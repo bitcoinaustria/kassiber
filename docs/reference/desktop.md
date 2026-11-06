@@ -22,24 +22,60 @@ translations are organized and the workflow for keeping English/German in sync,
 see [i18n.md](i18n.md); for the Austrian-German terminology (Bitcoin jargon kept
 English, BMF tax wording, `du` register), see [i18n-glossary.md](i18n-glossary.md).
 
-The shell assistant is a right-side panel that takes its width from the page
-column instead of floating over it; below 1024px it overlays as a modal sheet
-(focus stays inside, Escape closes it, and the page, sidebar and title-bar
-controls are inert while the title bar row stays a window drag region), and
-the nav folds to its rail while a docked panel would squeeze the page. The
-title-bar toggle and Mod+I open it, and the width is remembered. While it is
-closed, Settings → Appearance chooses a composer, a slim launcher, or nothing
+The shell assistant opens in the right panel, laid out after T3 Code's: it
+docks beside the page, which keeps working at its width minus the panel's (at
+least 480px), and carries a tab per open thing: the assistant, the panel's own
+surfaces, and open transactions' details, which open as tabs instead of a
+second sheet. The surfaces are the review queue (the causes the journals hold
+transactions for, transfers still to match, and journals waiting to be
+processed, read with the same daemon calls as the Review screen and the
+sidebar's Review badge), Changes (recent edit history as a diff, with undo, from
+the Activity page's history read) and Logs (a live tail of the redacted
+in-memory log). Changes and Logs open only while developer tools are on,
+like their pages, and close when they are turned off. A surface reads
+nothing until it is opened. A transaction a page opens is that page's
+preview tab (in italics), replaced by the next one the page opens; pinning it
+(the pin button or a double click) keeps it open in a tab of its own, as is
+every transaction opened from a surface, so several stay open side by side.
+Closing a detail returns to the tab it was opened from. A tab's icon turns
+into its close mark on hover; a middle click or Delete closes it too, and
+only that tab. `+` in the tab bar adds a surface, and a panel whose last tab
+closed shows a launcher of them instead. Each launcher row answers to a
+single key (A for the assistant, Q for the review queue, H for Changes, L for
+Logs, D for the latest detail) while no field, dialog or menu has the
+keyboard; a row that cannot open says why. The title-bar toggle shows and
+hides the panel and keeps all its tabs, including transaction details and
+their unsaved edits, for when it reopens; explicitly closing a detail that
+opened the panel closes it again. Reopening does not repeat a public graph
+lookup: it needs another explicit ask. Mod+I shows the panel with the
+assistant in front, brings it forward from another tab, or hides the panel
+while the assistant is in view. The tab bar's maximize button gives the
+panel the whole page column; the page stays mounted underneath. Details
+remember one width and the assistant and the surfaces another, dragged from
+the panel's left edge. Below 1024px the panel is a sheet over the page instead: it slides in
+from the right (always leaving a 48px strip in view) on a dimmed, softly
+blurred backdrop and is modal (focus moves in, the page is hidden from
+assistive tech, Escape, the backdrop or its close button hides it, and focus
+returns to where it was). While the assistant is not in view,
+Settings → Appearance chooses a composer, a slim launcher, or nothing
 below the page; either bar takes its own layout space. A tool approval the
-assistant asks for opens the panel and stays on screen as a dialog until it is
-answered, even if the panel is closed again. The expanded Transactions table holds the
-whole column: the panel and bar stay out of view there, a tool approval shows
-over it as that dialog, and the shortcut, the title-bar toggle, Ask about this,
-a page's handoff or a failed turn (whose error shows only in the panel) leave
-the expanded table and show the panel. Opening or mounting it reads only
+assistant asks for is a row in the conversation; it opens the panel once, and
+if the panel is closed again a notice under the page keeps it one click away
+until it is answered (see [AI](ai.md#tool-use)). The expanded Transactions
+table holds the whole column: the panel (unless a detail opened from the
+table) and bar stay out of view there, and the shortcut, the title-bar toggle,
+Ask about this, a page's handoff, a tool approval or a failed turn (whose error
+shows only in the panel) leave the expanded table and show the panel. Opening
+or mounting it reads only
 local configuration; nothing reaches a provider until the user sends. A conversation belongs to the book it
-started in, so opening another book starts a fresh one. "Ask about this" on a transaction row, its detail sheet, or a quarantine
-cause pins that record as typed screen context and prefills a question without
+started in, so opening another book starts a fresh one. "Ask about this" on a transaction row, its detail (which stays open as the
+Details tab while the assistant comes forward), or a quarantine cause pins
+that record as typed screen context and prefills a question without
 sending it; see [AI](ai.md) for the screen-context contract.
+The composer's toolbar holds the attach button, one model picker and send.
+The picker carries the model, its reasoning level, the speed toggle and the
+chat's permission mode in one popover (see
+[AI](ai.md#in-app-surface)).
 
 Current development modes:
 
@@ -115,14 +151,31 @@ Windows and Linux keep their native decorated frame; the same row is an
 in-app toolbar there with no inset and no drag region. Screens outside the shell
 (setup, loading, the error boundary) and the lock and import-restore screens use
 the same outline: the title bar row on the chrome and an inset page panel.
+Inside it the lock screen centres the wordmark over the welcome screen's type
+(title and lead, no eyebrow) and a passphrase field exactly the wordmark's width,
+with Back to setup set apart at the foot of the panel.
+While the native Touch ID prompt is open, the form gives way to a single
+waiting status and Touch ID guidance. Cancelling or failing that prompt restores
+the passphrase field and keyboard focus.
 
 Setup opens on one primary action, creating books, beside its chain artwork:
-flat blocks of transactions in the transaction graph's coin blue and Bitcoin
-orange. On the start screen the chain runs on a loop: transactions drop into the
-next block, a full block is found (its outline flashes orange), and the chain
-moves back a slot; the outlined cubes above it are the mempool. The artwork is
+three-dimensional blocks rasterized onto a coarse pixel grid, in the wordmark's
+monochrome and Bitcoin orange. Transactions flicker into the next block, a full
+block is found (its stepped outline flashes orange), and the chain moves back
+in discrete steps; small pixel cubes above it are the mempool. The artwork is
 an SVG generated locally: it shows no chain data and stays out of the
-accessibility tree and tab order, and with reduced motion the loop holds still.
+accessibility tree and tab order. Reduced motion holds it still, and hidden
+windows pause both the animation and its timer.
+
+The pixel wordmark appears throughout setup, the lock screen, and the sidebar.
+It arrives as falling cells on the welcome screen, decrypts when the lock
+screen appears and again on each unlock attempt, and assembles once after
+creating books. Folding the sidebar clips
+the word down to its K. During the first sync a looping K indicates work;
+the adjacent text and progress remain the source of real sync status. These
+effects stop in hidden windows and show a static mark with reduced motion.
+The app icon keeps the K and Bitcoin-orange wedge on a pixel grid. Standalone
+light- and dark-background wordmarks live in `docs/assets/` for reuse.
 
 The setup steps run in one wizard card laid out after T3 Code's welcome
 wizard: the identity and a segmented step track in its header, the step in an
@@ -138,7 +191,8 @@ connection first, including what setup leaves off (live prices, exchange
 imports, BTCPay, Lightning), then what stays on this machine.
 
 The side nav remembers whether it was folded to its icon rail, and folds by
-itself while the window is narrower than 1100px without changing that choice;
+itself while the window is narrower than 1100px (plus the docked right
+panel's width, so the page keeps that room beside it) without changing that choice;
 the profile stays on the rail either way. Back and forward also run from
 Cmd/Ctrl+[ and ] or Alt+Left/Right. History stays put while typing, with a
 dialog open, or while locked; on Windows and Linux the shell swallows Alt+arrows
@@ -146,9 +200,11 @@ then, because WebView2 would otherwise navigate by itself. Tooltips and menus
 write shortcuts in the platform's notation (`⌘⇧A` on macOS, `Ctrl+Shift+A`
 elsewhere).
 
-Every modal shares the command palette's treatment: dialogs, sheets, the
-palette, and the sync progress card use the same faint, unblurred backdrop and
-frosted surface, and dialogs hang from one anchor below the title bar
+Dialogs, the palette, and the sync progress card share the command palette's
+treatment: the same faint, unblurred backdrop and frosted surface. Sheets, the
+right panel's sheet and the Settings modal follow T3 Code instead: an opaque
+popover (or page) surface over a dimmed, 4px-blurred backdrop. Dialogs hang
+from one anchor below the title bar
 (`--kb-dialog-top`, capped by `--kb-dialog-max-h`) instead of centring, so a
 dialog whose content changes size grows downward rather than jumping.
 
@@ -163,6 +219,24 @@ chips `rounded-full`. The title bar names the page and is its `h1`, so a page
 does not repeat its name or add an eyebrow line. A page shows a title only when
 the title bar does not already say it, such as a settings section or a wallet's
 name, and that title uses `pageTitleClassName`.
+Settings opens as a large modal over the current page, after T3 Code's
+settings: a category rail on the left (an icon rail below `md`), a
+breadcrumb header with the close button, and the category below; Esc, the
+close button or the backdrop returns to the page, which stays mounted
+underneath. Each category keeps its `/settings/<slug>` route so links, the
+native menu, app search and `kassiber://` intents stay typed; the shell turns
+an in-app navigation to one into the modal without adding a history entry
+(`components/kb/settings/settingsModalNavigation.ts`), and a cold load of one opens the
+modal over Overview. Hovering or focusing a Settings link only preloads it;
+the modal opens on the navigation itself. Leaving the page from inside
+Settings (Open logs, Resume setup) closes it, as does locking the app, and a
+request for Settings made behind the lock screen is dropped rather than shown
+after unlocking.
+
+Scrollbars follow T3 Code: a 6px lane with a quiet thumb on a transparent
+track (`--app-scrollbar-*` in `globals.css`), for native scrollers and
+`ScrollArea` alike.
+
 `src/styles/layoutScale.test.ts` fails on bare `rounded` (square, because
 `--radius` is 0), arbitrary radii and shadows, page glass, and hand-rolled
 `rounded-* border bg-card` cards outside a short allowlist.
@@ -318,30 +392,63 @@ manual/AI-consented Coinjoin links, can show the spent and received legs; the
 desktop preloads both safe graph payloads once the route is known so switching
 between legs is UI-only when the daemon data is already available.
 
-The Connections detail page includes a read-only UTXOs table for chain-backed
+The Connections detail page for a wallet is the wallet's own record, not a
+scoped Overview. Under the header row (refresh and edit/rescan/remove), one
+panel holds its balance, a short fact list (UTXOs, transactions with their
+date span, last sync and backend) and its monthly booked balance from
+`ui.reports.balance_history` (month-end market value when the app shows fiat;
+months the wallet held nothing in show as zero, and the line stays in bitcoin
+for a range with an unpriced month). When the on-chain inventory and the books
+disagree, a card compares the two. A notice appears only when the wallet has
+transactions in the review queue or without a price, counted by the
+wallet-scoped `ui.transactions.dashboard` read the Transactions page uses, and
+links into that page filtered to the wallet. Tabs carry the rest. Transactions is
+a table of the wallet's transactions (date, type, description, amount, value,
+status) whose rows open in the docked transaction detail; its footer opens the
+full list on the Transactions page. Coins groups the unspent outputs by size
+and by age since confirmation, with the largest, median and smallest coin;
+these are chain facts, not tax lots, so a coin's age says nothing about its
+holding period. With values hidden, the size bands show nothing, since their
+counts bound the balance; a capped inventory says how many coins it covers. Details holds the connection settings, import runs, and the
+Samourai and BTCPay provenance panels. All of these are local display reads;
+none starts a sync.
+
+The Coins tab includes a read-only UTXOs table for chain-backed
 wallet sources. Refreshing a descriptor/xpub/address wallet updates the local
-output inventory, and the detail page shows current unspent transaction outputs with
+output inventory, and the table shows current unspent transaction outputs with
 outpoint, amount, confirmation state, receive/change branch/index when known,
-address or safe label, and source freshness. It shows all rows returned by the
-daemon payload, reports when that payload is capped, offers sorting by size,
-chain date, confirmations, or outpoint, and can open the UTXO's transaction in a
-configured/public explorer after the same privacy warning used by transaction
-detail explorer links. Above the table, the wallet's coins of its main asset
-show as glass blocks in the transaction graph's style, one per coin and as tall
-as its amount relative to the wallet's largest, unconfirmed coins frosted;
-hidden values give every block the same height in outpoint order. Without
-WebGL only the table shows. The table is
+address or safe label, and source freshness. It shows the rows returned by the
+daemon payload a page at a time, reports when that payload is capped, offers
+sorting by size, chain date, confirmations, or outpoint, and can open the UTXO's
+transaction in a configured/public explorer after the same privacy warning used
+by transaction detail explorer links. The table is
 inventory-only: there is no spend, PSBT, signing, broadcast, coin-selection, or
 freeze action.
 Unsupported file/BTCPay/Lightning-style sources show an unsupported state, and
 Liquid sources show an unblind blocker unless Kassiber has descriptor material
 that can unblind outputs locally.
 
+Overview leads with one readiness pill that names what holds the book back
+(sources, stale journals, open review, custody gaps, missing prices) and opens
+where that is dealt with; stale journals it reprocesses in place. Then three
+tiles: BTC price, the bitcoin held and in how many wallets (observed, so it
+carries no status and opens Wallets), and what it is worth with its change
+against cost basis, both shown whichever currency the app displays. The
+latest transactions sit beside the activity chart once the page is about
+64rem wide (measured on the page, so a docked assistant counts), as many whole
+rows as fit the chart's height, and under it otherwise; the list never
+scrolls inside the page, and Show all opens Transactions. A row names its
+status only when it asks for something. Holdings by Source runs across the
+page below as a ranked list, largest first: each source with its rail's logo,
+its value (whole currency units in fiat) and its share of the bitcoin held.
+Past eight, the smallest fold into one Other sources row. Its header leaves an
+incomplete cost basis to the tile and the chart.
+
 Overview, Wallets, the book-set overview, and the Reports metric strip read the
 daemon's `fiat.completeness` block (see [the daemon reference](daemon.md)) instead of
 trusting cost basis as-is. While it is incomplete, the fiat portfolio card turns amber
 and shows an Incomplete or Outdated badge instead of the "vs cost basis"
-percentage. It names the BTC without cost basis and links to Quarantine, or to
+percentage. It names the BTC without cost basis and links to Review, or to
 Journals when stale. The holdings header and chart summary drop their unrealized
 percentage. Chart points from the first gap on show cost basis, average cost, and
 unrealized as "—" with an explanation, the average-cost line stops there, and
@@ -353,17 +460,123 @@ each cause (stale journals, quarantine, custody gaps, missing prices) links to
 the page that resolves it.
 Without a market rate, fiat values show "—"
 instead of €0 or -100 %. Custody gaps and missing prices also show in the
-readiness pill and Book readiness panel. Book-set rows get a per-book badge, and
+readiness pill. Book-set rows get a per-book badge, and
 the fiat total says how many books are incomplete. Reports marks cost basis,
-gain/loss, and estimated tax as Provisional while journals are stale or
-quarantines, custody gaps, or missing prices exist. Reports copy stays English
-under the deferred reporting-language policy in [i18n.md](i18n.md).
+gain/loss, and indicative tax as Provisional while journals are stale or
+quarantines, custody gaps, or missing prices exist, and names the cause with a
+link to the page that resolves it. Reports copy stays English under the
+deferred reporting-language policy in [i18n.md](i18n.md).
+
+Review sits in the main nav and collects what waits on the owner, each item
+decided where it is listed. The pages with the full tools behind it
+(Transfers & Custody, Journals, Reconcile and Source Funds) sit under
+Extras above the calculators; the fold opens and is marked whenever one of
+its pages is open, however you got there.
+**Moves between your wallets** comes first, because pairing a move often
+clears a quarantine cause with it. **Can't be booked yet** holds the
+quarantine causes, as [custody resolution](custody-resolution.md#why-a-transaction-is-quarantined)
+describes, with the journal freshness warning above them. Each cause card
+keeps the full instruction behind its info button where its buttons already
+say what to do. Each card lists its
+transactions folded to three, with one Show more that shows the rest of the
+loaded page and then loads the next. A cause of approximate prices held for
+review offers **Accept these prices**, which accepts all of them in one
+previewed step (`accept_coarse_prices`). A price cause also offers **Enter
+prices**: a field per row for the receipt's total value or the price per
+unit, in the book currency (`summary.fiat_currency` of
+`ui.journals.quarantine`). Input is read in the owner's number format; a
+leading zero always starts a decimal, and the preview lists each price as it
+was read. Rate fields and their confirmation name each transaction's own
+asset, including when a cause holds several assets. Up to 50 typed prices go
+through one previewed step as
+`price_override` operations, each saved as exact and revertible from the
+transaction's history. **Moves between your wallets** lists the transfer
+and swap candidates from `ui.transfers.suggest` as table rows with the same
+edges in every row: the date, the route between the two wallets with their
+rails' logos (chain, Lightning, Liquid), one amount with the fee under it
+(instead of the fee, what arrived, for a swap into another asset or when no
+positive fee is left, as when more came in than left), and what pairing records:
+a plain transfer quietly, a Bitcoin swap or swap as a chip with its default
+treatment (tax-neutral carrying value or taxable), with how sure the match is.
+The rows size themselves by the list's width, not the window's, so a docked
+assistant gets the narrow layout: two lines, with the route and amount above
+the date, kind and buttons. A long wallet name is cut short with the full name
+on hover.
+The decision status masks wallet names while sensitive details are hidden.
+Each has Pair, which pairs it with its default kind and policy, and two icon
+buttons: Not a transfer, which dismisses it, and Details, which opens it in
+Transfers & Custody. Exact candidates with carrying-value policy, no competing
+match and no ownership proof can be paired in groups of up to 50.
+`ui.review.plan` binds their exact transaction IDs, policies, input version and
+book to the confirmation; `ui.review.apply` refuses stale confirmations and
+applies the preview atomically. Taxable and ownership-graph candidates stay
+one at a time. A decision can be undone for 20 seconds
+(`ui.transfers.unpair`, or `ui.transfers.dismissals.delete` for a dismissal).
+Once the owner stops deciding, the journals recalculate. That is local and
+makes no network request. The queued refresh survives navigation, including a
+decision response received after leaving Review. It carries the originating
+book scope and is abandoned after a book switch, leaving that book visibly
+stale until it is processed. Until it finishes, the list keeps its earlier
+reading less what was decided, because a read of stale journals lists more
+candidates than are open. One number counts what is left: `ui.review.badges`
+`review`, which is `quarantine_attention` plus the cached transfer candidates
+(an ownership-graph move counts once, under its held transaction).
+The sidebar's Review badge, the bell and search show it, in red while a
+quarantine holds rows back from the reports, and so does Overview's readiness
+pill while a quarantine is open and nothing more pressing is. Stale journals
+with nothing else open show a dot. The side panel's Review queue counts
+causes and transactions as the screen does and opens Review; a dismissal is
+stored with an English reason whatever the app's language, like accepted and
+entered prices. `/quarantine` and `kassiber://quarantine`
+open Review, and the native menu's Review item keeps Quarantine's shortcut.
+
+Reports shows one tax year from `ui.reports.capital_gains`: whether it can be
+filed, its result and how that result is built, and the files that carry it.
+It lists no rows; those stay on Transactions. Proceeds, cost basis, and
+gain/loss come from the payload's full-year `totals`; the gain/loss tile names
+the income and the tax-free Altbestand gain (from the breakdown's `tax_free`
+group) it includes. For an Austrian EUR book the payload carries the core's
+indicative tax (`indicativeTax`: 27.5 % of KZ 172 + 174 − 176, with KZ 801
+listed and never estimated) and the screen shows it with the core's caveats
+behind the tile's info icon. A year before 2022 has no crypto Kennzahlen
+(`e1kvApplies: false`): the screen states only KZ 801, shows no estimate,
+says so in the readiness notice and Rules, and offers no E 1kv tax report.
+Rows dated before 1 March 2022 have no crypto field in any year; a 2022 with
+such rows (`rowsBeforeCryptoKennzahlen`) says so before export, withholds the
+estimate and offers no E 1kv tax report. Generic books get no estimate, and a region the
+screen does not recognise reads as generic, never as Austrian. While the
+completeness read is still loading, the readiness pill says so and nothing is
+marked Provisional; a failed read or one without completeness stays
+"Completeness unknown". When a readiness notice names a blocker, the header
+pill is hidden rather than repeating it.
+
+The breakdown card states the result the way the report does. An Austrian book
+lists its E 1kv fields and KZ 801 on the E 1 with the core's amounts, then what
+stays off the return: tax-free Altbestand, tax-neutral swaps, and rows without
+a field. Rows without a field may still be taxable, so they show in amber, mark
+the figures Provisional and keep the year from "Ready for export". A generic book lists short-term gains, long-term gains, and income.
+Each row's transaction count links to Transactions filtered to exactly those
+transactions (`txids`, from the payload's `breakdown`); a group of more than 128
+opens the whole year instead, since the Transactions filter takes no more. How
+a single gain was calculated opens from the Calculation row on the
+transaction's Tax tab, which `ui.journals.events.list` feeds with an
+`explanationReference` for realized disposals and income.
+
+A Rules card lists the region, the book's stored gains algorithm, the core's
+rate (none when the core gives none), the Altbestand rule for an Austrian book
+or the "Long-term after" holding period for a generic one, and the tax-year
+boundary, and links to Books, where they change. The Files panel writes the
+tax report as PDF, XLSX, or CSV (the year's E 1kv for an Austrian book, the
+complete history for a generic one), the bookkeeping handoff, the summary PDF,
+and the audit package; the ledger's own exports stay on Transactions. The
+summary's wallet scope and cover page and the audit package's scope and
+contents fold under their rows. The outcome of the last export stays at the
+top of the panel.
 
 Privacy Mirror is the dedicated desktop page for local privacy linkage. It
 reads `ui.reports.privacy_mirror` and shows exposure summary, adversary cards,
 wallet/transaction/UTXO rows, timeline, coverage, unknowns, evidence
-drilldowns, and a PSBT/what-if panel. Wallet detail and transaction detail
-include compact Privacy Mirror panels from the same redacted payload. The page
+drilldowns, and a PSBT/what-if panel. The page
 is local-only, read-only, advisory-only, shows degraded states instead of
 standing reassurance badges, and uses the normal desktop daemon allowlist; it
 does not sync, sign, broadcast, select coins, or mutate accounting data.
@@ -386,8 +599,12 @@ back explicitly to `sqlcipher_inline` when no desktop secret service, D-Bus
 session, or unlocked collection is available. There is no
 plaintext fallback and no remember-unlock behavior.
 
-The same Settings screen carries **External agents (MCP)**, off by default and
-disabled while AI features are off. Turning it on records the choice through
+The same Settings screen carries **External agents**, off by default and
+disabled while AI features are off. Its **Allow agents** switch sits above what
+agents may do (**Read**, **Read and operate**, **Accounting decisions**) and a
+**Restrict results** switch, with copy saying what the selected grant allows; a first
+enable preselects accounting decisions with full access, and a recorded choice
+is kept. Turning it on records the switch and choice through
 `ui.agent_access.configure` and shows a `claude mcp add` command, plus a
 copyable JSON config, pinned to the current book. The desktop also mirrors the
 AI features switch into that preference, writing only when it changed, so
@@ -396,10 +613,12 @@ AI features switch into that preference, writing only when it changed, so
 Settings -> Desktop -> Developer tools carries the early-stage-features switch,
 which is off by default and gates the surfaces that are not finished yet. With
 it off, Network Monitor, Logs, and Settings -> Lightning disappear from the
-side nav, the settings rail, and app search, while Activity, Custody Gaps, Exit
+side nav, the Settings modal's rail, and app search, while Activity, Custody Gaps, Exit
 Calculator, and Privacy Mirror stay in the nav as greyed-out, inert rows. The
 nav treatment is a signpost, not the barrier: every one of those routes carries
-a guard that redirects to Overview, the native menu's Logs item is disabled, and
+a guard that redirects to Overview (Settings -> Lightning stays shut, and falls
+back to the default category if the switch turns off while it is open), the
+native menu's Logs item is disabled, and
 a native-menu or `kassiber://` intent for any of them lands on Settings ->
 Developer tools with an explanatory notification instead of a silent bounce. The
 choice is stored in the desktop's local UI state, so it survives updates;

@@ -3,7 +3,7 @@
   "schema_version": 1,
   "data": {
     "query": [],
-    "count": 313,
+    "count": 317,
     "global": {
       "machine_implies_json": true,
       "supports_non_interactive": true,
@@ -608,7 +608,7 @@
         ],
         "command": "mcp tools",
         "kind": "mcp.tools",
-        "help": "Describe the tools the MCP server exposes",
+        "help": "Describe the tools the MCP server exposes at the current grant",
         "effect": "read_only",
         "capability": "read",
         "needs_database": false,
@@ -625,7 +625,7 @@
         ],
         "command": "mcp status",
         "kind": "mcp.status",
-        "help": "Show whether external agents may use Kassiber",
+        "help": "Show whether external agents may use Kassiber, and their grant",
         "effect": "read_only",
         "capability": "read",
         "needs_database": false,
@@ -642,7 +642,7 @@
         ],
         "command": "mcp enable",
         "kind": "mcp.enable",
-        "help": "Allow external agents to read Kassiber books (asks in your terminal)",
+        "help": "Allow external agents to use Kassiber books (asks in your terminal)",
         "effect": "mutating",
         "capability": "admin",
         "needs_database": false,
@@ -650,7 +650,39 @@
         "supports_dry_run": false,
         "scope_flags": [],
         "may_prompt": false,
-        "arguments": []
+        "arguments": [
+          {
+            "name": "grant",
+            "flags": [
+              "--grant"
+            ],
+            "positional": false,
+            "required": false,
+            "repeatable": false,
+            "choices": [
+              "read",
+              "operator",
+              "accounting_decisions"
+            ],
+            "secret_input": false,
+            "help": "What agents may do: read, operator (also sync, process journals, export, record evidence) or accounting_decisions (also review, decide and edit transaction metadata); keeps the recorded grant if omitted, read for a first enable"
+          },
+          {
+            "name": "agent_access",
+            "flags": [
+              "--agent-access"
+            ],
+            "positional": false,
+            "required": false,
+            "repeatable": false,
+            "choices": [
+              "full",
+              "restricted"
+            ],
+            "secret_input": false,
+            "help": "full (unprojected results and custody/lineage/chain-analysis source tools) or restricted; keeps the recorded choice if omitted, restricted for a first enable"
+          }
+        ]
       },
       {
         "path": [
@@ -677,7 +709,7 @@
         "command": "mcp call",
         "kind": "mcp.call",
         "help": "Run one MCP tool against a book and print its result",
-        "effect": "read_only",
+        "effect": "mutating",
         "capability": "read",
         "needs_database": true,
         "supports_cursor": false,
@@ -711,6 +743,34 @@
             "choices": null,
             "secret_input": false,
             "help": "Tool arguments as a JSON object (not secret-bearing)"
+          },
+          {
+            "name": "grant",
+            "flags": [
+              "--grant"
+            ],
+            "positional": false,
+            "required": false,
+            "repeatable": false,
+            "choices": [
+              "read",
+              "operator",
+              "accounting_decisions"
+            ],
+            "secret_input": false,
+            "help": "Run with at most this grant; narrows the user's External agents grant, never widens it"
+          },
+          {
+            "name": "client",
+            "flags": [
+              "--client"
+            ],
+            "positional": false,
+            "required": false,
+            "repeatable": false,
+            "choices": null,
+            "secret_input": false,
+            "help": "Agent host name recorded with writes (display only)"
           },
           {
             "name": "workspace",
@@ -1047,10 +1107,10 @@
             ],
             "positional": false,
             "required": false,
-            "repeatable": false,
+            "repeatable": true,
             "choices": null,
             "secret_input": false,
-            "help": "Attach a local export (CSV/XLSX/PDF/image) to this chat so the assistant can analyze it \u2014 use for an exchange with no dedicated importer. For a CSV the assistant sees the column headers and row counts; cell values stay on this device unless the AI provider also runs here. PDFs and photos require a loopback local vision model."
+            "help": "Attach a local file (CSV/TSV/XLSX/PDF/image) to this chat; repeat for up to 8 files. An export from an exchange with no dedicated importer can be analyzed and imported. A provider with full agent access sees the CSV's cell values, the images, and the PDFs' text (or page images of a scan); a restricted provider sees the CSV's headers and row counts and none of the images or PDFs."
           },
           {
             "name": "file_context",
@@ -1059,10 +1119,10 @@
             ],
             "positional": false,
             "required": false,
-            "repeatable": false,
+            "repeatable": true,
             "choices": null,
             "secret_input": false,
-            "help": "Tell the assistant what the attached file is, e.g. \"2024 export from exchange XYZ, custodial account\". Context for the assistant, not a claim Kassiber books: values still come from the file."
+            "help": "Tell the assistant what an attached file is, e.g. \"2024 export from exchange XYZ, custodial account\"; the nth --file-context describes the nth --file. Context for the assistant, not a claim Kassiber books: values still come from the file."
           },
           {
             "name": "provider",
@@ -1194,7 +1254,23 @@
               "full"
             ],
             "secret_input": false,
-            "help": "Tool schema to expose to the model: core keeps common accounting tools small for local models; scoped adds the specialist tools behind the current question; full exposes the complete catalog."
+            "help": "Tool schema to expose to the model: full (default) offers the complete catalog; scoped offers the tools behind the current question and lets the model load more; core keeps a small common set for small local models."
+          },
+          {
+            "name": "permission_mode",
+            "flags": [
+              "--permission-mode"
+            ],
+            "positional": false,
+            "required": false,
+            "repeatable": false,
+            "choices": [
+              "approval",
+              "auto",
+              "full_access"
+            ],
+            "secret_input": false,
+            "help": "Who approves the assistant's changes: approval (default) asks before each one; auto approves changes another tool can undo and that stay on this machine, and asks for the rest; full_access approves everything, network actions such as syncs included."
           },
           {
             "name": "no_tools",
@@ -11487,6 +11563,63 @@
       {
         "path": [
           "transactions",
+          "verify"
+        ],
+        "command": "transactions verify",
+        "kind": "transactions.verify",
+        "help": "Check a transaction against its locally stored chain graph (no network)",
+        "effect": "read_only",
+        "capability": "read",
+        "needs_database": true,
+        "supports_cursor": false,
+        "supports_dry_run": false,
+        "scope_flags": [
+          "workspace",
+          "profile"
+        ],
+        "may_prompt": false,
+        "arguments": [
+          {
+            "name": "workspace",
+            "flags": [
+              "--workspace"
+            ],
+            "positional": false,
+            "required": false,
+            "repeatable": false,
+            "choices": null,
+            "secret_input": false,
+            "help": null
+          },
+          {
+            "name": "profile",
+            "flags": [
+              "--profile"
+            ],
+            "positional": false,
+            "required": false,
+            "repeatable": false,
+            "choices": null,
+            "secret_input": false,
+            "help": null
+          },
+          {
+            "name": "transaction",
+            "flags": [
+              "--transaction"
+            ],
+            "positional": false,
+            "required": true,
+            "repeatable": false,
+            "choices": null,
+            "secret_input": false,
+            "help": "Transaction id or txid"
+          }
+        ]
+      },
+      {
+        "path": [
+          "transactions",
           "export"
         ],
         "command": "transactions export",
@@ -14766,6 +14899,88 @@
         "path": [
           "journals",
           "quarantine",
+          "groups"
+        ],
+        "command": "journals quarantine groups",
+        "kind": "journals.quarantine.groups",
+        "help": "Quarantine counts and msat totals by reason and root cause",
+        "effect": "read_only",
+        "capability": "read",
+        "needs_database": true,
+        "supports_cursor": true,
+        "supports_dry_run": false,
+        "scope_flags": [
+          "workspace",
+          "profile"
+        ],
+        "may_prompt": false,
+        "arguments": [
+          {
+            "name": "workspace",
+            "flags": [
+              "--workspace"
+            ],
+            "positional": false,
+            "required": false,
+            "repeatable": false,
+            "choices": null,
+            "secret_input": false,
+            "help": null
+          },
+          {
+            "name": "profile",
+            "flags": [
+              "--profile"
+            ],
+            "positional": false,
+            "required": false,
+            "repeatable": false,
+            "choices": null,
+            "secret_input": false,
+            "help": null
+          },
+          {
+            "name": "group_id",
+            "flags": [
+              "--group-id"
+            ],
+            "positional": false,
+            "required": false,
+            "repeatable": false,
+            "choices": null,
+            "secret_input": false,
+            "help": "root:<transaction>, unrooted:<reason> or reason:<reason>; lists that group's members"
+          },
+          {
+            "name": "cursor",
+            "flags": [
+              "--cursor"
+            ],
+            "positional": false,
+            "required": false,
+            "repeatable": false,
+            "choices": null,
+            "secret_input": false,
+            "help": "Opaque cursor from a previous group page"
+          },
+          {
+            "name": "limit",
+            "flags": [
+              "--limit"
+            ],
+            "positional": false,
+            "required": false,
+            "repeatable": false,
+            "choices": null,
+            "secret_input": false,
+            "help": null
+          }
+        ]
+      },
+      {
+        "path": [
+          "journals",
+          "quarantine",
           "resolve",
           "price-override"
         ],
@@ -14813,11 +15028,35 @@
               "--transaction"
             ],
             "positional": false,
-            "required": true,
+            "required": false,
             "repeatable": false,
             "choices": null,
             "secret_input": false,
             "help": null
+          },
+          {
+            "name": "group_id",
+            "flags": [
+              "--group-id"
+            ],
+            "positional": false,
+            "required": false,
+            "repeatable": false,
+            "choices": null,
+            "secret_input": false,
+            "help": "A root:<transaction> group from `journals quarantine groups`; resolves its root"
+          },
+          {
+            "name": "reprocess",
+            "flags": [
+              "--reprocess"
+            ],
+            "positional": false,
+            "required": false,
+            "repeatable": false,
+            "choices": null,
+            "secret_input": false,
+            "help": "Process journals afterwards and report which waiting rows cleared"
           },
           {
             "name": "fiat_rate",
@@ -14896,11 +15135,35 @@
               "--transaction"
             ],
             "positional": false,
-            "required": true,
+            "required": false,
             "repeatable": false,
             "choices": null,
             "secret_input": false,
             "help": null
+          },
+          {
+            "name": "group_id",
+            "flags": [
+              "--group-id"
+            ],
+            "positional": false,
+            "required": false,
+            "repeatable": false,
+            "choices": null,
+            "secret_input": false,
+            "help": "A root:<transaction> group from `journals quarantine groups`; resolves its root"
+          },
+          {
+            "name": "reprocess",
+            "flags": [
+              "--reprocess"
+            ],
+            "positional": false,
+            "required": false,
+            "repeatable": false,
+            "choices": null,
+            "secret_input": false,
+            "help": "Process journals afterwards and report which waiting rows cleared"
           }
         ]
       },
@@ -17069,6 +17332,158 @@
             "choices": null,
             "secret_input": false,
             "help": "0 = never expire"
+          }
+        ]
+      },
+      {
+        "path": [
+          "transfers",
+          "dismissals",
+          "list"
+        ],
+        "command": "transfers dismissals list",
+        "kind": "transfers.dismissals.list",
+        "help": null,
+        "effect": "read_only",
+        "capability": "read",
+        "needs_database": true,
+        "supports_cursor": false,
+        "supports_dry_run": false,
+        "scope_flags": [
+          "workspace",
+          "profile"
+        ],
+        "may_prompt": false,
+        "arguments": [
+          {
+            "name": "workspace",
+            "flags": [
+              "--workspace"
+            ],
+            "positional": false,
+            "required": false,
+            "repeatable": false,
+            "choices": null,
+            "secret_input": false,
+            "help": null
+          },
+          {
+            "name": "profile",
+            "flags": [
+              "--profile"
+            ],
+            "positional": false,
+            "required": false,
+            "repeatable": false,
+            "choices": null,
+            "secret_input": false,
+            "help": null
+          },
+          {
+            "name": "include_expired",
+            "flags": [
+              "--include-expired"
+            ],
+            "positional": false,
+            "required": false,
+            "repeatable": false,
+            "choices": null,
+            "secret_input": false,
+            "help": "Also list dismissals whose expiry has passed"
+          },
+          {
+            "name": "limit",
+            "flags": [
+              "--limit"
+            ],
+            "positional": false,
+            "required": false,
+            "repeatable": false,
+            "choices": null,
+            "secret_input": false,
+            "help": null
+          }
+        ]
+      },
+      {
+        "path": [
+          "transfers",
+          "dismissals",
+          "delete"
+        ],
+        "command": "transfers dismissals delete",
+        "kind": "transfers.dismissals.delete",
+        "help": "Undo one dismissal so the pair can be suggested again",
+        "effect": "mutating",
+        "capability": "accounting_decisions",
+        "needs_database": true,
+        "supports_cursor": false,
+        "supports_dry_run": false,
+        "scope_flags": [
+          "workspace",
+          "profile"
+        ],
+        "may_prompt": false,
+        "arguments": [
+          {
+            "name": "workspace",
+            "flags": [
+              "--workspace"
+            ],
+            "positional": false,
+            "required": false,
+            "repeatable": false,
+            "choices": null,
+            "secret_input": false,
+            "help": null
+          },
+          {
+            "name": "profile",
+            "flags": [
+              "--profile"
+            ],
+            "positional": false,
+            "required": false,
+            "repeatable": false,
+            "choices": null,
+            "secret_input": false,
+            "help": null
+          },
+          {
+            "name": "dismissal_id",
+            "flags": [
+              "--id"
+            ],
+            "positional": false,
+            "required": false,
+            "repeatable": false,
+            "choices": null,
+            "secret_input": false,
+            "help": "Dismissal id from `dismissals list`"
+          },
+          {
+            "name": "tx_out",
+            "flags": [
+              "--tx-out"
+            ],
+            "positional": false,
+            "required": false,
+            "repeatable": false,
+            "choices": null,
+            "secret_input": false,
+            "help": null
+          },
+          {
+            "name": "tx_in",
+            "flags": [
+              "--tx-in"
+            ],
+            "positional": false,
+            "required": false,
+            "repeatable": false,
+            "choices": null,
+            "secret_input": false,
+            "help": null
           }
         ]
       },
@@ -23962,6 +24377,21 @@
             "help": "Send this HTTP provider's Chat Completions requests without Kassiber's no-retention flag (store: false), for an endpoint that refuses it; the provider's own retention then applies to prompts and tool results. Off by default. Run `kassiber ai providers test NAME` first: store_accepted false means the endpoint refuses the flag"
           },
           {
+            "name": "agent_access",
+            "flags": [
+              "--agent-access"
+            ],
+            "positional": false,
+            "required": false,
+            "repeatable": false,
+            "choices": [
+              "full",
+              "restricted"
+            ],
+            "secret_input": false,
+            "help": "What the assistant may use with this provider: full (default) offers every tool, including custody-gap, lineage and source-acquisition tools, and sends unprojected results and attachment cell values; restricted keeps an off-device provider to projected results. A provider on this device always has full access. Neither mode sends descriptors, xpubs, secrets or paths"
+          },
+          {
             "name": "api_key",
             "flags": [
               "--api-key"
@@ -24172,6 +24602,21 @@
             "choices": null,
             "secret_input": false,
             "help": "Send store: false with every Chat Completions request again (the default)"
+          },
+          {
+            "name": "agent_access",
+            "flags": [
+              "--agent-access"
+            ],
+            "positional": false,
+            "required": false,
+            "repeatable": false,
+            "choices": [
+              "full",
+              "restricted"
+            ],
+            "secret_input": false,
+            "help": "What the assistant may use with this provider: full (default) offers every tool, including custody-gap, lineage and source-acquisition tools, and sends unprojected results and attachment cell values; restricted keeps an off-device provider to projected results. A provider on this device always has full access. Neither mode sends descriptors, xpubs, secrets or paths"
           },
           {
             "name": "api_key",

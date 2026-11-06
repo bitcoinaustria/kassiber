@@ -799,7 +799,110 @@ def delete_pair_review(
         invalidate_journals(conn, profile_id)
     if commit:
         conn.commit()
-    return {"deleted": pair_id}
+    # The removed pair's legs and terms, so it can be paired again.
+    return {"deleted": pair_id, "pair": pair_to_dict(row)}
+
+
+def dismiss_pair_candidate(
+    conn,
+    *,
+    workspace_id: str,
+    profile_id: str,
+    out_transaction_id: str,
+    in_transaction_id: str,
+    reason=None,
+    expires_in_days=90,
+    invalidate=False,
+    commit=True,
+) -> Mapping[str, Any]:
+    """Record a "not one movement" dismissal for one candidate pair.
+
+    A dismissal also stops native transitions from pairing the two legs, so
+    a caller that previews journal effects passes ``invalidate=True``.
+    ``expires_in_days`` of 0 or less never expires.
+    """
+    expires_at = None
+    if expires_in_days and int(expires_in_days) > 0:
+        from datetime import datetime, timedelta, timezone
+
+        expires_at = (
+            datetime.now(timezone.utc) + timedelta(days=int(expires_in_days))
+        ).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    conn.execute(
+        """
+        INSERT INTO transaction_pair_dismissals(
+            id, workspace_id, profile_id, out_transaction_id, in_transaction_id,
+            reason, created_at, expires_at
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(profile_id, out_transaction_id, in_transaction_id)
+        DO UPDATE SET
+            reason = COALESCE(excluded.reason, transaction_pair_dismissals.reason),
+            expires_at = excluded.expires_at
+        """,
+        (
+            str(uuid.uuid4()),
+            workspace_id,
+            profile_id,
+            out_transaction_id,
+            in_transaction_id,
+            reason,
+            now_iso(),
+            expires_at,
+        ),
+    )
+    if invalidate:
+        invalidate_journals(conn, profile_id)
+    if commit:
+        conn.commit()
+    return conn.execute(
+        "SELECT * FROM transaction_pair_dismissals "
+        "WHERE profile_id = ? AND out_transaction_id = ? AND in_transaction_id = ?",
+        (profile_id, out_transaction_id, in_transaction_id),
+    ).fetchone()
+
+
+def delete_pair_dismissal(
+    conn,
+    *,
+    profile_id: str,
+    dismissal_id: str | None = None,
+    out_transaction_id: str | None = None,
+    in_transaction_id: str | None = None,
+    commit=True,
+) -> dict[str, Any]:
+    """Undo one "not one movement" dismissal, by its id or by its two legs.
+
+    Journal builds read dismissals (they stop native transitions), so removing
+    one makes the book's journals stale.
+    """
+    if dismissal_id is not None:
+        row = conn.execute(
+            "SELECT * FROM transaction_pair_dismissals WHERE profile_id = ? AND id = ?",
+            (profile_id, dismissal_id),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            "SELECT * FROM transaction_pair_dismissals "
+            "WHERE profile_id = ? AND out_transaction_id = ? AND in_transaction_id = ?",
+            (profile_id, out_transaction_id, in_transaction_id),
+        ).fetchone()
+    if row is None:
+        raise AppError("Dismissal not found", code="not_found")
+    conn.execute("DELETE FROM transaction_pair_dismissals WHERE id = ?", (row["id"],))
+    invalidate_journals(conn, profile_id)
+    if commit:
+        conn.commit()
+    return {
+        "deleted": row["id"],
+        "dismissal": {
+            "id": row["id"],
+            "out_transaction_id": row["out_transaction_id"],
+            "in_transaction_id": row["in_transaction_id"],
+            "reason": row["reason"],
+            "created_at": row["created_at"],
+            "expires_at": row["expires_at"],
+        },
+    }
 
 
 def update_pair_review(

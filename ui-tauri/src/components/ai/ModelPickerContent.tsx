@@ -5,7 +5,8 @@
  * Adapted from T3 Code (MIT, Copyright (c) 2026 T3 Tools Inc.):
  * `apps/web/src/components/chat/ModelPickerContent.tsx`. Same interaction
  * model — search field keeps focus, ArrowUp/ArrowDown move the highlight,
- * Enter picks, ArrowLeft / Shift+Tab reach the rail, Mod+Shift+ArrowUp/Down
+ * Enter picks, ArrowLeft / Shift+Tab reach the rail, ArrowRight at the end of
+ * the query reaches the docked reasoning column, Mod+Shift+ArrowUp/Down
  * switch provider, Mod+1…9 pick the nth row, starred models collect under
  * Favorites and a query searches every provider at once.
  *
@@ -95,8 +96,6 @@ export function ModelPickerContent({
   groups,
   value,
   favorites,
-  localOnly,
-  onLocalOnlyChange,
   showAllModels,
   onShowAllModelsChange,
   discoveryByProvider,
@@ -107,13 +106,13 @@ export function ModelPickerContent({
   onSelect,
   onToggleFavorite,
   onCheckModels,
+  docked = false,
+  onFocusEffort,
 }: {
-  /** Providers and their known models, already narrowed by the Local filter. */
+  /** Enabled providers and their known models. */
   groups: ModelPickerProviderGroup[];
   value: AssistantModelSelection;
   favorites: NonNullable<AssistantModelSelection>[];
-  localOnly: boolean;
-  onLocalOnlyChange: (localOnly: boolean) => void;
   /** List models that cannot run the assistant too. */
   showAllModels: boolean;
   onShowAllModelsChange: (showAll: boolean) => void;
@@ -125,6 +124,10 @@ export function ModelPickerContent({
   onSelect: (provider: AiProviderRow, model: string) => void;
   onToggleFavorite: (provider: string, model: string) => void;
   onCheckModels: (provider: AiProviderRow) => void;
+  /** Sits beside a reasoning column and above a footer, so it leaves them room. */
+  docked?: boolean;
+  /** Right at the end of the query moves into the docked reasoning column. */
+  onFocusEffort?: () => void;
 }) {
   const { t } = useTranslation("assistant");
   const listId = React.useId();
@@ -139,6 +142,10 @@ export function ModelPickerContent({
   }
   const [query, setQuery] = React.useState("");
   const [highlightedKey, setHighlightedKey] = React.useState<string | null>(null);
+  // Whether the highlight was last moved with the arrow keys. Only such a
+  // highlight is picked by ArrowRight; one the mouse or a rail switch left
+  // behind is not.
+  const keyboardHighlight = React.useRef(false);
   const [heldHeight, setHeldHeight] = React.useState<number | null>(null);
   const rootRef = React.useRef<HTMLDivElement>(null);
   const listRef = React.useRef<HTMLDivElement>(null);
@@ -155,8 +162,8 @@ export function ModelPickerContent({
     [groups],
   );
 
-  // A provider hidden by the Local filter (or removed in Settings) cannot stay
-  // the active view; fall back to the first remaining provider.
+  // A provider removed in Settings cannot stay the active view; fall back
+  // to the first remaining provider.
   const activeView = React.useMemo<ModelPickerView>(
     () =>
       view === null
@@ -210,14 +217,11 @@ export function ModelPickerContent({
         const model =
           group.models.find((row) => row.id === favorite.model) ?? { id: favorite.model };
         const item = toItem(group.provider, model);
-        // An unverified favorite falls back to the provider's posture, so the
-        // Local filter can only keep it when that posture is local too.
-        if (localOnly && item.posture !== "local") continue;
         items.push(item);
       }
     }
     return items;
-  }, [favorites, groups, localOnly, toItem]);
+  }, [favorites, groups, toItem]);
 
   const items = React.useMemo<PickerItem[]>(() => {
     if (isSearching) {
@@ -370,6 +374,7 @@ export function ModelPickerContent({
     const start = highlightedIndex < 0 ? (delta > 0 ? -1 : 0) : highlightedIndex;
     const next = (start + delta + items.length) % items.length;
     scrollHighlightRef.current = true;
+    keyboardHighlight.current = true;
     setHighlightedKey(items[next].key);
   };
 
@@ -389,6 +394,35 @@ export function ModelPickerContent({
     if (plain && event.key === "Enter") {
       event.preventDefault();
       pick(items[highlightedIndex]);
+      return;
+    }
+    if (
+      plain &&
+      onFocusEffort &&
+      !event.shiftKey &&
+      event.key === "ArrowRight" &&
+      event.currentTarget.selectionStart === query.length &&
+      event.currentTarget.selectionEnd === query.length
+    ) {
+      // The column shows the selected model's levels, so a model the arrow
+      // keys highlighted is picked first; the picker then moves to its
+      // levels. A highlight the mouse or a rail switch left behind is not
+      // picked by an arrow key (Enter picks it): ArrowRight moves to the
+      // selected model's levels instead.
+      const item = items[highlightedIndex];
+      if (
+        item &&
+        item.key !== selectedKey &&
+        keyboardHighlight.current &&
+        highlightedKey !== null &&
+        !selectDisabled
+      ) {
+        event.preventDefault();
+        pick(item);
+        return;
+      }
+      event.preventDefault();
+      onFocusEffort();
       return;
     }
     if (
@@ -458,7 +492,13 @@ export function ModelPickerContent({
     <div
       ref={rootRef}
       data-model-picker-content
-      className="relative flex h-[min(25rem,calc(var(--radix-popover-content-available-height,100vh)-1rem))] min-h-[15rem] w-full flex-row overflow-hidden"
+      className={cn(
+        "relative flex min-h-[15rem] w-full min-w-0 flex-row overflow-hidden",
+        // Docked, the footer below needs its share of the available height.
+        docked
+          ? "h-[min(22rem,calc(var(--radix-popover-content-available-height,100vh)-4rem))] flex-1"
+          : "h-[min(25rem,calc(var(--radix-popover-content-available-height,100vh)-1rem))]",
+      )}
       // Hold the height from when the search started: results scroll instead
       // of the popover jumping under the pointer.
       style={heldHeight !== null ? { height: heldHeight } : undefined}
@@ -505,27 +545,6 @@ export function ModelPickerContent({
               onKeyDown={handleSearchKeyDown}
               className="h-6.5 w-full bg-transparent ps-6 text-sm leading-6.5 text-foreground outline-none placeholder:text-muted-foreground/60"
             />
-          </div>
-          <div
-            className="inline-flex shrink-0 rounded-md bg-muted p-0.5 text-2xs"
-            role="group"
-            aria-label={t("modelPicker.privacyFilter")}
-          >
-            {([false, true] as const).map((local) => (
-              <button
-                key={String(local)}
-                type="button"
-                aria-pressed={localOnly === local}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => onLocalOnlyChange(local)}
-                className={cn(
-                  "rounded-sm px-1.5 py-0.5 text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
-                  localOnly === local && "bg-background text-foreground shadow-xs",
-                )}
-              >
-                {local ? t("modelPicker.localModels") : t("modelPicker.allModels")}
-              </button>
-            ))}
           </div>
         </div>
 
@@ -633,7 +652,10 @@ export function ModelPickerContent({
                   jumpLabel={jumpLabels.get(item.key) ?? null}
                   disabled={selectDisabled}
                   onSelect={() => pick(item)}
-                  onHighlight={() => setHighlightedKey(item.key)}
+                  onHighlight={() => {
+                    keyboardHighlight.current = false;
+                    setHighlightedKey(item.key);
+                  }}
                   favoriteShortcut={favoriteShortcut}
                   onToggleFavorite={() => onToggleFavorite(item.provider.name, item.model.id)}
                 />

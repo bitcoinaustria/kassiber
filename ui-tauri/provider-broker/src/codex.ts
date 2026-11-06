@@ -14,7 +14,7 @@ import {
   writeEvent,
 } from "./protocol.js";
 import { providerEnvironment, resolveExecutable } from "./executables.js";
-import { CHAT_ONLY_INSTRUCTIONS, promptFromMessages, systemInstructions } from "./prompt.js";
+import { CHAT_ONLY_INSTRUCTIONS, promptFromMessages, promptImages, systemInstructions } from "./prompt.js";
 
 export const SENSITIVE_CODEX_PROFILE = "kassiber-selected-context";
 export function sensitiveCodexConfig() {
@@ -66,6 +66,44 @@ export const CODEX_NON_TOOL_ITEM_TYPES = new Set([
   "reasoning",
   "dynamicToolCall",
 ]);
+
+/** Only protocol categories and bounded HTTP status codes leave the adapter. */
+function codexFailureMessage(error: unknown): string {
+  const info = error && typeof error === "object"
+    ? (error as { codexErrorInfo?: unknown }).codexErrorInfo : undefined;
+  switch (info) {
+    case "unauthorized":
+      return "Codex requires authentication. Run `codex login` outside Kassiber.";
+    case "usageLimitExceeded":
+    case "sessionBudgetExceeded":
+      return "Codex reported that the account's usage limit was reached.";
+    case "rateLimitExceeded":
+      return "Codex is rate limited. Try again later.";
+    case "contextWindowExceeded":
+      return "Codex reached the context limit. Start a new chat.";
+    case "modelNotFound":
+      return "Codex could not find the selected model. Check models and choose another.";
+    case "badRequest":
+      return "Codex rejected the request. Check the selected model and reasoning level.";
+    case "serverOverloaded":
+    case "internalServerError":
+      return "Codex reported a provider server error. Try again later.";
+    case "sandboxError":
+      return "Codex could not start its restricted execution environment.";
+  }
+  if (info && typeof info === "object") {
+    for (const category of ["httpConnectionFailed", "responseStreamConnectionFailed",
+      "responseStreamDisconnected", "responseTooManyFailedAttempts"] as const) {
+      const detail = (info as Record<string, unknown>)[category];
+      if (!detail || typeof detail !== "object") continue;
+      const status = (detail as { httpStatusCode?: unknown }).httpStatusCode;
+      return typeof status === "number" && Number.isInteger(status) && status >= 400 && status <= 599
+        ? `Codex could not connect to the provider (HTTP ${status}).`
+        : "Codex lost its connection to the provider. Try again.";
+    }
+  }
+  return "Codex reported a provider error.";
+}
 
 type JsonRpc = {
   id?: number | string;
@@ -610,10 +648,19 @@ export async function codexChat(
           const turn = message.params?.turn as { status?: string; error?: unknown } | undefined;
           resolve({ status: turn?.status || "completed", error: turn?.error });
         } else if (message.method === "error") {
-          reject(new Error("Codex reported a provider error."));
+          // A retry notification leaves the turn active. Aborting here kills
+          // the app-server before it can recover a transient connection.
+          if (message.params?.willRetry === true) {
+            writeEvent({ type: "status", phase: "retrying", message: "Codex is retrying the request." });
+          } else {
+            reject(new Error(codexFailureMessage(message.params?.error)));
+          }
         }
       });
     });
+    // A notification can reject before turn/start or the tier lookup settles.
+    // The same rejection is still observed by the completion race below.
+    completion.catch(() => undefined);
     const effort = request.options?.reasoning_effort;
     const tier = await turnTier(
       connection,
@@ -623,7 +670,14 @@ export async function codexChat(
     );
     await startTurn(connection, {
       threadId,
-      input: [{ type: "text", text: prompt }],
+      input: [
+        { type: "text", text: prompt },
+        // Inline data URLs only: never a path Codex would read itself.
+        ...promptImages(request.messages, resumed).map((image) => ({
+          type: "image",
+          url: `data:${image.media_type};base64,${image.data}`,
+        })),
+      ],
       approvalPolicy: "untrusted",
       approvalsReviewer: "user",
       ...(sensitive ? { permissions: SENSITIVE_CODEX_PROFILE } : {
@@ -637,7 +691,7 @@ export async function codexChat(
       ...tier,
     });
     const result = await Promise.race([completion, connection.closed]);
-    if (result.status !== "completed") throw new Error("Codex did not complete the response.");
+    if (result.status !== "completed") throw new Error(codexFailureMessage(result.error));
     writeEvent({
       type: "done",
       finish_reason: "stop",

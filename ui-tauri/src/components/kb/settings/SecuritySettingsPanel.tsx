@@ -1,20 +1,12 @@
-import {
-  CheckCircle2,
-  Fingerprint,
-  KeyRound,
-  Lock,
-  RefreshCw,
-  ShieldCheck,
-  ShieldOff,
-} from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import type { AppLockPolicy } from "@/store/ui";
 import { cn } from "@/lib/utils";
-import { SettingsSwitchRow } from "./SettingsControls";
+import { SettingsGroup, SettingsRow, SettingsSelect } from "./SettingsControls";
+
+const IDLE_MINUTES = [1, 5, 15, 30, 60];
 
 export function SecuritySettingsPanel({
   appLockPolicy,
@@ -77,232 +69,199 @@ export function SecuritySettingsPanel({
           : t("security.biometricVerifyHint")
       : t("security.biometricAvailableMacos")
     : t("security.biometricNeedsEncryption");
+  // A stored value outside the list (an older build's) stays selectable.
+  const idleMinutes = IDLE_MINUTES.includes(appLockPolicy.idleMinutes)
+    ? IDLE_MINUTES
+    : [...IDLE_MINUTES, appLockPolicy.idleMinutes].sort((a, b) => a - b);
 
   return (
     <div className="space-y-6">
-      {/* Encryption status + the two primary actions, surfaced first. */}
-      <section className="space-y-3">
-        <div className="flex items-center gap-2">
-          <KeyRound className="size-4" aria-hidden="true" />
-          <h3 className="text-sm font-semibold">
-            {t("security.encryptionHeading")}
-          </h3>
-        </div>
-        <div className="rounded-lg border bg-background p-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="min-w-0 space-y-1.5">
-              <span
-                className={cn(
-                  "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium",
-                  encryptedWorkspace
-                    ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                    : "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-                )}
-              >
-                {encryptedWorkspace ? (
-                  <ShieldCheck className="size-3" aria-hidden="true" />
-                ) : (
-                  <ShieldOff className="size-3" aria-hidden="true" />
-                )}
-                {encryptedWorkspace
-                  ? t("security.encrypted")
-                  : t("security.notEncrypted")}
-              </span>
-              <p className="max-w-prose text-sm text-muted-foreground">
-                {encryptedWorkspace
-                  ? t("security.encryptedDetail")
-                  : t("security.notEncryptedDetail")}
-              </p>
-            </div>
-            <div className="flex shrink-0 flex-wrap gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={onLockNow}
-              >
-                <Lock className="size-4" aria-hidden="true" />
-                {t("security.lockNow")}
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={onChangePassphrase}
-                disabled={!encryptedWorkspace}
-              >
-                <KeyRound className="size-4" aria-hidden="true" />
-                {t("security.changePassphrase")}
-              </Button>
-            </div>
-          </div>
-        </div>
-      </section>
+      <SettingsGroup
+        title={t("security.encryptionHeading")}
+        actions={
+          <Button type="button" size="sm" variant="outline" onClick={onLockNow}>
+            {t("security.lockNow")}
+          </Button>
+        }
+      >
+        <SettingsRow
+          label={t("security.encryptionStatus")}
+          description={
+            encryptedWorkspace
+              ? t("security.encryptedDetail")
+              : t("security.notEncryptedDetail")
+          }
+        >
+          <span
+            className={cn(
+              "text-sm",
+              encryptedWorkspace
+                ? "text-emerald-600 dark:text-emerald-400"
+                : "text-amber-600 dark:text-amber-400",
+            )}
+          >
+            {encryptedWorkspace
+              ? t("security.encrypted")
+              : t("security.notEncrypted")}
+          </span>
+        </SettingsRow>
+        <SettingsRow
+          label={t("security.passphraseLabel")}
+          description={
+            encryptedWorkspace
+              ? t("security.passphraseDescription")
+              : t("security.passphraseNeedsEncryption")
+          }
+        >
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={onChangePassphrase}
+            disabled={!encryptedWorkspace}
+          >
+            {t("security.changePassphrase")}
+          </Button>
+        </SettingsRow>
+      </SettingsGroup>
 
-      {/* App lock */}
-      <section className="space-y-3">
-        <div className="flex items-center gap-2">
-          <Lock className="size-4" aria-hidden="true" />
-          <h3 className="text-sm font-semibold">
-            {t("security.appLockHeading")}
-          </h3>
-        </div>
-        <div className="rounded-lg border bg-background p-3">
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0 space-y-1">
-              <Label className="text-sm font-medium">
-                {t("security.autoLockLabel")}
-              </Label>
-              <p className="text-sm text-muted-foreground">
-                {t("security.autoLockDescription")}
-              </p>
-            </div>
-            <Switch
-              checked={appLockPolicy.autoLockWhenIdle}
-              onCheckedChange={(checked) =>
-                setAppLockPolicy({ autoLockWhenIdle: checked })
+      <SettingsGroup title={t("security.appLockHeading")}>
+        <SettingsRow
+          label={t("security.autoLockLabel")}
+          description={t("security.autoLockDescription")}
+          htmlFor="settings-auto-lock"
+        >
+          <Switch
+            id="settings-auto-lock"
+            checked={appLockPolicy.autoLockWhenIdle}
+            onCheckedChange={(checked) =>
+              setAppLockPolicy({ autoLockWhenIdle: checked })
+            }
+          />
+        </SettingsRow>
+        {appLockPolicy.autoLockWhenIdle ? (
+          <SettingsRow
+            label={t("security.lockAfter")}
+            htmlFor="settings-lock-after"
+          >
+            <SettingsSelect
+              value={String(appLockPolicy.idleMinutes)}
+              onValueChange={(value) =>
+                setAppLockPolicy({ idleMinutes: Number(value) })
               }
+              options={idleMinutes.map((minutes) => ({
+                value: String(minutes),
+                label: t("security.minutes", { count: minutes }),
+              }))}
+              triggerProps={{ id: "settings-lock-after" }}
             />
-          </div>
-          {appLockPolicy.autoLockWhenIdle ? (
-            <div className="mt-3 space-y-2 border-t pt-3">
-              <Label className="text-xs text-muted-foreground">
-                {t("security.lockAfter")}
-              </Label>
-              <div className="flex flex-wrap gap-1.5">
-                {[1, 5, 15, 30, 60].map((minutes) => (
-                  <Button
-                    key={minutes}
-                    type="button"
-                    size="sm"
-                    variant={
-                      appLockPolicy.idleMinutes === minutes
-                        ? "default"
-                        : "outline"
-                    }
-                    onClick={() => setAppLockPolicy({ idleMinutes: minutes })}
-                  >
-                    {t("security.minutes", { count: minutes })}
-                  </Button>
-                ))}
-              </div>
-            </div>
-          ) : null}
-        </div>
-        <SettingsSwitchRow
+          </SettingsRow>
+        ) : null}
+        <SettingsRow
           label={t("security.requireOnLaunchLabel")}
           description={
             encryptedWorkspace
               ? t("security.requireOnLaunchEncrypted")
               : t("security.requireOnLaunchPlaintext")
           }
-          checked={encryptedWorkspace || appLockPolicy.requirePassphraseOnLaunch}
-          disabled={encryptedWorkspace}
-          onCheckedChange={(checked) =>
-            setAppLockPolicy({ requirePassphraseOnLaunch: checked })
-          }
-        />
-        <SettingsSwitchRow
+          htmlFor="settings-require-on-launch"
+        >
+          <Switch
+            id="settings-require-on-launch"
+            checked={encryptedWorkspace || appLockPolicy.requirePassphraseOnLaunch}
+            disabled={encryptedWorkspace}
+            onCheckedChange={(checked) =>
+              setAppLockPolicy({ requirePassphraseOnLaunch: checked })
+            }
+          />
+        </SettingsRow>
+        <SettingsRow
           label={t("security.lockOnCloseLabel")}
           description={t("security.lockOnCloseDescription")}
-          checked={appLockPolicy.lockOnWindowClose}
-          onCheckedChange={(checked) =>
-            setAppLockPolicy({ lockOnWindowClose: checked })
-          }
-        />
-      </section>
+          htmlFor="settings-lock-on-close"
+        >
+          <Switch
+            id="settings-lock-on-close"
+            checked={appLockPolicy.lockOnWindowClose}
+            onCheckedChange={(checked) =>
+              setAppLockPolicy({ lockOnWindowClose: checked })
+            }
+          />
+        </SettingsRow>
+      </SettingsGroup>
 
-      {/* Biometric unlock */}
-      <section className="space-y-3">
-        <div className="flex items-center gap-2">
-          <Fingerprint className="size-4" aria-hidden="true" />
-          <h3 className="text-sm font-semibold">
-            {t("security.biometricHeading")}
-          </h3>
-        </div>
-        <div className="rounded-lg border bg-background p-3">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="min-w-0 space-y-1">
-              <div className="flex items-center gap-2">
-                {touchIdConfigured ? (
-                  <CheckCircle2
-                    className="size-4 text-emerald-600 dark:text-emerald-400"
-                    aria-hidden="true"
-                  />
-                ) : null}
-                <p className="text-sm font-medium">
-                  {t("security.biometricTitle", { status: biometricStatus })}
-                </p>
-              </div>
-              <p className="text-sm text-muted-foreground">{biometricDetail}</p>
-            </div>
-            <div className="flex shrink-0 flex-wrap gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                disabled={!biometricActionable}
-                onClick={onRefreshTouchId}
-              >
-                <RefreshCw className="size-4" aria-hidden="true" />
-                {t("common:actions.refresh")}
-              </Button>
-              {touchIdConfigured ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={!biometricActionable}
-                  onClick={onForgetTouchId}
-                >
-                  {t("security.forget")}
-                </Button>
-              ) : (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={!biometricActionable}
-                  onClick={onEnrollTouchId}
-                >
-                  {t("security.setUp")}
-                </Button>
-              )}
-            </div>
-          </div>
-          <div className="mt-3 flex items-start justify-between gap-4 border-t pt-3">
-            <div className="min-w-0 space-y-1">
-              <Label className="text-sm font-medium">
-                {t("security.offerBiometricLabel")}
-              </Label>
-              <p className="text-sm text-muted-foreground">
-                {t("security.offerBiometricDescription")}
-              </p>
-            </div>
-            <Switch
-              checked={appLockPolicy.touchIdUnlock && touchIdConfigured}
-              disabled={!encryptedWorkspace || !touchIdConfigured}
-              onCheckedChange={(checked) =>
-                setAppLockPolicy({ touchIdUnlock: checked })
-              }
-            />
-          </div>
-          <div className="mt-3 flex items-center justify-between gap-4 border-t pt-3">
-            <p className="text-sm text-muted-foreground">
-              {t("security.forgetAllDescription")}
-            </p>
+      <SettingsGroup title={t("security.biometricHeading")}>
+        <SettingsRow label={t("security.biometricLabel")} description={biometricDetail}>
+          <span
+            className={cn(
+              "text-sm",
+              touchIdConfigured && !touchIdStatusPending
+                ? "text-emerald-600 dark:text-emerald-400"
+                : "text-muted-foreground",
+            )}
+          >
+            {biometricStatus}
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={!biometricActionable}
+            onClick={onRefreshTouchId}
+          >
+            {t("common:actions.refresh")}
+          </Button>
+          {touchIdConfigured ? (
             <Button
               type="button"
               size="sm"
-              variant="ghost"
-              disabled={forgetAllPending}
-              onClick={onForgetAllUnlock}
+              variant="outline"
+              disabled={!biometricActionable}
+              onClick={onForgetTouchId}
             >
-              {t("security.forgetAll")}
+              {t("security.forget")}
             </Button>
-          </div>
-        </div>
-      </section>
+          ) : (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={!biometricActionable}
+              onClick={onEnrollTouchId}
+            >
+              {t("security.setUp")}
+            </Button>
+          )}
+        </SettingsRow>
+        <SettingsRow
+          label={t("security.offerBiometricLabel")}
+          description={t("security.offerBiometricDescription")}
+          htmlFor="settings-offer-biometric"
+        >
+          <Switch
+            id="settings-offer-biometric"
+            checked={appLockPolicy.touchIdUnlock && touchIdConfigured}
+            disabled={!encryptedWorkspace || !touchIdConfigured}
+            onCheckedChange={(checked) =>
+              setAppLockPolicy({ touchIdUnlock: checked })
+            }
+          />
+        </SettingsRow>
+        <SettingsRow
+          label={t("security.savedUnlockLabel")}
+          description={t("security.forgetAllDescription")}
+        >
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={forgetAllPending}
+            onClick={onForgetAllUnlock}
+          >
+            {t("security.forgetAll")}
+          </Button>
+        </SettingsRow>
+      </SettingsGroup>
     </div>
   );
 }

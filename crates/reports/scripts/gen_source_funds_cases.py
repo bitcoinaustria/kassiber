@@ -10,6 +10,7 @@ from kassiber.core import source_funds
 from kassiber.db import open_db
 from kassiber.envelope import build_envelope
 from crates.reports.scripts.gen_source_funds_reads import BASE, ROOT
+from tests.rust_port.book_schema import TABLES
 
 DESTINATION = ROOT / 'crates/reports/tests/data/source_funds_cases.json'
 STAMP = '2026-01-02T03:04:05Z'
@@ -65,7 +66,7 @@ def outcome(conn, case):
 def dump(conn):
     tables = [row[0] for row in conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")]
-    assert len(tables) == 112
+    assert tuple(tables) == TABLES
     return {table: sorted([dict(row) for row in conn.execute(f'SELECT * FROM "{table}"')],
                           key=lambda row: json.dumps(row, sort_keys=True)) for table in tables}
 

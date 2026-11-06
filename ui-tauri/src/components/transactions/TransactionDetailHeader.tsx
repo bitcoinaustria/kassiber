@@ -78,7 +78,8 @@ export function TransactionDetailHeader({
   checklist?: ReactNode;
   explorer: ExplorerSummary;
   onOpenExplorer: (transaction: Transaction) => void;
-  onClose: () => void;
+  /** Absent in the right panel, whose tab carries the close. */
+  onClose?: () => void;
   /** "Ask about this": hands the record to the assistant panel. */
   onAskAssistant?: () => void;
   /** Return along the coins followed inside the sheet. */
@@ -91,6 +92,9 @@ export function TransactionDetailHeader({
   const showReviewStatusChip =
     reviewStatus !== "completed" &&
     !(reviewStatus === "pending" && confirmations <= 0);
+  const walletRepeatsCounterparty =
+    Boolean(transaction.wallet && transaction.counterparty) &&
+    transaction.wallet?.trim().toLowerCase() === transaction.counterparty?.trim().toLowerCase();
   // The headline amount follows the app's bitcoin/fiat switch, and clicking
   // either amount flips it, as in the transaction list.
   const currency = useCurrency();
@@ -202,7 +206,9 @@ export function TransactionDetailHeader({
                 <span className="text-muted-foreground">·</span>
               </>
             ) : null}
-            {!pair ? (
+            {/* An exchange's export names the wallet after the exchange;
+                say it once. */}
+            {!pair && !walletRepeatsCounterparty ? (
               <>
                 <span className="text-muted-foreground">
                   {transaction.wallet ?? t("detailHeader.unassignedWallet")}
@@ -240,15 +246,17 @@ export function TransactionDetailHeader({
               <ExternalLink className="size-4" aria-hidden="true" />
             </Button>
           ) : null}
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            aria-label={t("detailHeader.close")}
-            onClick={onClose}
-          >
-            <X className="size-4" aria-hidden="true" />
-          </Button>
+          {onClose ? (
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              aria-label={t("detailHeader.close")}
+              onClick={onClose}
+            >
+              <X className="size-4" aria-hidden="true" />
+            </Button>
+          ) : null}
         </div>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t bg-muted/50 px-4 py-2 sm:px-6">

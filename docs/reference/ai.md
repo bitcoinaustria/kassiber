@@ -149,7 +149,7 @@ replay out, once; a refusal naming neither drops the effort first. The answer th
 `notices` (and so `kassiber chat --machine`), stored history, and the
 desktop's notice under the answer.
 
-Model listings feed the effort menu. A model whose `supported_parameters`
+Model listings feed the picker's reasoning column. A model whose `supported_parameters`
 include `reasoning`, `include_reasoning`, or `reasoning_effort` (OpenRouter
 lists them) reports `supports_reasoning_effort: true` and `reasoning_efforts`
 with the HTTP levels it takes, narrowed by OpenRouter's
@@ -158,12 +158,12 @@ same list, or `null` when a listing says nothing, as OpenAI's does.
 `input_modalities` and `output_modalities` come from OpenRouter's
 `architecture`, as bounded lowercase lists.
 
-The desktop's effort menu offers an HTTP model only the levels in its
+The desktop's reasoning column offers an HTTP model only the levels in its
 `reasoning_efforts`, all three when it takes an effort without naming any, and
 none when its listing does not say it takes one (as OpenAI's never does) or
 before **Check models** has listed it. Levels a listing names elsewhere, such
 as `capabilities.reasoning_efforts: ["xhigh"]`, are not offered, and an HTTP
-provider's default effort on its Settings card is bounded to low, medium and
+provider's default effort in its Settings row is bounded to low, medium and
 high the same way. A stored default the model does not offer moves to the
 nearest offered level, as for CLI agents.
 
@@ -310,14 +310,77 @@ guarantee. Do not paste raw credentials, raw private descriptors, Silent
 Payments `sp()` / `spscan` scan material, wallet exports, or other sensitive
 material into a remote model unless that is acceptable for your threat model.
 
-If in doubt, keep inference local.
+If in doubt, keep inference local, or restrict the provider's agent access.
+
+### Agent access
+
+Each provider has an `agent_access` setting, `full` by default. With full
+access the assistant gets every tool and unprojected result: custody-gap,
+coverage and lineage reads and `ui.custody.review.apply`; review batches
+with pairs, dismissals, component revisions, custody-gap actions,
+acquisition kinds and coarse-price acceptance; chain-analysis
+sources, acquisition and dataset tools; chain-analysis results with their
+txids, outpoints and labels instead of opaque references; and an attached
+file's cell values and name. `restricted` keeps an off-device provider to the
+projected surface: those tools are denied with `agent_access_restricted`,
+chain-analysis results are projected, and an attachment is reduced to headers,
+counts and the column plan (its import plan likewise drops dates, amounts and
+the filename). Attached images and PDFs are not shown to a restricted
+provider at all. A provider on this device (kind `local` at a
+loopback URL) always has full access.
+
+Set it in the provider form (**Restrict what the assistant can use**) or with
+`kassiber ai providers create|update --agent-access full|restricted`. The
+daemon decides it once per chat in `_provider_has_full_agent_access`; a direct
+caller without that decision is restricted, and external agents over MCP use
+the access mode the user chose for them (see [MCP](mcp.md)). Neither mode sends
+descriptors, xpubs, wallet configuration, secrets, local paths or URLs, or
+offers raw shell, filesystem or CLI dispatch, and consent still gates every
+write.
+
+### Permission modes
+
+Who approves a write is the chat's `permission_mode`, decided by the daemon
+for every consented tool call (mutating tools and tools that leave the
+machine):
+
+- `approval` asks before each call, as before: allow once, allow for this
+  chat, or deny. Once-only tools (`AI_TOOL_ONCE_ONLY_CONSENT`) never take a
+  chat-wide allow. An absent mode is `approval`.
+- `auto` approves a tool marked `reversible` that does not egress, and asks
+  for everything else. A reversible tool's change can be taken back with
+  another AI tool whose arguments the result carries; the classification lives
+  in `REVERSIBLE_TOOLS` in `kassiber/ai/tools.py` and a test pins it.
+  Network access (sync, rate fetches, maintenance that may refresh,
+  chain-analysis acquisition), deletes without a restore, rollbacks, exports,
+  policy changes and batch writes always ask.
+- `full_access` approves every consented call without asking, once-only and
+  network tools included. Choosing it is the user's consent for that chat.
+
+`ai.chat` takes `permission_mode`; `ai.chat.permission_mode`
+(`{target_request_id, permission_mode}`) changes a running chat's mode and
+releases every waiting call the new mode approves, returning
+`released_call_ids`. An unknown or finished chat returns `updated: false`,
+`reason: "not_found"`, like `ai.tool_call.consent`. `kassiber chat
+--permission-mode approval|auto|full_access` sets it for the CLI (default
+`approval`). Approvals by a mode are audited as `mode_auto` or
+`mode_full_access`, never as a user click.
+
+A reversible tool's successful result carries
+`undo: {"tool": <wire name>, "arguments": {...}}`, the call that takes the
+change back: unpair a pair, delete a dismissal, revert a metadata or
+quarantine edit through `ui_transactions_history_revert`, plan a component's
+supersede or undo, plan an import rollback, and so on. A plan-bound inverse
+names its plan tool. No hint means nothing to undo (an edit that changed
+nothing) or no single call (several components created at once).
 
 Codex, Claude, OpenCode, and GitHub Copilot CLI providers are
 supported for convenience, but they are not a local-privacy guarantee. The
 broker denies provider-native tools in layers — Claude loads no
 user/project/local settings, empties its built-in tool set, disables slash
-commands, and accepts only its temporary Kassiber MCP server; OpenCode serves
-with `--pure` and a deny-all session permission plus exact Kassiber MCP allows;
+commands, and accepts only its temporary Kassiber MCP server; OpenCode 1 serves
+with `--pure`, while OpenCode 2 receives isolated provider-only configuration.
+Both use deny-all permissions plus exact Kassiber MCP allows;
 Codex runs a read-only sandbox with network access off; the
 [Agent Client Protocol agent](#agent-client-protocol-agents) starts with its
 built-in tools removed — and any tool outside the advertised Kassiber catalog
@@ -336,8 +399,11 @@ choose them deliberately.
 Codex exposes no tool-free profile, so a local read there can begin before the
 abort lands; with its network disabled that content can only surface through
 assistant text on a turn Kassiber is already failing. Kassiber reuses their normal local
-authentication/config, telemetry, and model-provider routing without reading,
-copying, persisting, or displaying provider credentials. Treat them as
+authentication/config, telemetry, and model-provider routing. OpenCode 2 reads
+provider configuration into RAM; private turns also transfer only the selected
+integration's active key credential between authenticated local servers in RAM.
+These values never enter Kassiber's database, diagnostics, or renderer. Other
+CLI adapters do not read or copy provider credentials. Treat CLI providers as
 off-device unless the underlying configuration proves local or confidential
 inference.
 
@@ -364,36 +430,66 @@ Completions work through the detected or chosen format.
 
 ### Adding a provider in the desktop
 
-**Add provider** in Settings → AI providers opens a form with presets:
-Ollama, oMLX, OpenAI (`https://api.openai.com/v1`), OpenRouter
-(`https://openrouter.ai/api/v1`), **Other OpenAI-compatible**, and the four CLI
-agents. A preset fills the name, base URL, posture and notes, and says in one
-line what it is for; none brings a model list. OpenAI and OpenRouter are
-remote, so choosing one shows the off-device warning and asks for its
-acknowledgement, and a new provider from either is not saved without an API
-key. **Other OpenAI-compatible** leaves the URL to the user.
+**Add provider** in Settings → Assistant opens a wizard, laid out after
+T3 Code's add-provider wizard, with a step track: **Provider**, **Connection**,
+**Privacy** (only for a provider whose prompts leave this device) and
+**Model**. Nothing contacts the provider until **Test connection** on the last
+step, and no step needs a test to finish.
 
-The posture follows the URL one way only. When the URL field is left, or the
-form is tested or saved, a local provider whose address is not on this device,
-or a CLI agent, moves to remote with a note saying why ("This address isn't on
-this device, so it's treated as remote."), and the acknowledgement is asked for
-again. On this device means `localhost`, `127.0.0.0/8` or an IPv6 loopback,
-read as written like the daemon's own check, so `127.1` is not loopback. The
-form never moves a provider to local and never changes a remote or TEE choice.
+**Provider** first asks how the model is reached, which is also where prompts
+go, each card with its posture badge:
 
-To use an OpenRouter key, choose **OpenRouter**, paste the key, acknowledge,
-and press **Test connection**. OpenRouter lists hundreds of models, so without
-a default model the test lists them but checks no reply ("Choose a model to
-check that it can answer."). The Default model field then suggests the listed
-models that can run the assistant, and testing again with one of them checks a
-reply, the format and tools. OpenAI works the same way.
+- **On this computer**: Ollama, LM Studio, vLLM, llama.cpp, oMLX, or
+  **Other compatible server**. Each local server shows the command that
+  starts it the way the assistant needs, to copy; Kassiber never runs it.
+  vLLM and llama.cpp refuse tools unless started with a tool parser
+  (`--enable-auto-tool-choice --tool-call-parser …`) or `--jinja`.
+- **Through your subscription app**: the Claude, Codex, OpenCode and GitHub
+  Copilot CLI agents.
+- **With an API key**: OpenAI (`https://api.openai.com/v1`), OpenRouter
+  (`https://openrouter.ai/api/v1`), or **Other OpenAI-compatible API**.
+
+"OpenAI-compatible" covers any server that speaks the OpenAI API; the two
+"other" entries differ only in posture: the server on this computer starts
+local and follows its address, the hosted API starts remote. A preset fills
+the name, base URL, posture and notes, and says in one line what it is for;
+none brings a model list. **Connection** holds the name, the address and the
+API key (kept in the system keychain), with the posture, API format, store
+choice and notes under **Advanced**. A new OpenAI or OpenRouter provider does
+not get past it without an API key, and leaving it runs the same address
+checks as the address field (below). **Privacy** says that prompts leave this
+device and what does not (descriptors, xpubs, secrets and wallet files), and
+holds the acknowledgement; the wizard does not move on without it. It also
+holds **Restrict what the assistant can use**, unticked, which sets the
+provider's [agent access](#agent-access) to restricted. **Model**
+holds the default model and **Test connection**. Editing a provider opens the
+same wizard at **Connection**, without the provider step, and saves from any
+step.
+
+The posture follows the URL one way only. When the URL field is left, the
+Connection step is left, or the form is tested or saved, a local provider
+whose address is not on this device, or a CLI agent, moves to remote with a
+note saying why ("This address isn't on this device, so it's treated as
+remote."), and the acknowledgement is asked for again; a save that moves it
+returns to the Privacy step. On this device means `localhost`, `127.0.0.0/8`
+or an IPv6 loopback, read as written like the daemon's own check, so `127.1`
+is not loopback. The form never moves a provider to local and never changes a
+remote or TEE choice.
+
+To use an OpenRouter key, choose **With an API key** → **OpenRouter**, paste
+the key, acknowledge, and press **Test connection** on the Model step.
+OpenRouter lists hundreds of models, so without a default model the test lists
+them but checks no reply ("Choose a model to check that it can answer."). The
+Default model field then suggests the listed models that can run the
+assistant, and testing again with one of them checks a reply, the format and
+tools. OpenAI works the same way.
 
 **Advanced** holds the API format: **Auto (recommended)**, **Responses API** or
 **Chat Completions** (see [Choosing the format](#choosing-the-format)). It is
 sent as `api_format` with the test and the saved row, opens on its own when a
 provider has a format other than auto, and shows an edited provider's last
-detection while the URL is the saved one; CLI agents have no format and no
-such section. It also holds the one explicit way to leave out
+detection while the URL is the saved one; CLI agents have no format, so for
+them Advanced holds only the posture and notes. It also holds the one explicit way to leave out
 `store: false`: an unchecked-by-default box, "Send requests without
 Kassiber's no-retention flag", whose hint says the provider's own retention
 then applies to prompts and tool results. It is saved as `omit_store_field`,
@@ -421,31 +517,66 @@ checkbox ("Testing sends a short prompt to this provider. Acknowledge that
 prompts may leave this device first.") unless the saved provider is already
 acknowledged as off-device, and sends `acknowledged: true` once it is ticked.
 
-### Settings → AI providers
+### Settings → Assistant
 
-Each provider is a card with its brand mark, privacy posture, kind (HTTP or
-CLI agent), and default badge. CLI agents sign in through their own CLI, so
-their cards show a runtime status instead of key storage: installed version
-and signed in, not installed, sign-in needed, or an error, with the broker's
-sanitized hint (for example ``Run `copilot login` outside Kassiber.``) and
-when it was checked. HTTP cards show the base URL with the API format the next
-chat speaks (the pinned format, the detected one, or that auto has detected
-nothing yet), key storage, and whether the last check reached the endpoint and
-how many models it listed. A provider set to `omit_store_field` says on its
-card that it sends requests without Kassiber's no-retention flag and that the
-provider's own retention applies.
+The page has three lists built from the same few controls (a switch for
+on/off, one dropdown for a choice, plain buttons for actions). The first holds
+the **Use the assistant** switch (AI features), the permission mode new chats start
+in, whether chats are kept, and deleting saved ones; then come **Models** and
+**External agents** (see [MCP](mcp.md)).
 
-Opening the page contacts no provider. CLI cards read the daemon's last
-result with `ai.provider_runtime.status` and `cached_only: true`, which never
-starts a probe, even on a cold cache; HTTP cards show what **Check models**
-already found in this session for the provider's current endpoint. CLI cards
+Each provider in Models is one row: its brand mark, name, "Default" on the
+default, where it runs (on this computer, a subscription app, a remote or
+confidential server), its default model, the last check's status and its
+on/off switch. Opening the row shows the rest and the actions (**Check**,
+**Set as default**, **Edit**, moving the key, **Remove**).
+CLI agents sign in through their own CLI, so their rows show a runtime status
+instead of key storage: installed version and signed in, not installed,
+sign-in needed, or an error, with the broker's sanitized hint (for example
+``Run `copilot login` outside Kassiber.``) and when it was checked. HTTP rows
+show the base URL with the API format the next chat speaks (the pinned
+format, the detected one, or that auto has detected nothing yet), key
+storage, and whether the last check reached the endpoint and how many models
+it listed. A provider set to `omit_store_field` says in its details that it
+sends requests without Kassiber's no-retention flag and that the provider's
+own retention applies.
+
+Opening the page contacts no provider. Cards read the daemon's last result
+with `cached_only: true`, which never starts a probe, even on a cold cache:
+`ai.provider_runtime.status` for a CLI agent, `ai.list_models` for an HTTP
+provider. The daemon keeps each provider's last check in the book
+(`ai_provider_checks`), so after a restart a row still shows what it found
+and when ("checked 3 days ago") instead of "Not checked yet". Only a check the
+user started writes it: **Check**, **Check all**, **Set up**, or the picker's
+**Check models**. It is read back only while the provider has the base URL it
+was made at, and a new key or any edit that clears the discovery cache
+deletes it; a later check that fails reports it marked stale. `cached_only`
+with `refresh` is refused. `ai.providers.list` also reports each provider's
+`last_checked_at` and `set_up`.
+
+The model picker restores these saved checks too, including local HTTP model
+lists and CLI runtime inventories. When both kinds exist, the newer check
+wins; a newer not-ready runtime clears an older model list. The picker keeps
+its checked inventory in memory for the app session and restores it from the
+book after a restart, scoped to the provider and checked endpoint. Restoring
+uses only `cached_only` reads; it never launches a CLI or contacts a provider.
+Fresh discovery still requires an explicit check.
+
+Built-in providers the user has not used yet are folded into a collapsed
+**N more providers** line at the end of the list: a built-in row still at its built-in address and name
+that is not the default, was never checked, and (off-device) was never
+acknowledged. Each row has **Set up**, which switches it on if needed and runs
+its check, asking for the acknowledgement first as any check does, and a
+remove button that shows on hover or keyboard focus. The group is display only; it never decides whether a provider
+may be contacted, and the model picker still lists every enabled provider.
+Providers the user added are always shown as rows. CLI rows
 also show a **Check models** result from the picker: when it is newer than
-the last runtime check, the card lists its models (and fast mode where one
+the last runtime check, the row lists its models (and fast mode where one
 offers it) as "Models listed", keeping a ready runtime's version line. A
 newer runtime check that is not ready shows no models. Results
 belong to the base URL that was checked (for a CLI agent, the runtime its
 locator names), in the desktop and in the daemon's discovery cache, so after
-the URL is edited the card reads "not checked", or shows the new runtime's
+the URL is edited the row reads "not checked", or shows the new runtime's
 last cached result, until the user checks it again; nothing probes the new
 endpoint on its own. A check is bound to the endpoint the user chose: the
 desktop sends that `base_url` with `ai.list_models` and the scoped
@@ -463,14 +594,14 @@ for it, so models and capabilities such as fast mode are no longer offered
 from an earlier check. **Check all** does the same
 for every enabled provider, one request per provider. Off-device providers
 need the acknowledgement first (one confirmation for all of them); if it
-cannot be recorded, each of those cards shows why and none of them is
+cannot be recorded, each of those rows shows why and none of them is
 checked, while the other providers still are. Offline
 mode refuses them before anything is asked, and the checks are unavailable
 while AI features are off. A failed check is reported once rather than
 retried, and its error belongs to that book and endpoint like the results
 do. A check sends no prompt.
 
-Each card also carries:
+Each row also carries:
 
 - **An enable switch.** A disabled provider is hidden from the model picker
   (a remembered selection on it falls back to the default provider) and is
@@ -515,7 +646,7 @@ Each card also carries:
   HTTP](#reasoning-effort-over-http)).
 - **A fast mode note** where one of the provider's models offers fast mode.
   Fast mode has no stored default: it is billed at a higher rate, so it stays
-  a per-session choice in the reasoning menu.
+  a per-session choice in the model picker's speed toggle.
 
 If Kassiber itself is running inside a container and Ollama is running on the
 host, seed the provider with the Docker host alias instead:
@@ -560,10 +691,45 @@ executables, reports `ready`, `missing executable`, or `authentication
 required`, and tells the user to run the provider's normal login command
 outside Kassiber when necessary. It uses Codex `app-server`, the Claude
 executable's `--output-format stream-json` event stream with strict MCP config,
-and the OpenCode SDK v2 against an ephemeral loopback OpenCode server, and the
+the OpenCode 1 SDK or OpenCode 2 HTTP API against a temporary loopback server, and the
 Agent Client Protocol for GitHub Copilot. A local Node.js executable
 meeting the [broker package requirements](../../ui-tauri/package.json) is
 required to run the bundled broker.
+
+OpenCode discovery and chat support the 1.x CLI (tested with 1.18.10) and stable
+2.x (tested with 2.2.0). Version 2 uses its current model/provider HTTP endpoints
+and a random-password-authenticated loopback server. Its provider settings are
+read into RAM from the user's JSON/JSONC configuration; user plugins, MCP
+servers, instructions, and project configuration are excluded. Native tools
+are denied, and only the advertised `kassiber_<tool>` MCP names are allowed,
+with MCP Code Mode disabled. The broker waits for its own MCP handshake and
+tool listing before prompting, then allows 250 ms for v2.2's 100 ms debounced
+tool-catalog reconciliation. That delay is a compatibility workaround: the
+API does not expose a registry-readiness barrier, so severe child-process
+event-loop delays can still postpone tool availability.
+
+Every OpenCode 2 turn starts a new native session from the visible transcript,
+with Kassiber's system instructions; no native session cursor is resumed or
+returned. Ordinary sessions remain in OpenCode's own database. Private turns
+use an in-memory database and transfer only the chosen integration's active
+key credential into it over authenticated loopback APIs, without sending a
+prompt to the persistent database. OAuth-backed private turns are refused:
+refreshing a copied OAuth token could invalidate the persistent login.
+Ordinary OAuth chats continue to use the native credential store.
+
+All OpenCode 2 process logs are redirected to a preinstalled null-device sink.
+Version 2 is refused on Windows, with system-managed configuration that cannot
+be isolated, and on prerelease/custom-channel builds whose log destination is
+not audited. Unknown future major versions are refused. A failed model-list
+command is a check error, not evidence that the user needs to log in. None of
+these processes starts merely by opening the picker or restoring cached models.
+
+Codex error notifications with `willRetry: true` leave the turn running so
+its own connection retries can complete. Terminal failures report only known
+protocol categories (such as authentication, usage limit, model or context)
+and bounded HTTP status codes; provider error text and additional details
+stay out of the response. `AI_REQUEST_INVALID` alone is the broker's fallback
+error code and does not establish that the user's prompt was invalid.
 
 ### Agent Client Protocol agents
 
@@ -678,7 +844,7 @@ HTTP](#reasoning-effort-over-http)). Copilot, OpenCode
 and HTTP providers have no fast mode, and no provider stores it as a default.
 The option (`options.fast_mode`, a boolean) crosses to the provider broker only
 when it is `true` and is never put in an HTTP request body. The desktop offers
-the toggle in the reasoning menu only for a model whose checked row advertises
+the Standard | Fast toggle in the model picker's footer only for a model whose checked row advertises
 it; that row depends on the installed CLI's version, so nothing is offered
 before Check models (which never runs on its own). It drops the toggle when the
 selected model changes to one that does not offer it;
@@ -693,8 +859,9 @@ editing or branching starts a clean native provider session.
 
 ## In-app surface
 
-The desktop assistant is a right-side panel beside every authenticated screen,
-with a composer or launcher below the page while it is closed (see
+The desktop assistant is a tab of the right panel beside every
+authenticated screen, next to an open transaction's details, with a composer
+or launcher below the page while it is not in the panel (see
 [the desktop reference](desktop.md)). Its provider/model picker is fed by
 `ai.providers.list` and `ai.list_models` over the daemon protocol; chat
 streaming is wired through Tauri events (`daemon://stream`) so the UI can
@@ -707,6 +874,16 @@ native CLI must not refresh global runtime status or start other providers.
 Stored configuration and cached models remain visible without discovery.
 First use still requires Kassiber's off-device acknowledgement.
 
+Until a model is chosen, the empty chat (the Assistant page and the panel)
+shows **Choose a model to start**: the coding agents (Claude, Codex, GitHub
+Copilot, OpenCode) as rows with **Use**, and a link to Settings for local
+models, servers and API keys. Showing it reads only the provider list and
+cached check results. **Use** switches the agent on if needed and runs the
+same check as Settings, after the off-device confirmation and refused in
+offline mode; a ready agent becomes the default provider and the chat's
+model, and one that is not ready says why in its row (not installed,
+sign-in needed with the CLI's hint).
+
 Typing in the picker ranks every provider's already-known models (configured
 defaults and earlier check results) at once; it never contacts a provider.
 Starred models collect under **Favorites** at the top of the rail. Favorites
@@ -716,16 +893,49 @@ from the composer, the arrow keys and Enter pick a row, Mod+1…9 pick the nth
 row, Mod+D stars or unstars the highlighted row, and Mod+Shift+Up/Down switch
 provider. Keys that confirm an input-method composition never pick or star a
 model. The collapsed trigger shows the provider name, model and privacy
-posture.
+posture, then the chosen reasoning level (none for Auto), a bolt while fast
+mode is on, and an open lock while the chat runs in Full access.
 
-The **All / Local** control filters the inventory by the posture Kassiber can
-prove. Model rows show both their source namespace and privacy posture.
+The picker is also where the model's traits live, laid out after T3 Code's
+composer picker: there are no separate effort or permission menus in the
+composer toolbar.
+
+- **Reasoning column.** Beside the list, under the selected model's name:
+  **Auto** (the default, which sends no level) and only the levels the
+  model advertises in its capability data (Kassiber's known levels low through
+  ultra, nothing made up). A model that takes no effort has no column,
+  including a native agent's model whose checked row says so, and a stored
+  level drops back to Auto. A native agent whose model is not checked yet
+  lists only Auto and a stored choice, with a hint that Check models names
+  the rest; Claude and Copilot list their published fixed levels. While an
+  answer streams the column is shown locked.
+- **Footer.** A **Standard | Fast** toggle, only for a model whose checked
+  row offers fast mode, with the higher-rate billing note shown beside it
+  while Fast is on, and the chat's permission mode as a menu of the
+  three modes with their descriptions. Changing the mode there behaves as
+  described under [Permission modes](#permission-modes).
+
+Picking a model with reasoning levels keeps the picker open and moves focus to
+those levels; picking one without levels closes it. Escape or a click outside
+closes it too. ArrowRight at the end of the search text picks a model the
+arrow keys highlighted and moves to its levels; when the highlight was left by
+the pointer or a provider switch, ArrowRight moves to the selected model's
+levels instead and Enter picks the highlighted one. In the column the arrow
+keys, Home and End move between levels and choose the one they land on, and
+ArrowLeft goes back to the search field; the arrow keys also switch the speed
+toggle. Mod+Shift+K opens the picker on the levels, or the search field when
+the model takes no effort, and moves there when it is open. Opening the picker or
+any of its sections reads only the provider list and cached check results; it
+never contacts a provider.
+
+Model rows show both their source namespace and privacy posture.
 OpenCode model IDs identify their source provider (`omlx/...`, `ollama/...`,
-`opencode/...`). OpenCode's model list carries no endpoint — `api.url` is empty
-for locally served models — so the route is judged by that source provider's
+`opencode/...`). For OpenCode 1, the route is judged by that source provider's
 resolved endpoint from `opencode debug config`, reading
-`provider.<id>.options.baseURL` and nothing else (the same options block can
-hold an `apiKey`, which never leaves the broker). A loopback endpoint (`127.0.0.0/8` matched as a literal IPv4
+`provider.<id>.options.baseURL`. OpenCode 2 uses the selected model's or
+provider's `settings.baseURL` from its HTTP API. Only the resulting posture
+leaves the broker; the same settings can hold an `apiKey` that is never exposed.
+A loopback endpoint (`127.0.0.0/8` matched as a literal IPv4
 address, `localhost`, `::1`) is labelled local, because the model cannot leave
 the machine. A loopback address that fronts a reverse proxy is the known
 limit of this check: it reports local while the proxy may forward inference
@@ -826,7 +1036,9 @@ daemon turns `persist: false` into the broker option `stateless_session:
 true`. The broker starts an ephemeral Codex thread (also with history
 persistence off), runs Claude with `--no-session-persistence`, and points
 OpenCode's database at memory and its data and state homes at the turn's
-directory. If the CLI cannot comply (Codex does not report the thread as
+directory. Legacy OpenCode selected-data isolation requires the audited 1.18.4
+runtime; version 2 uses the isolated configuration described above and refuses
+OAuth-backed private turns. If the CLI cannot comply (Codex does not report the thread as
 ephemeral, Claude's help lacks the flag, or OpenCode reports a database on
 disk), the turn fails before the prompt is sent. On Windows, OpenCode
 Incognito turns are refused before OpenCode starts. Keeping OpenCode's log
@@ -923,9 +1135,9 @@ on real terminals, and these commands:
 - `/new` — start a fresh conversation without restarting the daemon.
 
 Ctrl-C during a reply cancels that turn cooperatively and keeps the session.
-Daemon-side `allow_session` consent spans a single `ai.chat` request, so the
-REPL carries an interactive "[s] session" answer across turns client-side and
-re-sends it for that tool.
+Daemon-side `allow_session` consent lasts for the chat session (its
+`session_id`) while the daemon runs; the REPL also carries an interactive
+"[s] session" answer across turns client-side and re-sends it for that tool.
 
 Output modes cover scripting:
 
@@ -1083,7 +1295,7 @@ call) opens a fresh reasoning segment, so Ollama/oMLX traces stay
 per-round instead of one continuous blob. Models that don't emit either
 channel pass through unchanged.
 
-Settings → AI providers exposes a **Test connection** action. It calls the
+Settings → Assistant exposes a **Test connection** action. It calls the
 daemon's `ai.test_connection` kind with the *currently entered* base URL and
 API key (or, when editing without changing the API-key field, the saved key)
 and reports the model count. It also passes the form's privacy kind (`kind`),
@@ -1125,9 +1337,14 @@ tokens already generated or in flight may still be billed.
 
 ## Tool use
 
-External agents can reach a read-only, redacted slice of this catalog through
-`kassiber mcp serve`; that allowlist, its disabled read maintenance, and its
-book pinning are documented in [MCP](mcp.md).
+External agents reach this catalog through `kassiber mcp serve`, within the
+grant the user chose for them (`read`, `operator`, or `accounting_decisions`,
+classified by the operator broker's registry; never admin) and their access
+mode. Reads stay read-only and local at every grant; mutating tools run
+through the same executor and plan checks as here, with the MCP host's tool
+approval as the consent. Chat-only tools (attachments, handoff cards, visuals,
+cross-book views) are not exposed. The grants, read maintenance, annotations,
+audit, and book pinning are documented in [MCP](mcp.md).
 
 The desktop assistant and `kassiber chat` opt into a bounded tool loop with
 `ai.chat` top-level args:
@@ -1194,7 +1411,13 @@ boundary between read-only information and mutating actions. It also carries
 one hard figure rule: when an overview's `fiat.completeness.costBasisComplete`
 is false, the model must call cost basis and unrealized/realized gains
 incomplete and name the blockers, never state them as exact (see
-[the daemon overview contract](daemon.md)). The assistant is
+[the daemon overview contract](daemon.md)). Its evidence rules answer failure
+modes seen in a real repair session: name only ids a tool returned in the
+chat, take totals from tools rather than summing sampled pages, check value
+against the wallets' own rows or `ui.transactions.verify` instead of the
+component being audited, mark outside facts recalled from memory as
+unverified, read counter `definitions` before reconciling counts, follow an
+error's `remediation`, and use `ui.review.plan` for what-if questions. The assistant is
 skill-aware, but it is not shell-powered or CLI-powered: there is no raw command
 execution, raw filesystem access, arbitrary daemon dispatch, or generic
 Kassiber CLI tool.
@@ -1204,14 +1427,103 @@ Clients should upsert tool cards by `call_id`. Mutating tools emit an initial
 `ai.chat.tool_consent_required`. If the user approves the call, the daemon emits
 another `ai.chat.tool_call` for the same `call_id` with `needs_consent: false`
 before `ai.chat.tool_result`; that second record marks the approved call as
-running and must not create a duplicate card.
+running and must not create a duplicate card. Every `ai.chat.tool_call`
+carries `approval`: `required` (asked, or approved by a click), `auto` or
+`full_access` (approved by the chat's permission mode, including a call
+released by a mode switch while it waited), `session` (an earlier allow for
+this chat) or `not_needed` (no consent applies). `ai.chat.tool_consent_required`
+also carries `reversible`, `egresses` and `can_allow_session`, so the card can
+say "can't be undone" or "contacts the network" and hide the chat-wide allow
+for once-only tools.
+
+The desktop shows a waiting call as a row in the chat's work log, in place of
+its card, rather than a dialog: the daemon's summary, the redacted arguments or
+the recomputed plan or review proposal (with its per-year tax delta), a note
+when the call contacts the network or cannot be undone, and **Decline**,
+**Approve** and **More** (**Allow for this chat** only where the daemon offers
+session consent, and **Stop the answer**). Review and plan-bound approvals stay
+disabled until the daemon's preview is current. A new approval opens the
+assistant panel once; if the panel is closed again, a notice under the page
+keeps it one click away. A call that ran without a prompt carries a badge
+naming the mode or chat allowance that approved it, and a result that names an
+`undo` says the change can be undone by asking the assistant.
+
+Each desktop chat sends its permission mode as `permission_mode` with every
+`ai.chat`. **Approval** asks before every change. **Auto** lets the daemon
+approve changes that can be undone and stay on this device, and asks before
+network access and anything permanent. **Full access** never asks, syncs and
+other network actions included. New chats start in the mode set at Settings →
+Assistant → **New chats start in** (Auto unless changed). A saved chat reopens in the mode it
+last used, which the UI preferences keep by session id. Switching the mode in
+the model picker's footer while an answer streams sends `ai.chat.permission_mode` for that
+turn, and the daemon releases waiting approvals the new mode covers.
 
 Live chats advertise capability packs selected from the latest question and
 typed `screen_context`. `tool_profile=core` intersects those packs with the
 common catalog; `scoped` includes relevant specialist tools; `full` skips
-capability scoping. Omitted `tool_profile` defaults to `scoped` at the daemon;
-the CLI supplies `core` by default. Profile selection limits exposure and
-context size, not the validation or consent required to execute a tool.
+capability scoping. Omitted `tool_profile` defaults to `full`, at the daemon and
+in `kassiber chat`: Kassiber cannot tell how capable a model is, so every tool
+is offered unless the user picks a smaller profile. Profile selection limits
+exposure and context size, not the validation or consent required to execute a
+tool. The full catalog is about 154 KB of schemas (172 tools); CLI agents get
+it through the broker's 0600 manifest file or Codex's JSON-RPC, well under the
+2 MB tool-bridge message cap.
+
+The desktop sends `tool_profile` with every turn: the provider's tool set
+from Settings → Assistant, **All tools** (`full`), **Focused** (`scoped`)
+or **Minimal** (`core`), kept with the UI preferences by provider name. Every
+provider starts with all tools; Kassiber does not judge a model's strength.
+The set follows the provider, not the chat, so the composer's picker offers
+only the permission mode.
+
+Small local models are the reason `scoped` and `core` exist: every schema
+together is about 36k tokens, more than many local context windows. Instead,
+the Kassiber system prompt ends with a static area index (`tool_area_index`,
+about 300 tokens), one line per area, so the model knows what exists without
+the schemas. The index is identical on every turn, which keeps provider prompt
+caches valid. A capability question such as "what can you do?" is answered from
+that index and no longer advertises the full catalog.
+
+When routing missed an area, an HTTP provider's model can call `load_tools`
+with up to four area names. The daemon adds those schemas, under the same
+`tool_profile` limits and on-device restrictions, to both the advertised set
+(which authorizes calls and feeds the privacy receipt) and the next round's
+tool list. CLI agents behind the broker fix their catalog when a turn starts
+and abort on unknown tools, so they never get `load_tools`; their next
+question is routed again. `full` has nothing to load. Per-area schema budgets
+in `tests/test_ai_tool_areas.py` keep areas from growing unnoticed.
+
+Tax figures come from the core, never from the model's recall of tax law:
+
+- `ui.reports.capital_gains` takes `tax_year`, `asset`, and `limit` (default
+  50, at most 200). It returns the year's totals, the Austrian Kennzahl rows,
+  and the newest disposal and income rows. Each row carries its transaction id,
+  asset, exact msat, Austrian category, and Kennzahl. The rows are journal
+  entries, not acquisition lots: Austrian Neubestand uses one moving-average
+  pool, and the payload says so. Its `breakdown` sums the year by Austrian
+  field (with tax-free Altbestand and tax-neutral swaps beside them) or, for a
+  generic book, by holding period and income; the desktop's transaction id
+  lists for those groups are dropped. With `asset`, the totals, breakdown and
+  rows cover that asset while the Kennzahl rows stay book-wide. Journal event
+  reads likewise drop the explanation references that open the desktop's
+  calculation view.
+- For an Austrian EUR book, `ui.reports.tax_summary` adds `indicative_tax` for
+  the requested year, or the latest year. It is 27.5% of KZ 172 + KZ 174 −
+  KZ 176 as reported, from `kassiber/core/tax_estimate.py`, and is zero when
+  that base is negative. Any report blocker withholds the figure
+  (`status: "withheld"`, `estimated_tax_eur_cents: null`). A year before 2022
+  has no crypto Kennzahlen: `status: "not_applicable"` with no rate, basis or
+  base, and a note that a Steuerberater states that year. A 2022 with rows
+  from January or February is withheld (`crypto_rows_before_2022_03`), since
+  those rows have no field. KZ 801 Altbestand
+  speculation is listed as an amount and never estimated, because it is taxed
+  at the progressive rate. The notes say the figure covers this book only and
+  does not deduct KESt an Austrian provider withheld. The desktop's own tax
+  summary read skips this check. The Reports screen reads the same core figure
+  as `indicativeTax` from `ui.reports.capital_gains`, computed without the
+  blocker check. Reports marks it Provisional only for stale journals,
+  quarantines, custody gaps, missing prices, and rows in no field, fewer causes
+  than withhold it here, so the assistant's projection of that read drops it.
 
 The authoritative tool names, schemas, effects, and daemon mappings live in
 [TOOL_CATALOG and get_tool](../../kassiber/ai/tools.py), with capability selection
@@ -1334,7 +1646,7 @@ matter across tool additions:
   material and backend endpoints. Privacy Mirror and chain analysis share the
   same snapshot and opaque provider references; use `ui.chain_analysis.ai_context`
   for handoffs. Dataset import requires a validated source/recipe/hash-bound
-  preview, on-device provider and once-only consent. See
+  preview, full agent access and once-only consent. See
   [chain analysis](local-chain-analysis.md) and [Privacy Mirror](privacy-mirror.md).
 - Cross-book context requires an explicit book-set request within the chat's
   original workspace. Keep each book's tax/lot scope and mixed fiat values
@@ -1372,6 +1684,50 @@ and report-readiness hints from the current database. `ui.next_actions` returns 
 recommendations such as create a wallet, sync/import, process journals, review
 quarantine, or run reports. It only advises; it does not execute those actions.
 
+Counters carry their meaning. `ui.workspace.health`, `ui.review.badges`,
+`ui.journals.quarantine` (in `summary`) and `ui.journals.quarantine.groups`
+include `definitions`, one sentence per counter, so the model can say why the
+review badge, the review queue and the quarantine total differ instead of
+guessing.
+
+Journal-derived figures that are stale reach the model as an explicit state,
+never as zeros. After the read's own journal refresh (or on an MCP read, which
+never refreshes), `ui.journals.transfers.list`, `ui.reports.capital_gains`,
+`ui.journals.events.list` and `ui.journals.snapshot` replace their figures
+with `null` plus `status: "unavailable"`, a `reason` (`journals_stale` or
+`journals_never_processed`) and a `remediation` naming `ui.journals.process`;
+the overview nulls its basis, unrealized and realized figures when its
+completeness is `stale`. Quarantine reads keep the last processing's rows
+with `projection.status: "stale"`, or are unavailable if journals never ran.
+The desktop pages show their own stale state and are unchanged; this lives in
+`_project_stale_journal_figures_for_ai`.
+
+Quarantine can be read and acted on by root cause.
+`ui.journals.quarantine.groups` returns whole-book counts and per-asset msat
+totals by reason and by root group (a root transaction plus every downstream
+row, such as `custody_basis_barrier`, that waits on it), largest first; with a
+`group_id` (`root:`, `unrooted:` or `reason:`) it pages that group's members
+in a stable order behind a cursor bound to the journal state, which fails with
+`quarantine_cursor_stale` once the quarantine changed.
+`ui.journals.quarantine.resolve` accepts a `root:` `group_id` instead of a
+transaction and acts on that root. After its reprocess it reports
+`dependents_cleared` (count and up to 50 ids of rows that waited on the root
+and are no longer held) and a `quarantine_delta` that also lists rows that
+cleared outside the group or newly appeared; without a reprocess the effect is
+`not_measured`, not zero. The CLI has the same reads and effect
+(`journals quarantine groups`, `journals quarantine resolve ... --group-id
+--reprocess`).
+
+`ui.transactions.verify` (CLI `transactions verify`) checks one transaction
+against the raw graph stored with it, locally and without addresses: inputs
+minus outputs against the recorded fee, and every wallet of the book owning an
+input or output against its imported row's wallet delta, and the reverse. It
+returns `ok`, `mismatch`, `partial` or `unverifiable` (no stored graph) with
+expected and recorded msat, and per input/output `owned`, the wallet and a
+`keychain` of `receive`, `change` or `unknown` taken from the owning wallet's
+derivation branch. Ownership comes from the book's local index, so an
+unmatched output is "not matched", never "external".
+
 `read_skill_reference` is a virtual tool. `read_skill_reference("index")`
 returns a compact routing document derived from the Kassiber skill concepts and
 points the model to deeper allowlisted references. The deeper references are
@@ -1387,20 +1743,27 @@ pairing can express one-to-many or many-to-one ownership hops; cross-asset and
 layer-transition links remain one-to-one on that pairing surface.
 
 Natural-language pairing ("pair the Phoenix payment with the Liquid receipt") is
-supported on the `core` tool profile through `ui_transfers_pair` only.
+supported on the `core` tool profile through `ui_transfers_pair`, with
+`ui_transfers_unpair` as its undo (the pair result's `undo` names that call).
 `ui_transfers_bulk_pair` is excluded so a single consent can never sweep a whole
-review queue, and `ui_transfers_unpair` is excluded too — the assistant is told
-not to promise an undo it may not be able to perform, since the user can always
-unpair from the desktop review screen.
+review queue. Every reversible tool on the `core` profile keeps its inverse
+there too, including `ui_transactions_history_revert` for quarantine
+resolutions.
 
-`ui_transfers_dismiss` is excluded on stronger grounds: it is the one review-queue
-write with neither a read-back nor an undo. `transaction_pair_dismissals` has a
-single upsert and no `DELETE` anywhere in the codebase, no list/read daemon kind
-and no AI tool, and the desktop undo path only calls `unpair`. With
-`expires_in_days: 0` the matcher would stop offering a candidate permanently while
-neither the assistant nor the user could discover that the dismissal exists — and
-`ui_transfers_suggest` explicitly documents that dismissed legs are silently
-absent. It should join the profile once a dismissal read path exists.
+`ui_transfers_dismiss` is on the `core` profile too, behind per-call consent.
+`ui_transfers_dismissals_delete` (`transfers dismissals delete --id ...` or
+`--tx-out/--tx-in`) undoes one and invalidates journals, and a review batch can
+carry the same undo as `undismiss_pair`. A dismissal can be read back:
+`ui_transfers_dismissals_list` (`transfers dismissals list`) returns each
+dismissed pair with both legs' full ids, wallet, direction, amount and
+`expires_at` (null means never). `ui_transfers_suggest` and
+`ui_transfers_review_context` return profile-wide `exclusions`, counted before
+filters: `excluded_by_active_pair` and `excluded_already_journaled` count legs,
+`excluded_by_dismissal` counts pairs. Zero candidates is therefore never
+silent.
+A full-access provider can also propose a bounded dismissal (1 to 3650 days)
+inside a review batch, where the consent preview shows it and the receipt
+records it.
 
 Three properties of `ui_transfers_pair` are documented on the tool because the
 model would otherwise have to guess them, and each guess is a real error class:
@@ -1419,9 +1782,117 @@ model would otherwise have to guess them, and each guess is a real error class:
   candidates, and let the user choose. Blocking it outright would break the
   desktop flow, where the human resolves the cluster by choosing; disclosure at
   the consent surface is the remaining gap.
-The desktop/CLI custody-component resolver handles 1:N, N:1, N:M, multi-hop,
-and missing-wallet histories atomically; those authored component mutations are
-not generic AI pairing shortcuts.
+
+The custody-component resolver handles 1:N, N:1, N:M, multi-hop, and
+missing-wallet histories atomically. `ui_transfers_components_plan` and
+`_apply` take the same `action` as the CLI: `create`, `revise` (a new revision
+of a lineage, which may reuse the old anchors and with `activate: true`
+supersedes the active revision atomically), `supersede`, `undo`, and
+`activate`. Apply re-plans against the current book and fails closed when the
+input version moved. A revision spec from the model is validated against the
+create contract, and a conversion cannot activate or attest its own review.
+These are authored component mutations, not generic AI pairing shortcuts.
+
+`ui_review_plan` is the what-if path and the batch path. It applies up to 50
+typed operations to an in-memory copy of the book and never persists, so it
+needs no consent; `ui_review_apply` applies the unchanged artifact atomically on
+one consent. The artifact's `before`/`after` carry per-year realized gain/loss,
+income and, for Austrian EUR books, Kennzahlen and the core's indicative tax
+(withheld while report blockers remain), and `delta` lists the years that
+change. The model answers "what does this change do to my taxes?" from that,
+not from its own arithmetic. With full agent access a batch may also create
+pairs, dismiss candidates, revise/undo/activate/supersede components, run
+custody-gap actions, declare acquisition kinds and accept coarse prices; a
+restricted provider keeps prices, exclusions, unpairs and component creation. Conversion components
+stay drafts for the owner in either mode. Operation shapes and the tax fields
+are in [custody resolution](custody-resolution.md#resolve-with-the-cli-or-chat).
+
+A chat holds up to eight files, which reach it three ways. The **+** button
+opens the native picker. Files dropped on the desktop window over the
+assistant are staged by the shell, which records the paths of that drop and
+stages them only when the window asks right after it; the webview never names
+a path. A pasted file (or, in the browser preview, a dropped one) goes to the
+daemon as bytes in chunks of at most 512 KiB through
+`ui.chat.attachments.upload`, up to 25 MB. All three return the same opaque
+token and are staged with the chat's file list: CSV, TSV, XLSX, XLSM, PDF, PNG,
+JPEG, WebP and GIF. The composer shows each file as a card with its type and
+size, and an image as a small thumbnail: for a pasted one the renderer draws
+it from the bytes it already holds, for a picked or dropped one the daemon
+returns a 96 px PNG made on this device (`source.thumbnail`) with the staging
+grant. The message that first carries a file shows the same card, and a
+saved chat keeps it (name, type and size in the user row's provenance, never
+a path or token); the files stay with the chat for later turns until removed. Sending waits
+while a pasted file is still on its way.
+
+`ai.chat` takes the chat's files as `attachments: [{token, label?, new?}]`, in
+order; the daemon names them `file-1` … `file-8` and adds a note to the turn
+listing each one and how the model can read it. `new` marks the files the
+message first sends. A file whose staging grant ended (30 minutes unused)
+or belongs to another book is left out instead of failing the turn: the note
+says that id is no longer available, the result's `expired_attachments`
+returns its token, and the chat drops the file with a notice. What the model
+sees depends on its [agent access](#agent-access):
+
+- **Spreadsheets** (CSV, TSV, XLSX) are read through `ui_wallets_analyze_file`
+  and imported through the plan and apply below, naming the file by id
+  (`file`, optional when only one export is attached). A restricted provider
+  gets headers, counts and the column plan.
+- **Images and PDFs** are shown to a provider with full access on the user's
+  message: an image as an image (reduced to 1568 px on the long edge when it is
+  larger and Pillow is available), a PDF as its text layer via Poppler's
+  `pdftotext` (up to 30 pages and 40,000 characters, framed as data rather
+  than instructions), or as images of its first three pages when it has no
+  text (a scan). One message carries at most eight images and 12 MB, the
+  files a message first sends taking that budget first. When the chat has a
+  saved native session (Claude, Codex, Copilot), the files of earlier turns go
+  in a separate message just before the user's: the broker replays only the
+  user's message when it does resume, and the whole conversation, those files
+  included, when it starts a fresh thread instead (the session is gone or the
+  advertised tools changed). The note naming the chat's files rides on the
+  user's message then, so a resumed session still learns which file is
+  which. A stateless provider is shown every file on the user's message on
+  every turn. A restricted provider is told an
+  image or PDF is attached, by its extension only, and is shown none of it.
+- **Rows from an image or PDF** come only through the on-device reader:
+  `ui_wallets_read_document` (a local vision model; consent, as it starts a
+  model) drafts rows, and `ui_wallets_import_document_plan` / `_apply` import
+  the ready ones as a bound plan; a restricted provider sees counts only. These
+  tools are offered only on a turn whose chat holds an image or PDF; see
+  [imports](imports.md#from-the-assistant).
+- **Any file** can be kept as evidence on a transaction with the consented
+  `ui_attachments_add_from_chat` (`transaction`, `file`, optional `label`):
+  the same managed copy as attaching it in the transaction's evidence. It
+  documents the row and changes no accounting.
+
+The note tells the model that what a file shows is evidence for the user to
+confirm, not an established fact, and that amounts and dates never go from a
+file into an import by hand. CLI agents get the images through the broker:
+Claude as a stream-json image block, Codex and OpenCode as inline data URLs,
+and an ACP agent only when it advertises image prompts (otherwise the prompt
+says the image was left out). In the CLI, `kassiber chat --file PATH` repeats
+for several files, and the nth `--file-context` describes the nth file.
+
+A chat attachment can be imported, not only analyzed.
+`ui_wallets_import_attachment_plan` runs the desktop's generic-ledger import of
+the staged file inside a rolled-back savepoint and returns its exact effect
+with a plan digest, the file's SHA-256 and the book's input version;
+`ui_wallets_import_attachment_apply` repeats it and commits only when all three
+still match, after once-only consent. The approval row shows the plan the daemon
+recomputes then, and its summary names the row count and target. Only file
+and exchange wallets, or a new `custom` wallet, are targets. Applied imports
+are ordinary import runs: `ui_imports_list`, `ui_imports_rollback_plan` and the
+consented, plan-bound `ui_imports_rollback` undo them, except when a rollback
+would delete reviewed work, which stays in the desktop. No tool takes a path,
+and results never carry one. A restricted provider gets counts and the column
+plan, without dates, amounts or the filename. Descriptor, xpub, address and
+credential-backed connections are never created by the assistant:
+`ui_wallets_request_input` returns a typed handoff the desktop shows as a setup
+button. `ui_wallets_list` gives each wallet a `completeness_class` and
+`scan_bounds`, so the assistant can say where a wallet's history is unknown
+rather than assume it is complete. Details:
+[imports](imports.md#onboarding-an-unsupported-exchange-with-the-assistant) and
+[wallet completeness](imports.md#wallet-completeness-and-scan-bounds).
+
 Source-funds evidence writes are also consent-gated:
 `ui_source_funds_sources_create`,
 `ui_source_funds_links_create`, `ui_source_funds_links_review`,
@@ -1526,12 +1997,31 @@ a reopened chat belongs to that book.
 ```
 
 `decision` can be `allow_once`, `allow_session`, or `deny`. Session consent is
-in-memory and lasts only for the current `ai.chat` request; it applies only to
-subsequent calls to the same tool name in that chat. If the user denies or does
+in-memory and lasts for the chat session: later turns that send the same
+`session_id` (or the id the terminal record returned for a new chat) skip the
+prompt for that tool name until the daemon restarts. Once-only tools never
+take it. If the user denies or does
 not respond before the consent timeout, the daemon feeds a tool result back to
 the model with `ok: false` and `reason: "user_denied"` or
 `"consent_timeout"`. Unknown tools still return `tool_not_allowed` and are not
 executed.
+
+A failed tool returns `ok: false`, `reason` (the error code), `message`, the
+error's `hint`, and a `remediation` when Kassiber knows the fix:
+`{action, target, tool, arguments_hint, desktop_only}`, with full resolvable
+ids in `target` and the function name in `tool` (null when no tool can take
+the step; `desktop_only` when only the user can, as for restricted agent
+access). Core errors attach it to `details["remediation"]`, which the CLI
+envelope also shows; the daemon adds defaults for stale plans, changed review
+cases, restricted access, and a switched book. Error `details` reach the model
+only for an allowlist of id-level codes (such as `ambiguous_reference` and
+the custody component codes), bounded and redacted like any result.
+
+A transaction reference is a full Kassiber id or an external id (txid) that
+names one row. When several rows share a txid, as in a CoinJoin or a batched
+deposit, `ambiguous_reference` lists every candidate; the qualified forms
+`<txid>:<wallet id or label>`, `<txid>:in|out` and `<txid>:<wallet>:<in|out>`
+select one and still fail closed when they do not. Prefixes never resolve.
 
 The terminal `ai.chat` record includes a compact `provenance` object with the
 provider/model, generation timestamp, local tool names used, journal refresh
@@ -1540,6 +2030,105 @@ learned from health/report-blocker tools. Denied calls never count as executed
 or as cross-book disclosure. The GUI uses that object and the exact tool payloads to render source
 chips beside the assistant answer, making the result traceable to
 program-derived facts.
+
+### Visuals in chat
+
+The assistant can answer with an interactive visual through the read-only tool
+`ui_visuals_render` (`ui.visuals.render`). It is an ordinary catalog tool, so it
+reaches every provider the same way: HTTP function calls, Codex `dynamicTools`,
+and the MCP bridge for Claude, OpenCode and Copilot. It belongs to the `reports`
+and `transactions` capability packs and to the `core` profile. A question that
+names a visual ("chart", "plot", "graph", "Diagramm", "Grafik", …) selects the
+reports pack, and a quarantine review keeps its own bounded pack without it.
+The model chooses only what to show: a `source`, a `measure`, the source's
+filters and an optional `title` of at most 80 characters (control characters
+removed). It never supplies numbers, markup or code. The daemon reads every
+figure from the same local reads the app's pages and report tools use, and
+[`kassiber/core/chat_visuals.py`](../../kassiber/core/chat_visuals.py) turns them
+into a typed specification, long-format `rows` and source-specific extras:
+
+| `source` | Read | Visual | Filters |
+| --- | --- | --- | --- |
+| `overview` | `ui.overview.snapshot` | portfolio value, BTC balance, cost basis, unrealized and realized-this-year results, value vs cost basis over time, allocation by wallet, completeness | none |
+| `balance_history` | `ui.reports.balance_history` | balance per asset over time; amount, value, cost basis, or value vs cost basis | `interval`, `start`, `end`, `wallet`, `asset`, `limit` (buckets, default 60, at most 240) |
+| `portfolio` | `ui.reports.portfolio_summary` | holdings by wallet or asset; value, amount, cost basis or unrealized | `group_by`, `asset` |
+| `tax_summary` | `ui.reports.tax_summary` | realized result per tax year, with each year's breakdown by asset and holding period | none |
+| `cash_flow` | `ui.transactions.dashboard`, with the page's transfer suggestions | received and sent per period, in BTC or fiat; transfers and swaps counted apart | `period`, `wallet` |
+| `transactions` | `ui.transactions.list` | a list of up to 25 transactions that open in the app | `query`, `direction`, `wallet`, `period`, `status`, `sort` (recent, oldest, largest, smallest), `limit` |
+| `transaction_flow` | `ui.transactions.graph`, local only, and `ui.transactions.resolve` | the transaction detail panel's own graph, with the change to the user's wallets, the amount moved and the fee above it, or the transaction itself when there is no graph | `transaction` (required) |
+| `readiness` | `ui.report.blockers` | a checklist of what blocks reports, each open item with an action | none |
+
+A filter that belongs to another source is refused, not ignored. Every row
+carries all of its source's measures, so the user switches measure, grouping,
+range or unit in the visual without another read or another model turn. Before
+a report source (`balance_history`, `portfolio`, `tax_summary`, `overview`) is
+read, stale journals are refreshed exactly as for the report tools, which
+includes the wallet sync a user may have enabled for report reads. The
+transaction list, flow, cash-flow and readiness visuals run no such
+maintenance: they are plain local reads.
+
+Visuals state what they know is missing as `caveats` instead of plotting it as
+zero. Report visuals read the same blockers as the readiness checklist and
+flag stale journals, quarantined transactions, unresolved custody, transactions
+without a price (so basis and gains may be incomplete) and a failed sync.
+Within a visual: a held balance with no price (the value is `null`, never 0),
+no current market rate
+(the overview then shows no value), unpriced movements counted as zero fiat on
+the cash-flow page, confidential amounts, and data cut off by a limit. The
+overview marks cost basis and gains "Incomplete" whenever its completeness
+block says so. The balance report leaves out every bucket in which a balance is
+zero, so the visual builds its buckets from the calendar range and puts each
+zero back: a full exit falls to zero instead of ending on the last balance held.
+When the report truncated by row, the visual drops the oldest bucket, which may
+have lost some assets. A transaction flow names only the user's own wallets
+(from the graph's wallet field, also for a coin several of them share); other
+inputs and outputs are "Input n" and "Output n", with no address or outpoint,
+and the graph is read without public lookup. Amounts of different assets are
+never added up as bitcoin. Cash-flow buckets are counted in UTC; the
+Transactions page counts them in the desktop's time zone, so a movement close
+to midnight can fall in a neighbouring bucket.
+
+The model reads a digest instead of the full payload (`model_digest`): the
+specification, the caveats, summary figures such as each series' first, last,
+lowest and highest value, and the rows only while there are at most 30. The
+digest says the visual was shown to the user, and its `summary` repeats the
+caveats, because the auto-read context keeps only that part of an oversized
+entry. The desktop and `kassiber chat` receive every row. CLI agents get the
+same digest as HTTP providers.
+
+The pre-read router plans a visual the user asks for by name, so a model that
+never calls tools still answers with one: a chart word plans the chart its
+subject names (tax, holdings, cash flow, otherwise the balance); "overview" or
+"dashboard" plans the overview; "what needs attention", "checklist" or "ready
+to file" plans readiness; and "show my transactions" plans the list, with
+"largest", "oldest", "incoming" and "outgoing" taken as its sort and direction.
+"graph" next to ownership, evidence or chain-analysis words is not a chart. A
+visual the router drew and the model then drew again with the same data is
+shown once, as the model's.
+
+The desktop renders each visual as a card under the work log, above the answer
+(`ui-tauri/src/components/ai/visuals/`), with a placeholder while the daemon
+draws it. Cards animate in: figures count up and lines and bars draw from their
+baseline; the global reduced-motion rule stops all of it. A transaction flow
+is drawn with the transaction detail panel's flat bowtie
+(`TransactionFlowDiagram`), never the panel's draggable 3D view. The desktop
+reads that graph itself with the panel's own local read (`ui.transactions.graph`
+without public lookup), so the chat and the panel draw the same data while the model only
+ever receives the redacted summary without outpoints or addresses. Every card has a table view, "Copy as CSV"
+(raw numbers; a text cell that starts with a formula character gets a leading apostrophe),
+"Open larger", and "Open in Kassiber" for the matching page or transaction.
+Follow-up chips and each readiness action send an ordinary prompt through the
+assistant's send path, so a write it leads to still needs consent. The desktop
+accepts only a version 1 payload with known sources, units, checks and actions
+and shows the tool card for anything else. Series are keyed `s0`, `s1`, …, so no
+data label becomes a CSS or object key, and the model's title is plain text.
+Colours were run through the dataviz palette validator for both themes; gains
+and losses, and received and sent, use a blue/red pair that stays apart under
+colour-vision deficiency, and every bar chart's axis includes zero. Hidden
+amounts blur every value and axis label. Chat history keeps an answer's text,
+not its tool results, so a reopened chat shows the answer without its visuals;
+asking again draws them from the current book. `kassiber mcp serve` does not
+offer the tool, since external agents have no surface to draw on.
 
 ## Remote inference
 

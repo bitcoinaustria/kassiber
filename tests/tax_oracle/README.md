@@ -69,6 +69,11 @@ plugin, never from the product.
   rule below; `FROZEN.json` records the result, and the tax-shadow overlay
   showed no exit-tax difference between the oracle and production.
 
+- `normalize.py` `_pricing_needs_review` takes main's accepted coarse-price
+  rule (#708): a coarse price the owner accepted at this exact price is no
+  longer held for review. Production applies it in the request builder;
+  the `generic-coarse-*-accepted-review` and stale-acceptance goldens show it.
+
 ## Freeze rule
 
 Any other edit is a bug fix. It lands in production and in the oracle in the

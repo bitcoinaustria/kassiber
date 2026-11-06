@@ -719,12 +719,9 @@ class OperatorService:
         agent_control: bytearray | None = None,
     ) -> dict[str, object]:
         if agent_scope:
-            if capability is not Capability.READ:
-                raise AppError(
-                    "an agent session is read-only",
-                    code="operator_invalid_lease_capability",
-                    retryable=False,
-                )
+            # An agent session carries the user's External agents grant; like
+            # any lease it is never admin (checked below), and it admits only
+            # `mcp call`, each classified by its tool (`_parse_argv`).
             if agent_control is None or len(agent_control) < MIN_AGENT_CONTROL_BYTES:
                 raise AppError(
                     "an agent session needs its holder's control secret",
@@ -2620,6 +2617,13 @@ def _parse_argv(
             details={"command": path},
             retryable=False,
         ) from exc
+    if path == "mcp.call":
+        # One command line runs any agent tool: the lease must cover the
+        # tool's own class and any grant the call claims (which lets a read
+        # refresh journals), not just the `mcp call` entry's read baseline.
+        from ..mcp.tools import call_capability
+
+        capability = call_capability(getattr(args, "tool", None), getattr(args, "grant", None))
     return args, path, capability
 
 

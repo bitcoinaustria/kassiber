@@ -28,6 +28,9 @@ from kassiber.errors import AppError
 ROOT = Path(__file__).resolve().parents[3]
 OUT = ROOT / "crates/reports/tests/data/lightning.json"
 SCRATCH = ROOT / "target/r5-lightning/oracle"
+# Every table of the current schema, from the store manifest both runtimes admit.
+TABLES = sorted(o[1] for o in json.loads((ROOT / "crates/store/fixtures/current-schema.json").read_text())["objects"]
+                if o[0] == "table")
 CONNECTION = dict(id="node", label="Café node", kind="coreln", profile_id="p", backend_name=None)
 SEED = """
 DELETE FROM schema_migration_audits;
@@ -186,7 +189,7 @@ def connection_specs():
 
 def table_dump(conn):
     tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")]
-    assert len(tables) == 112
+    assert tables == TABLES
     return {t: sorted([list(row) for row in conn.execute(f'SELECT * FROM "{t}"')], key=wire) for t in tables}
 
 

@@ -10,6 +10,7 @@ from kassiber.secrets.sqlcipher import open_encrypted
 from tests import cli_runner
 from tests.rust_desktop_parity import run_candidate
 from tests.test_rust_shell_parity import _environment
+from tests.rust_port.book_schema import TABLES
 
 ROOT = Path(__file__).resolve().parent.parent
 RUST_BIN = os.environ.get("KASSIBER_RUST_BIN")
@@ -43,7 +44,7 @@ class RustTransactionResolveTest(unittest.TestCase):
         try:
             tables = sorted(row[0] for row in conn.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"))
-            self.assertEqual(len(tables), 112)
+            self.assertEqual(tuple(tables), TABLES)
             return {table: sorted(conn.execute('SELECT * FROM "' + table + '"').fetchall(), key=repr)
                     for table in tables}
         finally:

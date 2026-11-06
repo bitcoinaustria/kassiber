@@ -200,6 +200,12 @@ class ToolCatalogPromptTest(unittest.TestCase):
             "ui_wallets_utxos",
             "ui_wallets_identify",
             "ui_wallets_analyze_file",
+            "ui_wallets_import_attachment_plan",
+            "ui_wallets_import_attachment_apply",
+            "ui_wallets_request_input",
+            "ui_imports_list",
+            "ui_imports_rollback_plan",
+            "ui_imports_rollback",
             "ui_backends_list",
             "ui_profiles_snapshot",
             "ui_reports_capital_gains",
@@ -208,12 +214,14 @@ class ToolCatalogPromptTest(unittest.TestCase):
             "ui_reports_portfolio_summary",
             "ui_reports_tax_summary",
             "ui_reports_balance_history",
+            "ui_visuals_render",
             "ui_reports_lightning_profitability",
             "ui_reports_privacy_hygiene",
             "ui_reports_privacy_mirror",
             "ui_connections_node_snapshot",
             "ui_journals_snapshot",
             "ui_journals_quarantine",
+            "ui_journals_quarantine_groups",
             "ui_journals_quarantine_resolve",
             "ui_journals_events_list",
             "ui_journals_transfers_list",
@@ -263,6 +271,8 @@ class ToolCatalogPromptTest(unittest.TestCase):
             "ui_transfers_unpair",
             "ui_transfers_bulk_pair",
             "ui_transfers_dismiss",
+            "ui_transfers_dismissals_list",
+            "ui_transfers_dismissals_delete",
             "ui_transfers_rules_create",
             "ui_transfers_rules_delete",
             "ui_transfers_rules_set_enabled",
@@ -271,6 +281,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
             "ui_saved_views_delete",
             "ui_transactions_resolve",
             "ui_transactions_graph",
+            "ui_transactions_verify",
             "ui_transactions_review_context",
             "ui_workspace_overview_snapshot",
             "ui_activity_stale",
@@ -285,6 +296,10 @@ class ToolCatalogPromptTest(unittest.TestCase):
             "ui_transactions_metadata_update",
             "ui_transactions_history_revert",
             "ui_attachments_copy",
+            "ui_attachments_add_from_chat",
+            "ui_wallets_read_document",
+            "ui_wallets_import_document_plan",
+            "ui_wallets_import_document_apply",
             "ui_source_funds_evidence_list",
             "ui_source_funds_sources_attach",
             "ui_source_funds_links_attach",
@@ -666,10 +681,12 @@ class ToolCatalogPromptTest(unittest.TestCase):
         }
         self.assertIn("ui_transfers_payouts_create", payout_tools)
 
+        # Discovery is answered by the system prompt's area index, not by
+        # advertising every schema (~36k tokens) to a small local model.
         discovery_tools = build_responses_tools(
             [{"role": "user", "content": "What can you do? Show all tools."}]
         )
-        self.assertEqual(len(discovery_tools), len(build_responses_tools()))
+        self.assertLess(len(discovery_tools), len(build_responses_tools()) // 4)
 
     def test_quarantine_requests_advertise_custody_repairs(self):
         for message, screen_context in (
@@ -677,6 +694,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
             ("Bitte hilf mir, die Quarantäne zu lösen", None),
             ("Bitte hilf mir mit der Quarantaene", None),
             ("Help me resolve these", {"route": "/quarantine"}),
+            ("Help me resolve these", {"route": "/review"}),
         ):
             with self.subTest(message=message, screen_context=screen_context):
                 names = {
@@ -942,7 +960,11 @@ class ToolCatalogPromptTest(unittest.TestCase):
         self.assertIn("Never output placeholders", messages[0]["content"])
         self.assertIn("summary report tool", messages[0]["content"])
         self.assertNotIn("kassiber backends create my-esplora", messages[0]["content"])
-        self.assertLess(len(DEFAULT_KASSIBER_SYSTEM_PROMPT), 2000)
+        # The evidence rules answer failure modes seen in a real repair
+        # session (invented ids, sums over sampled pages, auditing a
+        # component with its own legs, unverified outside facts).
+        self.assertIn("ids a tool returned", messages[0]["content"])
+        self.assertLess(len(DEFAULT_KASSIBER_SYSTEM_PROMPT), 2600)
 
 
 class ResponsesToolCallAccumulatorTest(unittest.TestCase):
@@ -2891,6 +2913,36 @@ class ChatHistorySeedTest(unittest.TestCase):
                         ("assistant", "reply"),
                     ],
                 )
+            finally:
+                conn.close()
+
+
+    def test_a_user_message_keeps_the_files_it_sent(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-chat-files-") as tmp:
+            conn = open_db(str(Path(tmp) / "data"))
+            try:
+                workspace = core_accounts.create_workspace(conn, "Demo", commit=False)
+                profile = core_accounts.create_profile(
+                    conn, workspace["id"], "Main", "EUR", None, "generic", 365, commit=False
+                )
+                session = core_chat_history.create_session(
+                    conn, workspace["id"], profile["id"], title="files", commit=False
+                )
+                shown = [{"filename": "receipt.png", "kind": "image", "size_bytes": 812}]
+                core_chat_history.append_exchange(
+                    conn,
+                    profile["id"],
+                    session["id"],
+                    user_content="What is on it?",
+                    assistant_content="A receipt.",
+                    user_attachments=shown,
+                    commit=True,
+                )
+                user, assistant = core_chat_history.get_session(
+                    conn, profile["id"], session["id"]
+                )["messages"]
+                self.assertEqual(user["provenance"], {"attachments": shown})
+                self.assertIsNone(assistant["provenance"])
             finally:
                 conn.close()
 

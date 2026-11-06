@@ -8,6 +8,7 @@ import pytest
 
 from kassiber.db import open_db
 from tests.test_rust_report_exports import _book, _dump
+from tests.rust_port.book_schema import TABLES
 
 ROOT = Path(__file__).resolve().parents[1]
 pytestmark = pytest.mark.skipif(not os.environ.get("KASSIBER_RUST_BIN"), reason="requires Rust test-harness binary")
@@ -33,7 +34,7 @@ def setup(tmp_path, monkeypatch, name, offline):
     conn = open_db(data)
     conn.close()
     before = _dump(data, {})
-    assert len(before) == 112
+    assert tuple(sorted(before)) == TABLES
     return data, env, call, case["psbt"], canonical(before)
 
 
@@ -129,7 +130,7 @@ def test_psbt_product_bytes_files_all_tables_and_zero_hybrid_fallback(tmp_path, 
         total_cli += cli_count
         total_requests += len(requests)
     print(json.dumps({"offline": offline, "rust_cli": total_cli, "rust_daemon_sessions": len(selected),
-                      "rust_psbt_requests": total_requests, "python_fallbacks": 0, "tables": 112}, sort_keys=True))
+                      "rust_psbt_requests": total_requests, "python_fallbacks": 0, "tables": len(TABLES)}, sort_keys=True))
 
 
 @pytest.mark.parametrize("offline", [False, True])
@@ -163,7 +164,7 @@ def test_psbt_decoder_daemon_preserves_native_unhandled_debug_contract(tmp_path,
     unchanged(data, before)
     routed(env, 0, 1)
     print(json.dumps({"offline": offline, "debug": debug, "rust_daemon_sessions": 1,
-                      "rust_psbt_requests": 3, "python_fallbacks": 0, "tables": 112}, sort_keys=True))
+                      "rust_psbt_requests": 3, "python_fallbacks": 0, "tables": len(TABLES)}, sort_keys=True))
 
 
 def test_psbt_registered_product_routes_and_wire_order(tmp_path, monkeypatch):
@@ -188,4 +189,4 @@ def test_psbt_registered_product_routes_and_wire_order(tmp_path, monkeypatch):
     unchanged(data, before)
     routed(env, 1, 1)
     print(json.dumps({"rust_cli": 1, "rust_daemon_sessions": 1, "rust_psbt_requests": 1,
-                      "python_fallbacks": 0, "tables": 112}, sort_keys=True))
+                      "python_fallbacks": 0, "tables": len(TABLES)}, sort_keys=True))

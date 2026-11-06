@@ -13,6 +13,13 @@ const daemon = vi.hoisted(() => ({
 }));
 
 vi.hoisted(() => {
+  // The export's notification uses the real persisted UI store. Provide its
+  // storage before the module imports, as other mounted store tests do.
+  vi.stubGlobal("localStorage", {
+    getItem: vi.fn(() => null),
+    setItem: vi.fn(),
+    removeItem: vi.fn(),
+  });
   globalThis.ResizeObserver ??= class {
     observe() {}
     unobserve() {}
@@ -52,6 +59,8 @@ vi.mock("react-i18next", () => ({
 
 import { forgetCrossCheck } from "./crossCheckMemory";
 import { ToolCrossCheck } from "./ToolCrossCheck";
+import { saveDaemonExport } from "@/lib/exportFile";
+import { useUiStore } from "@/store/ui";
 
 const tx = (over: Record<string, unknown>) => ({
   occurred_at: "2025-06-01T10:00:00Z",
@@ -219,8 +228,18 @@ describe("ToolCrossCheck", () => {
     expect(daemon.crossCheckArgs).toEqual([]);
     fireEvent.click(screen.getByRole("button", { name: /CoinTracking/ }));
     expect(daemon.crossCheckArgs.at(-1)).toMatchObject({ tool: "cointracking", filename: "export.csv" });
-    fireEvent.click(screen.getByRole("button", { name: /reconcile.tools.export$/ }));
+    // Finish the asynchronous save and notification before leaving the test.
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /reconcile.tools.export$/ }));
+    });
     expect(daemon.mutate["ui.reports.export_cross_check"]).toHaveBeenCalledWith(daemon.crossCheckArgs.at(-1));
+    expect(saveDaemonExport).toHaveBeenCalledWith(expect.objectContaining({
+      exportPath: "/data/exports/kassiber-cross-check.xlsx",
+    }));
+    expect(useUiStore.getState().notifications[0]).toMatchObject({
+      title: "reconcile.tools.saved",
+      tone: "success",
+    });
   });
 
 });

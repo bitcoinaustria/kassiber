@@ -22,6 +22,8 @@ import type {
 type BuildAppSearchOptions = {
   snapshot?: OverviewSnapshot;
   query: string;
+  /** What is left to review, as the sidebar counts it (`ui.review.badges`). */
+  reviewCount?: number;
   aiFeaturesEnabled: boolean;
   developerToolsEnabled: boolean;
   resolvedTransaction?: ResolvedTransactionLookup | null;
@@ -80,7 +82,7 @@ const PAGE_NAV_TITLE_KEYS: Record<string, string> = {
   "page:connections": "nav:book.wallets",
   "page:journals": "nav:book.ledger",
   "page:reports": "nav:book.reports",
-  "page:quarantine": "nav:book.quarantine",
+  "page:review": "nav:book.review",
   "page:egress": "nav:book.egress",
   "page:source-of-funds": "nav:book.sourceFunds",
   "page:swaps-transfers": "nav:book.swaps",
@@ -191,13 +193,13 @@ const PAGE_RESULTS: SearchResult[] = [
     privacyTier: "public",
   },
   {
-    id: "page:quarantine",
+    id: "page:review",
     category: "page",
-    title: "Quarantine",
-    subtitle: "Review ambiguous rows",
-    keywords: ["review", "issues", "missing", "price"],
+    title: "Review",
+    subtitle: "Decide what can't be booked and transfers to pair",
+    keywords: ["review", "quarantine", "issues", "missing", "price", "transfer", "pair"],
     iconKey: "shield",
-    route: { to: "/quarantine" },
+    route: { to: "/review" },
     privacyTier: "public",
     shortcut: { keys: ["mod", "8"], nativeMenu: true },
   },
@@ -388,9 +390,9 @@ const SUGGESTED_RESULT_IDS = [
   "page:overview",
   "page:transactions",
   "page:connections",
+  "page:review",
   "page:reports",
   "page:assistant",
-  "page:quarantine",
   "page:journals",
   "page:settings",
   "action:sync-wallets",
@@ -441,6 +443,7 @@ export function buildAppSearchResults({
   resolvedTransaction,
   isResolvingTransaction,
   limit = SEARCH_LIMIT,
+  reviewCount,
   t,
 }: BuildAppSearchOptions): RankedSearchResult[] {
   if (!query.trim()) return [];
@@ -463,7 +466,7 @@ export function buildAppSearchResults({
       return true;
     }).map((result) => localizeActionResult(result, t)),
     ...settingsResults(t, developerToolsEnabled),
-    ...snapshotResults(snapshot, query, t),
+    ...snapshotResults(snapshot, query, t, reviewCount),
   ];
 
   const resolvedTransactionId = resolvedTransaction?.transaction?.id ?? null;
@@ -741,7 +744,11 @@ function snapshotResults(
   snapshot: OverviewSnapshot | undefined,
   query: string,
   t: AppTranslate,
+  reviewCount?: number,
 ): SearchResult[] {
+  const toReview = reviewCount ?? snapshot?.status?.quarantines ?? 0;
+  const journalsTitle = translatedString(t, "search:review.journals.title");
+  const reviewTitle = translatedString(t, "search:review.queue.title");
   return [
     ...(snapshot?.connections.map((connection) =>
       connectionResult(t, connection),
@@ -752,29 +759,32 @@ function snapshotResults(
           {
             id: "review:journals",
             category: "review_item" as const,
-            title: "Ledger needs processing",
-            subtitle: "Reports are stale until journal processing runs",
-            keywords: ["journal", "reports", "stale", "process"],
+            title: journalsTitle,
+            subtitle: translatedString(t, "search:review.journals.subtitle"),
+            keywords: withLocalizedKeyword(["journal", "reports", "stale", "process"], journalsTitle),
             iconKey: "ledger",
             action: {
               id: "process-journals" as const,
-              label: "Process journals",
+              label: translatedString(t, "search:review.journals.action"),
             },
             privacyTier: "local_metadata" as const,
             ranking: { priority: 15 },
           },
         ]
       : []),
-    ...((snapshot?.status?.quarantines ?? 0) > 0
+    ...(toReview > 0
       ? [
           {
             id: "review:quarantine",
             category: "review_item" as const,
-            title: "Transactions quarantined",
-            subtitle: `${snapshot?.status?.quarantines ?? 0} rows need review`,
-            keywords: ["quarantine", "review", "missing", "price"],
+            title: reviewTitle,
+            subtitle: String(t("search:review.queue.subtitle", { count: toReview })),
+            keywords: withLocalizedKeyword(
+              ["quarantine", "review", "missing", "price", "transfer"],
+              reviewTitle,
+            ),
             iconKey: "shield",
-            route: { to: "/quarantine" as const },
+            route: { to: "/review" as const },
             privacyTier: "local_metadata" as const,
           },
         ]

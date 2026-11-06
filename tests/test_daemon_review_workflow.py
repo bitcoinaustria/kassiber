@@ -89,15 +89,75 @@ def test_ai_artifact_cannot_silently_change_during_redaction(book, reason):
     assert conn.execute("SELECT COUNT(*) FROM review_workflow_receipts").fetchone()[0] == 0
 
 
-@pytest.mark.parametrize("action", ["revise", "activate", "undo"])
-def test_batch_cannot_bypass_ai_component_authority(book, action):
+@pytest.mark.parametrize("action", ["revise", "activate", "undo", "supersede"])
+def test_restricted_batch_cannot_bypass_ai_component_authority(book, action):
     conn, _runtime = book
     with pytest.raises(AppError) as caught:
         daemon._review_workflow_payload(conn, "ui.review.plan", {
             "expected_input_version": 0,
             "operations": [{"type": "custody_component", "request": {"action": action, "component_id": "existing"}}],
         }, authored_source="ai_tool")
-    assert caught.value.code == "interaction_required"
+    assert caught.value.code == "agent_access_restricted"
+
+
+@pytest.mark.parametrize("operation", [
+    {"type": "pair", "out_transaction_id": "a", "in_transaction_id": "b", "reason": "Confirmed"},
+    {"type": "dismiss_pair", "out_transaction_id": "a", "in_transaction_id": "b", "reason": "Confirmed"},
+    {"type": "custody_gap", "action": "dismiss", "gap_id": "g", "reason": "Confirmed"},
+    {"type": "kind_override", "transaction_id": "a", "kind": "income", "reason": "Confirmed"},
+])
+def test_new_review_operations_need_full_agent_access(operation):
+    with pytest.raises(AppError) as caught:
+        daemon._validate_ai_review_operations([operation])
+    assert caught.value.code == "agent_access_restricted"
+    daemon._validate_ai_review_operations([operation], full_access=True)
+
+
+def test_consent_preview_follows_the_providers_agent_access(book):
+    conn, runtime = book
+    version = conn.execute("SELECT journal_input_version FROM profiles WHERE id='profile'").fetchone()[0]
+    plan_args = {"expected_input_version": version, "operations": [{
+        "type": "dismiss_pair", "out_transaction_id": "out", "in_transaction_id": "in",
+        "reason": "The user says these are not one movement",
+    }]}
+    with pytest.raises(AppError) as caught:
+        daemon._review_workflow_payload(conn, "ui.review.plan", plan_args, authored_source="ai_tool")
+    assert caught.value.code == "agent_access_restricted"
+    artifact = daemon._review_workflow_payload(
+        conn, "ui.review.plan", plan_args, authored_source="ai_tool", full_access=True,
+    )
+    arguments = {"artifact": artifact, "idempotency_key": "dismiss"}
+    assert daemon._ai_review_consent_preview(runtime, arguments) == {
+        "status": "unavailable", "code": "agent_access_restricted",
+    }
+    runtime.maintenance_state["provider_full_access"] = True
+    assert daemon._ai_review_consent_preview(runtime, arguments) == {"status": "ready", "artifact": artifact}
+    receipt = daemon._review_workflow_payload(
+        conn, "ui.review.apply", arguments, authored_source="ai_tool", full_access=True,
+    )
+    assert receipt["status"] == "verified"
+    with pytest.raises(AppError) as caught:
+        daemon._review_workflow_payload(conn, "ui.review.receipt", {"idempotency_key": "dismiss"},
+                                        authored_source="ai_tool")
+    assert caught.value.code == "agent_access_restricted"
+
+
+def test_full_access_batch_never_activates_a_conversion(book):
+    conn, _runtime = book
+    for request in (
+        {"action": "revise", "component_id": "c", "spec": {"conservation_mode": "conversion"}, "activate": True},
+        {"action": "revise", "component_id": "c", "spec": {"conservation_mode": "conversion"}},
+        {"action": "revise", "component_id": "c", "spec": {"conversion_reviewed": True}},
+    ):
+        with pytest.raises(AppError) as caught:
+            daemon._validate_ai_review_operations(
+                [{"type": "custody_component", "request": request}], full_access=True, conn=conn,
+            )
+        assert caught.value.code == "interaction_required"
+    daemon._validate_ai_review_operations([{"type": "custody_component", "request": {
+        "action": "revise", "component_id": "c",
+        "spec": {"conservation_mode": "conversion", "conversion_reviewed": False},
+    }}], full_access=True, conn=conn)
 
 
 def test_batch_cannot_self_attest_conversion_review():

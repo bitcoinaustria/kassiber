@@ -119,7 +119,7 @@ function ChatCodeBlock({
   const copyLabel = copied ? t("message.copied") : t("message.copy");
 
   return (
-    <div className="my-4 overflow-hidden rounded-xl border border-border bg-muted/70 first:mt-0 last:mb-0">
+    <div className="my-4 overflow-hidden rounded-lg border border-border bg-muted/70 first:mt-0 last:mb-0">
       <div className="flex items-center justify-between gap-2 border-b border-border/60 bg-muted/50 py-1 pr-1.5 pl-3">
         <span className="font-mono text-2xs uppercase tracking-wide text-muted-foreground">
           {language ?? t("message.code")}
@@ -229,6 +229,9 @@ const components: Components = {
       {...props}
     />
   ),
+  strong: ({ className, ...props }) => (
+    <strong className={cn("font-semibold", className)} {...props} />
+  ),
   hr: ({ className, ...props }) => (
     <hr className={cn("my-6 border-border", className)} {...props} />
   ),
@@ -238,7 +241,7 @@ const components: Components = {
   code: ({ className, ...props }) => (
     <code
       className={cn(
-        "rounded-md border border-border bg-muted px-1 py-0.5 font-mono text-[0.85em]",
+        "rounded-sm bg-foreground/10 px-[0.35em] py-[0.1em] font-mono text-[0.85em] [box-decoration-break:clone]",
         className,
       )}
       {...props}

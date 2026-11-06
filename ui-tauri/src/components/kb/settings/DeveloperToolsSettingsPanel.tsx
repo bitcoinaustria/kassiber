@@ -1,8 +1,8 @@
 import * as React from "react";
-import { ExternalLink } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import {
   APP_LOG_MAX_BYTES,
   APP_LOG_MAX_RECORDS,
@@ -10,7 +10,7 @@ import {
   subscribeAppLogRecords,
 } from "@/lib/appLogs";
 import { formatCount } from "@/lib/localeFormat";
-import { SettingsSwitchRow } from "./SettingsControls";
+import { SettingsGroup, SettingsRow } from "./SettingsControls";
 import { formatBytes } from "./SettingsModel";
 
 export function DeveloperToolsSettingsPanel({
@@ -29,47 +29,44 @@ export function DeveloperToolsSettingsPanel({
   const { t } = useTranslation("settings");
   const bytes = useAppLogBufferSize();
   return (
-    <section className="space-y-3">
-      <p className="max-w-2xl text-sm text-muted-foreground">
-        {t("developer.intro")}
-      </p>
-      <SettingsSwitchRow
+    <SettingsGroup footer={t("developer.intro")}>
+      <SettingsRow
         label={t("developer.enableLabel")}
-        description={
-          enabled ? t("developer.enableOn") : t("developer.enableOff")
-        }
-        checked={enabled}
-        onCheckedChange={setEnabled}
-      />
-      <SettingsSwitchRow
+        description={enabled ? t("developer.enableOn") : t("developer.enableOff")}
+        htmlFor="settings-developer-tools"
+      >
+        <Switch
+          id="settings-developer-tools"
+          checked={enabled}
+          onCheckedChange={setEnabled}
+        />
+      </SettingsRow>
+      <SettingsRow
         label={t("developer.alphaBannerLabel")}
         description={t("developer.alphaBannerDescription")}
-        checked={bannerVisible}
-        onCheckedChange={setBannerVisible}
-      />
-      {enabled ? (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="w-fit"
-          onClick={onOpenLogs}
-        >
-          <ExternalLink className="size-4" aria-hidden="true" />
-          {t("developer.openLogs")}
-        </Button>
-      ) : null}
-      <div className="rounded-lg border bg-background p-3 text-sm">
-        <p className="font-medium">{t("developer.bufferHeading")}</p>
-        <p className="text-muted-foreground">
-          {t("developer.bufferDescription", {
-            retained: formatBytes(bytes),
-            records: formatCount(APP_LOG_MAX_RECORDS),
-            bytes: formatBytes(APP_LOG_MAX_BYTES),
-          })}
-        </p>
-      </div>
-    </section>
+        htmlFor="settings-alpha-banner"
+      >
+        <Switch
+          id="settings-alpha-banner"
+          checked={bannerVisible}
+          onCheckedChange={setBannerVisible}
+        />
+      </SettingsRow>
+      <SettingsRow
+        label={t("developer.bufferHeading")}
+        description={t("developer.bufferDescription", {
+          retained: formatBytes(bytes),
+          records: formatCount(APP_LOG_MAX_RECORDS),
+          bytes: formatBytes(APP_LOG_MAX_BYTES),
+        })}
+      >
+        {enabled ? (
+          <Button type="button" variant="outline" size="sm" onClick={onOpenLogs}>
+            {t("developer.openLogs")}
+          </Button>
+        ) : null}
+      </SettingsRow>
+    </SettingsGroup>
   );
 }
 

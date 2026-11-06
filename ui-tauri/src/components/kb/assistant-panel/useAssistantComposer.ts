@@ -11,7 +11,7 @@ type ComposerProps = React.ComponentProps<typeof Ai02>;
 /**
  * The composer wiring shared by the closed bar and the open panel: both edit
  * the same draft and send through the same session. Sending from anywhere
- * opens the panel so the answer is visible beside the page.
+ * opens the panel so the answer is in view.
  */
 export function useAssistantComposer(): ComposerProps {
   const session = useAssistantSession();
@@ -56,10 +56,14 @@ export function useAssistantComposer(): ComposerProps {
     showThinkingEffort: supportsThinkingEffort,
     fastMode: session.fastMode,
     onFastModeChange: session.setFastMode,
+    permissionMode: session.permissionMode,
+    onPermissionModeChange: session.setPermissionMode,
     modelPickerEnabled: true,
     onAttach: session.attachFile,
-    attachedFilename: session.attachment?.filename ?? null,
-    onClearAttachment: session.clearAttachment,
+    attachments: session.attachments,
+    onRemoveAttachment: session.removeAttachment,
+    onAttachFiles: session.attachFiles,
+    onNativeFileDrop: session.attachDroppedFiles,
     historyMessages: session.messages,
   };
 }

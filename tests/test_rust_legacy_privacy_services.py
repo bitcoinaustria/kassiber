@@ -9,6 +9,7 @@ import pytest
 from kassiber.db import open_db
 from tests.test_rust_report_exports import _book, _dump
 from tests.test_rust_legacy_privacy import REFERENCE
+from tests.rust_port.book_schema import TABLES
 
 ROOT = Path(__file__).resolve().parents[1]
 pytestmark = pytest.mark.skipif(not os.environ.get('KASSIBER_RUST_BIN'),reason='requires Rust test-harness binary')
@@ -17,7 +18,7 @@ KIND = 'ui.privacy_hygiene.snapshot'
 
 def state(data):
     result = _dump(data,{})
-    assert len(result) == 112
+    assert tuple(sorted(result)) == TABLES
     return REFERENCE.canonical(result).encode()
 
 
@@ -87,7 +88,7 @@ def test_legacy_daemon_bytes_all_tables_zero_fallback(tmp_path,monkeypatch,offli
             assert state(data) == before,name
             assert routes(env,['daemon']) == 1
             total += len(requests)
-    print(json.dumps({'offline':offline,'legacy_daemon_requests':total,'rust_daemon_sessions':len(names),'python_fallbacks':0,'tables_per_comparison':112},sort_keys=True))
+    print(json.dumps({'offline':offline,'legacy_daemon_requests':total,'rust_daemon_sessions':len(names),'python_fallbacks':0,'tables_per_comparison':len(TABLES)},sort_keys=True))
 
 
 @pytest.mark.parametrize('offline',[False,True])
@@ -112,7 +113,7 @@ def test_legacy_registration_preserves_configuration_report_cli(tmp_path,monkeyp
     assert state(data) == before
     count += 1
     assert routes(env,['reports.privacy-hygiene']*count) == count
-    print(json.dumps({'offline':offline,'reports.privacy-hygiene':count,'python_fallbacks':0,'tables_per_comparison':112},sort_keys=True))
+    print(json.dumps({'offline':offline,'reports.privacy-hygiene':count,'python_fallbacks':0,'tables_per_comparison':len(TABLES)},sort_keys=True))
 
 
 @pytest.mark.parametrize('debug',[False,True])
@@ -142,7 +143,7 @@ def test_legacy_corrupt_amount_uses_native_unhandled_diagnostics(tmp_path,monkey
     assert actual.stderr == b''
     assert state(data) == before
     assert routes(env,['daemon']) == 1
-    print(json.dumps({'debug':debug,'native_unhandled_sessions':1,'legacy_daemon_requests':3,'python_fallbacks':0,'tables_per_comparison':112},sort_keys=True))
+    print(json.dumps({'debug':debug,'native_unhandled_sessions':1,'legacy_daemon_requests':3,'python_fallbacks':0,'tables_per_comparison':len(TABLES)},sort_keys=True))
 
 
 def test_legacy_transport_mutations_apply_and_name_process_killers(tmp_path):

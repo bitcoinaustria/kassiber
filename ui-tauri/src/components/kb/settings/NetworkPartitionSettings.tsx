@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useDaemonMutation } from "@/daemon/client";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { SettingsDisclosure } from "./SettingsControls";
+import { Switch } from "@/components/ui/switch";
+import { SettingsDisclosure, SettingsRow } from "./SettingsControls";
 import { isFileSaveAvailable, saveFile } from "@/lib/filePicker";
 
 type Plan = { profile_id: string; plan_id: string; inventory_digest: string; can_apply: boolean; blockers: { code: string; wallet_id?: string; wallet_ids?: string[] }[]; counts: Record<string, number> };
@@ -38,22 +38,31 @@ export function NetworkPartitionSettings({ profileId, inventoryDigest, environme
       }
     } catch (failure) { setError(failure instanceof Error ? failure.message : String(failure)); }
   };
+  const actions = (children: ReactNode) => <div className="flex flex-wrap justify-end gap-2 px-4 py-3">{children}</div>;
   return <SettingsDisclosure title={t("bookNetwork.partition.title")}>
-    <p className="text-xs text-muted-foreground">{t("bookNetwork.partition.help")}</p>
-    {wallets.map(wallet => <label className="flex items-center gap-2 text-sm" key={wallet.wallet_id}><Checkbox checked={selected.includes(wallet.wallet_id)} onCheckedChange={checked => setSelected(values => checked === true ? [...values, wallet.wallet_id] : values.filter(id => id !== wallet.wallet_id))} />{wallet.label}</label>)}
-    <Button variant="outline" disabled={!selected.length || plan.isPending} onClick={() => void run(false)}>{t("bookNetwork.preview")}</Button>
+    <p className="px-4 py-3 text-sm text-muted-foreground">{t("bookNetwork.partition.help")}</p>
+    {wallets.map(wallet => <SettingsRow key={wallet.wallet_id} label={wallet.label} htmlFor={`book-network-split-${wallet.wallet_id}`}>
+      <Switch id={`book-network-split-${wallet.wallet_id}`} checked={selected.includes(wallet.wallet_id)} onCheckedChange={checked => setSelected(values => checked ? [...values, wallet.wallet_id] : values.filter(id => id !== wallet.wallet_id))} />
+    </SettingsRow>)}
+    {actions(<Button type="button" variant="outline" size="sm" disabled={!selected.length || plan.isPending} onClick={() => void run(false)}>{t("bookNetwork.preview")}</Button>)}
     {current && <>
-      {current.blockers.map((blocker, index) => <p role="alert" className="text-sm text-destructive" key={index}>{t(`bookNetwork.partition.blockers.${blocker.code as "relation_crosses_partition" | "incompatible_wallet_history" | "unresolved_relation" | "scope_declaration_required" | "legacy_ledger_present"}`)} {(blocker.wallet_ids ?? [blocker.wallet_id]).map(id => wallets.find(wallet => wallet.wallet_id === id)?.label).filter(Boolean).join(", ")}</p>)}
+      {current.blockers.map((blocker, index) => <p role="alert" className="px-4 py-3 text-sm text-destructive" key={index}>{t(`bookNetwork.partition.blockers.${blocker.code as "relation_crosses_partition" | "incompatible_wallet_history" | "unresolved_relation" | "scope_declaration_required" | "legacy_ledger_present"}`)} {(blocker.wallet_ids ?? [blocker.wallet_id]).map(id => wallets.find(wallet => wallet.wallet_id === id)?.label).filter(Boolean).join(", ")}</p>)}
       {current.can_apply && <>
-        <p className="text-xs">{t("bookNetwork.partition.counts", { wallets: current.counts.wallets ?? 0, transactions: current.counts.transactions ?? 0 })}</p>
-        <label className="flex flex-col gap-1 text-sm">{t("bookNetwork.partition.passphrase")}<Input type="password" autoComplete="new-password" value={passphrase} onChange={event => setPassphrase(event.target.value)} /></label>
-        <label className="flex flex-col gap-1 text-sm">{t("bookNetwork.partition.confirmPassphrase")}<Input type="password" autoComplete="new-password" value={confirmation} onChange={event => setConfirmation(event.target.value)} /></label>
-        <label className="flex flex-col gap-1 text-sm">{t("bookNetwork.partition.destination")}<Input className="font-mono text-xs" value={destination} onChange={event => setDestination(event.target.value)} /></label>
-        {isFileSaveAvailable && <Button variant="outline" onClick={async () => { const path = await saveFile({ defaultPath: "network-partition.kassiber" }); if (path) setDestination(path); }}>{t("common:actions.save")}</Button>}
-        <Button disabled={passphrase.length < 12 || passphrase !== confirmation || !destination || exportPartition.isPending} onClick={() => void run(true)}>{t("bookNetwork.partition.export")}</Button>
+        <p className="px-4 py-3 text-sm">{t("bookNetwork.partition.counts", { wallets: current.counts.wallets ?? 0, transactions: current.counts.transactions ?? 0 })}</p>
+        <SettingsRow label={t("bookNetwork.partition.passphrase")} htmlFor="book-network-split-passphrase">
+          <Input id="book-network-split-passphrase" className="h-8 w-48" type="password" autoComplete="new-password" value={passphrase} onChange={event => setPassphrase(event.target.value)} />
+        </SettingsRow>
+        <SettingsRow label={t("bookNetwork.partition.confirmPassphrase")} htmlFor="book-network-split-confirm">
+          <Input id="book-network-split-confirm" className="h-8 w-48" type="password" autoComplete="new-password" value={confirmation} onChange={event => setConfirmation(event.target.value)} />
+        </SettingsRow>
+        <SettingsRow label={t("bookNetwork.partition.destination")} htmlFor="book-network-split-destination">
+          <Input id="book-network-split-destination" className="h-8 w-72 font-mono text-xs" value={destination} onChange={event => setDestination(event.target.value)} />
+          {isFileSaveAvailable && <Button type="button" variant="outline" size="sm" onClick={async () => { const path = await saveFile({ defaultPath: "network-partition.kassiber" }); if (path) setDestination(path); }}>{t("common:actions.save")}</Button>}
+        </SettingsRow>
+        {actions(<Button type="button" variant="outline" size="sm" disabled={passphrase.length < 12 || passphrase !== confirmation || !destination || exportPartition.isPending} onClick={() => void run(true)}>{t("bookNetwork.partition.export")}</Button>)}
       </>}
     </>}
-    {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-    {saved && <p role="status" className="text-sm">{t("bookNetwork.partition.saved")}</p>}
+    {error && <p role="alert" className="px-4 py-3 text-sm text-destructive">{error}</p>}
+    {saved && <p role="status" className="px-4 py-3 text-sm">{t("bookNetwork.partition.saved")}</p>}
   </SettingsDisclosure>;
 }

@@ -94,7 +94,8 @@ array of typed operations, for example after verifying the stated invoice:
 ```
 
 A price operation requires exactly one of `fiat_rate` or `fiat_value`, as an exact
-decimal string, plus an audit reason. `exclude` requires `transaction_id` and a
+decimal string in the book's fiat currency (the cases' `fiat_currency`), plus an
+audit reason. Convert a receipt in another currency first and say so in the reason. `exclude` requires `transaction_id` and a
 reason establishing why the row belongs outside accounting. Never use exclusion
 to hide missing evidence, a custody gap, or a transfer. `unpair` takes the
 case's `pair.pair_id`, its `pair.pair_fingerprint` as `expected_fingerprint`,
@@ -106,14 +107,44 @@ one plan. Kassiber refuses an unpair (`review_case_changed`) whose pair was
 revised (allocations included) or replaced since that reading, or no longer
 holds its suspense case after the plan's other operations before it; read
 the case again and ask the user again. `custody_component` wraps
-an existing typed component planner request under `request`; the CLI supports
-its actions, while AI may only create components. Reviewed conversion approval
-remains unavailable to AI. Unsupported repairs remain unresolved.
+an existing typed component planner request under `request` (`create`,
+`revise`, `undo`, `activate`, `supersede`). When an interpretation was wrong,
+supersede it and create the corrected one on the same anchors in the same plan,
+or revise it. AI never activates a conversion component or attests its review:
+those stay drafts for the owner. Unsupported repairs remain unresolved.
+
+The same batch carries the other journal-meaning writes, so one approval
+covers everything the user agreed to:
+
+- `pair`: `out_transaction_id`, `in_transaction_id`, optional `pair_kind`,
+  `policy`, `out_amount_msat` (cross-asset only), and a reason.
+- `undismiss_pair`: the two legs and a reason; removes that dismissal.
+- `dismiss_pair`: the two legs, a reason, `expires_in_days` 1 to 3650
+  (default 90). Permanent dismissals stay on `transfers dismiss`.
+- `custody_gap`: `action` (`create`, `dismiss`, `revise`, `reopen`,
+  `classify_residual` with `classification`), `gap_id`, and a reason.
+- `kind_override`: an inbound kind (or null) for a non-quarantined inbound
+  transaction outside an active custody review.
+- `accept_coarse_prices`: a reason and optional `transaction_ids`. It accepts
+  the daily or coarser price of `pricing_review_required` cases as it stands,
+  bound to that exact price; a changed price is held again. Without ids the
+  plan names every such case; a chat plan holds about 1000, so name batches
+  of ids in a larger book. Propose it only after the user said the
+  approximate prices are acceptable, and offer `price_override` for any price
+  they want corrected instead.
+
+Each operation runs against the book as the previous ones left it. Plan is the
+what-if path: `before`/`after` carry per-year `tax` figures (realized gain/loss,
+income, and for Austrian EUR books the Kennzahlen and indicative tax, withheld
+while any report blocker remains) and `delta` lists the years that change.
+Answer "what does this do to my taxes?" from a plan, never by estimating.
 
 In chat use `ui.review.cases`, inspect `ui.transactions.review_context` and
 `ui.transfers.review_context`, then `ui.review.plan`. Explain the returned
-before/after effects and obtain per-call consent for `ui.review.apply`, passing
-the artifact unchanged. The default CLI `core` profile and built-in chat both
+before/after effects and tax delta and obtain per-call consent for
+`ui.review.apply`, passing the artifact unchanged. Pairs, dismissals,
+component revisions, custody-gap actions and kind overrides need full agent
+access. The default CLI `core` profile and built-in chat both
 advertise this bounded review pack for quarantine questions. Planning is read
 only; applying atomically rechecks scope/version/effects, writes, rebuilds, and
 stores a durable receipt. Read `ui.review.receipt` after an uncertain response
@@ -126,7 +157,7 @@ budget limit or cancellation, report what was inspected, `next_cursor`, unresolv
 evidence, and any receipt/idempotency key needed for the next turn. Re-read cases
 if its cursor expires. Do not increase the budget instead of checking an uncertain
 write. Selected redacted local facts can reach the configured provider; native
-custody-gap/lineage tools remain local-provider only. Portable AI plans reject
+custody-gap/lineage tools are unavailable when agent access is restricted. Portable AI plans reject
 path/URL/secret-bearing free text rather than changing a digest-bound artifact;
 refer to local evidence IDs. Explicit CLI files retain their exact content.
 
@@ -137,6 +168,9 @@ kassiber journals quarantined
 kassiber journals quarantine show --transaction <transaction-id>
 kassiber journals quarantine resolve price-override --transaction <transaction-id> --fiat-rate <rate>
 kassiber journals quarantine resolve exclude --transaction <transaction-id>
+kassiber journals quarantine groups [--group-id root:<transaction-id>] [--cursor <cursor>]
+kassiber journals quarantine resolve exclude --group-id root:<transaction-id> --reprocess
+kassiber transactions verify --transaction <transaction-id-or-txid>
 ```
 
 `journals quarantined` has no pagination or `--limit`; `ui.journals.quarantine`
@@ -158,6 +192,24 @@ not one movement. Name the wallet or evidence the user has to
 provide from `evidence`, and do not present an assumption as proven. The
 individual AI tool `ui.journals.quarantine.resolve` repairs reviewed prices or
 explicit exclusions.
+
+For counts, read `ui.journals.quarantine.groups` rather than summing pages: it
+returns whole-book counts and per-asset msat totals by reason and by root
+group, and pages one group's members with a cursor (`quarantine_cursor_stale`
+means the quarantine changed; read again). Each payload's `definitions` says
+what its counters count. `ui.journals.quarantine.resolve` with a `root:`
+`group_id` acts on that root; report its `dependents_cleared` and
+`quarantine_delta` (including `newly_quarantined`) rather than assuming the
+whole group cleared. A result with `status: "unavailable"` and null figures
+means journals must be processed first, not that nothing is booked.
+
+`ui.transactions.verify` compares a transaction with its stored chain graph:
+conservation (inputs minus outputs against the recorded fee) and each owning
+wallet's imported leg. `mismatch` with `missing_imported_leg` or
+`amount_differs` points at an import that dropped or misbooked a leg;
+`unverifiable` means no raw graph is stored, not that the row is correct. Its
+per-output `keychain` (`receive`/`change`/`unknown`) separates a receipt from
+change only when the owning wallet's branch is known.
 After custody mutations outside `ui.review.apply`, run `ui.journals.process`
 and reread quarantine/report blockers; an applied component alone does not
 mean the book is resolved.
@@ -196,7 +248,15 @@ Activate only after exact anchor coverage and conservation pass atomically.
 In chat, use `ui.transfers.components.list` to avoid duplicating reviewed state,
 then `ui.transfers.components.plan` before asking
 for consent to write the final component set with the returned
-`expected_input_version`.
+`expected_input_version`. To replace a wrong active interpretation, plan
+`action: "revise"` (same anchors allowed, `activate: true`) or
+`action: "supersede"` on the component an error's `remediation` names.
+
+A failed tool result carries `reason` (the error code), `message`, and, where
+Kassiber knows it, `remediation`: `action`, `target` (full ids), `tool` (the
+function that takes the step, or null), `arguments_hint`, and `desktop_only`
+(only the user can take it in the desktop). Follow it instead of guessing the
+target; an `arguments_hint` still needs the usual plan and consent.
 
 If `kassiber --machine journals transfers list` reports
 `summary.cross_asset_pairs: 0`, no cross-asset swap pair is active yet.

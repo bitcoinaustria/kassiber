@@ -1,18 +1,7 @@
 import * as React from "react";
-import {
-  AlertTriangle,
-  CheckCircle2,
-  Database,
-  ExternalLink,
-  FileInput,
-  RefreshCw,
-  Upload,
-  XCircle,
-} from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -22,18 +11,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { openExternalUrl } from "@/daemon/transport";
 import { isFilePickerAvailable, pickFile } from "@/lib/filePicker";
-import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
 import {
   formatCount,
@@ -50,6 +31,7 @@ import {
   type KrakenRatesImportOperation,
   type RateRebuildData,
 } from "./SettingsModel";
+import { SettingsGroup, SettingsRow, SettingsSelect } from "./SettingsControls";
 
 export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
   const { t } = useTranslation(["settings", "common"]);
@@ -403,166 +385,60 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
   };
   const importedPairs = krakenImportResult?.summary ?? [];
   const importedTotals = krakenImportResult?.totals;
+  const linkClass =
+    "underline underline-offset-4 hover:text-foreground";
   return (
-    <section className="space-y-4">
-      <p className="max-w-2xl text-sm text-muted-foreground">
-        {t("marketData.intro")}
-      </p>
-
-      {coarsePricedCount > 0 && !requireCoarseReview ? (
-        <div className="rounded-lg border bg-background p-3 text-sm">
-          <p className="font-medium">
-            {t("marketData.coarse.countNotice", { count: coarsePricedCount })}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {t("marketData.coarse.countDescription")}
-          </p>
-        </div>
-      ) : null}
-
-      <div className="rounded-lg border bg-background p-3">
-        <div className="mb-3 flex flex-col gap-2 border-b pb-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="grid gap-1">
-            <Label htmlFor="market-rate-provider">
-              {t("marketData.priceSourceLabel")}
-            </Label>
-            <p className="text-xs text-muted-foreground">
-              {t("marketData.priceSourceHint")}
-            </p>
-          </div>
-          <Select
-            value={marketRateProvider}
-            disabled={liveMinuteRatesDisabled}
-            onValueChange={(value) => {
-              void setMarketRateProvider(value as MarketRateProvider);
-            }}
-          >
-            <SelectTrigger id="market-rate-provider" className="w-full sm:w-56">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {marketRateProviderOptions.map((provider) => (
-                <SelectItem key={provider} value={provider}>
-                  {marketRateProviderLabel(provider)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex items-start gap-3">
-          <Checkbox
+    <div className="space-y-6">
+      <SettingsGroup
+        title={t("marketData.liveHeading")}
+        footer={t("marketData.intro")}
+      >
+        <SettingsRow
+          label={t("marketData.autoRefreshLabel")}
+          description={t("marketData.autoRefreshHint", {
+            provider: marketRateProviderLabelText,
+          })}
+          htmlFor="market-data-auto-refresh"
+        >
+          <Switch
             id="market-data-auto-refresh"
             checked={liveMinuteRatesEnabled}
             disabled={liveMinuteRatesDisabled}
             onCheckedChange={(checked) => {
-              void setLiveMinuteRates(checked === true);
+              void setLiveMinuteRates(checked);
             }}
           />
-          <Label
-            htmlFor="market-data-auto-refresh"
-            className="grid gap-1 text-sm leading-relaxed"
-          >
-            <span>{t("marketData.autoRefreshLabel")}</span>
-            <span className="font-normal text-muted-foreground">
-              {t("marketData.autoRefreshHint", {
-                provider: marketRateProviderLabelText,
-              })}
-            </span>
-          </Label>
-        </div>
-        <p className="mt-2 text-xs text-muted-foreground">
-          {t("marketData.autoRefreshFootnote")}
-        </p>
-        <div className="mt-3 flex items-start gap-3 border-t pt-3">
-          <Checkbox
-            id="require-coarse-review"
-            checked={requireCoarseReview}
-            disabled={maintenanceBusy}
-            onCheckedChange={(checked) => {
-              void setRequireCoarseReview(checked === true);
+        </SettingsRow>
+        <SettingsRow
+          label={t("marketData.priceSourceLabel")}
+          description={t("marketData.priceSourceHint")}
+          htmlFor="market-rate-provider"
+        >
+          <SettingsSelect<MarketRateProvider>
+            value={marketRateProvider}
+            disabled={liveMinuteRatesDisabled}
+            onValueChange={(value) => {
+              void setMarketRateProvider(value);
             }}
+            options={marketRateProviderOptions.map((provider) => ({
+              value: provider,
+              label: marketRateProviderLabel(provider),
+            }))}
+            triggerProps={{ id: "market-rate-provider" }}
           />
-          <Label
-            htmlFor="require-coarse-review"
-            className="grid gap-1 text-sm leading-relaxed"
-          >
-            <span>{t("marketData.coarse.reviewToggleLabel")}</span>
-            <span className="font-normal text-muted-foreground">
-              {t("marketData.coarse.reviewToggleDescription")}
-            </span>
-          </Label>
-        </div>
-        <div className="mt-3 flex items-start gap-3 border-t pt-3">
-          <Checkbox
-            id="bitcoin-rail-carrying-value"
-            checked={bitcoinRailCarryingValue}
-            disabled={maintenanceBusy}
-            onCheckedChange={(checked) => {
-              void setBitcoinRailCarryingValue(checked === true);
-            }}
-          />
-          <Label
-            htmlFor="bitcoin-rail-carrying-value"
-            className="grid gap-1 text-sm leading-relaxed"
-          >
-            <span>{t("marketData.bitcoinRails.toggleLabel")}</span>
-            <span className="font-normal text-muted-foreground">
-              {t("marketData.bitcoinRails.toggleDescription")}
-            </span>
-          </Label>
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <p className="text-sm font-medium">{t("marketData.providersHeading")}</p>
-        <div className="grid gap-2">
-          {rateBackends.map((backend, index) => (
-            <div
-              key={backend.id}
-              className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-background p-3"
-            >
-              <div className="min-w-0 space-y-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-medium">{backend.name}</span>
-                  <span
-                    className={cn(
-                      "inline-flex items-center rounded-md border px-1.5 py-0.5 text-2xs font-medium uppercase tracking-wide",
-                      index === 0
-                        ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                        : "border-border bg-muted text-muted-foreground",
-                    )}
-                  >
-                    {index === 0
-                      ? t("marketData.primary")
-                      : t("marketData.fallback")}
-                  </span>
-                </div>
-                <p className="truncate font-mono text-xs text-muted-foreground">
-                  {backend.url}
-                </p>
-              </div>
-              <span className="shrink-0 text-xs text-muted-foreground">
-                {backend.health}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="rounded-lg border bg-background p-3">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0">
-            <p className="text-sm font-medium">
-              {t("marketData.rebuildHeading")}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {t("marketData.rebuildDescription", { pair: activeRatePair })}
-            </p>
-          </div>
+        </SettingsRow>
+        <SettingsRow
+          label={t("marketData.rebuildHeading")}
+          description={
+            liveMinuteRatesEnabled
+              ? t("marketData.rebuildDescription", { pair: activeRatePair })
+              : t("marketData.rebuildOptInRequired")
+          }
+        >
           <Button
             type="button"
             variant="outline"
-            className="shrink-0"
+            size="sm"
             onClick={() => {
               setRateRebuildError(null);
               setRateRebuildOpen(true);
@@ -571,112 +447,54 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
               isRebuildingRates || isImportingKraken || !liveMinuteRatesEnabled
             }
           >
-            {isRebuildingRates ? (
-              <RefreshCw className="size-4 animate-spin" aria-hidden="true" />
-            ) : (
-              <Database className="size-4" aria-hidden="true" />
-            )}
-            {t("marketData.rebuildButton")}
+            {isRebuildingRates
+              ? t("marketData.rebuildDialogPending")
+              : t("marketData.rebuildButton")}
           </Button>
-        </div>
-        <p className="mt-2 text-xs text-muted-foreground">
-          {t("marketData.rebuildFootnote")}
-        </p>
-        {!liveMinuteRatesEnabled ? (
-          <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
-            {t("marketData.rebuildOptInRequired")}
-          </p>
-        ) : null}
+        </SettingsRow>
         {isRebuildingRates ? (
-          <div className="mt-3 rounded-lg border border-primary/25 bg-primary/5 p-3">
-            <div className="flex items-center justify-between gap-3 text-xs">
-              <span className="font-medium text-foreground">
-                {t("marketData.rebuildingTitle")}
-              </span>
+          <div role="status" className="space-y-1 px-4 py-3 text-sm">
+            <p>
+              {t("marketData.rebuildingTitle")}
               <span className="text-muted-foreground">
+                {" · "}
                 {t("marketData.rebuildingCounting")}
               </span>
-            </div>
-            <div
-              className="mt-2 h-2 overflow-hidden rounded-full bg-muted"
-              role="progressbar"
-              aria-label={t("marketData.rebuildProgressAria")}
-              aria-valuetext={t("marketData.rebuildProgressValue")}
-            >
-              <div className="h-full w-1/2 animate-pulse rounded-full bg-primary" />
-            </div>
-            <p className="mt-2 text-xs text-muted-foreground">
+            </p>
+            <p className="text-muted-foreground">
               {t("marketData.rebuildingFootnote")}
             </p>
           </div>
         ) : null}
         {rateRebuildResult ? (
-          <div
-            className={cn(
-              "mt-3 rounded-lg border p-3 text-sm",
-              rateRebuildJournalBlocker
-                ? "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-200"
-                : "border-emerald-500/30 bg-emerald-500/5 text-emerald-700 dark:text-emerald-300",
-            )}
-          >
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="font-medium">
-                {rateRebuildJournalBlocker
-                  ? t("marketData.resultBlocked")
-                  : rateRebuildProgress?.total
+          <div className="space-y-1 px-4 py-3 text-sm">
+            <p
+              className={
+                rateRebuildJournalBlocker
+                  ? "text-amber-600 dark:text-amber-400"
+                  : "text-emerald-600 dark:text-emerald-400"
+              }
+            >
+              {rateRebuildJournalBlocker
+                ? t("marketData.resultBlocked")
+                : rateRebuildProgress?.total
                   ? t("marketData.resultProgress", {
                       refreshed: formatCount(rateRebuildProgress.refreshed),
                       total: formatCount(rateRebuildProgress.total),
                     })
                   : t("marketData.resultRebuilt")}
-              </span>
-              <span
-                className={cn(
-                  "text-xs",
-                  rateRebuildJournalBlocker
-                    ? "text-amber-800/80 dark:text-amber-200/80"
-                    : "text-emerald-700/80 dark:text-emerald-300/80",
-                )}
-              >
-                {t("marketData.resultRowsFetched", {
-                  pair: rateRebuildResult.pair ?? activeRatePair,
-                  rows: formatCount(rateRebuildSamples),
-                })}
-              </span>
-            </div>
-            <div
-              className={cn(
-                "mt-2 h-2 overflow-hidden rounded-full",
-                rateRebuildJournalBlocker
-                  ? "bg-amber-950/10 dark:bg-amber-100/15"
-                  : "bg-emerald-950/10 dark:bg-emerald-100/15",
-              )}
-              role="progressbar"
-              aria-label={t("marketData.txRefreshAria")}
-              aria-valuemin={0}
-              aria-valuemax={rateRebuildProgress?.total ?? 1}
-              aria-valuenow={rateRebuildProgress?.refreshed ?? 1}
-            >
-              <div
-                className={cn(
-                  "h-full w-full rounded-full",
-                  rateRebuildJournalBlocker ? "bg-amber-500" : "bg-emerald-500",
-                )}
-              />
-            </div>
+            </p>
             {rateRebuildJournalBlocker ? (
-              <p className="mt-2 text-xs text-amber-800/80 dark:text-amber-200/80">
+              <p className="text-amber-600 dark:text-amber-400">
                 {rateRebuildJournalBlocker}
               </p>
             ) : null}
-            <p
-              className={cn(
-                "mt-2 text-xs",
-                rateRebuildJournalBlocker
-                  ? "text-amber-800/80 dark:text-amber-200/80"
-                  : "text-emerald-700/80 dark:text-emerald-300/80",
-              )}
-            >
+            <p className="text-muted-foreground">
+              {t("marketData.resultRowsFetched", {
+                pair: rateRebuildResult.pair ?? activeRatePair,
+                rows: formatCount(rateRebuildSamples),
+              })}
+              {" · "}
               {t("marketData.resultRemoved", {
                 rates: formatCount(rateRebuildResult.deleted.rates),
                 minutes: formatCount(rateRebuildResult.deleted.checked_minutes),
@@ -687,197 +505,206 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
             </p>
           </div>
         ) : null}
-      </div>
+      </SettingsGroup>
 
-      <div className="rounded-lg border bg-background p-3">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0">
-            <p className="text-sm font-medium">
-              {t("marketData.krakenHeading")}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {t("marketData.krakenDescription")}
-            </p>
-            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">
-              <a
-                href={KRAKEN_OHLCVT_SUPPORT_URL}
-                onClick={(event) =>
-                  openMarketDataUrl(event, KRAKEN_OHLCVT_SUPPORT_URL)
-                }
-                className="inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline"
-              >
-                {t("marketData.krakenGetArchive")}
-                <ExternalLink className="size-3" aria-hidden="true" />
-              </a>
-              <a
-                href={KRAKEN_MARKET_DATA_BLOG_URL}
-                onClick={(event) =>
-                  openMarketDataUrl(event, KRAKEN_MARKET_DATA_BLOG_URL)
-                }
-                className="inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline"
-              >
-                {t("marketData.krakenBlog")}
-                <ExternalLink className="size-3" aria-hidden="true" />
-              </a>
-            </div>
-          </div>
-          <span className="inline-flex w-fit items-center rounded-md border bg-muted px-2 py-1 text-xs text-muted-foreground">
-            kraken-csv
-          </span>
-        </div>
-
-        <div className="mt-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
-          <div className="min-w-0 space-y-1">
-            <p className="text-sm font-medium">
-              {t("marketData.krakenMinuteHeading")}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {t("marketData.krakenMinuteDescription")}
-            </p>
-          </div>
-
-          <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-            <Input
-              value={krakenArchivePath}
-              onChange={(event) => setKrakenArchivePath(event.target.value)}
-              placeholder={t("marketData.krakenPathPlaceholder")}
-              aria-label={t("marketData.krakenPathAria")}
-              disabled={isImportingKraken}
-            />
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                className="flex-1 sm:flex-none"
-                onClick={() => void chooseKrakenArchive()}
-                disabled={!isFilePickerAvailable || isImportingKraken}
-                title={
-                  isFilePickerAvailable
-                    ? t("marketData.chooseFileTitle")
-                    : t("marketData.filePickerUnavailable")
-                }
-              >
-                <Upload className="size-4" aria-hidden="true" />
-                {t("marketData.chooseFile")}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="flex-1 sm:flex-none"
-                onClick={() => void chooseKrakenDirectory()}
-                disabled={!isFilePickerAvailable || isImportingKraken}
-                title={
-                  isFilePickerAvailable
-                    ? t("marketData.chooseFolderTitle")
-                    : t("marketData.filePickerUnavailable")
-                }
-              >
-                <FileInput className="size-4" aria-hidden="true" />
-                {t("marketData.chooseFolder")}
-              </Button>
-            </div>
-          </div>
-
-          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-            <Button
-              type="button"
-              onClick={() => void startKrakenImport("full")}
-              disabled={isImportingKraken}
-            >
-              {pendingKrakenOperation === "full" && !pendingBundledKrakenImport ? (
-                <RefreshCw className="size-4 animate-spin" aria-hidden="true" />
-              ) : (
-                <Database className="size-4" aria-hidden="true" />
-              )}
-              {t("marketData.fullMinuteHistory")}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void startKrakenImport("incremental")}
-              disabled={isImportingKraken}
-            >
-              {pendingKrakenOperation === "incremental" ? (
-                <RefreshCw className="size-4 animate-spin" aria-hidden="true" />
-              ) : (
-                <RefreshCw className="size-4" aria-hidden="true" />
-              )}
-              {t("marketData.incrementalMinuteUpdate")}
-            </Button>
-          </div>
-        </div>
-
-        <div className="mt-3 rounded-lg border bg-muted/30 p-3">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="min-w-0 space-y-1">
-              <p className="text-sm font-medium">
-                {t("marketData.bundledHeading")}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {t("marketData.bundledDescription")}
-              </p>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              className="shrink-0"
-              onClick={() => void startKrakenImport("full", { bundled: true })}
-              disabled={isImportingKraken}
-            >
-              {pendingBundledKrakenImport ? (
-                <RefreshCw className="size-4 animate-spin" aria-hidden="true" />
-              ) : (
-                <Database className="size-4" aria-hidden="true" />
-              )}
-              {t("marketData.importDailyValues")}
-            </Button>
-          </div>
-        </div>
-
-        {krakenImportError ? (
-          <div className="mt-3 flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-            <XCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-            <span>{krakenImportError}</span>
-          </div>
+      <SettingsGroup title={t("marketData.policyHeading")}>
+        <SettingsRow
+          label={t("marketData.coarse.reviewToggleLabel")}
+          description={t("marketData.coarse.reviewToggleDescription")}
+          htmlFor="require-coarse-review"
+        >
+          <Switch
+            id="require-coarse-review"
+            checked={requireCoarseReview}
+            disabled={maintenanceBusy}
+            onCheckedChange={(checked) => {
+              void setRequireCoarseReview(checked);
+            }}
+          />
+        </SettingsRow>
+        {coarsePricedCount > 0 && !requireCoarseReview ? (
+          <SettingsRow
+            label={t("marketData.coarse.countNotice", { count: coarsePricedCount })}
+            description={t("marketData.coarse.countDescription")}
+          >
+            {null}
+          </SettingsRow>
         ) : null}
+        <SettingsRow
+          label={t("marketData.bitcoinRails.toggleLabel")}
+          description={t("marketData.bitcoinRails.toggleDescription")}
+          htmlFor="bitcoin-rail-carrying-value"
+        >
+          <Switch
+            id="bitcoin-rail-carrying-value"
+            checked={bitcoinRailCarryingValue}
+            disabled={maintenanceBusy}
+            onCheckedChange={(checked) => {
+              void setBitcoinRailCarryingValue(checked);
+            }}
+          />
+        </SettingsRow>
+      </SettingsGroup>
 
+      {rateBackends.length > 0 ? (
+        <SettingsGroup title={t("marketData.providersHeading")}>
+          {rateBackends.map((backend, index) => (
+            <SettingsRow
+              key={backend.id}
+              label={backend.name}
+              description={
+                <span className="block truncate">
+                  {index === 0 ? t("marketData.primary") : t("marketData.fallback")}
+                  {" · "}
+                  {backend.url}
+                </span>
+              }
+            >
+              <span className="text-sm text-muted-foreground">{backend.health}</span>
+            </SettingsRow>
+          ))}
+        </SettingsGroup>
+      ) : null}
+
+      <SettingsGroup
+        title={t("marketData.krakenHeading")}
+        footer={
+          <>
+            <a
+              href={KRAKEN_OHLCVT_SUPPORT_URL}
+              onClick={(event) => openMarketDataUrl(event, KRAKEN_OHLCVT_SUPPORT_URL)}
+              className={linkClass}
+            >
+              {t("marketData.krakenGetArchive")}
+            </a>
+            {" · "}
+            <a
+              href={KRAKEN_MARKET_DATA_BLOG_URL}
+              onClick={(event) => openMarketDataUrl(event, KRAKEN_MARKET_DATA_BLOG_URL)}
+              className={linkClass}
+            >
+              {t("marketData.krakenBlog")}
+            </a>
+          </>
+        }
+      >
+        <SettingsRow
+          label={t("marketData.krakenMinuteHeading")}
+          description={t("marketData.krakenMinuteDescription")}
+        >
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void startKrakenImport("full")}
+            disabled={isImportingKraken}
+          >
+            {pendingKrakenOperation === "full" && !pendingBundledKrakenImport
+              ? t("marketData.importing")
+              : t("marketData.fullMinuteHistory")}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void startKrakenImport("incremental")}
+            disabled={isImportingKraken}
+          >
+            {pendingKrakenOperation === "incremental"
+              ? t("marketData.importing")
+              : t("marketData.incrementalMinuteUpdate")}
+          </Button>
+        </SettingsRow>
+        <div className="flex items-center gap-2 px-4 py-3">
+          <Input
+            className="h-8 min-w-0 flex-1"
+            value={krakenArchivePath}
+            onChange={(event) => setKrakenArchivePath(event.target.value)}
+            placeholder={t("marketData.krakenPathPlaceholder")}
+            aria-label={t("marketData.krakenPathAria")}
+            disabled={isImportingKraken}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void chooseKrakenArchive()}
+            disabled={!isFilePickerAvailable || isImportingKraken}
+            title={
+              isFilePickerAvailable
+                ? t("marketData.chooseFileTitle")
+                : t("marketData.filePickerUnavailable")
+            }
+          >
+            {t("marketData.chooseFile")}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void chooseKrakenDirectory()}
+            disabled={!isFilePickerAvailable || isImportingKraken}
+            title={
+              isFilePickerAvailable
+                ? t("marketData.chooseFolderTitle")
+                : t("marketData.filePickerUnavailable")
+            }
+          >
+            {t("marketData.chooseFolder")}
+          </Button>
+        </div>
+        <SettingsRow
+          label={t("marketData.bundledHeading")}
+          description={t("marketData.bundledDescription")}
+        >
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void startKrakenImport("full", { bundled: true })}
+            disabled={isImportingKraken}
+          >
+            {pendingBundledKrakenImport
+              ? t("marketData.importing")
+              : t("marketData.importDailyValues")}
+          </Button>
+        </SettingsRow>
+        {krakenImportError ? (
+          <p role="alert" className="px-4 py-3 text-sm text-destructive">
+            {krakenImportError}
+          </p>
+        ) : null}
         {krakenImportResult ? (
-          <div className="mt-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3">
-            <div className="flex items-start gap-2 text-sm text-emerald-700 dark:text-emerald-300">
-              <CheckCircle2 className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-              <span>
-                {importedTotals?.pairs
-                  ? t("marketData.importedTotals", {
-                      count: importedTotals.pairs,
-                      rows: formatCount(importedTotals.samples),
-                      pairs: formatCount(importedTotals.pairs),
-                    })
-                  : t("marketData.noRowsImported")}
-              </span>
-            </div>
-            {importedPairs.length ? (
-              <div className="mt-2 divide-y rounded-md border bg-background text-xs">
-                {importedPairs.map((row) => (
-                  <div
-                    key={row.pair}
-                    className="grid gap-1 px-3 py-2 sm:grid-cols-[120px_minmax(0,1fr)_120px]"
-                  >
-                    <span className="font-medium">{row.pair}</span>
-                    <span className="truncate text-muted-foreground">
-                      {formatKrakenRange(row)}
-                    </span>
-                    <span className="text-muted-foreground sm:text-right">
-                      {t("marketData.importedRowGranularity", {
-                        rows: formatCount(row.samples),
-                        granularity: row.granularity ?? "",
-                      })}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : null}
+          <div className="space-y-1 px-4 py-3 text-sm">
+            <p
+              className={
+                importedTotals?.pairs
+                  ? "text-emerald-600 dark:text-emerald-400"
+                  : "text-amber-600 dark:text-amber-400"
+              }
+            >
+              {importedTotals?.pairs
+                ? t("marketData.importedTotals", {
+                    count: importedTotals.pairs,
+                    rows: formatCount(importedTotals.samples),
+                    pairs: formatCount(importedTotals.pairs),
+                  })
+                : t("marketData.noRowsImported")}
+            </p>
+            {importedPairs.map((row) => (
+              <p key={row.pair} className="text-muted-foreground">
+                {row.pair}
+                {" · "}
+                {formatKrakenRange(row)}
+                {" · "}
+                {t("marketData.importedRowGranularity", {
+                  rows: formatCount(row.samples),
+                  granularity: row.granularity ?? "",
+                })}
+              </p>
+            ))}
             {importedTotals?.skipped_rows || importedTotals?.skipped_files ? (
-              <p className="mt-2 text-xs text-muted-foreground">
+              <p className="text-muted-foreground">
                 {t("marketData.skipped", {
                   rows: formatCount(importedTotals.skipped_rows),
                   files: formatCount(importedTotals.skipped_files),
@@ -886,7 +713,8 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
             ) : null}
           </div>
         ) : null}
-      </div>
+      </SettingsGroup>
+
       <Dialog open={rateRebuildOpen} onOpenChange={setRateRebuildOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -898,20 +726,12 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
               })}
             </DialogDescription>
           </DialogHeader>
-          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
-            <div className="flex items-start gap-2">
-              <AlertTriangle
-                className="mt-0.5 size-4 shrink-0"
-                aria-hidden="true"
-              />
-              <div className="space-y-1">
-                <p className="font-medium">
-                  {t("marketData.rebuildDialogWarningTitle")}
-                </p>
-                <p>{t("marketData.rebuildDialogWarningBody")}</p>
-              </div>
-            </div>
-          </div>
+          <p className="text-sm text-amber-700 dark:text-amber-300">
+            <span className="font-medium">
+              {t("marketData.rebuildDialogWarningTitle")}
+            </span>{" "}
+            {t("marketData.rebuildDialogWarningBody")}
+          </p>
           {rateRebuildError ? (
             <p className="text-sm text-destructive">{rateRebuildError}</p>
           ) : null}
@@ -929,11 +749,6 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
               onClick={() => void startRateRebuild()}
               disabled={isRebuildingRates || !liveMinuteRatesEnabled}
             >
-              {isRebuildingRates ? (
-                <RefreshCw className="size-4 animate-spin" aria-hidden="true" />
-              ) : (
-                <Database className="size-4" aria-hidden="true" />
-              )}
               {isRebuildingRates
                 ? t("marketData.rebuildDialogPending")
                 : t("marketData.rebuildDialogSubmit")}
@@ -941,6 +756,6 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </section>
+    </div>
   );
 }

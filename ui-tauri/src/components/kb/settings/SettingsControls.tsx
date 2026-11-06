@@ -4,7 +4,13 @@ import { Check, ChevronRight, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { copyTextWithPolicy } from "@/lib/clipboard";
 import { cn } from "@/lib/utils";
 
@@ -45,21 +51,33 @@ export function CopyButton({
 /**
  * A settings list in the manner of the ChatGPT desktop app's settings: one
  * hairline box, rows divided inside it, each row the setting's name and a line
- * of explanation on the left and its control on the right.
+ * of explanation on the left and its control on the right. Actions for the
+ * whole list sit beside the title; a note about all of it goes under the box.
  */
 export function SettingsGroup({
   title,
+  actions,
+  footer,
   className,
   children,
+  ...rest
 }: {
   title?: React.ReactNode;
+  actions?: React.ReactNode;
+  footer?: React.ReactNode;
   className?: string;
   children: React.ReactNode;
-}) {
+} & Omit<React.HTMLAttributes<HTMLElement>, "title" | "children">) {
   return (
-    <section className={cn("space-y-2", className)}>
-      {title ? <h3 className="text-sm font-semibold">{title}</h3> : null}
-      <div className="divide-y rounded-lg border bg-background">{children}</div>
+    <section className={cn("space-y-2", className)} {...rest}>
+      {title || actions ? (
+        <div className="flex items-end justify-between gap-3">
+          {title ? <h3 className="text-sm font-semibold">{title}</h3> : <span />}
+          {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
+        </div>
+      ) : null}
+      <div className="divide-y overflow-hidden rounded-lg border bg-background">{children}</div>
+      {footer ? <p className="px-1 text-xs text-muted-foreground">{footer}</p> : null}
     </section>
   );
 }
@@ -91,138 +109,101 @@ export function SettingsRow({
   );
 }
 
-export interface SegmentedOption<T extends string> {
+export interface SettingsSelectOption<T extends string> {
   value: T;
   label: React.ReactNode;
-  icon?: React.ReactNode;
+  /** Shown on hover over the option. */
+  title?: string;
+  disabled?: boolean;
 }
 
 /**
- * A choice of a few exclusive values, drawn as one pill of segments. A radio
- * group, not tabs: picking a theme changes a setting, it does not switch a
- * panel, so arrows move the choice the way they do in a native radio group.
+ * A choice among values, as a dropdown of one width and height wherever it
+ * sits, so a column of choices lines up. Only listed values are passed on.
  */
-export function SegmentedControl<T extends string>({
+export function SettingsSelect<T extends string>({
   value,
   onValueChange,
   options,
-  label,
+  disabled = false,
+  placeholder,
+  triggerProps,
 }: {
   value: T;
   onValueChange: (value: T) => void;
-  options: readonly SegmentedOption<T>[];
-  label: string;
-}) {
-  const refs = React.useRef<Array<HTMLButtonElement | null>>([]);
-  const select = (index: number) => {
-    const option = options[(index + options.length) % options.length];
-    onValueChange(option.value);
-    refs.current[(index + options.length) % options.length]?.focus();
+  options: readonly SettingsSelectOption<T>[];
+  disabled?: boolean;
+  /** Shown while the value matches no option. */
+  placeholder?: string;
+  /** id, aria-* and data-* for the trigger. */
+  triggerProps?: Omit<React.ComponentProps<typeof SelectTrigger>, "size" | "children"> & {
+    [data: `data-${string}`]: string | undefined;
   };
+}) {
   return (
-    <div
-      role="radiogroup"
-      aria-label={label}
-      className="inline-flex items-center gap-0.5 rounded-lg bg-muted p-0.5"
+    <Select
+      value={value}
+      disabled={disabled}
+      onValueChange={(next) => {
+        const option = options.find((candidate) => candidate.value === next);
+        if (option) onValueChange(option.value);
+      }}
     >
-      {options.map((option, index) => {
-        const checked = option.value === value;
-        return (
-          <button
+      <SelectTrigger
+        size="sm"
+        {...triggerProps}
+        className={cn("w-48", triggerProps?.className)}
+      >
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((option) => (
+          <SelectItem
             key={option.value}
-            ref={(node) => {
-              refs.current[index] = node;
-            }}
-            type="button"
-            role="radio"
-            aria-checked={checked}
-            tabIndex={checked ? 0 : -1}
-            onClick={() => onValueChange(option.value)}
-            onKeyDown={(event) => {
-              if (event.key === "ArrowRight" || event.key === "ArrowDown") {
-                event.preventDefault();
-                select(index + 1);
-              } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
-                event.preventDefault();
-                select(index - 1);
-              }
-            }}
-            className={cn(
-              "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium whitespace-nowrap transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none [&_svg]:size-4 [&_svg]:shrink-0",
-              checked
-                ? "bg-background text-foreground shadow-xs dark:bg-input/60"
-                : "text-muted-foreground hover:text-foreground",
-            )}
+            value={option.value}
+            title={option.title}
+            disabled={option.disabled}
           >
-            {option.icon}
             {option.label}
-          </button>
-        );
-      })}
-    </div>
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 
 /**
- * A collapsed section for rarely changed settings. The native `<details>`
- * keeps it keyboard- and find-in-page friendly; only the marker is replaced,
- * because WebKit and Chromium each draw their own triangle.
+ * A collapsed list for rarely changed settings: a SettingsGroup's box whose
+ * rows show once opened. The native `<details>` keeps it keyboard- and
+ * find-in-page friendly; only the marker is replaced, because WebKit and
+ * Chromium each draw their own triangle.
  */
 export function SettingsDisclosure({
   title,
+  open,
   className,
   children,
 }: {
   title: React.ReactNode;
+  /** Starts open; the user can still fold it. */
+  open?: boolean;
   className?: string;
   children: React.ReactNode;
 }) {
   return (
-    <details className={cn("group rounded-lg border bg-background", className)}>
-      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium select-none hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none [&::-webkit-details-marker]:hidden">
+    <details
+      open={open || undefined}
+      className={cn("group overflow-hidden rounded-lg border bg-background", className)}
+    >
+      <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-medium select-none hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset [&::-webkit-details-marker]:hidden">
         <ChevronRight
           className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90"
           aria-hidden="true"
         />
         {title}
       </summary>
-      <div className="space-y-3 border-t px-4 py-3">{children}</div>
+      <div className="divide-y border-t">{children}</div>
     </details>
-  );
-}
-
-export interface SettingsSwitchRowProps {
-  label: string;
-  description: string;
-  checked: boolean;
-  onCheckedChange: (checked: boolean) => void;
-  disabled?: boolean;
-}
-
-export function SettingsSwitchRow({
-  label,
-  description,
-  checked,
-  onCheckedChange,
-  disabled = false,
-}: SettingsSwitchRowProps) {
-  return (
-    <div
-      className={cn(
-        "flex items-start justify-between gap-4 rounded-lg border bg-background p-3",
-        disabled && "opacity-60",
-      )}
-    >
-      <div className="min-w-0 space-y-1">
-        <Label className="text-sm font-medium">{label}</Label>
-        <p className="text-sm text-muted-foreground">{description}</p>
-      </div>
-      <Switch
-        checked={checked}
-        onCheckedChange={onCheckedChange}
-        disabled={disabled}
-      />
-    </div>
   );
 }
 
@@ -235,28 +216,31 @@ export function CommandLine({ command }: { command: string }) {
   );
 }
 
-export function PathField({
-  id,
+/**
+ * A value to copy rather than edit, such as a path or a command: its name,
+ * the value in monospace under it, and a copy button. A row of a SettingsGroup.
+ */
+export function SettingsCopyRow({
   label,
   value,
+  copyLabel,
+  placeholder,
 }: {
-  id: string;
-  label: string;
+  label: React.ReactNode;
   value: string | null;
+  copyLabel: string;
+  /** Shown while the value is still unknown. */
+  placeholder?: string;
 }) {
   return (
-    <div className="space-y-1.5">
-      <Label htmlFor={id}>{label}</Label>
-      <div className="flex items-center gap-1">
-        <Input
-          id={id}
-          readOnly
-          value={value ?? "loading…"}
-          className="font-mono text-xs"
-        />
-        {value ? <CopyButton value={value} label={`Copy ${label}`} /> : null}
-      </div>
-    </div>
+    <SettingsRow
+      label={label}
+      description={
+        <span className="font-mono text-xs break-all">{value ?? placeholder}</span>
+      }
+    >
+      {value ? <CopyButton value={value} label={copyLabel} /> : null}
+    </SettingsRow>
   );
 }
 

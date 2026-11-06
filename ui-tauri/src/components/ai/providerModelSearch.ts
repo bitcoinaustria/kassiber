@@ -138,16 +138,6 @@ export function sortModelRowsByPosture(
   return sortByPrivacyPosture(models, (model) => modelPrivacyPosture(provider, model));
 }
 
-export function filterModelsByPrivacy(
-  provider: AiProviderRow,
-  models: AiModelsListData["models"],
-  localOnly: boolean,
-): AiModelsListData["models"] {
-  return localOnly
-    ? models.filter((model) => modelPrivacyPosture(provider, model) === "local")
-    : models;
-}
-
 export function providerRuntimeSelectable(
   runtime: AiProviderRuntimeStatus | null | undefined,
 ): boolean {

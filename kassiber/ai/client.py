@@ -667,7 +667,7 @@ def _store_refused(exc: AppError) -> AppError:
         code="ai_store_refused",
         details=details,
         hint=(
-            "Run Test connection in Settings → AI providers to see your options, "
+            "Run Test connection in Settings → Assistant to see your options, "
             "or `kassiber ai providers test <name>`."
         ),
         retryable=False,
@@ -1638,7 +1638,7 @@ def _http_error_app_error(exc: urllib.error.HTTPError) -> AppError:
             "AI provider rejected the request as unauthorized",
             code="ai_auth_failed",
             details=details,
-            hint="Check the provider's API key in Settings → AI providers.",
+            hint="Check the provider's API key in Settings → Assistant.",
             retryable=False,
         )
     if status == 429:

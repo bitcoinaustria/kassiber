@@ -64,3 +64,19 @@ export type TransactionTrail = ReturnType<typeof useTransactionTrail>;
 
 /** Provided by the sheet frame; the keyed body reads it across transactions. */
 export const TransactionTrailContext = React.createContext<TransactionTrail | null>(null);
+
+/**
+ * True while the detail is a tab of the right panel rather than its own
+ * sheet: the tab and the panel carry the close, and asking the assistant
+ * leaves the detail open beside it.
+ */
+export const TransactionDetailHostedContext = React.createContext(false);
+
+/** A fresh scope on hide/reopen prevents retained details from repeating a public lookup. */
+export const TransactionDetailLookupScopeContext = React.createContext<object>({});
+
+/**
+ * The panel's own transaction tab a detail renders for, if any: a detail the
+ * panel keeps (`PanelTransactionDetail`) rather than a page's preview.
+ */
+export const RightPanelDetailOwnerContext = React.createContext<number | null>(null);

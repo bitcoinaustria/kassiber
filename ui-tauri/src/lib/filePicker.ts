@@ -49,6 +49,8 @@ export interface DocumentImportSourceSelection {
     media_type?: string;
     size_bytes?: number;
     kind?: "image" | "pdf" | string;
+    /** A chat image's small PNG preview, made by the daemon; never a path. */
+    thumbnail?: string;
   };
 }
 

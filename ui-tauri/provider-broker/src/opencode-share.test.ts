@@ -54,6 +54,7 @@ async function fakeOpenCode(listen = false): Promise<string> {
 const {appendFileSync}=require('node:fs');
 const {join}=require('node:path');
 const argv=process.argv.slice(2);
+if(argv[0]==='--version'){console.log('1.18.10');process.exit(0);}
 if(argv[0]==='db'){console.log(process.env.OPENCODE_DB||'/home/user/.local/share/opencode/opencode.db');process.exit(0);}
 if(argv[0]!=='serve') process.exit(2);
 appendFileSync(join(__dirname,'serve.jsonl'),JSON.stringify({

@@ -68,7 +68,7 @@ fn outcome(result: Result<Value, AppError>) -> Value {
 fn dump(conn: &Connection) -> Vec<(String, Vec<String>)> {
     let names: Vec<String> = conn.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").unwrap()
         .query_map([], |row| row.get(0)).unwrap().map(Result::unwrap).collect();
-    assert_eq!(names.len(), 112);
+    assert_eq!(names, kassiber_store::table_names());
     names
         .into_iter()
         .map(|name| {

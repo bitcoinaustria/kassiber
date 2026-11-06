@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { Readable, Writable } from "node:stream";
 import * as acp from "@agentclientprotocol/sdk";
 import type {
+  ContentBlock,
   InitializeRequest,
   InitializeResponse,
   McpServer,
@@ -29,7 +30,7 @@ import {
   resolveExecutable,
   runProvider,
 } from "./executables.js";
-import { promptFromMessages, systemInstructions } from "./prompt.js";
+import { imagesNotShownNote, promptFromMessages, promptImages, systemInstructions } from "./prompt.js";
 import {
   providerStatus,
   safeErrorMessage,
@@ -505,6 +506,30 @@ function promptText(request: ChatRequest, resumed: boolean): string {
   return `SYSTEM INSTRUCTIONS:\n${systemInstructions(request)}\n\n${conversation}`;
 }
 
+/**
+ * The prompt blocks: the text, then the attached images when the agent says
+ * it takes images (`promptCapabilities.image`). One that does not is told
+ * they were left out, rather than sent blocks it would reject or ignore.
+ */
+export function promptBlocks(
+  request: ChatRequest,
+  resumed: boolean,
+  acceptsImages: boolean,
+): ContentBlock[] {
+  const images = promptImages(request.messages, resumed);
+  const text = promptText(request, resumed);
+  if (!images.length) return [{ type: "text", text }];
+  if (!acceptsImages) return [{ type: "text", text: text + imagesNotShownNote(images.length) }];
+  return [
+    { type: "text", text },
+    ...images.map((image): ContentBlock => ({
+      type: "image",
+      mimeType: image.media_type,
+      data: image.data,
+    })),
+  ];
+}
+
 export async function acpChat(
   spec: AcpAgentSpec,
   request: ChatRequest,
@@ -670,7 +695,11 @@ export async function acpChat(
         prompted = true;
         const prompt = ctx.request(acp.methods.agent.session.prompt, {
           sessionId: activeSession,
-          prompt: [{ type: "text", text: promptText(request, resumed) }],
+          prompt: promptBlocks(
+            request,
+            resumed,
+            init.agentCapabilities?.promptCapabilities?.image === true,
+          ),
         });
         prompt.catch(() => undefined);
         const response = await Promise.race([prompt, violation]);

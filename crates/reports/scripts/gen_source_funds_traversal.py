@@ -7,6 +7,7 @@ import tempfile
 
 from kassiber.core.source_funds_traversal import load_report_traversal
 from kassiber.db import open_db
+from tests.rust_port.book_schema import TABLES
 
 ROOT = Path(__file__).resolve().parents[3]
 DESTINATION = ROOT / 'crates/reports/tests/data/source_funds_traversal.json'
@@ -137,7 +138,7 @@ def outcome(conn, case):
 def all_tables(conn):
     tables = [row[0] for row in conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")]
-    assert len(tables) == 112
+    assert tuple(tables) == TABLES
     records = {table: sorted([dict(row) for row in conn.execute('SELECT * FROM "' + table + '"')],
                              key=lambda row: json.dumps(row, sort_keys=True))
                for table in tables}

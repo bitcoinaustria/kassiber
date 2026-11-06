@@ -4,7 +4,7 @@
 use crate::spec::*;
 
 /// Every parser `build_parser()` builds, depth first; index 0 is `kassiber`.
-pub(crate) static PARSERS: [Parser; 378] = [
+pub(crate) static PARSERS: [Parser; 383] = [
     Parser {
         prog: "kassiber",
         description: Some("Open-source, local-first Bitcoin accounting with wallet buckets and multi-wallet support. CLI surface of the Kassiber suite; a desktop GUI is also available."),
@@ -22,7 +22,7 @@ pub(crate) static PARSERS: [Parser; 378] = [
         Action { kind: ActionKind::Store, option_strings: &["--diagnostics-out"], dest: Some("diagnostics_out"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Text("On error, write a public-safe diagnostics report to PATH, or use 'auto' for exports/diagnostics"), metavar: Some("PATH|auto"), choices: None, subparsers: None },
         Action { kind: ActionKind::Store, option_strings: &["--db-passphrase-fd"], dest: Some("db_passphrase_fd"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Int, required: false, help: Help::Text("Read the SQLCipher database passphrase from this open file descriptor and close it after use; required for headless automation against an encrypted database."), metavar: Some("FD"), choices: None, subparsers: None },
         Action { kind: ActionKind::Store, option_strings: &["--operator-auth-fd"], dest: Some("operator_auth_fd"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Int, required: false, help: Help::Text("Read fresh broker admin authentication from this fd"), metavar: Some("FD"), choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("daemon", 1), ("init", 2), ("status", 3), ("update", 4), ("offline", 5), ("verify-download", 9), ("operator", 10), ("mcp", 23), ("health", 30), ("next-actions", 31), ("commands", 32), ("projects", 34), ("chat", 39), ("chats", 40), ("secrets", 46), ("backup", 55), ("chain-analysis", 58), ("review", 104), ("maintenance", 109), ("backends", 111), ("context", 121), ("workspaces", 125), ("networks", 128), ("profiles", 134), ("accounts", 139), ("wallets", 142), ("transactions", 180), ("attachments", 183), ("metadata", 190), ("journals", 226), ("loans", 241), ("transfers", 246), ("views", 276), ("imports", 280), ("btcpay", 283), ("documents", 293), ("source-funds", 298), ("reports", 321), ("rates", 358), ("diagnostics", 365), ("ai", 367)], choice_help: &[ChoiceHelp { dest: "update", metavar: "update", help: Help::Text("Check for a new release and show the manual update command") }, ChoiceHelp { dest: "offline", metavar: "offline", help: Help::Text("Show or change offline mode, which blocks every outbound connection") }, ChoiceHelp { dest: "verify-download", metavar: "verify-download", help: Help::Text("Verify a release artifact against an SSH-signed SHA-256 manifest") }, ChoiceHelp { dest: "operator", metavar: "operator", help: Help::Text("Manage terminal broker leases, modes, and queued operations") }, ChoiceHelp { dest: "mcp", metavar: "mcp", help: Help::Text("Serve Kassiber's read-only tools to external agents over MCP (stdio)") }, ChoiceHelp { dest: "health", metavar: "health", help: Help::Text("Summarize active-project readiness and blockers") }, ChoiceHelp { dest: "next-actions", metavar: "next-actions", help: Help::Text("Suggest the next safe actions for the active project") }, ChoiceHelp { dest: "commands", metavar: "commands", help: Help::Text("Describe the CLI command surface as machine-readable metadata") }, ChoiceHelp { dest: "projects", metavar: "projects", help: Help::Text("List, create, and select encrypted project containers") }, ChoiceHelp { dest: "secrets", metavar: "secrets", help: Help::Text("Manage SQLCipher database encryption (init, change passphrase, verify)") }, ChoiceHelp { dest: "backup", metavar: "backup", help: Help::Text("Export or import a `.kassiber` encrypted backup bundle") }, ChoiceHelp { dest: "chain-analysis", metavar: "chain-analysis", help: Help::Text("Local transaction investigations, tracing and evidence") }, ChoiceHelp { dest: "review", metavar: "review", help: Help::Text("Inspect, preview, apply, and verify accounting repairs") }, ChoiceHelp { dest: "maintenance", metavar: "maintenance", help: Help::Text("Repair or remove storage left by earlier Kassiber versions") }, ChoiceHelp { dest: "networks", metavar: "networks", help: Help::Text("Inspect and bind a book's network environment") }, ChoiceHelp { dest: "loans", metavar: "loans", help: Help::Text("Mark transactions as Bitcoin-backed-loan legs") }, ChoiceHelp { dest: "imports", metavar: "imports", help: Help::Text("File import runs, and rolling one back") }] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("daemon", 1), ("init", 2), ("status", 3), ("update", 4), ("offline", 5), ("verify-download", 9), ("operator", 10), ("mcp", 23), ("health", 30), ("next-actions", 31), ("commands", 32), ("projects", 34), ("chat", 39), ("chats", 40), ("secrets", 46), ("backup", 55), ("chain-analysis", 58), ("review", 104), ("maintenance", 109), ("backends", 111), ("context", 121), ("workspaces", 125), ("networks", 128), ("profiles", 134), ("accounts", 139), ("wallets", 142), ("transactions", 180), ("attachments", 184), ("metadata", 191), ("journals", 227), ("loans", 243), ("transfers", 248), ("views", 281), ("imports", 285), ("btcpay", 288), ("documents", 298), ("source-funds", 303), ("reports", 326), ("rates", 363), ("diagnostics", 370), ("ai", 372)], choice_help: &[ChoiceHelp { dest: "update", metavar: "update", help: Help::Text("Check for a new release and show the manual update command") }, ChoiceHelp { dest: "offline", metavar: "offline", help: Help::Text("Show or change offline mode, which blocks every outbound connection") }, ChoiceHelp { dest: "verify-download", metavar: "verify-download", help: Help::Text("Verify a release artifact against an SSH-signed SHA-256 manifest") }, ChoiceHelp { dest: "operator", metavar: "operator", help: Help::Text("Manage terminal broker leases, modes, and queued operations") }, ChoiceHelp { dest: "mcp", metavar: "mcp", help: Help::Text("Serve Kassiber's tools to external agents over MCP (stdio), within your grant") }, ChoiceHelp { dest: "health", metavar: "health", help: Help::Text("Summarize active-project readiness and blockers") }, ChoiceHelp { dest: "next-actions", metavar: "next-actions", help: Help::Text("Suggest the next safe actions for the active project") }, ChoiceHelp { dest: "commands", metavar: "commands", help: Help::Text("Describe the CLI command surface as machine-readable metadata") }, ChoiceHelp { dest: "projects", metavar: "projects", help: Help::Text("List, create, and select encrypted project containers") }, ChoiceHelp { dest: "secrets", metavar: "secrets", help: Help::Text("Manage SQLCipher database encryption (init, change passphrase, verify)") }, ChoiceHelp { dest: "backup", metavar: "backup", help: Help::Text("Export or import a `.kassiber` encrypted backup bundle") }, ChoiceHelp { dest: "chain-analysis", metavar: "chain-analysis", help: Help::Text("Local transaction investigations, tracing and evidence") }, ChoiceHelp { dest: "review", metavar: "review", help: Help::Text("Inspect, preview, apply, and verify accounting repairs") }, ChoiceHelp { dest: "maintenance", metavar: "maintenance", help: Help::Text("Repair or remove storage left by earlier Kassiber versions") }, ChoiceHelp { dest: "networks", metavar: "networks", help: Help::Text("Inspect and bind a book's network environment") }, ChoiceHelp { dest: "loans", metavar: "loans", help: Help::Text("Mark transactions as Bitcoin-backed-loan legs") }, ChoiceHelp { dest: "imports", metavar: "imports", help: Help::Text("File import runs, and rolling one back") }] }) },
         ],
         options: &[("-h", 0), ("--help", 0), ("--version", 1), ("--project", 2), ("--data-root", 3), ("--env-file", 4), ("--format", 5), ("--machine", 6), ("--non-interactive", 7), ("--output", 8), ("--debug", 9), ("--diagnostics-out", 10), ("--db-passphrase-fd", 11), ("--operator-auth-fd", 12)],
         mutex_groups: &[],
@@ -299,7 +299,7 @@ pub(crate) static PARSERS: [Parser; 378] = [
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("mcp_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("serve", 24), ("tools", 25), ("status", 26), ("enable", 27), ("disable", 28), ("call", 29)], choice_help: &[ChoiceHelp { dest: "serve", metavar: "serve", help: Help::Text("Run a local stdio MCP server (MCP 2026-07-28 and 2025 handshake clients)") }, ChoiceHelp { dest: "tools", metavar: "tools", help: Help::Text("Describe the tools the MCP server exposes") }, ChoiceHelp { dest: "status", metavar: "status", help: Help::Text("Show whether external agents may use Kassiber") }, ChoiceHelp { dest: "enable", metavar: "enable", help: Help::Text("Allow external agents to read Kassiber books (asks in your terminal)") }, ChoiceHelp { dest: "disable", metavar: "disable", help: Help::Text("Stop serving external agents") }, ChoiceHelp { dest: "call", metavar: "call", help: Help::Text("Run one MCP tool against a book and print its result") }] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("mcp_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("serve", 24), ("tools", 25), ("status", 26), ("enable", 27), ("disable", 28), ("call", 29)], choice_help: &[ChoiceHelp { dest: "serve", metavar: "serve", help: Help::Text("Run a local stdio MCP server (MCP 2026-07-28 and 2025 handshake clients)") }, ChoiceHelp { dest: "tools", metavar: "tools", help: Help::Text("Describe the tools the MCP server exposes at the current grant") }, ChoiceHelp { dest: "status", metavar: "status", help: Help::Text("Show whether external agents may use Kassiber, and their grant") }, ChoiceHelp { dest: "enable", metavar: "enable", help: Help::Text("Allow external agents to use Kassiber books (asks in your terminal)") }, ChoiceHelp { dest: "disable", metavar: "disable", help: Help::Text("Stop serving external agents") }, ChoiceHelp { dest: "call", metavar: "call", help: Help::Text("Run one MCP tool against a book and print its result") }] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -346,10 +346,12 @@ pub(crate) static PARSERS: [Parser; 378] = [
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--grant"], dest: Some("grant"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Text("What agents may do: read, operator (also sync, process journals, export, record evidence) or accounting_decisions (also review, decide and edit transaction metadata); keeps the recorded grant if omitted, read for a first enable"), metavar: None, choices: Some(&["read", "operator", "accounting_decisions"]), subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--agent-access"], dest: Some("agent_access"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Text("full (unprojected results and custody/lineage/chain-analysis source tools) or restricted; keeps the recorded choice if omitted, restricted for a first enable"), metavar: None, choices: Some(&["full", "restricted"]), subparsers: None },
         ],
-        options: &[("-h", 0), ("--help", 0)],
+        options: &[("-h", 0), ("--help", 0), ("--grant", 1), ("--agent-access", 2)],
         mutex_groups: &[],
-        sections: &[Section { title: "positional arguments", description: None, actions: &[] }, Section { title: "options", description: None, actions: &[0] }],
+        sections: &[Section { title: "positional arguments", description: None, actions: &[] }, Section { title: "options", description: None, actions: &[0, 1, 2] }],
         defaults: &[],
     },
     Parser {
@@ -370,12 +372,14 @@ pub(crate) static PARSERS: [Parser; 378] = [
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
         Action { kind: ActionKind::Store, option_strings: &["--tool"], dest: Some("tool"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Text("MCP tool name from `kassiber mcp tools`"), metavar: None, choices: None, subparsers: None },
         Action { kind: ActionKind::Store, option_strings: &["--arguments"], dest: Some("arguments"), nargs: Nargs::Single, constant: Lit::None, default: Lit::Str("{}"), value_type: ValueType::Str, required: false, help: Help::Text("Tool arguments as a JSON object (not secret-bearing)"), metavar: Some("JSON"), choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--grant"], dest: Some("grant"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Text("Run with at most this grant; narrows the user's External agents grant, never widens it"), metavar: None, choices: Some(&["read", "operator", "accounting_decisions"]), subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--client"], dest: Some("client"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Text("Agent host name recorded with writes (display only)"), metavar: Some("NAME"), choices: None, subparsers: None },
         Action { kind: ActionKind::Store, option_strings: &["--workspace"], dest: Some("workspace"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Text("Book set (workspace) id or label to pin; defaults to the active one per call"), metavar: None, choices: None, subparsers: None },
         Action { kind: ActionKind::Store, option_strings: &["--profile"], dest: Some("profile"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Text("Book (profile) id or label to pin; defaults to the active one per call"), metavar: None, choices: None, subparsers: None },
         ],
-        options: &[("-h", 0), ("--help", 0), ("--tool", 1), ("--arguments", 2), ("--workspace", 3), ("--profile", 4)],
+        options: &[("-h", 0), ("--help", 0), ("--tool", 1), ("--arguments", 2), ("--grant", 3), ("--client", 4), ("--workspace", 5), ("--profile", 6)],
         mutex_groups: &[],
-        sections: &[Section { title: "positional arguments", description: None, actions: &[] }, Section { title: "options", description: None, actions: &[0, 1, 2, 3, 4] }],
+        sections: &[Section { title: "positional arguments", description: None, actions: &[] }, Section { title: "options", description: None, actions: &[0, 1, 2, 3, 4, 5, 6] }],
         defaults: &[],
     },
     Parser {
@@ -498,8 +502,8 @@ pub(crate) static PARSERS: [Parser; 378] = [
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
         Action { kind: ActionKind::Store, option_strings: &[], dest: Some("prompt"), nargs: Nargs::Optional, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Text("One-shot prompt; pass '-' to read it from stdin. Omit for REPL mode."), metavar: None, choices: None, subparsers: None },
         Action { kind: ActionKind::Store, option_strings: &["--prompt"], dest: Some("prompt_text"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Text("One-shot prompt text."), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::Store, option_strings: &["--file"], dest: Some("file"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Text("Attach a local export (CSV/XLSX/PDF/image) to this chat so the assistant can analyze it \u{2014} use for an exchange with no dedicated importer. For a CSV the assistant sees the column headers and row counts; cell values stay on this device unless the AI provider also runs here. PDFs and photos require a loopback local vision model."), metavar: Some("PATH"), choices: None, subparsers: None },
-        Action { kind: ActionKind::Store, option_strings: &["--file-context"], dest: Some("file_context"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Text("Tell the assistant what the attached file is, e.g. \"2024 export from exchange XYZ, custodial account\". Context for the assistant, not a claim Kassiber books: values still come from the file."), metavar: Some("TEXT"), choices: None, subparsers: None },
+        Action { kind: ActionKind::Append, option_strings: &["--file"], dest: Some("file"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Text("Attach a local file (CSV/TSV/XLSX/PDF/image) to this chat; repeat for up to 8 files. An export from an exchange with no dedicated importer can be analyzed and imported. A provider with full agent access sees the CSV's cell values, the images, and the PDFs' text (or page images of a scan); a restricted provider sees the CSV's headers and row counts and none of the images or PDFs."), metavar: Some("PATH"), choices: None, subparsers: None },
+        Action { kind: ActionKind::Append, option_strings: &["--file-context"], dest: Some("file_context"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Text("Tell the assistant what an attached file is, e.g. \"2024 export from exchange XYZ, custodial account\"; the nth --file-context describes the nth --file. Context for the assistant, not a claim Kassiber books: values still come from the file."), metavar: Some("TEXT"), choices: None, subparsers: None },
         Action { kind: ActionKind::Store, option_strings: &["--provider"], dest: Some("provider"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Text("Provider name (defaults to the stored default)"), metavar: None, choices: None, subparsers: None },
         Action { kind: ActionKind::Store, option_strings: &["--model"], dest: Some("model"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Text("Model id (defaults to the provider's default_model)"), metavar: None, choices: None, subparsers: None },
         Action { kind: ActionKind::Store, option_strings: &["--system"], dest: Some("system"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Text("Raw system prompt replacing the built-in Kassiber assistant prompt."), metavar: None, choices: None, subparsers: None },
@@ -509,7 +513,8 @@ pub(crate) static PARSERS: [Parser; 378] = [
         Action { kind: ActionKind::Store, option_strings: &["--reasoning-effort"], dest: Some("reasoning_effort"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Text("Forward a provider-specific reasoning effort option when supported. Defaults to the provider's stored default effort, else auto."), metavar: None, choices: Some(&["auto", "low", "medium", "high", "xhigh", "max", "ultra"]), subparsers: None },
         Action { kind: ActionKind::StoreTrue, option_strings: &["--fast"], dest: Some("fast"), nargs: Nargs::Zero, constant: Lit::Bool(true), default: Lit::Bool(false), value_type: ValueType::Str, required: false, help: Help::Text("Ask for the model's fast serving mode (Codex Fast service tier, Claude Opus fast mode). Billed at a higher rate; ignored by models and providers without one."), metavar: None, choices: None, subparsers: None },
         Action { kind: ActionKind::Store, option_strings: &["--tool-loop-max-iterations"], dest: Some("tool_loop_max_iterations"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Int, required: false, help: Help::Text("Maximum tool-loop iterations per turn (default: 16 for review, 8 otherwise)."), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::Store, option_strings: &["--tool-profile"], dest: Some("tool_profile"), nargs: Nargs::Single, constant: Lit::None, default: Lit::Str("core"), value_type: ValueType::Str, required: false, help: Help::Text("Tool schema to expose to the model: core keeps common accounting tools small for local models; scoped adds the specialist tools behind the current question; full exposes the complete catalog."), metavar: None, choices: Some(&["core", "scoped", "full"]), subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--tool-profile"], dest: Some("tool_profile"), nargs: Nargs::Single, constant: Lit::None, default: Lit::Str("full"), value_type: ValueType::Str, required: false, help: Help::Text("Tool schema to expose to the model: full (default) offers the complete catalog; scoped offers the tools behind the current question and lets the model load more; core keeps a small common set for small local models."), metavar: None, choices: Some(&["core", "scoped", "full"]), subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--permission-mode"], dest: Some("permission_mode"), nargs: Nargs::Single, constant: Lit::None, default: Lit::Str("approval"), value_type: ValueType::Str, required: false, help: Help::Text("Who approves the assistant's changes: approval (default) asks before each one; auto approves changes another tool can undo and that stay on this machine, and asks for the rest; full_access approves everything, network actions such as syncs included."), metavar: None, choices: Some(&["approval", "auto", "full_access"]), subparsers: None },
         Action { kind: ActionKind::StoreTrue, option_strings: &["--no-tools"], dest: Some("no_tools"), nargs: Nargs::Zero, constant: Lit::Bool(true), default: Lit::Bool(false), value_type: ValueType::Str, required: false, help: Help::Text("Disable daemon AI tools for this chat."), metavar: None, choices: None, subparsers: None },
         Action { kind: ActionKind::StoreTrue, option_strings: &["--yes"], dest: Some("yes"), nargs: Nargs::Zero, constant: Lit::Bool(true), default: Lit::Bool(false), value_type: ValueType::Str, required: false, help: Help::Text("Non-interactively allow mutating AI tools, except ui.review.apply (fresh review required)."), metavar: None, choices: None, subparsers: None },
         Action { kind: ActionKind::Append, option_strings: &["--allow-tool"], dest: Some("allow_tool"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Text("Non-interactively allow only this mutating tool name; repeat or pass comma-separated names. Other mutating tools still prompt on a TTY or deny without one. ui.review.apply always requires fresh interactive review."), metavar: None, choices: None, subparsers: None },
@@ -520,9 +525,9 @@ pub(crate) static PARSERS: [Parser; 378] = [
         Action { kind: ActionKind::StoreTrue, option_strings: &["--continue"], dest: Some("continue_session"), nargs: Nargs::Zero, constant: Lit::Bool(true), default: Lit::Bool(false), value_type: ValueType::Str, required: false, help: Help::Text("Continue the most recently updated persisted chat session."), metavar: None, choices: None, subparsers: None },
         Action { kind: ActionKind::Store, option_strings: &["--session"], dest: Some("session"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Text("Continue a specific persisted chat session (see `kassiber chats list`)."), metavar: Some("SESSION_ID"), choices: None, subparsers: None },
         ],
-        options: &[("-h", 0), ("--help", 0), ("--prompt", 2), ("--file", 3), ("--file-context", 4), ("--provider", 5), ("--model", 6), ("--system", 7), ("--temperature", 8), ("--max-tokens", 9), ("--timeout", 10), ("--reasoning-effort", 11), ("--fast", 12), ("--tool-loop-max-iterations", 13), ("--tool-profile", 14), ("--no-tools", 15), ("--yes", 16), ("--allow-tool", 17), ("--stream-json", 18), ("--transcript", 19), ("--plain", 20), ("--incognito", 21), ("--continue", 22), ("--session", 23)],
+        options: &[("-h", 0), ("--help", 0), ("--prompt", 2), ("--file", 3), ("--file-context", 4), ("--provider", 5), ("--model", 6), ("--system", 7), ("--temperature", 8), ("--max-tokens", 9), ("--timeout", 10), ("--reasoning-effort", 11), ("--fast", 12), ("--tool-loop-max-iterations", 13), ("--tool-profile", 14), ("--permission-mode", 15), ("--no-tools", 16), ("--yes", 17), ("--allow-tool", 18), ("--stream-json", 19), ("--transcript", 20), ("--plain", 21), ("--incognito", 22), ("--continue", 23), ("--session", 24)],
         mutex_groups: &[],
-        sections: &[Section { title: "positional arguments", description: None, actions: &[1] }, Section { title: "options", description: None, actions: &[0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23] }],
+        sections: &[Section { title: "positional arguments", description: None, actions: &[1] }, Section { title: "options", description: None, actions: &[0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24] }],
         defaults: &[],
     },
     Parser {
@@ -2675,7 +2680,7 @@ pub(crate) static PARSERS: [Parser; 378] = [
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("transactions_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 181), ("export", 182)], choice_help: &[] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("transactions_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 181), ("verify", 182), ("export", 183)], choice_help: &[ChoiceHelp { dest: "verify", metavar: "verify", help: Help::Text("Check a transaction against its locally stored chain graph (no network)") }] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -2713,6 +2718,20 @@ pub(crate) static PARSERS: [Parser; 378] = [
         defaults: &[],
     },
     Parser {
+        prog: "kassiber transactions verify",
+        description: None,
+        actions: &[
+        Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--workspace"], dest: Some("workspace"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Missing, metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--profile"], dest: Some("profile"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Missing, metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--transaction"], dest: Some("transaction"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Text("Transaction id or txid"), metavar: None, choices: None, subparsers: None },
+        ],
+        options: &[("-h", 0), ("--help", 0), ("--workspace", 1), ("--profile", 2), ("--transaction", 3)],
+        mutex_groups: &[],
+        sections: &[Section { title: "positional arguments", description: None, actions: &[] }, Section { title: "options", description: None, actions: &[0, 1, 2, 3] }],
+        defaults: &[],
+    },
+    Parser {
         prog: "kassiber transactions export",
         description: None,
         actions: &[
@@ -2737,7 +2756,7 @@ pub(crate) static PARSERS: [Parser; 378] = [
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("attachments_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("add", 184), ("list", 185), ("rename", 186), ("remove", 187), ("verify", 188), ("gc", 189)], choice_help: &[] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("attachments_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("add", 185), ("list", 186), ("rename", 187), ("remove", 188), ("verify", 189), ("gc", 190)], choice_help: &[] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -2836,7 +2855,7 @@ pub(crate) static PARSERS: [Parser; 378] = [
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("metadata_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("notes", 191), ("tags", 194), ("bip329", 199), ("exclude", 204), ("include", 205), ("records", 206)], choice_help: &[] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("metadata_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("notes", 192), ("tags", 195), ("bip329", 200), ("exclude", 205), ("include", 206), ("records", 207)], choice_help: &[] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -2848,7 +2867,7 @@ pub(crate) static PARSERS: [Parser; 378] = [
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("notes_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("set", 192), ("clear", 193)], choice_help: &[] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("notes_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("set", 193), ("clear", 194)], choice_help: &[] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -2891,7 +2910,7 @@ pub(crate) static PARSERS: [Parser; 378] = [
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("tags_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 195), ("create", 196), ("add", 197), ("remove", 198)], choice_help: &[] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("tags_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 196), ("create", 197), ("add", 198), ("remove", 199)], choice_help: &[] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -2963,7 +2982,7 @@ pub(crate) static PARSERS: [Parser; 378] = [
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("bip329_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("import", 200), ("preview", 201), ("list", 202), ("export", 203)], choice_help: &[] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("bip329_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("import", 201), ("preview", 202), ("list", 203), ("export", 204)], choice_help: &[] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -3065,7 +3084,7 @@ pub(crate) static PARSERS: [Parser; 378] = [
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("records_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 207), ("get", 208), ("note", 209), ("tag", 212), ("excluded", 215), ("kind", 218), ("history", 221)], choice_help: &[ChoiceHelp { dest: "kind", metavar: "kind", help: Help::Text("Classify a transaction's tax character (income vs plain acquisition). Unlike tags, this drives the tax engine.") }] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("records_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 208), ("get", 209), ("note", 210), ("tag", 213), ("excluded", 216), ("kind", 219), ("history", 222)], choice_help: &[ChoiceHelp { dest: "kind", metavar: "kind", help: Help::Text("Classify a transaction's tax character (income vs plain acquisition). Unlike tags, this drives the tax engine.") }] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -3114,7 +3133,7 @@ pub(crate) static PARSERS: [Parser; 378] = [
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("records_note_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("set", 210), ("clear", 211)], choice_help: &[] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("records_note_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("set", 211), ("clear", 212)], choice_help: &[] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -3157,7 +3176,7 @@ pub(crate) static PARSERS: [Parser; 378] = [
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("records_tag_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("add", 213), ("remove", 214)], choice_help: &[] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("records_tag_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("add", 214), ("remove", 215)], choice_help: &[] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -3201,7 +3220,7 @@ pub(crate) static PARSERS: [Parser; 378] = [
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("records_excluded_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("set", 216), ("clear", 217)], choice_help: &[] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("records_excluded_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("set", 217), ("clear", 218)], choice_help: &[] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -3243,7 +3262,7 @@ pub(crate) static PARSERS: [Parser; 378] = [
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("records_kind_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("set", 219), ("clear", 220)], choice_help: &[] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("records_kind_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("set", 220), ("clear", 221)], choice_help: &[] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -3286,7 +3305,7 @@ pub(crate) static PARSERS: [Parser; 378] = [
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("history_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 222), ("activity", 223), ("stale", 224), ("revert", 225)], choice_help: &[] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("history_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 223), ("activity", 224), ("stale", 225), ("revert", 226)], choice_help: &[] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -3377,7 +3396,7 @@ pub(crate) static PARSERS: [Parser; 378] = [
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("journals_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("process", 227), ("list", 228), ("quarantined", 229), ("transfers", 230), ("events", 232), ("quarantine", 235)], choice_help: &[] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("journals_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("process", 228), ("list", 229), ("quarantined", 230), ("transfers", 231), ("events", 233), ("quarantine", 236)], choice_help: &[] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -3431,7 +3450,7 @@ pub(crate) static PARSERS: [Parser; 378] = [
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("journal_transfers_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 231)], choice_help: &[] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("journal_transfers_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 232)], choice_help: &[] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -3456,7 +3475,7 @@ pub(crate) static PARSERS: [Parser; 378] = [
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("events_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 233), ("get", 234)], choice_help: &[] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("events_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 234), ("get", 235)], choice_help: &[] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -3503,7 +3522,7 @@ pub(crate) static PARSERS: [Parser; 378] = [
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("quarantine_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("show", 236), ("clear", 237), ("resolve", 238)], choice_help: &[] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("quarantine_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("show", 237), ("clear", 238), ("groups", 239), ("resolve", 240)], choice_help: &[ChoiceHelp { dest: "groups", metavar: "groups", help: Help::Text("Quarantine counts and msat totals by reason and root cause") }] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -3539,11 +3558,27 @@ pub(crate) static PARSERS: [Parser; 378] = [
         defaults: &[],
     },
     Parser {
+        prog: "kassiber journals quarantine groups",
+        description: None,
+        actions: &[
+        Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--workspace"], dest: Some("workspace"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Missing, metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--profile"], dest: Some("profile"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Missing, metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--group-id"], dest: Some("group_id"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Text("root:<transaction>, unrooted:<reason> or reason:<reason>; lists that group's members"), metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--cursor"], dest: Some("cursor"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Text("Opaque cursor from a previous group page"), metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--limit"], dest: Some("limit"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Int, required: false, help: Help::Missing, metavar: None, choices: None, subparsers: None },
+        ],
+        options: &[("-h", 0), ("--help", 0), ("--workspace", 1), ("--profile", 2), ("--group-id", 3), ("--cursor", 4), ("--limit", 5)],
+        mutex_groups: &[],
+        sections: &[Section { title: "positional arguments", description: None, actions: &[] }, Section { title: "options", description: None, actions: &[0, 1, 2, 3, 4, 5] }],
+        defaults: &[],
+    },
+    Parser {
         prog: "kassiber journals quarantine resolve",
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("quarantine_resolve_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("price-override", 239), ("exclude", 240)], choice_help: &[] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("quarantine_resolve_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("price-override", 241), ("exclude", 242)], choice_help: &[] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -3557,13 +3592,15 @@ pub(crate) static PARSERS: [Parser; 378] = [
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
         Action { kind: ActionKind::Store, option_strings: &["--workspace"], dest: Some("workspace"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Missing, metavar: None, choices: None, subparsers: None },
         Action { kind: ActionKind::Store, option_strings: &["--profile"], dest: Some("profile"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Missing, metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::Store, option_strings: &["--transaction"], dest: Some("transaction"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--transaction"], dest: Some("transaction"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Missing, metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--group-id"], dest: Some("group_id"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Text("A root:<transaction> group from `journals quarantine groups`; resolves its root"), metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::StoreTrue, option_strings: &["--reprocess"], dest: Some("reprocess"), nargs: Nargs::Zero, constant: Lit::Bool(true), default: Lit::Bool(false), value_type: ValueType::Str, required: false, help: Help::Text("Process journals afterwards and report which waiting rows cleared"), metavar: None, choices: None, subparsers: None },
         Action { kind: ActionKind::Store, option_strings: &["--fiat-rate"], dest: Some("fiat_rate"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Missing, metavar: None, choices: None, subparsers: None },
         Action { kind: ActionKind::Store, option_strings: &["--fiat-value"], dest: Some("fiat_value"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Missing, metavar: None, choices: None, subparsers: None },
         ],
-        options: &[("-h", 0), ("--help", 0), ("--workspace", 1), ("--profile", 2), ("--transaction", 3), ("--fiat-rate", 4), ("--fiat-value", 5)],
-        mutex_groups: &[],
-        sections: &[Section { title: "positional arguments", description: None, actions: &[] }, Section { title: "options", description: None, actions: &[0, 1, 2, 3, 4, 5] }],
+        options: &[("-h", 0), ("--help", 0), ("--workspace", 1), ("--profile", 2), ("--transaction", 3), ("--group-id", 4), ("--reprocess", 5), ("--fiat-rate", 6), ("--fiat-value", 7)],
+        mutex_groups: &[Mutex { required: true, actions: &[3, 4] }],
+        sections: &[Section { title: "positional arguments", description: None, actions: &[] }, Section { title: "options", description: None, actions: &[0, 1, 2, 3, 4, 5, 6, 7] }],
         defaults: &[],
     },
     Parser {
@@ -3573,11 +3610,13 @@ pub(crate) static PARSERS: [Parser; 378] = [
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
         Action { kind: ActionKind::Store, option_strings: &["--workspace"], dest: Some("workspace"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Missing, metavar: None, choices: None, subparsers: None },
         Action { kind: ActionKind::Store, option_strings: &["--profile"], dest: Some("profile"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Missing, metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::Store, option_strings: &["--transaction"], dest: Some("transaction"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--transaction"], dest: Some("transaction"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Missing, metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--group-id"], dest: Some("group_id"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Text("A root:<transaction> group from `journals quarantine groups`; resolves its root"), metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::StoreTrue, option_strings: &["--reprocess"], dest: Some("reprocess"), nargs: Nargs::Zero, constant: Lit::Bool(true), default: Lit::Bool(false), value_type: ValueType::Str, required: false, help: Help::Text("Process journals afterwards and report which waiting rows cleared"), metavar: None, choices: None, subparsers: None },
         ],
-        options: &[("-h", 0), ("--help", 0), ("--workspace", 1), ("--profile", 2), ("--transaction", 3)],
-        mutex_groups: &[],
-        sections: &[Section { title: "positional arguments", description: None, actions: &[] }, Section { title: "options", description: None, actions: &[0, 1, 2, 3] }],
+        options: &[("-h", 0), ("--help", 0), ("--workspace", 1), ("--profile", 2), ("--transaction", 3), ("--group-id", 4), ("--reprocess", 5)],
+        mutex_groups: &[Mutex { required: true, actions: &[3, 4] }],
+        sections: &[Section { title: "positional arguments", description: None, actions: &[] }, Section { title: "options", description: None, actions: &[0, 1, 2, 3, 4, 5] }],
         defaults: &[],
     },
     Parser {
@@ -3585,7 +3624,7 @@ pub(crate) static PARSERS: [Parser; 378] = [
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("loans_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("mark", 242), ("unmark", 243), ("link", 244), ("list", 245)], choice_help: &[ChoiceHelp { dest: "mark", metavar: "mark", help: Help::Text("Mark a transaction as a loan non-event") }, ChoiceHelp { dest: "unmark", metavar: "unmark", help: Help::Text("Remove a transaction's loan mark (reverts to normal tax classification)") }, ChoiceHelp { dest: "link", metavar: "link", help: Help::Text("Tie two or more marked loan legs together") }, ChoiceHelp { dest: "list", metavar: "list", help: Help::Text("List loan marks and open collateral locks") }] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("loans_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("mark", 244), ("unmark", 245), ("link", 246), ("list", 247)], choice_help: &[ChoiceHelp { dest: "mark", metavar: "mark", help: Help::Text("Mark a transaction as a loan non-event") }, ChoiceHelp { dest: "unmark", metavar: "unmark", help: Help::Text("Remove a transaction's loan mark (reverts to normal tax classification)") }, ChoiceHelp { dest: "link", metavar: "link", help: Help::Text("Tie two or more marked loan legs together") }, ChoiceHelp { dest: "list", metavar: "list", help: Help::Text("List loan marks and open collateral locks") }] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -3656,7 +3695,7 @@ pub(crate) static PARSERS: [Parser; 378] = [
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("transfers_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 247), ("pair", 248), ("unpair", 249), ("update", 250), ("gaps", 251), ("components", 257), ("payouts", 262), ("suggest", 266), ("bulk-pair", 267), ("dismiss", 268), ("rules", 269)], choice_help: &[ChoiceHelp { dest: "update", metavar: "update", help: Help::Text("Edit the kind / policy / note of an existing pair in place") }, ChoiceHelp { dest: "gaps", metavar: "gaps", help: Help::Text("Review and resolve deterministic missing-wallet custody candidates") }, ChoiceHelp { dest: "components", metavar: "components", help: Help::Text("Author atomic, versioned custody interpretations across Bitcoin rails") }] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("transfers_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 249), ("pair", 250), ("unpair", 251), ("update", 252), ("gaps", 253), ("components", 259), ("payouts", 264), ("suggest", 268), ("bulk-pair", 269), ("dismiss", 270), ("dismissals", 271), ("rules", 274)], choice_help: &[ChoiceHelp { dest: "update", metavar: "update", help: Help::Text("Edit the kind / policy / note of an existing pair in place") }, ChoiceHelp { dest: "gaps", metavar: "gaps", help: Help::Text("Review and resolve deterministic missing-wallet custody candidates") }, ChoiceHelp { dest: "components", metavar: "components", help: Help::Text("Author atomic, versioned custody interpretations across Bitcoin rails") }] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -3731,7 +3770,7 @@ pub(crate) static PARSERS: [Parser; 378] = [
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("transfers_gaps_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 252), ("review", 253), ("history", 254), ("plan", 255), ("apply", 256)], choice_help: &[ChoiceHelp { dest: "history", metavar: "history", help: Help::Text("Show append-only review and correction history") }, ChoiceHelp { dest: "plan", metavar: "plan", help: Help::Text("Build a pure custody review plan at the current input version") }, ChoiceHelp { dest: "apply", metavar: "apply", help: Help::Text("Apply a custody review plan while its input version is current") }] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("transfers_gaps_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 254), ("review", 255), ("history", 256), ("plan", 257), ("apply", 258)], choice_help: &[ChoiceHelp { dest: "history", metavar: "history", help: Help::Text("Show append-only review and correction history") }, ChoiceHelp { dest: "plan", metavar: "plan", help: Help::Text("Build a pure custody review plan at the current input version") }, ChoiceHelp { dest: "apply", metavar: "apply", help: Help::Text("Apply a custody review plan while its input version is current") }] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -3822,7 +3861,7 @@ pub(crate) static PARSERS: [Parser; 378] = [
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("transfers_components_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 258), ("show", 259), ("plan", 260), ("apply", 261)], choice_help: &[ChoiceHelp { dest: "list", metavar: "list", help: Help::Text("List custody components") }, ChoiceHelp { dest: "show", metavar: "show", help: Help::Text("Show one custody component") }, ChoiceHelp { dest: "plan", metavar: "plan", help: Help::Text("Purely plan one or more N:M custody components") }, ChoiceHelp { dest: "apply", metavar: "apply", help: Help::Text("Atomically persist an unchanged custody component plan") }] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("transfers_components_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 260), ("show", 261), ("plan", 262), ("apply", 263)], choice_help: &[ChoiceHelp { dest: "list", metavar: "list", help: Help::Text("List custody components") }, ChoiceHelp { dest: "show", metavar: "show", help: Help::Text("Show one custody component") }, ChoiceHelp { dest: "plan", metavar: "plan", help: Help::Text("Purely plan one or more N:M custody components") }, ChoiceHelp { dest: "apply", metavar: "apply", help: Help::Text("Atomically persist an unchanged custody component plan") }] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -3909,7 +3948,7 @@ pub(crate) static PARSERS: [Parser; 378] = [
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("payouts_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 263), ("create", 264), ("delete", 265)], choice_help: &[] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("payouts_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 265), ("create", 266), ("delete", 267)], choice_help: &[] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -4025,11 +4064,54 @@ pub(crate) static PARSERS: [Parser; 378] = [
         defaults: &[],
     },
     Parser {
+        prog: "kassiber transfers dismissals",
+        description: None,
+        actions: &[
+        Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("transfers_dismissals_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 272), ("delete", 273)], choice_help: &[ChoiceHelp { dest: "delete", metavar: "delete", help: Help::Text("Undo one dismissal so the pair can be suggested again") }] }) },
+        ],
+        options: &[("-h", 0), ("--help", 0)],
+        mutex_groups: &[],
+        sections: &[Section { title: "positional arguments", description: None, actions: &[1] }, Section { title: "options", description: None, actions: &[0] }],
+        defaults: &[],
+    },
+    Parser {
+        prog: "kassiber transfers dismissals list",
+        description: None,
+        actions: &[
+        Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--workspace"], dest: Some("workspace"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Missing, metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--profile"], dest: Some("profile"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Missing, metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::StoreTrue, option_strings: &["--include-expired"], dest: Some("include_expired"), nargs: Nargs::Zero, constant: Lit::Bool(true), default: Lit::Bool(false), value_type: ValueType::Str, required: false, help: Help::Text("Also list dismissals whose expiry has passed"), metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--limit"], dest: Some("limit"), nargs: Nargs::Single, constant: Lit::None, default: Lit::Int(200), value_type: ValueType::Int, required: false, help: Help::Missing, metavar: None, choices: None, subparsers: None },
+        ],
+        options: &[("-h", 0), ("--help", 0), ("--workspace", 1), ("--profile", 2), ("--include-expired", 3), ("--limit", 4)],
+        mutex_groups: &[],
+        sections: &[Section { title: "positional arguments", description: None, actions: &[] }, Section { title: "options", description: None, actions: &[0, 1, 2, 3, 4] }],
+        defaults: &[],
+    },
+    Parser {
+        prog: "kassiber transfers dismissals delete",
+        description: None,
+        actions: &[
+        Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--workspace"], dest: Some("workspace"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Missing, metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--profile"], dest: Some("profile"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Missing, metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--id"], dest: Some("dismissal_id"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Text("Dismissal id from `dismissals list`"), metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--tx-out"], dest: Some("tx_out"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Missing, metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--tx-in"], dest: Some("tx_in"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Missing, metavar: None, choices: None, subparsers: None },
+        ],
+        options: &[("-h", 0), ("--help", 0), ("--workspace", 1), ("--profile", 2), ("--id", 3), ("--tx-out", 4), ("--tx-in", 5)],
+        mutex_groups: &[],
+        sections: &[Section { title: "positional arguments", description: None, actions: &[] }, Section { title: "options", description: None, actions: &[0, 1, 2, 3, 4, 5] }],
+        defaults: &[],
+    },
+    Parser {
         prog: "kassiber transfers rules",
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("transfers_rules_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 270), ("create", 271), ("delete", 272), ("enable", 273), ("disable", 274), ("apply", 275)], choice_help: &[] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("transfers_rules_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 275), ("create", 276), ("delete", 277), ("enable", 278), ("disable", 279), ("apply", 280)], choice_help: &[] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -4135,7 +4217,7 @@ pub(crate) static PARSERS: [Parser; 378] = [
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("views_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 277), ("create", 278), ("delete", 279)], choice_help: &[] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("views_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 282), ("create", 283), ("delete", 284)], choice_help: &[] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -4191,7 +4273,7 @@ pub(crate) static PARSERS: [Parser; 378] = [
         description: Some("Every file import is recorded as a run, so an import that mapped columns wrongly can be undone without deleting the whole wallet. Only the transactions a run created are removed \u{2014} rows it merely enriched predate it and stay."),
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("imports_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 281), ("rollback", 282)], choice_help: &[ChoiceHelp { dest: "list", metavar: "list", help: Help::Text("List this book's import runs") }, ChoiceHelp { dest: "rollback", metavar: "rollback", help: Help::Text("Delete the transactions one import run created") }] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("imports_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 286), ("rollback", 287)], choice_help: &[ChoiceHelp { dest: "list", metavar: "list", help: Help::Text("List this book's import runs") }, ChoiceHelp { dest: "rollback", metavar: "rollback", help: Help::Text("Delete the transactions one import run created") }] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -4234,7 +4316,7 @@ pub(crate) static PARSERS: [Parser; 378] = [
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("btcpay_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("key-url", 284), ("inspect", 285), ("setup", 286), ("provenance", 287)], choice_help: &[ChoiceHelp { dest: "key-url", metavar: "key-url", help: Help::Text("Print the permissions Kassiber needs and a pre-filled BTCPay key authorization link (no network access)") }, ChoiceHelp { dest: "inspect", metavar: "inspect", help: Help::Text("Inspect a BTCPay instance: key permissions, stores, payment methods, shared wallets, and a setup plan") }, ChoiceHelp { dest: "setup", metavar: "setup", help: Help::Text("Apply a BTCPay setup plan: wallet sources, wallet mappings, payment ledgers, and invoice/payout provenance routes") }] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("btcpay_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("key-url", 289), ("inspect", 290), ("setup", 291), ("provenance", 292)], choice_help: &[ChoiceHelp { dest: "key-url", metavar: "key-url", help: Help::Text("Print the permissions Kassiber needs and a pre-filled BTCPay key authorization link (no network access)") }, ChoiceHelp { dest: "inspect", metavar: "inspect", help: Help::Text("Inspect a BTCPay instance: key permissions, stores, payment methods, shared wallets, and a setup plan") }, ChoiceHelp { dest: "setup", metavar: "setup", help: Help::Text("Apply a BTCPay setup plan: wallet sources, wallet mappings, payment ledgers, and invoice/payout provenance routes") }] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -4295,7 +4377,7 @@ pub(crate) static PARSERS: [Parser; 378] = [
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("btcpay_provenance_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("sync", 288), ("list", 289), ("suggest", 290), ("links", 291), ("review", 292)], choice_help: &[] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("btcpay_provenance_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("sync", 293), ("list", 294), ("suggest", 295), ("links", 296), ("review", 297)], choice_help: &[] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -4387,7 +4469,7 @@ pub(crate) static PARSERS: [Parser; 378] = [
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("documents_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 294), ("create", 295), ("attach", 296), ("import-report", 297)], choice_help: &[] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("documents_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 299), ("create", 300), ("attach", 301), ("import-report", 302)], choice_help: &[] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -4471,7 +4553,7 @@ pub(crate) static PARSERS: [Parser; 378] = [
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("source_funds_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("review-context", 299), ("request-input", 300), ("sources", 301), ("links", 305), ("suggest", 311), ("assemble", 312), ("cases", 313), ("coverage", 315), ("recipients", 316)], choice_help: &[ChoiceHelp { dest: "review-context", metavar: "review-context", help: Help::Text("Inspect one provenance target and its reachable evidence") }, ChoiceHelp { dest: "request-input", metavar: "request-input", help: Help::Text("Describe missing user input for an inspected provenance target") }, ChoiceHelp { dest: "assemble", metavar: "assemble", help: Help::Text("Auto-assemble the reviewed flow graph behind a target from local evidence (tx inputs/outputs, payment hashes, platform ids).") }] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("source_funds_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("review-context", 304), ("request-input", 305), ("sources", 306), ("links", 310), ("suggest", 316), ("assemble", 317), ("cases", 318), ("coverage", 320), ("recipients", 321)], choice_help: &[ChoiceHelp { dest: "review-context", metavar: "review-context", help: Help::Text("Inspect one provenance target and its reachable evidence") }, ChoiceHelp { dest: "request-input", metavar: "request-input", help: Help::Text("Describe missing user input for an inspected provenance target") }, ChoiceHelp { dest: "assemble", metavar: "assemble", help: Help::Text("Auto-assemble the reviewed flow graph behind a target from local evidence (tx inputs/outputs, payment hashes, platform ids).") }] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -4516,7 +4598,7 @@ pub(crate) static PARSERS: [Parser; 378] = [
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("source_funds_sources_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 302), ("create", 303), ("attach", 304)], choice_help: &[] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("source_funds_sources_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 307), ("create", 308), ("attach", 309)], choice_help: &[] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -4578,7 +4660,7 @@ pub(crate) static PARSERS: [Parser; 378] = [
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("source_funds_links_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 306), ("create", 307), ("review", 308), ("attach", 309), ("bulk-review", 310)], choice_help: &[] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("source_funds_links_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 311), ("create", 312), ("review", 313), ("attach", 314), ("bulk-review", 315)], choice_help: &[] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -4722,7 +4804,7 @@ pub(crate) static PARSERS: [Parser; 378] = [
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("source_funds_cases_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 314)], choice_help: &[] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("source_funds_cases_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 319)], choice_help: &[] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -4762,7 +4844,7 @@ pub(crate) static PARSERS: [Parser; 378] = [
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("source_funds_recipients_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 317), ("create", 318), ("update", 319), ("delete", 320)], choice_help: &[] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("source_funds_recipients_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 322), ("create", 323), ("update", 324), ("delete", 325)], choice_help: &[] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -4836,7 +4918,7 @@ pub(crate) static PARSERS: [Parser; 378] = [
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("reports_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("summary", 322), ("tax-summary", 323), ("balance-sheet", 324), ("portfolio-summary", 325), ("capital-gains", 326), ("journal-entries", 327), ("privacy-hygiene", 328), ("privacy-mirror", 329), ("explain-capital-gain", 330), ("psbt-privacy", 331), ("austrian-e1kv", 332), ("austrian-tax-summary", 333), ("exit-tax", 334), ("filed-snapshots", 335), ("balance-history", 338), ("export-pdf", 339), ("export-summary-pdf", 340), ("export-csv", 341), ("export-xlsx", 342), ("export-year-handoff", 343), ("cross-check", 344), ("lightning-profitability", 345), ("export-lightning-profitability-csv", 346), ("commercial-subledger", 347), ("export-commercial-subledger-csv", 348), ("source-funds", 349), ("export-source-funds-pdf", 350), ("export-source-funds-bundle", 351), ("export-austrian-e1kv-pdf", 352), ("export-austrian", 353), ("export-austrian-e1kv-xlsx", 354), ("export-austrian-e1kv-csv", 355), ("export-exit-tax-pdf", 356), ("export-exit-tax-xlsx", 357)], choice_help: &[ChoiceHelp { dest: "export-year-handoff", metavar: "export-year-handoff", help: Help::Text("Write one year's transactions, journal rows, opening/closing balances, roll-forward, and reconciliation to XLSX for EA / Jahresabschluss work.") }, ChoiceHelp { dest: "cross-check", metavar: "cross-check", help: Help::Text("Compare a CoinTracking or Blockpit transaction export with the book: matches, tax-relevant differences, and rows only one side has.") }] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("reports_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("summary", 327), ("tax-summary", 328), ("balance-sheet", 329), ("portfolio-summary", 330), ("capital-gains", 331), ("journal-entries", 332), ("privacy-hygiene", 333), ("privacy-mirror", 334), ("explain-capital-gain", 335), ("psbt-privacy", 336), ("austrian-e1kv", 337), ("austrian-tax-summary", 338), ("exit-tax", 339), ("filed-snapshots", 340), ("balance-history", 343), ("export-pdf", 344), ("export-summary-pdf", 345), ("export-csv", 346), ("export-xlsx", 347), ("export-year-handoff", 348), ("cross-check", 349), ("lightning-profitability", 350), ("export-lightning-profitability-csv", 351), ("commercial-subledger", 352), ("export-commercial-subledger-csv", 353), ("source-funds", 354), ("export-source-funds-pdf", 355), ("export-source-funds-bundle", 356), ("export-austrian-e1kv-pdf", 357), ("export-austrian", 358), ("export-austrian-e1kv-xlsx", 359), ("export-austrian-e1kv-csv", 360), ("export-exit-tax-pdf", 361), ("export-exit-tax-xlsx", 362)], choice_help: &[ChoiceHelp { dest: "export-year-handoff", metavar: "export-year-handoff", help: Help::Text("Write one year's transactions, journal rows, opening/closing balances, roll-forward, and reconciliation to XLSX for EA / Jahresabschluss work.") }, ChoiceHelp { dest: "cross-check", metavar: "cross-check", help: Help::Text("Compare a CoinTracking or Blockpit transaction export with the book: matches, tax-relevant differences, and rows only one side has.") }] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -5025,7 +5107,7 @@ pub(crate) static PARSERS: [Parser; 378] = [
         description: Some("Record or list append-only hashes and bounded summaries for reports saved or filed outside Kassiber."),
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("filed_snapshots_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 336), ("create", 337)], choice_help: &[] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("filed_snapshots_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 341), ("create", 342)], choice_help: &[] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -5402,7 +5484,7 @@ pub(crate) static PARSERS: [Parser; 378] = [
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("rates_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("pairs", 359), ("sync", 360), ("rebuild", 361), ("latest", 362), ("range", 363), ("set", 364)], choice_help: &[ChoiceHelp { dest: "sync", metavar: "sync", help: Help::Text("Fetch missing rates from --source. When the requested window already has everything, it still fetches one latest quote to warm the cache, so this is never a no-op on the wire.") }, ChoiceHelp { dest: "rebuild", metavar: "rebuild", help: Help::Text("Re-fetch the rate cache from --source and rewrite it. This contacts the provider; it is not a local recompute.") }] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("rates_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("pairs", 364), ("sync", 365), ("rebuild", 366), ("latest", 367), ("range", 368), ("set", 369)], choice_help: &[ChoiceHelp { dest: "sync", metavar: "sync", help: Help::Text("Fetch missing rates from --source. When the requested window already has everything, it still fetches one latest quote to warm the cache, so this is never a no-op on the wire.") }, ChoiceHelp { dest: "rebuild", metavar: "rebuild", help: Help::Text("Re-fetch the rate cache from --source and rewrite it. This contacts the provider; it is not a local recompute.") }] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -5501,7 +5583,7 @@ pub(crate) static PARSERS: [Parser; 378] = [
         description: None,
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("diagnostics_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("collect", 366)], choice_help: &[] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("diagnostics_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("collect", 371)], choice_help: &[] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -5525,7 +5607,7 @@ pub(crate) static PARSERS: [Parser; 378] = [
         description: Some("AI provider configuration and chat over OpenAI-compatible APIs (Responses or Chat Completions) or fixed CLI adapters."),
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("ai_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("providers", 368), ("models", 377)], choice_help: &[] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("ai_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("providers", 373), ("models", 382)], choice_help: &[] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -5537,7 +5619,7 @@ pub(crate) static PARSERS: [Parser; 378] = [
         description: Some("Manage AI provider configurations."),
         actions: &[
         Action { kind: ActionKind::Help, option_strings: &["-h", "--help"], dest: Some("help"), nargs: Nargs::Zero, constant: Lit::None, default: Lit::Suppress, value_type: ValueType::Str, required: false, help: Help::Text("show this help message and exit"), metavar: None, choices: None, subparsers: None },
-        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("ai_providers_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 369), ("get", 370), ("create", 371), ("update", 372), ("delete", 373), ("set-default", 374), ("clear-default", 375), ("test", 376)], choice_help: &[] }) },
+        Action { kind: ActionKind::SubParsers, option_strings: &[], dest: Some("ai_providers_command"), nargs: Nargs::Parser, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Missing, metavar: None, choices: None, subparsers: Some(&SubParsers { names: &[("list", 374), ("get", 375), ("create", 376), ("update", 377), ("delete", 378), ("set-default", 379), ("clear-default", 380), ("test", 381)], choice_help: &[] }) },
         ],
         options: &[("-h", 0), ("--help", 0)],
         mutex_groups: &[],
@@ -5576,6 +5658,7 @@ pub(crate) static PARSERS: [Parser; 378] = [
         Action { kind: ActionKind::Store, option_strings: &["--base-url"], dest: Some("base_url"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: true, help: Help::Text("OpenAI-compatible API root, e.g. http://localhost:11434/v1 or https://openrouter.ai/api/v1; or claude-cli://default / codex-cli://default / opencode-cli://default / copilot-cli://default"), metavar: None, choices: None, subparsers: None },
         Action { kind: ActionKind::Store, option_strings: &["--api-format"], dest: Some("api_format"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Text("OpenAI wire format of an HTTP provider: auto (default) speaks the detected format, else the Responses API, and falls back to Chat Completions once if the server has no /responses; responses or chat-completions pins one. CLI agents take only auto"), metavar: None, choices: Some(&["auto", "responses", "chat-completions"]), subparsers: None },
         Action { kind: ActionKind::StoreTrue, option_strings: &["--omit-store-field"], dest: Some("omit_store_field"), nargs: Nargs::Zero, constant: Lit::Bool(true), default: Lit::Bool(false), value_type: ValueType::Str, required: false, help: Help::Text("Send this HTTP provider's Chat Completions requests without Kassiber's no-retention flag (store: false), for an endpoint that refuses it; the provider's own retention then applies to prompts and tool results. Off by default. Run `kassiber ai providers test NAME` first: store_accepted false means the endpoint refuses the flag"), metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--agent-access"], dest: Some("agent_access"), nargs: Nargs::Single, constant: Lit::None, default: Lit::Str("full"), value_type: ValueType::Str, required: false, help: Help::Text("What the assistant may use with this provider: full (default) offers every tool, including custody-gap, lineage and source-acquisition tools, and sends unprojected results and attachment cell values; restricted keeps an off-device provider to projected results. A provider on this device always has full access. Neither mode sends descriptors, xpubs, secrets or paths"), metavar: None, choices: Some(&["full", "restricted"]), subparsers: None },
         Action { kind: ActionKind::Store, option_strings: &["--api-key"], dest: Some("api_key"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Text("Deprecated argv bearer token shim; prefer --api-key-stdin or --api-key-fd"), metavar: None, choices: None, subparsers: None },
         Action { kind: ActionKind::StoreTrue, option_strings: &["--api-key-stdin"], dest: Some("api_key_stdin"), nargs: Nargs::Zero, constant: Lit::Bool(true), default: Lit::Bool(false), value_type: ValueType::Str, required: false, help: Help::Text("Read the AI provider API key value from stdin (preferred over `--api-key <value>`)"), metavar: None, choices: None, subparsers: None },
         Action { kind: ActionKind::Store, option_strings: &["--api-key-fd"], dest: Some("api_key_fd"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Int, required: false, help: Help::Text("Read the AI provider API key value from this open file descriptor"), metavar: Some("FD"), choices: None, subparsers: None },
@@ -5587,9 +5670,9 @@ pub(crate) static PARSERS: [Parser; 378] = [
         Action { kind: ActionKind::Store, option_strings: &["--notes"], dest: Some("notes"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Missing, metavar: None, choices: None, subparsers: None },
         Action { kind: ActionKind::StoreTrue, option_strings: &["--acknowledge"], dest: Some("acknowledge"), nargs: Nargs::Zero, constant: Lit::Bool(true), default: Lit::Bool(false), value_type: ValueType::Str, required: false, help: Help::Text("Acknowledge that prompts may leave the device (auto for kind=local)"), metavar: None, choices: None, subparsers: None },
         ],
-        options: &[("-h", 0), ("--help", 0), ("--base-url", 2), ("--api-format", 3), ("--omit-store-field", 4), ("--api-key", 5), ("--api-key-stdin", 6), ("--api-key-fd", 7), ("--default-model", 8), ("--default-effort", 9), ("--disabled", 10), ("--display-name", 11), ("--kind", 12), ("--notes", 13), ("--acknowledge", 14)],
+        options: &[("-h", 0), ("--help", 0), ("--base-url", 2), ("--api-format", 3), ("--omit-store-field", 4), ("--agent-access", 5), ("--api-key", 6), ("--api-key-stdin", 7), ("--api-key-fd", 8), ("--default-model", 9), ("--default-effort", 10), ("--disabled", 11), ("--display-name", 12), ("--kind", 13), ("--notes", 14), ("--acknowledge", 15)],
         mutex_groups: &[],
-        sections: &[Section { title: "positional arguments", description: None, actions: &[1] }, Section { title: "options", description: None, actions: &[0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14] }],
+        sections: &[Section { title: "positional arguments", description: None, actions: &[1] }, Section { title: "options", description: None, actions: &[0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] }],
         defaults: &[],
     },
     Parser {
@@ -5602,6 +5685,7 @@ pub(crate) static PARSERS: [Parser; 378] = [
         Action { kind: ActionKind::Store, option_strings: &["--api-format"], dest: Some("api_format"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Text("OpenAI wire format of an HTTP provider: auto (default) speaks the detected format, else the Responses API, and falls back to Chat Completions once if the server has no /responses; responses or chat-completions pins one. CLI agents take only auto"), metavar: None, choices: Some(&["auto", "responses", "chat-completions"]), subparsers: None },
         Action { kind: ActionKind::StoreConst, option_strings: &["--omit-store-field"], dest: Some("omit_store_field"), nargs: Nargs::Zero, constant: Lit::Bool(true), default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Text("Send this HTTP provider's Chat Completions requests without Kassiber's no-retention flag (store: false), for an endpoint that refuses it; the provider's own retention then applies to prompts and tool results. Off by default. Run `kassiber ai providers test NAME` first: store_accepted false means the endpoint refuses the flag"), metavar: None, choices: None, subparsers: None },
         Action { kind: ActionKind::StoreConst, option_strings: &["--send-store-field"], dest: Some("omit_store_field"), nargs: Nargs::Zero, constant: Lit::Bool(false), default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Text("Send store: false with every Chat Completions request again (the default)"), metavar: None, choices: None, subparsers: None },
+        Action { kind: ActionKind::Store, option_strings: &["--agent-access"], dest: Some("agent_access"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Text("What the assistant may use with this provider: full (default) offers every tool, including custody-gap, lineage and source-acquisition tools, and sends unprojected results and attachment cell values; restricted keeps an off-device provider to projected results. A provider on this device always has full access. Neither mode sends descriptors, xpubs, secrets or paths"), metavar: None, choices: Some(&["full", "restricted"]), subparsers: None },
         Action { kind: ActionKind::Store, option_strings: &["--api-key"], dest: Some("api_key"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Str, required: false, help: Help::Text("Deprecated argv bearer token shim; prefer --api-key-stdin or --api-key-fd"), metavar: None, choices: None, subparsers: None },
         Action { kind: ActionKind::StoreTrue, option_strings: &["--api-key-stdin"], dest: Some("api_key_stdin"), nargs: Nargs::Zero, constant: Lit::Bool(true), default: Lit::Bool(false), value_type: ValueType::Str, required: false, help: Help::Text("Read the AI provider API key value from stdin (preferred over `--api-key <value>`)"), metavar: None, choices: None, subparsers: None },
         Action { kind: ActionKind::Store, option_strings: &["--api-key-fd"], dest: Some("api_key_fd"), nargs: Nargs::Single, constant: Lit::None, default: Lit::None, value_type: ValueType::Int, required: false, help: Help::Text("Read the AI provider API key value from this open file descriptor"), metavar: Some("FD"), choices: None, subparsers: None },
@@ -5616,9 +5700,9 @@ pub(crate) static PARSERS: [Parser; 378] = [
         Action { kind: ActionKind::StoreTrue, option_strings: &["--acknowledge"], dest: Some("acknowledge"), nargs: Nargs::Zero, constant: Lit::Bool(true), default: Lit::Bool(false), value_type: ValueType::Str, required: false, help: Help::Text("Stamp acknowledged_at to now"), metavar: None, choices: None, subparsers: None },
         Action { kind: ActionKind::StoreTrue, option_strings: &["--revoke-acknowledge"], dest: Some("revoke_acknowledge"), nargs: Nargs::Zero, constant: Lit::Bool(true), default: Lit::Bool(false), value_type: ValueType::Str, required: false, help: Help::Text("Clear acknowledged_at"), metavar: None, choices: None, subparsers: None },
         ],
-        options: &[("-h", 0), ("--help", 0), ("--base-url", 2), ("--api-format", 3), ("--omit-store-field", 4), ("--send-store-field", 5), ("--api-key", 6), ("--api-key-stdin", 7), ("--api-key-fd", 8), ("--default-model", 9), ("--default-effort", 10), ("--enable", 11), ("--disable", 12), ("--display-name", 13), ("--kind", 14), ("--notes", 15), ("--clear", 16), ("--acknowledge", 17), ("--revoke-acknowledge", 18)],
-        mutex_groups: &[Mutex { required: false, actions: &[4, 5] }, Mutex { required: false, actions: &[11, 12] }],
-        sections: &[Section { title: "positional arguments", description: None, actions: &[1] }, Section { title: "options", description: None, actions: &[0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18] }],
+        options: &[("-h", 0), ("--help", 0), ("--base-url", 2), ("--api-format", 3), ("--omit-store-field", 4), ("--send-store-field", 5), ("--agent-access", 6), ("--api-key", 7), ("--api-key-stdin", 8), ("--api-key-fd", 9), ("--default-model", 10), ("--default-effort", 11), ("--enable", 12), ("--disable", 13), ("--display-name", 14), ("--kind", 15), ("--notes", 16), ("--clear", 17), ("--acknowledge", 18), ("--revoke-acknowledge", 19)],
+        mutex_groups: &[Mutex { required: false, actions: &[4, 5] }, Mutex { required: false, actions: &[12, 13] }],
+        sections: &[Section { title: "positional arguments", description: None, actions: &[1] }, Section { title: "options", description: None, actions: &[0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19] }],
         defaults: &[],
     },
     Parser {

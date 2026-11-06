@@ -1,0 +1,104 @@
+[
+  {
+    "id": "accepted-price-before-msat",
+    "file": "crates/store/src/compat_ordered.rs",
+    "find": "        (\"transactions\", \"pricing_review_accepted_price\"),\n    )?;",
+    "replace": "        (\"transactions\", \"pricing_quality\"),\n    )?;",
+    "expect_failing": [
+      "main_sync_storage_upgrades_a_pre_sync_book_and_admits_it"
+    ],
+    "rule": "Existing books gain transactions.pricing_review_accepted_price after pricing_quality."
+  },
+  {
+    "id": "accepted-price-after-msat",
+    "file": "crates/store/src/compat_ordered.rs",
+    "find": "    if ensure_column(\n        conn,\n        \"transactions\",\n        \"pricing_review_accepted_price\",\n        \"TEXT\",\n    )? {\n        commit(conn)?;\n    }",
+    "replace": "",
+    "expect_failing": [
+      "ordered_pass_restores_the_accepted_price_the_msat_rebuild_drops"
+    ],
+    "rule": "The msat rebuild drops the accepted coarse price; the pass must add it again after the rebuild."
+  },
+  {
+    "id": "provider-agent-access",
+    "file": "crates/store/src/compat_ordered.rs",
+    "find": "        (\"ai_providers\", \"agent_access\"),",
+    "replace": "        (\"ai_providers\", \"omit_store_field\"),",
+    "expect_failing": [
+      "main_sync_storage_upgrades_a_pre_sync_book_and_admits_it"
+    ],
+    "rule": "Existing books gain ai_providers.agent_access with default 'full'."
+  },
+  {
+    "id": "audit-consent-step-skipped",
+    "file": "crates/store/src/compat_ordered.rs",
+    "find": "    repairs::ai_audit_consent(conn, observer)?;\n",
+    "replace": "",
+    "expect_failing": [
+      "main_sync_storage_upgrades_a_pre_sync_book_and_admits_it"
+    ],
+    "rule": "Existing books rebuild the custody AI audit to admit mode_auto, mode_full_access and mcp_host."
+  },
+  {
+    "id": "audit-consent-current-check",
+    "file": "crates/store/src/compat_schema.rs",
+    "find": "    if [\"mode_auto\", \"mode_full_access\", \"mcp_host\"]\n        .iter()\n        .all(|decision| current.contains(&format!(\"'{decision}'\")))",
+    "replace": "    if [\"mode_auto\", \"mode_full_access\"]\n        .iter()\n        .all(|decision| current.contains(&format!(\"'{decision}'\")))",
+    "expect_failing": [
+      "ai_audit_consent_rebuild_copies_rows_and_rolls_back_on_failure"
+    ],
+    "rule": "A table lacking any one of the three widened decisions must be rebuilt."
+  },
+  {
+    "id": "audit-consent-no-copy",
+    "file": "crates/store/src/compat_schema.rs",
+    "find": "        execute(\n            conn,\n            &format!(\n                \"INSERT INTO custody_ai_assistance_audits ({fields}) SELECT {fields} FROM custody_ai_assistance_audits__pre_consent_widening\"\n            ),\n        )?;",
+    "replace": "        let _ = fields;",
+    "expect_failing": [
+      "ai_audit_consent_rebuild_copies_rows_and_rolls_back_on_failure",
+      "main_sync_storage_upgrades_a_pre_sync_book_and_admits_it"
+    ],
+    "rule": "The rebuild copies every audit row unchanged."
+  },
+  {
+    "id": "audit-consent-no-trigger",
+    "file": "crates/store/src/compat_schema.rs",
+    "find": "        for prefix in [\"DROP TABLE\", \"CREATE INDEX\", \"CREATE TRIGGER\"] {",
+    "replace": "        for prefix in [\"DROP TABLE\", \"CREATE INDEX\"] {",
+    "expect_failing": [
+      "ai_audit_consent_rebuild_copies_rows_and_rolls_back_on_failure"
+    ],
+    "rule": "The rebuild restores the audit's immutability trigger."
+  },
+  {
+    "id": "audit-consent-not-atomic",
+    "file": "crates/store/src/compat_schema.rs",
+    "find": "        observe(\"ai-audit.after_rename\")?;",
+    "replace": "        conn.execute_batch(\"COMMIT; BEGIN IMMEDIATE\")\n            .map_err(map_sqlite_error)?;\n        observe(\"ai-audit.after_rename\")?;",
+    "expect_failing": [
+      "ai_audit_consent_rebuild_copies_rows_and_rolls_back_on_failure"
+    ],
+    "rule": "The rebuild publishes nothing before its single commit; an interruption leaves the old table intact."
+  },
+  {
+    "id": "gate-unknown-audit",
+    "file": "crates/store/src/schema.rs",
+    "find": "            || (!known\n                && ![",
+    "replace": "            || (false\n                && ![",
+    "expect_failing": [
+      "newer_unknown_layouts_and_audits_are_refused"
+    ],
+    "rule": "An unknown migration audit is refused."
+  },
+  {
+    "id": "gate-unknown-objects",
+    "file": "crates/store/src/schema.rs",
+    "find": "    if objects(conn)? != expected[\"objects\"] {\n        crate::schema_structure::verify(conn, &expected)?;\n    }",
+    "replace": "    let _ = &expected[\"objects\"];",
+    "expect_failing": [
+      "newer_unknown_layouts_and_audits_are_refused",
+      "historical_layout_uses_normalized_gate_and_still_refuses_constraint_drift"
+    ],
+    "rule": "Unknown tables, columns, indexes, triggers and views are refused."
+  }
+]

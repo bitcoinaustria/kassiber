@@ -16,7 +16,7 @@ from ..errors import AppError
 from ..msat import msat_to_btc
 from ..time_utils import parse_legacy_timestamp
 from ..transfers import is_bitcoin_rail_pair
-from . import quarantine_catalog
+from . import pricing, quarantine_catalog
 from .privacy_hops import privacy_hop_evidence_from_row
 from .custody_evidence import row_principal_msat
 from .custody_pricing import finite_decimal
@@ -113,6 +113,9 @@ def _base_row(
     for field in ("fiat_value", "fiat_value_exact", "fiat_rate", "fiat_rate_exact"):
         if result.get(field) not in (None, ""):
             finite_decimal(result[field], f"transaction {observation.anchor_transaction_id}: {field}")
+    # A coarse-price review was accepted for the transaction's own price; the
+    # projection re-slices that price below, so keep what was reviewed.
+    result["pricing_review_price"] = pricing.reviewed_price(result)
     result["custody_chain_order"] = chain_order_evidence(result)
     result.update(
         {

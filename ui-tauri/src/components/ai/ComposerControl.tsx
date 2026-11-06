@@ -40,12 +40,3 @@ export function ComposerControlChevron({ className }: { className?: string }) {
     />
   );
 }
-
-export function ComposerControlSeparator({ className }: { className?: string }) {
-  return (
-    <span
-      aria-hidden="true"
-      className={cn("mx-0.5 hidden h-4 w-px shrink-0 bg-border sm:block", className)}
-    />
-  );
-}

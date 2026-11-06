@@ -274,6 +274,18 @@ fn run(request: &Value) -> Result<Value> {
             )?;
             Ok(json!({"identity":book.instance_id()}))
         }
+        "open-migrating" => {
+            // The product's bootstrap open: the ordered pass, then admission.
+            let book = Book::open_migrating(
+                root,
+                kassiber_store::OpenOptions {
+                    passphrase: pass,
+                    ..Default::default()
+                },
+                true,
+            )?;
+            Ok(json!({"identity":book.instance_id()}))
+        }
         "open" => {
             let book = Book::open(
                 root,

@@ -107,6 +107,17 @@ export interface AiProviderRow {
    * and refused by the daemon for chat. Absent on older daemons = enabled.
    */
   enabled?: boolean;
+  /**
+   * When the provider was last checked at its current address, kept across
+   * restarts; null when never. Only a check the user started sets it.
+   */
+  last_checked_at?: string | null;
+  /**
+   * False for a built-in provider the user has not used yet (not the default,
+   * never checked, never acknowledged). Settings folds those away; it never
+   * decides whether the provider may be contacted. Absent = set up.
+   */
+  set_up?: boolean;
   /** Effort a new session starts with for this provider; null = auto. */
   default_reasoning_effort?: string | null;
   /** The user's wire-format setting; always "auto" for a CLI agent. */
@@ -123,6 +134,12 @@ export interface AiProviderRow {
    * requests without `store: false`; its own retention then applies.
    */
   omit_store_field?: boolean;
+  /**
+   * What the assistant may use with this provider: every tool and unprojected
+   * result (full, the default), or only what a restricted off-device provider
+   * gets.
+   */
+  agent_access?: "full" | "restricted";
   supports_reasoning_effort?: boolean;
   capabilities?: unknown;
 }
@@ -208,7 +225,7 @@ export interface AiModelRow {
  * depend on the model (provider-broker `CLAUDE_MODELS` and Copilot's
  * `efforts`). Used only when the selected model's row is not known yet —
  * before **Check models**, the picker holds just the stored default id — so
- * the effort menu still offers the real levels without contacting anything.
+ * the reasoning column still offers the real levels without contacting anything.
  * Codex and OpenCode vary per model and stay discovery-only.
  */
 export const NATIVE_RUNTIME_REASONING_EFFORTS: Partial<
@@ -354,8 +371,11 @@ export function selectedModelSupportsReasoningEffort({
 }): boolean {
   if (!selection) return false;
   const provider = providers.find((row) => row.name === selection.provider);
-  if (providerSupportsReasoningEffort(provider)) return true;
   const model = models.find((row) => row.id === selection.model);
+  // A checked row that says the model takes no effort outranks the CLI
+  // provider's flag, which only says the agent can take one.
+  if (model?.supports_reasoning_effort === false) return false;
+  if (providerSupportsReasoningEffort(provider)) return true;
   if (provider && !nativeAiProviderRuntime(provider.base_url)) {
     // The daemon reads an HTTP listing (OpenRouter's `reasoning`, a
     // `reasoning_effort` parameter) into this flag; a model it says nothing
@@ -382,7 +402,7 @@ function reasoningEffortsFromCapabilityObject(value: unknown): string[] {
 /**
  * The specific reasoning-effort levels a model (or its provider) advertises,
  * lower-cased and de-duplicated in advertised order. Empty when nothing is
- * advertised — callers should fall back to their default level set.
+ * advertised; the picker then offers only Auto, never a made-up level.
  *
  * An HTTP model offers only the wire levels its listing names
  * (`reasoning_efforts`, which the daemon narrows to low/medium/high), or all

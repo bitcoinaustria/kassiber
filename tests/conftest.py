@@ -131,6 +131,23 @@ def _arm_child_hooks() -> None:
     _CHILD_HOOKS_ARMED = True
 
 
+def _default_to_scope_distribution(config: pytest.Config) -> None:
+    """Keep a test class on one worker under `-n`, unless `--dist` was given.
+
+    Some classes are ordered steps over one shared book (the CLI smoke suite
+    runs `test_00…` before `test_13…`). xdist's default `load` spreads a
+    class over workers, so a plain `pytest -n 8` failed those steps with
+    "Workspace 'Main' not found". CI shards already pass `--dist loadscope`;
+    this makes a local parallel run do the same.
+    """
+    if not getattr(config.option, "numprocesses", None):
+        return
+    args = [*config.invocation_params.args, *os.environ.get("PYTEST_ADDOPTS", "").split()]
+    if any(arg == "--dist" or arg.startswith("--dist=") or arg == "-d" for arg in args):
+        return
+    config.option.dist = "loadscope"
+
+
 def pytest_configure(config: pytest.Config) -> None:
     """Fail any test that tries to leave the machine.
 
@@ -161,6 +178,7 @@ def pytest_configure(config: pytest.Config) -> None:
         "stubs_tax_engine: the test replaces parts of the production tax engine, so the shadow mode runs "
         "its calls on production without comparing them with the oracle",
     )
+    _default_to_scope_distribution(config)
     _isolate_offline_preference()
     _select_tax_engine_backend(config)
     _record_custody_snapshots()

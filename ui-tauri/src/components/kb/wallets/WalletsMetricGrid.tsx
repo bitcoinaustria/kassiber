@@ -177,7 +177,8 @@ export function WalletsMetricGrid({
           label={t("metrics.walletBalance")}
           value={
             <span className={hiddenSensitiveClassName(hideSensitive)}>
-              <CurrencyToggleText>
+              {/* The cell body ignores the pointer; the toggle opts back in. */}
+              <CurrencyToggleText className="pointer-events-auto">
                 {fiatUnavailable
                   ? "—"
                   : currency === "eur"

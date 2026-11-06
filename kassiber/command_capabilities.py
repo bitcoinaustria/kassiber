@@ -60,10 +60,12 @@ CLI_READ_PATHS = _paths(
     imports.list
     review.cases review.plan review.receipt
     journals.list journals.quarantined journals.transfers.list
-    journals.events.list journals.events.get journals.quarantine.show loans.list
+    journals.events.list journals.events.get journals.quarantine.show
+    journals.quarantine.groups transactions.verify loans.list
     transfers.list transfers.gaps.list transfers.gaps.history transfers.gaps.plan
     transfers.components.list transfers.components.show transfers.components.plan
     transfers.payouts.list transfers.suggest transfers.rules.list views.list
+    transfers.dismissals.list
     btcpay.provenance.list btcpay.provenance.links btcpay.key-url documents.list
     source-funds.sources.list source-funds.links.list source-funds.cases.list
     source-funds.review-context source-funds.request-input
@@ -134,6 +136,7 @@ CLI_ACCOUNTING_DECISION_PATHS = _paths(
     transfers.pair transfers.unpair transfers.update transfers.gaps.review
     transfers.gaps.apply transfers.components.apply transfers.payouts.create
     transfers.payouts.delete transfers.bulk-pair transfers.dismiss
+    transfers.dismissals.delete
     transfers.rules.create transfers.rules.delete transfers.rules.enable
     transfers.rules.disable transfers.rules.apply views.create views.delete
     btcpay.provenance.review source-funds.links.review
@@ -186,7 +189,7 @@ DAEMON_READ_KINDS = _paths(
     ui.btcpay.provenance.links ui.transactions.commercial_context
     ui.documents.list ui.journals.snapshot ui.journals.events.list
     ui.journals.quarantine ui.journals.transfers.list ui.transfers.suggest
-    ui.transfers.list ui.transfers.payouts.list
+    ui.transfers.list ui.transfers.payouts.list ui.transfers.dismissals.list
     ui.transfers.components.list ui.transfers.components.get
     ui.transfers.components.plan ui.custody.coverage.snapshot
     ui.custody.lineage.snapshot ui.custody.gaps.list
@@ -259,6 +262,7 @@ DAEMON_OPERATOR_KINDS = _paths(
     ui.connections.btcpay.discover ui.connections.btcpay.test
     ui.metadata.bip329.import ui.metadata.bip329.export ui.wallets.update
     ui.wallets.sync ai.chat ai.chat.cancel ai.tool_call.consent
+    ai.chat.permission_mode ui.chat.attachments.upload
     """
 )
 
@@ -271,6 +275,7 @@ DAEMON_ACCOUNTING_DECISION_KINDS = _paths(
     ui.journals.quarantine.resolve ui.review.apply ui.transfers.payouts.create
     ui.transfers.payouts.delete ui.transfers.pair ui.transfers.unpair
     ui.transfers.update ui.transfers.bulk_pair ui.transfers.dismiss
+    ui.transfers.dismissals.delete
     ui.transfers.components.apply ui.custody.review.apply ui.transfers.rules.create
     ui.transfers.rules.delete ui.transfers.rules.set_enabled
     ui.transfers.rules.apply

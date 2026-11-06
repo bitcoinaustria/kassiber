@@ -2,26 +2,47 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { DaemonRequestError, useDaemon, useDaemonMutation } from "@/daemon/client";
 import { terminalCommandStatus, type TerminalCommandStatus } from "@/daemon/transport";
 import {
+  AGENT_GRANTS,
+  RECOMMENDED_AGENT_ACCESS,
+  RECOMMENDED_AGENT_GRANT,
   agentLauncher,
   claudeCodeCommand,
   mcpJsonConfig,
   mcpServeArgs,
+  type AgentAccessMode,
   type AgentAccessStatus,
+  type AgentGrant,
   type AgentPeer,
 } from "@/lib/agentAccess";
 import { cn } from "@/lib/utils";
-import { CommandLine, CopyButton } from "./SettingsControls";
+import {
+  CommandLine,
+  CopyButton,
+  SettingsGroup,
+  SettingsRow,
+  SettingsSelect,
+} from "./SettingsControls";
 import type { StatusData } from "./SettingsModel";
+
+const GRANT_LABEL_KEYS = {
+  read: "ai.agentsGrantRead",
+  operator: "ai.agentsGrantOperator",
+  accounting_decisions: "ai.agentsGrantDecisions",
+} as const;
+const GRANT_HINT_KEYS = {
+  read: "ai.agentsGrantReadHint",
+  operator: "ai.agentsGrantOperatorHint",
+  accounting_decisions: "ai.agentsGrantDecisionsHint",
+} as const;
 
 /**
  * Off by default and subordinate to the AI master switch. The Python core
- * enforces both on every MCP call; this row only records the user's choice
- * and shows the command to paste into an agent.
+ * enforces both, and the grant, on every MCP call; this row only records the
+ * user's choice and shows the command to paste into an agent.
  */
 export function ExternalAgentsSettings({ aiFeaturesEnabled }: { aiFeaturesEnabled: boolean }) {
   const { t } = useTranslation("settings");
@@ -32,11 +53,42 @@ export function ExternalAgentsSettings({ aiFeaturesEnabled }: { aiFeaturesEnable
   const lock = useDaemonMutation("ui.agent_access.lock");
   const pairing = useDaemonMutation("ui.agent_access.pairing");
   const [terminal, setTerminal] = React.useState<TerminalCommandStatus | null>(null);
+  // Before agents are on, the choice is a draft the switch then records. A
+  // first enable starts from the recommendation; a recorded choice is kept.
+  const [draftGrant, setDraftGrant] = React.useState<AgentGrant | null>(null);
+  const [draftAccess, setDraftAccess] = React.useState<AgentAccessMode | null>(null);
 
   const access =
     accessQuery.data?.kind === "ui.agent_access.status" ? accessQuery.data.data : null;
   const status = statusQuery.data?.kind === "status" ? statusQuery.data.data : null;
   const enabled = aiFeaturesEnabled && access?.mcp_enabled === true;
+  const recorded = access?.access_recorded === true;
+  const grant: AgentGrant =
+    access?.mcp_enabled === true
+      ? (access.grant ?? "read")
+      : (draftGrant ?? (recorded ? (access?.grant ?? "read") : RECOMMENDED_AGENT_GRANT));
+  const agentAccess: AgentAccessMode =
+    access?.mcp_enabled === true
+      ? (access.agent_access ?? "restricted")
+      : (draftAccess ??
+        (recorded ? (access?.agent_access ?? "restricted") : RECOMMENDED_AGENT_ACCESS));
+  // Once the core confirms agents are on, the draft is recorded: from then on
+  // the recorded choice is what the row shows and a later enable re-sends.
+  const recordedOn = access?.mcp_enabled === true;
+  React.useEffect(() => {
+    if (!recordedOn) return;
+    setDraftGrant(null);
+    setDraftAccess(null);
+  }, [recordedOn]);
+  const choiceDisabled = !aiFeaturesEnabled || !access || configure.isPending;
+  const chooseGrant = (next: AgentGrant) => {
+    if (access?.mcp_enabled === true) configure.mutate({ grant: next });
+    else setDraftGrant(next);
+  };
+  const chooseAccess = (next: AgentAccessMode) => {
+    if (access?.mcp_enabled === true) configure.mutate({ agent_access: next });
+    else setDraftAccess(next);
+  };
 
   React.useEffect(() => {
     if (!enabled) return;
@@ -83,33 +135,85 @@ export function ExternalAgentsSettings({ aiFeaturesEnabled }: { aiFeaturesEnable
     unlock.data?.kind === "ui.agent_access.unlock" && unlock.data.data?.session?.existing_lease === true;
 
   return (
-    <div
-      className={cn(
-        "space-y-3 rounded-md border bg-background p-4",
-        !aiFeaturesEnabled && "opacity-60",
-      )}
+    <SettingsGroup
+      title={t("ai.agentsLabel")}
+      className={cn(!aiFeaturesEnabled && "opacity-60")}
+      footer={
+        aiFeaturesEnabled && access
+          ? grant === "read"
+            ? t("ai.agentsAdminNever")
+            : t("ai.agentsHostApproval")
+          : null
+      }
     >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0 space-y-1">
-          <Label htmlFor="settings-external-agents">{t("ai.agentsLabel")}</Label>
-          <p className="text-sm text-muted-foreground">{t("ai.agentsDescription")}</p>
-        </div>
+      <SettingsRow
+        label={t("ai.agentsAllowLabel")}
+        description={t("ai.agentsDescription")}
+        htmlFor="settings-external-agents"
+      >
         <Switch
           id="settings-external-agents"
           checked={enabled}
           disabled={!aiFeaturesEnabled || !access || configure.isPending}
-          onCheckedChange={(checked) =>
-            configure.mutate({ mcp_enabled: checked, ai_features_enabled: aiFeaturesEnabled })
-          }
+          onCheckedChange={(checked) => {
+            configure.mutate(
+              checked
+                ? {
+                    mcp_enabled: true,
+                    ai_features_enabled: aiFeaturesEnabled,
+                    grant,
+                    agent_access: agentAccess,
+                  }
+                : { mcp_enabled: false, ai_features_enabled: aiFeaturesEnabled },
+            );
+          }}
           aria-label={t("ai.agentsAria")}
-          className="shrink-0"
         />
-      </div>
+      </SettingsRow>
       {configure.isError ? (
-        <p className="text-sm text-destructive">{t("ai.agentsError")}</p>
+        <p className="px-4 py-3 text-sm text-destructive">{t("ai.agentsError")}</p>
+      ) : null}
+      {aiFeaturesEnabled && access ? (
+        <>
+          <div data-agent-grant={grant}>
+            <SettingsRow
+              label={t("ai.agentsGrantLabel")}
+              description={t(GRANT_HINT_KEYS[grant])}
+              htmlFor="settings-external-agents-grant"
+            >
+              <SettingsSelect<AgentGrant>
+                value={grant}
+                disabled={choiceDisabled}
+                onValueChange={chooseGrant}
+                options={AGENT_GRANTS.map((option) => ({
+                  value: option,
+                  label: t(GRANT_LABEL_KEYS[option]),
+                }))}
+                triggerProps={{ id: "settings-external-agents-grant" }}
+              />
+            </SettingsRow>
+          </div>
+          <SettingsRow
+            label={t("ai.agentsRestrictLabel")}
+            description={
+              <span id="settings-external-agents-restrict-hint">
+                {t("ai.agentsRestrictHint")}
+              </span>
+            }
+            htmlFor="settings-external-agents-restrict"
+          >
+            <Switch
+              id="settings-external-agents-restrict"
+              checked={agentAccess === "restricted"}
+              disabled={choiceDisabled}
+              onCheckedChange={(checked) => chooseAccess(checked ? "restricted" : "full")}
+              aria-describedby="settings-external-agents-restrict-hint"
+            />
+          </SettingsRow>
+        </>
       ) : null}
       {enabled && args ? (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 px-4 py-3">
           <div className="min-w-0 flex-1">
             <CommandLine command={claudeCodeCommand(launcher, args)} />
           </div>
@@ -122,74 +226,70 @@ export function ExternalAgentsSettings({ aiFeaturesEnabled }: { aiFeaturesEnable
       {/* A lease the broker has not confirmed locking stays visible, with
           Lock, even after agents are turned off. */}
       {(enabled && session?.needed) || session?.active ? (
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm text-muted-foreground">
-            {session.active
+        <SettingsRow
+          label={t("ai.agentsSessionLabel")}
+          description={
+            session.active
               ? t("ai.agentsSessionActive", { minutes: idleMinutes })
               : existingLease
                 ? t("ai.agentsSessionExisting")
-                : t("ai.agentsSessionLocked")}
-          </p>
+                : t("ai.agentsSessionLocked")
+          }
+        >
           <Button
             type="button"
             size="sm"
             variant="outline"
-            className="shrink-0"
             disabled={sessionBusy}
             onClick={() => (session.active ? lock.mutate(undefined) : unlock.mutate(undefined))}
           >
             {session.active ? t("ai.agentsSessionLock") : t("ai.agentsSessionUnlock")}
           </Button>
-        </div>
+        </SettingsRow>
       ) : null}
-      {session?.active ? (
-        <div className="space-y-2">
-          {agents.length === 0 ? (
-            <p className="text-xs text-muted-foreground">{t("ai.agentsSessionWaiting")}</p>
-          ) : null}
-          {agents.map((agent) => (
-            <div
+      {session?.active && agents.length === 0 ? (
+        <p className="px-4 py-3 text-sm text-muted-foreground">{t("ai.agentsSessionWaiting")}</p>
+      ) : null}
+      {session?.active
+        ? agents.map((agent) => (
+            <SettingsRow
               key={agent.id}
-              className="flex flex-col gap-2 rounded-md border px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
-            >
-              <p className="min-w-0 text-sm">
-                {agent.state === "pending"
+              label={
+                agent.state === "pending"
                   ? t("ai.agentsPairingRequest", { name: agentName(agent) })
-                  : t("ai.agentsPairingAllowed", { name: agentName(agent), count: agent.calls })}
-              </p>
-              <div className="flex shrink-0 gap-2">
-                {agent.state === "pending" ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    disabled={sessionBusy}
-                    onClick={() => decide(agent, true)}
-                  >
-                    {t("ai.agentsPairingAllow")}
-                  </Button>
-                ) : null}
+                  : t("ai.agentsPairingAllowed", { name: agentName(agent), count: agent.calls })
+              }
+            >
+              {agent.state === "pending" ? (
                 <Button
                   type="button"
                   size="sm"
-                  variant="outline"
                   disabled={sessionBusy}
-                  onClick={() => decide(agent, false)}
+                  onClick={() => decide(agent, true)}
                 >
-                  {agent.state === "pending" ? t("ai.agentsPairingDeny") : t("ai.agentsPairingRemove")}
+                  {t("ai.agentsPairingAllow")}
                 </Button>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : null}
+              ) : null}
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={sessionBusy}
+                onClick={() => decide(agent, false)}
+              >
+                {agent.state === "pending" ? t("ai.agentsPairingDeny") : t("ai.agentsPairingRemove")}
+              </Button>
+            </SettingsRow>
+          ))
+        : null}
       {(enabled || session?.active) && sessionError ? (
-        <p className="text-sm text-destructive">
+        <p className="px-4 py-3 text-sm text-destructive">
           {t("ai.agentsSessionError")}
           {sessionError instanceof DaemonRequestError && sessionError.envelope.error?.hint
             ? ` ${sessionError.envelope.error.hint}`
             : null}
         </p>
       ) : null}
-    </div>
+    </SettingsGroup>
   );
 }

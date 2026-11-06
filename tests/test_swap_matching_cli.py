@@ -505,6 +505,16 @@ class SwapMatchingCliTest(unittest.TestCase):
         self.assertGreaterEqual(payload["data"]["counts"]["total"], 1)
         candidate = payload["data"]["candidates"][0]
 
+        def journal_input_version():
+            conn = sqlite3.connect(data_root / "kassiber.sqlite3")
+            try:
+                return conn.execute(
+                    "SELECT journal_input_version FROM profiles WHERE label = 'Swap'"
+                ).fetchone()[0]
+            finally:
+                conn.close()
+
+        version_before = journal_input_version()
         payload, code = _run(
             data_root, "transfers", "dismiss",
             "--workspace", "Main", "--profile", "Swap",
@@ -514,6 +524,8 @@ class SwapMatchingCliTest(unittest.TestCase):
         )
         self.assertEqual(code, 0, payload)
         self.assertEqual(payload["kind"], "transfers.dismiss")
+        # Journal builds read dismissals, so a dismissal makes them stale.
+        self.assertGreater(journal_input_version(), version_before)
         self.assertEqual(payload["data"]["reason"], "not actually a swap")
         self.assertIsNotNone(payload["data"]["expires_at"])
 
@@ -522,6 +534,111 @@ class SwapMatchingCliTest(unittest.TestCase):
             "--workspace", "Main", "--profile", "Swap",
         )
         self.assertEqual(payload["data"]["counts"]["total"], 0)
+        # Zero candidates is explained, not silent.
+        self.assertEqual(payload["data"]["exclusions"]["excluded_by_dismissal"], 1)
+        self.assertEqual(payload["data"]["exclusions"]["excluded_by_active_pair"], 0)
+
+        listed, code = _run(
+            data_root, "transfers", "dismissals", "list",
+            "--workspace", "Main", "--profile", "Swap",
+        )
+        self.assertEqual(code, 0, listed)
+        self.assertEqual(listed["kind"], "transfers.dismissals.list")
+        self.assertEqual(listed["data"]["counts"], {"active": 1, "expired": 0, "permanent": 0})
+        dismissal = listed["data"]["dismissals"][0]
+        self.assertTrue(dismissal["active"])
+        self.assertFalse(dismissal["permanent"])
+        self.assertEqual(dismissal["out"]["transaction_id"], candidate["out_id"])
+        self.assertEqual(dismissal["in"]["transaction_id"], candidate["in_id"])
+        self.assertEqual(dismissal["out"]["direction"], "outbound")
+        self.assertEqual(dismissal["in"]["wallet"], "liquid-onchain")
+        self.assertIsInstance(dismissal["in"]["amount_msat"], int)
+
+        conn = sqlite3.connect(data_root / "kassiber.sqlite3")
+        try:
+            conn.execute(
+                "UPDATE transaction_pair_dismissals SET expires_at = '2020-01-01T00:00:00Z'"
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        listed, _ = _run(
+            data_root, "transfers", "dismissals", "list",
+            "--workspace", "Main", "--profile", "Swap",
+        )
+        self.assertEqual(listed["data"]["dismissals"], [])
+        self.assertEqual(listed["data"]["counts"]["expired"], 1)
+        listed, _ = _run(
+            data_root, "transfers", "dismissals", "list",
+            "--workspace", "Main", "--profile", "Swap", "--include-expired",
+        )
+        self.assertFalse(listed["data"]["dismissals"][0]["active"])
+        payload, _ = _run(
+            data_root, "transfers", "suggest",
+            "--workspace", "Main", "--profile", "Swap",
+        )
+        self.assertGreaterEqual(payload["data"]["counts"]["total"], 1)
+        self.assertEqual(payload["data"]["exclusions"]["excluded_by_dismissal"], 0)
+
+    def test_dismissal_delete_undoes_a_dismissal_by_id_and_by_legs(self):
+        data_root = self._fresh_root("undismiss")
+        _bootstrap_profile(data_root, self.phoenix_csv, self.liquid_csv)
+        payload, _ = _run(
+            data_root, "transfers", "suggest",
+            "--workspace", "Main", "--profile", "Swap",
+        )
+        candidate = payload["data"]["candidates"][0]
+
+        def dismiss():
+            dismissed, code = _run(
+                data_root, "transfers", "dismiss",
+                "--workspace", "Main", "--profile", "Swap",
+                "--tx-out", candidate["out_id"], "--tx-in", candidate["in_id"],
+            )
+            self.assertEqual(code, 0, dismissed)
+            return dismissed["data"]["id"]
+
+        def journal_input_version():
+            conn = sqlite3.connect(data_root / "kassiber.sqlite3")
+            try:
+                return conn.execute(
+                    "SELECT journal_input_version FROM profiles WHERE label = 'Swap'"
+                ).fetchone()[0]
+            finally:
+                conn.close()
+
+        dismissal_id = dismiss()
+        before = journal_input_version()
+        deleted, code = _run(
+            data_root, "transfers", "dismissals", "delete",
+            "--workspace", "Main", "--profile", "Swap", "--id", dismissal_id,
+        )
+        self.assertEqual(code, 0, deleted)
+        self.assertEqual(deleted["kind"], "transfers.dismissals.delete")
+        self.assertEqual(deleted["data"]["deleted"], dismissal_id)
+        self.assertEqual(deleted["data"]["dismissal"]["out_transaction_id"], candidate["out_id"])
+        # Journal builds read dismissals, so removing one makes them stale.
+        self.assertGreater(journal_input_version(), before)
+        payload, _ = _run(
+            data_root, "transfers", "suggest",
+            "--workspace", "Main", "--profile", "Swap",
+        )
+        self.assertGreaterEqual(payload["data"]["counts"]["total"], 1)
+        self.assertEqual(payload["data"]["exclusions"]["excluded_by_dismissal"], 0)
+
+        dismiss()
+        deleted, code = _run(
+            data_root, "transfers", "dismissals", "delete",
+            "--workspace", "Main", "--profile", "Swap",
+            "--tx-out", candidate["out_id"], "--tx-in", candidate["in_id"],
+        )
+        self.assertEqual(code, 0, deleted)
+        missing, code = _run(
+            data_root, "transfers", "dismissals", "delete",
+            "--workspace", "Main", "--profile", "Swap", "--id", dismissal_id,
+        )
+        self.assertNotEqual(code, 0)
+        self.assertEqual(missing["error"]["code"], "not_found")
 
     def test_rules_crud(self):
         data_root = self._fresh_root("rules")

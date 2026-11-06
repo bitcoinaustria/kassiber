@@ -14,10 +14,11 @@ export type WorkLogItem =
 
 /**
  * A call stays visible on its own when it waits on the user's consent, failed,
- * was denied, or is an evidence request card. Consent cards are updates keyed
- * by `call_id`: the same call is "pending" before the consent prompt arrives
- * and "running" after approval, so it moves into a group only once the user
- * has decided.
+ * was denied, ran without asking (its permission mode or "Allow for this
+ * chat" approved it, so its card says so), or is an evidence request card.
+ * Consent cards are updates keyed by `call_id`: the same call is "pending"
+ * before the consent prompt arrives and "running" after approval, so it moves
+ * into a group only once the user has decided.
  */
 export function toolCallNeedsAttention(call: AiChatToolCall): boolean {
   return (
@@ -25,7 +26,17 @@ export function toolCallNeedsAttention(call: AiChatToolCall): boolean {
     (call.status === "pending" && call.needsConsent) ||
     call.status === "error" ||
     call.status === "denied" ||
+    toolCallRanWithoutAsking(call) ||
     evidenceRequest(call) !== null
+  );
+}
+
+/** A change the daemon approved without asking the user. */
+export function toolCallRanWithoutAsking(call: AiChatToolCall): boolean {
+  return (
+    call.approval === "auto" ||
+    call.approval === "full_access" ||
+    call.approval === "session"
   );
 }
 
