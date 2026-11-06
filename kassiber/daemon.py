@@ -1084,9 +1084,9 @@ class ActiveAiChats:
         *,
         chat_session_id: str | None,
         provider_name: str,
-        history_fingerprint: str,
+        history_fingerprint: str | None,
     ) -> str | None:
-        if not chat_session_id:
+        if not chat_session_id or history_fingerprint is None:
             return None
         with self._lock:
             entry = self._provider_sessions.get((chat_session_id, provider_name))
@@ -2223,6 +2223,8 @@ def _ui_swap_matching_payload_from_conn(
                 activate=True if activate is None else activate,
             )
         resolved_workspace, resolved_profile = resolve_scope(conn, workspace, profile)
+        if not isinstance(action, str):
+            raise AppError("Custody component review action is unsupported", code="validation")
         if authored_source == "ai_tool" and action in {"revise", "activate"}:
             _validate_ai_custody_state_boundary(
                 conn,
@@ -7291,9 +7293,12 @@ def _ai_read_wants_maintenance(call: ParsedAiToolCall) -> bool:
     for one never starts a sync the matching page would not.
     """
 
-    if call.name not in _AI_AUTO_JOURNAL_REFRESH_TOOL_NAMES:
+    # Models call tools by wire name (`ui_reports_summary`); decide on the
+    # catalog name the refresh set uses.
+    entry = get_tool(call.name)
+    if entry is None or entry.name not in _AI_AUTO_JOURNAL_REFRESH_TOOL_NAMES:
         return False
-    if call.name == "ui.visuals.render":
+    if entry.name == "ui.visuals.render":
         source = call.arguments.get("source") if isinstance(call.arguments, dict) else None
         return source in core_chat_visuals.JOURNAL_SOURCES
     return True
@@ -8009,6 +8014,8 @@ def _validate_ai_review_operations(
         if not isinstance(operation, dict):
             raise AppError("Review operation must be an object", code="validation")
         kind = operation.get("type")
+        if not isinstance(kind, str):
+            raise AppError("Review operation type is unsupported", code="validation")
         request = operation.get("request")
         action = request.get("action", "create") if isinstance(request, dict) else None
         if not full_access and (
@@ -10414,6 +10421,19 @@ def _provider_session_history_fingerprint(messages: list[dict[str, Any]]) -> str
     ).hexdigest()
 
 
+def _provider_session_resume_fingerprint(messages: list[dict[str, Any]]) -> str | None:
+    """Fingerprint the branch a resumable cursor was recorded against.
+
+    A cursor is remembered after a turn under the transcript plus its answer.
+    The next request carries that transcript followed by one new user prompt,
+    so look up everything before the prompt. Any other shape resumes nothing.
+    """
+
+    if not messages or not isinstance(messages[-1], dict) or messages[-1].get("role") != "user":
+        return None
+    return _provider_session_history_fingerprint(messages[:-1])
+
+
 # Finish reasons of an answer that was cut off before it ended on its own.
 _AI_CUT_OFF_FINISH_REASONS = frozenset({"length", "content_filter"})
 
@@ -10838,7 +10858,7 @@ def _run_ai_chat_tool_loop(
         active_ai_chats.provider_session(
             chat_session_id=validated["session_id"],
             provider_name=provider_snapshot["name"],
-            history_fingerprint=_provider_session_history_fingerprint(
+            history_fingerprint=_provider_session_resume_fingerprint(
                 validated["messages"]
             ),
         )
@@ -10961,7 +10981,10 @@ def _run_ai_chat_tool_loop(
     )
     response_context = responses_request_context(messages)
     finish_reason = None
-    content = ""
+    # Every leg streams its text to the user, who sends all of it back as the
+    # assistant message; the provider cursor and the saved answer are bound
+    # to that visible answer.
+    shown_parts: list[str] = []
     review_checkpoint: dict[str, Any] = {}
     for _iteration in range(validated["tool_loop_max_iterations"]):
         if cancel_event.is_set():
@@ -10982,7 +11005,7 @@ def _run_ai_chat_tool_loop(
         notices = _ai_chat_notices(runtime)
         notices.extend(phase for phase in turn.notices if phase not in notices)
         tool_calls = turn.tool_calls
-        content = turn.content
+        shown_parts.append(turn.content)
         finish_reason = turn.finish_reason
         if cancel_event.is_set():
             finish_reason = "cancelled"
@@ -11021,6 +11044,20 @@ def _run_ai_chat_tool_loop(
                 preview_arguments, consent_summary = _ai_plan_consent_preview(
                     runtime, entry, call.arguments
                 )
+            summary_refusal = None
+            if (
+                entry is not None
+                and advertised
+                and entry.requires_consent
+                and not call.argument_error
+                and consent_summary is None
+            ):
+                # A call the consent card cannot describe is malformed: the
+                # model gets a validation result instead of a consent prompt.
+                try:
+                    consent_summary = summarize_tool_call(entry, call.arguments)
+                except AppError as exc:
+                    summary_refusal = exc
             proposal_seen_at = now_iso()
             consent_applies = (
                 entry is not None
@@ -11028,6 +11065,7 @@ def _run_ai_chat_tool_loop(
                 and not duplicate_call_id
                 and entry.requires_consent
                 and not call.argument_error
+                and summary_refusal is None
             )
             # The chat's permission mode (or an earlier "allow for this chat")
             # may approve the call without asking.
@@ -11089,6 +11127,8 @@ def _run_ai_chat_tool_loop(
                 result = _tool_result_denied("duplicate_tool_call_id")
             elif entry is not None and not advertised:
                 result = _tool_result_denied("tool_not_advertised")
+            elif summary_refusal is not None:
+                result = _tool_result_from_app_error(summary_refusal, entry)
             elif entry is not None and entry.requires_consent and not call.argument_error:
                 consent_requested_at = proposal_seen_at
                 if needs_consent:
@@ -11099,8 +11139,7 @@ def _run_ai_chat_tool_loop(
                                 {
                                     "call_id": call.call_id,
                                     "name": display_name,
-                                    "summary": consent_summary
-                                    or summarize_tool_call(entry, call.arguments),
+                                    "summary": consent_summary,
                                     "arguments_preview": preview_arguments,
                                     "reversible": entry.reversible,
                                     "egresses": entry.egresses,
@@ -11248,7 +11287,7 @@ def _run_ai_chat_tool_loop(
                 "unapplied proposals must be planned again. Applied receipts remain available.\n"
                 "```json\n" + json.dumps({"review_checkpoint": review_checkpoint}, sort_keys=True) + "\n```"
             )
-            content = (content or "") + continuation
+            shown_parts.append(continuation)
             out.write(_with_request_id(build_envelope(
                 "ai.chat.delta", {"delta": {"content": continuation}},
             ), request_id))
@@ -11263,7 +11302,7 @@ def _run_ai_chat_tool_loop(
             history_fingerprint=_provider_session_history_fingerprint(
                 [
                     *validated["messages"],
-                    {"role": "assistant", "content": content or ""},
+                    {"role": "assistant", "content": "".join(shown_parts)},
                 ]
             ),
         )
@@ -11275,7 +11314,7 @@ def _run_ai_chat_tool_loop(
         validated,
         finish_reason,
         runtime,
-        assistant_content=content or "",
+        assistant_content="".join(shown_parts),
     )
 
 
@@ -11368,7 +11407,7 @@ def _run_ai_chat_stream(
                 active_ai_chats.provider_session(
                     chat_session_id=validated["session_id"],
                     provider_name=provider_snapshot["name"],
-                    history_fingerprint=_provider_session_history_fingerprint(
+                    history_fingerprint=_provider_session_resume_fingerprint(
                         validated["messages"]
                     ),
                 )

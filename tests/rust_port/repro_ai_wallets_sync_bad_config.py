@@ -1,13 +1,13 @@
-"""Repro: one malformed wallet configuration crashes every AI wallet sync.
+"""Check: one malformed wallet configuration is a typed AI wallet-sync refusal.
 
 ``_wallets_sync_payload`` plans the refresh through
-``_freshness_wallet_source_specs``, which runs ``json.loads`` on each wallet's
-``config_json`` unguarded. A single wallet whose stored configuration is not
-JSON raises ``JSONDecodeError`` for the whole book, so the assistant's
-consented ``ui.wallets.sync`` ends as the generic ``tool_error`` (with a
-traceback on stderr) instead of skipping that wallet. The Rust port refuses
-such books with ``not_implemented`` (the direct-sync reference path) and does
-not reproduce the crash.
+``_freshness_wallet_source_specs``, which ran ``json.loads`` on each wallet's
+``config_json`` unguarded. A single wallet whose stored configuration was not
+JSON raised ``JSONDecodeError`` for the whole book, so the assistant's
+consented ``ui.wallets.sync`` ended as the generic ``tool_error`` with a
+traceback on stderr. The planner now refuses with ``invalid_wallet_config``
+naming the wallet. The Rust port refuses such books with ``not_implemented``
+(the direct-sync reference path) and should adopt the typed code.
 
     uv run --locked python tests/rust_port/repro_ai_wallets_sync_bad_config.py
 """
@@ -46,9 +46,10 @@ def main() -> int:
         with contextlib.redirect_stderr(stderr):
             result = daemon._execute_mutating_ai_tool(daemon.ParsedAiToolCall("c", "ui.wallets.sync", {}), runtime)
         print(f"result: {result}")
-        print(f"traceback on stderr: {'JSONDecodeError' in stderr.getvalue()}")
+        traceback = "JSONDecodeError" in stderr.getvalue() or "Traceback" in stderr.getvalue()
+        print(f"traceback on stderr: {traceback}")
         conn.close()
-    return 0
+    return 0 if not traceback and "invalid_wallet_config" in repr(result) else 1
 
 
 if __name__ == "__main__":

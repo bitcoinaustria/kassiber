@@ -1,10 +1,11 @@
-"""Disposable repro: graph transfer-group annotations follow PYTHONHASHSEED.
+"""Check: graph transfer-group annotations no longer follow PYTHONHASHSEED.
 
-`_annotate_graph` collects a row's annotation group ids into a set and appends
-one `linked_transfer_group` annotation per id to each owned destination, so
-with two or more groups their order depends on string hashing. Rust sorts the
-ids. Python product code is unchanged. Run with TMPDIR under the worktree's
-target/; it starts child interpreters with different hash seeds.
+`_annotate_graph` collected a row's annotation group ids into a set and
+appended one `linked_transfer_group` annotation per id to each owned
+destination, so with two or more groups their order depended on string
+hashing. It now sorts the ids, as Rust does. Run with TMPDIR under the
+worktree's target/; it starts child interpreters with different hash seeds.
+Exit 0 means one sorted order under every seed.
 """
 import os
 import subprocess
@@ -30,13 +31,14 @@ print([a.get("groupId") for a in graph["outputs"][0]["annotations"] if a["code"]
 def main():
     orders = set()
     for seed in ("1", "2", "3", "4"):
-        env = dict(os.environ, PYTHONHASHSEED=seed)
+        env = {key: value for key, value in os.environ.items() if key != "XDG_DATA_HOME"}
+        env["PYTHONHASHSEED"] = seed
         out = subprocess.run([sys.executable, "-c", CHILD], env=env, capture_output=True, text=True, check=True)
         orders.add(out.stdout.strip())
-    if len(orders) > 1:
-        print(f"Python reference bug reproduced: {len(orders)} annotation orders across hash seeds")
-    else:
-        raise SystemExit("expected the annotation order to vary with PYTHONHASHSEED")
+    expected = str([f"custody-decision:{name}" for name in "abcdefgh"])
+    if orders != {expected}:
+        raise SystemExit(f"annotation order still varies or is unsorted: {sorted(orders)}")
+    print("fixed: one sorted annotation order across hash seeds")
 
 
 if __name__ == "__main__":

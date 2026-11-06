@@ -120,3 +120,44 @@ def test_malformed_or_symlinked_recovery_intent_never_changes_live_files(tmp_pat
         install.recover_staged_restore(data)
     assert failure.value.code == "unsafe_restore_target"
     assert live.read_bytes() == b"retained"
+
+
+def test_restore_staged_under_symlinked_temp_root_installs(tmp_path):
+    # macOS stages under /var/folders/... where /var links to /private/var.
+    (tmp_path / "private-var").mkdir()
+    (tmp_path / "var").symlink_to("private-var")
+    stage = tmp_path / "var/folders/kassiber-restore-x/stage"
+    (stage / "attachments").mkdir(parents=True)
+    (stage / "kassiber.sqlite3").write_bytes(b"incoming book")
+    (stage / "attachments/receipt").write_bytes(b"incoming attachment")
+    data = tmp_path / "book/data"
+    install.install_staged_backup(stage, data)
+    assert (data / "kassiber.sqlite3").read_bytes() == b"incoming book"
+    assert (data.parent / "attachments/receipt").read_bytes() == b"incoming attachment"
+
+
+@pytest.mark.parametrize("link", ["stage", "stage/kassiber.sqlite3", "stage/attachments/receipt"])
+def test_restore_still_refuses_links_at_or_below_the_staging_root(tmp_path, link):
+    (tmp_path / "private-var").mkdir()
+    (tmp_path / "var").symlink_to("private-var")
+    parent = tmp_path / "var/folders"
+    real = tmp_path / "real-stage"
+    (real / "attachments").mkdir(parents=True)
+    (real / "kassiber.sqlite3").write_bytes(b"incoming book")
+    (real / "attachments/receipt").write_bytes(b"incoming attachment")
+    outside = tmp_path / "outside"
+    outside.write_bytes(b"not staged")
+    parent.mkdir(parents=True)
+    if link == "stage":
+        (parent / "stage").symlink_to(real)
+    else:
+        real.rename(parent / "stage")
+        target = parent / link
+        target.unlink()
+        target.symlink_to(outside)
+    data = tmp_path / "book/data"
+    with pytest.raises(install.AppError) as failure:
+        install.install_staged_backup(parent / "stage", data)
+    assert failure.value.code == "unsafe_restore_target"
+    assert not (data / "kassiber.sqlite3").exists()
+    assert not (data.parent / "attachments").exists()

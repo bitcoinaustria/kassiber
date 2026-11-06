@@ -1,10 +1,11 @@
-"""Repro: model-initiated AI reads never refresh stale journals.
+"""Check: model-initiated AI reads refresh stale journals.
 
-``_execute_read_only_ai_tool`` decides on the automatic journal refresh with
+``_execute_read_only_ai_tool`` decided on the automatic journal refresh with
 ``call.name in _AI_AUTO_JOURNAL_REFRESH_TOOL_NAMES``. That set holds dotted
 catalog names, but providers call tools by their wire names
 (``ui_reports_summary``), so only the planner's auto-reads, which use dotted
-names, ever refresh. The Rust port keeps this for parity.
+names, ever refreshed. The check now resolves the catalog entry first. The
+Rust port still keeps the old behaviour (crates/ai/src/executor.rs).
 
     uv run --locked python tests/rust_port/repro_ai_refresh_wire_name.py
 """
@@ -38,12 +39,14 @@ def main() -> int:
                 task.response.put((True, task.callback(conn)))
 
         runtime = daemon.AiToolRuntime(str(Path(directory) / "data"), {}, Inline(), {})
+        refreshed = []
         for name in ("ui.reports.summary", "ui_reports_summary"):
             calls.clear()
             result = daemon._execute_read_only_ai_tool(daemon.ParsedAiToolCall("c", name, {}), runtime)
             print(f"{name}: ok = {result.get('ok')}, refresh attempted = {bool(calls)}")
+            refreshed.append(bool(calls))
         conn.close()
-    return 0
+    return 0 if all(refreshed) else 1
 
 
 if __name__ == "__main__":

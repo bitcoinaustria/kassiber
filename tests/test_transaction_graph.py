@@ -4572,3 +4572,47 @@ class TransactionGraphTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+_GROUP_ORDER_CHILD = r"""
+import json
+from kassiber.core.transaction_graph import _annotate_graph
+
+
+class Index:
+    def lookup_outpoint(self, outpoint):
+        return [type("M", (), dict(wallet_id="w2", wallet_label="Two", chain="bitcoin",
+                                   network="main", branch_label="receive"))()]
+
+    def lookup_script(self, script):
+        return []
+
+
+graph = {"inputs": [], "outputs": [{"id": "out-0", "outpoint": "aa:0", "_script": None,
+                                    "ownership": "unknown", "role": "output", "annotations": []}]}
+row = {"id": "t", "wallet_id": "w1", "direction": "outbound", "raw_json": "{}"}
+groups = [{"groupId": f"custody-decision:{name}"} for name in "hgfedcba"]
+groups.append({"groupId": "custody-decision:a"})
+_annotate_graph(graph, row, Index(), {"by_row": {"t": groups}}, raw={})
+print(json.dumps([a.get("groupId") for a in graph["outputs"][0]["annotations"]
+                  if a["code"] == "linked_transfer_group"]))
+"""
+
+
+class LinkedTransferGroupOrderTest(unittest.TestCase):
+    def test_group_annotation_order_is_sorted_under_every_hash_seed(self):
+        import os
+        import subprocess
+        import sys
+
+        root = Path(__file__).resolve().parent.parent
+        expected = [f"custody-decision:{name}" for name in "abcdefgh"]
+        for seed in ("0", "1", "2", "3", "4", "5", "17", "4242"):
+            env = {key: value for key, value in os.environ.items() if key != "XDG_DATA_HOME"}
+            env["PYTHONHASHSEED"] = seed
+            result = subprocess.run(
+                [sys.executable, "-c", _GROUP_ORDER_CHILD],
+                cwd=root, env=env, capture_output=True, text=True, check=False, timeout=60,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout), expected, seed)
