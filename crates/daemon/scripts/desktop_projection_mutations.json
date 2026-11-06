@@ -208,5 +208,15 @@
       "tests/test_rust_report_read_sync.py::RustReportReadSyncTest::test_policy_without_source_classes_runs_nothing"
     ],
     "rule": "Report-read refresh only runs source classes the policy enables."
+  },
+  {
+    "id": "maintenance-unhashable-sync",
+    "file": "crates/daemon/src/settings.rs",
+    "find": "    let force = match &mode {",
+    "replace": "    if let Value::List(_) | Value::Dict(_) = mode {\n        return Err(AppError::new(\"internal_error\", format!(\"unhashable type: '{}'\", type_name(&mode))));\n    }\n    let force = match &mode {",
+    "expect_failing": [
+      "tests/test_rust_maintenance_run.py::RustMaintenanceRunTest::test_unhashable_sync_is_the_typed_validation_refusal"
+    ],
+    "rule": "A list or object maintenance sync mode is the ordinary validation refusal."
   }
 ]

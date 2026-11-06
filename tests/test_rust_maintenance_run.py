@@ -1,7 +1,6 @@
-import json
 import unittest
 
-from tests.rust_desktop_parity import RUST_BIN, DesktopParity, run_candidate
+from tests.rust_desktop_parity import RUST_BIN, DesktopParity
 from tests.test_rust_report_blockers import BARRIERS, CURRENT
 from tests.test_rust_report_capital_gains import BOOK, generated, journal_shape
 from tests.test_rust_transaction_dashboard import ACTIVITY
@@ -16,18 +15,15 @@ class RustMaintenanceRunTest(DesktopParity, unittest.TestCase):
         self.compare([[], "x", 3, {"z": 1, "a": 2}, {"sync": "never", "x": 1}, {"sync": "bad"},
                       {"sync": None}, {"sync": 1}, {"sync": True}, {"sync": " never"}, {"sync": "NEVER"}])
 
-    def test_unhashable_sync_answers_python_envelope_without_traceback(self):
-        # tests/rust_port/repro_maintenance_unhashable_sync.py: Python lets the
-        # TypeError escape with a traceback; Rust keeps its envelope, minus debug.
-        requests = self.requests([{"sync": []}, {"sync": {"a": 1}}])
-        wire = "".join(json.dumps(request) + "\n" for request in [*requests, dict(kind="daemon.shutdown")])
-        result = run_candidate(["--machine", "--data-root", str(self.root), "daemon"],
-                               env=self.env, input=wire.encode())
-        self.assertEqual(result.stderr, b"")
-        errors = [json.loads(line)["error"] for line in result.stdout.splitlines()[1:3]]
-        self.assertEqual([(e["code"], e["message"], e["debug"]) for e in errors],
-                         [("internal_error", "unhashable type: 'list'", ""),
-                          ("internal_error", "unhashable type: 'dict'", "")])
+    def test_unhashable_sync_is_the_typed_validation_refusal(self):
+        # tests/rust_port/repro_maintenance_unhashable_sync.py: Python checks
+        # the type before set membership, so a list or object is refused like
+        # any other bad mode, with no traceback.
+        self.change(ACTIVITY + CURRENT + "UPDATE profiles SET journal_input_version=3 WHERE id='p';")
+        responses = self.compare([{"sync": []}, {"sync": {"a": 1}}, {"sync": ["never"]}])
+        self.assertEqual([(r["error"]["code"], r["error"]["details"]) for r in responses],
+                         [("validation", {"sync": []}), ("validation", {"sync": {"a": 1}}),
+                          ("validation", {"sync": ["never"]})])
 
     def test_current_book_without_sync_matches_wire_bytes(self):
         self.change(BARRIERS)

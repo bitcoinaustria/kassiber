@@ -73,13 +73,6 @@ pub fn run_as(
     let mode = get(&args, "sync")
         .cloned()
         .unwrap_or_else(|| s("if_enabled"));
-    if let Value::List(_) | Value::Dict(_) = mode {
-        // `mode in {...}` hashes its operand first.
-        return Err(AppError::new(
-            "internal_error",
-            format!("unhashable type: '{}'", type_name(&mode)),
-        ));
-    }
     let force = match &mode {
         Value::Str(text) if text.as_str() == Some("never") => None,
         Value::Str(text) if text.as_str() == Some("if_enabled") => Some(false),

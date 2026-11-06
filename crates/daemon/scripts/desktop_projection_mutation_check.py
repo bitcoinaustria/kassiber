@@ -5,8 +5,9 @@ Report blockers, the maintenance run, the evidence summary, the transaction
 graph, the transaction review context and report-read refresh: each entry
 mutates Rust source and names the differential pytest cases (or, for states a
 daemon session cannot reach, the unit tests) that must fail.
-The scratch copy, its Cargo target and every disposable book live under the
-resolved ``target/`` directory, never under the system temporary directory.
+The scratch copy, the shared ``target/scratch-build`` Cargo cache and every
+disposable book live under the resolved ``target/`` directory, never under the
+system temporary directory.
 
     uv run --locked python crates/daemon/scripts/desktop_projection_mutation_check.py [--only ID ...]
     uv run --locked python crates/daemon/scripts/desktop_projection_mutation_check.py --check
@@ -59,9 +60,9 @@ def main():
         return checker.main()
     target = (ROOT / "target").resolve()
     scratch = target / "desktop-projection-mutation-scratch"
-    # The Cargo build cache lives inside the scratch tree, so deleting the
-    # tree also deletes the cache.
-    build = scratch / "cargo-build"
+    # Every scratch build shares target/scratch-build, so third-party crates
+    # compile once across entries and campaigns.
+    build = target / "scratch-build"
     scratch.mkdir(parents=True, exist_ok=True)
     tempfile.tempdir = str(scratch)
     os.environ["TMPDIR"] = str(scratch)
