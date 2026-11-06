@@ -268,6 +268,30 @@ class CustodyComponentAiActionTests(unittest.TestCase):
             "Create 2 gap-resolution components",
         )
 
+    def test_unhashable_action_is_a_validation_refusal(self):
+        from kassiber.errors import AppError
+
+        for action in ([], {}, ["create"], {"action": "create"}):
+            with self.subTest(action=action):
+                for name in ("ui.transfers.components.plan", "ui.transfers.components.apply"):
+                    with self.assertRaises(AppError) as raised:
+                        summarize_tool_call(get_tool(name), {"action": action})
+                    self.assertEqual(raised.exception.code, "validation")
+                planned = self._plan({"action": action})
+                self.assertEqual((planned["ok"], planned["reason"]), (False, "validation"))
+                applied = self._apply({"action": action, "expected_input_version": 0})
+                self.assertEqual((applied["ok"], applied["reason"]), (False, "validation"))
+                with self.assertRaises(AppError) as desktop:
+                    _ui_swap_matching_payload_from_conn(
+                        self.conn,
+                        "ui.transfers.components.plan",
+                        {"workspace": "Main", "profile": "Book", "action": action},
+                    )
+                self.assertEqual(desktop.exception.code, "validation")
+        self.assertEqual(
+            self.conn.execute("SELECT COUNT(*) FROM custody_components").fetchone()[0], 0
+        )
+
 
 class AiToolErrorRemediationTests(unittest.TestCase):
     def test_restricted_access_denial_says_only_the_user_can_lift_it(self):
