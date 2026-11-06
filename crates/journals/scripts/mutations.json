@@ -502,8 +502,8 @@
   {
     "id": "JR-carry-slot",
     "file": "crates/journals/src/render.rs",
-    "find": "row_values[rows[id.as_str()]] = row;",
-    "replace": "row_values[rows[id.as_str()]] = &Value::Null;",
+    "find": "row_values[rows[id.as_str()]] = Row::Json(row);",
+    "replace": "row_values[rows[id.as_str()]] = NULL_ROW;",
     "expect_failing": [
       "ledger_rendering_matches_python"
     ],
@@ -532,8 +532,8 @@
   {
     "id": "JR-balance-wallet-kind",
     "file": "crates/journals/src/boundary/joins.rs",
-    "find": "if *field(posting, \"location_kind\") != \"wallet\" {",
-    "replace": "if *field(posting, \"location_kind\") == \"wallet\" {",
+    "find": "if *posting.at(\"location_kind\") != \"wallet\" {",
+    "replace": "if *posting.at(\"location_kind\") == \"wallet\" {",
     "expect_failing": [
       "balance_join_matches_existing_comparator_and_promotes_before_overflow"
     ],
@@ -1722,7 +1722,7 @@
   {
     "id": "JP-relation-target-principal",
     "file": "crates/journals/src/persistence/quantity.rs",
-    "find": "target_principal = kassiber_custody::quantity::principal_msat(target)?;",
+    "find": "target_principal = kassiber_custody::quantity::principal_msat(&target)?;",
     "replace": "target_principal = json!(1);",
     "expect_failing": [
       "economic_relation_fallbacks_and_nonpositive_amounts_preserve_exact_principal"
@@ -2212,8 +2212,8 @@
   {
     "id": "JENGINE-typed-result",
     "file": "crates/journals/src/engine.rs",
-    "find": "kassiber_tax_core::ledger_typed(&request).map_err(boundary::staged_error)",
-    "replace": "kassiber_tax_core::ledger_typed(&request).map(|_| boundary::empty_response()).map_err(boundary::staged_error)",
+    "find": "kassiber_tax_core::sequential(|| kassiber_tax_core::ledger_typed(&request))\n                .map_err(boundary::staged_error)",
+    "replace": "kassiber_tax_core::sequential(|| kassiber_tax_core::ledger_typed(&request))\n                .map(|_| boundary::empty_response())\n                .map_err(boundary::staged_error)",
     "expect_failing": [
       "typed_engine_boundary_matches_text_and_refusal_attributes"
     ],
@@ -2252,7 +2252,7 @@
   {
     "id": "JR-pricing-original-identity",
     "file": "crates/journals/src/render.rs",
-    "find": ".filter(|original| std::ptr::eq(*original, row))",
+    "find": ".filter(|original| original.same(row))",
     "replace": ".filter(|_| true)",
     "expect_failing": [
       "ledger_rendering_matches_python"
@@ -2647,7 +2647,7 @@
     "expect_failing": [
       "storage_encodings_and_markers_match_python"
     ],
-    "rule": "UUID hex retains each digest byte\u2019s high nibble."
+    "rule": "UUID hex retains each digest byte’s high nibble."
   },
   {
     "id": "JP-uuid-low-digit",
@@ -2657,7 +2657,7 @@
     "expect_failing": [
       "storage_encodings_and_markers_match_python"
     ],
-    "rule": "UUID hex retains each digest byte\u2019s low nibble."
+    "rule": "UUID hex retains each digest byte’s low nibble."
   },
   {
     "id": "JP-padding-shortcut-negative-limit",
@@ -4968,5 +4968,85 @@
       "refresh_matches_complete_python_books_ordered_results_phases_and_tapes"
     ],
     "rule": "Coerce byte-valued legacy freshness markers exactly like Python integers."
+  },
+  {
+    "id": "JV-row-get",
+    "file": "crates/journals/src/render.rs",
+    "find": "            Self::View(row) => row.get(key),",
+    "replace": "            Self::View(_) => None,",
+    "expect_failing": [
+      "projection_row_views_render_as_their_json"
+    ],
+    "rule": "Rendering reads projection rows through their views."
+  },
+  {
+    "id": "JV-row-json",
+    "file": "crates/journals/src/render.rs",
+    "find": "            Self::View(row) => row.json(),",
+    "replace": "            Self::View(_) => Value::Null,",
+    "expect_failing": [
+      "projection_row_views_render_as_their_json"
+    ],
+    "rule": "A carried row starts from the whole projection row."
+  },
+  {
+    "id": "JV-row-required",
+    "file": "crates/journals/src/render.rs",
+    "find": "            Self::View(row) => row\n                .get(key)",
+    "replace": "            Self::View(row) => row\n                .get(\"id\")",
+    "expect_failing": [
+      "projection_row_views_render_as_their_json"
+    ],
+    "rule": "A required field reads that field of a row view."
+  },
+  {
+    "id": "JV-observation-view",
+    "file": "crates/journals/src/model.rs",
+    "find": "            Self::View(o) => o.at(key),",
+    "replace": "            Self::View(_) => &Value::Null,",
+    "expect_failing": [
+      "process_complete_dumps_match_python_from_raw_books"
+    ],
+    "rule": "Persistence reads observations through their views."
+  },
+  {
+    "id": "JV-posting-view",
+    "file": "crates/journals/src/model.rs",
+    "find": "            Self::View(p) => p.at(key),",
+    "replace": "            Self::View(_) => &Value::Null,",
+    "expect_failing": [
+      "process_complete_dumps_match_python_from_raw_books"
+    ],
+    "rule": "Persistence reads postings through their views."
+  },
+  {
+    "id": "JV-posting-fields",
+    "file": "crates/journals/src/persistence/quantity.rs",
+    "find": "    .map(|key| posting.at(key))",
+    "replace": "    .map(|_| &Value::Null)",
+    "expect_failing": [
+      "process_complete_dumps_match_python_from_raw_books"
+    ],
+    "rule": "Posting views bind every posting column."
+  },
+  {
+    "id": "JV-state-views",
+    "file": "crates/journals/src/boundary.rs",
+    "find": "        quantity_views: c.quantity_views,",
+    "replace": "        quantity_views: None,",
+    "expect_failing": [
+      "process_complete_dumps_match_python_from_raw_books"
+    ],
+    "rule": "The journal state keeps the stage views it was built from."
+  },
+  {
+    "id": "JV-process-rows",
+    "file": "crates/journals/src/process.rs",
+    "find": "            projection_rows: Some(&self.projection_rows),",
+    "replace": "            projection_rows: None,",
+    "expect_failing": [
+      "process_complete_dumps_match_python_from_raw_books"
+    ],
+    "rule": "The pipeline renders from the projection row views."
   }
 ]

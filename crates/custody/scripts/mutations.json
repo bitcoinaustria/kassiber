@@ -22756,8 +22756,8 @@
   {
     "id": "FUSION-FIELD-rate",
     "file": "crates/custody/src/ledger_request.rs",
-    "find": "let values = [&row[exact], &row[field]];",
-    "replace": "let values = if index == 0 { [&row[field], &row[exact]] } else { [&row[exact], &row[field]] };",
+    "find": "let values = [row.at(exact), row.at(field)];",
+    "replace": "let values = if index == 0 { [row.at(field), row.at(exact)] } else { [row.at(exact), row.at(field)] };",
     "expect_failing": [
       "fusion_builder_field_choice"
     ],
@@ -24948,5 +24948,230 @@
       "typed_evidence_commitments_preserve_exceptional_preimages"
     ],
     "rule": "Typed quantity commitments preserve the CPython integer-string digit limit."
+  },
+  {
+    "id": "VIEW-row-int",
+    "file": "crates/custody/src/finalized_projection/row.rs",
+    "find": "                Written::Int(n) => built.push((key, Value::from(n))),",
+    "replace": "                Written::Int(_) => {}",
+    "expect_failing": [
+      "views_read_the_fields_json_with_writes",
+      "projection_views_read_the_rows_and_build_the_same_request"
+    ],
+    "rule": "Integer fields of a row view read as their JSON numbers."
+  },
+  {
+    "id": "VIEW-row-convert",
+    "file": "crates/custody/src/finalized_projection/row.rs",
+    "find": "                    if let Some(value) = exact(value)? {",
+    "replace": "                    if let Some(value) = exact(value).ok().flatten() {",
+    "expect_failing": [
+      "views_read_the_fields_json_with_writes",
+      "json_with_views_converts_in_json_with_order"
+    ],
+    "rule": "A failing field conversion fails the row view."
+  },
+  {
+    "id": "VIEW-row-built-first",
+    "file": "crates/custody/src/finalized_projection/row.rs",
+    "find": ".find(|(name, _)| *name == key)",
+    "replace": ".find(|(name, _)| *name != key)",
+    "expect_failing": [
+      "views_read_the_fields_json_with_writes",
+      "projection_views_read_the_rows_and_build_the_same_request"
+    ],
+    "rule": "Converted fields are read in place of their raw values."
+  },
+  {
+    "id": "VIEW-row-source",
+    "file": "crates/custody/src/finalized_projection/row.rs",
+    "find": "            Err(_) => self.source.get(key),",
+    "replace": "            Err(_) => None,",
+    "expect_failing": [
+      "views_read_the_fields_json_with_writes",
+      "projection_views_read_the_rows_and_build_the_same_request"
+    ],
+    "rule": "Fields a row does not override are read from its source."
+  },
+  {
+    "id": "VIEW-row-override",
+    "file": "crates/custody/src/finalized_projection/row.rs",
+    "find": "                Stored::Value(value) => value,\n                Stored::Static(value) => value,\n                Stored::Leg(position, slot) => self",
+    "replace": "                Stored::Value(_) => &Value::Null,\n                Stored::Static(value) => value,\n                Stored::Leg(position, slot) => self",
+    "expect_failing": [
+      "views_read_the_fields_json_with_writes",
+      "projection_views_read_the_rows_and_build_the_same_request"
+    ],
+    "rule": "Generated fields override the source row."
+  },
+  {
+    "id": "VIEW-row-leg",
+    "file": "crates/custody/src/finalized_projection/row.rs",
+    "find": "                    .expect(\"detached observation in the projection's input\")\n                    .field(*slot),\n                Stored::Int(_) => unreachable!",
+    "replace": "                    .expect(\"detached observation in the projection's input\")\n                    .field(slot ^ 1),\n                Stored::Int(_) => unreachable!",
+    "expect_failing": [
+      "projection_views_read_the_rows_and_build_the_same_request"
+    ],
+    "rule": "Observation fields of a row view read their own slot."
+  },
+  {
+    "id": "VIEW-row-any-key",
+    "file": "crates/custody/src/finalized_projection/row.rs",
+    "find": "        self.overrides.iter().any(|(name, _)| test(name))\n            || self.source",
+    "replace": "        self.overrides.iter().any(|(name, _)| test(name))\n            && self.source",
+    "expect_failing": [
+      "views_read_the_fields_json_with_writes"
+    ],
+    "rule": "A row has a field when its source or its overrides have it."
+  },
+  {
+    "id": "VIEW-row-json-built",
+    "file": "crates/custody/src/finalized_projection/row.rs",
+    "find": "        for (key, value) in &self.built {\n            fields.insert((*key).to_owned(), value.clone());\n        }",
+    "replace": "",
+    "expect_failing": [
+      "views_read_the_fields_json_with_writes"
+    ],
+    "rule": "A row view writes its converted fields."
+  },
+  {
+    "id": "VIEW-projection-canonical-order",
+    "file": "crates/custody/src/finalized_projection.rs",
+    "find": "        result.insert(\"intra_pairs\".into(), list(&self.intra)?);\n        let built",
+    "replace": "        let built",
+    "expect_failing": [
+      "json_with_views_converts_in_json_with_order"
+    ],
+    "rule": "Projection views convert the pairs before the rows, as json_with does."
+  },
+  {
+    "id": "VIEW-projection-moves",
+    "file": "crates/custody/src/finalized_projection.rs",
+    "find": "        let views = self\n            .rows\n            .iter()\n            .map(|row| RowView::new(row, rows, self.canonical.as_deref(), &built))\n            .collect::<Result<Vec<_>, E>>()?;\n        result.insert(\"selected_move_ids\".into(), list(&self.moves)?);",
+    "replace": "        result.insert(\"selected_move_ids\".into(), list(&self.moves)?);\n        let views = self\n            .rows\n            .iter()\n            .map(|row| RowView::new(row, rows, self.canonical.as_deref(), &built))\n            .collect::<Result<Vec<_>, E>>()?;",
+    "expect_failing": [
+      "json_with_views_converts_in_json_with_order"
+    ],
+    "rule": "Projection views convert the rows before the moves, as json_with does."
+  },
+  {
+    "id": "FUSION-row-any-key",
+    "file": "crates/custody/src/ledger_request.rs",
+    "find": "        self.as_object().is_some_and(|m| m.keys().any(|k| test(k)))",
+    "replace": "        self.as_object().is_some_and(|m| m.keys().all(|k| test(k)))",
+    "expect_failing": [
+      "fusion_builder"
+    ],
+    "rule": "Any custody component field refuses a request row."
+  },
+  {
+    "id": "FUSION-view-json",
+    "file": "crates/custody/src/ledger_request.rs",
+    "find": "        Cow::Owned(crate::finalized_projection::RowView::json(self))",
+    "replace": "        Cow::Owned(Value::Null)",
+    "expect_failing": [
+      "fusion_holds_read_whole_rows_through_views"
+    ],
+    "rule": "Hold detection reads the whole projection row."
+  },
+  {
+    "id": "QVIEW-observation-plain",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "            LegRef::Json(value) if !plain(value) => {",
+    "replace": "            LegRef::Json(value) if plain(value) => {",
+    "expect_failing": [
+      "observation_views_read_what_json_with_writes"
+    ],
+    "rule": "A JSON observation is read in place only when it is its own JSON."
+  },
+  {
+    "id": "QVIEW-observation-built",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "                Ok(Self::Built(owned(std::borrow::Cow::Borrowed(value))?))",
+    "replace": "                Ok(Self::Read(o))",
+    "expect_failing": [
+      "observation_views_read_what_json_with_writes"
+    ],
+    "rule": "A non-plain observation is read converted."
+  },
+  {
+    "id": "QVIEW-views-canonical",
+    "file": "crates/custody/src/quantity/runtime.rs",
+    "find": "        let (value, views) = self.json_parts(false, convert, true)?;",
+    "replace": "        let (value, views) = self.json_parts(true, convert, true)?;",
+    "expect_failing": [
+      "projection_views_read_the_rows_and_build_the_same_request"
+    ],
+    "rule": "Quantity views leave out the canonical input."
+  },
+  {
+    "id": "QVIEW-posting-asset",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "                        && plain(&o[\"asset\"])\n",
+    "replace": "",
+    "expect_failing": [
+      "posting_views_read_what_postings_json_writes"
+    ],
+    "rule": "A posting whose asset converts is built."
+  },
+  {
+    "id": "QVIEW-posting-rail",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "                    LegRef::Json(_) => plain(&o[\"event_key\"][\"chain\"]),",
+    "replace": "                    LegRef::Json(_) => true,",
+    "expect_failing": [
+      "posting_views_read_what_postings_json_writes"
+    ],
+    "rule": "A posting whose rail converts is built."
+  },
+  {
+    "id": "QVIEW-posting-location",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "                        && plain(&p.location)\n",
+    "replace": "",
+    "expect_failing": [
+      "posting_views_read_what_postings_json_writes"
+    ],
+    "rule": "A posting whose location converts is built."
+  },
+  {
+    "id": "QVIEW-posting-hash",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "                        && plain(&o[\"quantity_hash\"])\n",
+    "replace": "",
+    "expect_failing": [
+      "posting_views_read_what_postings_json_writes"
+    ],
+    "rule": "A posting whose observation hash converts is built."
+  },
+  {
+    "id": "QVIEW-posting-state",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "                        && plain(&p.state)\n",
+    "replace": "",
+    "expect_failing": [
+      "posting_views_read_what_postings_json_writes"
+    ],
+    "rule": "A posting whose state converts is built."
+  },
+  {
+    "id": "QVIEW-posting-kind",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "            \"location_kind\" => kind,",
+    "replace": "            \"location_kind\" => id,",
+    "expect_failing": [
+      "posting_views_read_what_postings_json_writes"
+    ],
+    "rule": "A read posting names its location kind."
+  },
+  {
+    "id": "QVIEW-posting-amount",
+    "file": "crates/custody/src/quantity/arbitration.rs",
+    "find": "            \"amount_msat\" => amount,",
+    "replace": "            \"amount_msat\" => &NULL,",
+    "expect_failing": [
+      "posting_views_read_what_postings_json_writes"
+    ],
+    "rule": "A read posting holds its amount."
   }
 ]
