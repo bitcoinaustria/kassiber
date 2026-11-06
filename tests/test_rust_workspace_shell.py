@@ -76,7 +76,7 @@ def dump(database, key=None):
     try:
         tables = [r[0] for r in conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")]
-        assert len(tables) == 112
+        assert len(tables) == 113
         rows = {t: sorted((tuple(r) for r in conn.execute(f'SELECT * FROM "{t}"')), key=repr) for t in tables}
     finally:
         conn.close()

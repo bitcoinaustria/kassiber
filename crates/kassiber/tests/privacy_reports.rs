@@ -48,6 +48,7 @@ import json, os, sqlite3
 from pathlib import Path
 import pytest
 from tests.test_rust_report_exports import _book, _dump
+from tests.rust_port.book_schema import TABLES
 from kassiber.db import open_db
 
 root = Path(os.environ['KASSIBER_PRIVACY_SCRATCH'])
@@ -68,7 +69,7 @@ for name in selected:
         conn = open_db(data)
         conn.close()
         before = json.dumps(_dump(data, {}), sort_keys=True, separators=(',', ':')).encode()
-        assert len(_dump(data, {})) == 112
+        assert tuple(sorted(_dump(data, {}))) == TABLES
         for flags in [('--format', 'json'), ('--format', 'table'), ('--format', 'plain'), ('--format', 'csv'), ('--machine',)]:
             args = (*flags, 'reports', 'privacy-hygiene')
             expected = call(*args, reference=True)
@@ -112,7 +113,7 @@ for name in selected:
         assert log and all(r['served_by'] == 'rust' for r in log), log
         assert sum(r['command'] == 'reports.privacy-hygiene' for r in log) == 8
         assert sum(r['command'] == 'daemon' for r in log) == 1
-print(json.dumps({'rust': totals, 'python_fallbacks': 0, 'daemon_requests': totals['daemon']*8, 'tables_per_comparison': 112}, sort_keys=True))
+print(json.dumps({'rust': totals, 'python_fallbacks': 0, 'daemon_requests': totals['daemon']*8, 'tables_per_comparison': len(TABLES)}, sort_keys=True))
 "#;
 
 const ORACLE: &str = r#"
@@ -160,6 +161,7 @@ import json, os
 from pathlib import Path
 import pytest
 from tests.test_rust_report_exports import _book, _dump
+from tests.rust_port.book_schema import TABLES
 from kassiber.db import open_db
 
 root = Path(os.environ['KASSIBER_PRIVACY_SCRATCH'])
@@ -176,7 +178,7 @@ for field in ('journal_input_version', 'last_processed_input_version', 'last_pro
             conn.commit()
             conn.close()
             before = _dump(data, {})
-            assert len(before) == 112
+            assert tuple(sorted(before)) == TABLES
             wire = b'{"request_id":1,"kind":"ui.reports.privacy_hygiene","args":{"unknown":true}}\n{"request_id":2,"kind":"ui.reports.privacy_hygiene"}\n{"request_id":3,"kind":"ui.reports.privacy_hygiene","args":false}\n'
             expected = call(*flags, 'daemon', reference=True, wire=wire)
             actual = call(*flags, 'daemon', wire=wire)
@@ -203,5 +205,5 @@ for field in ('journal_input_version', 'last_processed_input_version', 'last_pro
             log = [json.loads(line) for line in Path(env['KASSIBER_HYBRID_LOG']).read_text().splitlines()]
             assert len(log) == 1 and log[0]['served_by'] == 'rust', log
             sessions += 1
-print(json.dumps({'native_debug_sessions': sessions, 'hygiene_requests': sessions * 3, 'python_fallbacks': 0, 'tables_per_comparison': 112}, sort_keys=True))
+print(json.dumps({'native_debug_sessions': sessions, 'hygiene_requests': sessions * 3, 'python_fallbacks': 0, 'tables_per_comparison': len(TABLES)}, sort_keys=True))
 "#;

@@ -1,4 +1,4 @@
-"""Desktop project catalog/switching: byte envelopes, catalog and 112-table books."""
+"""Desktop project catalog/switching: byte envelopes, catalog and whole-book table comparisons."""
 from __future__ import annotations
 
 import json
@@ -14,6 +14,7 @@ import pytest
 
 from kassiber.secrets.sqlcipher import open_encrypted
 from tests import cli_runner
+from tests.rust_port.book_schema import TABLES
 
 ROOT = Path(__file__).resolve().parents[1]
 BINARY = os.environ.get("KASSIBER_RUST_BIN")
@@ -97,7 +98,7 @@ def dump(database, key):
     try:
         tables = [r[0] for r in conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")]
-        assert len(tables) == 112
+        assert tuple(tables) == TABLES
         rows = {t: sorted((tuple(r) for r in conn.execute(f'SELECT * FROM "{t}"')), key=repr) for t in tables}
     finally:
         conn.close()

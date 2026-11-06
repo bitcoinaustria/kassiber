@@ -13,6 +13,7 @@ mod schema;
 mod schema_structure;
 pub mod semantics;
 pub mod state_root;
+pub use schema::table_names;
 
 /// Development-only deterministic sources and file-layer fault injection.
 /// No product command reads test environment variables or enables this feature.

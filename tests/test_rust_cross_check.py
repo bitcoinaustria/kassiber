@@ -16,6 +16,7 @@ from tests.rust_port.xlsx import RecordingWorkbook, canonical, first_difference
 from tests.test_rust_report_exports import _dump
 from tests.test_rust_xlsx_exports import _wire
 from tests.test_rust_austrian_xlsx import _clocked_book
+from tests.rust_port.book_schema import TABLES
 
 ROOT = Path(__file__).resolve().parents[1]
 SERVICE = os.environ.get('KASSIBER_XLSX_SERVICE_BIN')
@@ -25,7 +26,7 @@ CASES = json.loads((ROOT/'crates/reports/tests/data/cross_check.json').read_text
 
 def state(root):
     result = _dump(root,{})
-    assert len(result)==112
+    assert tuple(sorted(result))==TABLES
     return json.dumps(result,sort_keys=True,separators=(',',':')).encode()
 
 

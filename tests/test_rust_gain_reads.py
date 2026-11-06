@@ -13,6 +13,7 @@ from kassiber.db import JOURNAL_CALCULATION_SEMANTICS_VERSION, open_db
 from crates.reports.scripts.gen_gain_vectors import BASE, outcome
 from tests import cli_runner
 from tests.test_rust_report_exports import _dump, REFERENCE, STAMP
+from tests.rust_port.book_schema import TABLES
 
 ROOT=Path(__file__).resolve().parents[1]
 SERVICE=os.environ.get('KASSIBER_XLSX_SERVICE_BIN')
@@ -41,7 +42,7 @@ def test_gain_service_bytes_and_every_database_table(tmp_path,case):
     actual=json.loads(result.stdout)
     assert json.dumps(actual,sort_keys=True,separators=(',',':')).encode()==json.dumps(expected,sort_keys=True,separators=(',',':')).encode()
     assert state(root)==expected_state
-    assert len(_dump(root,{}))==112
+    assert tuple(sorted(_dump(root,{})))==TABLES
 
 
 def book(tmp_path,monkeypatch,variant='ready'):

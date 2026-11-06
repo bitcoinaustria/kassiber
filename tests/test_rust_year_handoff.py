@@ -19,6 +19,7 @@ from tests.rust_port.xlsx import RecordingWorkbook, canonical, first_difference,
 from tests.test_rust_report_exports import _dump, _normalize
 from tests.test_rust_xlsx_exports import _wire
 from tests.test_rust_austrian_xlsx import _clocked_book
+from tests.rust_port.book_schema import TABLES
 
 ROOT = Path(__file__).resolve().parents[1]
 SERVICE = os.environ.get("KASSIBER_XLSX_SERVICE_BIN")
@@ -28,7 +29,7 @@ CASES = json.loads((ROOT / "crates/reports/tests/data/year_handoff.json").read_t
 
 def _state(root, identities):
     tables = _dump(root, identities)
-    assert len(tables) == 112
+    assert tuple(sorted(tables)) == TABLES
     return json.dumps(tables, sort_keys=True, separators=(",", ":")).encode()
 
 
