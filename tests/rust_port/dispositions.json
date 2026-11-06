@@ -3004,6 +3004,9 @@
       "test_snapshot_creation_rows_and_frozen_dependency_copy": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares stored-journal report JSON/table/plain and daemon bytes with Python on disposable FIFO/HIFO/Austrian books, including 3000 transactions, blockers and saved snapshots; asserts native report routing", "reviewed": true, "tests": 1},
       "test_table_and_plain_reads_match_bytes": {"disposition": "oracle", "flags": ["subprocess"], "group": "reports", "reason": "compares stored-journal report JSON/table/plain and daemon bytes with Python on disposable FIFO/HIFO/Austrian books, including 3000 transactions, blockers and saved snapshots; asserts native report routing", "reviewed": true, "tests": 1}
     },
+    "tests/test_rust_reports_screen.py": {
+      "RustReportsScreenTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares the native Reports screen payload, journal event explanation references and E 1kv refusals (raw JSONL and all tables) with Python, plaintext and SQLCipher, around the 1 March 2022 crypto Kennzahlen", "reviewed": true, "tests": 8}
+    },
     "tests/test_rust_review_builds.py": {
       "test_complete_review_build_vectors_replay_through_python": {"disposition": "oracle", "flags": ["mock", "mock-internal"], "group": "journals", "reason": "replays complete review-build states through unchanged Python with declared identity tapes and canonical live-anchor filtering; native tests join loading, custody, fusion and rendering for the same synthetic snapshots", "reviewed": true, "tests": 1}
     },
