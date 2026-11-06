@@ -17,6 +17,7 @@ kassiber-envelope
 kassiber-net test-observer test-support
 kassiber-ownership
 kassiber-paths
+kassiber-pdf
 kassiber-pydecimal
 kassiber-pyjson
 kassiber-pytext
@@ -56,6 +57,9 @@ tauri-plugin-single-instance deep-link
 tauri-plugin-window-state
 tempfile
 tokio io-util process time
+typst
+typst-layout
+typst-pdf
 windows-native-keyring-store
 windows-sys Win32_Foundation Win32_Storage_FileSystem Win32_UI_Shell Win32_Security Win32_Security_Authorization Win32_System_Threading Win32_System_Memory Win32_System_Pipes Win32_System_IO Win32_System_Console
 zbus-secret-service-keyring-store rt-tokio-crypto-rust
