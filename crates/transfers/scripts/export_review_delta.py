@@ -60,6 +60,12 @@ def inputs():
     yield effects(year(2025)), effects(austrian(2025, kennzahlen={"10": 1, "9": 2, "801": 3}))
     yield (effects(austrian(2025, kennzahlen={"174": 7}, cents=2)),
            effects(austrian(2025, kennzahlen={"174": 7}, status="indicative", cents=2)))
+    # Only the estimate moves (the same base, other report blockers lifted).
+    yield (effects(austrian(2025, kennzahlen={"174": 7}, cents=2)),
+           effects(austrian(2025, kennzahlen={"174": 7}, cents=3)))
+    # Only the status moves.
+    yield (effects(austrian(2025, kennzahlen={"174": 7}, status="withheld", cents=None)),
+           effects(austrian(2025, kennzahlen={"174": 7}, status="not_applicable", cents=None)))
     # Untrusted shapes.
     for value in (None, [], "", 7, {}, {"tax": None}, {"tax": {}}, {"tax": {"years": None}},
                   {"tax": {"years": 7}}, {"tax": {"years": "ab"}}, {"tax": {"years": {"2024": 1}}},

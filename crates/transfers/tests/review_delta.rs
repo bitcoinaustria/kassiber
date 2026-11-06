@@ -37,5 +37,5 @@ fn tax_delta_matches_python_on_planned_and_untrusted_effects() {
         }
     }
     assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
-    assert_eq!((deltas, faults), (91, 100));
+    assert_eq!((deltas, faults), (93, 100));
 }

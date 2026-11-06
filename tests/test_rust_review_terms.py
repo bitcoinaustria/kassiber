@@ -338,6 +338,17 @@ class AustrianTaxDeltaParity(TermParity, unittest.TestCase):
         self.masked([{"artifact": artifact, "idempotency_key": "at"}], kind="ui.review.apply")
         self.compare([{"idempotency_key": "at"}], kind="ui.review.receipt")
 
+    def test_reviewed_prices_are_stored_in_the_book_currency(self):
+        """#711: a price entered for a row imported in another currency is
+        the book's, on the quarantine resolve and on a review apply."""
+        self.change("UPDATE transactions SET fiat_currency='USD' WHERE id='unpriced'")
+        self.python("journals", "process")
+        self.masked([{"transaction": "unpriced", "action": "price_override", "fiat_rate": "20000",
+                      "reason": "Receipt"}], kind="ui.journals.quarantine.resolve")
+        with closing(open_db(self.root, passphrase=self.passphrase)) as conn:
+            currency = conn.execute("SELECT fiat_currency FROM transactions WHERE id='unpriced'").fetchone()[0]
+        self.assertEqual(currency, "EUR")
+
     def test_generic_vienna_and_currency_variants_match_python(self):
         self.change("UPDATE profiles SET fiat_currency=' eur '")
         self.compare([self.plan([self.price("20000")])])
