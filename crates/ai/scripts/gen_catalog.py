@@ -26,21 +26,21 @@ def document() -> dict:
     from kassiber.cli import chat as cli_chat
     from kassiber.core import chat_history, ui_snapshot
 
-    entries = []
-    for tool in tools.TOOL_CATALOG:
-        entries.append(
-            {
-                "name": tool.name,
-                "wire_name": tool.wire_name,
-                "description": tool.description,
-                # Literal key order: the provider sees the schema as written.
-                "parameters": tool.parameters,
-                "kind_class": tool.kind_class,
-                "daemon_kind": tool.daemon_kind,
-                "summary_template": tool.summary_template,
-                "egresses": tool.egresses,
-            }
-        )
+    def entry(tool) -> dict:
+        return {
+            "name": tool.name,
+            "wire_name": tool.wire_name,
+            "description": tool.description,
+            # Literal key order: the provider sees the schema as written.
+            "parameters": tool.parameters,
+            "kind_class": tool.kind_class,
+            "daemon_kind": tool.daemon_kind,
+            "summary_template": tool.summary_template,
+            "egresses": tool.egresses,
+            "reversible": tool.reversible,
+        }
+
+    entries = [entry(tool) for tool in tools.TOOL_CATALOG]
     aliases = {
         alias: entry.name
         for alias, entry in tools.TOOL_BY_NAME.items()
@@ -50,9 +50,15 @@ def document() -> dict:
         "tools": entries,
         "aliases": dict(sorted(aliases.items())),
         "skill_reference_index": tools.SKILL_REFERENCE_INDEX,
+        # Tool areas (#677): resolvable by name, offered per turn by the
+        # chat loop, never part of a capability pack.
+        "load_tools": entry(tools.LOAD_TOOLS_ENTRY),
+        "tool_area_index": tools.tool_area_index(),
         # Chat (R6-7): the product prompt and the page-metric definitions
         # the model reads, embedded as Python writes them.
         "system_prompt": prompt.DEFAULT_KASSIBER_SYSTEM_PROMPT,
+        # What a tool-enabled turn sends: the prompt with the area index.
+        "kassiber_system_prompt": prompt.KASSIBER_SYSTEM_PROMPT,
         "screen_metric_definitions": {
             "grouped": ui_snapshot.screen_context_metric_definitions(True),
             "ungrouped": ui_snapshot.screen_context_metric_definitions(False),
@@ -72,6 +78,15 @@ def document() -> dict:
             "skill_reference_names": list(tools.SKILL_REFERENCE_NAMES),
             "tool_profile_names": list(tools.TOOL_PROFILE_NAMES),
             "core_tool_names": sorted(tools.CORE_TOOL_NAMES),
+            "wallet_import_tool_names": sorted(tools.WALLET_IMPORT_TOOL_NAMES),
+            "chat_document_tool_names": sorted(tools.CHAT_DOCUMENT_TOOL_NAMES),
+            "chat_document_capability": tools.CHAT_DOCUMENT_CAPABILITY,
+            "tool_area_summaries": dict(tools.TOOL_AREA_SUMMARIES),
+            "load_tools_max_areas": tools.LOAD_TOOLS_MAX_AREAS,
+            # The Auto permission mode's classification, with each inverse.
+            "reversible_tools": dict(sorted(tools.REVERSIBLE_TOOLS.items())),
+            "permission_modes": list(daemon.AI_PERMISSION_MODES),
+            "permission_mode_decisions": dict(daemon._AI_MODE_DECISIONS),
             "review_tool_names": sorted(tools.REVIEW_TOOL_NAMES),
             "tool_capability_names": list(tools.TOOL_CAPABILITY_NAMES),
             "core_capability_tool_names": sorted(tools._CORE_TOOL_NAMES),

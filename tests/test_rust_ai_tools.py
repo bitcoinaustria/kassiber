@@ -961,6 +961,11 @@ REFUSED_MUTATIONS = {
     ("ui.source_funds.export", None),
     ("ui.btcpay.provenance.review", None),
     ("ui.wallets.sync", None),
+    ("ui.attachments.add_from_chat", None),
+    ("ui.imports.rollback", None),
+    ("ui.transfers.dismissals.delete", None),
+    ("ui.wallets.import_attachment.apply", None),
+    ("ui.wallets.import_document.apply", None),
 }
 
 
@@ -1081,7 +1086,21 @@ def mutating_requests(fixture, tool):
 
 
 # Read tools still answering `not_implemented` (crates/ai REFUSED_READS).
-REFUSED_READS = {"ui.connections.node.snapshot"}
+# Mirrors crates/ai REFUSED_READS: services other slices or later S12 steps
+# own.
+REFUSED_READS = {
+    "ui.connections.node.snapshot",
+    "ui.imports.list",
+    "ui.imports.rollback.plan",
+    "ui.journals.quarantine.groups",
+    "ui.transactions.verify",
+    "ui.transfers.dismissals.list",
+    "ui.visuals.render",
+    "ui.wallets.import_attachment.plan",
+    "ui.wallets.import_document.plan",
+    "ui.wallets.read_document",
+    "ui.wallets.request_input",
+}
 
 
 if __name__ == "__main__":

@@ -39,6 +39,9 @@ pub struct ToolEntry {
     pub summary_template: Option<String>,
     /// Independent of `kind_class`: does the tool leave the machine?
     pub egresses: bool,
+    /// `REVERSIBLE_TOOLS`: another AI tool can take the change back, so the
+    /// `auto` permission mode may approve it without asking.
+    pub reversible: bool,
 }
 
 impl ToolEntry {
@@ -68,6 +71,8 @@ impl ToolEntry {
 
 struct Catalog {
     tools: Vec<ToolEntry>,
+    /// `LOAD_TOOLS_ENTRY`: resolvable by name, never in `TOOL_CATALOG`.
+    load_tools: ToolEntry,
     by_name: HashMap<String, usize>,
     skill_reference_index: String,
 }
@@ -79,6 +84,27 @@ fn text(value: Option<&Value>) -> Option<String> {
     }
 }
 
+fn entry(entry: &Value) -> ToolEntry {
+    ToolEntry {
+        name: text(get(entry, "name")).expect("tool name"),
+        wire_name: text(get(entry, "wire_name")),
+        description: text(get(entry, "description")).expect("tool description"),
+        parameters: get(entry, "parameters").cloned().expect("tool parameters"),
+        kind_class: match text(get(entry, "kind_class")).as_deref() {
+            Some("read_only") => KindClass::ReadOnly,
+            Some("mutating") => KindClass::Mutating,
+            other => panic!("unknown kind_class {other:?}"),
+        },
+        daemon_kind: text(get(entry, "daemon_kind")),
+        summary_template: text(get(entry, "summary_template")),
+        egresses: matches!(get(entry, "egresses"), Some(Value::Bool(true))),
+        reversible: matches!(get(entry, "reversible"), Some(Value::Bool(true))),
+    }
+}
+
+/// The index `TOOL_BY_NAME` gives `LOAD_TOOLS_ENTRY`.
+const LOAD_TOOLS_INDEX: usize = usize::MAX;
+
 fn catalog() -> &'static Catalog {
     static CATALOG: OnceLock<Catalog> = OnceLock::new();
     CATALOG.get_or_init(|| {
@@ -86,30 +112,16 @@ fn catalog() -> &'static Catalog {
         let Some(Value::List(entries)) = get(&document, "tools") else {
             panic!("embedded catalog has no tools");
         };
-        let tools: Vec<ToolEntry> = entries
-            .iter()
-            .map(|entry| ToolEntry {
-                name: text(get(entry, "name")).expect("tool name"),
-                wire_name: text(get(entry, "wire_name")),
-                description: text(get(entry, "description")).expect("tool description"),
-                parameters: get(entry, "parameters").cloned().expect("tool parameters"),
-                kind_class: match text(get(entry, "kind_class")).as_deref() {
-                    Some("read_only") => KindClass::ReadOnly,
-                    Some("mutating") => KindClass::Mutating,
-                    other => panic!("unknown kind_class {other:?}"),
-                },
-                daemon_kind: text(get(entry, "daemon_kind")),
-                summary_template: text(get(entry, "summary_template")),
-                egresses: matches!(get(entry, "egresses"), Some(Value::Bool(true))),
-            })
-            .collect();
+        let tools: Vec<ToolEntry> = entries.iter().map(entry).collect();
+        let load_tools = entry(get(&document, "load_tools").expect("load_tools entry"));
         // `TOOL_BY_NAME`: name, then provider name, in catalog order (a
-        // later entry wins), then the legacy blockers alias.
+        // later entry wins), then `load_tools`, then the legacy blockers alias.
         let mut by_name = HashMap::new();
         for (index, tool) in tools.iter().enumerate() {
             by_name.insert(tool.name.clone(), index);
             by_name.insert(tool.provider_name().to_owned(), index);
         }
+        by_name.insert(load_tools.name.clone(), LOAD_TOOLS_INDEX);
         if let Some(Value::Dict(aliases)) = get(&document, "aliases") {
             for (alias, target) in aliases {
                 let (Key::Str(alias), Value::Str(target)) = (alias, target) else {
@@ -121,6 +133,7 @@ fn catalog() -> &'static Catalog {
         }
         Catalog {
             tools,
+            load_tools,
             by_name,
             skill_reference_index: text(get(&document, "skill_reference_index"))
                 .expect("skill reference index"),
@@ -136,10 +149,15 @@ pub fn tools() -> &'static [ToolEntry] {
 /// `get_tool(name)`: by name, provider name, or the one legacy alias.
 pub fn get_tool(name: &str) -> Option<&'static ToolEntry> {
     let catalog = catalog();
-    catalog
-        .by_name
-        .get(name)
-        .map(|&index| &catalog.tools[index])
+    catalog.by_name.get(name).map(|&index| match index {
+        LOAD_TOOLS_INDEX => &catalog.load_tools,
+        index => &catalog.tools[index],
+    })
+}
+
+/// `LOAD_TOOLS_ENTRY`.
+pub fn load_tools_entry() -> &'static ToolEntry {
+    &catalog().load_tools
 }
 
 /// `get_tool` for a model-supplied name that may hold surrogates (no tool

@@ -348,12 +348,12 @@
   {
     "id": "B-review-kind-override",
     "file": "crates/ai/src/review.rs",
-    "find": "        if kind == Some(&s(\"kind_override\")) {",
-    "replace": "        if kind == Some(&s(\"kind_override_x\")) {",
+    "find": "    [\"custody_component\", \"exclude\", \"price_override\", \"unpair\"];",
+    "replace": "    [\"custody_component\", \"exclude\", \"price_override\", \"pair\"];",
     "expect_failing": [
       "ai_review_operation_rules_match_python"
     ],
-    "rule": "AI review batches may not override acquisition effects."
+    "rule": "A restricted provider plans only the four restricted review operation types (#678)."
   },
   {
     "id": "B-review-conversion-activate",
@@ -609,8 +609,8 @@
   {
     "id": "R67-on-device-strip",
     "file": "crates/ai/src/chat/turn.rs",
-    "find": "let entries = strip_on_device_only(entries, on_device);",
-    "replace": "let entries = strip_on_device_only(entries, true);",
+    "find": "let mut entries = strip_on_device_only(entries, on_device);",
+    "replace": "let mut entries = strip_on_device_only(entries, true);",
     "expect_failing": [
       "on_device_tools_are_never_offered_to_other_providers"
     ],
@@ -1011,5 +1011,115 @@
       "display_reads_never_probe_and_cli_runtimes_go_through_the_broker"
     ],
     "rule": "A CLI connection test reports binary_presence when the broker's rows say so."
+  },
+  {
+    "id": "S12-review-full-access",
+    "file": "crates/ai/src/review.rs",
+    "find": "        if !full_access {",
+    "replace": "        if false {",
+    "expect_failing": [
+      "ai_review_operation_rules_match_python"
+    ],
+    "rule": "Only full agent access lifts the restricted review operation types."
+  },
+  {
+    "id": "S12-conversion-revision",
+    "file": "crates/ai/src/review.rs",
+    "find": "    if mode != \"conversion\" {",
+    "replace": "    if mode == \"conversion\" {",
+    "expect_failing": [
+      "ai_review_operation_rules_match_python"
+    ],
+    "rule": "An AI revision or activation never makes a conversion component effective."
+  },
+  {
+    "id": "S12-chat-document-pack",
+    "file": "crates/ai/src/select.rs",
+    "find": "        return BTreeSet::from([CHAT_DOCUMENT_CAPABILITY]);",
+    "replace": "        return BTreeSet::from([\"core\"]);",
+    "expect_failing": [
+      "tool_capabilities_match_python"
+    ],
+    "rule": "Chat-document tools belong to no capability pack the question selects."
+  },
+  {
+    "id": "S12-review-route",
+    "file": "crates/ai/src/select.rs",
+    "find": "    if route == \"/review\"",
+    "replace": "    if route == \"/reviewx\"",
+    "expect_failing": [
+      "selection_matches_python"
+    ],
+    "rule": "The Review screen selects the bounded review pack."
+  },
+  {
+    "id": "S12-load-tools-restricted",
+    "file": "crates/ai/src/executor.rs",
+    "find": "        crate::select::build_area_tools(&names, profile),\n        full_access(state),",
+    "replace": "        crate::select::build_area_tools(&names, profile),\n        true,",
+    "expect_failing": [
+      "load_tools_adds_requested_areas_only_when_offered"
+    ],
+    "rule": "load_tools never offers on-device-only tools to a restricted provider."
+  },
+  {
+    "id": "S12-load-tools-enabled",
+    "file": "crates/ai/src/executor.rs",
+    "find": "    if !enabled || !matches!(get(state, \"advertised_tools\"), Some(Value::List(_))) {",
+    "replace": "    if !matches!(get(state, \"advertised_tools\"), Some(Value::List(_))) {",
+    "expect_failing": [
+      "load_tools_adds_requested_areas_only_when_offered"
+    ],
+    "rule": "load_tools works only on turns that offered it."
+  },
+  {
+    "id": "S12-once-only-rollback",
+    "file": "crates/ai/src/consent.rs",
+    "find": "    \"ui.imports.rollback\",\n",
+    "replace": "    \"ui.imports.rollback.plan\",\n",
+    "expect_failing": [
+      "constants_match_python"
+    ],
+    "rule": "Each import rollback is its own plan-bound decision."
+  },
+  {
+    "id": "S12-planner-visuals",
+    "file": "crates/ai/src/planner.rs",
+    "find": "        plan.add(\"ui.visuals.render\", arguments);",
+    "replace": "        let _ = arguments;",
+    "expect_failing": [
+      "planner_matches_python"
+    ],
+    "rule": "A chart request plans the chart's local read."
+  },
+  {
+    "id": "S12-summary-group",
+    "file": "crates/ai/src/summary.rs",
+    "find": ".map(|group| Text::default().push(\"the root of \").py(&group).done())",
+    "replace": ".map(|group| Text::default().push(\"the group \").py(&group).done())",
+    "expect_failing": [
+      "summaries_match_python"
+    ],
+    "rule": "A group resolution names the group's root in its consent text."
+  },
+  {
+    "id": "S12-summary-unhashable",
+    "file": "crates/ai/src/summary.rs",
+    "find": "    if let Some(kind) = unhashable(action) {",
+    "replace": "    if let Some(kind) = None::<&str> {",
+    "expect_failing": [
+      "summaries_match_python"
+    ],
+    "rule": "An unhashable component action fails the turn as Python's summary does."
+  },
+  {
+    "id": "S12-prompt-area-index",
+    "file": "crates/ai/src/prompt.rs",
+    "find": "        Some(PromptKind::Kassiber) if tools_enabled => s(kassiber_system_prompt()),",
+    "replace": "        Some(PromptKind::Kassiber) if tools_enabled => s(default_system_prompt()),",
+    "expect_failing": [
+      "messages_gain_one_system_message"
+    ],
+    "rule": "A tool-enabled turn's prompt carries the tool-area index."
   }
 ]

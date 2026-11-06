@@ -22,6 +22,7 @@ use super::history::Persist;
 use super::registry::{ActiveChat, ActiveChats};
 use super::screen::{attachment_context_for_model, screen_context_for_model};
 use crate::broker::Locate;
+use crate::catalog::load_tools_entry;
 use crate::catalog::{get_tool_py, KindClass};
 use crate::consent::CONSENT_TIMEOUT;
 use crate::executor::{
@@ -526,6 +527,7 @@ impl Worker {
                 &self.turn.validated.messages,
                 kind,
                 self.turn.validated.system_prompt.as_ref(),
+                false,
             )?;
             if !host.emit(status("waiting_for_model", "Loading model")) {
                 return Err(Stop::Closed);
@@ -652,6 +654,7 @@ impl Worker {
             &validated.messages,
             validated.system_prompt_kind,
             validated.system_prompt.as_ref(),
+            true,
         )?;
         let mut screen_context = validated.screen_context.clone();
         if let Some(context @ Value::Dict(_)) = &screen_context {
@@ -710,8 +713,27 @@ impl Worker {
         }
         let on_device =
             get(&self.turn.state, "provider_on_device").is_some_and(kassiber_envelope::truthy);
-        let entries = strip_on_device_only(entries, on_device);
-        let tools: Vec<Value> = entries
+        let mut entries = strip_on_device_only(entries, on_device);
+        set(
+            &mut self.turn.state,
+            "tool_profile",
+            s(validated.tool_profile),
+        );
+        crate::pyval::pop(&mut self.turn.state, "pending_tool_definitions");
+        // `_ai_turn_can_load_tools`: an HTTP provider receives the tool list
+        // with every request, so an added area is offered on the next round;
+        // a broker agent fixes its catalog when the turn starts.
+        let loading =
+            !matches!(self.client, Some(ChatClient::Broker(_))) && validated.tool_profile != "full";
+        set(
+            &mut self.turn.state,
+            "load_tools_enabled",
+            Value::Bool(loading),
+        );
+        if loading {
+            entries.push(load_tools_entry());
+        }
+        let mut tools: Vec<Value> = entries
             .iter()
             .map(|entry| entry.to_responses_tool())
             .collect();
@@ -774,6 +796,13 @@ impl Worker {
                 finish_reason = Some("cancelled".into());
                 exhausted = false;
                 break;
+            }
+            // Schemas a `load_tools` call added last round; already
+            // authorized in `advertised_tools`, now offered to the model.
+            if let Value::List(pending) =
+                crate::pyval::pop(&mut self.turn.state, "pending_tool_definitions")
+            {
+                tools.extend(pending);
             }
             let client = self.client.as_mut().expect("client built");
             let leg = stream_leg(
@@ -871,7 +900,7 @@ impl Worker {
                                 ("name", Value::Str(display_name.clone())),
                                 (
                                     "summary",
-                                    Value::Str(summarize_tool_call(entry, &call.arguments)),
+                                    Value::Str(summarize_tool_call(entry, &call.arguments)?),
                                 ),
                                 ("arguments_preview", preview.clone()),
                             ]),

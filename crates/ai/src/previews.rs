@@ -17,20 +17,21 @@ use crate::summary::summarize_tool_call;
 use crate::ToolError;
 
 /// The consent card for `call`: `call_id`, `name`, `summary`,
-/// `arguments_preview` and, for `ui.review.apply`, `review_preview`.
+/// `arguments_preview` and, for `ui.review.apply`, `review_preview`. An
+/// error where Python's summary raises.
 pub fn consent_request(
     entry: &ToolEntry,
     call: &ParsedCall,
     runtime: &mut Runtime<'_>,
     host: &mut dyn ReadHost,
-) -> Value {
+) -> Result<Value, kassiber_envelope::AppError> {
     let arguments_preview = preview_arguments(entry, &call.arguments, runtime, host);
     let mut card = vec![
         (Key::from("call_id"), Value::Str(call.call_id.clone())),
         (Key::from("name"), s(entry.name.as_str())),
         (
             Key::from("summary"),
-            Value::Str(summarize_tool_call(entry, &call.arguments)),
+            Value::Str(summarize_tool_call(entry, &call.arguments)?),
         ),
         (Key::from("arguments_preview"), arguments_preview),
     ];
@@ -40,7 +41,7 @@ pub fn consent_request(
             review_preview(&call.arguments, runtime, host),
         ));
     }
-    Value::Dict(card)
+    Ok(Value::Dict(card))
 }
 
 /// `preview_arguments`: the redacted arguments, or for acquisition and
@@ -173,8 +174,8 @@ fn dataset_preview(arguments: &Value, runtime: &mut Runtime<'_>, host: &mut dyn 
 /// `_ai_review_consent_preview(runtime, arguments)`: the accounting effects
 /// are recomputed, never taken from the model.
 fn review_preview(arguments: &Value, runtime: &mut Runtime<'_>, host: &mut dyn ReadHost) -> Value {
-    let result = scoped(runtime, host, &mut |book, _| {
-        book.review_consent_preview(arguments)
+    let result = scoped(runtime, host, &mut |book, state| {
+        book.review_consent_preview(arguments, crate::executor::full_access(state))
     });
     match result {
         Ok(preview) => preview,

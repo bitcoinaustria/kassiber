@@ -63,8 +63,29 @@ pub const REFUSED_EXPORTS: [&str; 7] = [
 ];
 
 /// Mutating tools whose service is not native yet, with the work that owns it.
-pub const REFUSED_MUTATIONS: [(&str, &str); 1] =
-    [("ui.btcpay.provenance.review", "commercial evidence review")];
+pub const REFUSED_MUTATIONS: [(&str, &str); 6] = [
+    ("ui.btcpay.provenance.review", "commercial evidence review"),
+    (
+        "ui.attachments.add_from_chat",
+        "the chat attachments (main-sync S12)",
+    ),
+    (
+        "ui.imports.rollback",
+        crate::executor::ATTACHMENT_IMPORT_OWNER,
+    ),
+    (
+        "ui.transfers.dismissals.delete",
+        "main-sync S6 (transfer dismissals)",
+    ),
+    (
+        "ui.wallets.import_attachment.apply",
+        crate::executor::ATTACHMENT_IMPORT_OWNER,
+    ),
+    (
+        "ui.wallets.import_document.apply",
+        crate::executor::DOCUMENT_IMPORT_OWNER,
+    ),
+];
 
 fn refuse_export(kind: &str) -> Result<(), ToolError> {
     if REFUSED_EXPORTS.contains(&kind) {
@@ -469,11 +490,13 @@ fn mutate(
                 ))
             })
         }
-        "ui.review.apply" | "ui.journals.quarantine.resolve" => {
-            scoped(runtime, host, &mut |book, _| {
-                Ok(envelope(kind, book.mutate(kind, arguments, "ai_tool")?))
-            })
-        }
+        "ui.review.apply" => scoped(runtime, host, &mut |book, state| {
+            let full_access = crate::executor::full_access(state);
+            Ok(envelope(kind, book.review(kind, arguments, full_access)?))
+        }),
+        "ui.journals.quarantine.resolve" => scoped(runtime, host, &mut |book, _| {
+            Ok(envelope(kind, book.mutate(kind, arguments, "ai_tool")?))
+        }),
         "ui.rates.rebuild" | "ui.rates.latest" | "ui.maintenance.configure" => {
             scoped(runtime, host, &mut |book, _| {
                 Ok(envelope(kind, book.mutate(kind, arguments, "gui")?))

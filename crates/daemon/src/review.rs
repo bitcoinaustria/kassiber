@@ -38,18 +38,48 @@ fn fields(kind: &str) -> (&'static [&'static str], &'static [&'static str]) {
 }
 
 pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<Value, AppError> {
-    execute_as(book, kind, args, "gui")
+    execute_as(book, kind, args, "gui", false)
+}
+
+/// The AI rules' `TypeError` (an unhashable operation type or action), which
+/// the AI executor answers as an unexpected failure.
+fn ai_rules(error: kassiber_ai::ToolError) -> AppError {
+    match error {
+        kassiber_ai::ToolError::App(error) => error,
+        _ => AppError::new("internal_error", "review operation check failed"),
+    }
+}
+
+/// `get_component(conn, id, profile_id=..., include_local_evidence=False)`
+/// for the AI conversion checks.
+fn component(book: &mut dyn Book, id: &str) -> Result<Value, AppError> {
+    crate::transfers::execute(
+        book,
+        "ui.transfers.components.get",
+        Some(&dict([("component_id", s(id))])),
+    )
+}
+
+fn validate_ai_operations(
+    book: &mut dyn Book,
+    operations: Option<&Value>,
+    full_access: bool,
+) -> Result<(), AppError> {
+    let mut lookup = |id: &str| component(&mut *book, id);
+    kassiber_ai::review::validate_operations(operations, full_access, Some(&mut lookup))
+        .map_err(ai_rules)
 }
 
 /// `_review_workflow_payload(..., authored_source=...)`. An `ai_tool` call
 /// stores a redacted explanation, may only plan or apply operations within
-/// the AI's own authority, and gets a plan back only if it can be sent to the
-/// provider unchanged.
+/// the AI's own authority (`full_access` is the provider's agent access),
+/// and gets a plan back only if it can be sent to the provider unchanged.
 pub fn execute_as(
     book: &mut dyn Book,
     kind: &str,
     args: Option<&Value>,
     source: &str,
+    full_access: bool,
 ) -> Result<Value, AppError> {
     let empty = dict::<&str>([]);
     let args = args.filter(|v| !matches!(v, Value::Null)).unwrap_or(&empty);
@@ -88,22 +118,18 @@ pub fn execute_as(
         ),
         "ui.review.receipt" => {
             let receipt = book.review(&operation, args, source)?;
-            let overrides = matches!(
-                kassiber_envelope::get(&receipt, "proposed_operations"),
-                Some(Value::List(operations)) if operations.iter().any(|operation| {
-                    kassiber_envelope::get(operation, "type") == Some(&s("kind_override"))
-                })
-            );
-            if overrides {
+            if !full_access
+                && kassiber_ai::review::receipt_restricted(&receipt).map_err(ai_rules)?
+            {
                 return Err(AppError::new(
-                    "interaction_required",
-                    "Acquisition effect receipts are local desktop/CLI only",
+                    "agent_access_restricted",
+                    "This review receipt is unavailable while this provider's agent access is restricted",
                 ));
             }
             Ok(receipt)
         }
         _ => {
-            kassiber_ai::review::validate_operations(kassiber_ai::review::operations(args))?;
+            validate_ai_operations(book, kassiber_ai::review::operations(args), full_access)?;
             let payload = book.review(&operation, args, source)?;
             if kind == "ui.review.plan" {
                 kassiber_ai::review::check_planned_artifact(&payload)?;
@@ -117,13 +143,17 @@ pub fn execute_as(
 /// before an AI `ui.review.apply` are recomputed here, never taken from the
 /// model's artifact. A receipt under the same idempotency key reads as
 /// already applied.
-pub fn consent_preview(book: &mut dyn Book, arguments: &Value) -> Result<Value, AppError> {
+pub fn consent_preview(
+    book: &mut dyn Book,
+    arguments: &Value,
+    full_access: bool,
+) -> Result<Value, AppError> {
     use kassiber_envelope::{get, truthy};
     let artifact = match get(arguments, "artifact") {
         Some(artifact @ Value::Dict(_)) => artifact.clone(),
         _ => return Err(AppError::new("validation", "Review artifact is required")),
     };
-    kassiber_ai::review::validate_operations(get(&artifact, "operations"))?;
+    validate_ai_operations(book, get(&artifact, "operations"), full_access)?;
     book.resolve_scope(None, None)?;
     if let Some(key) = get(arguments, "idempotency_key").filter(|key| truthy(key)) {
         match book.review(

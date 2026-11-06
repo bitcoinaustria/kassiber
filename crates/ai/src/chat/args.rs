@@ -13,7 +13,7 @@ use crate::redact::redact_tool_arguments;
 use crate::select::{select_tool_capabilities, TOOL_CAPABILITY_NAMES, TOOL_PROFILE_NAMES};
 
 /// `_AI_SCREEN_ROUTES`, sorted.
-pub const SCREEN_ROUTES: [&str; 25] = [
+pub const SCREEN_ROUTES: [&str; 26] = [
     "/",
     "/activity",
     "/assistant",
@@ -33,6 +33,7 @@ pub const SCREEN_ROUTES: [&str; 25] = [
     "/quarantine",
     "/reconcile",
     "/reports",
+    "/review",
     "/settings",
     "/source-of-funds",
     "/swaps",

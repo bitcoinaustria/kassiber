@@ -109,7 +109,23 @@ impl Book for FakeBook {
             .into()),
         }
     }
-    fn review_consent_preview(&mut self, _arguments: &Value) -> Result<Value, ToolError> {
+    fn review(
+        &mut self,
+        kind: &str,
+        arguments: &Value,
+        _full_access: bool,
+    ) -> Result<Value, ToolError> {
+        // Review kinds are `ai_tool`-authored reads and writes.
+        if kind == "ui.review.apply" {
+            return self.mutate(kind, arguments, "ai_tool");
+        }
+        self.read(kind, arguments, "ai_tool")
+    }
+    fn review_consent_preview(
+        &mut self,
+        _arguments: &Value,
+        _full_access: bool,
+    ) -> Result<Value, ToolError> {
         self.reads.push("review.preview".into());
         Ok(dict([("status", s("ready"))]))
     }
@@ -189,6 +205,112 @@ fn only_tools_advertised_this_turn_run() {
     assert_eq!(fake.visits, 2);
     // Without a list, direct callers keep the catalog allowlist.
     assert!(is_advertised(get_tool("status").unwrap(), &empty()));
+}
+
+fn names(value: Option<&Value>) -> Vec<String> {
+    match value {
+        Some(Value::List(items)) => items
+            .iter()
+            .map(|item| match item {
+                Value::Str(text) => text.as_str().unwrap().to_owned(),
+                other => panic!("{other:?}"),
+            })
+            .collect(),
+        other => panic!("{other:?}"),
+    }
+}
+
+#[test]
+fn load_tools_adds_requested_areas_only_when_offered() {
+    let mut fake = book();
+    let areas = |areas: &[&str]| {
+        dict([(
+            "areas",
+            Value::List(areas.iter().map(|area| s(*area)).collect()),
+        )])
+    };
+    // A broker turn (or `full`) never enables loading.
+    let mut state = dict([("advertised_tools", Value::List(vec![s("load_tools")]))]);
+    let denied = run(
+        &mut fake,
+        &mut state,
+        "load_tools",
+        areas(&["loans"]),
+        false,
+    );
+    assert_eq!(reason(&denied).as_deref(), Some("tool_not_advertised"));
+    let enabled = |profile: &str, on_device: bool| {
+        dict([
+            ("advertised_tools", Value::List(vec![s("load_tools")])),
+            ("load_tools_enabled", Value::Bool(true)),
+            ("tool_profile", s(profile)),
+            ("provider_on_device", Value::Bool(on_device)),
+        ])
+    };
+    let mut state = enabled("scoped", false);
+    let loaded = run(
+        &mut fake,
+        &mut state,
+        "load_tools",
+        areas(&["loans", "loans"]),
+        false,
+    );
+    let data = get(get(&loaded, "envelope").unwrap(), "data").unwrap();
+    assert_eq!(names(get(data, "areas")), ["loans"]);
+    let added = names(get(data, "added_tools"));
+    let loans: Vec<&str> = tools()
+        .iter()
+        .filter(|tool| tool.name.starts_with("ui.loans."))
+        .map(|tool| tool.provider_name())
+        .collect();
+    assert_eq!(added, loans);
+    assert_eq!(get(data, "already_offered"), Some(&Value::from(0)));
+    let mut advertised = vec!["load_tools".to_owned()];
+    advertised.extend(added.iter().cloned());
+    assert_eq!(names(get(&state, "advertised_tools")), advertised);
+    assert!(
+        matches!(get(&state, "pending_tool_definitions"), Some(Value::List(pending)) if pending.len() == loans.len())
+    );
+    // Loading again adds nothing new.
+    let again = run(
+        &mut fake,
+        &mut state,
+        "load_tools",
+        areas(&["loans"]),
+        false,
+    );
+    let data = get(get(&again, "envelope").unwrap(), "data").unwrap();
+    assert!(names(get(data, "added_tools")).is_empty());
+    assert_eq!(
+        get(data, "already_offered"),
+        Some(&Value::from(loans.len()))
+    );
+    // A restricted provider never gets the on-device-only tools.
+    for on_device in [false, true] {
+        let mut state = enabled("scoped", on_device);
+        let loaded = run(
+            &mut fake,
+            &mut state,
+            "load_tools",
+            areas(&["privacy"]),
+            false,
+        );
+        let data = get(get(&loaded, "envelope").unwrap(), "data").unwrap();
+        let added = names(get(data, "added_tools"));
+        assert_eq!(added.iter().any(|name| on_device_only(name)), on_device);
+    }
+    // The `core` profile keeps its own limit.
+    let mut state = enabled("core", true);
+    let loaded = run(
+        &mut fake,
+        &mut state,
+        "load_tools",
+        areas(&["loans"]),
+        false,
+    );
+    let data = get(get(&loaded, "envelope").unwrap(), "data").unwrap();
+    assert!(names(get(data, "added_tools")).is_empty());
+    assert_eq!(fake.visits, 0);
 }
 
 #[test]
@@ -369,7 +491,17 @@ fn no_shell_filesystem_secret_or_configuration_tool_exists() {
                         "ui.wallets.utxos",
                         "ui.wallets.identify",
                         "ui.wallets.analyze_file",
-                        "ui.wallets.sync"
+                        "ui.wallets.sync",
+                        // Rows from an attached file or document into a file
+                        // wallet (kind custom): no descriptor, backend or key.
+                        "ui.wallets.import_attachment.plan",
+                        "ui.wallets.import_attachment.apply",
+                        "ui.wallets.import_document.plan",
+                        "ui.wallets.import_document.apply",
+                        "ui.wallets.read_document",
+                        // A desktop handoff card naming a source kind; the
+                        // user enters the source in the wizard.
+                        "ui.wallets.request_input"
                     ]
                     .contains(&kind),
                     "{kind} configures sources"
@@ -1078,7 +1210,7 @@ fn consent_previews_never_write() {
             data_root: "/data",
             state: &mut state,
         };
-        let card = consent_request(entry, &call, &mut runtime, &mut fake);
+        let card = consent_request(entry, &call, &mut runtime, &mut fake).unwrap();
         assert_eq!(get(&card, "call_id"), Some(&s("call_1")), "{name}");
         if name.starts_with("ui.chain_analysis.") {
             // Other providers never see a recomputed acquisition or dataset.

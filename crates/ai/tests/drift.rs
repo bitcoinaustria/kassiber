@@ -11,8 +11,9 @@ use kassiber_ai::planner::{
 };
 use kassiber_ai::redact::SENSITIVE_ARGUMENT_KEY_PARTS;
 use kassiber_ai::select::{
-    CORE_CAPABILITY_TOOL_NAMES, CORE_TOOL_NAMES, REVIEW_TOOL_NAMES, TOOL_CAPABILITY_NAMES,
-    TOOL_PROFILE_NAMES,
+    CHAT_DOCUMENT_CAPABILITY, CHAT_DOCUMENT_TOOL_NAMES, CORE_CAPABILITY_TOOL_NAMES,
+    CORE_TOOL_NAMES, REVIEW_TOOL_NAMES, TOOL_CAPABILITY_NAMES, TOOL_PROFILE_NAMES,
+    WALLET_IMPORT_TOOL_NAMES,
 };
 use kassiber_ai::skills::{read_skill_reference, SKILL_REFERENCE_NAMES};
 use kassiber_ai::{get_tool, tools, KindClass};
@@ -62,6 +63,33 @@ fn constants_match_python() {
     assert_eq!(names("tool_profile_names"), TOOL_PROFILE_NAMES);
     assert_eq!(names("tool_capability_names"), TOOL_CAPABILITY_NAMES);
     assert_eq!(names("core_tool_names"), sorted(&CORE_TOOL_NAMES));
+    assert_eq!(
+        names("wallet_import_tool_names"),
+        sorted(&WALLET_IMPORT_TOOL_NAMES)
+    );
+    assert_eq!(
+        names("chat_document_tool_names"),
+        sorted(&CHAT_DOCUMENT_TOOL_NAMES)
+    );
+    assert_eq!(
+        constant("chat_document_capability"),
+        kassiber_envelope::s(CHAT_DOCUMENT_CAPABILITY)
+    );
+    let Value::Dict(areas) = constant("tool_area_summaries") else {
+        panic!("tool_area_summaries")
+    };
+    let areas: Vec<&str> = areas
+        .iter()
+        .map(|(key, _)| match key {
+            kassiber_pyjson::Key::Str(key) => key.as_str().unwrap(),
+            other => panic!("{other:?}"),
+        })
+        .collect();
+    // Every loadable area is a capability pack.
+    assert!(areas
+        .iter()
+        .all(|area| TOOL_CAPABILITY_NAMES.contains(area)));
+    assert_eq!(areas.len(), 11);
     assert_eq!(names("review_tool_names"), sorted(&REVIEW_TOOL_NAMES));
     assert_eq!(
         names("core_capability_tool_names"),
@@ -98,12 +126,12 @@ fn constants_match_python() {
 
 #[test]
 fn embedded_catalog_has_every_definition() {
-    assert_eq!(tools().len(), 161);
+    assert_eq!(tools().len(), 176);
     let reads = tools()
         .iter()
         .filter(|tool| tool.kind_class == KindClass::ReadOnly)
         .count();
-    assert_eq!(reads, 100);
+    assert_eq!(reads, 110);
     let egressing: Vec<&str> = tools()
         .iter()
         .filter(|tool| tool.egresses)
@@ -114,10 +142,42 @@ fn embedded_catalog_has_every_definition() {
         [
             "ui.reports.lightning_profitability",
             "ui.connections.node.snapshot",
+            "ui.rates.rebuild",
+            "ui.wallets.sync",
+            "ui.maintenance.run",
+            "ui.wallets.read_document",
+            "ui.rates.latest",
             "ui.chain_analysis.acquire.apply",
             "ui.chain_analysis.sources.run",
         ]
     );
+    // `REVERSIBLE_TOOLS` is the one place reversibility is assigned.
+    let Value::Dict(reversible) = constant("reversible_tools") else {
+        panic!("reversible_tools")
+    };
+    let mut marked: Vec<&str> = tools()
+        .iter()
+        .filter(|tool| tool.reversible)
+        .map(|tool| tool.name.as_str())
+        .collect();
+    marked.sort();
+    let listed: Vec<String> = reversible
+        .iter()
+        .map(|(key, _)| match key {
+            kassiber_pyjson::Key::Str(key) => key.as_str().unwrap().to_owned(),
+            other => panic!("{other:?}"),
+        })
+        .collect();
+    assert_eq!(marked, listed);
+    assert_eq!(marked.len(), 19);
+    for tool in tools().iter().filter(|tool| tool.reversible) {
+        assert_eq!(tool.kind_class, KindClass::Mutating, "{}", tool.name);
+    }
+    // `load_tools` resolves by name but is never part of a pack.
+    let load_tools = kassiber_ai::catalog::load_tools_entry();
+    assert!(std::ptr::eq(get_tool("load_tools").unwrap(), load_tools));
+    assert!(tools().iter().all(|tool| tool.name != "load_tools"));
+    assert_eq!(load_tools.kind_class, KindClass::ReadOnly);
     for tool in tools() {
         assert!(
             std::ptr::eq(get_tool(&tool.name).unwrap(), tool),
@@ -218,6 +278,12 @@ fn chat_constants_match_python() {
         get(&catalog_document(), "system_prompt"),
         Some(&kassiber_envelope::s(
             kassiber_ai::prompt::default_system_prompt()
+        ))
+    );
+    assert_eq!(
+        get(&catalog_document(), "kassiber_system_prompt"),
+        Some(&kassiber_envelope::s(
+            kassiber_ai::prompt::kassiber_system_prompt()
         ))
     );
 }

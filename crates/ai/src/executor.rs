@@ -23,10 +23,11 @@ use crate::ToolError;
 
 /// `_AI_AUTO_JOURNAL_REFRESH_TOOL_NAMES`: reads that rebuild stale journals
 /// first, unless the caller disabled read maintenance (MCP).
-pub const AUTO_JOURNAL_REFRESH_TOOLS: [&str; 20] = [
+pub const AUTO_JOURNAL_REFRESH_TOOLS: [&str; 22] = [
     "ui.audit.changes_since_last_answer",
     "ui.audit.evidence.summary",
     "ui.journals.quarantine",
+    "ui.journals.quarantine.groups",
     "ui.journals.snapshot",
     "ui.journals.transfers.list",
     "ui.next_actions",
@@ -43,6 +44,8 @@ pub const AUTO_JOURNAL_REFRESH_TOOLS: [&str; 20] = [
     "ui.review.worklist",
     "ui.transactions.review_context",
     "ui.transfers.review_context",
+    // Only for the report sources (`_ai_read_wants_maintenance`).
+    "ui.visuals.render",
     "ui.workspace.health",
 ];
 
@@ -59,10 +62,34 @@ pub const LOCAL_CUSTODY_READ_KINDS: [&str; 6] = [
 
 /// Read tools refused until the service behind them is native, with the
 /// work that owns it (design doc §2).
-pub const REFUSED_READS: [(&str, &str); 1] = [(
-    "ui.connections.node.snapshot",
-    "the Lightning node snapshot route",
-)];
+pub const REFUSED_READS: [(&str, &str); 11] = [
+    (
+        "ui.connections.node.snapshot",
+        "the Lightning node snapshot route",
+    ),
+    ("ui.imports.list", ATTACHMENT_IMPORT_OWNER),
+    ("ui.imports.rollback.plan", ATTACHMENT_IMPORT_OWNER),
+    (
+        "ui.journals.quarantine.groups",
+        "main-sync S5 (quarantine root causes)",
+    ),
+    ("ui.transactions.verify", "main-sync S8 (row verification)"),
+    (
+        "ui.transfers.dismissals.list",
+        "main-sync S6 (transfer dismissals)",
+    ),
+    ("ui.visuals.render", "the chat visuals (main-sync S12)"),
+    ("ui.wallets.import_attachment.plan", ATTACHMENT_IMPORT_OWNER),
+    ("ui.wallets.import_document.plan", DOCUMENT_IMPORT_OWNER),
+    ("ui.wallets.read_document", DOCUMENT_IMPORT_OWNER),
+    ("ui.wallets.request_input", ATTACHMENT_IMPORT_OWNER),
+];
+
+/// Who owns importing an attached file and its rollback.
+pub const ATTACHMENT_IMPORT_OWNER: &str = "the chat attachment import (main-sync S12)";
+
+/// Who owns reading an attached photo or PDF and importing its rows.
+pub const DOCUMENT_IMPORT_OWNER: &str = "the chat document import (main-sync S12)";
 
 /// Reads whose payload carries a `safety` block that reports whether the
 /// read prelude contacted the network.
@@ -252,8 +279,22 @@ pub trait Book {
     fn dataset_preview(&mut self, _arguments: &Value) -> Result<Value, ToolError> {
         Err(not_native("ui.chain_analysis.datasets.import", "this book").into())
     }
+    /// `_review_workflow_payload(..., authored_source="ai_tool",
+    /// full_access=...)`: the review kinds with the AI rules applied.
+    fn review(
+        &mut self,
+        kind: &str,
+        _arguments: &Value,
+        _full_access: bool,
+    ) -> Result<Value, ToolError> {
+        Err(not_native(kind, "this book").into())
+    }
     /// `_ai_review_consent_preview`'s scoped body.
-    fn review_consent_preview(&mut self, _arguments: &Value) -> Result<Value, ToolError> {
+    fn review_consent_preview(
+        &mut self,
+        _arguments: &Value,
+        _full_access: bool,
+    ) -> Result<Value, ToolError> {
         Err(not_native("ui.review.apply", "this book").into())
     }
     /// `append_assistance_record(...)` then `commit()`.
@@ -389,6 +430,9 @@ fn read(
             ("envelope", success("read_skill_reference", reference)),
         ])));
     }
+    if call.name.is(LOAD_TOOLS_NAME) {
+        return Ok(load_tool_areas(call, runtime.state));
+    }
     let Some(kind) = entry.daemon_kind.as_deref() else {
         return Ok(tool_result_denied("tool_not_allowed", None));
     };
@@ -480,6 +524,88 @@ fn read(
     };
     let result = host.on_request_loop(&mut work)?;
     Ok(redact_ai_tool_result(&result))
+}
+
+/// `LOAD_TOOLS_NAME`.
+pub const LOAD_TOOLS_NAME: &str = "load_tools";
+
+/// `_ai_full_access(runtime)`: this turn's access mode; absent (a direct or
+/// MCP caller) is restricted.
+pub fn full_access(state: &Value) -> bool {
+    get(state, "provider_full_access") == Some(&Value::Bool(true))
+        || get(state, "provider_on_device") == Some(&Value::Bool(true))
+}
+
+/// `_load_tool_areas_for_ai(call, runtime)`: the requested areas' schemas
+/// are authorized now and offered from the next round. Python returns this
+/// result unredacted; it names tools only.
+fn load_tool_areas(call: &ParsedCall, state: &mut Value) -> Value {
+    let enabled = get(state, "load_tools_enabled").is_some_and(kassiber_envelope::truthy);
+    if !enabled || !matches!(get(state, "advertised_tools"), Some(Value::List(_))) {
+        return tool_result_denied("tool_not_advertised", None);
+    }
+    let mut areas: Vec<Value> = Vec::new();
+    if let Some(Value::List(requested)) = get(&call.arguments, "areas") {
+        for area in requested {
+            if !areas.contains(area) {
+                areas.push(area.clone());
+            }
+        }
+    }
+    let names: Vec<&str> = areas
+        .iter()
+        .filter_map(|area| match area {
+            Value::Str(area) => area.as_str(),
+            _ => None,
+        })
+        .collect();
+    let profile = match get(state, "tool_profile") {
+        Some(Value::Str(profile)) => profile.as_str(),
+        _ => None,
+    };
+    let definitions = crate::select::strip_on_device_only(
+        crate::select::build_area_tools(&names, profile),
+        full_access(state),
+    );
+    let Some(Value::List(advertised)) = get(state, "advertised_tools") else {
+        unreachable!("checked above");
+    };
+    let added: Vec<&ToolEntry> = definitions
+        .iter()
+        .copied()
+        .filter(|tool| {
+            !advertised
+                .iter()
+                .any(|name| matches!(name, Value::Str(name) if name.is(tool.provider_name())))
+        })
+        .collect();
+    let added_names: Vec<Value> = added.iter().map(|tool| s(tool.provider_name())).collect();
+    let mut advertised = advertised.clone();
+    advertised.extend(added_names.iter().cloned());
+    kassiber_envelope::set(state, "advertised_tools", Value::List(advertised));
+    let mut pending = match crate::pyval::pop(state, "pending_tool_definitions") {
+        Value::List(pending) => pending,
+        _ => Vec::new(),
+    };
+    pending.extend(added.iter().map(|tool| tool.to_responses_tool()));
+    kassiber_envelope::set(state, "pending_tool_definitions", Value::List(pending));
+    dict([
+        ("ok", Value::Bool(true)),
+        (
+            "envelope",
+            success(
+                LOAD_TOOLS_NAME,
+                dict([
+                    ("areas", Value::List(areas)),
+                    ("added_tools", Value::List(added_names)),
+                    (
+                        "already_offered",
+                        Value::Int((definitions.len() - added.len()).into()),
+                    ),
+                ]),
+            ),
+        ),
+    ])
 }
 
 /// `_sync_payload_has_errors(payload)`: the refresh failed, or a source did.

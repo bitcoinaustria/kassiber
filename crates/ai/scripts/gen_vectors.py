@@ -388,7 +388,13 @@ def summary_cases():
             arguments_list += [{"link": "l", "state": "reviewed"}, {"link": "l"}]
         seen: dict[str, int] = {}
         for arguments in arguments_list:
-            summary = tools.summarize_tool_call(tool, arguments)
+            try:
+                summary = tools.summarize_tool_call(tool, arguments)
+            except TypeError:
+                # Python reference bug: a list or dict `action` is hashed
+                # before the schema is checked, and the chat turn fails.
+                cases.append({"tool": tool.name, "arguments": arguments, "exception": "TypeError"})
+                continue
             # Three witnesses per distinct summary are enough.
             seen[summary] = seen.get(summary, 0) + 1
             if seen[summary] <= 3:
@@ -622,8 +628,45 @@ def review_operation_cases():
         [{"type": "custody_component", "request": {"components": [{**conversion, "conversion_reviewed": True}], "activate": False}}],
         [{"type": "custody_component", "request": {"action": "create", "components": [{}, conversion, {"conservation_mode": ""}], "activate": 0}}],
         [{"type": "custody_component", "request": {"components": [{"conservation_mode": "conversion", "conversion_reviewed": 1}], "activate": False}}],
+        # Agent access (#678) and component revisions (#679).
+        [{"type": None}],
+        [{"type": "pair"}],
+        [{"type": "unpair"}, {"type": "price_override"}, {"type": "accept_coarse_prices"}],
+        [{"type": "custody_component", "request": "x"}],
+        [{"type": "custody_component", "request": {"action": "supersede", "component_id": "conv"}}],
+        [{"type": "custody_component", "request": {"action": 5}}],
+        [{"type": "custody_component", "request": {"action": "revise", "component_id": "qty", "spec": {}}}],
+        [{"type": "custody_component", "request": {"action": "revise", "component_id": " conv ", "spec": {}}}],
+        [{"type": "custody_component", "request": {"action": "revise", "component_id": "conv", "spec": {"conversion_reviewed": False}}}],
+        [{"type": "custody_component", "request": {"action": "revise", "component_id": "conv", "spec": {"conversion_reviewed": False}, "activate": True}}],
+        [{"type": "custody_component", "request": {"action": "revise", "component_id": "conv", "spec": {"conversion_reviewed": True}}}],
+        [{"type": "custody_component", "request": {"action": "revise", "component_id": "missing", "spec": {}}}],
+        [{"type": "custody_component", "request": {"action": "revise", "component_id": 7, "spec": {}}}],
+        [{"type": "custody_component", "request": {"action": "revise", "spec": {"conservation_mode": "conversion", "conversion_reviewed": 0}}}],
+        [{"type": "custody_component", "request": {"action": "revise", "spec": {"conservation_mode": "", "conversion_reviewed": True}}}],
+        [{"type": "custody_component", "request": {"action": "revise", "spec": "x"}}],
+        [{"type": "custody_component", "request": {"action": "activate", "component_id": "conv"}}],
+        [{"type": "custody_component", "request": {"action": "activate", "component_id": "qty"}}],
     ]
-    return [{"operations": value, "outcome": outcome(daemon._validate_ai_review_operations, copy.deepcopy(value))} for value in values]
+    components = {"conv": {"conservation_mode": "conversion"}, "qty": {"conservation_mode": "quantity"}}
+
+    def get_component(conn, component_id, **kwargs):
+        if component_id not in components:
+            raise AppError("custody component was not found", code="not_found")
+        return dict(components[component_id])
+
+    cases = []
+    with mock.patch.object(daemon, "resolve_scope", lambda *args: (None, {"id": "p"})), \
+            mock.patch.object(daemon.core_custody_components, "get_component", get_component):
+        for value in values:
+            for full_access in (False, True):
+                cases.append({
+                    "operations": value,
+                    "full_access": full_access,
+                    "outcome": outcome(daemon._validate_ai_review_operations, copy.deepcopy(value),
+                                       full_access=full_access, conn=object()),
+                })
+    return cases
 
 
 def planned_artifact_cases():

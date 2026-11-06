@@ -167,9 +167,24 @@ impl AiBook for HostBook<'_> {
             .map_err(tool_error)
     }
 
-    fn review_consent_preview(&mut self, arguments: &Value) -> Result<Value, ToolError> {
+    fn review(
+        &mut self,
+        kind: &str,
+        arguments: &Value,
+        full_access: bool,
+    ) -> Result<Value, ToolError> {
         let book = self.daemon.book_mut().map_err(tool_error)?;
-        crate::review::consent_preview(book.as_mut(), arguments).map_err(tool_error)
+        crate::review::execute_as(book.as_mut(), kind, Some(arguments), "ai_tool", full_access)
+            .map_err(tool_error)
+    }
+
+    fn review_consent_preview(
+        &mut self,
+        arguments: &Value,
+        full_access: bool,
+    ) -> Result<Value, ToolError> {
+        let book = self.daemon.book_mut().map_err(tool_error)?;
+        crate::review::consent_preview(book.as_mut(), arguments, full_access).map_err(tool_error)
     }
 
     fn append_custody_audit(&mut self, audit: &Value) -> Result<Value, ToolError> {
@@ -237,7 +252,14 @@ fn native_mutate(
         _ => {}
     }
     if crate::review::KINDS.contains(&kind) {
-        return crate::review::execute_as(daemon.book_mut()?.as_mut(), kind, Some(args), source);
+        // AI review calls reach `HostBook::review`; restricted otherwise.
+        return crate::review::execute_as(
+            daemon.book_mut()?.as_mut(),
+            kind,
+            Some(args),
+            source,
+            false,
+        );
     }
     if crate::transfers::KINDS.contains(&kind) {
         return crate::transfers::execute_as(daemon.book_mut()?.as_mut(), kind, Some(args), source);
@@ -385,7 +407,7 @@ fn native_read(
         return crate::metadata::execute(daemon.book_mut()?.as_mut(), kind, args);
     }
     if crate::review::KINDS.contains(&kind) {
-        return crate::review::execute_as(daemon.book_mut()?.as_mut(), kind, args, source);
+        return crate::review::execute_as(daemon.book_mut()?.as_mut(), kind, args, source, false);
     }
     if crate::transfers::KINDS.contains(&kind) {
         return crate::transfers::execute_as(daemon.book_mut()?.as_mut(), kind, args, source);

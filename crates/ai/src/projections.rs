@@ -695,7 +695,7 @@ pub fn read_for_ai(
         // operation authority checks, plans that must reach the provider
         // unchanged, no acquisition-effect receipts).
         "ui.review.cases" | "ui.review.request_input" | "ui.review.plan" | "ui.review.receipt" => {
-            book.read(kind, arguments, "ai_tool")
+            book.review(kind, arguments, crate::executor::full_access(state))
         }
         _ if kind.starts_with("ui.chain_analysis.") => {
             chain_analysis_for_ai(kind, arguments, state, book)

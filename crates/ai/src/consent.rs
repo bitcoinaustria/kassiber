@@ -17,19 +17,23 @@ const POLL: Duration = Duration::from_millis(250);
 
 /// `AI_TOOL_ONCE_ONLY_CONSENT`: tools whose "allow for this chat" means
 /// "allow once".
-pub const ONCE_ONLY_CONSENT: [&str; 10] = [
+pub const ONCE_ONLY_CONSENT: [&str; 13] = [
     "ui.chain_analysis.acquire.apply",
     "ui.chain_analysis.datasets.import",
     "ui.chain_analysis.datasets.import.start",
     "ui.chain_analysis.sources.authorize",
     "ui.chain_analysis.sources.run",
     "ui.custody.review.apply",
+    // Each import and each rollback is its own plan-bound decision.
+    "ui.imports.rollback",
     "ui.journals.quarantine.resolve",
     // Changes standing egress policy: one session grant must not keep
     // re-flipping it.
     "ui.maintenance.configure",
     "ui.review.apply",
     "ui.transfers.components.apply",
+    "ui.wallets.import_attachment.apply",
+    "ui.wallets.import_document.apply",
 ];
 
 /// Whether a session grant for `tool` is never remembered.

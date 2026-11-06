@@ -173,8 +173,15 @@ fn redaction_matches_python() {
 fn summaries_match_python() {
     for case in section("summaries") {
         let tool = get_tool(text(field(case, "tool"))).unwrap();
-        let have = Value::Str(summarize_tool_call(tool, field(case, "arguments")));
-        assert_eq!(&have, field(case, "summary"), "{case:?}");
+        match summarize_tool_call(tool, field(case, "arguments")) {
+            Ok(summary) => assert_eq!(&Value::Str(summary), field(case, "summary"), "{case:?}"),
+            // Python raises TypeError; the chat turn ends with internal_error.
+            Err(error) => {
+                assert_eq!(field(case, "exception"), &s("TypeError"), "{case:?}");
+                assert_eq!(error.code, "internal_error");
+                assert!(error.message.starts_with("unhashable type: '"), "{error:?}");
+            }
+        }
     }
 }
 
@@ -300,17 +307,27 @@ fn value_outcome(result: Result<Value, ToolError>, expected: &Value) -> Value {
     }
 }
 
-fn app(result: Result<(), AppError>) -> Result<(), ToolError> {
-    result.map_err(ToolError::App)
-}
-
 #[test]
 fn ai_review_operation_rules_match_python() {
     use kassiber_ai::review::validate_operations;
     for case in section("review_operations") {
         let operations = field(case, "operations");
         let operations = (!matches!(operations, Value::Null)).then_some(operations);
-        let have = outcome(app(validate_operations(operations)));
+        let full_access = field(case, "full_access") == &Value::Bool(true);
+        // The generator's book: two components and nothing else.
+        let mut lookup = |id: &str| match id {
+            "conv" => Ok(dict([("conservation_mode", s("conversion"))])),
+            "qty" => Ok(dict([("conservation_mode", s("quantity"))])),
+            _ => Err(AppError::new(
+                "not_found",
+                "custody component was not found",
+            )),
+        };
+        let have = outcome(validate_operations(
+            operations,
+            full_access,
+            Some(&mut lookup),
+        ));
         assert_eq!(&have, field(case, "outcome"), "{case:?}");
     }
 }

@@ -181,6 +181,200 @@ fn balance_history_interval(text: &str) -> &'static str {
     }
 }
 
+/// `_CHART_WORDS`.
+const CHART_WORDS: [&str; 15] = [
+    "chart",
+    "charts",
+    "plot",
+    "diagram",
+    "diagrams",
+    "diagramm",
+    "diagramme",
+    "grafik",
+    "schaubild",
+    "visualize",
+    "visualise",
+    "visualization",
+    "visualisation",
+    "visualisiere",
+    "visualisieren",
+];
+
+/// `_SHOW_TRANSACTIONS_RE`.
+fn show_transactions() -> &'static Regex {
+    static PATTERN: OnceLock<Regex> = OnceLock::new();
+    PATTERN.get_or_init(|| {
+        pyre::compile(
+            r"\b(show|list|display|zeig\w*|liste\w*|anzeigen)\b.*\b(transactions?|payments?|transaktion\w*|zahlung\w*|buchungen)\b",
+        )
+    })
+}
+
+/// `_planned_chat_visuals(text)`: visuals the user asked for by name, drawn
+/// even if the model calls no tool.
+fn planned_chat_visuals(text: &str) -> Vec<Value> {
+    let mut planned = Vec::new();
+    if has_any(
+        text,
+        &[
+            "dashboard",
+            "overview",
+            "übersicht",
+            "uebersicht",
+            "überblick",
+            "ueberblick",
+            "how am i doing",
+            "wie stehe ich",
+            "wie steht es",
+        ],
+    ) && !has_any(text, &["workspace overview", "all books", "alle bücher"])
+    {
+        planned.push(dict([("source", s("overview"))]));
+    }
+    if has_any(
+        text,
+        &[
+            "checklist",
+            "what needs attention",
+            "what is missing",
+            "what's missing",
+            "ready for tax",
+            "ready to file",
+            "was fehlt",
+            "was ist zu tun",
+            "checkliste",
+        ],
+    ) {
+        planned.push(dict([("source", s("readiness"))]));
+    }
+    if show_transactions().is_match(text).unwrap_or(false)
+        && !has_any(text, &["graph", "flow", "fluss"])
+    {
+        let mut args = vec![(Key::from("source"), s("transactions"))];
+        if has_any(
+            text,
+            &["largest", "biggest", "größte", "groesste", "höchste"],
+        ) {
+            args.push((Key::from("sort"), s("largest")));
+        } else if has_any(text, &["smallest", "kleinste"]) {
+            args.push((Key::from("sort"), s("smallest")));
+        } else if has_any(text, &["oldest", "first", "älteste", "aelteste", "erste"]) {
+            args.push((Key::from("sort"), s("oldest")));
+        }
+        if has_any(
+            text,
+            &[
+                "incoming",
+                "received",
+                "deposit",
+                "eingang",
+                "eingänge",
+                "erhalten",
+            ],
+        ) {
+            args.push((Key::from("direction"), s("inbound")));
+        } else if has_any(
+            text,
+            &[
+                "outgoing",
+                "sent",
+                "paid",
+                "spent",
+                "ausgang",
+                "ausgänge",
+                "bezahlt",
+            ],
+        ) {
+            args.push((Key::from("direction"), s("outbound")));
+        }
+        planned.push(Value::Dict(args));
+    }
+    let graph_word = has_token(text, &["graph", "graphs"])
+        && !has_any(
+            text,
+            &[
+                "ownership",
+                "evidence",
+                "chain analysis",
+                "chain-analysis",
+                "cluster",
+                "privacy",
+            ],
+        );
+    if !(has_token(text, &CHART_WORDS) || graph_word) {
+        return planned;
+    }
+    let wants_tax = has_any(text, &["tax", "steuer", "gain", "gewinn", "verlust"]);
+    let wants_portfolio = has_any(
+        text,
+        &[
+            "portfolio",
+            "holding",
+            "allocation",
+            "per wallet",
+            "by wallet",
+            "bestand",
+            "bestände",
+            "bestaende",
+            "verteilung",
+            "aufteilung",
+        ],
+    );
+    let wants_flow = has_any(
+        text,
+        &[
+            "cash flow",
+            "cashflow",
+            "inflow",
+            "outflow",
+            "income",
+            "spending",
+            "received and sent",
+            "in and out",
+            "einnahmen",
+            "ausgaben",
+            "zuflüsse",
+            "abflüsse",
+        ],
+    );
+    let wants_balance = has_any(
+        text,
+        &[
+            "balance",
+            "saldo",
+            "over time",
+            "history",
+            "verlauf",
+            "trend",
+            "entwicklung",
+            "growth",
+            "wachstum",
+        ],
+    );
+    let about_transaction = has_any(
+        text,
+        &["transaction", "transaktion", "txid", "input", "output"],
+    ) || has_token(text, &["tx"]);
+    if wants_tax {
+        planned.push(dict([("source", s("tax_summary"))]));
+    }
+    if wants_portfolio {
+        planned.push(dict([("source", s("portfolio"))]));
+    }
+    if wants_flow {
+        planned.push(dict([("source", s("cash_flow"))]));
+    }
+    if wants_balance
+        || !(wants_tax || wants_portfolio || wants_flow || about_transaction || !planned.is_empty())
+    {
+        planned.push(dict([
+            ("source", s("balance_history")),
+            ("interval", s(balance_history_interval(text))),
+        ]));
+    }
+    planned
+}
+
 /// `_latest_user_message_content(messages)`.
 pub fn latest_user_message(messages: &[Value]) -> PyStr {
     for message in messages.iter().rev() {
@@ -669,6 +863,10 @@ pub fn planned_auto_reads(system_prompt_kind: Option<&str>, messages: &[Value]) 
                 ("limit", int(120)),
             ]),
         );
+    }
+
+    for arguments in planned_chat_visuals(text) {
+        plan.add("ui.visuals.render", arguments);
     }
 
     if has_any(
