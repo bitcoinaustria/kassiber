@@ -367,6 +367,15 @@ delta with `amount_includes_fee=true`, keeps the whole transaction fee only as
 graph evidence, and lets transfer/custody conservation require an explicit
 component rather than charging the entire fee to one participant.
 
+An explicit (unblinded) output paid to a wallet script has a public amount
+and asset. LWK 0.18.0 lists it among the transaction's owned outputs, and its
+later spend among the owned inputs, but leaves it out of `WalletTx.balance()`
+and `Wollet.utxos()`. Kassiber adds those explicit owned amounts back into the
+per-asset wallet delta and publishes an unspent explicit output in the
+inventory with `raw.confidential=false`, so it is booked like a confidential
+receipt or spend. A book synced before this correction is repaired by the next
+ordinary sync, which re-projects every wollet transaction.
+
 Elements consensus values are stored as integer 1e-8 base units for every
 asset; Kassiber preserves that canonical unit even when an issued asset has
 separate display metadata. The pinned binding declares
