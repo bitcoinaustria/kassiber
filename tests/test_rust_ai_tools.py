@@ -29,6 +29,8 @@ import sys
 import tempfile
 import unittest
 
+from tests.rust_desktop_parity import BOOK_TABLES
+
 ROOT = Path(__file__).resolve().parent.parent
 RUST_BIN = os.environ.get("KASSIBER_RUST_BIN")
 REFERENCE = ROOT / "tests" / "rust_ai_tool_reference.py"
@@ -473,13 +475,13 @@ class AiToolExecutorParityTest(unittest.TestCase):
         try:
             tables = sorted(row[0] for row in conn.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"))
-            self.assertEqual(len(tables), 112)
+            self.assertEqual(tables, BOOK_TABLES)
             return {table: sorted(conn.execute(f'SELECT * FROM "{table}"').fetchall(), key=repr) for table in tables}
         finally:
             conn.close()
 
     def compare_writes(self, fixture, requests, seed, unchanged=False):
-        """Envelope and model bytes per call, then all 112 tables, on copies."""
+        """Envelope and model bytes per call, then every book table, on copies."""
         if not requests:
             return []
         base = Path(tempfile.mkdtemp(prefix="writes-", dir=self.base))
@@ -526,7 +528,7 @@ class AiToolExecutorParityTest(unittest.TestCase):
         return [json.loads(line) for line in actual[1:-1]]
 
     def test_mutating_tools_match_python_on_every_fixture(self):
-        """Every mutating tool: whole envelope and all 112 tables after the calls."""
+        """Every mutating tool: whole envelope and every book table after the calls."""
         from concurrent.futures import ThreadPoolExecutor
         from kassiber.ai.tools import TOOL_CATALOG
 
@@ -562,6 +564,31 @@ class AiToolExecutorParityTest(unittest.TestCase):
                 with self.subTest(fixture=fixture, tool=name):
                     self.compare_writes(fixture, compared, seed)
                     self.assertEqual(refused, [])
+
+    def test_wire_name_reads_refresh_stale_journals(self):
+        """tests/rust_port/repro_ai_refresh_wire_name.py: a model calls tools by
+        wire name; the stale-journal refresh decides on the catalog entry, so
+        ``ui_reports_summary`` rebuilds journals as ``ui.reports.summary`` does."""
+        from kassiber.ai.tools import get_tool
+
+        ids = FIXTURE_IDS["reports"]
+        state = {**REMOTE, "scope_workspace_id": ids["ws"], "scope_profile_id": ids["profile"]}
+        # ui.review.worklist also refreshes, but its badges still lack main
+        # #707's fields in Rust (slice S4), so it is not compared here.
+        for name in ("ui.reports.summary", "ui.overview.snapshot", "ui.reports.balance_sheet"):
+            tool = get_tool(name)
+            for called in (tool.provider_name, tool.name):
+                with self.subTest(called=called):
+                    seed = self.base / "stale" / called / "seed"
+                    shutil.copytree(self.seed("reports"), seed)
+                    with closing(sqlite3.connect(seed / "kassiber.sqlite3")) as conn, conn:
+                        conn.execute("UPDATE profiles SET journal_input_version=journal_input_version+1 WHERE id=?",
+                                     (ids["profile"],))
+                    requests = [{"kind": "test.ai_tool", "args": {
+                        "name": called, "arguments": {},
+                        "state": copy.deepcopy(state), "call_id": "call_x"}}]
+                    records = self.compare_writes("reports", requests, seed)
+                    self.assertIn("auto_journal_process", json.dumps(records[0]), called)
 
     def test_custody_writes_are_audited_or_rolled_back(self):
         """Consented custody writes commit with their audit row; refused ones

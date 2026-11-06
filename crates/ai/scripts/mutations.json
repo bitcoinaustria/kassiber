@@ -1051,5 +1051,15 @@
       "tests/test_rust_ai_chat.py::RustAiChatParityTest::test_broker_chat_tool_round_and_resumed_cursor"
     ],
     "rule": "A tool-free turn looks its cursor up by the transcript before the new prompt."
+  },
+  {
+    "id": "A-refresh-wire-name",
+    "file": "crates/ai/src/executor.rs",
+    "find": "    let refresh = AUTO_JOURNAL_REFRESH_TOOLS.contains(&entry.name.as_str())",
+    "replace": "    let refresh = AUTO_JOURNAL_REFRESH_TOOLS.iter().any(|name| call.name.is(name))",
+    "expect_failing": [
+      "wire_name_reads_refresh_like_catalog_names"
+    ],
+    "rule": "A read called by its wire name refreshes stale journals like its catalog name."
   }
 ]
