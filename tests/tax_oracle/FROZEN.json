@@ -3,7 +3,7 @@
   "files": {
     "adapter.py": {
       "source": "kassiber/core/engines/rp2.py",
-      "sha256": "737997108336965670dfff4ef74ff25d89009cc895fb3b9d72e5b9568d81fdaa"
+      "sha256": "4ebe52040e46441755035b8bdc1d9a0d97a2b3e88afdfbceffec1876ffe3bd77"
     },
     "austrian.py": {
       "source": "kassiber/core/austrian.py",
