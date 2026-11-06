@@ -4739,6 +4739,9 @@ def summarize_tool_call(tool: ToolEntry, arguments: dict[str, Any]) -> str:
         "ui.transfers.components.apply",
     }:
         action = arguments.get("action", "create")
+        if not isinstance(action, str):
+            # Refused before any consent card; the summary keys on the action.
+            raise AppError("Custody component review action is unsupported", code="validation")
         if action != "create":
             target = arguments.get("component_id")
             component = (

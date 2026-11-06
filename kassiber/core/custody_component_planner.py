@@ -1127,6 +1127,8 @@ def _component_review_arguments(
     activate: bool | None,
     reason: str | None,
 ) -> dict[str, Any]:
+    if not isinstance(action, str):
+        raise _error("Custody component review action is unsupported")
     if action not in COMPONENT_REVIEW_ACTIONS:
         raise _error("Custody component review action is unsupported", action=action)
     if reason is not None and not isinstance(reason, str):
