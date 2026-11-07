@@ -48,6 +48,9 @@ impl FakeProvider {
                     }
                     Err(_) => break,
                 };
+                // macOS hands out accepted sockets in the listener's
+                // non-blocking mode; Linux does not.
+                let _ = stream.set_nonblocking(false);
                 let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
                 let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
                 let mut bytes = Vec::new();
@@ -144,6 +147,9 @@ impl FakeElectrum {
                     Err(_) => return,
                 }
             };
+            // macOS hands out accepted sockets in the listener's
+            // non-blocking mode; Linux does not.
+            let _ = stream.set_nonblocking(false);
             let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
             let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
             let mut reader = BufReader::new(stream);
