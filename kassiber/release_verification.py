@@ -29,6 +29,7 @@ import tempfile
 from pathlib import Path
 from typing import Iterable
 
+from .durable_sync import full_fsync
 from .errors import AppError
 from .update_check import _has_exact_schema_version, parse_version
 
@@ -1001,7 +1002,7 @@ def generate_release_manifest(
         with temporary.open("x", encoding="utf-8", newline="\n") as handle:
             handle.writelines(lines)
             handle.flush()
-            os.fsync(handle.fileno())
+            full_fsync(handle.fileno())
         os.replace(temporary, output)
     except OSError as exc:
         try:

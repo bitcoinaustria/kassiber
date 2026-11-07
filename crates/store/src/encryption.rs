@@ -217,6 +217,8 @@ fn open_container_inner(path: &Path, pass: Option<&str>, backup: bool) -> Result
     conn.busy_timeout(BUSY_TIMEOUT).map_err(map_sqlite_error)?;
     if let Some(pass) = pass {
         apply_keying(&conn, pass)?;
+    } else {
+        crate::apply_durability(&conn)?;
     }
     let logging: Option<String> = if backup {
         let previous = conn

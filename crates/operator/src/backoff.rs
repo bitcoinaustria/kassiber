@@ -183,10 +183,34 @@ impl AuthAttemptBackoff {
         let mut temporary = path.as_os_str().to_owned();
         temporary.push(".tmp");
         let temporary = PathBuf::from(temporary);
-        if std::fs::write(&temporary, text.as_bytes()).is_ok() {
-            let _ = std::fs::rename(&temporary, path);
+        // Python writes and renames without syncing; a deadline that a power
+        // loss could roll back would reopen the throttle, so flush both.
+        if write_synced(&temporary, text.as_bytes()).is_ok()
+            && std::fs::rename(&temporary, path).is_ok()
+        {
+            if let Some(parent) = path.parent() {
+                let _ = sync_directory(parent);
+            }
         }
     }
+}
+
+fn write_synced(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+    let mut file = std::fs::File::create(path)?;
+    file.write_all(bytes)?;
+    #[cfg(test)]
+    tests::SYNCED.with(|synced| synced.borrow_mut().push(path.to_owned()));
+    file.sync_all()
+}
+
+/// `sync_all` is `F_FULLFSYNC` on macOS. Directory syncs are a no-op on Windows.
+fn sync_directory(path: &Path) -> std::io::Result<()> {
+    #[cfg(test)]
+    tests::SYNCED.with(|synced| synced.borrow_mut().push(path.to_owned()));
+    #[cfg(not(windows))]
+    std::fs::File::open(path)?.sync_all()?;
+    Ok(())
 }
 
 /// `int(value)` for a JSON value, `default` when missing; `None` where
@@ -221,6 +245,31 @@ fn python_float(value: Option<&Value>) -> Option<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    thread_local! {
+        /// Files and directories this test thread flushed, in order.
+        pub(super) static SYNCED: std::cell::RefCell<Vec<PathBuf>> =
+            const { std::cell::RefCell::new(Vec::new()) };
+    }
+
+    #[test]
+    fn persisted_counters_are_synced_before_and_after_the_rename() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("config").join(AUTH_BACKOFF_FILENAME);
+        let backoff = AuthAttemptBackoff::new(Some(path.clone()));
+        SYNCED.with(|synced| synced.borrow_mut().clear());
+        backoff.record_failure();
+        let mut temporary = path.as_os_str().to_owned();
+        temporary.push(".tmp");
+        assert_eq!(
+            SYNCED.with(|synced| synced.take()),
+            vec![PathBuf::from(temporary), root.path().join("config")]
+        );
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            "{\"failures\": 1, \"locked_until\": 0.0}\n"
+        );
+    }
 
     #[test]
     fn three_failures_start_a_persisted_backoff() {

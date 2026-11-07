@@ -13,6 +13,8 @@ import stat
 import tempfile
 from pathlib import Path
 
+from .durable_sync import full_fsync, sync_directory
+
 
 def atomic_write_private(destination: Path, text: str) -> None:
     """Atomically replace `destination` with owner-only (0600) UTF-8 content."""
@@ -33,8 +35,9 @@ def atomic_write_private(destination: Path, text: str) -> None:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             handle.write(text)
             handle.flush()
-            os.fsync(handle.fileno())
+            full_fsync(handle.fileno())
         os.replace(temporary, destination)
+        sync_directory(destination.parent)
     finally:
         try:
             temporary.unlink()

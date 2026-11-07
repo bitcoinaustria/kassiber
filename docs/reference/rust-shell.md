@@ -18147,3 +18147,33 @@ shared build disk.
 `crates/store/scripts/symlink_mutation_check.py` runs the 17 entries of
 `symlink_mutations.json` over the store unit tests that pin each resolution
 step and each refusal kept; all 17 are killed.
+
+## macOS durability follow-ups (2026-11-07)
+
+From the native Mac validation (`macos-validation.md`, A8). SQLite commits on
+macOS now use `F_FULLFSYNC` in both runtimes; see
+[database compatibility](database-compatibility.md#macos-full-sync-durability).
+Write paths that skipped a sync now take one:
+
+| Path | Python | Rust |
+| --- | --- | --- |
+| Machine preferences (`private_files.atomic_write_private`, `layout::write_private_preference`) | directory sync added | directory sync added |
+| `settings.json` | directory sync added | already synced (`durable::atomic_write`) |
+| Project catalog | file and directory sync added | already synced |
+| Legacy project staging copy | whole staged tree synced before the publishing rename | already synced |
+| `secrets init` publication | candidate and directory synced before the renames, directory after; a new empty encrypted book is synced | already synced |
+| Backup export | directory sync added after the rename | directory sync added after the rename |
+| `auth_backoff.json` | unchanged: no syncs | temporary file and directory synced (stricter; a lost deadline would reopen the throttle) |
+| In-place report exporters (commercial subledger CSV, Lightning CSV, cross-check XLSX) | unchanged: plain write | the finished regular file and its directory are synced; FIFOs and devices are written but not synced |
+
+Deliberate differences: Python's `full_fsync` falls back to `fsync` when a file
+system refuses `F_FULLFSYNC`, as SQLite does; Rust's `sync_all` returns the
+error. Output bytes, envelopes and stored data are unchanged everywhere. The
+Rust syncs are recorded on the test thread by a `cfg(test)` seam
+(`SYNCED_DIRECTORIES`/`SYNCED`) and pinned by
+`private_preferences_and_exports_sync_their_directory`,
+`published_archives_sync_their_directory_after_the_rename`,
+`persisted_counters_are_synced_before_and_after_the_rename` and
+`in_place_exports_are_flushed_but_special_files_are_not`. The three report
+call sites themselves have no unit test of their own; the helper they share does.
+

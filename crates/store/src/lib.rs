@@ -271,7 +271,9 @@ pub mod test_hooks {
     }
 }
 use kassiber_ownership::{CanonicalProject, OwnerNamespace};
-use kassiber_paths::{canonicalize_allow_missing, looks_like_plaintext, resolve_database_path};
+use kassiber_paths::{
+    canonicalize_allow_missing, looks_like_plaintext, resolve_database_path, Platform,
+};
 pub use kassiber_paths::{Context as PathContext, Error, ErrorKind, Result};
 pub use rusqlite;
 use rusqlite::{
@@ -825,7 +827,38 @@ fn apply_keying(conn: &Connection, passphrase: &str) -> Result<()> {
     conn.execute_batch(&sql).map_err(map_sqlite_error)?;
     // SQLCipher 4.10 defaults authentication failures to stderr. Keep the
     // machine protocol quiet; the caller returns the redacted typed refusal.
-    conn.execute_batch("PRAGMA cipher_log_level = NONE; PRAGMA cipher_compatibility = 4; PRAGMA kdf_iter = 256000; PRAGMA cipher_page_size = 4096;").map_err(map_sqlite_error)
+    conn.execute_batch("PRAGMA cipher_log_level = NONE; PRAGMA cipher_compatibility = 4; PRAGMA kdf_iter = 256000; PRAGMA cipher_page_size = 4096;").map_err(map_sqlite_error)?;
+    apply_durability(conn)
+}
+
+/// On macOS `fsync` leaves commits in the drive's cache; these make SQLite
+/// commits and WAL checkpoints use `F_FULLFSYNC`. Python's
+/// `durable_sync.apply_sqlite_durability` sets the same flags on the same
+/// connections: every book open, every keyed open and the plaintext
+/// migration source. Per connection, covering attached databases; stored
+/// bytes are unchanged.
+pub(crate) fn apply_durability(conn: &Connection) -> Result<()> {
+    conn.execute_batch(durability_pragmas(durability_platform()))
+        .map_err(map_sqlite_error)
+}
+fn durability_pragmas(platform: Platform) -> &'static str {
+    match platform {
+        Platform::Macos => "PRAGMA fullfsync = ON; PRAGMA checkpoint_fullfsync = ON;",
+        Platform::Linux | Platform::Windows => "",
+    }
+}
+#[cfg(not(test))]
+fn durability_platform() -> Platform {
+    Platform::current()
+}
+#[cfg(test)]
+thread_local! {
+    /// Unit tests run the macOS branch on any host through this seam.
+    static DURABILITY_PLATFORM: std::cell::Cell<Option<Platform>> = const { std::cell::Cell::new(None) };
+}
+#[cfg(test)]
+fn durability_platform() -> Platform {
+    DURABILITY_PLATFORM.with(|p| p.get()).unwrap_or_else(Platform::current)
 }
 
 /// Authenticate a throwaway read-only connection without migration or journal
@@ -940,7 +973,8 @@ fn configure_pragmas(conn: &Connection, encrypted: bool) -> Result<()> {
     } else {
         "PRAGMA mmap_size = 268435456;"
     })
-    .map_err(map_sqlite_error)
+    .map_err(map_sqlite_error)?;
+    apply_durability(conn)
 }
 fn transition_journal_settings<'a>(
     version: &str,
@@ -980,6 +1014,65 @@ pub fn map_sqlite_error(error: rusqlite::Error) -> Error {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn durability(conn: &Connection) -> (i64, i64) {
+        (
+            conn.query_row("PRAGMA fullfsync", [], |r| r.get(0)).unwrap(),
+            conn.query_row("PRAGMA checkpoint_fullfsync", [], |r| r.get(0))
+                .unwrap(),
+        )
+    }
+    fn as_platform<T>(platform: Platform, body: impl FnOnce() -> T) -> T {
+        DURABILITY_PLATFORM.with(|p| p.set(Some(platform)));
+        let result = body();
+        DURABILITY_PLATFORM.with(|p| p.set(None));
+        result
+    }
+
+    /// Mirrors `tests/test_durable_sync.py`: book opens, keyed SQLCipher opens
+    /// and the plaintext migration source all flush with `F_FULLFSYNC` on macOS.
+    #[test]
+    fn macos_connections_set_both_fullfsync_pragmas() {
+        let root = tempfile::tempdir().unwrap();
+        as_platform(Platform::Macos, || {
+            let plain = Book::create(&root.path().join("plain"), None).unwrap();
+            assert_eq!(durability(plain.connection()), (1, 1));
+            let encrypted =
+                Book::create(&root.path().join("encrypted"), Some("Synthetic passphrase 1"))
+                    .unwrap();
+            assert_eq!(durability(encrypted.connection()), (1, 1));
+            let source = encryption::open_container(plain.database(), None).unwrap();
+            assert_eq!(durability(&source), (1, 1));
+            let keyed = encryption::open_container(
+                encrypted.database(),
+                Some("Synthetic passphrase 1"),
+            )
+            .unwrap();
+            assert_eq!(durability(&keyed), (1, 1));
+        });
+    }
+
+    /// Without the seam the host decides: the Mac agent's run checks macOS.
+    #[test]
+    fn the_host_platform_decides_the_pragmas() {
+        let root = tempfile::tempdir().unwrap();
+        let book = Book::create(&root.path().join("host"), None).unwrap();
+        let expected = if cfg!(target_os = "macos") { (1, 1) } else { (0, 0) };
+        assert_eq!(durability(book.connection()), expected);
+    }
+
+    #[test]
+    fn other_platforms_keep_sqlite_defaults() {
+        let root = tempfile::tempdir().unwrap();
+        for platform in [Platform::Linux, Platform::Windows] {
+            as_platform(platform, || {
+                let book = Book::create(&root.path().join(format!("{platform:?}")), None).unwrap();
+                assert_eq!(durability(book.connection()), (0, 0));
+                let source = encryption::open_container(book.database(), None).unwrap();
+                assert_eq!(durability(&source), (0, 0));
+            });
+        }
+    }
     #[test]
     fn in_memory_accounting_clone_remains_supported_with_full_synchronous() {
         let source = Connection::open_in_memory().unwrap();

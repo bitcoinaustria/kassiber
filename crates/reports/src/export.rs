@@ -78,6 +78,38 @@ fn file_entry(file: &PublishedFile) -> Value {
     ])
 }
 
+/// Write `bytes` like `fs::write` (create or truncate in place), then flush
+/// the file: these reference exporters keep Python's direct write but must
+/// not lose a finished artifact to a crash.
+pub(crate) fn write_synced(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+    let mut file = std::fs::File::create(path)?;
+    file.write_all(bytes)?;
+    sync_written(&file, path)
+}
+
+/// Flush a file written in place to the device (`F_FULLFSYNC` on macOS), then
+/// its directory entry. Only regular files: a FIFO or device the user named
+/// has nothing to flush. The directory sync is best effort, as Python's
+/// `_fsync_csv_directory` is where the file system refuses it.
+pub(crate) fn sync_written(file: &std::fs::File, path: &Path) -> std::io::Result<()> {
+    if !file.metadata()?.is_file() {
+        return Ok(());
+    }
+    #[cfg(test)]
+    tests::SYNCED.with(|synced| synced.borrow_mut().push(path.to_owned()));
+    file.sync_all()?;
+    #[cfg(not(windows))]
+    if let Ok(directory) = std::fs::File::open(
+        path.parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or(Path::new(".")),
+    ) {
+        let _ = directory.sync_all();
+    }
+    Ok(())
+}
+
 /// Path.mkdir(parents=True, exist_ok=True), retaining the actual failing
 /// ancestor in the error rather than substituting the final artifact path.
 pub(crate) fn create_directory(path: &Path) -> Result<()> {
@@ -226,6 +258,25 @@ pub fn export_with(
 mod tests {
     use super::*;
     use kassiber_store::rusqlite;
+
+    thread_local! {
+        /// Files `sync_written` flushed on this test thread.
+        pub(crate) static SYNCED: std::cell::RefCell<Vec<PathBuf>> =
+            const { std::cell::RefCell::new(Vec::new()) };
+    }
+
+    #[test]
+    fn in_place_exports_are_flushed_but_special_files_are_not() {
+        let root = tempfile::tempdir().unwrap();
+        let file = root.path().join("artifact.csv");
+        std::fs::write(&file, b"previous, longer content").unwrap();
+        SYNCED.with(|synced| synced.borrow_mut().clear());
+        write_synced(&file, b"a,b\r\n").unwrap();
+        assert_eq!(std::fs::read(&file).unwrap(), b"a,b\r\n");
+        #[cfg(unix)]
+        write_synced(Path::new("/dev/null"), b"discarded").unwrap();
+        assert_eq!(SYNCED.with(|synced| synced.take()), vec![file]);
+    }
 
     struct Fixed(String);
     impl Sources for Fixed {

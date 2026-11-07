@@ -16,6 +16,7 @@ import stat
 import tempfile
 from typing import Callable
 
+from ..durable_sync import full_fsync
 from ..errors import AppError
 
 JOURNAL = ".restore-pending.json"
@@ -61,7 +62,7 @@ def _sync(path: Path) -> None:
     if os.name != "nt":
         fd = os.open(path, os.O_RDONLY)
         try:
-            os.fsync(fd)
+            full_fsync(fd)
         finally:
             os.close(fd)
 
@@ -71,7 +72,7 @@ def _tree_sync(path: Path, observe: Observer) -> None:
         _reject_links(item)
         if item.is_file():
             with item.open("rb") as handle:
-                os.fsync(handle.fileno())
+                full_fsync(handle.fileno())
             observe(f"restore.copy_sync.{item.relative_to(path).as_posix()}")
     for directory in sorted((p for p in path.rglob("*") if p.is_dir()), reverse=True):
         _sync(directory)
@@ -86,7 +87,7 @@ def _publish(state: Path, journal: dict, observe: Observer) -> None:
         try:
             handle.write((json.dumps(journal, sort_keys=True) + "\n").encode())
             handle.flush()
-            os.fsync(handle.fileno())
+            full_fsync(handle.fileno())
             observe(f"restore.{journal['phase']}.journal_sync")
             os.replace(temporary, state / JOURNAL)
             observe(f"restore.{journal['phase']}.journal_replace")

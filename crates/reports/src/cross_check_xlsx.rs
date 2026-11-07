@@ -61,7 +61,7 @@ pub(super) fn publish(
     )?;
     let bytes = kassiber_xlsx::render(&document(report, created, lang)?)
         .map_err(|e| AppError::new("internal_error", e.to_string()))?;
-    std::fs::write(path, &bytes).map_err(|e| export::io_error(e, Some(path)))?;
+    export::write_synced(path, &bytes).map_err(|e| export::io_error(e, Some(path)))?;
     let absolute = path
         .canonicalize()
         .map_err(|e| export::io_error(e, Some(path)))?;

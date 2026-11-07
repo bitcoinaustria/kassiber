@@ -124,7 +124,7 @@ pub(super) fn export(conn: &Connection, args: &Value) -> Result<Value> {
     )?;
     // This reference exporter uses an ordinary text file, with no saved report
     // marker or staging file. Preserve its path spelling, including relatives.
-    std::fs::write(path, artifact_csv::encode(&csv))
+    super::export::write_synced(path, &artifact_csv::encode(&csv))
         .map_err(|e| super::export::io_error(e, Some(path)))?;
     Ok(dict([
         ("file", s(path.to_string_lossy().into_owned())),

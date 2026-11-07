@@ -37,6 +37,7 @@ from .db import (
     resolve_database_path,
     resolve_effective_state_root,
 )
+from .durable_sync import full_fsync, sync_directory, sync_tree
 from .errors import AppError
 from .secrets.sqlcipher import looks_like_plaintext_sqlite
 
@@ -321,9 +322,12 @@ def write_catalog(catalog: dict[str, Any], path: str | Path | None = None) -> Pa
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             handle.write(json.dumps(normalized, indent=2, sort_keys=True) + "\n")
+            handle.flush()
+            full_fsync(handle.fileno())
         _chmod_best_effort(tmp_path, 0o600)
         tmp_path.replace(cpath)
         _chmod_best_effort(cpath, 0o600)
+        sync_directory(cpath.parent)
     except Exception:
         try:
             tmp_path.unlink()
@@ -919,7 +923,10 @@ def migrate_legacy_default_layout_if_needed(
         )
         marker["report"] = str(report)
         _write_migration_json(marker_path, marker)
+        # Every staged copy must be on disk before the rename publishes it.
+        sync_tree(staging_root)
         staging_root.replace(target_root)
+        sync_directory(target_root.parent)
         _move_legacy_artifacts_aside(layout, target_root)
     except Exception:
         shutil.rmtree(staging_root, ignore_errors=True)

@@ -155,14 +155,37 @@ pub fn export(
         passphrase,
         recipients,
     )?;
-    pending.flush().map_err(io_error)?;
-    pending.as_file().sync_all().map_err(io_error)?;
-    pending.persist(output).map_err(|e| io_error(e.error))?;
+    publish(pending, output)?;
     Ok(Export {
         output: output.to_owned(),
         manifest,
         age_backend: backend.flavor(),
     })
+}
+
+/// Flush the complete archive, rename it into place and make the rename
+/// durable, as Python's `backup.pack` does.
+fn publish(mut pending: tempfile::NamedTempFile, output: &Path) -> Result<()> {
+    pending.flush().map_err(io_error)?;
+    pending.as_file().sync_all().map_err(io_error)?;
+    pending.persist(output).map_err(|e| io_error(e.error))?;
+    sync_parent_directory(output)
+}
+
+/// Make the rename that published `path` durable (`F_FULLFSYNC` on macOS
+/// through `sync_all`), as Python's `backup.pack` does. A no-op on Windows.
+fn sync_parent_directory(path: &Path) -> Result<()> {
+    let parent = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    #[cfg(test)]
+    tests::SYNCED_DIRECTORIES.with(|synced| synced.borrow_mut().push(parent.to_owned()));
+    #[cfg(not(windows))]
+    File::open(parent)
+        .and_then(|directory| directory.sync_all())
+        .map_err(io_error)?;
+    Ok(())
 }
 
 fn manifest(
@@ -476,6 +499,31 @@ fn unavailable_refs(manifest: &Value) -> Vec<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    thread_local! {
+        /// Directories `sync_parent_directory` flushed on this test thread.
+        pub(super) static SYNCED_DIRECTORIES: std::cell::RefCell<Vec<PathBuf>> =
+            const { std::cell::RefCell::new(Vec::new()) };
+    }
+
+    #[test]
+    fn published_archives_sync_their_directory_after_the_rename() {
+        let root = tempfile::tempdir().unwrap();
+        let output = root.path().join("out/backup.kassiber");
+        fs::create_dir(root.path().join("out")).unwrap();
+        let mut pending = tempfile::Builder::new()
+            .prefix(".backup.kassiber.")
+            .tempfile_in(root.path().join("out"))
+            .unwrap();
+        pending.write_all(b"age-encryption.org/v1").unwrap();
+        SYNCED_DIRECTORIES.with(|synced| synced.borrow_mut().clear());
+        publish(pending, &output).unwrap();
+        assert_eq!(fs::read(&output).unwrap(), b"age-encryption.org/v1");
+        assert_eq!(
+            SYNCED_DIRECTORIES.with(|synced| synced.take()),
+            vec![root.path().join("out")]
+        );
+    }
 
     #[test]
     fn provider_refs_never_materialize_external_secrets_or_hide_inline_conflicts() {

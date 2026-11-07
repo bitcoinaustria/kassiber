@@ -96,7 +96,8 @@ fn report_csv_destination(path: &Path) -> std::io::Result<std::path::PathBuf> {
 /// Publish a machine preference exactly as `private_files.atomic_write_private`.
 /// Unlike book metadata writes, this replaces a final symlink without following it.
 pub fn write_private_preference(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
-    write_atomic_file(path, bytes, true, &mut || Ok(()))
+    write_atomic_file(path, bytes, true, &mut || Ok(()))?;
+    sync_parent_directory(path)
 }
 
 /// Publish an explicit export without changing the permissions of its parent.
@@ -109,13 +110,20 @@ pub fn write_export(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
         Err(error) => return Err(error),
     }
     write_atomic_file(path, bytes, false, &mut || Ok(()))?;
+    sync_parent_directory(path)
+}
+
+/// Make the rename that published `path` durable (`F_FULLFSYNC` on macOS
+/// through `sync_all`). Python's directory-fsync contract is a no-op on Windows.
+fn sync_parent_directory(path: &Path) -> std::io::Result<()> {
+    let parent = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    #[cfg(test)]
+    tests::SYNCED_DIRECTORIES.with(|synced| synced.borrow_mut().push(parent.to_owned()));
     #[cfg(not(windows))]
-    std::fs::File::open(
-        path.parent()
-            .filter(|p| !p.as_os_str().is_empty())
-            .unwrap_or(Path::new(".")),
-    )?
-    .sync_all()?;
+    std::fs::File::open(parent)?.sync_all()?;
     Ok(())
 }
 
@@ -333,6 +341,27 @@ pub fn write_private_json(path: &Path, value: &Value) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    thread_local! {
+        /// Directories `sync_parent_directory` flushed on this test thread.
+        pub(super) static SYNCED_DIRECTORIES: std::cell::RefCell<Vec<std::path::PathBuf>> =
+            const { std::cell::RefCell::new(Vec::new()) };
+    }
+
+    #[test]
+    fn private_preferences_and_exports_sync_their_directory() {
+        let root = tempfile::tempdir().unwrap();
+        let preference = root.path().join("config/offline-mode.json");
+        let export = root.path().join("exports/report.csv");
+        std::fs::create_dir(root.path().join("exports")).unwrap();
+        SYNCED_DIRECTORIES.with(|synced| synced.borrow_mut().clear());
+        super::write_private_preference(&preference, b"{}\n").unwrap();
+        super::write_export(&export, b"a\r\n").unwrap();
+        assert_eq!(
+            SYNCED_DIRECTORIES.with(|synced| synced.take()),
+            vec![root.path().join("config"), root.path().join("exports")]
+        );
+        assert_eq!(std::fs::read(&preference).unwrap(), b"{}\n");
+    }
     #[cfg(unix)]
     #[test]
     fn report_csv_replaces_read_only_target_preserving_mode() {

@@ -323,6 +323,7 @@ impl Report {
             file.write_all(encoded.as_bytes())
                 .map_err(|e| export::io_error(e, Some(path)))?;
         }
+        export::sync_written(&file, path).map_err(|e| export::io_error(e, Some(path)))?;
         Ok(dict([
             ("connection", self.connection.payload()),
             ("file", s(path.to_string_lossy().into_owned())),
