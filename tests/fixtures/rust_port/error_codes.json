@@ -237,14 +237,14 @@
       }
     },
     {
-      "at": "kassiber/core/exchange_imports.py:699",
+      "at": "kassiber/core/exchange_imports.py:715",
       "name": "currency_code",
       "value": {
         "expression": "currency.get('code')"
       }
     },
     {
-      "at": "kassiber/core/exchange_imports.py:701",
+      "at": "kassiber/core/exchange_imports.py:717",
       "name": "currency_code",
       "value": {
         "expression": "account.get('currency')"
@@ -3351,14 +3351,14 @@
       "retryable": false
     },
     {
-      "at": "kassiber/cli/review.py:74",
+      "at": "kassiber/cli/review.py:77",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/review.py:87",
+      "at": "kassiber/cli/review.py:90",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
@@ -10130,114 +10130,114 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/exchange_imports.py:220",
+      "at": "kassiber/core/exchange_imports.py:223",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/exchange_imports.py:231",
+      "at": "kassiber/core/exchange_imports.py:234",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/exchange_imports.py:243",
+      "at": "kassiber/core/exchange_imports.py:246",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/exchange_imports.py:371",
+      "at": "kassiber/core/exchange_imports.py:376",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/exchange_imports.py:426",
+      "at": "kassiber/core/exchange_imports.py:431",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/exchange_imports.py:474",
+      "at": "kassiber/core/exchange_imports.py:479",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/exchange_imports.py:573",
+      "at": "kassiber/core/exchange_imports.py:584",
       "callee": "AppError",
       "code": "config_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/exchange_imports.py:618",
+      "at": "kassiber/core/exchange_imports.py:629",
       "callee": "AppError",
       "code": "protocol_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/exchange_imports.py:621",
+      "at": "kassiber/core/exchange_imports.py:632",
       "callee": "AppError",
       "code": "protocol_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/exchange_imports.py:648",
+      "at": "kassiber/core/exchange_imports.py:659",
       "callee": "AppError",
       "code": "config_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/exchange_imports.py:663",
+      "at": "kassiber/core/exchange_imports.py:677",
       "callee": "AppError",
       "code": {
-        "expression": "'auth_error' if any(('permission' in str(item).lower() for item in errors)) else 'protocol_error'"
+        "expression": "'auth_error' if any(('permission' in item.lower() for item in items)) else 'protocol_error'"
       },
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/exchange_imports.py:684",
+      "at": "kassiber/core/exchange_imports.py:700",
       "callee": "AppError",
       "code": "config_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/exchange_imports.py:743",
+      "at": "kassiber/core/exchange_imports.py:759",
       "callee": "AppError",
       "code": "protocol_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/exchange_imports.py:746",
+      "at": "kassiber/core/exchange_imports.py:762",
       "callee": "AppError",
       "code": "protocol_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/exchange_imports.py:766",
+      "at": "kassiber/core/exchange_imports.py:782",
       "callee": "AppError",
       "code": "config_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/exchange_imports.py:857",
+      "at": "kassiber/core/exchange_imports.py:873",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
@@ -21411,18 +21411,11 @@
       "retryable": true
     },
     {
-      "at": "kassiber/http_client.py:157",
+      "at": "kassiber/http_client.py:161",
       "callee": "AppError",
       "code": "backend_timeout",
       "form": "call",
       "retryable": true
-    },
-    {
-      "at": "kassiber/http_client.py:169",
-      "callee": "AppError",
-      "code": "app_error",
-      "form": "call",
-      "retryable": false
     },
     {
       "at": "kassiber/http_client.py:175",
@@ -21432,14 +21425,21 @@
       "retryable": false
     },
     {
-      "at": "kassiber/http_client.py:191",
+      "at": "kassiber/http_client.py:181",
+      "callee": "AppError",
+      "code": "app_error",
+      "form": "call",
+      "retryable": false
+    },
+    {
+      "at": "kassiber/http_client.py:197",
       "callee": "AppError",
       "code": "backend_timeout",
       "form": "call",
       "retryable": true
     },
     {
-      "at": "kassiber/http_client.py:205",
+      "at": "kassiber/http_client.py:211",
       "callee": "AppError",
       "code": "backend_timeout",
       "form": "call",
