@@ -613,8 +613,10 @@ mod tests {
                 "kassiber/x.py failed",
             ),
             (
+                // Since the 5h/5i secret floor a value runs to the end of
+                // the line, as kassiber.log_ring now redacts it.
                 "passphrase=hunter2 token=abc /tmp/a b/c",
-                "passphrase=[redacted] token=[redacted] c",
+                "passphrase=[redacted]",
             ),
             ("~/notes/a.txt and //server/share/x", "a.txt and x"),
         ] {
