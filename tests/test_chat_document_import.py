@@ -12,8 +12,6 @@ from __future__ import annotations
 
 import os
 import queue
-import subprocess
-import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -23,6 +21,7 @@ from kassiber.ai.tools import CHAT_DOCUMENT_TOOL_NAMES, get_tool, tool_capabilit
 from kassiber.core import attachments, document_import, import_batches
 from kassiber.db import open_db
 from tests.test_document_import import FakeVisionClient
+from tests import cli_runner
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PNG = b"\x89PNG\r\n\x1a\n" + (13).to_bytes(4, "big") + b"IHDR" + (800).to_bytes(4, "big") + (600).to_bytes(4, "big")
@@ -41,8 +40,8 @@ class ChatDocumentImportTests(unittest.TestCase):
             ("wallets", "create", "--workspace", "W", "--profile", "P",
              "--label", "Receipts", "--kind", "custom"),
         ):
-            subprocess.run(
-                [sys.executable, "-m", "kassiber", "--data-root", self.data_root, "--machine", *args],
+            cli_runner.run(
+                ["--data-root", self.data_root, "--machine", *args],
                 capture_output=True, text=True, cwd=REPO_ROOT, check=True,
             )
         self.conn = open_db(self.data_root)

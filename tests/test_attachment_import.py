@@ -11,8 +11,6 @@ from __future__ import annotations
 import json
 import os
 import queue
-import subprocess
-import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -20,6 +18,7 @@ from unittest.mock import patch
 from kassiber import daemon
 from kassiber.ai.tools import CORE_TOOL_NAMES, get_tool
 from kassiber.db import open_db
+from tests import cli_runner
 
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -57,9 +56,8 @@ class AttachmentImportFixture(unittest.TestCase):
             ("wallets", "create", "--workspace", "W", "--profile", "P",
              "--label", "Cold", "--kind", "address", "--address", ADDRESS),
         ):
-            subprocess.run(
-                [sys.executable, "-m", "kassiber", "--data-root", self.data_root,
-                 "--machine", *args],
+            cli_runner.run(
+                ["--data-root", self.data_root, "--machine", *args],
                 capture_output=True, text=True, cwd=REPO_ROOT, check=True,
             )
         self.conn = open_db(self.data_root)

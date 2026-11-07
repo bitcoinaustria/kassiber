@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import subprocess
-import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -11,6 +9,7 @@ from pathlib import Path
 from kassiber import daemon
 from kassiber.core.tax_estimate import austrian_indicative_tax
 from kassiber.db import open_db
+from tests import cli_runner
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -99,8 +98,8 @@ class AssistantTaxSummaryTest(unittest.TestCase):
     """The assistant's tax summary carries the core figure for an Austrian book."""
 
     def _cli(self, root, *args):
-        result = subprocess.run(
-            [sys.executable, "-m", "kassiber", "--data-root", str(root), "--machine", *args],
+        result = cli_runner.run(
+            ["--data-root", str(root), "--machine", *args],
             cwd=ROOT, capture_output=True, text=True, check=False,
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
