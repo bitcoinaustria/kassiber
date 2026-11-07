@@ -313,6 +313,10 @@ def _cli_scenario(side: Side, scope: tuple[str, str]) -> list[tuple[str, int, st
     run("operation stopped", ["--machine", "operator", "operation", "status", "old.x"])
     run("unlock machine", ["--machine", "operator", "unlock"])
     run("unlock touch id", ["--machine", "operator", "unlock", "--auth", "touch-id"])
+    run("touch-id status", ["--machine", "operator", "touch-id", "status"])
+    run("touch-id status table", ["operator", "touch-id", "status"])
+    run("touch-id enroll machine", ["--machine", "operator", "touch-id", "enroll"])
+    run("touch-id forget machine", ["--machine", "operator", "touch-id", "forget"])
     run("mode machine", ["--machine", "operator", "mode", "brokered"])
     run("unlock bad duration", ["--machine", "operator", "unlock", "--passphrase-fd", "{3}", "--duration", "5s"], pw)
     run("unlock short duration", ["--machine", "operator", "unlock", "--passphrase-fd", "{3}", "--duration", "0m"], pw)
@@ -323,6 +327,9 @@ def _cli_scenario(side: Side, scope: tuple[str, str]) -> list[tuple[str, int, st
     run("status running", ["--machine", "operator", "status"])
     run("mode wrong", ["--machine", "operator", "mode", "brokered", "--passphrase-fd", "{3}"], {3: "wrong passphrase"})
     run("mode brokered", ["--machine", "operator", "mode", "brokered", "--passphrase-fd", "{3}"], pw)
+    run("touch-id status bound", ["--machine", "operator", "touch-id", "status"])
+    run("touch-id enroll unsigned", ["--machine", "operator", "touch-id", "enroll", "--passphrase-fd", "{3}"], pw)
+    run("touch-id forget unsigned", ["--machine", "operator", "touch-id", "forget", "--passphrase-fd", "{3}"], pw)
     run("no lease", ["--machine", "status"])
     run("no lease table", ["status"])
     run(
@@ -452,6 +459,11 @@ def test_operator_cli_matches_python_through_both_brokers(sides):
     # The scenario reaches each state it means to.
     assert json.loads(by_label["status stopped"][1])["data"]["broker"] == "stopped"
     assert json.loads(by_label["unlock machine"][1])["error"]["code"] == "interaction_required"
+    unavailable = {"available": False, "configured": False, "reason": "native_auth_unavailable"}
+    assert json.loads(by_label["touch-id status"][1])["data"] == unavailable
+    assert json.loads(by_label["touch-id status bound"][1])["data"] == unavailable
+    assert json.loads(by_label["touch-id enroll machine"][1])["error"]["code"] == "interaction_required"
+    assert json.loads(by_label["touch-id enroll unsigned"][1])["error"]["code"] == "native_auth_unavailable"
     assert json.loads(by_label["no lease"][1])["error"]["details"]["reason"] == "operator_lease_required"
     assert json.loads(by_label["unlock"][1])["data"]["lease"] == "unlocked"
     assert json.loads(by_label["unlock huge duration"][1])["error"]["code"] == "operator_invalid_duration"
@@ -477,6 +489,9 @@ def test_operator_cli_matches_python_through_both_brokers(sides):
         "operator.mode",
         "operator.operation.status",
         "operator.operation.cancel",
+        "operator.touch-id.status",
+        "operator.touch-id.enroll",
+        "operator.touch-id.forget",
         "status",
         "secrets.verify",
     } <= {record["command"] for record in served}

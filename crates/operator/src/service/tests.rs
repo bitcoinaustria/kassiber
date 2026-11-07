@@ -134,6 +134,8 @@ pub(crate) struct Fake {
     pub(crate) mode_calls: Mutex<Vec<ModeCall>>,
     pub(crate) fixed_mode: Mutex<Option<String>>,
     pub(crate) unclassified: AtomicBool,
+    /// `bind_project_policy` calls: data root, database and expected project.
+    pub(crate) bind_calls: Mutex<Vec<(String, String, Option<String>)>>,
 }
 
 fn default_opener() -> Arc<Opener> {
@@ -154,6 +156,7 @@ impl Fake {
             mode_calls: Mutex::new(Vec::new()),
             fixed_mode: Mutex::new(None),
             unclassified: AtomicBool::new(false),
+            bind_calls: Mutex::new(Vec::new()),
         })
     }
 
@@ -236,6 +239,19 @@ impl Backend for Fake {
         }
         locked(&self.modes).insert(data_root.to_owned(), mode.to_owned());
         Ok(mode.to_owned())
+    }
+    fn bind_project_policy(
+        &self,
+        data_root: &str,
+        database_identity: &str,
+        expected_project_identity: Option<&str>,
+    ) -> Result<()> {
+        locked(&self.bind_calls).push((
+            data_root.to_owned(),
+            database_identity.to_owned(),
+            expected_project_identity.map(str::to_owned),
+        ));
+        Ok(())
     }
     fn classify(&self, argv: &[String]) -> Result<Classified> {
         let parsed = fake_classify(argv)?;

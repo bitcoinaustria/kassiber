@@ -32,33 +32,30 @@ fn s(text: &str) -> Value {
     kassiber_envelope::s(text)
 }
 
-/// Touch ID's broker side (`native_auth.py`), R6-4. Until then every
-/// platform answers as Linux and Windows do.
+/// Touch ID's broker side (`native_auth.py`). Production brokers use the
+/// binary's bridge over [`crate::native_auth::NativeAuthHelper`]; builds
+/// without one answer as Linux and Windows do.
 pub trait NativeAuth: Send + Sync {
     /// `native_auth_helper_identity()`.
     fn helper_identity(&self) -> Result<String>;
     /// `validate_native_auth_helper_identity(expected)`.
     fn validate(&self, expected: &str) -> Result<()>;
-    /// `require_project_policy_binding` plus `broker_touch_id_passphrase`:
-    /// the passphrase and the bound project and database identities.
-    fn unlock_passphrase(
-        &self,
-        data_root: &str,
-        expected: &str,
-    ) -> Result<(Zeroizing<Vec<u8>>, String, String)>;
+    /// `require_project_policy_binding(data_root)`: the bound project and
+    /// database identities.
+    fn binding(&self, data_root: &str) -> Result<(String, String)>;
+    /// `broker_touch_id_passphrase(data_root, expected_helper_identity=...)`.
+    fn passphrase(&self, data_root: &str, expected: &str) -> Result<Zeroizing<Vec<u8>>>;
+    /// `touch_id_store(data_root, passphrase, expected_helper_identity=...)`.
+    fn store(&self, data_root: &str, passphrase: &[u8], expected: &str) -> Result<()>;
+    /// `touch_id_delete(data_root, expected_helper_identity=...)`.
+    fn delete(&self, data_root: &str, expected: &str) -> Result<()>;
 }
 
 /// `_configured_helper_path()` outside a signed macOS app.
 pub struct NativeAuthUnavailable;
 
 fn native_auth_unavailable() -> Error {
-    Error::App(
-        AppError::new(
-            "native_auth_unavailable",
-            "Touch ID operator authentication is unavailable in this build",
-        )
-        .with_hint("Use password authentication or the signed macOS desktop CLI launcher."),
-    )
+    Error::App(crate::native_auth::unavailable_error())
 }
 
 impl NativeAuth for NativeAuthUnavailable {
@@ -68,7 +65,16 @@ impl NativeAuth for NativeAuthUnavailable {
     fn validate(&self, _: &str) -> Result<()> {
         Err(native_auth_unavailable())
     }
-    fn unlock_passphrase(&self, _: &str, _: &str) -> Result<(Zeroizing<Vec<u8>>, String, String)> {
+    fn binding(&self, _: &str) -> Result<(String, String)> {
+        Err(native_auth_unavailable())
+    }
+    fn passphrase(&self, _: &str, _: &str) -> Result<Zeroizing<Vec<u8>>> {
+        Err(native_auth_unavailable())
+    }
+    fn store(&self, _: &str, _: &[u8], _: &str) -> Result<()> {
+        Err(native_auth_unavailable())
+    }
+    fn delete(&self, _: &str, _: &str) -> Result<()> {
         Err(native_auth_unavailable())
     }
 }
@@ -659,9 +665,9 @@ impl BrokerServer {
             let data_root = self.canonical_data_root(&required_string(request, "data_root")?)?;
             let identity = required_string(request, "native_auth_identity")?;
             self.inner.native.validate(&identity)?;
+            let (project_identity, database_identity) = self.inner.native.binding(&data_root)?;
             let (duration, capability) = lease_request_args(request)?;
-            let (passphrase, project_identity, database_identity) =
-                self.inner.native.unlock_passphrase(&data_root, &identity)?;
+            let passphrase = self.inner.native.passphrase(&data_root, &identity)?;
             return Ok(ok(service.unlock(
                 &data_root,
                 &passphrase,
@@ -735,14 +741,22 @@ impl BrokerServer {
             )?));
         }
         if is("touch_id_configure") {
-            let _data_root = self.canonical_data_root(&required_string(request, "data_root")?)?;
+            let data_root = self.canonical_data_root(&required_string(request, "data_root")?)?;
             let identity = required_string(request, "native_auth_identity")?;
             self.inner.native.validate(&identity)?;
-            if !matches!(get(request, "configured"), Some(Value::Bool(_))) {
+            let Some(Value::Bool(configured)) = get(request, "configured").cloned() else {
                 return Err(protocol("Touch ID configuration requires a boolean state"));
-            }
-            // The helper bridge is R6-4; no build reaches here before it.
-            return Err(native_auth_unavailable());
+            };
+            let challenge = new_challenge()?;
+            channel.send_json(&self.continue_secret("fresh_native_auth", &challenge))?;
+            let authentication = channel.receive_secret(&challenge)?;
+            return Ok(ok(service.configure_touch_id_authenticated(
+                &data_root,
+                &authentication,
+                configured,
+                &identity,
+                &*self.inner.native,
+            )?));
         }
         Err(protocol("unknown operator broker action"))
     }
@@ -1116,6 +1130,7 @@ pub fn public_safe_details(value: &Value) -> Value {
 /// until a signal or a stop, close. Returns the exit code.
 pub fn main(
     backend: Arc<dyn Backend>,
+    native: Arc<dyn NativeAuth>,
     inputs: BuildInputs<'_>,
     guard: SessionGuard,
     stderr: &mut dyn std::io::Write,
@@ -1141,7 +1156,7 @@ pub fn main(
         let parts = ServerParts {
             generation,
             service: service.clone(),
-            native: Arc::new(NativeAuthUnavailable),
+            native,
             build: current_build_identity(inputs),
             guard,
         };

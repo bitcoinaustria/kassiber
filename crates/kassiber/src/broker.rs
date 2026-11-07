@@ -238,6 +238,22 @@ impl Backend for RealBackend {
         .map_err(app)
     }
 
+    fn bind_project_policy(
+        &self,
+        data_root: &str,
+        database_identity: &str,
+        expected_project_identity: Option<&str>,
+    ) -> Result<()> {
+        kassiber_secrets::modes::bind_project_policy(
+            &namespace()?,
+            Path::new(data_root),
+            database_identity,
+            expected_project_identity,
+            &[],
+        )
+        .map_err(app)
+    }
+
     fn classify(&self, argv: &[String]) -> Result<Classified> {
         let parsed = kassiber_cli::operator::classify(argv).map_err(app)?;
         use kassiber_runtime::capabilities::Capability as Cli;
@@ -274,6 +290,44 @@ impl Backend for RealBackend {
     }
 }
 
+/// The broker's Touch ID side: the signed helper bridge over this book's
+/// policy binding and opaque keychain account (`native_auth.py`).
+#[derive(Default)]
+pub struct RealNativeAuth {
+    helper: kassiber_operator::native_auth::NativeAuthHelper,
+}
+
+/// `operator_touch_id_account(data_root)`.
+pub(crate) fn touch_id_account(data_root: &str) -> Result<String> {
+    kassiber_secrets::modes::operator_touch_id_account(&namespace()?, Path::new(data_root))
+        .map_err(app)
+}
+
+impl kassiber_operator::server::NativeAuth for RealNativeAuth {
+    fn helper_identity(&self) -> Result<String> {
+        self.helper.helper_identity()
+    }
+    fn validate(&self, expected: &str) -> Result<()> {
+        self.helper.validate(expected)
+    }
+    fn binding(&self, data_root: &str) -> Result<(String, String)> {
+        kassiber_secrets::modes::require_project_policy_binding(&namespace()?, Path::new(data_root))
+            .map_err(app)
+    }
+    fn passphrase(&self, data_root: &str, expected: &str) -> Result<zeroize::Zeroizing<Vec<u8>>> {
+        self.helper
+            .broker_passphrase(&|| touch_id_account(data_root), Some(expected))
+    }
+    fn store(&self, data_root: &str, passphrase: &[u8], expected: &str) -> Result<()> {
+        self.helper
+            .store(&|| touch_id_account(data_root), passphrase, Some(expected))
+    }
+    fn delete(&self, data_root: &str, expected: &str) -> Result<()> {
+        self.helper
+            .delete(&|| touch_id_account(data_root), Some(expected))
+    }
+}
+
 /// The session guard: the system one, or in test builds the integration
 /// fixture's (`KASSIBER_RUST_TEST_OPERATOR_SESSION=fixture`, the
 /// equivalent of `tests/operator_server_fixture.py`).
@@ -292,6 +346,7 @@ pub fn serve(build: kassiber_runtime::BuildInfo) -> i32 {
     let backend: Arc<dyn Backend> = Arc::new(RealBackend::new());
     kassiber_operator::server::main(
         backend,
+        Arc::new(RealNativeAuth::default()),
         kassiber_operator::build::BuildInputs {
             version: build.version,
             channel: build.channel,

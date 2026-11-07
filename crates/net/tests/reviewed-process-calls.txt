@@ -38,6 +38,10 @@ crates/operator/src/client.rs|launch_broker|let mut command = kassiber_ipc::proc
 crates/operator/src/runner.rs|run|let mut command = ChildCommand::new(&self.program);
 # R6-3 agent-session labels on macOS: `/bin/ps` with a fixed PATH and the C locale.
 crates/operator/src/peers.rs|run_ps|let mut command = ChildCommand::new("/bin/ps");
+# R6-4 Touch ID: `/usr/bin/codesign` on the helper path and live pids, and the
+# signed desktop helper itself behind its ready/go launch gate (macOS only).
+crates/operator/src/native_auth.rs|codesign|let mut command = ChildCommand::new(CODESIGN);
+crates/operator/src/native_auth.rs|spawn|let mut command = ChildCommand::new(program);
 crates/ownership/tests/project.rs|inherited_owner_handles_exclude_a_second_owner_after_parent_release|let mut command = ChildCommand::new("/bin/sh");
 crates/ownership/tests/project.rs|uninherited_children_hold_nothing|let mut command = ChildCommand::new("/bin/sh");
 # The store probe's lock-child op: a child holding inherited owner locks for the Python interop test.

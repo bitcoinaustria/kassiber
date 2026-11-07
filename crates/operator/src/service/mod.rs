@@ -1368,6 +1368,43 @@ impl OperatorService {
         ]))
     }
 
+    /// `configure_touch_id_authenticated(data_root, secret, configured=...,
+    /// native_auth_identity=...)`: fresh authentication, then the policy
+    /// binding and the signed helper's store or delete, all inside it.
+    pub fn configure_touch_id_authenticated(
+        &self,
+        data_root: &str,
+        secret: &[u8],
+        configured: bool,
+        native_auth_identity: &str,
+        native: &dyn crate::server::NativeAuth,
+    ) -> Result<Value> {
+        let project = self.inner.backend.canonical_project(data_root)?;
+        let canonical_data_root = parent_text(&project);
+        self.authenticate_database(
+            &canonical_data_root,
+            secret,
+            "operator_native_enrollment",
+            false,
+            |authenticated| {
+                self.inner.backend.bind_project_policy(
+                    &canonical_data_root,
+                    authenticated,
+                    Some(&project.identity),
+                )?;
+                if configured {
+                    native.store(&canonical_data_root, secret, native_auth_identity)
+                } else {
+                    native.delete(&canonical_data_root, native_auth_identity)
+                }
+            },
+        )?;
+        Ok(dict([
+            ("configured", Value::Bool(configured)),
+            ("auth", s("touch_id")),
+        ]))
+    }
+
     // ----- lock and status -----
 
     /// `lock(data_root, expected_lease_id=..., restore_manual=...)`.

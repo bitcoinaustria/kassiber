@@ -331,3 +331,43 @@ fn forget_requires_fresh_authentication_before_any_native_or_policy_effect() {
     assert_eq!(store.deletes.get(), deletes);
     assert_eq!(std::fs::read(&paths.settings_file).unwrap(), before);
 }
+
+/// `test_rotation_generation_changes_opaque_native_account`: the operator
+/// Touch ID account needs the binding and changes with the generation.
+#[test]
+fn operator_touch_id_account_follows_the_binding_and_the_generation() {
+    use crate::modes::{bind_project_policy, operator_touch_id_account};
+    use sha2::{Digest, Sha256};
+    let (tmp, ns, paths) = fixture();
+    let root = &paths.data_root;
+    assert_eq!(
+        operator_touch_id_account(&ns, root).unwrap_err().code,
+        "operator_policy_binding_required"
+    );
+    bind_project_policy(&ns, root, &"d".repeat(32), None, &[]).unwrap();
+    let identity = ns.canonical_project(root).unwrap().identity;
+    let expected = |generation: &str| -> String {
+        Sha256::digest(format!("kassiber-operator-touch-id-v1:{identity}:{generation}").as_bytes())
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect()
+    };
+    let before = operator_touch_id_account(&ns, root).unwrap();
+    assert_eq!(before, expected("initial"));
+    assert_eq!(before.len(), 64);
+    assert!(!before.contains(tmp.path().to_str().unwrap()));
+    for (stored, generation) in [
+        (serde_json::json!("ab".repeat(16)), "ab".repeat(16)),
+        (serde_json::json!(7), "invalid".to_owned()),
+        (serde_json::Value::Null, "invalid".to_owned()),
+    ] {
+        kassiber_store::layout::mutate_settings(&paths.settings_file, |settings| {
+            settings.insert("operator_native_auth_generation".into(), stored.clone());
+            Ok(())
+        })
+        .unwrap();
+        let after = operator_touch_id_account(&ns, root).unwrap();
+        assert_eq!(after, expected(&generation));
+        assert_ne!(after, before);
+    }
+}

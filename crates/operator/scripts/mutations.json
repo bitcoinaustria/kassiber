@@ -982,5 +982,165 @@
       "machine_failed_operation_exits_with_a_positive_child_code"
     ],
     "rule": "A signal-killed child's negative code exits plainly as 1."
+  },
+  {
+    "id": "r64-identifier",
+    "file": "crates/operator/src/native_auth.rs",
+    "find": "    identity.identifier == NATIVE_AUTH_IDENTIFIER\n",
+    "replace": "    !identity.identifier.is_empty()\n",
+    "expect_failing": [
+      "inspect_code_pins_identifier_team_and_cdhash"
+    ],
+    "rule": "Only the desktop app's signing identifier at.bitcoinaustria.kassiber is a native-auth helper."
+  },
+  {
+    "id": "r64-team-length",
+    "file": "crates/operator/src/native_auth.rs",
+    "find": "        && identity.team.chars().count() == 10\n",
+    "replace": "        && identity.team.chars().count() >= 9\n",
+    "expect_failing": [
+      "inspect_code_pins_identifier_team_and_cdhash"
+    ],
+    "rule": "A team identifier has exactly ten characters."
+  },
+  {
+    "id": "r64-team-alphabet",
+    "file": "crates/operator/src/native_auth.rs",
+    "find": "            .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())\n",
+    "replace": "            .all(|c| c.is_ascii_alphanumeric())\n",
+    "expect_failing": [
+      "inspect_code_pins_identifier_team_and_cdhash"
+    ],
+    "rule": "A team identifier is uppercase ASCII letters and digits; `not set` and lowercase are refused."
+  },
+  {
+    "id": "r64-cdhash-length",
+    "file": "crates/operator/src/native_auth.rs",
+    "find": "        && matches!(identity.cdhash.chars().count(), 40 | 64)\n",
+    "replace": "        && identity.cdhash.chars().count() >= 39\n",
+    "expect_failing": [
+      "inspect_code_pins_identifier_team_and_cdhash"
+    ],
+    "rule": "A cdhash is a 40- or 64-digit hex string."
+  },
+  {
+    "id": "r64-cdhash-alphabet",
+    "file": "crates/operator/src/native_auth.rs",
+    "find": "('a'..='f').contains(&c)",
+    "replace": "c.is_ascii_lowercase()",
+    "expect_failing": [
+      "inspect_code_pins_identifier_team_and_cdhash"
+    ],
+    "rule": "A cdhash is hexadecimal."
+  },
+  {
+    "id": "r64-requirement-developer-id",
+    "file": "crates/operator/src/native_auth.rs",
+    "find": " and certificate leaf[field.1.2.840.113635.100.6.1.13] exists\",",
+    "replace": "\",",
+    "expect_failing": [
+      "identity_vectors_match_python"
+    ],
+    "rule": "The requirement demands a Developer ID Application leaf, not just any Apple-anchored team certificate."
+  },
+  {
+    "id": "r64-opaque-identity",
+    "file": "crates/operator/src/native_auth.rs",
+    "find": "\"kassiber-native-auth-signature-v1:{}:{}:{}\"",
+    "replace": "\"kassiber-native-auth-signature-v2:{}:{}:{}\"",
+    "expect_failing": [
+      "identity_vectors_match_python"
+    ],
+    "rule": "The opaque helper identity is the Python digest, so either runtime's broker accepts the other's CLI."
+  },
+  {
+    "id": "r64-parent-pid",
+    "file": "crates/operator/src/native_auth.rs",
+    "find": "        if parent != helper {\n",
+    "replace": "        if false {\n",
+    "expect_failing": [
+      "caller_identity_binds_the_cli_to_its_live_signed_parent"
+    ],
+    "rule": "The CLI's parent process must be the signed helper itself."
+  },
+  {
+    "id": "r64-running-helper",
+    "file": "crates/operator/src/native_auth.rs",
+    "find": "        if running != helper\n",
+    "replace": "        if false\n",
+    "expect_failing": [
+      "store_validates_live_helper_before_writing_passphrase"
+    ],
+    "rule": "The launched helper's live code must be the configured signed helper even without an expected identity."
+  },
+  {
+    "id": "r64-expected-helper",
+    "file": "crates/operator/src/native_auth.rs",
+    "find": "            if !constant_time_eq(actual.as_bytes(), expected.as_bytes()) {\n",
+    "replace": "            if false {\n",
+    "expect_failing": [
+      "helper_identity_detects_replacement_before_secret_handoff"
+    ],
+    "rule": "A helper replaced after the caller named it is refused before any secret moves."
+  },
+  {
+    "id": "r64-launch-gate",
+    "file": "crates/operator/src/native_auth.rs",
+    "find": "matches!(ready.read(&mut byte), Ok(1)) && byte == *b\"R\"",
+    "replace": "true",
+    "expect_failing": [
+      "launch_gate_refuses_a_helper_that_never_signals"
+    ],
+    "rule": "A helper that never reaches its gate is refused, never released."
+  },
+  {
+    "id": "r64-exit-four",
+    "file": "crates/operator/src/native_auth.rs",
+    "find": "        if code == 4 {\n",
+    "replace": "        if code == 5 {\n",
+    "expect_failing": [
+      "broker_touch_id_maps_the_helper_exit_codes"
+    ],
+    "rule": "Exit 4 from broker-get is operator_native_auth_not_configured with the enroll hint."
+  },
+  {
+    "id": "r64-status-exit-four",
+    "file": "crates/operator/src/native_auth.rs",
+    "find": "            4 => dict([\n",
+    "replace": "            5 => dict([\n",
+    "expect_failing": [
+      "touch_id_status_uses_the_live_validated_helper_gate"
+    ],
+    "rule": "Status exit 4 is available and not configured, not a failure."
+  },
+  {
+    "id": "r64-secret-limit",
+    "file": "crates/operator/src/native_auth.rs",
+    "find": "        if value.len() > SECRET_LIMIT {\n",
+    "replace": "        if value.len() > SECRET_LIMIT + 1 {\n",
+    "expect_failing": [
+      "broker_touch_id_refuses_a_secret_over_16_kib"
+    ],
+    "rule": "A helper secret over 16 KiB is wiped and refused."
+  },
+  {
+    "id": "r64-fresh-native-auth-label",
+    "file": "crates/operator/src/server.rs",
+    "find": "self.continue_secret(\"fresh_native_auth\", &challenge)",
+    "replace": "self.continue_secret(\"fresh_admin_auth\", &challenge)",
+    "expect_failing": [
+      "test_touch_id_configuration_is_challenge_bound_and_binds_the_policy"
+    ],
+    "rule": "Enrollment asks for the fresh_native_auth secret, Python's challenge label."
+  },
+  {
+    "id": "r64-enrollment-binding",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "                    authenticated,\n                    Some(&project.identity),\n                )?;\n                if configured {",
+    "replace": "                    authenticated,\n                    None,\n                )?;\n                if configured {",
+    "expect_failing": [
+      "test_touch_id_configuration_is_challenge_bound_and_binds_the_policy"
+    ],
+    "rule": "Enrollment binds the policy to the project it authenticated, refusing a swapped file."
   }
 ]

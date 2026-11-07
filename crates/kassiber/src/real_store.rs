@@ -607,6 +607,9 @@ impl BookStore for RealStore {
     fn unlock_mode_status(&self, root: &str) -> Result<Value, AppError> {
         kassiber_secrets::modes::unlock_mode_status(&namespace()?, Path::new(root))
     }
+    fn operator_touch_id_account(&self, root: &str) -> Result<String, AppError> {
+        kassiber_secrets::modes::operator_touch_id_account(&namespace()?, Path::new(root))
+    }
     fn database_is_encrypted(&self, root: &str) -> Result<bool, AppError> {
         let db = kassiber_paths::resolve_database_path(Path::new(root));
         Ok(db.is_file()

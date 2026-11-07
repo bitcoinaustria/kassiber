@@ -133,6 +133,14 @@ pub trait Backend: Send + Sync {
         database_identity: Option<&str>,
         expected_project_identity: Option<&str>,
     ) -> Result<String>;
+    /// `bind_project_policy(data_root, database_identity,
+    /// expected_project_identity=...)`.
+    fn bind_project_policy(
+        &self,
+        data_root: &str,
+        database_identity: &str,
+        expected_project_identity: Option<&str>,
+    ) -> Result<()>;
     /// `_parse_argv(argv)` with the broker's secret labels already
     /// normalized away by the caller.
     fn classify(&self, argv: &[String]) -> Result<Classified>;
