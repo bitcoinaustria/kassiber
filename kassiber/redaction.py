@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import re
 import secrets
@@ -205,13 +206,30 @@ def redact_secret_text(value: str) -> str:
 WITHHELD_CREDENTIAL = "<redacted>"
 
 
-def withhold_credentials(value: str, credentials: Iterable[str | None]) -> str:
-    """Replace each literal credential a server echoed back with ``<redacted>``.
+_HEX_FORM_RE = re.compile(r"[0-9A-Fa-f]+")
+# Request headers whose whole value authenticates the request.
+CREDENTIAL_HEADERS = frozenset(
+    {
+        "authorization",
+        "proxy-authorization",
+        "cookie",
+        "grpc-metadata-macaroon",
+        "api-key",
+        "x-api-key",
+        "x-mbx-apikey",
+        "cb-access-key",
+        "rune",
+    }
+)
+_QUERY_CREDENTIAL_PARTS = ("key", "auth", "sig", "access")
 
-    Pattern redaction cannot recognize a bare API key or secret, so callers
-    that hold the credential they sent scrub it from untrusted response text
-    before that text reaches an error. Percent- and JSON-escaped spellings are
-    withheld too.
+
+def credential_forms(credentials: Iterable[str | None]) -> tuple[str, ...]:
+    """Every spelling of ``credentials`` the scrub withholds, longest first.
+
+    A credential is withheld as sent, percent-encoded (``quote`` and
+    ``quote_plus``) and JSON-escaped (with and without ``\\/``). Ties in length
+    sort by text, so the result never depends on set iteration order.
     """
 
     forms: set[str] = set()
@@ -229,9 +247,211 @@ def withhold_credentials(value: str, credentials: Iterable[str | None]) -> str:
                 escaped.replace("/", "\\/"),
             )
         )
-    for form in sorted(forms, key=len, reverse=True):
-        value = value.replace(form, WITHHELD_CREDENTIAL)
+    return tuple(sorted(forms, key=lambda form: (-len(form), form)))
+
+
+def _withhold_forms(value: str, forms: tuple[str, ...]) -> str:
+    for form in forms:
+        if _HEX_FORM_RE.fullmatch(form):
+            # Hex means the same bytes in either case (an LND macaroon).
+            value = re.sub(
+                re.escape(form),
+                lambda _match: WITHHELD_CREDENTIAL,
+                value,
+                flags=re.IGNORECASE | re.ASCII,
+            )
+        else:
+            value = value.replace(form, WITHHELD_CREDENTIAL)
     return value
+
+
+def withhold_credentials(value: str, credentials: Iterable[str | None]) -> str:
+    """Replace each literal credential a server echoed back with ``<redacted>``.
+
+    Pattern redaction cannot recognize a bare API key or secret, so callers
+    that hold the credential they sent scrub it from untrusted response text
+    before that text reaches an error, and before any truncation, which could
+    otherwise keep a prefix. Percent- and JSON-escaped spellings are withheld
+    too, and a hex credential in either letter case.
+    """
+
+    return _withhold_forms(value, credential_forms(credentials))
+
+
+def _withhold_value(value: Any, forms: tuple[str, ...], depth: int) -> Any:
+    if depth > 8:
+        return "[truncated]"
+    if isinstance(value, dict):
+        return {
+            (_withhold_forms(key, forms) if isinstance(key, str) else key): _withhold_value(
+                item, forms, depth + 1
+            )
+            for key, item in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        return [_withhold_value(item, forms, depth + 1) for item in value]
+    if isinstance(value, str):
+        return _withhold_forms(value, forms)
+    return value
+
+
+def withhold_credentials_value(value: Any, credentials: Iterable[str | None]) -> Any:
+    """``withhold_credentials`` over every string key and leaf of a structure."""
+
+    forms = credential_forms(credentials)
+    return _withhold_value(value, forms, 0) if forms else value
+
+
+def withhold_error_credentials(error: Any, credentials: Iterable[str | None]) -> Any:
+    """Withhold ``credentials`` from an ``AppError``'s message, hint and details.
+
+    Used where a caller still holds the credentials when an error leaves it:
+    the error is rewritten in place and returned, so ``raise`` keeps its
+    traceback and cause.
+    """
+
+    forms = credential_forms(credentials)
+    if not forms:
+        return error
+    if error.args:
+        error.args = (_withhold_forms(str(error.args[0]), forms), *error.args[1:])
+    if isinstance(getattr(error, "hint", None), str):
+        error.hint = _withhold_forms(error.hint, forms)
+    if getattr(error, "details", None) is not None:
+        error.details = _withhold_value(error.details, forms, 0)
+    return error
+
+
+def authorization_credentials(value: Any) -> list[str]:
+    """The credentials one ``Authorization``-style header value carries.
+
+    The whole value, the part after its scheme, and for ``Basic`` the decoded
+    ``user:password`` with its two halves.
+    """
+
+    text = str(value or "").strip()
+    if not text:
+        return []
+    found = [text]
+    scheme, _, rest = text.partition(" ")
+    rest = rest.strip()
+    if rest:
+        found.append(rest)
+        if scheme.lower() == "basic":
+            try:
+                decoded = base64.b64decode(rest, validate=True).decode("utf-8")
+            except (ValueError, UnicodeDecodeError):
+                decoded = ""
+            if decoded:
+                found.append(decoded)
+                user, separator, password = decoded.partition(":")
+                if separator:
+                    found.extend((user, password))
+    return found
+
+
+def basic_credentials(username: Any, password: Any) -> list[str]:
+    """``user``, ``password``, ``user:password`` and its ``Basic`` base64."""
+
+    user = str(username or "")
+    secret = str(password or "")
+    if not user and not secret:
+        return []
+    pair = f"{user}:{secret}"
+    return [user, secret, pair, base64.b64encode(pair.encode("utf-8")).decode("ascii")]
+
+
+def url_credentials(url: Any, *, default_scheme: str | None = None) -> list[str]:
+    """Credentials embedded in a URL: its userinfo and credential-like query values.
+
+    ``default_scheme`` lets a bare ``user:pass@host:port`` proxy location parse.
+    Query values count when their key names a secret, a key, auth, a signature
+    or an access token.
+    """
+
+    raw = str(url or "").strip()
+    if not raw:
+        return []
+    if default_scheme and "://" not in raw:
+        raw = f"{default_scheme}://{raw}"
+    try:
+        parts = urlparse.urlsplit(raw)
+    except ValueError:
+        return []
+    found: list[str] = []
+    userinfo, at, _host = parts.netloc.rpartition("@")
+    if at and userinfo:
+        user, _separator, password = userinfo.partition(":")
+        found.append(userinfo)
+        found.extend(basic_credentials(urlparse.unquote(user), urlparse.unquote(password)))
+        found.extend((user, password))
+    for key, item in urlparse.parse_qsl(parts.query, keep_blank_values=False):
+        lowered = key.lower()
+        if is_sensitive_key(key) or any(part in lowered for part in _QUERY_CREDENTIAL_PARTS):
+            found.append(item)
+    return [item for item in found if item]
+
+
+def header_credentials(headers: Any) -> list[str]:
+    """The credentials a request's headers carry (see ``CREDENTIAL_HEADERS``)."""
+
+    found: list[str] = []
+    items = headers.items() if hasattr(headers, "items") else (headers or ())
+    for name, value in items:
+        lowered = str(name).lower()
+        if lowered in {"authorization", "proxy-authorization"}:
+            found.extend(authorization_credentials(value))
+        elif lowered in CREDENTIAL_HEADERS or is_sensitive_key(lowered):
+            text = str(value or "").strip()
+            if text:
+                found.append(text)
+    return found
+
+
+_BACKEND_USERNAME_FIELDS = ("username", "rpcuser", "rpc_user")
+_BACKEND_PASSWORD_FIELDS = ("password", "rpcpassword", "rpc_password")
+
+
+def backend_credentials(backend: Any) -> tuple[str, ...]:
+    """Every credential a backend config holds, in the forms Kassiber sends.
+
+    The token (API key, macaroon, rune), the auth header, RPC user and
+    password with their ``Basic`` form, and userinfo or credential-like query
+    values in the backend and proxy URLs. A cookie file's content is read only
+    where the request is built; see ``request_credentials``.
+    """
+
+    if not hasattr(backend, "get"):
+        return ()
+
+    def text(key: str) -> str:
+        value = backend.get(key)
+        return str(value).strip() if value is not None else ""
+
+    found: list[str] = []
+    token = text("token")
+    if token:
+        found.append(token)
+    found.extend(authorization_credentials(text("auth_header")))
+    users = [text(key) for key in _BACKEND_USERNAME_FIELDS if text(key)]
+    passwords = [text(key) for key in _BACKEND_PASSWORD_FIELDS if text(key)]
+    for user in users or [""]:
+        for password in passwords or [""]:
+            found.extend(basic_credentials(user, password))
+    found.extend(url_credentials(text("url")))
+    for key in ("tor_proxy", "proxy"):
+        found.extend(url_credentials(text(key), default_scheme="socks5h"))
+    return tuple(item for item in found if item)
+
+
+def request_credentials(*, url: Any = None, headers: Any = None, proxy_url: Any = None) -> tuple[str, ...]:
+    """Every credential one outbound request carries: URL, headers and proxy."""
+
+    return (
+        *url_credentials(url),
+        *header_credentials(headers),
+        *url_credentials(proxy_url, default_scheme="socks5h"),
+    )
 
 
 def redact_secret_value(value: Any, *, depth: int = 0) -> Any:
@@ -257,8 +477,15 @@ def redact_secret_value(value: Any, *, depth: int = 0) -> Any:
     return value
 
 
-def provider_error_body_preview(body: str, *, limit: int = 512) -> tuple[str, bool]:
-    """Return a size-limited, redacted preview of an untrusted provider body."""
+def provider_error_body_preview(
+    body: str, *, limit: int = 512, withheld: Iterable[str | None] = ()
+) -> tuple[str, bool]:
+    """Return a size-limited, redacted preview of an untrusted provider body.
 
+    ``withheld`` credentials are withheld before the cut, which could
+    otherwise keep a prefix.
+    """
+
+    body = withhold_credentials(body, withheld)
     truncated = len(body) > limit
     return redact_secret_text(body[:limit]), truncated

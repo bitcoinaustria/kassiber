@@ -162,7 +162,8 @@ def request_with_retry(
             retry_after = retry_after_seconds_from_http_error(exc)
         except urlerror.URLError as exc:
             raise AppError(
-                f"Failed to reach backend {_url_error_label(url)}: {exc.reason}"
+                f"Failed to reach backend {_url_error_label(url)}: "
+                + withhold_credentials(str(exc.reason), withheld)
             ) from exc
         finally:
             limiter.release()
