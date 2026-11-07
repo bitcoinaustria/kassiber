@@ -55,20 +55,21 @@ fn kind(v: &str) -> String {
     }
     .into()
 }
-// CPython 3.11 str.isdigit(): decimal digits plus Unicode 14 digit-only
-// ranges. Some digit-only strings fail int(); preserve that reference refusal.
-fn digit(c: char) -> bool {
-    kassiber_pytext::decimal_value(c as u32).is_some()
-        || matches!(c, '\u{b2}'..='\u{b3}' | '\u{b9}' | '\u{1369}'..='\u{1371}' | '\u{19da}' | '\u{2070}' | '\u{2074}'..='\u{2079}' | '\u{2080}'..='\u{2089}' | '\u{2460}'..='\u{2468}' | '\u{2474}'..='\u{247c}' | '\u{2488}'..='\u{2490}' | '\u{24ea}' | '\u{24f5}'..='\u{24fd}' | '\u{24ff}' | '\u{2776}'..='\u{277e}' | '\u{2780}'..='\u{2788}' | '\u{278a}'..='\u{2792}' | '\u{10a40}'..='\u{10a43}' | '\u{10e60}'..='\u{10e68}' | '\u{11052}'..='\u{1105a}' | '\u{1f100}'..='\u{1f10a}')
-}
 fn amount(p: &Value, k: &str) -> Result<Option<i128>> {
     let Some(v) = get(p, k) else { return Ok(None) };
     let amount = match v {
         Value::Int(_) => n(v)?,
         Value::Str(v) => {
             let Some(v) = v.as_str() else { return Ok(None) };
+            // `_first_nonnegative_int`: string amounts use ASCII decimal
+            // digits; any other digit is no evidence (b654fad74).
             let v = kassiber_pytext::strip(v);
-            if v.is_empty() || !v.chars().all(digit) {
+            if v.is_empty() || !v.bytes().all(|b| b.is_ascii_digit()) {
+                return Ok(None);
+            }
+            // `int()` refuses past CPython's integer-string limit; the
+            // reference skips such an amount as it skips any ValueError.
+            if v.len() > kassiber_pyjson::INT_MAX_STR_DIGITS {
                 return Ok(None);
             }
             n(&s(v))?

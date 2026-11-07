@@ -67,9 +67,8 @@ def main():
             assert len(record(rows)) == expected
     rows=[_row(id='o',wallet_id='source',raw_json=dict(provider='boltz',swap_id='digit-repro',flow='chain',send_amount_msat='²')),
           _row(id='i',wallet_id='target',direction='inbound')]
-    try:record(rows)
-    except ValueError:pass
-    else:raise AssertionError('Python digit reference repro stopped refusing')
+    # b654fad74: a non-ASCII digit amount is no evidence; the pair still matches.
+    assert record(rows), 'a non-ASCII digit amount must not block the heuristic pair'
     assert not record(rows,booked_move_transaction_ids={'o'})
     duplicate_hash=[_row(id='hash-o',wallet_id='source',amount=10_000_000,payment_hash='ab'*32,payment_hash_source='importer'),
                     _row(id='hash-duplicate',wallet_id='third',amount=10_000_000,payment_hash='ab'*32,payment_hash_source='importer'),

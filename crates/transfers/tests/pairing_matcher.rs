@@ -18,7 +18,7 @@ fn bytes(v: &Value) -> String {
 #[test]
 fn pairing_matcher_matches_python_transfer_fixtures_byte_for_byte() {
     let cases = kassiber_pytext::loads(include_str!("pairing_matcher.json")).unwrap();
-    assert_eq!(list(&cases).len(), 123);
+    assert_eq!(list(&cases).len(), 149);
     for (index, case) in list(&cases).iter().enumerate() {
         let opts = field(case, "options");
         let mut o = MatchOptions::default();
