@@ -29,7 +29,7 @@ from ..errors import AppError
 from ..http_client import request_with_retry
 from ..msat import dec
 from ..proxy import build_proxy_opener
-from ..redaction import withhold_credentials
+from ..redaction import request_credentials, withhold_credentials
 from ..util import str_or_none
 from ..wallet_descriptors import normalize_asset_code
 from . import pricing
@@ -566,6 +566,14 @@ def _read_json(
         with opener.open(request, timeout=timeout) as response:
             return json.loads(response.read().decode("utf-8"))
 
+    # The proxy's userinfo and anything the request itself carries are
+    # withheld as well as the caller's key and secret.
+    withheld = (
+        *withheld,
+        *request_credentials(
+            url=url, headers=request.header_items(), proxy_url=getattr(opener, "proxy_url", None)
+        ),
+    )
     return request_with_retry(url, open_once, source_label=source_label, withheld=withheld)
 
 

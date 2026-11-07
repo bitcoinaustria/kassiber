@@ -579,3 +579,79 @@ class ChainBackendCredentialEchoTest(CredentialEchoAssertions, unittest.TestCase
                 with self.assertRaises(AppError) as raised:
                     sync_backends.parse_socket_backend_url(url)
                 self.assertErrorWithheld(raised.exception, (RPC_PASSWORD, socket_password))
+
+
+# --- HTTP proxies, exchanges and rate sources -----------------------------------
+
+PROXY_USER = "proxy-user-abc"
+PROXY_PASSWORD = "proxy/Pass:word-" + "K" * 10
+EXCHANGE_KEY = "exch+Key/" + "A1b2C3d4" * 4
+EXCHANGE_SECRET = base64.b64encode(b"synthetic exchange secret bytes!" * 2).decode()
+
+
+class ProxyCredentialEchoTest(CredentialEchoAssertions, unittest.TestCase):
+    def _proxy(self, server):
+        return f"http://{quote(PROXY_USER, safe='')}:{quote(PROXY_PASSWORD, safe='')}@127.0.0.1:{server.server.server_address[1]}"
+
+    def _proxy_forms(self):
+        pair = f"{PROXY_USER}:{PROXY_PASSWORD}"
+        return (PROXY_PASSWORD, pair, base64.b64encode(pair.encode()).decode())
+
+    def test_an_http_proxy_error_withholds_proxy_and_exchange_credentials(self):
+        from kassiber.core.exchange_imports import fetch_binance_records, fetch_coinbase_records, fetch_kraken_records
+
+        for fetch in (fetch_kraken_records, fetch_coinbase_records, fetch_binance_records):
+            for status in (407, 502):
+                with self.subTest(fetch=fetch.__name__, status=status):
+                    with EchoServer(proxy_echo(status)) as server:
+                        backend = {
+                            "url": "http://exchange.invalid",
+                            "token": EXCHANGE_KEY,
+                            "auth_header": EXCHANGE_SECRET,
+                            "tor_proxy": self._proxy(server),
+                        }
+                        with self.assertRaises(AppError) as raised:
+                            fetch(backend)
+                    # The proxy saw its own credentials (and the exchange key header).
+                    self.assertIn("Proxy-Authorization", server.requests[0]["headers"])
+                    self.assertErrorWithheld(raised.exception, self._proxy_forms())
+
+    def test_a_rate_source_proxy_error_withholds_proxy_credentials(self):
+        from kassiber.core import rates
+
+        with EchoServer(proxy_echo(407)) as server:
+            with self.assertRaises(AppError) as raised:
+                rates.http_get_json("http://rates.invalid/api/v3/simple/price", proxy_url=self._proxy(server))
+        self.assertErrorWithheld(raised.exception, self._proxy_forms())
+
+    def test_a_btcpay_proxy_error_withholds_proxy_credentials(self):
+        from kassiber.btcpay.client import GreenfieldClient
+
+        with EchoServer(proxy_echo(502, as_json=True)) as server:
+            client = GreenfieldClient.from_backend(
+                {"url": "http://pay.invalid", "token": BTCPAY_KEY, "tor_proxy": self._proxy(server)}
+            )
+            with self.assertRaises(AppError) as raised:
+                client.get_json("/api/v1/stores")
+        self.assertErrorWithheld(raised.exception, self._proxy_forms())
+
+    def test_malformed_proxy_and_target_urls_are_not_echoed(self):
+        from urllib import request as urlrequest
+
+        from kassiber import proxy
+
+        for setting in (
+            f"socks5h://{PROXY_USER}:{PROXY_PASSWORD}@:9050",
+            f"://{PROXY_USER}:{PROXY_PASSWORD}@127.0.0.1:9050",
+            f"ftp://{PROXY_USER}:{PROXY_PASSWORD}@127.0.0.1:21",
+            f"socks5h://{PROXY_USER}:{PROXY_USER}x",
+        ):
+            with self.subTest(setting=setting.split("://")[0]):
+                with self.assertRaises(AppError) as raised:
+                    # A SOCKS proxy is parsed when the response opens.
+                    with proxy.urlopen_with_proxy(urlrequest.Request("http://target.invalid/"), proxy_url=setting):
+                        pass
+                self.assertErrorWithheld(raised.exception, (PROXY_PASSWORD,))
+        with self.assertRaises(AppError) as raised:
+            proxy.SocksUrlResponse(f"ftp://user:{PROXY_PASSWORD}@host/", "socks5h://127.0.0.1:9050", 1, {}).__enter__()
+        self.assertErrorWithheld(raised.exception, (PROXY_PASSWORD,))

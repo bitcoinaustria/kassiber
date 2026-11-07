@@ -31,6 +31,19 @@ def _with_default_proxy_scheme(proxy_url, default_scheme="socks5h"):
     return raw
 
 
+def _redacted_proxy(proxy_url):
+    # A proxy setting may carry user:pass; never echo it in an error.
+    from .backends import redact_backend_proxy_url
+
+    return redact_backend_proxy_url(proxy_url)
+
+
+def _redacted_url(url):
+    from .backends import redact_backend_url
+
+    return redact_backend_url(url)
+
+
 def is_onion_endpoint(endpoint):
     raw = str(endpoint or "").strip()
     if not raw:
@@ -42,12 +55,16 @@ def is_onion_endpoint(endpoint):
 
 def _parse_proxy_url(proxy_url, *, default_scheme="socks5h"):
     normalized = _with_default_proxy_scheme(proxy_url, default_scheme=default_scheme)
-    parsed = urlparse.urlsplit(normalized)
-    scheme = (parsed.scheme or default_scheme).lower()
-    host = parsed.hostname
-    port = parsed.port or {"socks5": 9050, "socks5h": 9050}.get(scheme)
+    try:
+        parsed = urlparse.urlsplit(normalized)
+        scheme = (parsed.scheme or default_scheme).lower()
+        host = parsed.hostname
+        port = parsed.port or {"socks5": 9050, "socks5h": 9050}.get(scheme)
+    except ValueError:
+        # urllib's message quotes the bad port, which may be part of userinfo.
+        host = port = None
     if not host or not port:
-        raise AppError(f"Invalid proxy URL: {proxy_url}")
+        raise AppError(f"Invalid proxy URL: {_redacted_proxy(proxy_url)}")
     username = (
         urlparse.unquote(parsed.username)
         if parsed.username is not None
@@ -349,7 +366,7 @@ def urlopen_with_proxy(
         return opener.open(request, timeout=timeout)
     if scheme not in {"socks5", "socks5h"}:
         raise AppError(
-            f"Unsupported {source_label} proxy transport '{scheme or proxy}'",
+            f"Unsupported {source_label} proxy transport '{scheme or _redacted_proxy(proxy)}'",
             code="validation",
             hint=(
                 "Use http://, socks5://, socks5h://, or HOST:PORT "
@@ -399,7 +416,7 @@ class SocksUrlResponse:
         parsed = urlparse.urlsplit(self._url)
         if parsed.scheme not in {"http", "https"} or not parsed.hostname:
             raise AppError(
-                f"Unsupported backend URL for proxy fetch: {self._url}",
+                f"Unsupported backend URL for proxy fetch: {_redacted_url(self._url)}",
                 code="validation",
             )
         port = parsed.port or (443 if parsed.scheme == "https" else 80)

@@ -18,6 +18,7 @@ from ..backends import preferred_mempool_api_backend
 from ..db import APP_NAME, get_setting, set_setting
 from ..errors import AppError
 from ..proxy import urlopen_with_proxy
+from ..redaction import request_credentials
 from . import pricing
 from ..time_utils import _iso_z, _parse_iso_datetime
 
@@ -217,6 +218,7 @@ def http_get_json(
         sleeper=_sleeper,
         rng=_rng,
         max_attempts=_max_attempts,
+        withheld=request_credentials(url=url, proxy_url=proxy_url),
     )
 
 
