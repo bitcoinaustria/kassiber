@@ -1461,5 +1461,15 @@
       "only_inline_image_data_reaches_the_broker"
     ],
     "rule": "The broker gets only base64 image data URLs, never a remote URL or other content."
+  },
+  {
+    "id": "S12-evidence-from-chat-withholds-name",
+    "file": "crates/ai/src/mutate.rs",
+    "find": "    if !crate::executor::full_access(state) {\n        // The note gave a restricted provider the extension only.",
+    "replace": "    if false {\n        // The note gave a restricted provider the extension only.",
+    "expect_failing": [
+      "a_chat_file_kept_as_evidence_never_names_the_file_to_a_restricted_provider"
+    ],
+    "rule": "Keeping a chat file as evidence never returns its name to a restricted provider."
   }
 ]

@@ -283,7 +283,9 @@ on a list or object `purpose` that Rust refuses as validation.
   the wallets pack, any file offers `ui.attachments.add_from_chat`, an image
   or PDF the document reader.
 - Tools name a file by `file` (`files::ai_chat_file`); the analysis tool
-  reads only exports. The user row keeps the cards (name, kind, size) of
+  reads only exports. `ui.attachments.add_from_chat` keeps any chat file as
+  evidence on a transaction (the native `ui.attachments.add` on the grant's
+  file); a restricted provider never gets the file's name back. The user row keeps the cards (name, kind, size) of
   the files its message first sent.
 - The broker carries a user message's inline images apart from its text
   (`images`, base64 data URLs only), on tool turns and plain ones.

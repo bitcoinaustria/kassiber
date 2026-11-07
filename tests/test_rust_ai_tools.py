@@ -972,7 +972,6 @@ REFUSED_MUTATIONS = {
     ("ui.source_funds.export", None),
     ("ui.btcpay.provenance.review", None),
     ("ui.wallets.sync", None),
-    ("ui.attachments.add_from_chat", None),
     ("ui.imports.rollback", None),
     ("ui.transfers.dismissals.delete", None),
     ("ui.wallets.import_attachment.apply", None),
@@ -988,6 +987,12 @@ def _mutating_extra() -> dict[str, list[dict]]:
         {"id": "{in}", "role": "destination", "amount_msat": 1000},
     ]}
     return {
+        "ui.attachments.add_from_chat": [
+            {"transaction": "{in}", "file": "file-1"},
+            {"transaction": "{in}", "label": "Kraken receipt"},
+            {"transaction": "{in}", "file": "file-9"},
+            {"transaction": "{in}", "path": "/etc/passwd"},
+        ],
         "ui.journals.quarantine.resolve": [
             {"transaction": "{q}", "action": "exclude", "reason": "Dust from an old faucet"},
             {"transaction": "{q}", "action": "price_override", "fiat_rate": "50000", "reason": "Exchange statement", "reprocess": False},
@@ -1076,6 +1081,14 @@ def mutating_requests(fixture, tool):
         states = [{**REMOTE, **scope}, {**LOCAL, **scope}]
     elif tool.name == "ui.maintenance.run":
         states = [{**REMOTE, **scope}, {**REMOTE, **scope, "auto_sync_attempted": True}]
+    elif tool.name == "ui.attachments.add_from_chat":
+        # The chat's files as the daemon resolves them (#693); the evidence
+        # copy is the book's own, the source stays where it is.
+        chat_files = {"chat_files": [
+            {"id": "file-1", "source_file": str(ROOT / "tests/fixtures/XBTEUR_1.csv"),
+             "filename": "XBTEUR_1.csv", "label": None, "kind": "delimited", "new": True, "token": "t"},
+        ]}
+        states = [{**REMOTE, **scope}, {**REMOTE, **scope, **chat_files}, {**LOCAL, **scope, **chat_files}]
     compared, refused = [], []
     for arguments in cases:
         for state in states:

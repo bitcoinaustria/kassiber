@@ -955,6 +955,47 @@ fn mutating_tools_run_only_with_a_consent_bound_to_the_call() {
 }
 
 #[test]
+fn a_chat_file_kept_as_evidence_never_names_the_file_to_a_restricted_provider() {
+    let stored = || {
+        dict([
+            ("id", s("att-1")),
+            ("original_filename", s("statement_max.mustermann.pdf")),
+            ("filename", s("statement_max.mustermann.pdf")),
+            ("label", s("statement_max.mustermann.pdf")),
+            ("display_label", s("statement_max.mustermann.pdf")),
+        ])
+    };
+    let chat_files = Value::List(vec![dict([
+        ("id", s("file-1")),
+        ("source_file", s("/chat/statement_max.mustermann.pdf")),
+        ("filename", s("statement_max.mustermann.pdf")),
+        ("kind", s("pdf")),
+    ])]);
+    for full_access in [false, true] {
+        let mut fake = book();
+        fake.payload = Some(stored());
+        let mut state = consented();
+        kassiber_envelope::set(&mut state, "chat_files", chat_files.clone());
+        kassiber_envelope::set(&mut state, "provider_full_access", Value::Bool(full_access));
+        let result = write(
+            &mut fake,
+            &mut state,
+            "ui.attachments.add_from_chat",
+            dict([("transaction", s("tx-1")), ("file", s("file-1"))]),
+            None,
+        );
+        assert_eq!(fake.writes, ["ui.attachments.add:ai_tool"]);
+        // The managed copy is made from the grant's file, named by it.
+        assert_eq!(
+            get(&fake.written[0], "file"),
+            Some(&s("/chat/statement_max.mustermann.pdf"))
+        );
+        let text = format!("{result:?}");
+        assert_eq!(text.contains("mustermann"), full_access, "{text}");
+    }
+}
+
+#[test]
 fn mutating_tools_run_only_when_advertised_this_turn() {
     let mut fake = book();
     let mut state = consented();
