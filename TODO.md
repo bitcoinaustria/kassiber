@@ -1407,8 +1407,11 @@ operator leaves, brokered routing and `ui.agent_access.*` kinds and R6-8's
   Its Windows console Ctrl-C handler has not been compiled: build and run it
   on a Windows runner, and run the `/bin/ps` labels on a Mac.
 - [ ] R6-4: Touch ID flow (`operator touch-id ...` and
-  `operator unlock --auth touch-id`), including the signed hardware run on a
-  Mac.
+  `operator unlock --auth touch-id`). The port is native and its signed
+  identity checks passed on a Mac; see the
+  [R6-4 checkpoint](docs/reference/rust-shell.md#operator-touch-id-r6-4).
+  Left: the hardware enroll/unlock/forget run with the Developer ID
+  provisioning profile, which shows the actual Touch ID prompt.
 - [ ] R6-5: AI tool catalog, executor, consent and projections; wire each tool
   as its R5 service lands (81 tools wait on R5, chain analysis the largest).
 - [ ] R6-6: provider configuration, streaming HTTP, the provider broker client

@@ -4681,7 +4681,7 @@ backoff, the janitor, idle restart and close), the runner and the server
 with its 64-client limit, signal stop, detail filter and Linux login guard,
 read from systemd's user record. Storage, modes, classification and paths
 come through a backend seam the binary implements; the CLI gains a
-`classify` API and the broker-child mode. Touch ID answers
+`classify` API and the broker-child mode. Touch ID answered
 `native_auth_unavailable` until R6-4.
 
 Parity: 93 service, 31 server and 10 mode tests port the Python suites with
@@ -4722,6 +4722,26 @@ desktop lease's intervals and conditional lock, and the CLI's broker choice,
 build binding, exit codes and mapping. The
 [checkpoint](../reference/rust-shell.md#operator-cli-brokered-routing-and-agent-access-r6-3)
 records the details and what R6-4 and R6-8 take on.
+
+### R6-4 operator Touch ID
+
+`operator touch-id status`/`enroll`/`forget`, `operator unlock --auth
+touch-id` and the broker's `unlock_touch_id` and `touch_id_configure` are
+native. `crates/operator/src/native_auth.rs` ports the helper bridge: the
+signed `kassiber-ui` path and `codesign` identity checks, the ready/go
+launch gate with live-pid validation, pipe-only secrets, the exit-code
+mapping and the CLI's binding to its signed parent; `kassiber-secrets`
+derives the opaque account. The Tauri helper is unchanged.
+
+Parity: the ten Python native-auth tests port over a platform seam, server
+and service tests cover ordering and the configure flow, the operator CLI
+differential gains seven touch-id steps (byte-identical), and 18 new
+mutation entries are all killed. On a Mac, a Developer-ID-signed copy
+passed the helper's identity check of the Rust sidecar and refused every
+wrongly signed or placed variant; the Touch ID prompt itself waits for a
+run with the Developer ID provisioning profile. The
+[checkpoint](../reference/rust-shell.md#operator-touch-id-r6-4) records the
+details.
 
 ### R6-5a AI tool executor and read tools (partial)
 
