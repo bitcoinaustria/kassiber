@@ -614,6 +614,11 @@ safe-to-record contract for secret-bearing config values:
   through the edit form instead of silently clearing it. A CA certificate is
   public material, but the value can be a local filesystem path, so this stays
   off the CLI and AI surfaces, which keep `has_certificate` presence only
+- error text a server, proxy or tool sends back (an HTTP error body, a JSON
+  `message`, `lightning-cli` output) shows `<redacted>` wherever it repeats a
+  credential the request carried, in any spelling Kassiber sent it; see
+  [credential echoes](credential-echo.md) for every integration and what to
+  rotate if older output was shared
 
 This contract is intentionally narrow. It does **not** mean every CLI surface
 is safe to paste into a hosted model, issue tracker, or shared log. Addresses,
