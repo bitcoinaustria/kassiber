@@ -1,12 +1,13 @@
 import json
 
+from tests.rust_port.fixture_compare import assert_rebuilt
 from tests.rust_port.journal_render_branches import PATH, renderer_vectors, vectors
 from tests.test_tax_mutations import checker
 
 
 def test_renderer_branch_witnesses_rebuild_from_python():
     witnesses = json.loads(PATH.read_text())
-    assert witnesses == vectors() + renderer_vectors()
+    assert_rebuilt(witnesses, vectors() + renderer_vectors(), PATH.name)
     assert len({case['name'] for case in witnesses}) == len(witnesses)
     for case in witnesses:
         assert set(case['expected']) in ({'state'}, {'error'})

@@ -7,6 +7,8 @@ import sys
 
 import pytest
 
+from tests.rust_port.fixture_compare import assert_rebuilt
+
 from tests.rust_port.journal_scalar_vectors import PATH as SCALAR_PATH, vectors as scalar_vectors, byte_vectors, render_vectors as scalar_render_vectors, refusal_vectors as scalar_refusal_vectors
 from tests.rust_port.journal_render_vectors import PATH, vectors, machine_msat_vectors, legacy_float_vectors, response_refusal_vectors
 from tests.rust_port.journal_native_builder_vectors import PATH as BUILDER_PATH, vectors as builder_vectors
@@ -16,18 +18,18 @@ from tests.rust_port.journal_nonfinite_vectors import PATH as NONFINITE_PATH, ve
 
 
 def test_render_vectors_rebuild_from_python_build():
-    assert json.dumps(json.loads(NONFINITE_PATH.read_text()), sort_keys=True, ensure_ascii=True) == json.dumps(nonfinite_vectors(), sort_keys=True, ensure_ascii=True)
-    assert json.dumps(json.loads(GRAPH_PATH.read_text()), sort_keys=True, ensure_ascii=True) == json.dumps(graph_vectors(), sort_keys=True, ensure_ascii=True)
-    assert json.dumps(json.loads(BUILDER_PATH.read_text()), sort_keys=True, ensure_ascii=True) == json.dumps(builder_vectors(), sort_keys=True, ensure_ascii=True)
-    assert json.loads(NATIVE_PATH.read_text()) == native_vectors()
-    assert json.loads(SCALAR_PATH.read_text()) == scalar_vectors()
-    assert json.loads(SCALAR_PATH.with_name("render-scalar-bytes.json").read_text()) == byte_vectors()
-    assert json.loads(SCALAR_PATH.with_name("render-scalar-refusals.json").read_text()) == scalar_refusal_vectors()
-    assert json.loads(SCALAR_PATH.with_name("render-scalar-coercions.json").read_text()) == scalar_render_vectors()
-    assert json.loads(PATH.read_text()) == vectors()
-    assert json.loads(PATH.with_name('msat-machine.json').read_text()) == [list(v) for v in machine_msat_vectors()]
-    assert json.loads(PATH.with_name('render-legacy-floats.json').read_text()) == legacy_float_vectors()
-    assert json.loads(PATH.with_name('render-response-refusals.json').read_text()) == response_refusal_vectors()
+    assert_rebuilt(json.dumps(json.loads(NONFINITE_PATH.read_text()), sort_keys=True, ensure_ascii=True), json.dumps(nonfinite_vectors(), sort_keys=True, ensure_ascii=True), NONFINITE_PATH.name)
+    assert_rebuilt(json.dumps(json.loads(GRAPH_PATH.read_text()), sort_keys=True, ensure_ascii=True), json.dumps(graph_vectors(), sort_keys=True, ensure_ascii=True), GRAPH_PATH.name)
+    assert_rebuilt(json.dumps(json.loads(BUILDER_PATH.read_text()), sort_keys=True, ensure_ascii=True), json.dumps(builder_vectors(), sort_keys=True, ensure_ascii=True), BUILDER_PATH.name)
+    assert_rebuilt(json.loads(NATIVE_PATH.read_text()), native_vectors(), NATIVE_PATH.name)
+    assert_rebuilt(json.loads(SCALAR_PATH.read_text()), scalar_vectors(), SCALAR_PATH.name)
+    assert_rebuilt(json.loads(SCALAR_PATH.with_name("render-scalar-bytes.json").read_text()), byte_vectors(), 'render-scalar-bytes.json')
+    assert_rebuilt(json.loads(SCALAR_PATH.with_name("render-scalar-refusals.json").read_text()), scalar_refusal_vectors(), 'render-scalar-refusals.json')
+    assert_rebuilt(json.loads(SCALAR_PATH.with_name("render-scalar-coercions.json").read_text()), scalar_render_vectors(), 'render-scalar-coercions.json')
+    assert_rebuilt(json.loads(PATH.read_text()), vectors(), PATH.name)
+    assert_rebuilt(json.loads(PATH.with_name('msat-machine.json').read_text()), [list(v) for v in machine_msat_vectors()], 'msat-machine.json')
+    assert_rebuilt(json.loads(PATH.with_name('render-legacy-floats.json').read_text()), legacy_float_vectors(), 'render-legacy-floats.json')
+    assert_rebuilt(json.loads(PATH.with_name('render-response-refusals.json').read_text()), response_refusal_vectors(), 'render-response-refusals.json')
 
 
 def test_uuid_tapes_are_bijections_and_cover_every_rendered_identity():

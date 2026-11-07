@@ -8,6 +8,7 @@ import subprocess
 
 import pytest
 
+from tests.rust_port.fixture_compare import assert_rebuilt
 from tests.rust_port.journal_pipeline_oracle import restore
 from tests.rust_port.journal_refresh_oracle import PATH, packed_vectors
 from tests.rust_port.journal_persistence_oracle import dump
@@ -29,7 +30,7 @@ def cases():
 
 def test_refresh_vectors_rebuild_from_the_python_reference():
     actual = json.dumps(packed_vectors(), ensure_ascii=True, separators=(',', ':'), allow_nan=False) + '\n'
-    assert PATH.read_text() == actual
+    assert_rebuilt(PATH.read_text(), actual, PATH.name)
 
 
 @pytest.mark.parametrize('cipher', [False, True])
