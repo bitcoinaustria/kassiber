@@ -28709,6 +28709,566 @@
       ]
     },
     {
+      "name": "actions",
+      "sql": [
+        "INSERT INTO workspaces(id,label,created_at) VALUES('w','Main','2025-01-01T00:00:00Z')",
+        "INSERT INTO profiles(id,workspace_id,label,fiat_currency,tax_country,created_at,last_processed_at,last_processed_tx_count,ownership_review_counts_json) VALUES('p','w','Book','EUR','at','2025-01-01T00:00:00Z','2025-01-01T00:00:00Z',42,'{\"owned\":7}')",
+        "INSERT INTO profiles(id,workspace_id,label,created_at) VALUES('other','w','Other','2025-01-01T00:00:00Z')",
+        "INSERT INTO wallets(id,workspace_id,profile_id,label,kind,created_at) VALUES('source','w','p','source','custom','2025-01-01T00:00:00Z')",
+        "INSERT INTO wallets(id,workspace_id,profile_id,label,kind,created_at) VALUES('target','w','p','target','custom','2025-01-01T00:00:00Z')",
+        "INSERT INTO wallets(id,workspace_id,profile_id,label,kind,created_at) VALUES('liquid','w','p','liquid','custom','2025-01-01T00:00:00Z')",
+        "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,amount_includes_fee,occurred_at,kind,raw_json,created_at) VALUES('a','w','p','source','fp-a','a-ext','BTC','outbound',1000,10,0,'2025-02-01T00:00:00Z','deposit','{}','2025-01-01T00:00:00Z')",
+        "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,amount_includes_fee,occurred_at,kind,raw_json,created_at) VALUES('b','w','p','target','fp-b','b-ext','BTC','inbound',600,0,0,'2025-02-01T00:00:00Z','deposit','{}','2025-01-01T00:00:00Z')",
+        "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,amount_includes_fee,occurred_at,kind,raw_json,created_at) VALUES('c','w','p','target','fp-c','c-ext','BTC','inbound',400,0,0,'2025-02-01T00:00:00Z','deposit','{}','2025-01-01T00:00:00Z')",
+        "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,amount_includes_fee,occurred_at,kind,raw_json,created_at) VALUES('d','w','p','source','fp-d','d-ext','BTC','outbound',1000,0,0,'2025-02-01T00:00:00Z','deposit','{}','2025-01-01T00:00:00Z')",
+        "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,amount_includes_fee,occurred_at,kind,raw_json,created_at) VALUES('e','w','p','target','fp-e','e-ext','BTC','inbound',1000,0,0,'2025-02-01T00:00:00Z','deposit','{}','2025-01-01T00:00:00Z')",
+        "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,amount_includes_fee,occurred_at,kind,raw_json,created_at) VALUES('f','w','p','source','fp-f','f-ext','BTC','outbound',1010,10,1,'2025-02-01T00:00:00Z','deposit','{}','2025-01-01T00:00:00Z')",
+        "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,amount_includes_fee,occurred_at,kind,raw_json,created_at) VALUES('g','w','p','liquid','fp-g','g-ext','LBTC','inbound',800,0,0,'2025-02-01T00:00:00Z','deposit','{}','2025-01-01T00:00:00Z')",
+        "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,amount_includes_fee,occurred_at,kind,raw_json,created_at) VALUES('h','w','p','target','fp-h','h-ext','ETH','inbound',700,0,0,'2025-02-01T00:00:00Z','deposit','{}','2025-01-01T00:00:00Z')",
+        "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,amount_includes_fee,occurred_at,kind,raw_json,created_at) VALUES('j','w','p','source','fp-j','j-ext','BTC','outbound',1000,0,0,'2025-02-01T00:00:00Z','deposit','{}','2025-01-01T00:00:00Z')",
+        "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,amount_includes_fee,occurred_at,kind,raw_json,created_at) VALUES('k','w','p','target','fp-k','k-ext','BTC','inbound',1000,0,0,'2025-02-01T00:00:00Z','deposit','{}','2025-01-01T00:00:00Z')",
+        "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,amount_includes_fee,occurred_at,kind,raw_json,created_at) VALUES('l','w','p','target','fp-l','j-ext','BTC','inbound',200,0,0,'2025-02-01T00:00:00Z','deposit','{}','2025-01-01T00:00:00Z')",
+        "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,amount_includes_fee,occurred_at,kind,raw_json,created_at) VALUES('zero','w','p','source','fp-zero','zero-ext','BTC','outbound',0,0,0,'2025-02-01T00:00:00Z','deposit','{}','2025-01-01T00:00:00Z')",
+        "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,amount_includes_fee,occurred_at,kind,raw_json,created_at) VALUES('neg','w','p','source','fp-neg','neg-ext','BTC','outbound',10,20,1,'2025-02-01T00:00:00Z','deposit','{}','2025-01-01T00:00:00Z')",
+        "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,amount_includes_fee,occurred_at,kind,raw_json,created_at) VALUES('bad','w','p','target','fp-bad','bad-ext','BTC','inbound',1000,1,1,'2025-02-01T00:00:00Z','deposit','{}','2025-01-01T00:00:00Z')",
+        "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,amount_includes_fee,occurred_at,kind,raw_json,created_at) VALUES('excluded','w','p','target','fp-excluded','excluded-ext','BTC','inbound',1000,0,0,'2025-02-01T00:00:00Z','deposit','{}','2025-01-01T00:00:00Z')",
+        "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,amount_includes_fee,occurred_at,kind,raw_json,created_at) VALUES('net','w','p','target','fp-net','net-ext','BTC','inbound',1000,0,0,'2025-02-01T00:00:00Z','deposit','{\"network\":\"regtest\"}','2025-01-01T00:00:00Z')",
+        "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,amount_includes_fee,occurred_at,kind,raw_json,created_at) VALUES('contradiction','w','p','target','fp-contradiction','contradiction-ext','BTC','inbound',1000,0,0,'2025-02-01T00:00:00Z','deposit','{\"chain\":\"liquid\"}','2025-01-01T00:00:00Z')",
+        "UPDATE transactions SET excluded=1 WHERE id='excluded'"
+      ],
+      "cases": [
+        {
+          "operation": "transfers.components.plan",
+          "args": {
+            "action": [],
+            "components": [
+              {
+                "legs": [
+                  {
+                    "role": "source",
+                    "amount_msat": 1000,
+                    "transaction": "d"
+                  },
+                  {
+                    "role": "destination",
+                    "untracked_wallet": " Cold Storage ",
+                    "occurred_at": "2025-02-01T00:00:00Z",
+                    "amount_msat": 1000
+                  }
+                ]
+              }
+            ],
+            "authored_source": "cli"
+          },
+          "setup": [],
+          "profile": "p",
+          "id": "051f12c5-6e27-5963-8014-c3e1f6610e21",
+          "now": "2025-06-01T00:00:00Z",
+          "error": {
+            "code": "validation",
+            "message": "Custody component review action is unsupported",
+            "hint": null,
+            "details": null
+          },
+          "rows": {
+            "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
+            "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
+            "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_economic_terms": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_transaction_memberships": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_authored_evidence_snapshots": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_evidence_commitments": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "wallets": "60837e8cc1f5603d80583020fd11df670e146d50b7d8eca8ca165778bd646c9a"
+          }
+        },
+        {
+          "operation": "transfers.components.plan",
+          "args": {
+            "action": {},
+            "components": [
+              {
+                "legs": [
+                  {
+                    "role": "source",
+                    "amount_msat": 1000,
+                    "transaction": "d"
+                  },
+                  {
+                    "role": "destination",
+                    "untracked_wallet": " Cold Storage ",
+                    "occurred_at": "2025-02-01T00:00:00Z",
+                    "amount_msat": 1000
+                  }
+                ]
+              }
+            ],
+            "authored_source": "cli"
+          },
+          "setup": [],
+          "profile": "p",
+          "id": "59a56f7b-7519-5e1f-9e2f-f4a83b2d880b",
+          "now": "2025-06-01T01:00:00Z",
+          "error": {
+            "code": "validation",
+            "message": "Custody component review action is unsupported",
+            "hint": null,
+            "details": null
+          },
+          "rows": {
+            "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
+            "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
+            "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_economic_terms": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_transaction_memberships": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_authored_evidence_snapshots": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_evidence_commitments": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "wallets": "60837e8cc1f5603d80583020fd11df670e146d50b7d8eca8ca165778bd646c9a"
+          }
+        },
+        {
+          "operation": "transfers.components.plan",
+          "args": {
+            "action": null,
+            "components": [
+              {
+                "legs": [
+                  {
+                    "role": "source",
+                    "amount_msat": 1000,
+                    "transaction": "d"
+                  },
+                  {
+                    "role": "destination",
+                    "untracked_wallet": " Cold Storage ",
+                    "occurred_at": "2025-02-01T00:00:00Z",
+                    "amount_msat": 1000
+                  }
+                ]
+              }
+            ],
+            "authored_source": "cli"
+          },
+          "setup": [],
+          "profile": "p",
+          "id": "6d870ace-fce8-5559-bc1a-379ec36f216e",
+          "now": "2025-06-01T02:00:00Z",
+          "error": {
+            "code": "validation",
+            "message": "Custody component review action is unsupported",
+            "hint": null,
+            "details": null
+          },
+          "rows": {
+            "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
+            "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
+            "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_economic_terms": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_transaction_memberships": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_authored_evidence_snapshots": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_evidence_commitments": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "wallets": "60837e8cc1f5603d80583020fd11df670e146d50b7d8eca8ca165778bd646c9a"
+          }
+        },
+        {
+          "operation": "transfers.components.plan",
+          "args": {
+            "action": 7,
+            "components": [
+              {
+                "legs": [
+                  {
+                    "role": "source",
+                    "amount_msat": 1000,
+                    "transaction": "d"
+                  },
+                  {
+                    "role": "destination",
+                    "untracked_wallet": " Cold Storage ",
+                    "occurred_at": "2025-02-01T00:00:00Z",
+                    "amount_msat": 1000
+                  }
+                ]
+              }
+            ],
+            "authored_source": "cli"
+          },
+          "setup": [],
+          "profile": "p",
+          "id": "ef8e6183-57f4-507d-8bf0-e55e0af8c618",
+          "now": "2025-06-01T03:00:00Z",
+          "error": {
+            "code": "validation",
+            "message": "Custody component review action is unsupported",
+            "hint": null,
+            "details": null
+          },
+          "rows": {
+            "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
+            "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
+            "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_economic_terms": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_transaction_memberships": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_authored_evidence_snapshots": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_evidence_commitments": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "wallets": "60837e8cc1f5603d80583020fd11df670e146d50b7d8eca8ca165778bd646c9a"
+          }
+        },
+        {
+          "operation": "transfers.components.plan",
+          "args": {
+            "action": true,
+            "components": [
+              {
+                "legs": [
+                  {
+                    "role": "source",
+                    "amount_msat": 1000,
+                    "transaction": "d"
+                  },
+                  {
+                    "role": "destination",
+                    "untracked_wallet": " Cold Storage ",
+                    "occurred_at": "2025-02-01T00:00:00Z",
+                    "amount_msat": 1000
+                  }
+                ]
+              }
+            ],
+            "authored_source": "cli"
+          },
+          "setup": [],
+          "profile": "p",
+          "id": "2e201e8e-713d-5798-9edf-76a069db3b95",
+          "now": "2025-06-01T04:00:00Z",
+          "error": {
+            "code": "validation",
+            "message": "Custody component review action is unsupported",
+            "hint": null,
+            "details": null
+          },
+          "rows": {
+            "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
+            "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
+            "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_economic_terms": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_transaction_memberships": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_authored_evidence_snapshots": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_evidence_commitments": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "wallets": "60837e8cc1f5603d80583020fd11df670e146d50b7d8eca8ca165778bd646c9a"
+          }
+        },
+        {
+          "operation": "transfers.components.plan",
+          "args": {
+            "action": "explode",
+            "components": [
+              {
+                "legs": [
+                  {
+                    "role": "source",
+                    "amount_msat": 1000,
+                    "transaction": "d"
+                  },
+                  {
+                    "role": "destination",
+                    "untracked_wallet": " Cold Storage ",
+                    "occurred_at": "2025-02-01T00:00:00Z",
+                    "amount_msat": 1000
+                  }
+                ]
+              }
+            ],
+            "authored_source": "cli"
+          },
+          "setup": [],
+          "profile": "p",
+          "id": "12530bd4-bbc0-52cb-a7de-03954d239b1e",
+          "now": "2025-06-01T05:00:00Z",
+          "error": {
+            "code": "validation",
+            "message": "Custody component review action is unsupported",
+            "hint": null,
+            "details": {
+              "action": "explode"
+            }
+          },
+          "rows": {
+            "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
+            "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
+            "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_economic_terms": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_transaction_memberships": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_authored_evidence_snapshots": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_evidence_commitments": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "wallets": "60837e8cc1f5603d80583020fd11df670e146d50b7d8eca8ca165778bd646c9a"
+          }
+        },
+        {
+          "operation": "transfers.components.plan",
+          "args": {
+            "action": "Create",
+            "components": [
+              {
+                "legs": [
+                  {
+                    "role": "source",
+                    "amount_msat": 1000,
+                    "transaction": "d"
+                  },
+                  {
+                    "role": "destination",
+                    "untracked_wallet": " Cold Storage ",
+                    "occurred_at": "2025-02-01T00:00:00Z",
+                    "amount_msat": 1000
+                  }
+                ]
+              }
+            ],
+            "authored_source": "cli"
+          },
+          "setup": [],
+          "profile": "p",
+          "id": "111a5122-c3c9-5940-b53b-fae14829da3e",
+          "now": "2025-06-01T06:00:00Z",
+          "error": {
+            "code": "validation",
+            "message": "Custody component review action is unsupported",
+            "hint": null,
+            "details": {
+              "action": "Create"
+            }
+          },
+          "rows": {
+            "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
+            "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
+            "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_economic_terms": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_transaction_memberships": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_authored_evidence_snapshots": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_evidence_commitments": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "wallets": "60837e8cc1f5603d80583020fd11df670e146d50b7d8eca8ca165778bd646c9a"
+          }
+        },
+        {
+          "operation": "transfers.components.apply",
+          "args": {
+            "action": [],
+            "expected_input_version": 0,
+            "components": [
+              {
+                "legs": [
+                  {
+                    "role": "source",
+                    "amount_msat": 1000,
+                    "transaction": "d"
+                  },
+                  {
+                    "role": "destination",
+                    "untracked_wallet": " Cold Storage ",
+                    "occurred_at": "2025-02-01T00:00:00Z",
+                    "amount_msat": 1000
+                  }
+                ]
+              }
+            ],
+            "authored_source": "cli"
+          },
+          "setup": [],
+          "profile": "p",
+          "id": "a214963a-17cd-5d40-aac5-ced487f524ea",
+          "now": "2025-06-01T07:00:00Z",
+          "error": {
+            "code": "validation",
+            "message": "Custody component review action is unsupported",
+            "hint": null,
+            "details": null
+          },
+          "rows": {
+            "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
+            "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
+            "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_economic_terms": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_transaction_memberships": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_authored_evidence_snapshots": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_evidence_commitments": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "wallets": "60837e8cc1f5603d80583020fd11df670e146d50b7d8eca8ca165778bd646c9a"
+          }
+        },
+        {
+          "operation": "transfers.components.apply",
+          "args": {
+            "action": {
+              "a": 1
+            },
+            "expected_input_version": 0,
+            "components": [
+              {
+                "legs": [
+                  {
+                    "role": "source",
+                    "amount_msat": 1000,
+                    "transaction": "d"
+                  },
+                  {
+                    "role": "destination",
+                    "untracked_wallet": " Cold Storage ",
+                    "occurred_at": "2025-02-01T00:00:00Z",
+                    "amount_msat": 1000
+                  }
+                ]
+              }
+            ],
+            "authored_source": "cli"
+          },
+          "setup": [],
+          "profile": "p",
+          "id": "8af9c428-9eb8-5b12-a3cd-ea71b7d4f6c2",
+          "now": "2025-06-01T08:00:00Z",
+          "error": {
+            "code": "validation",
+            "message": "Custody component review action is unsupported",
+            "hint": null,
+            "details": null
+          },
+          "rows": {
+            "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
+            "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
+            "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_economic_terms": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_transaction_memberships": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_authored_evidence_snapshots": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_evidence_commitments": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "wallets": "60837e8cc1f5603d80583020fd11df670e146d50b7d8eca8ca165778bd646c9a"
+          }
+        },
+        {
+          "operation": "transfers.components.apply",
+          "args": {
+            "action": null,
+            "expected_input_version": 0,
+            "components": [
+              {
+                "legs": [
+                  {
+                    "role": "source",
+                    "amount_msat": 1000,
+                    "transaction": "d"
+                  },
+                  {
+                    "role": "destination",
+                    "untracked_wallet": " Cold Storage ",
+                    "occurred_at": "2025-02-01T00:00:00Z",
+                    "amount_msat": 1000
+                  }
+                ]
+              }
+            ],
+            "authored_source": "cli"
+          },
+          "setup": [],
+          "profile": "p",
+          "id": "c476a388-be7e-5ab4-84ab-4844e93051fa",
+          "now": "2025-06-01T09:00:00Z",
+          "error": {
+            "code": "validation",
+            "message": "Custody component review action is unsupported",
+            "hint": null,
+            "details": null
+          },
+          "rows": {
+            "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
+            "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
+            "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_economic_terms": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_transaction_memberships": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_authored_evidence_snapshots": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_evidence_commitments": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "wallets": "60837e8cc1f5603d80583020fd11df670e146d50b7d8eca8ca165778bd646c9a"
+          }
+        },
+        {
+          "operation": "transfers.components.apply",
+          "args": {
+            "action": "explode",
+            "expected_input_version": 0,
+            "components": [
+              {
+                "legs": [
+                  {
+                    "role": "source",
+                    "amount_msat": 1000,
+                    "transaction": "d"
+                  },
+                  {
+                    "role": "destination",
+                    "untracked_wallet": " Cold Storage ",
+                    "occurred_at": "2025-02-01T00:00:00Z",
+                    "amount_msat": 1000
+                  }
+                ]
+              }
+            ],
+            "authored_source": "cli"
+          },
+          "setup": [],
+          "profile": "p",
+          "id": "dae6d9bf-c4e0-5772-8007-1d17158cee0a",
+          "now": "2025-06-01T10:00:00Z",
+          "error": {
+            "code": "validation",
+            "message": "Custody component review action is unsupported",
+            "hint": null,
+            "details": {
+              "action": "explode"
+            }
+          },
+          "rows": {
+            "chain_index_clock": "26ba10e07574c364817226d5b7b6dbd5e1a3a830c28ebce49112595b0b4257d1",
+            "chain_index_dirty": "ce35681450c2a99452edb77137d0cd22b6756f92c5bfd58fb65ee5728e3670db",
+            "profiles": "13049d2e91e1754e79b734a6b46afdce471c93c45a19e7707c00545458a8b8db",
+            "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_economic_terms": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_transaction_memberships": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_authored_evidence_snapshots": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_evidence_commitments": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "wallets": "60837e8cc1f5603d80583020fd11df670e146d50b7d8eca8ca165778bd646c9a"
+          }
+        }
+      ]
+    },
+    {
       "name": "amounts",
       "sql": [
         "INSERT INTO workspaces(id,label,created_at) VALUES('w','Main','2025-01-01T00:00:00Z')",
@@ -31844,8 +32404,8 @@
           "id": "c14b6795-477a-5ced-8f60-cc9e91e609c6",
           "now": "2025-06-01T06:00:00Z",
           "error": {
-            "code": "internal_error",
-            "message": "unhashable type: 'list'",
+            "code": "validation",
+            "message": "Custody component review action is unsupported",
             "hint": null,
             "details": null
           },
