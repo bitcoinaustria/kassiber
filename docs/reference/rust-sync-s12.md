@@ -36,7 +36,7 @@ inspection. "Now" is the state on this branch.
 | #678 | `providers.agent_access` (`full` default, `restricted`), `_provider_has_full_agent_access`, `_ai_full_access`: a restricted off-device provider is kept to projected results and away from custody-gap, lineage, chain-analysis source and attachment-value tools; an on-device provider always has full access | provider rows and `create/update --agent-access`; `agent_access_restricted` denials replace `local_provider_required` | `crates/ai/src/providers`, `executor.rs`, `mutate.rs`, `projections.rs`, `previews.rs`, `file_analysis.rs`, `chat/screen.rs`, `select.rs` | Differs: Rust gates on `provider_kind == local` and has no `agent_access` | see [state](#state-on-this-branch) |
 | #679 | `custody_components` revise/supersede/undo/activate actions; `ui.transfers.dismissals.list`; qualified txids (S2) | tools `ui.transfers.components.plan/apply` (`action`, `component_id`, `activate`), `ui.transfers.dismissals.list` | `crates/ai/src/summary.rs`, `executor.rs`, `crates/transfers` | Differs: summaries, schemas | Summaries ported; dismissals list refused (owned by S6); component actions follow S11 |
 | #681 | quarantine root-cause groups (S5), `transaction_verify.py` (S8), wallet completeness | tools `ui.journals.quarantine.groups`, `ui.transactions.verify`; refresh set gains the groups tool | `executor.rs`, `projections.rs` | Missing; AI reads also lacked the stale-journal projection | Catalog entries, refresh set; the projection is ported (see [MCP grants](#mcp-grants-686)); the tools refused until S5 and S8 |
-| #682 | `core/attachment_import.py`, `import_batches.py`: an attached file imported as a consented, plan-bound import with rollback | tools `ui.wallets.import_attachment.plan/apply`, `ui.imports.list`, `ui.imports.rollback(.plan)`, `ui.wallets.request_input`, `ui.attachments.add_from_chat` | none | Missing | Catalog entries, consent and summaries; refused until ported |
+| #682 | `core/attachment_import.py`, `import_batches.py`: an attached file imported as a consented, plan-bound import with rollback | tools `ui.wallets.import_attachment.plan/apply`, `ui.imports.list`, `ui.imports.rollback(.plan)`, `ui.wallets.request_input`, `ui.attachments.add_from_chat` | none | Missing | Catalog entries, consent and summaries; the import runs, their rollback and the wallet handoff ported (see [import runs](#import-runs-and-the-wallet-handoff-682)); `import_attachment.plan/apply` refused until ported |
 | #683 | system prompt evidence rules; journals stale on dismiss (S6) | `ai.chat` system prompt | `prompt.rs` (embedded) | Differs | Prompt regenerated |
 | #684 | `ai/undo.py`, `REVERSIBLE_TOOLS`, `AI_PERMISSION_MODES`, `AiToolConsentState.preapproval/set_permission_mode`; custody AI audit decisions `mode_auto`, `mode_full_access` | `ai.chat` `permission_mode`, kind `ai.chat.permission_mode`, `ai.chat.tool_call` `approval`, consent card `reversible`, `egresses`, `can_allow_session`, result `undo` | `crates/ai/src/consent.rs`, `chat/turn.rs`, `mutate.rs`, `crates/daemon/src/ai_chat.rs` | Missing: kind refused, no `reversible` | see [state](#state-on-this-branch) |
 | #686 | `agent_access.py` grants (`read`, `operator`, `accounting_decisions`) and access mode; `mcp/tools.py` registry over the broker's exact-path classification; writes through the assistant executor, audited `mcp_host` | `mcp serve` tool list and calls, `mcp enable --grant --agent-access`, `mcp call --grant --client`, `ui.agent_access.configure` | `crates/mcp`, `crates/daemon/src/agent_access.rs`, `crates/setup/src/agent_access.rs` | Differs: Rust lists the 44 read tools and refuses writes | Ported; see [MCP grants](#mcp-grants-686) |
@@ -303,6 +303,26 @@ a PDF's text, an image, an expired grant, a plain follow-up, the stored
 cards) and a broker scenario with images over a resumed session; all 11
 tests pass. The tools harness now feeds the analysis tool `chat_files` and
 compares its by-id cases; they match.
+
+### Import runs and the wallet handoff (#682)
+
+- `crates/ai/src/import_runs.rs`: `ui.imports.list` and
+  `ui.imports.rollback.plan` read the book's import runs (a restricted
+  provider gets no recorded filename); the plan is `review_rollback`'s,
+  bound to the book's input version and a digest, and blocked when nothing
+  is left to delete or the rollback would delete reviewed work.
+  `ui.imports.rollback` runs only when the consented digest and version
+  still hold (`rollback_plan_stale`, `rollback_blocked`).
+  `kassiber_imports::Operation::Review` and `InputVersion` supply the plan
+  with the version and the version alone.
+- `ui.wallets.request_input`: the typed desktop handoff for a wallet the
+  assistant must not create (source allowlist, bounded plain-text
+  explanation, the packet's digest as its correlation id).
+- `previews::plan_consent_preview`: the consent card of a plan-bound apply
+  recomputes the plan (`ready`, `blocked`, `stale`, `unavailable`) and its
+  summary; the attachment and document imports show as unavailable after
+  Python's first checks until they are ported.
+  `tests/rust_ai_tool_reference.py` applies the same card as the chat loop.
 
 ### Tools harness after these steps
 

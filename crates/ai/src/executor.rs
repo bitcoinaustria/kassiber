@@ -62,13 +62,11 @@ pub const LOCAL_CUSTODY_READ_KINDS: [&str; 6] = [
 
 /// Read tools refused until the service behind them is native, with the
 /// work that owns it (design doc §2).
-pub const REFUSED_READS: [(&str, &str); 11] = [
+pub const REFUSED_READS: [(&str, &str); 8] = [
     (
         "ui.connections.node.snapshot",
         "the Lightning node snapshot route",
     ),
-    ("ui.imports.list", ATTACHMENT_IMPORT_OWNER),
-    ("ui.imports.rollback.plan", ATTACHMENT_IMPORT_OWNER),
     (
         "ui.journals.quarantine.groups",
         "main-sync S5 (quarantine root causes)",
@@ -82,7 +80,6 @@ pub const REFUSED_READS: [(&str, &str); 11] = [
     ("ui.wallets.import_attachment.plan", ATTACHMENT_IMPORT_OWNER),
     ("ui.wallets.import_document.plan", DOCUMENT_IMPORT_OWNER),
     ("ui.wallets.read_document", DOCUMENT_IMPORT_OWNER),
-    ("ui.wallets.request_input", ATTACHMENT_IMPORT_OWNER),
 ];
 
 /// Who owns importing an attached file and its rollback.
@@ -385,6 +382,14 @@ pub trait Book {
     /// failure applied (`_apply_sync_failure_blocker`).
     fn report_blockers(&mut self, _auto_sync: Option<&Value>) -> Result<Value, ToolError> {
         Err(not_native("ui.report.blockers", "this book").into())
+    }
+    /// The book's import runs (#682): their list, a run's rollback plan with
+    /// the book's input version, or its rollback.
+    fn import_runs(
+        &mut self,
+        _request: crate::import_runs::ImportRuns<'_>,
+    ) -> Result<Value, ToolError> {
+        Err(not_native("ui.imports.list", "this book").into())
     }
     /// `core_file_analysis.analyze_file(source_file, column_map=...,
     /// sample_rows=...)` over the chat's staged attachment.

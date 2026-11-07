@@ -24,6 +24,7 @@ pub mod consent;
 pub mod discovery;
 pub mod executor;
 pub mod file_analysis;
+pub mod import_runs;
 pub mod mutate;
 pub mod planner;
 pub mod previews;

@@ -1471,5 +1471,35 @@
       "a_chat_file_kept_as_evidence_never_names_the_file_to_a_restricted_provider"
     ],
     "rule": "Keeping a chat file as evidence never returns its name to a restricted provider."
+  },
+  {
+    "id": "S12-rollback-bound-to-plan",
+    "file": "crates/ai/src/import_runs.rs",
+    "find": "    if !py_eq(&field(\"input_version\"), expected_input_version)",
+    "replace": "    if false && !py_eq(&field(\"input_version\"), expected_input_version)",
+    "expect_failing": [
+      "a_rollback_runs_only_on_the_plan_the_user_saw"
+    ],
+    "rule": "A rollback runs only on the plan and book version the user consented to (#682)."
+  },
+  {
+    "id": "S12-rollback-blocked-by-reviewed-work",
+    "file": "crates/ai/src/import_runs.rs",
+    "find": "    if matches!(get(&current, \"blockers\"), Some(Value::List(blockers)) if !blockers.is_empty()) {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "reviewed_work_blocks_a_rollback_from_chat"
+    ],
+    "rule": "A rollback that would delete reviewed work is the desktop's decision."
+  },
+  {
+    "id": "S12-rollback-withholds-filename",
+    "file": "crates/ai/src/import_runs.rs",
+    "find": "    if !full_access {\n        payload = without_filename(&payload);",
+    "replace": "    if false {\n        payload = without_filename(&payload);",
+    "expect_failing": [
+      "a_rollback_runs_only_on_the_plan_the_user_saw"
+    ],
+    "rule": "A restricted provider never gets an import run's recorded filename."
   }
 ]

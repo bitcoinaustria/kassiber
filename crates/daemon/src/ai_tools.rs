@@ -160,6 +160,39 @@ impl AiBook for HostBook<'_> {
         .map_err(tool_error)
     }
 
+    fn import_runs(
+        &mut self,
+        request: kassiber_ai::import_runs::ImportRuns<'_>,
+    ) -> Result<Value, ToolError> {
+        use kassiber_ai::import_runs::ImportRuns;
+        let book = self.daemon.book_mut().map_err(tool_error)?;
+        let run = |book: &mut Box<dyn kassiber_runtime::store::Book>,
+                   operation: fn(String, String) -> kassiber_imports::Operation,
+                   batch: &str| {
+            let (_, profile_id) = book.resolve_scope(None, None)?;
+            book.import_runs(operation(profile_id, batch.to_owned()))
+        };
+        match request {
+            ImportRuns::List(arguments) => crate::imports::list(book.as_mut(), arguments),
+            ImportRuns::Review(batch) => run(
+                book,
+                |profile_id, batch| kassiber_imports::Operation::Review { profile_id, batch },
+                batch,
+            ),
+            ImportRuns::Rollback(batch) => run(
+                book,
+                |profile_id, batch| kassiber_imports::Operation::Rollback { profile_id, batch },
+                batch,
+            ),
+            ImportRuns::InputVersion => {
+                book.resolve_scope(None, None).and_then(|(_, profile_id)| {
+                    book.import_runs(kassiber_imports::Operation::InputVersion { profile_id })
+                })
+            }
+        }
+        .map_err(tool_error)
+    }
+
     fn dataset_preview(&mut self, arguments: &Value) -> Result<Value, ToolError> {
         let runtime = std::sync::Arc::clone(&self.daemon.analysis);
         let book = self.daemon.book_mut().map_err(tool_error)?;

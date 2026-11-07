@@ -63,12 +63,8 @@ pub const REFUSED_EXPORTS: [&str; 7] = [
 ];
 
 /// Mutating tools whose service is not native yet, with the work that owns it.
-pub const REFUSED_MUTATIONS: [(&str, &str); 5] = [
+pub const REFUSED_MUTATIONS: [(&str, &str); 4] = [
     ("ui.btcpay.provenance.review", "commercial evidence review"),
-    (
-        "ui.imports.rollback",
-        crate::executor::ATTACHMENT_IMPORT_OWNER,
-    ),
     (
         "ui.transfers.dismissals.delete",
         "main-sync S6 (transfer dismissals)",
@@ -208,7 +204,11 @@ fn optional_str_arg(arguments: &Value, key: &str) -> Result<Option<PyStr>, AppEr
 }
 
 /// `_required_str_arg(args, key, label)`.
-fn required_str_arg(arguments: &Value, key: &str, label: &str) -> Result<PyStr, AppError> {
+pub(crate) fn required_str_arg(
+    arguments: &Value,
+    key: &str,
+    label: &str,
+) -> Result<PyStr, AppError> {
     optional_str_arg(arguments, key)?.ok_or_else(|| {
         AppError::new("validation", format!("{label} is required."))
             .with_hint(format!("Enter {}.", label.to_lowercase()))
@@ -600,6 +600,13 @@ fn mutate(
             Ok(envelope(
                 kind,
                 redact_evidence_for_ai(&attach_chat_file(book, state, arguments)?),
+            ))
+        }),
+        "ui.imports.rollback" => scoped(runtime, host, &mut |book, state| {
+            let full_access = crate::executor::full_access(state);
+            Ok(envelope(
+                kind,
+                crate::import_runs::rollback_for_ai(book, arguments, full_access, true)?,
             ))
         }),
         "ui.attachments.copy" => scoped(runtime, host, &mut |book, _| {

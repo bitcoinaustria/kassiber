@@ -132,6 +132,13 @@ def _extra_arguments() -> dict[str, list[dict]]:
         "ui.activity.history": [{"transaction": "a"}, {"wallet": "cold"}],
         "ui.transactions.commercial_context": [{"transaction": "a"}],
         "ui.attachments.list": [{"transaction": "a"}, {"limit": 1}],
+        "ui.imports.list": [{"wallet": "nope"}, {"limit": 1}],
+        "ui.imports.rollback.plan": [{"batch": "missing"}, {"batch": " "}],
+        "ui.wallets.request_input": [
+            {"source": "descriptor"}, {"source": "kraken", "explanation": "  Your Kraken API key, please  "},
+            {"source": "ftp"}, {"source": ["descriptor"]}, {"source": "lnd", "explanation": "a\x01b"},
+            {"source": "lnd", "explanation": "x" * 501},
+        ],
         "ui.wallets.utxos": [{"wallet": "cold"}, {"wallet": "missing"}],
         "ui.reports.tax_summary": [{"year": 2025}],
         "ui.reports.balance_history": [{"interval": "month", "limit": 120}, {"interval": "day", "limit": 5}],
@@ -972,7 +979,6 @@ REFUSED_MUTATIONS = {
     ("ui.source_funds.export", None),
     ("ui.btcpay.provenance.review", None),
     ("ui.wallets.sync", None),
-    ("ui.imports.rollback", None),
     ("ui.transfers.dismissals.delete", None),
     ("ui.wallets.import_attachment.apply", None),
     ("ui.wallets.import_document.apply", None),
@@ -1114,8 +1120,6 @@ def mutating_requests(fixture, tool):
 # own.
 REFUSED_READS = {
     "ui.connections.node.snapshot",
-    "ui.imports.list",
-    "ui.imports.rollback.plan",
     "ui.journals.quarantine.groups",
     "ui.transactions.verify",
     "ui.transfers.dismissals.list",
@@ -1123,7 +1127,6 @@ REFUSED_READS = {
     "ui.wallets.import_attachment.plan",
     "ui.wallets.import_document.plan",
     "ui.wallets.read_document",
-    "ui.wallets.request_input",
 }
 
 

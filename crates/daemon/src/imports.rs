@@ -2,6 +2,7 @@
 use kassiber_envelope::{dict, get, s, set, success, truthy, type_name, AppError};
 use kassiber_imports::Operation;
 use kassiber_pyjson::Value;
+use kassiber_runtime::store::Book;
 
 use crate::output::{with_request_id, RequestId};
 use crate::{Daemon, Handled};
@@ -43,6 +44,20 @@ pub(super) fn optional_string(args: &Value, key: &str) -> Result<Option<String>,
     }
 }
 
+/// `_imports_list_payload(conn, args)`: the active book's import runs,
+/// newest first.
+pub(crate) fn list(book: &mut dyn Book, args: &Value) -> Result<Value, AppError> {
+    let (_, profile_id) = book.resolve_scope(None, None)?;
+    let wallet = optional_string(args, "wallet")?;
+    let limit = get(args, "limit").cloned().unwrap_or(Value::Null);
+    let batches = book.import_runs(Operation::List {
+        profile_id,
+        wallet,
+        limit,
+    })?;
+    Ok(dict([("batches", batches)]))
+}
+
 pub(super) fn handle(
     daemon: &mut Daemon,
     kind: &str,
@@ -63,17 +78,10 @@ pub(super) fn handle(
         }
     };
     let book = daemon.book.as_mut().expect("opened book");
-    let (_, profile_id) = book.resolve_scope(None, None)?;
     let payload = if kind == "ui.imports.list" {
-        let wallet = optional_string(args, "wallet")?;
-        let limit = get(args, "limit").cloned().unwrap_or(Value::Null);
-        let batches = book.import_runs(Operation::List {
-            profile_id,
-            wallet,
-            limit,
-        })?;
-        dict([("batches", batches)])
+        list(book.as_mut(), args)?
     } else {
+        let (_, profile_id) = book.resolve_scope(None, None)?;
         let batch = optional_string(args, "batch")?.ok_or_else(|| {
             AppError::new("validation", "Import run is required.").with_hint("Enter import run.")
         })?;

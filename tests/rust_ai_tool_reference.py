@@ -118,10 +118,16 @@ def _ai_consent_preview(daemon, ctx, request):
             )
         if entry.name in {"ui.chain_analysis.datasets.import", "ui.chain_analysis.datasets.import.start"}:
             preview_arguments = daemon._chain_analysis_dataset_consent_preview(runtime, call.arguments)
+        consent_summary = None
+        if entry.name in daemon._AI_PLAN_BOUND_CONSENT_TOOLS and not call.argument_error:
+            # The chat loop's plan-bound card (#682): the daemon's own plan.
+            preview_arguments, consent_summary = daemon._ai_plan_consent_preview(
+                runtime, entry, call.arguments
+            )
         card = {
             "call_id": call.call_id,
             "name": entry.name,
-            "summary": summarize_tool_call(entry, call.arguments),
+            "summary": consent_summary if consent_summary is not None else summarize_tool_call(entry, call.arguments),
             "arguments_preview": preview_arguments,
             **(
                 {"review_preview": daemon._ai_review_consent_preview(runtime, call.arguments)}
