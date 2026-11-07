@@ -26,6 +26,7 @@ import os
 import sqlite3
 from typing import Any, Mapping
 
+from ..db import begin_write_savepoint
 from ..errors import AppError
 from . import attachment_import as core_attachment_import
 from . import attachments as core_attachments
@@ -245,7 +246,7 @@ def plan_or_apply(
         blocker["code"] in {"nothing_ready", "target_not_file_wallet", "wallet_label_taken"}
         for blocker in blockers
     )
-    conn.execute(f"SAVEPOINT {_SAVEPOINT}")
+    begin_write_savepoint(conn, _SAVEPOINT)
     try:
         if simulate:
             try:
@@ -329,7 +330,7 @@ def plan_or_apply(
     # One savepoint holds the wallet, the rows, their evidence and the import
     # run: the import's own savepoint would otherwise commit the rows before
     # the run is recorded.
-    conn.execute(f"SAVEPOINT {_APPLY_SAVEPOINT}")
+    begin_write_savepoint(conn, _APPLY_SAVEPOINT)
     savepoint_active = True
     try:
         target_wallet = wallet if wallet is not None else _create_target_wallet(conn, described_target)

@@ -193,7 +193,7 @@ from ..projects import (
     set_selected_project,
 )
 from ..log_ring import sanitize_traceback_text
-from ..db import migrate_hidden_home_state_root_if_needed
+from ..db import begin_write_savepoint, migrate_hidden_home_state_root_if_needed
 from ..secrets.migration import create_empty_encrypted_database
 from ..secrets.cli import add_secrets_parser, dispatch_secrets
 from ..secrets.cli_input import (
@@ -460,7 +460,7 @@ def _add_workspace_profile_args(parser: argparse.ArgumentParser) -> None:
 def _dry_run_transaction(conn: sqlite3.Connection, operation) -> dict[str, Any]:
     """Run a mutating preview under a savepoint, then restore exact DB state."""
 
-    conn.execute("SAVEPOINT cli_dry_run")
+    begin_write_savepoint(conn, "cli_dry_run")
     try:
         result = operation()
         conn.execute("ROLLBACK TO SAVEPOINT cli_dry_run")

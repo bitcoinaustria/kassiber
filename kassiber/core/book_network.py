@@ -10,6 +10,7 @@ from functools import wraps
 from collections.abc import Mapping
 from typing import Any
 
+from ..db import begin_write_savepoint
 from ..errors import AppError
 from ..time_utils import now_iso
 from ..transfers import bitcoin_network_domain_evidence
@@ -220,7 +221,7 @@ def _plan_book_network(conn, profile_id, args):
 
 def apply_book_network(conn, profile_id, args):
     savepoint = "network_bind_" + uuid.uuid4().hex
-    conn.execute(f"SAVEPOINT {savepoint}")
+    begin_write_savepoint(conn, savepoint)
     try:
         result = _apply_book_network(conn, profile_id, args)
     except BaseException:

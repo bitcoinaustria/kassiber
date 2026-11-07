@@ -18,6 +18,7 @@ import sqlite3
 import uuid
 from typing import Any, Mapping
 
+from ..db import begin_write_savepoint
 from ..errors import AppError
 from ..msat import dec, msat_to_btc
 from ..secrets import sqlcipher
@@ -620,7 +621,7 @@ def _tax_effects(conn, profile, state) -> dict[str, Any]:
     current = _profile(conn, profile)
     austrian = (str(current["tax_country"] or "").strip().lower() == "at"
                 and str(current["fiat_currency"] or "").strip().upper() == "EUR")
-    conn.execute("SAVEPOINT review_tax_preview")
+    begin_write_savepoint(conn, "review_tax_preview")
     try:
         custody_journal.store_ledger_state(conn, current, state)
         stored = _profile(conn, current)

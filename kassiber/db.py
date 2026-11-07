@@ -515,6 +515,29 @@ def sqlite_error_is_busy(details: dict[str, object]) -> bool:
         sqlite3.SQLITE_BUSY,
         sqlite3.SQLITE_LOCKED,
     }
+
+
+def begin_write_savepoint(conn, name: str) -> None:
+    """Open SAVEPOINT `name` for a write, holding SQLite's writer lock from the start.
+
+    Outside a transaction a SAVEPOINT begins a deferred one: its reads take a
+    shared lock that the first write must then upgrade. When another
+    connection holds the writer lock (a daemon worker, another Kassiber
+    process), SQLite refuses that upgrade with SQLITE_BUSY at once instead of
+    running the busy handler, since waiting could deadlock, so busy_timeout
+    never applies and the request fails as database_busy. Asking for the
+    writer lock with the transaction's first statement waits like any write.
+    RELEASE of an outermost savepoint still commits. Read-only snapshots keep
+    a plain SAVEPOINT; they never upgrade.
+    """
+    conn.execute(f"SAVEPOINT {name}")
+    try:
+        # Changes nothing; requesting the writer lock is its only effect.
+        conn.execute("UPDATE settings SET value = value WHERE 0")
+    except BaseException:
+        conn.execute(f"ROLLBACK TO SAVEPOINT {name}")
+        conn.execute(f"RELEASE SAVEPOINT {name}")
+        raise
 LEGACY_DATA_ROOT = os.path.expanduser(f"~/.local/share/{LEGACY_APP_NAME}")
 DEFAULT_DB_FILENAME = f"{APP_NAME}.sqlite3"
 LEGACY_DB_FILENAME = f"{LEGACY_APP_NAME}.sqlite3"

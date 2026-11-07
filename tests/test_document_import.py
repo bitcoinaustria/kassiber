@@ -4,6 +4,8 @@ import json
 import io
 import subprocess
 import tempfile
+import threading
+import time
 import unittest
 import unittest.mock as mock
 import urllib.request
@@ -531,6 +533,56 @@ class DocumentImportTest(unittest.TestCase):
         self.assertEqual(attachment["original_filename"], "receipt.png")
         stored = self.root / "attachments" / attachment["stored_relpath"]
         self.assertTrue(stored.exists())
+
+    def test_import_waits_for_a_writer_on_another_connection(self):
+        """A daemon worker or another process holding the writer delays the
+        import; it must not fail it as database_busy. An encrypted book runs
+        SQLCipher's SQLite in rollback-journal mode, a plaintext one in WAL."""
+        for passphrase in (None, "synthetic document key"):
+            with self.subTest(encrypted=passphrase is not None):
+                data_root = self.root / ("encrypted" if passphrase else "plaintext")
+                conn = open_db(data_root, passphrase=passphrase)
+                self.addCleanup(conn.close)
+                _, profile, wallet = _book(conn)
+                draft = document_import.preview_document_import(
+                    conn,
+                    source_file=str(self.source),
+                    client_factory=lambda _provider: FakeVisionClient(),
+                )
+                conn.commit()
+                held, release = threading.Event(), threading.Event()
+
+                def hold_writer():
+                    other = open_db(data_root, passphrase=passphrase)
+                    try:
+                        other.execute("BEGIN IMMEDIATE")
+                        held.set()
+                        release.wait(30)
+                        other.commit()
+                    finally:
+                        other.close()
+
+                holder = threading.Thread(target=hold_writer)
+                holder.start()
+                self.assertTrue(held.wait(60))
+                threading.Timer(1.0, release.set).start()
+                started = time.monotonic()
+                try:
+                    outcome = document_import.import_document_draft(
+                        conn,
+                        source_file=str(self.source),
+                        wallet=wallet,
+                        profile=profile,
+                        rows=draft["rows"],
+                        hooks=_hooks(),
+                    )
+                finally:
+                    release.set()
+                    holder.join(60)
+                self.assertGreaterEqual(time.monotonic() - started, 0.5)
+                self.assertEqual(outcome["imported"], 1)
+                self.assertFalse(conn.in_transaction)
+                self.assertEqual(conn.execute("SELECT COUNT(*) FROM transactions").fetchone()[0], 1)
 
     def test_import_rejects_source_changed_after_preview(self):
         _, profile, wallet = _book(self.conn)

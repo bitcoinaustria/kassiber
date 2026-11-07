@@ -11,6 +11,7 @@ from heapq import heappop, heappush
 from types import MappingProxyType
 from typing import Any, Callable, Mapping, Sequence
 
+from ..db import begin_write_savepoint
 from ..envelope import json_ready
 from .custody_pricing import finite_decimal
 from ..errors import AppError
@@ -2023,7 +2024,7 @@ def suggest_links(
     # ceiling regardless of how the request reaches us.
     if max_suggestions > SUGGESTION_WRITE_CAP:
         max_suggestions = SUGGESTION_WRITE_CAP
-    conn.execute("SAVEPOINT source_funds_suggest")
+    begin_write_savepoint(conn, "source_funds_suggest")
     rows = _inputs.rows if _inputs is not None else _active_transaction_rows(conn, profile["id"])
     rows_by_id = {row["id"]: row for row in rows}
     scoped_tx_ids = (
@@ -3800,7 +3801,7 @@ def save_case_snapshot(
     created_at = _now()
     snapshot_json = json.dumps(json_ready(snapshot), sort_keys=True)
     digest = _snapshot_hash(snapshot)
-    conn.execute("SAVEPOINT source_funds_case_snapshot")
+    begin_write_savepoint(conn, "source_funds_case_snapshot")
     try:
         conn.execute(
             """

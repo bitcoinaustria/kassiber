@@ -12,6 +12,7 @@ import json
 import re
 import uuid
 
+from ..db import begin_write_savepoint
 from ..errors import AppError
 from ..time_utils import now_iso
 from .chain_analysis import run_analysis
@@ -43,7 +44,7 @@ def arguments(args, allowed, required=()):
 @contextmanager
 def atomic(conn):
     name = "chain_analysis_" + uuid.uuid4().hex
-    conn.execute(f"SAVEPOINT {name}")
+    begin_write_savepoint(conn, name)
     try:
         yield
     except BaseException:

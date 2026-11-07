@@ -578,7 +578,7 @@ def create_filed_report_snapshot(
             raise _error("Filed marker identity must match the referenced saved export")
     owns_transaction = not conn.in_transaction
     if owns_transaction:
-        conn.execute("BEGIN")
+        conn.execute("BEGIN IMMEDIATE")
     conn.execute("SAVEPOINT filed_snapshot_create")
     try:
         conn.execute(

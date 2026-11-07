@@ -758,7 +758,7 @@ def apply_review(
     """Atomically replan, mutate, append audit history and record impacts."""
 
     if not conn.in_transaction:
-        conn.execute("BEGIN")
+        conn.execute("BEGIN IMMEDIATE")
     conn.execute("SAVEPOINT custody_gap_review_apply")
     try:
         custody_components.require_review_input_version(
