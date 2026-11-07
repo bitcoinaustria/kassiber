@@ -26,7 +26,7 @@ from urllib import request as urlrequest
 
 from .. import __version__
 from .. import http_client
-from ..backends import backend_batch_size, backend_timeout, backend_value, resolve_backend
+from ..backends import backend_batch_size, backend_timeout, backend_value, redact_backend_url, resolve_backend
 from ..db import APP_NAME
 from ..egress_ledger import get_egress_ledger
 from ..envelope import json_ready
@@ -38,7 +38,12 @@ from ..proxy import (
     require_egress_enabled,
     urlopen_with_proxy,
 )
-from ..redaction import redact_operational_text
+from ..redaction import (
+    backend_credentials,
+    redact_operational_text,
+    request_credentials,
+    withhold_credentials,
+)
 from ..time_utils import UNKNOWN_OCCURRED_AT, parse_iso_datetime_or_none, timestamp_to_iso
 from ..time_utils import iso_to_unix
 from ..transfers import canonical_txid
@@ -139,6 +144,7 @@ def http_get_json(
         rng=_rng,
         max_attempts=_max_attempts,
         on_retry=_emit_http_backoff,
+        withheld=request_credentials(url=url, headers=headers, proxy_url=proxy_url),
     )
 
 
@@ -178,6 +184,7 @@ def http_get_text(
         rng=_rng,
         max_attempts=_max_attempts,
         on_retry=_emit_http_backoff,
+        withheld=request_credentials(url=url, headers=headers, proxy_url=proxy_url),
     )
 
 
@@ -230,6 +237,7 @@ def http_post_json(
         max_attempts=_max_attempts,
         on_retry=_emit_http_backoff,
         deadline=deadline,
+        withheld=request_credentials(url=url, headers=headers, proxy_url=proxy_url),
     )
 
 
@@ -270,12 +278,16 @@ def append_url_path(base_url, extra_path):
 
 def parse_socket_backend_url(url, default_scheme="ssl", default_ports=None):
     default_ports = default_ports or {}
-    parsed = urlparse.urlsplit(url if "://" in url else f"{default_scheme}://{url}")
-    scheme = (parsed.scheme or default_scheme).lower()
-    host = parsed.hostname
-    port = parsed.port or default_ports.get(scheme)
+    try:
+        parsed = urlparse.urlsplit(url if "://" in url else f"{default_scheme}://{url}")
+        scheme = (parsed.scheme or default_scheme).lower()
+        host = parsed.hostname
+        port = parsed.port or default_ports.get(scheme)
+    except ValueError:
+        # urllib's message quotes the bad port, which may be part of userinfo.
+        host = port = None
     if not host or not port:
-        raise AppError(f"Invalid backend socket URL: {url}")
+        raise AppError(f"Invalid backend socket URL: {redact_backend_url(url)}")
     return scheme, host, port
 
 
@@ -367,7 +379,7 @@ class ElectrumClient:
         try:
             message = json.loads(line)
         except json.JSONDecodeError as exc:
-            preview = line.strip().replace("\n", "\\n")
+            preview = withhold_credentials(line.strip(), backend_credentials(self.backend)).replace("\n", "\\n")
             if len(preview) > 120:
                 preview = preview[:117] + "..."
             raise AppError(
@@ -428,7 +440,8 @@ class ElectrumClient:
                 else:
                     detail = str(error)
                 # The Electrum server message is untrusted free text that can
-                # echo a txid/amount; pseudonymize at the source.
+                # echo a txid/amount or a credential; scrub at the source.
+                detail = withhold_credentials(detail, backend_credentials(self.backend))
                 raise AppError(
                     f"Electrum call {method} failed {redact_operational_text(detail)}",
                     code="electrum_rpc_error",
@@ -489,7 +502,8 @@ class ElectrumClient:
                 else:
                     detail = str(error)
                 # The Electrum server message is untrusted free text that can
-                # echo a txid/amount; pseudonymize at the source.
+                # echo a txid/amount or a credential; scrub at the source.
+                detail = withhold_credentials(detail, backend_credentials(self.backend))
                 raise AppError(
                     f"Electrum call {method} failed {redact_operational_text(detail)}",
                     code="electrum_rpc_error",
@@ -1505,7 +1519,9 @@ def prepare_dependency_observer_fetch(conn, profile, wallet, discovery):
         except AppError:
             raise
         except Exception as exc:
-            safe_error = redact_operational_text(str(exc))
+            safe_error = redact_operational_text(
+                withhold_credentials(str(exc), backend_credentials(discovery.backend))
+            )
             raise AppError(
                 f"{state.chain.title()} compatibility observation failed for backend '{discovery.backend.get('name')}'",
                 code="backend_sync_failed",
@@ -3210,6 +3226,17 @@ def bitcoinrpc_auth_headers(backend):
     return {"Authorization": f"Basic {encoded}"}
 
 
+def _bitcoinrpc_credentials(backend):
+    """The credentials a Core RPC request carries, cookie included when readable."""
+
+    credentials = list(backend_credentials(backend))
+    try:
+        credentials.extend(request_credentials(headers=bitcoinrpc_auth_headers(backend)))
+    except (AppError, OSError, UnicodeDecodeError):
+        pass
+    return tuple(credentials)
+
+
 def bitcoinrpc_url(backend, wallet_name=None):
     if wallet_name:
         return append_url_path(backend["url"], f"wallet/{urlparse.quote(wallet_name, safe='')}")
@@ -3483,7 +3510,11 @@ def _raise_bitcoinrpc_import_failure(
     operation,
     failure,
 ):
-    failure_text = json.dumps(failure, sort_keys=True, default=str)
+    # Core's result text is the server's; withhold what the request carried.
+    failure_text = withhold_credentials(
+        json.dumps(failure, sort_keys=True, default=str),
+        _bitcoinrpc_credentials(backend),
+    )
     normalized = failure_text.lower()
     if "rescan" in normalized and ("fail" in normalized or "prun" in normalized):
         coverage = bitcoinrpc_prune_coverage(backend, birthday_ts)

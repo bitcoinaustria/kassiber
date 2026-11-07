@@ -463,3 +463,119 @@ def patch_online():
     from kassiber import egress_policy
 
     return patch.object(egress_policy, "require_online", lambda *_a, **_k: None)
+
+
+# --- Esplora and Bitcoin Core RPC ------------------------------------------------
+
+ESPLORA_TOKEN = "esplora-bearer-T0ken-" + "q" * 16
+ESPLORA_QUERY_KEY = "query-api-key-V4lue-77"
+RPC_USER = "rpc-user-name-xyz"
+RPC_PASSWORD = "rpc/pass+word=" + "Z9" * 8
+
+
+class ChainBackendCredentialEchoTest(CredentialEchoAssertions, unittest.TestCase):
+    def test_esplora_errors_withhold_the_token_header_and_query_key(self):
+        from kassiber.core import sync_backends
+
+        for status in (400, 401, 403, 404, 500):
+            for auth in ({"token": ESPLORA_TOKEN}, {"auth_header": f"Bearer {ESPLORA_TOKEN}"}):
+                with self.subTest(status=status, auth=sorted(auth)):
+                    with EchoServer(json_echo(status)) as server:
+                        backend = {"url": f"{server.url}/api?api_key={ESPLORA_QUERY_KEY}", **auth}
+                        headers = sync_backends._esplora_auth_headers(backend)
+                        for call in (
+                            lambda: sync_backends.http_get_json(f"{server.url}/api/blocks/tip?api_key={ESPLORA_QUERY_KEY}", headers=headers),
+                            lambda: sync_backends.http_get_text(f"{server.url}/api/blocks/tip/hash?api_key={ESPLORA_QUERY_KEY}", headers=headers),
+                        ):
+                            with self.assertRaises(AppError) as raised:
+                                call()
+                            self.assertErrorWithheld(raised.exception, (ESPLORA_TOKEN, ESPLORA_QUERY_KEY))
+
+    def test_bitcoin_core_errors_withhold_user_password_and_basic_form(self):
+        from kassiber.core import sync_backends
+
+        basic = base64.b64encode(f"{RPC_USER}:{RPC_PASSWORD}".encode()).decode()
+        for status in (401, 403, 502):
+            for offset in OFFSETS:
+                with self.subTest(status=status, offset=offset):
+                    with EchoServer(text_echo(status, offset)) as server:
+                        backend = {"name": "core", "url": server.url, "username": RPC_USER, "password": RPC_PASSWORD}
+                        with self.assertRaises(AppError) as raised:
+                            sync_backends.bitcoinrpc_call(backend, "getblockchaininfo")
+                    self.assertErrorWithheld(raised.exception, (RPC_PASSWORD, basic, f"{RPC_USER}:{RPC_PASSWORD}"))
+
+    def test_bitcoin_core_cookie_errors_withhold_the_cookie(self):
+        from kassiber.core import sync_backends
+
+        cookie_password = "c0ffee" * 10
+        with tempfile.TemporaryDirectory() as tmp:
+            cookie = f"{tmp}/.cookie"
+            with open(cookie, "w", encoding="utf-8") as handle:
+                handle.write(f"__cookie__:{cookie_password}")
+            with EchoServer(text_echo(401)) as server:
+                backend = {"name": "core", "url": server.url, "cookiefile": cookie}
+                with self.assertRaises(AppError) as raised:
+                    sync_backends.bitcoinrpc_call(backend, "getblockchaininfo")
+        self.assertErrorWithheld(raised.exception, (cookie_password,))
+
+    def test_bitcoin_core_typed_rpc_errors_keep_no_server_text(self):
+        from kassiber.core import sync_backends
+
+        def respond(_handler, echo):
+            return 500, "application/json", json.dumps(
+                {"result": None, "id": "kassiber-getblockchaininfo", "error": {"code": -1, "message": echo}}
+            )
+
+        with EchoServer(respond) as server:
+            backend = {"name": "core", "url": server.url, "username": RPC_USER, "password": RPC_PASSWORD}
+            with self.assertRaises(AppError) as raised:
+                sync_backends.bitcoinrpc_call(backend, "getblockchaininfo")
+        self.assertEqual(str(raised.exception), "Bitcoin Core RPC getblockchaininfo failed (-1)")
+        self.assertErrorWithheld(raised.exception, (RPC_PASSWORD,))
+
+    def test_core_rescan_failure_text_withholds_the_password(self):
+        from kassiber.core import sync_backends
+
+        backend = {"name": "core", "url": "http://127.0.0.1:1", "username": RPC_USER, "password": RPC_PASSWORD}
+        with self.assertRaises(AppError) as raised:
+            sync_backends._raise_bitcoinrpc_import_failure(backend, None, "importdescriptors", {"error": {"message": f"bad {RPC_PASSWORD}"}})
+        self.assertErrorWithheld(raised.exception, (RPC_PASSWORD,))
+
+    def test_electrum_errors_withhold_backend_credentials(self):
+        import socketserver
+        import threading
+
+        from kassiber.core import sync_backends
+
+        class Handler(socketserver.StreamRequestHandler):
+            def handle(self):
+                for line in self.rfile:
+                    request = json.loads(line)
+                    reply = {"jsonrpc": "2.0", "id": request["id"], "error": {"code": 1, "message": f"no {ESPLORA_TOKEN}"}}
+                    self.wfile.write((json.dumps(reply) + "\n").encode())
+
+        server = socketserver.ThreadingTCPServer(("127.0.0.1", 0), Handler)
+        server.daemon_threads = True
+        thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
+        thread.start()
+        try:
+            backend = {"name": "fulcrum", "kind": "electrum", "url": f"tcp://127.0.0.1:{server.server_address[1]}", "token": ESPLORA_TOKEN}
+            with self.assertRaises(AppError) as raised:
+                with sync_backends.ElectrumClient(backend):
+                    pass
+        finally:
+            server.shutdown()
+            server.server_close()
+        self.assertErrorWithheld(raised.exception, (ESPLORA_TOKEN,))
+
+    def test_a_socket_url_error_withholds_its_userinfo(self):
+        from kassiber.core import sync_backends
+
+        # A password with `/` also cuts the URL short, where urllib's own
+        # error would quote the part before it as a bad port.
+        socket_password = "socket-pass-word-99"
+        for url in (f"ssl://user:{RPC_PASSWORD}@", f"ssl://user:{socket_password}@", f"ssl://user:{socket_password}x"):
+            with self.subTest(url=url[:9]):
+                with self.assertRaises(AppError) as raised:
+                    sync_backends.parse_socket_backend_url(url)
+                self.assertErrorWithheld(raised.exception, (RPC_PASSWORD, socket_password))
