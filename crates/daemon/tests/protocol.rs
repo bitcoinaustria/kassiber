@@ -89,7 +89,9 @@ fn ready_comes_first_without_a_request_id() {
 fn malformed_requests_match_python() {
     let input = concat!(
         "{\"request_id\":\"a\",\"kind\":\"nope\"}\n",
-        "{\"request_id\":\"b\",\"kind\":\"ui.agent_access.status\"}\n",
+        // A kind Python serves and Rust does not yet; when it turns native,
+        // take another from the ready list's difference to SUPPORTED_KINDS.
+        "{\"request_id\":\"b\",\"kind\":\"ui.transactions.ledger_template\"}\n",
         "not json\n",
         "[1]\n",
         "\n",
@@ -102,7 +104,7 @@ fn malformed_requests_match_python() {
     let (_, lines, _) = run(FakeConfig::default(), input);
     let expected = [
         r#"{"kind":"error","schema_version":1,"error":{"code":"unsupported_kind","message":"daemon kind 'nope' is not classified or supported","hint":null,"details":{"kind":"nope"},"retryable":false,"debug":null},"request_id":"a"}"#,
-        r#"{"kind":"error","schema_version":1,"error":{"code":"not_implemented","message":"daemon kind 'ui.agent_access.status' is not implemented in the Rust daemon yet","hint":null,"details":{"kind":"ui.agent_access.status"},"retryable":false,"debug":null},"request_id":"b"}"#,
+        r#"{"kind":"error","schema_version":1,"error":{"code":"not_implemented","message":"daemon kind 'ui.transactions.ledger_template' is not implemented in the Rust daemon yet","hint":null,"details":{"kind":"ui.transactions.ledger_template"},"retryable":false,"debug":null},"request_id":"b"}"#,
         r#"{"kind":"error","schema_version":1,"error":{"code":"invalid_json","message":"daemon request line is not valid JSON","hint":null,"details":{"error":"Expecting value: line 1 column 1 (char 0)"},"retryable":false,"debug":null},"request_id":null}"#,
         r#"{"kind":"error","schema_version":1,"error":{"code":"validation","message":"daemon request must be a JSON object","hint":null,"details":{"type":"list"},"retryable":false,"debug":null},"request_id":null}"#,
         r#"{"kind":"error","schema_version":1,"error":{"code":"validation","message":"daemon request requires a non-empty string kind","hint":null,"details":{"keys":["args"]},"retryable":false,"debug":null}}"#,
