@@ -84,10 +84,11 @@ class AiCatalogDriftTest(unittest.TestCase):
                 ROOT / "crates/transfers/src/custody_ai_audit.rs",
             ]
         )
-        oracles = Path(__file__).read_text(encoding="utf-8")
         for entry in entries:
             for name in entry["expect_failing"]:
                 if entry["id"].startswith("wire-"):
+                    # Wire entries name the Python oracle test by its file.
+                    oracles = (ROOT / name.split("::", 1)[0]).read_text(encoding="utf-8")
                     self.assertIn(f"    def {name.rsplit('::', 1)[1]}(self", oracles, entry["id"])
                 else:
                     self.assertIn(f"fn {name}()", sources, entry["id"])
