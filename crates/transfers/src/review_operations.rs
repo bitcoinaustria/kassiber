@@ -304,14 +304,6 @@ pub fn normalize(operations: &Value) -> Result<Value> {
             reason(operation)?;
             continue;
         }
-        // Python's term-operation lookup hashes the type first, so a list or
-        // object type escapes as a bare TypeError (since #680).
-        if let Some(value @ (Value::List(_) | Value::Dict(_))) = get(operation, "type") {
-            return Err(AppError::new(
-                "internal_error",
-                format!("unhashable type: '{}'", kassiber_envelope::type_name(value)),
-            ));
-        }
         if term_fields(kind).is_some() {
             term(operation, kind)?;
             continue;

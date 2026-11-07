@@ -140,6 +140,11 @@ def scenarios():
             plan(components=[dict(legs=[leg('source', None, 1000, wallet='absent')])], activate=False),
             plan(components=[dict(legs=[leg('source', None, 1000, asset='lbtc', wallet='liquid', occurred_at='2025-02-01T00:00:00Z'), leg('destination', None, 1000, asset='L-BTC', rail='', exposure=None, conservation_unit='')])], activate=False),
         ],
+        # A non-string action is refused without details; an unknown text action names itself.
+        'actions': [
+            *[plan(v, components=[COLD]) for v in ([], {}, None, 7, True, 'explode', 'Create')],
+            *[apply(v, components=[COLD]) for v in ([], {'a': 1}, None, 'explode')],
+        ],
         'amounts': [
             plan(components=[dict(legs=[leg('source', 'd', None, amount_btc='0.00000001'), dict(role='destination', transaction='e', amount_btc=1e-08)])]),
             *[plan(components=[dict(legs=[dict(role='source', transaction='d', amount_btc=v)])], activate=False) for v in ('NaN', 'sNaN', 'Infinity', '-Infinity', True, None, 'bad', '1e30', '-0.00000001', ' 1_0e-11 ', '0.000000000005', '0.000000000015', [1])],

@@ -88,5 +88,15 @@
    "tests/test_rust_review_terms.py::AustrianTaxDeltaParity::test_reviewed_prices_are_stored_in_the_book_currency"
   ],
   "rule": "A quarantine price override is stored in the book's currency (#711)."
+ },
+ {
+  "id": "S4-desktop-component-action",
+  "file": "crates/daemon/src/transfers.rs",
+  "find": "    if get(args, \"action\").is_some_and(|action| !matches!(action, Value::Str(_))) {\n",
+  "replace": "    if false {\n",
+  "expect_failing": [
+   "tests/test_rust_component_remediation.py::ComponentRemediationParity::test_non_text_actions_are_refused_like_python"
+  ],
+  "rule": "The desktop component kinds refuse a non-text action before the apply's input version (Python fix b2c0d9447)."
  }
 ]

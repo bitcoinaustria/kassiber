@@ -124,10 +124,6 @@ def export():
             case.update(canonical=review._json(result), digest=review._digest(result))
         except AppError as error:
             case["error"] = dict(code=error.code, message=str(error), hint=error.hint, details=error.details)
-        except TypeError as error:
-            # A bare exception reaches the daemon's internal_error envelope
-            # (an unhashable operation type since #680).
-            case["error"] = dict(code="internal_error", message=str(error), hint=None, details=None)
         cases.append(case)
     for character in ("a", "é", "🦀"):
         operation = dict(type="custody_component", request=dict(action="create", spec=dict(notes="")))

@@ -134,6 +134,29 @@ class ComponentRemediationParity(SyncParity, unittest.TestCase):
                      kind="ui.transfers.components.get")
 
 
+    def test_non_text_actions_are_refused_like_python(self):
+        """A list or object action is validation, after the scope and before
+        the apply's input version (Python fix b2c0d9447)."""
+        refused = self.compare(
+            [{"action": ["create"], "components": [spec("x")]}, {"action": {"a": 1}},
+             {"action": None}, {"action": 7}, {"action": "explode"},
+             {"action": [], "profile": "missing"}],
+            kind="ui.transfers.components.plan",
+        )
+        self.assertEqual(refused[0]["error"], {
+            "code": "validation", "message": "Custody component review action is unsupported",
+            "hint": None, "details": None, "retryable": False, "debug": None})
+        self.assertEqual(refused[4]["error"]["details"], {"action": "explode"})
+        applied = self.compare(
+            [{"action": [], "expected_input_version": "stale"},
+             {"action": None, "expected_input_version": -1},
+             {"action": "explode", "expected_input_version": "stale"}],
+            kind="ui.transfers.components.apply",
+        )
+        self.assertEqual(applied[0]["error"]["message"], "Custody component review action is unsupported")
+        self.assertIn("input version", applied[2]["error"]["message"])
+
+
 class EncryptedComponentRemediationParity(ComponentRemediationParity):
     PASSPHRASE = "sync-s11-passphrase"
 

@@ -573,6 +573,13 @@ fn component_cap(kind: &str, args: &Value) -> Result<(), AppError> {
 }
 
 fn component_payload(kind: &str, args: &Value) -> Result<(&'static str, Value), AppError> {
+    // After the scope and before the input version, as the reference checks it.
+    if get(args, "action").is_some_and(|action| !matches!(action, Value::Str(_))) {
+        return Err(AppError::new(
+            "validation",
+            "Custody component review action is unsupported",
+        ));
+    }
     let field = |key: &str| get(args, key).cloned().unwrap_or(Value::Null);
     let mut payload = dict([
         (

@@ -262,16 +262,6 @@
   "rule": "An acceptance names each transaction once after stripping."
  },
  {
-  "id": "S4-unhashable-type",
-  "file": "crates/transfers/src/review_operations.rs",
-  "find": "        if let Some(value @ (Value::List(_) | Value::Dict(_))) = get(operation, \"type\") {\n",
-  "replace": "        if let Some(value @ Value::Dict(_)) = get(operation, \"type\") {\n",
-  "expect_failing": [
-   "review_operations_match_python_normalization_digests_bounds_and_refusals"
-  ],
-  "rule": "A list operation type escapes as Python's TypeError, not an unsupported type."
- },
- {
   "id": "S4-gap-reason-bound",
   "file": "crates/transfers/src/review_operations.rs",
   "find": "reason.code_points().count() > 500)",
@@ -480,5 +470,15 @@
    "pairing_services_match_python_seeded_complete_database_rows_and_ordered_results"
   ],
   "rule": "The automatic pairing summary's before and remaining counts carry `ownership` (#707)."
+ },
+ {
+  "id": "S4-component-action-text",
+  "file": "crates/transfers/src/component_review.rs",
+  "find": "    if !matches!(action, Value::Str(_)) {\n",
+  "replace": "    if false {\n",
+  "expect_failing": [
+   "component_reviews_match_python_complete_database_rows_and_refusals"
+  ],
+  "rule": "A non-text component review action is refused as validation without details (Python fix b2c0d9447)."
  }
 ]
