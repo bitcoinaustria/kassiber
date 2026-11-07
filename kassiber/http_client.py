@@ -33,7 +33,7 @@ from urllib import error as urlerror
 from urllib import parse as urlparse
 
 from .errors import AppError
-from .redaction import redact_operational_text, redact_secret_text
+from .redaction import redact_operational_text, redact_secret_text, withhold_credentials
 from .retry import retry_after_seconds_from_http_error
 
 # Matches the per-wallet HTTP worker cap in
@@ -132,6 +132,7 @@ def request_with_retry(
     max_attempts=None,
     on_retry=None,
     deadline=None,
+    withheld=(),
 ):
     """Run ``opener()`` under the per-host limiter with bounded 429/503 retry.
 
@@ -143,6 +144,9 @@ def request_with_retry(
 
     An optional monotonic ``deadline`` bounds host-slot waits and retry sleeps.
     The opener must also cap its transport timeout using ``remaining_timeout``.
+
+    ``withheld`` names the literal credentials the request carried; an error
+    body that echoes one shows ``<redacted>`` instead.
     """
     sleeper = sleeper if sleeper is not None else time.sleep
     rng = rng if rng is not None else random
@@ -164,7 +168,9 @@ def request_with_retry(
                 # echoes txids/amounts; scrub secrets + pseudonymize operational
                 # ids at the source so the error never carries them raw into the
                 # ring/envelope/disk (the render pass is a backstop, not the only
-                # line of defense).
+                # line of defense). Credentials the caller sent are withheld
+                # before truncation, which could otherwise keep a prefix.
+                detail = withhold_credentials(detail, withheld)
                 detail = redact_operational_text(redact_secret_text(detail[:200]))
                 raise AppError(
                     f"HTTP {exc.code} from backend for {_url_error_label(url)}: {detail}"

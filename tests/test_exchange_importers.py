@@ -1,17 +1,28 @@
+import argparse
 import base64
+import io
 import json
+import logging
 import tempfile
+import traceback
 import unittest
+from email.message import Message
 from pathlib import Path
-from urllib.parse import parse_qs
+from urllib import error as urlerror
+from urllib.parse import parse_qs, quote, quote_plus
 
 from kassiber.core.exchange_imports import (
+    fetch_binance_records,
+    fetch_coinbase_records,
     fetch_kraken_records,
     normalize_binance_records,
     normalize_coinbase_records,
     normalize_kraken_records,
 )
+from kassiber.diagnostics import collect_public_diagnostics
+from kassiber.envelope import build_error_envelope
 from kassiber.errors import AppError
+from kassiber.log_ring import LogRing, RingHandler, sanitize_traceback_text
 from kassiber.importers import (
     load_binance_supplemental_csv_records,
     load_import_records,
@@ -353,6 +364,115 @@ class ExchangeImporterTest(unittest.TestCase):
         self.assertEqual(binance[0]["fiat_currency"], "PLN")
         self.assertEqual(kraken[0]["asset"], "BTC")
         self.assertEqual(kraken[0]["fiat_currency"], "PLN")
+
+
+# A key and secret with characters percent-encoding changes, so the escaped
+# spellings are exercised too.
+API_KEY = "kRk+Key/" + "A1b2C3d4" * 6
+API_SECRET = base64.b64encode(b"synthetic exchange secret bytes:" * 2).decode()
+
+
+class _Response:
+    def __init__(self, payload):
+        self.payload = payload
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+    def read(self):
+        return json.dumps(self.payload).encode()
+
+
+class _Opener:
+    """Answers every request with one JSON payload or one HTTP error body."""
+
+    def __init__(self, *, payload=None, status=None, body=b""):
+        self.payload = payload
+        self.status = status
+        self.body = body
+
+    def open(self, request, timeout=0):  # noqa: ARG002
+        if self.status is not None:
+            raise urlerror.HTTPError(request.full_url, self.status, "error", Message(), io.BytesIO(self.body))
+        return _Response(self.payload)
+
+
+class ExchangeCredentialEchoTest(unittest.TestCase):
+    """A provider that echoes the API key or secret never gets it shown."""
+
+    def _surfaces(self, error):
+        """The envelope, the bounded log ring and the public diagnostics."""
+
+        debug = sanitize_traceback_text(
+            "".join(traceback.format_exception(type(error), error, error.__traceback__))
+        )
+        envelope = build_error_envelope(
+            error.code, str(error), details=error.details, hint=error.hint,
+            retryable=error.retryable, debug=debug,
+        )
+        ring = LogRing()
+        logger = logging.getLogger("kassiber.tests.exchange_credential_echo")
+        handler = RingHandler(ring)
+        logger.addHandler(handler)
+        try:
+            logger.error("exchange sync failed: %s", error, exc_info=error,
+                         extra={"kb_fields": {"details": json.dumps(error.details)}})
+        finally:
+            logger.removeHandler(handler)
+        with tempfile.TemporaryDirectory() as data_root:
+            diagnostics = collect_public_diagnostics(
+                None, argparse.Namespace(data_root=data_root, env_file=None, runtime_config={}),
+                error=error,
+            )
+        return {
+            "envelope": json.dumps(envelope),
+            "log ring": json.dumps(ring.snapshot()),
+            "diagnostics": json.dumps(diagnostics),
+        }
+
+    def _assert_withheld(self, error):
+        for surface, text in self._surfaces(error).items():
+            for credential in (API_KEY, API_SECRET):
+                # Any 8-character run of a credential counts as a leak, which
+                # also catches a prefix cut off at a truncation boundary.
+                for start in range(len(credential) - 7):
+                    window = credential[start:start + 8]
+                    self.assertNotIn(window, text, f"{surface} shows {window!r}")
+
+    def _backend(self):
+        return {"url": "https://exchange.invalid", "token": API_KEY, "auth_header": API_SECRET}
+
+    def test_kraken_error_list_and_string_withhold_key_and_secret(self):
+        echoed = f"EGeneral:Permission denied for {API_KEY} signed with {API_SECRET}"
+        for errors in ([echoed, f"EAPI:Invalid key {quote(API_KEY, safe='')}"], echoed):
+            with self.subTest(errors=type(errors).__name__):
+                with self.assertRaises(AppError) as raised:
+                    fetch_kraken_records(self._backend(), opener=_Opener(payload={"error": errors}))
+                self.assertEqual(raised.exception.code, "auth_error")
+                details = raised.exception.details["kraken_errors"]
+                self.assertEqual(details[0], "EGeneral:Permission denied for <redacted> signed with <redacted>")
+                self._assert_withheld(raised.exception)
+
+    def test_http_error_bodies_withhold_key_and_secret_before_truncation(self):
+        # The key straddles the 200-character cut, where truncating first
+        # would have left its prefix in the message.
+        body = (
+            "x" * 190
+            + f" {API_KEY} {API_SECRET} {quote_plus(API_KEY)} {json.dumps(API_KEY)}"
+        ).encode()
+        for fetch in (fetch_kraken_records, fetch_coinbase_records, fetch_binance_records):
+            with self.subTest(fetch=fetch.__name__):
+                with self.assertRaises(AppError) as raised:
+                    fetch(self._backend(), opener=_Opener(status=401, body=body))
+                self.assertIn("HTTP 401", str(raised.exception))
+                self._assert_withheld(raised.exception)
+                with self.assertRaises(AppError) as raised:
+                    fetch(self._backend(), opener=_Opener(status=401, body=body[190:]))
+                self.assertIn("<redacted>", str(raised.exception))
+                self._assert_withheld(raised.exception)
 
 
 class JsonImportFormatTest(unittest.TestCase):
