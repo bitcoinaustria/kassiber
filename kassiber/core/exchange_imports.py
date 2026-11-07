@@ -29,6 +29,7 @@ from ..errors import AppError
 from ..http_client import request_with_retry
 from ..msat import dec
 from ..proxy import build_proxy_opener
+from ..redaction import withhold_credentials
 from ..util import str_or_none
 from ..wallet_descriptors import normalize_asset_code
 from . import pricing
@@ -552,14 +553,20 @@ def _backend_opener(backend: Mapping[str, Any], opener=None):
     return opener or build_proxy_opener(backend_value(backend, "tor_proxy"))
 
 
-def _read_json(opener, request: urlrequest.Request, timeout: int, source_label: str):
+def _read_json(
+    opener,
+    request: urlrequest.Request,
+    timeout: int,
+    source_label: str,
+    withheld: tuple[str, ...],
+):
     url = request.full_url
 
     def open_once():
         with opener.open(request, timeout=timeout) as response:
             return json.loads(response.read().decode("utf-8"))
 
-    return request_with_retry(url, open_once, source_label=source_label)
+    return request_with_retry(url, open_once, source_label=source_label, withheld=withheld)
 
 
 def fetch_kraken_records(
@@ -657,17 +664,22 @@ def _kraken_private_post(opener, base, path, key, secret, timeout, *, params=Non
         },
         method="POST",
     )
-    payload = _read_json(opener, request, timeout, "Kraken")
+    payload = _read_json(opener, request, timeout, "Kraken", (key, secret))
     errors = payload.get("error") if isinstance(payload, Mapping) else None
     if errors:
+        # One error string is one item: split into characters, an echoed
+        # credential would slip past the scrub below one letter at a time.
+        items = [str(errors)] if isinstance(errors, str) else [str(item) for item in errors]
         raise AppError(
             "Kraken API returned an error",
             code=(
                 "auth_error"
-                if any("permission" in str(item).lower() for item in errors)
+                if any("permission" in item.lower() for item in items)
                 else "protocol_error"
             ),
-            details={"kraken_errors": [str(item) for item in errors]},
+            details={
+                "kraken_errors": [withhold_credentials(item, (key, secret)) for item in items]
+            },
             retryable=False,
         )
     return payload
@@ -738,7 +750,7 @@ def _coinbase_get_paginated(opener, base, path, key, secret, timeout):
                 "CB-ACCESS-TIMESTAMP": timestamp,
             },
         )
-        payload = _read_json(opener, request, timeout, "Coinbase")
+        payload = _read_json(opener, request, timeout, "Coinbase", (key, secret))
         if not isinstance(payload, Mapping):
             raise AppError("Coinbase response was not a JSON object", code="protocol_error")
         data = payload.get("data")
@@ -839,7 +851,7 @@ def _binance_signed_get(opener, base, path, key, secret, timeout, params):
         url,
         headers={"Accept": "application/json", "X-MBX-APIKEY": key},
     )
-    return _read_json(opener, request, timeout, "Binance")
+    return _read_json(opener, request, timeout, "Binance", (key, secret))
 
 
 def fetch_exchange_records(

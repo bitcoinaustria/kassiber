@@ -1646,7 +1646,10 @@ self-custody wallet sync evidence.
 
 Create a backend with `kind=kraken`; store the API key in `token` and the
 base64 API secret in `auth_header` (or `password`). Raw credentials remain in
-the backend secret boundary and are redacted from output.
+the backend secret boundary and are redacted from output. For all three
+exchange APIs, an error the server returns (Kraken's `kraken_errors`, or any
+non-2xx body) shows `<redacted>` wherever it repeats the API key or secret,
+including percent- or JSON-escaped spellings.
 
 ```bash
 python3 -m kassiber backends create kraken-main \
