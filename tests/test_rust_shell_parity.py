@@ -324,13 +324,13 @@ class RustDaemonParityTest(_Roots):
         served = set(rust_ready["data"]["supported_kinds"])
         python_ready["data"]["supported_kinds"] = [
             *[kind for kind in python_ready["data"]["supported_kinds"] if kind in served],
-            "test.stream", "test.emit_event", "test.late", "test.secret_store", "test.freshness.plan", "test.freshness.select", "test.freshness.invoke",
+            "test.stream", "test.journals.refresh", "test.emit_event", "test.late", "test.secret_store", "test.freshness.plan", "test.freshness.select", "test.freshness.invoke",
             "test.freshness.execute", "test.freshness.product.execute",
             "test.freshness.cancel", "test.freshness.pause", "test.freshness.resume",
             "test.freshness.request.cancel", "test.freshness.request.revoke",
             "test.freshness.graph.pending",
             "test.freshness.graph.start",
-            "test.ai_tool", "test.ai_auto_read",
+            "test.ai_tool", "test.ai_auto_read", "test.ai_consent_preview", "test.ai_custody_record",
         ]
         self.assertEqual(rust[0], (json.dumps(python_ready, separators=(",", ":")) + "\n").encode())
         for index, (expected, actual) in enumerate(zip(python[1:], rust[1:]), 1):
@@ -864,12 +864,13 @@ class RustRealStoreParityTest(_Roots):
         self.assertEqual((expected[0], actual[0]), (0, 0))
         self.assertEqual(actual[1][1:], expected[1][1:])
         served = set(json.loads(actual[1][0])["data"]["supported_kinds"])
+        # The backend kinds are native now; any that is not must still refuse.
         unported = [(kind, args) for kind, args in requests[-6:] if kind not in served]
-        self.assertTrue(unported)
-        refused = _daemon(["--data-root", str(self.root), "daemon"], env,
-                          [json.dumps({"request_id":i,"kind":kind,"args":args})+"\n" for i,(kind,args) in enumerate(unported)])
-        for line in refused[1][1:]:
-            self.assertEqual(json.loads(line)["error"]["code"], "not_implemented")
+        if unported:
+            refused = _daemon(["--data-root", str(self.root), "daemon"], env,
+                              [json.dumps({"request_id":i,"kind":kind,"args":args})+"\n" for i,(kind,args) in enumerate(unported)])
+            for line in refused[1][1:]:
+                self.assertEqual(json.loads(line)["error"]["code"], "not_implemented")
 
     def test_init_backend_bootstrap_and_ephemeral_environment_match_python(self):
         import sqlite3
@@ -1041,9 +1042,10 @@ class RustRealStoreParityTest(_Roots):
         self.ok(self.call(True, ["init"], default=True))
         self.same_status(default=True)
         unrelated = self.home / "unported" / "data"
-        # Any leaf the binary has not ported (R6 AI providers here) must fail
-        # closed before it resolves or creates the requested book.
-        response = self.call(True, ["ai", "providers", "list"], root=unrelated)
+        # Any leaf the binary has not ported (a quarantine resolve form that
+        # stays with Python here) must fail closed before it resolves or
+        # creates the requested book.
+        response = self.call(True, ["journals", "quarantine", "resolve", "exclude", "--transaction", "x"], root=unrelated)
         self.assertEqual(json.loads(response.stdout)["error"]["code"], "not_implemented")
         self.assertFalse(unrelated.exists())
 
