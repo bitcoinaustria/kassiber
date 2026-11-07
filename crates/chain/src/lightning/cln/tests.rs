@@ -311,7 +311,10 @@ fn cln_report_process_errors_are_typed_and_never_expose_raw_output() {
         let gate = Gate::new(|| Offline::Online, Ledger::default()).with_cln_fixture(program.clone());
         let config = json!({"kind":"coreln", "lightning_cli":program, "token":"private-rune", "commando_peer_id":"private-peer", "rpc_file":"private-rpc"});
         let client = ClnReportClient::new(&config, gate, action()).unwrap();
-        let error = client.fetch(Some(&Consent::explicit_trigger(client.request())), Instant::now() + Duration::from_millis(100)).unwrap_err();
+        // A freshly written script's first exec can take ~100 ms on macOS;
+        // only the timeout case may be that short.
+        let budget = Duration::from_millis(if code == "backend_timeout" { 100 } else { 2000 });
+        let error = client.fetch(Some(&Consent::explicit_trigger(client.request())), Instant::now() + budget).unwrap_err();
         assert_eq!(error.code, code);
         assert!(error.retryable);
         let rendered = kassiber_pyjson::dumps(&error.envelope(None), &Default::default()).unwrap();

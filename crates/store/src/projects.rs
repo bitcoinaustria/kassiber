@@ -558,7 +558,10 @@ mod tests {
         let entry =
             ensure_default(&context, None, "2026-01-01T00:00:00Z", &mut |_| Ok(())).unwrap();
         assert_eq!(entry.path, global.join("projects/default"));
-        let projects = real.join("home/.local/share/kassiber/projects");
+        // The platform's own state root under the resolved alias, not Linux's.
+        let projects = real
+            .join(global.strip_prefix(&alias).unwrap())
+            .join("projects");
         let marker = read_marker(&projects.join("default/config").join(MARKER)).unwrap();
         assert!(marker.get("legacy_artifacts").is_some());
         // Kassiber's own project tree is below the resolved root and still refuses links.

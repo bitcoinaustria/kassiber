@@ -434,21 +434,21 @@ mod tests {
 
     #[test]
     fn detached_children_lead_a_new_session() {
-        let mut command = shell("ps -o sid= -p $$");
-        command.stdout(Stdio::Pipe).detach(true);
-        let mut child = command.spawn().unwrap();
-        let pid = child.id();
-        let mut output = String::new();
-        child
-            .stdout
-            .take()
-            .unwrap()
-            .read_to_string(&mut output)
-            .unwrap();
-        child.wait().unwrap();
-        // getsid of the exited child is gone; the shell reported its own.
-        let reported: u32 = output.trim().parse().unwrap_or(0);
-        assert_eq!(reported, pid, "the detached child is its session leader");
+        // getsid(2) on the live child: macOS `ps` has no `sid` keyword.
+        for detach in [true, false] {
+            let mut command = shell("exec sleep 30");
+            command.detach(detach);
+            let mut child = command.spawn().unwrap();
+            let pid = child.id() as libc::pid_t;
+            let session = unsafe { libc::getsid(pid) };
+            child.kill().unwrap();
+            child.wait().unwrap();
+            if detach {
+                assert_eq!(session, pid, "the detached child is its session leader");
+            } else {
+                assert_eq!(session, unsafe { libc::getsid(0) });
+            }
+        }
     }
 
     #[test]

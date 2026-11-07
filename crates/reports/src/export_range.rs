@@ -375,14 +375,52 @@ mod tests {
         assert_eq!(book_zone(false, &[]).unwrap(), Zone::utc("UTC"));
     }
 
+    /// Whether `zone` names a fixture file only because the file system
+    /// ignores case (macOS APFS): `europe/vienna` opens `Europe/Vienna` there.
+    fn resolves_only_case_insensitively(zone: &Value) -> bool {
+        let Value::Str(zone) = zone else {
+            return false;
+        };
+        let Some(zone) = zone.as_str() else {
+            return false;
+        };
+        let mut directory = fixtures().remove(0);
+        if !directory.join(zone).is_file() {
+            return false;
+        }
+        for part in zone.split('/') {
+            let names: Vec<_> = std::fs::read_dir(&directory)
+                .unwrap()
+                .map(|entry| entry.unwrap().file_name())
+                .collect();
+            if !names.iter().any(|name| name == part) {
+                // `..`, `.` and empty parts are not listed: not a case question.
+                return names
+                    .iter()
+                    .any(|name| name.to_str().is_some_and(|name| name.eq_ignore_ascii_case(part)));
+            }
+            directory.push(part);
+        }
+        false
+    }
+
     /// `resolve_export_range` results, payloads and refusals from CPython.
+    /// The vectors come from a case-sensitive file system; where the zone
+    /// lookup ignores case, CPython accepts those names too, so they are
+    /// skipped there.
     #[test]
     fn export_range_vectors() {
         let data = data();
         let cases = artifact_csv::list(value(&data, "cases"));
         assert!(cases.len() > 700);
+        let case_insensitive = fixtures()[0].join("EUROPE/VIENNA").is_file();
+        let mut skipped = 0;
         for case in cases {
             let name = text(case, "name");
+            if resolves_only_case_insensitively(value(case, "timezone")) {
+                skipped += 1;
+                continue;
+            }
             let profile = dict([("tax_country", value(case, "country").clone())]);
             let now = (kassiber_rates::time::parse(&text(case, "now")).unwrap()
                 - kassiber_rates::time::UNIX)
@@ -434,6 +472,8 @@ mod tests {
                 }
             }
         }
+        // Only a case-insensitive file system skips, and only the case variants.
+        assert_eq!(skipped > 0, case_insensitive, "{skipped} skipped");
     }
 
     /// A tzdata directory is not a zone; CPython leaks an internal path there.

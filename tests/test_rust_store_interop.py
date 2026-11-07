@@ -329,7 +329,9 @@ def test_runtime_paths_match_python_without_writes(probe, tmp_path, isolated, se
     (project_data.parent / ".env").write_text("# synthetic\n")
     kwargs = {"data_root": str(project_data)} if selection == "explicit" else {"project": "SYNTHETIC"} if selection == "project" else {"project": "synthetic", "data_root": str(project_data)} if selection == "both" else {}
     before = sorted((str(p), p.read_bytes()) for p in state.rglob("*") if p.is_file())
-    result = _probe(probe, {"op": "resolve", "platform": "linux", "home": str(home), "environ": {"XDG_DATA_HOME": os.environ["XDG_DATA_HOME"]}, "options": kwargs}, check=False)
+    # Python resolves for the host, so the probe must too (macOS: Application Support).
+    platform = {"darwin": "macos", "win32": "windows"}.get(sys.platform, "linux")
+    result = _probe(probe, {"op": "resolve", "platform": platform, "home": str(home), "environ": {"XDG_DATA_HOME": os.environ["XDG_DATA_HOME"]}, "options": kwargs}, check=False)
     if selection == "both":
         with pytest.raises(AppError) as error:
             resolve_runtime_paths(**kwargs)

@@ -143,14 +143,16 @@ pub(super) fn action() -> ReportAction {
         export_file: None,
     }
 }
+// Generous budgets: a loopback `connect()` to the fake node occasionally
+// stalls past 2 s on macOS (docs/reference/macos-validation.md, A2).
 fn config(url: &str) -> Json {
-    json!({"name":"fake-lnd","kind":"lnd","url":url,"token":"ABCD","timeout":2})
+    json!({"name":"fake-lnd","kind":"lnd","url":url,"token":"ABCD","timeout":30})
 }
 fn gate() -> Gate {
     Gate::new(|| Offline::Online, Ledger::default())
 }
 fn deadline() -> Instant {
-    Instant::now() + Duration::from_secs(5)
+    Instant::now() + Duration::from_secs(30)
 }
 
 #[test]

@@ -322,8 +322,15 @@ mod tests {
             let (_root, program) = fake(body);
             let gate = gate(program.clone());
             let request = Request::cln(config(program), [7; 32]);
+            // A freshly written script's first exec can take ~100 ms on macOS;
+            // only the timeout case may be that short.
+            let budget = if expected == "timeout" {
+                Duration::from_millis(100)
+            } else {
+                Duration::from_secs(2)
+            };
             let start = Instant::now();
-            let result = run(&gate, request, start + Duration::from_millis(100), 32);
+            let result = run(&gate, request, start + budget, 32);
             assert!(
                 match expected {
                     "timeout" => matches!(result, Err(ClnProcessError::Timeout)),
@@ -332,7 +339,7 @@ mod tests {
                 },
                 "{result:?}"
             );
-            assert!(start.elapsed() < Duration::from_secs(2));
+            assert!(start.elapsed() < budget + Duration::from_secs(2));
         }
         for revoke in [true, false] {
             let (_root, program) = fake("import time; time.sleep(10)");

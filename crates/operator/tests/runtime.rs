@@ -21,9 +21,15 @@ fn parse(text: &str) -> Value {
 }
 
 /// A private directory with a short path: AF_UNIX paths stop at 104 bytes
-/// on macOS and 108 on Linux.
+/// on macOS and 108 on Linux. macOS's per-user `TMPDIR` under
+/// `/private/var/folders/…` alone leaves too little room, so use `/tmp` there.
 fn private_dir() -> tempfile::TempDir {
-    let dir = tempfile::Builder::new().prefix("kb-op-").tempdir().unwrap();
+    let mut builder = tempfile::Builder::new();
+    builder.prefix("kb-op-");
+    #[cfg(target_os = "macos")]
+    let dir = builder.tempdir_in("/tmp").unwrap();
+    #[cfg(not(target_os = "macos"))]
+    let dir = builder.tempdir().unwrap();
     std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
     dir
 }
