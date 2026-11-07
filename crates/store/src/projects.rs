@@ -27,7 +27,7 @@ fn owner_guard(data: &Path) -> Result<Option<fs::File>> {
         Ok(None)
     }
     #[cfg(not(windows))]
-    crate::state_root::owner_lock(&path, false, false)
+    crate::state_root::owner_lock(data, &path, false, false)
 }
 fn copy_in_use() -> Error {
     Error::new(
@@ -110,9 +110,10 @@ fn read_marker(path: &Path) -> Result<Value> {
     }
     Ok(value)
 }
-fn write_marker(path: &Path, marker: &Value) -> Result<()> {
+/// `root` is the global or project state root holding the marker.
+fn write_marker(root: &Path, path: &Path, marker: &Value) -> Result<()> {
     durable::atomic_write(
-        path,
+        &durable::under(root, path)?,
         (layout::python_json(marker, true)? + "\n").as_bytes(),
         &mut |_| Ok(()),
     )
@@ -286,7 +287,7 @@ fn resume(
         .as_object_mut()
         .expect("marker object")
         .remove("pending_legacy_artifacts");
-    write_marker(path, marker)?;
+    write_marker(global, path, marker)?;
     observer("legacy.complete")
 }
 fn resume_default(
@@ -336,7 +337,7 @@ fn move_aside(
             .map(|(k, p)| (k.into(), json!(p)))
             .collect();
         marker["pending_legacy_artifacts"] = json!({"backup_root":backup,"sources":sources});
-        write_marker(&path, &marker)?;
+        write_marker(global, &path, &marker)?;
         observer("legacy.intent")?;
     }
     resume(context, global, &path, &mut marker, timestamp, observer)
@@ -459,7 +460,7 @@ pub fn ensure_default(
                     }
                     let mut marker = initial_marker(&legacy, count, timestamp);
                     let marker_path = staging.join("config").join(MARKER);
-                    write_marker(&marker_path, &marker)?;
+                    write_marker(&global, &marker_path, &marker)?;
                     observer("legacy.marker")?;
                     let multi = count.is_some_and(|n| n > 1);
                     let report = report(
@@ -476,7 +477,7 @@ pub fn ensure_default(
                     )?;
                     observer("legacy.report")?;
                     marker["report"] = json!(report);
-                    write_marker(&marker_path, &marker)?;
+                    write_marker(&global, &marker_path, &marker)?;
                     observer("legacy.before_promote")?;
                     rename_noreplace(&staging, &target).map_err(Error::io)?;
                     durable::sync_directory(target.parent().expect("projects parent"))?;
@@ -538,6 +539,36 @@ pub fn validate_after_unlock(
     marker["requires_single_workspace_validation"] = json!(false);
     marker["legacy_workspace_count"] = json!(count);
     marker["validated_at"] = json!(timestamp);
-    write_marker(&path, &marker)?;
+    write_marker(&target, &path, &marker)?;
     observer("legacy.validated")
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    #[test]
+    fn legacy_books_under_linked_parents_migrate_and_markers_refuse_links_below() {
+        let temporary = tempfile::tempdir().unwrap();
+        let (alias, real) = crate::durable::tests::aliased(temporary.path());
+        let mut context = Context::from_env().unwrap();
+        context.home = alias.join("home");
+        context.environ.clear();
+        let global = context.native_state_root();
+        drop(crate::Book::create(&global.join("data"), None).unwrap());
+        let entry =
+            ensure_default(&context, None, "2026-01-01T00:00:00Z", &mut |_| Ok(())).unwrap();
+        assert_eq!(entry.path, global.join("projects/default"));
+        let projects = real.join("home/.local/share/kassiber/projects");
+        let marker = read_marker(&projects.join("default/config").join(MARKER)).unwrap();
+        assert!(marker.get("legacy_artifacts").is_some());
+        // Kassiber's own project tree is below the resolved root and still refuses links.
+        let other = alias.join("other");
+        fs::create_dir_all(real.join("other/projects-real")).unwrap();
+        std::os::unix::fs::symlink("projects-real", real.join("other/projects")).unwrap();
+        let root = other.join("projects/default");
+        let error =
+            write_marker(&other, &root.join("config").join(MARKER), &json!({})).unwrap_err();
+        assert_eq!(error.kind, ErrorKind::UnsafeConfiguration);
+        assert!(!real.join("other/projects-real/default").exists());
+    }
 }

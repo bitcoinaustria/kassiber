@@ -3,9 +3,36 @@ use crate::{Error, ErrorKind, Result};
 use std::{
     fs::{self, File, OpenOptions},
     io::Write,
-    path::Path,
+    path::{Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
 };
+
+/// Roots the user or OS chooses (a data root and its state root, the app-data
+/// directory, home) are resolved like Python's `Path.resolve(strict=False)`:
+/// links above them, such as macOS `/var` -> `/private/var` or a linked home,
+/// are the user's layout. Return `path` on its resolved root with the
+/// Kassiber-managed tail kept lexical, so `refuse_symlinks` still refuses
+/// every link from the root down.
+pub(crate) fn under(root: &Path, path: &Path) -> Result<PathBuf> {
+    let tail = path.strip_prefix(root).map_err(|_| {
+        Error::new(
+            ErrorKind::UnsafeConfiguration,
+            "storage path is outside its root",
+        )
+    })?;
+    let resolved = kassiber_paths::canonicalize_allow_missing(root)?;
+    Ok(if tail.as_os_str().is_empty() {
+        resolved
+    } else {
+        resolved.join(tail)
+    })
+}
+
+/// `under` the parent directory: a database in its data root, or a file whose
+/// directory the user named.
+pub(crate) fn beside(path: &Path) -> Result<PathBuf> {
+    under(path.parent().unwrap_or(Path::new("")), path)
+}
 
 pub(crate) fn refuse_symlinks(path: &Path) -> Result<()> {
     for ancestor in path.ancestors() {
@@ -117,4 +144,51 @@ pub(crate) fn atomic_write_with_permissions(
         let _ = fs::remove_file(&temporary);
     }
     result
+}
+
+#[cfg(all(test, unix))]
+pub(crate) mod tests {
+    use super::*;
+    use std::os::unix::fs::symlink;
+
+    /// A macOS-style `var` -> `private-var` alias inside a disposable root.
+    pub(crate) fn aliased(root: &Path) -> (PathBuf, PathBuf) {
+        let real = root.join("private-var");
+        fs::create_dir(&real).unwrap();
+        symlink("private-var", root.join("var")).unwrap();
+        (root.join("var"), fs::canonicalize(real).unwrap())
+    }
+
+    #[test]
+    fn roots_resolve_while_links_below_them_still_refuse() {
+        let temporary = tempfile::tempdir().unwrap();
+        let (alias, real) = aliased(temporary.path());
+        let root = alias.join("state");
+        let settings = root.join("config/settings.json");
+        let resolved = under(&root, &settings).unwrap();
+        assert_eq!(resolved, real.join("state/config/settings.json"));
+        refuse_symlinks(&resolved).unwrap();
+        directory(resolved.parent().unwrap()).unwrap();
+        assert_eq!(beside(&settings).unwrap(), resolved);
+        assert_eq!(under(&root, &root).unwrap(), real.join("state"));
+        // The unresolved path keeps the prior refusal for links above a root.
+        assert_eq!(
+            refuse_symlinks(&settings).unwrap_err().kind,
+            ErrorKind::UnsafeConfiguration
+        );
+        fs::rename(real.join("state/config"), real.join("state/elsewhere")).unwrap();
+        symlink("elsewhere", real.join("state/config")).unwrap();
+        let error = refuse_symlinks(&under(&root, &settings).unwrap()).unwrap_err();
+        assert_eq!(
+            (error.kind, error.message),
+            (
+                ErrorKind::UnsafeConfiguration,
+                "storage path contains a symlink"
+            )
+        );
+        assert_eq!(
+            under(&alias.join("other"), &settings).unwrap_err().kind,
+            ErrorKind::UnsafeConfiguration
+        );
+    }
 }

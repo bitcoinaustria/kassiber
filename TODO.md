@@ -86,6 +86,14 @@ ordered compatibility, hidden-home cutover and legacy project migration through
   acceptance; supported runtime integration is not full R3 acceptance.
 - [ ] Complete storage crash/backup and Windows/macOS acceptance, then wire
   maintenance commands with Python-safe journals and credential stale guards.
+  Include the storage-root symlink differential tests on a native Mac, where
+  `$TMPDIR` really sits under `/var` -> `/private/var`
+  ([storage roots and symlinks](docs/reference/rust-store.md#storage-roots-and-symlinks)).
+- [ ] Decide with the owner whether backup restore should resolve its staging
+  root. Python and Rust both refuse a restore staged under a linked `$TMPDIR`,
+  which is every standard Mac
+  (`tests/rust_port/repro_restore_staging_symlinked_tmpdir.py`). Change the
+  Python reference first, then the store's staged-source check.
 
 ## Rust backend R6 AI providers
 

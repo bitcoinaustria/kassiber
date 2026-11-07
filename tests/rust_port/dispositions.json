@@ -3174,7 +3174,7 @@
     "tests/test_rust_shell_parity.py": {
       "RustCliParityTest": {"disposition": "oracle", "flags": ["mock", "subprocess"], "group": "cli-shell", "reason": "compares the Rust binary's CLI and daemon protocol with the Python reference while Python remains", "reviewed": true, "tests": 10},
       "RustDaemonParityTest": {"disposition": "oracle", "flags": ["mock", "subprocess"], "group": "cli-shell", "reason": "compares the Rust binary's CLI and daemon protocol with the Python reference while Python remains", "reviewed": true, "tests": 5},
-      "RustRealStoreParityTest": {"disposition": "oracle", "flags": ["mock", "mock-internal", "sql", "sql-seed", "subprocess"], "group": "cli-shell", "reason": "compares the Rust binary's CLI and daemon protocol with the Python reference while Python remains", "reviewed": true, "tests": 65},
+      "RustRealStoreParityTest": {"disposition": "oracle", "flags": ["mock", "mock-internal", "sql", "sql-seed", "subprocess"], "group": "cli-shell", "reason": "compares the Rust binary's CLI and daemon protocol with the Python reference while Python remains", "reviewed": true, "tests": 69},
       "RustShellDriftTest": {"disposition": "oracle", "flags": ["subprocess"], "group": "cli-shell", "reason": "compares the Rust binary's CLI and daemon protocol with the Python reference while Python remains", "reviewed": true, "tests": 7}
     },
     "tests/test_rust_source_funds_batch.py": {

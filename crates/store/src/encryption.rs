@@ -38,7 +38,9 @@ pub(crate) fn create_empty_with_observer(
             "passphrase must not be empty or contain NUL bytes",
         ));
     }
-    durable::refuse_symlinks(database)?;
+    // The data root resolves like Python's; links at the database and its
+    // candidate still refuse.
+    durable::refuse_symlinks(&durable::beside(database)?)?;
     if database.exists() {
         validate(database)?;
     }
@@ -48,7 +50,7 @@ pub(crate) fn create_empty_with_observer(
             "refusing to overwrite existing database",
         ));
     }
-    if let Some(parent) = database.parent() {
+    if let Some(parent) = durable::beside(database)?.parent() {
         durable::directory(parent)?;
     }
     let state = find_resumable_state(database);
@@ -59,7 +61,9 @@ pub(crate) fn create_empty_with_observer(
         ));
     }
     observer("empty.before_candidate_create")?;
-    drop(durable::create_new(&state.encrypted_temp_path)?);
+    drop(durable::create_new(&durable::beside(
+        &state.encrypted_temp_path,
+    )?)?);
     observer("empty.after_candidate_create")?;
     let conn = Connection::open(&state.encrypted_temp_path).map_err(map_sqlite_error)?;
     apply_keying(&conn, passphrase)?;
@@ -173,7 +177,7 @@ fn maintenance(
     Ok(leases)
 }
 fn validate(path: &Path) -> Result<()> {
-    durable::refuse_symlinks(path)?;
+    durable::refuse_symlinks(&durable::beside(path)?)?;
     kassiber_ownership::validate_database_file(path)
 }
 fn quote(value: &str) -> String {
@@ -519,7 +523,7 @@ pub(crate) fn encrypt_with_observer(
     }
     let state = find_resumable_state(&path);
     for artifact in [&state.encrypted_temp_path, &state.backup_path] {
-        durable::refuse_symlinks(artifact)?;
+        durable::refuse_symlinks(&durable::beside(artifact)?)?;
     }
     if state.encrypted_temp {
         return Err(Error::new(
@@ -557,7 +561,7 @@ pub(crate) fn encrypt_with_observer(
     let version = pragma(&source, "user_version")?;
     let vacuum = pragma(&source, "auto_vacuum")?;
     observer("encryption.before_export")?;
-    durable::create_new(&state.encrypted_temp_path)?;
+    durable::create_new(&durable::beside(&state.encrypted_temp_path)?)?;
     observer("encryption.after_candidate_create")?;
     let path_text = state
         .encrypted_temp_path
@@ -773,6 +777,57 @@ mod tests {
         assert!(result.is_err());
         assert_eq!(std::fs::read(&path).unwrap(), b"");
         assert_eq!(std::fs::read(&candidate).unwrap(), b"corrupt candidate");
+    }
+    #[cfg(unix)]
+    #[test]
+    fn data_roots_resolve_but_linked_databases_and_candidates_refuse() {
+        use std::os::unix::fs::symlink;
+        let temporary = tempfile::tempdir().unwrap();
+        let (alias, real) = crate::durable::tests::aliased(temporary.path());
+        let path = alias.join("empty/data/kassiber.sqlite3");
+        create_empty_database(&path, "synthetic key").unwrap();
+        assert!(
+            verify_encrypted(&real.join("empty/data/kassiber.sqlite3"), "synthetic key").is_ok()
+        );
+        let namespace = OwnerNamespace::isolated(temporary.path().join("owners"));
+        let data = alias.join("plain/data");
+        drop(crate::Book::create(&data, None).unwrap());
+        let result = encrypt_plaintext(&namespace, &data, "synthetic key", None).unwrap();
+        assert_eq!(result.encrypted_path, data.join("kassiber.sqlite3"));
+        assert!(real
+            .join("plain/data/kassiber.pre-encryption.sqlite3.bak")
+            .is_file());
+        let refused = |result: Result<()>| {
+            assert_eq!(result.unwrap_err().kind, ErrorKind::UnsafeConfiguration);
+        };
+        let linked = real.join("linked/data");
+        std::fs::create_dir_all(&linked).unwrap();
+        symlink("elsewhere.sqlite3", linked.join("kassiber.sqlite3")).unwrap();
+        refused(create_empty_database(
+            &alias.join("linked/data/kassiber.sqlite3"),
+            "key",
+        ));
+        assert!(!linked.join("elsewhere.sqlite3").exists());
+        let data = alias.join("candidate/data");
+        drop(crate::Book::create(&data, None).unwrap());
+        symlink(
+            "elsewhere.sqlite3",
+            real.join("candidate/data/kassiber.encrypted.sqlite3"),
+        )
+        .unwrap();
+        refused(encrypt_plaintext(&namespace, &data, "synthetic key", None).map(drop));
+        assert!(!real.join("candidate/data/elsewhere.sqlite3").exists());
+        let data = alias.join("backup/data");
+        drop(crate::Book::create(&data, None).unwrap());
+        let real_data = real.join("backup/data");
+        symlink(
+            "elsewhere.bak",
+            real_data.join("kassiber.pre-encryption.sqlite3.bak"),
+        )
+        .unwrap();
+        refused(encrypt_plaintext(&namespace, &data, "synthetic key", None).map(drop));
+        assert!(!real_data.join("kassiber.encrypted.sqlite3").exists());
+        assert!(kassiber_paths::looks_like_plaintext(&real_data.join("kassiber.sqlite3")).unwrap());
     }
     #[test]
     fn empty_container_is_verified_private_and_never_overwrites_a_book_or_candidate() {

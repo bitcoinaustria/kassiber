@@ -54,10 +54,18 @@ fn chmod_private(path: &Path) -> Result<()> {
     let _ = path;
     Ok(())
 }
-pub(crate) fn owner_lock(path: &Path, create: bool, blocking: bool) -> Result<Option<File>> {
+/// `root` is the app-data parent or legacy root the lock lives in; see
+/// `durable::under`. Links from the root down are refused.
+pub(crate) fn owner_lock(
+    root: &Path,
+    path: &Path,
+    create: bool,
+    blocking: bool,
+) -> Result<Option<File>> {
     if !exists(path) && !create {
         return Ok(None);
     }
+    let path = &durable::under(root, path)?;
     durable::refuse_symlinks(path)?;
     if exists(path) && !fs::symlink_metadata(path).map_err(Error::io)?.is_file() {
         return Err(failed());
@@ -114,7 +122,7 @@ fn reject_symlinks(root: &Path, top: bool) -> Result<()> {
     }
     Ok(())
 }
-fn collect_owner_locks(root: &Path, handles: &mut Vec<File>) -> Result<()> {
+fn collect_owner_locks(legacy: &Path, root: &Path, handles: &mut Vec<File>) -> Result<()> {
     for entry in fs::read_dir(root).map_err(Error::io)? {
         let entry = entry.map_err(Error::io)?;
         let kind = entry.file_type().map_err(Error::io)?;
@@ -128,11 +136,11 @@ fn collect_owner_locks(root: &Path, handles: &mut Vec<File>) -> Result<()> {
                 .retryable(true));
             }
             #[cfg(not(windows))]
-            if let Some(handle) = owner_lock(&entry.path(), false, false)? {
+            if let Some(handle) = owner_lock(legacy, &entry.path(), false, false)? {
                 handles.push(handle);
             }
         } else if kind.is_dir() {
-            collect_owner_locks(&entry.path(), handles)?;
+            collect_owner_locks(legacy, &entry.path(), handles)?;
         }
     }
     Ok(())
@@ -159,6 +167,7 @@ fn rebase_catalog(
     if !path.is_file() {
         return Ok(());
     }
+    let path = durable::under(preferred, &path)?;
     durable::refuse_symlinks(&path)?;
     let mut payload = read_json(&path)?;
     if !payload.is_object() {
@@ -214,12 +223,12 @@ fn migrate_with_rename(
     let mut moved = false;
     let result = (|| {
         let parent = preferred.parent().ok_or_else(failed)?;
-        durable::directory(parent)?;
+        durable::directory(&durable::under(parent, parent)?)?;
         let lock = parent.join(format!(
             ".{}-state-migration.lock",
             preferred.file_name().unwrap_or_default().to_string_lossy()
         ));
-        let _lock = owner_lock(&lock, true, true)?;
+        let _lock = owner_lock(parent, &lock, true, true)?;
         let legacy_state = has_state(&legacy);
         let legacy_proof = exists(&legacy.join(PROOF));
         let preferred_proof = valid_proof(&preferred);
@@ -270,14 +279,17 @@ fn migrate_with_rename(
             #[cfg(not(windows))]
             {
                 let startup = legacy.join("run/operator-v1.start.lock");
-                durable::directory(startup.parent().expect("startup parent"))?;
-                match owner_lock(&startup, true, false) {
+                durable::directory(&durable::under(
+                    &legacy,
+                    startup.parent().expect("startup parent"),
+                )?)?;
+                match owner_lock(&legacy, &startup, true, false) {
                     Ok(Some(file)) => locks.push(file),
                     Ok(None) => (),
                     Err(_) => return Ok(legacy.clone()),
                 }
             }
-            if collect_owner_locks(&legacy, &mut locks).is_err() {
+            if collect_owner_locks(&legacy, &legacy, &mut locks).is_err() {
                 return Ok(legacy.clone());
             }
             if exists(&preferred) {
@@ -285,7 +297,7 @@ fn migrate_with_rename(
             }
             if !valid_proof(&legacy) {
                 durable::atomic_write(
-                    &legacy.join(PROOF),
+                    &durable::under(&legacy, &legacy.join(PROOF))?,
                     (python_json(&proof(), true)? + "\n").as_bytes(),
                     &mut |label| observer(&format!("proof.{label}")),
                 )?;
@@ -308,7 +320,7 @@ fn migrate_with_rename(
         if legacy.is_symlink() || (exists(&legacy) && !legacy.is_dir()) {
             return Err(failed());
         }
-        durable::directory(&legacy)?;
+        durable::directory(&durable::under(&legacy, &legacy)?)?;
         chmod_private(&legacy)?;
         for fixed in ["bin", "run"] {
             let source = preferred.join(fixed);
@@ -374,6 +386,49 @@ mod tests {
         );
         assert!(!legacy.join(PROOF).exists());
         assert!(!ctx.native_state_root().exists());
+    }
+    #[cfg(unix)]
+    #[test]
+    fn linked_home_parents_migrate_but_linked_legacy_layouts_stay() {
+        use std::os::unix::fs::symlink;
+        let temporary = tempfile::tempdir().unwrap();
+        let (alias, real) = durable::tests::aliased(temporary.path());
+        let home = alias.join("home");
+        let legacy = real.join("home/.kassiber");
+        durable::directory(&legacy.join("data")).unwrap();
+        durable::directory(&legacy.join("run")).unwrap();
+        fs::write(legacy.join("data/kassiber.sqlite3"), b"moved").unwrap();
+        let ctx = context(&home);
+        let moved = migrate_hidden_home(&ctx).unwrap();
+        assert_eq!(moved, home.join(".local/share/kassiber"));
+        assert_eq!(
+            fs::read(real.join("home/.local/share/kassiber/data/kassiber.sqlite3")).unwrap(),
+            b"moved"
+        );
+        assert!(legacy.join("run").is_dir());
+        assert!(!legacy.join("data").exists());
+        // Python's _reject_unsafe_migration_symlinks keeps these layouts legacy.
+        for inner in [false, true] {
+            let home = alias.join(format!("home-{inner}"));
+            let target = real.join(format!("home-{inner}/target"));
+            durable::directory(&target.join("data")).unwrap();
+            fs::write(target.join("data/kassiber.sqlite3"), b"kept").unwrap();
+            let legacy = home.join(".kassiber");
+            let real_legacy = real.join(format!("home-{inner}/.kassiber"));
+            if inner {
+                durable::directory(&real_legacy).unwrap();
+                symlink(target.join("data"), real_legacy.join("data")).unwrap();
+            } else {
+                symlink(&target, &real_legacy).unwrap();
+            }
+            let ctx = context(&home);
+            assert_eq!(migrate_hidden_home(&ctx).unwrap(), legacy);
+            assert!(!ctx.native_state_root().exists());
+            assert_eq!(
+                fs::read(legacy.join("data/kassiber.sqlite3")).unwrap(),
+                b"kept"
+            );
+        }
     }
     fn context(home: &Path) -> Context {
         Context {
