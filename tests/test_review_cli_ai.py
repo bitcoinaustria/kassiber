@@ -108,6 +108,18 @@ class ReviewCliAiTest(unittest.TestCase):
                          '--workspace', 'w', '--profile', 'p', success=False)
         self.assertEqual(error['error']['code'], 'validation')
 
+    def test_cli_refuses_an_artifact_whose_kind_is_a_list_or_object(self):
+        # Such a kind once crashed the envelope check with internal_error; it
+        # is refused like a number or an unknown name.
+        source = self.root / 'artifact.json'
+        for kind in (['review.plan'], {'review.plan': True}, 5, 'other'):
+            with self.subTest(kind=kind):
+                source.write_text(json.dumps({'kind': kind, 'data': {}}))
+                error = self.cli('review', 'apply', '--artifact-file', str(source), '--idempotency-key', 'k',
+                                 '--workspace', 'w', '--profile', 'p', success=False)
+                self.assertEqual(error['error']['code'], 'review_artifact_invalid')
+                self.assertEqual(error['error']['message'], 'Review artifact is malformed')
+
     def test_quarantine_pack_is_complete_and_bounded_for_both_profiles(self):
         for profile in ('core', 'scoped'):
             for question in ('Untersuche alle Quarantäne-Fälle mit Blockchain und Exports',

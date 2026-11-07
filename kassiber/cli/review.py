@@ -68,7 +68,10 @@ def dispatch_review(conn: Any, args: argparse.Namespace) -> dict[str, Any]:
                                           expected_input_version=args.expected_input_version, hooks=hooks)
     if command == "apply":
         artifact = _read_json_file(args.artifact_file)
-        if isinstance(artifact, dict) and artifact.get("kind") in {"review.plan", "ui.review.plan"}:
+        # Only a string kind can name the plan envelope; any other file goes to
+        # the artifact validator, which refuses it as malformed.
+        kind = artifact.get("kind") if isinstance(artifact, dict) else None
+        if isinstance(kind, str) and kind in {"review.plan", "ui.review.plan"}:
             artifact = artifact.get("data")
         if not isinstance(artifact, dict):
             raise AppError("Review artifact file must contain a plan object", code="validation")
