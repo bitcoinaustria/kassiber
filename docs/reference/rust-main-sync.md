@@ -519,9 +519,10 @@ coarse price, so the differential tests above cover those paths.
   details for a non-text action, and on the desktop component kinds after the
   scope and before the apply's input version); Rust follows, with the
   component case in `components.json` and `test_rust_component_remediation.py`.
-  `review apply --artifact-file` with a list or object envelope `kind` still
-  crashes in Python (`tests/rust_port/repro_review_artifact_unhashable_kind.py`);
-  `crates/cli/src/review.rs` keeps copying it until that is fixed.
+  `review apply --artifact-file` with a list or object envelope `kind`
+  crashed too; Python fixed it (c53939f17: only a string kind names the
+  envelope, anything else is a malformed artifact) and
+  `crates/cli/src/review.rs` follows.
 - Python's `suggest_transfer_candidates` reads the matcher clock twice since
   S6's exclusion summary; Rust's count-only calls (automatic pairing and the
   recount) read it once. They now read it twice, so a clock that fails on
@@ -560,7 +561,7 @@ coarse price, so the differential tests above cover those paths.
   workspace vectors. Every `kassiber-transfers` test binary passes, and so
   do the journals `process_refresh` and `process_native` binaries.
 - Mutation catalogs, every entry killed: 24 S4 entries in
-  `crates/transfers/scripts/sync_mutations.json` (cargo tests) and 10 in
+  `crates/transfers/scripts/sync_mutations.json` (cargo tests) and 11 in
   `review_process_mutations.json`, run by `review_process_mutation_check.py`
   against a test-harness binary rebuilt from each mutated tree (the Python
   differential tests).

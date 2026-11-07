@@ -559,6 +559,8 @@ class ReviewCliParity(ReviewParity, unittest.TestCase):
             ["review", "apply", "--artifact-file", self.write("list.json", [artifact]), "--idempotency-key", "k"],
             ["review", "apply", "--artifact-file", self.write("unhashable.json", {"kind": ["review.plan"], "data": artifact}),
              "--idempotency-key", "k"],
+            ["review", "apply", "--artifact-file", self.write("object-kind.json", {"kind": {"plan": 1}, "data": artifact}),
+             "--idempotency-key", "k"],
             ["review", "apply", "--artifact-file", self.write("empty-envelope.json", {"kind": "review.plan"}),
              "--idempotency-key", "k"],
             ["review", "apply", "--artifact-file", self.write("tampered.json", {**artifact, "digest": "0" * 64}),

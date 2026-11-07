@@ -79,20 +79,13 @@ pub fn execute(book: &mut dyn Book, operation: &str, args: &Namespace) -> Result
         "review.apply" => {
             let mut artifact =
                 read_json_file(&kassiber_envelope::py_str(&arg(args, "artifact_file")))?;
-            if matches!(artifact, Value::Dict(_)) {
-                match get(&artifact, "kind") {
-                    // A set membership test hashes the kind first.
-                    Some(kind @ (Value::List(_) | Value::Dict(_))) => {
-                        return Err(AppError::new(
-                            "internal_error",
-                            format!("unhashable type: '{}'", kassiber_envelope::type_name(kind)),
-                        ))
-                    }
-                    Some(kind) if *kind == s("review.plan") || *kind == s("ui.review.plan") => {
-                        artifact = get(&artifact, "data").cloned().unwrap_or(Value::Null);
-                    }
-                    _ => {}
-                }
+            // Only a string kind names the plan envelope; any other file goes
+            // to the artifact validator, which refuses it as malformed.
+            if matches!(
+                get(&artifact, "kind"),
+                Some(kind) if *kind == s("review.plan") || *kind == s("ui.review.plan")
+            ) {
+                artifact = get(&artifact, "data").cloned().unwrap_or(Value::Null);
             }
             if !matches!(artifact, Value::Dict(_)) {
                 return Err(AppError::new(
@@ -260,11 +253,21 @@ mod tests {
             assert_eq!(get(args, "artifact"), Some(&dict([("digest", s("d"))])));
             assert_eq!(get(args, "idempotency_key"), Some(&s("key")));
         }
-        let kept = apply(br#"{"kind":"other","data":{}}"#).unwrap();
-        assert_eq!(
-            get(get(&kept, "args").unwrap(), "artifact").and_then(|a| get(a, "kind")),
-            Some(&s("other"))
-        );
+        for (payload, kind) in [
+            (&br#"{"kind":"other","data":{}}"#[..], s("other")),
+            // Not a string: no envelope, so the validator sees the file itself.
+            (
+                br#"{"kind":["review.plan"],"data":{}}"#,
+                Value::List(vec![s("review.plan")]),
+            ),
+            (br#"{"kind":{},"data":{}}"#, dict::<&str>([])),
+        ] {
+            let kept = apply(payload).unwrap();
+            assert_eq!(
+                get(get(&kept, "args").unwrap(), "artifact").and_then(|a| get(a, "kind")),
+                Some(&kind)
+            );
+        }
         for (payload, code, message) in [
             (
                 &br#"{"kind":"review.plan"}"#[..],
@@ -275,16 +278,6 @@ mod tests {
                 b"[]",
                 "validation",
                 "Review artifact file must contain a plan object",
-            ),
-            (
-                br#"{"kind":["review.plan"]}"#,
-                "internal_error",
-                "unhashable type: 'list'",
-            ),
-            (
-                br#"{"kind":{}}"#,
-                "internal_error",
-                "unhashable type: 'dict'",
             ),
         ] {
             let error = apply(payload).unwrap_err();
