@@ -21,11 +21,14 @@ the feasibility spikes are in place; these remain:
   replay tokenize gigabytes, hang `test_cli_session_replay.py` for over five
   minutes, and fill `/tmp`. Skip or cap large trees and fail with a clear
   message instead of hanging.
-- [ ] Validate the spike conditions natively: SQLCipher packaging and keyring
-  formats on macOS and Windows, and the Touch ID helper's identity check
-  against a signed Rust sidecar.
-- [ ] Validate the Rust HTTPS/HTTP foundation on all release targets and run its
-  owned-loopback regressions outside restricted sandboxes. The gate, inventory,
+- [ ] Validate the spike conditions natively on Windows: SQLCipher packaging
+  and keyring formats. macOS passed on 2026-11-07, including the Touch ID
+  helper's identity check against a Developer-ID-signed Rust sidecar; see
+  [macOS validation](docs/reference/macos-validation.md), which also lists the
+  macOS-only test failures and drift to fix.
+- [ ] Validate the Rust HTTPS/HTTP foundation on Windows and Linux release
+  targets and run its owned-loopback regressions outside restricted sandboxes
+  (macOS passed with the 2026-11-07 fixture fix). The gate, inventory,
   TLS/HTTP/proxy adapters and bypass scanner are in
   [the Rust egress reference](docs/reference/rust-port-egress.md); service slices
   still need their own consent, envelopes and integration proof.
@@ -1405,7 +1408,7 @@ operator leaves, brokered routing and `ui.agent_access.*` kinds and R6-8's
   `ui.agent_access.*`; see the
   [R6-3 checkpoint](docs/reference/rust-shell.md#operator-cli-brokered-routing-and-agent-access-r6-3).
   Its Windows console Ctrl-C handler has not been compiled: build and run it
-  on a Windows runner, and run the `/bin/ps` labels on a Mac.
+  on a Windows runner. The `/bin/ps` labels match Python on a Mac.
 - [ ] R6-4: Touch ID flow (`operator touch-id ...` and
   `operator unlock --auth touch-id`). The port is native and its signed
   identity checks passed on a Mac; see the
