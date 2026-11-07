@@ -104,6 +104,9 @@ pub fn validate_operations(
             return Err(AppError::new("validation", "Review operation must be an object").into());
         }
         let kind = get(operation, "type");
+        if !matches!(kind, Some(Value::Str(_))) {
+            return Err(AppError::new("validation", "Review operation type is unsupported").into());
+        }
         let request = get(operation, "request").filter(|request| matches!(request, Value::Dict(_)));
         let action = request.map(|request| get(request, "action").unwrap_or(&create));
         let component = kind.is_some_and(|kind| py_eq(kind, &s("custody_component")));

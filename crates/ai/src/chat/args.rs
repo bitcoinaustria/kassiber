@@ -585,14 +585,16 @@ pub fn validate(args: &Value) -> Result<Validated, AppError> {
         Some(Value::Bool(flag)) => *flag,
         Some(_) => return Err(validation("ai.chat tools_enabled must be a boolean")),
     };
+    // Every tool is available unless the caller narrows it (#684): the user
+    // chooses `scoped` or `core` for a small local model.
     let tool_profile = match get(args, "tool_profile") {
-        None => "scoped",
+        None => "full",
         Some(Value::Str(text)) if TOOL_PROFILE_NAMES.iter().any(|name| text.is(name)) => {
             TOOL_PROFILE_NAMES
                 .iter()
                 .copied()
                 .find(|name| text.is(name))
-                .unwrap_or("scoped")
+                .unwrap_or("full")
         }
         Some(other) => {
             return Err(

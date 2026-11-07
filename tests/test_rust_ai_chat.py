@@ -624,12 +624,11 @@ class RustAiChatParityTest(unittest.TestCase):
         sent = [json.loads(line) for line in self.broker_log.splitlines()]
         chats = [line for line in sent if line.get("command") == "chat"]
         self.assertEqual(len(chats), 3)
-        # Python records the cursor against the turn's transcript plus the
-        # last leg's answer, then looks it up against the next request's
-        # whole transcript, which already holds the new prompt: a cursor is
-        # never resumed (tests/rust_port/repro_chat_cursor_never_resumes.py).
-        # Rust keeps that behaviour.
-        self.assertNotIn("provider_session_id", chats[1].get("options") or {})
+        # The cursor is recorded against the turn's transcript plus every
+        # leg's answer and looked up against the next request's transcript
+        # before its new prompt (7e3e9e286), so the follow-up resumes it
+        # (tests/rust_port/repro_chat_cursor_never_resumes.py).
+        self.assertEqual(chats[1]["options"].get("provider_session_id"), "native-cursor-1")
         self.assertTrue(chats[2]["options"].get("stateless_session"))
 
     def test_offline_mode_refuses_a_remote_provider_before_contact(self):

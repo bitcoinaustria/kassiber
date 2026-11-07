@@ -1103,14 +1103,14 @@
     "rule": "A group resolution names the group's root in its consent text."
   },
   {
-    "id": "S12-summary-unhashable",
+    "id": "S12-summary-nonstring-action",
     "file": "crates/ai/src/summary.rs",
-    "find": "    if let Some(kind) = unhashable(action) {",
-    "replace": "    if let Some(kind) = None::<&str> {",
+    "find": "                    \"validation\",\n                    \"Custody component review action is unsupported\",",
+    "replace": "                    \"internal_error\",\n                    \"Custody component review action is unsupported\",",
     "expect_failing": [
       "summaries_match_python"
     ],
-    "rule": "An unhashable component action fails the turn as Python's summary does."
+    "rule": "A non-string component action is a validation result, not a failed turn (b2c0d9447)."
   },
   {
     "id": "S12-prompt-area-index",
@@ -1191,5 +1191,55 @@
       "a_seeded_snapshot_is_reported_but_never_spares_a_probe"
     ],
     "rule": "A saved check never spares the next explicit probe."
+  },
+  {
+    "id": "S12-review-nonstring-type",
+    "file": "crates/ai/src/review.rs",
+    "find": "        if !matches!(kind, Some(Value::Str(_))) {",
+    "replace": "        if false {",
+    "expect_failing": [
+      "ai_review_operation_rules_match_python"
+    ],
+    "rule": "A non-string review operation type is refused as validation (5d8b2658a)."
+  },
+  {
+    "id": "S12-chat-whole-answer",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "            content.push_str(&leg.content);",
+    "replace": "            content = leg.content;",
+    "expect_failing": [
+      "a_tool_turn_saves_every_leg_of_its_answer"
+    ],
+    "rule": "A tool turn's saved answer is every leg the user saw (a26567dfa)."
+  },
+  {
+    "id": "S12-chat-summary-refusal",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "                        && summary_refusal.is_none()\n",
+    "replace": "\n",
+    "expect_failing": [
+      "a_call_the_consent_card_cannot_describe_is_refused_before_any_card"
+    ],
+    "rule": "A call the consent card cannot describe gets no card (b2c0d9447)."
+  },
+  {
+    "id": "S12-chat-resume-fingerprint",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "        .then(|| history_fingerprint(before))",
+    "replace": "        .then(|| history_fingerprint(messages))",
+    "expect_failing": [
+      "resume_looks_up_the_transcript_before_the_new_prompt"
+    ],
+    "rule": "A cursor is looked up against the transcript before the new prompt (7e3e9e286)."
+  },
+  {
+    "id": "S12-chat-full-profile",
+    "file": "crates/ai/src/chat/args.rs",
+    "find": "        None => \"full\",",
+    "replace": "        None => \"scoped\",",
+    "expect_failing": [
+      "every_tool_is_offered_unless_the_caller_narrows_it"
+    ],
+    "rule": "Every tool is offered unless the caller narrows it (#684)."
   }
 ]

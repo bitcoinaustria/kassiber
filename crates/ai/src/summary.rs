@@ -93,25 +93,8 @@ fn import_target(arguments: &Value) -> Option<PyStr> {
     }
 }
 
-/// Python's name for an unhashable value's type.
-fn unhashable(value: &Value) -> Option<&'static str> {
-    match value {
-        Value::List(_) => Some("list"),
-        Value::Dict(_) => Some("dict"),
-        _ => None,
-    }
-}
-
 /// A component action other than `create`: what the consent card says.
-fn component_effect(name: &str, arguments: &Value, action: &Value) -> Result<PyStr, AppError> {
-    if let Some(kind) = unhashable(action) {
-        // Python looks the action up in a dict before the schema is checked,
-        // and the chat turn fails (tests/rust_port/repro_component_summary_unhashable.py).
-        return Err(AppError::new(
-            "internal_error",
-            format!("unhashable type: '{kind}'"),
-        ));
-    }
+fn component_effect(name: &str, arguments: &Value, action: &PyStr) -> Result<PyStr, AppError> {
     let component = match stripped(arguments, "component_id") {
         Some(target) => Text::default()
             .push("custody component ")
@@ -119,11 +102,7 @@ fn component_effect(name: &str, arguments: &Value, action: &Value) -> Result<PyS
             .done(),
         None => text("custody component"),
     };
-    let action = match action {
-        Value::Str(action) => action.as_str(),
-        _ => None,
-    };
-    let (prefix, suffix) = match action {
+    let (prefix, suffix) = match action.as_str() {
         Some("revise") if get(arguments, "activate") == Some(&Value::Bool(true)) => {
             ("Replace ", " with a new active revision")
         }
@@ -150,7 +129,8 @@ fn component_effect(name: &str, arguments: &Value, action: &Value) -> Result<PyS
         .done())
 }
 
-/// `summarize_tool_call(tool, arguments)`. An error where Python raises.
+/// `summarize_tool_call(tool, arguments)`: a validation error for a call
+/// the consent card cannot describe.
 pub fn summarize_tool_call(tool: &ToolEntry, arguments: &Value) -> Result<PyStr, AppError> {
     let name = tool.name.as_str();
     Ok(match name {
@@ -447,8 +427,15 @@ pub fn summarize_tool_call(tool: &ToolEntry, arguments: &Value) -> Result<PyStr,
         ),
         "ui.transfers.components.plan" | "ui.transfers.components.apply" => {
             let create = Value::Str(text("create"));
-            let action = get(arguments, "action").unwrap_or(&create);
-            if !matches!(action, Value::Str(action) if action.is("create")) {
+            let Value::Str(action) = get(arguments, "action").unwrap_or(&create) else {
+                // Refused before any consent card: the card keys on the
+                // action (tests/rust_port/repro_component_summary_unhashable.py).
+                return Err(AppError::new(
+                    "validation",
+                    "Custody component review action is unsupported",
+                ));
+            };
+            if !action.is("create") {
                 return component_effect(name, arguments, action);
             }
             let count = list_len(get(arguments, "components"));

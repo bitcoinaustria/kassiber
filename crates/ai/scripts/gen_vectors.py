@@ -390,10 +390,11 @@ def summary_cases():
         for arguments in arguments_list:
             try:
                 summary = tools.summarize_tool_call(tool, arguments)
-            except TypeError:
-                # Python reference bug: a list or dict `action` is hashed
-                # before the schema is checked, and the chat turn fails.
-                cases.append({"tool": tool.name, "arguments": arguments, "exception": "TypeError"})
+            except AppError:
+                # A call the consent card cannot describe (a non-string
+                # component action): the chat loop answers it as validation.
+                cases.append({"tool": tool.name, "arguments": arguments,
+                              "outcome": outcome(tools.summarize_tool_call, tool, arguments)})
                 continue
             # Three witnesses per distinct summary are enough.
             seen[summary] = seen.get(summary, 0) + 1
@@ -630,6 +631,8 @@ def review_operation_cases():
         [{"type": "custody_component", "request": {"components": [{"conservation_mode": "conversion", "conversion_reviewed": 1}], "activate": False}}],
         # Agent access (#678) and component revisions (#679).
         [{"type": None}],
+        [{"type": ["exclude"]}],
+        [{"type": {"kind": "exclude"}}],
         [{"type": "pair"}],
         [{"type": "unpair"}, {"type": "price_override"}, {"type": "accept_coarse_prices"}],
         [{"type": "custody_component", "request": "x"}],

@@ -152,13 +152,39 @@ the other provider tables, covers `agent_access` on create and update
 (daemon and CLI) and the cached and saved model listings, and adds an
 encrypted-book scenario; all 9 tests pass (all 8 failed on the merge).
 
+### Python fix round 7 (eabbe6606)
+
+`t3code/python-reference-fixes-r7-7` is merged as a pure merge (2b523c060).
+Its assistant changes are ported:
+
+- b2c0d9447: a non-string component `action` is a validation result
+  ("Custody component review action is unsupported") before any consent
+  card, and the turn continues (`summary.rs`, the pre-consent refusal in
+  `chat/turn.rs`). The transfers-side handler check belongs to S4.
+- a26567dfa: a tool turn's saved answer is every leg's text, and 7e3e9e286
+  binds and looks up the provider cursor the same way: the lookup
+  fingerprints the transcript before the new prompt
+  (`chat::turn::resume_fingerprint`), so a follow-up resumes the native
+  session. `tests/test_rust_ai_chat.py` now asserts the resume.
+- 5d8b2658a: a non-string review operation type is a validation result in
+  the AI review rules.
+- #684's default `tool_profile` is `full`.
+
+The fix round's other assistant fixes are not ported here: the refresh by
+wire name (09912e4c0), the wallet sync with an unreadable config
+(7bca137d4), the maintenance sync mode (a125129ed) and the CLI chat's
+Ctrl-C (c40e8fb32).
+
+`tests/test_rust_ai_chat.py` passes 4 of 9 (all 9 failed on the merge); the
+other five differ only by the permission-mode `approval` field and the
+chat-files `attachment` arguments, the next steps.
+
 ## Python reference notes
 
-`summarize_tool_call` (`kassiber/ai/tools.py`) looks a component action up
-in a dict before the arguments are checked against the schema, so a model
-that sends `{"action": ["a"]}` (or a dict) to `ui.transfers.components.plan`
-or `.apply` raises `TypeError: unhashable type: 'list'`, and the chat turn
-ends with `internal_error`. Repro:
-`tests/rust_port/repro_component_summary_unhashable.py`. The Rust summary
-returns the same `internal_error` message (without Python's traceback
-`debug` field), and the vectors record the case as an exception.
+`summarize_tool_call` (`kassiber/ai/tools.py`) used to look a component
+action up in a dict before the arguments were checked against the schema,
+so a model that sent `{"action": ["a"]}` to `ui.transfers.components.plan`
+or `.apply` raised `TypeError: unhashable type: 'list'` and the chat turn
+ended with `internal_error`. Fix round 7 (b2c0d9447) made it a validation
+result; `tests/rust_port/repro_component_summary_unhashable.py` now checks
+the fixed behaviour and exits non-zero if the crash returns.

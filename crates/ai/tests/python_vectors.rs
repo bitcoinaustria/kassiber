@@ -175,12 +175,12 @@ fn summaries_match_python() {
         let tool = get_tool(text(field(case, "tool"))).unwrap();
         match summarize_tool_call(tool, field(case, "arguments")) {
             Ok(summary) => assert_eq!(&Value::Str(summary), field(case, "summary"), "{case:?}"),
-            // Python raises TypeError; the chat turn ends with internal_error.
-            Err(error) => {
-                assert_eq!(field(case, "exception"), &s("TypeError"), "{case:?}");
-                assert_eq!(error.code, "internal_error");
-                assert!(error.message.starts_with("unhashable type: '"), "{error:?}");
-            }
+            // A call the consent card cannot describe is refused.
+            Err(error) => assert_eq!(
+                &outcome(Err(ToolError::App(error))),
+                field(case, "outcome"),
+                "{case:?}"
+            ),
         }
     }
 }

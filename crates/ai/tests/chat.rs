@@ -659,3 +659,94 @@ fn on_device_tools_are_never_offered_to_other_providers() {
     assert!(!remote.contains("ui_chain_analysis_sources_"));
     assert!(!remote.contains("ui_chain_analysis_acquire_apply"));
 }
+
+fn function_call_with(call_id: &str, name: &str, arguments: &str) -> String {
+    format!(
+        r#"{{"type": "function_call", "id": "fc_{call_id}", "call_id": "{call_id}", "name": "{name}", "arguments": {}}}"#,
+        dumps(&s(arguments))
+    )
+}
+
+#[test]
+fn a_tool_turn_saves_every_leg_of_its_answer() {
+    let provider = ScriptedProvider::new().unwrap();
+    provider.queue(
+        "POST",
+        "responses",
+        vec![
+            responses(
+                &[message_item("Checking. "), function_call("c1", "status")],
+                Some("Checking. "),
+            ),
+            answer("All good."),
+        ],
+    );
+    let registry = ActiveChats::default();
+    let mut host = Host::new();
+    history::set_history_mode(&host.conn, "on").unwrap();
+    let args = r#"{"model": "test-model", "tools_enabled": true, "tool_profile": "full", "persist": true, "system_prompt_kind": "raw", "system_prompt": "Use tools.", "messages": [{"role": "user", "content": "hello"}]}"#;
+    Worker::new(turn(&provider, &registry, args)).run(&mut host);
+    assert_eq!(get(host.terminal(), "finish_reason"), Some(&s("stop")));
+    // The answer the user saw, every leg of it (a26567dfa).
+    let saved: String = host
+        .conn
+        .query_row(
+            "SELECT content FROM ai_chat_messages WHERE role = 'assistant'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(saved, "Checking. All good.");
+}
+
+#[test]
+fn a_call_the_consent_card_cannot_describe_is_refused_before_any_card() {
+    let provider = ScriptedProvider::new().unwrap();
+    provider.queue(
+        "POST",
+        "responses",
+        vec![
+            responses(
+                &[function_call_with(
+                    "bad",
+                    "ui_transfers_components_apply",
+                    r#"{"action": ["a"]}"#,
+                )],
+                None,
+            ),
+            answer("Sorry."),
+        ],
+    );
+    let registry = ActiveChats::default();
+    let mut host = Host::new();
+    Worker::new(turn(&provider, &registry, TOOLS)).run(&mut host);
+    // No consent card; the model gets the validation result and the turn
+    // goes on (b2c0d9447).
+    assert!(!host
+        .kinds()
+        .contains(&"ai.chat.tool_consent_required".to_owned()));
+    let call = host
+        .records
+        .iter()
+        .find(|record| get(record, "kind") == Some(&s("ai.chat.tool_call")))
+        .unwrap();
+    assert_eq!(
+        get(get(call, "data").unwrap(), "needs_consent"),
+        Some(&Value::Bool(false))
+    );
+    let result = host.result("bad");
+    assert_eq!(get(&result, "reason"), Some(&s("validation")));
+    assert_eq!(
+        get(&result, "message"),
+        Some(&s("Custody component review action is unsupported"))
+    );
+    assert_eq!(get(host.terminal(), "finish_reason"), Some(&s("stop")));
+}
+
+#[test]
+fn every_tool_is_offered_unless_the_caller_narrows_it() {
+    // #684: the default profile is `full`.
+    assert_eq!(validate(&load(PLAIN)).unwrap().tool_profile, "full");
+    let scoped = r#"{"model": "m", "tool_profile": "scoped", "messages": [{"role": "user", "content": "hi"}]}"#;
+    assert_eq!(validate(&load(scoped)).unwrap().tool_profile, "scoped");
+}

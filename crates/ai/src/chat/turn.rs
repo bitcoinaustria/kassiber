@@ -26,7 +26,7 @@ use crate::catalog::load_tools_entry;
 use crate::catalog::{get_tool_py, KindClass};
 use crate::consent::CONSENT_TIMEOUT;
 use crate::executor::{
-    execute_mutating, execute_read_only, is_advertised, model_output, parse_tool_call,
+    denial_for, execute_mutating, execute_read_only, is_advertised, model_output, parse_tool_call,
     run_auto_reads, tool_result_denied, tool_result_record, ReadHost, Runtime,
 };
 use crate::planner::{
@@ -39,6 +39,7 @@ use crate::redact::{redact_ai_tool_result, redact_tool_arguments};
 use crate::select::{build_responses_tools, strip_on_device_only};
 use crate::summary::summarize_tool_call;
 use crate::transport::{ChatDelta, Receipt, RequestContext, PROVIDER_STATUS_NOTICES};
+use crate::ToolError;
 
 /// `_AI_CUT_OFF_FINISH_REASONS`: an answer cut off by its token limit or a
 /// content filter runs none of its tool calls.
@@ -116,6 +117,17 @@ fn stopped(error: AppError) -> Stop {
         CLOSED_MARKER => Stop::Closed,
         _ => Stop::Error(error),
     }
+}
+
+/// `_provider_session_resume_fingerprint(messages)`: the branch a resumable
+/// cursor was recorded against. A cursor is remembered under the transcript
+/// plus its answer; the next request carries that transcript and one new
+/// user prompt, so everything before the prompt is looked up. Any other
+/// shape resumes nothing.
+pub fn resume_fingerprint(messages: &[Value]) -> Option<String> {
+    let (last, before) = messages.split_last()?;
+    (matches!(last, Value::Dict(_)) && get(last, "role") == Some(&s("user")))
+        .then(|| history_fingerprint(before))
 }
 
 /// `_provider_session_history_fingerprint(messages)`: binds a provider
@@ -542,7 +554,7 @@ impl Worker {
                         .map(lossy)
                         .as_deref(),
                     &self.turn.provider.name,
-                    &history_fingerprint(&self.turn.validated.messages),
+                    resume_fingerprint(&self.turn.validated.messages).as_deref(),
                 )
             } else {
                 None
@@ -636,7 +648,7 @@ impl Worker {
                     .map(lossy)
                     .as_deref(),
                 &self.turn.provider.name,
-                &history_fingerprint(&self.turn.validated.messages),
+                resume_fingerprint(&self.turn.validated.messages).as_deref(),
             )
         } else {
             None
@@ -821,7 +833,10 @@ impl Worker {
                     }
                 }
             }
-            content = leg.content;
+            // Every leg streams its text to the user, who sends all of it
+            // back as the assistant message: the provider cursor and the
+            // saved answer are bound to that visible answer.
+            content.push_str(&leg.content);
             finish_reason = leg.finish_reason;
             if chat.is_cancelled() {
                 finish_reason = Some("cancelled".into());
@@ -850,11 +865,24 @@ impl Worker {
                     .unwrap_or_else(|| call.name.clone());
                 let preview = redact_tool_arguments(&call.arguments);
                 let proposal_seen_at = host.now();
+                // A call the consent card cannot describe is malformed: the
+                // model gets a validation result instead of a consent prompt.
+                let mut summary = None;
+                let mut summary_refusal = None;
+                if let Some(entry) = entry.filter(|entry| {
+                    advertised && entry.requires_consent() && call.argument_error.is_none()
+                }) {
+                    match summarize_tool_call(entry, &call.arguments) {
+                        Ok(text) => summary = Some(text),
+                        Err(error) => summary_refusal = Some(error),
+                    }
+                }
                 let consent_gated = entry.is_some_and(|entry| {
                     advertised
                         && !duplicate
                         && entry.requires_consent()
                         && call.argument_error.is_none()
+                        && summary_refusal.is_none()
                 });
                 let needs_consent =
                     consent_gated && !chat.consent.has_session_allow(&lossy(&display_name));
@@ -889,6 +917,8 @@ impl Worker {
                     tool_result_denied("duplicate_tool_call_id", None)
                 } else if entry.is_some() && !advertised {
                     tool_result_denied("tool_not_advertised", None)
+                } else if let Some(error) = summary_refusal {
+                    denial_for(ToolError::App(error))
                 } else if let Some(entry) =
                     entry.filter(|entry| entry.requires_consent() && call.argument_error.is_none())
                 {
@@ -900,7 +930,7 @@ impl Worker {
                                 ("name", Value::Str(display_name.clone())),
                                 (
                                     "summary",
-                                    Value::Str(summarize_tool_call(entry, &call.arguments)?),
+                                    Value::Str(summary.clone().expect("summarised above")),
                                 ),
                                 ("arguments_preview", preview.clone()),
                             ]),
@@ -1129,6 +1159,28 @@ mod tests {
         let mut output = Some(vec![item.clone()]);
         drop_cut_off_calls(Some("tool_calls"), &mut calls, &mut output);
         assert_eq!((calls.len(), output.map(|o| o.len())), (1, Some(1)));
+    }
+
+    #[test]
+    fn resume_looks_up_the_transcript_before_the_new_prompt() {
+        let message =
+            |role: &str, content: &str| dict([("role", s(role)), ("content", s(content))]);
+        let earlier = [message("user", "hi"), message("assistant", "Hello")];
+        let next = [
+            message("user", "hi"),
+            message("assistant", "Hello"),
+            message("user", "more"),
+        ];
+        assert_eq!(
+            resume_fingerprint(&next),
+            Some(history_fingerprint(&earlier))
+        );
+        assert_eq!(resume_fingerprint(&earlier), None);
+        assert_eq!(resume_fingerprint(&[]), None);
+        assert_eq!(
+            resume_fingerprint(&[message("user", "only")]),
+            Some(history_fingerprint(&[]))
+        );
     }
 
     #[test]
