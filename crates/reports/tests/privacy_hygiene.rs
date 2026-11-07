@@ -18,7 +18,7 @@ fn canonical(v: &Value) -> String {
 
 fn tables(conn: &Connection) -> BTreeMap<String, String> {
     let names = conn.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").unwrap().query_map([], |r| r.get::<_, String>(0)).unwrap().collect::<Result<Vec<_>, _>>().unwrap();
-    assert_eq!(names.len(), 113);
+    assert_eq!(names.len(), 112);
     names
         .into_iter()
         .map(|name| {

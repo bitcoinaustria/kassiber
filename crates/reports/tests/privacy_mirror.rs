@@ -50,7 +50,7 @@ fn mirror_report_scope_and_table_match_python_without_accounting_readiness() {
 
 fn tables(conn: &Connection) -> Vec<(String, Vec<Vec<kassiber_store::rusqlite::types::Value>>)> {
     let names=conn.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").unwrap().query_map([],|r|r.get::<_,String>(0)).unwrap().collect::<Result<Vec<_>,_>>().unwrap();
-    assert_eq!(names.len(), 113);
+    assert_eq!(names.len(), 112);
     names
         .into_iter()
         .map(|name| {
@@ -146,7 +146,7 @@ fn synchronized_mirror_matches_python_cold_warm_incremental_and_caller_rollback(
 fn table_hashes(conn: &Connection) -> Value {
     use sha2::{Digest, Sha256};
     let names=conn.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").unwrap().query_map([],|r|r.get::<_,String>(0)).unwrap().collect::<Result<Vec<_>,_>>().unwrap();
-    assert_eq!(names.len(), 113);
+    assert_eq!(names.len(), 112);
     dict(names.iter().map(|name| {
         let mut stmt = conn.prepare(&format!("SELECT * FROM \"{name}\"")).unwrap();
         let columns = stmt
