@@ -206,8 +206,15 @@ Resolve trust before minting consent:
   This preserves the host/override/bundled selection intent of
   `tests/test_pyinstaller_entry.py`; Mozilla roots are maintained by
   webpki-roots rather than the separately versioned certifi package.
-- `TlsTrust::platform_roots()` explicitly selects the native platform store
-  for source/non-frozen behavior. Empty/error stores refuse. Native root
+- `TlsTrust::platform_roots()` selects the native platform store for
+  source/non-frozen behavior, unless the environment overrides it:
+  `rustls-native-certs` loads roots only from `SSL_CERT_FILE` when that is set
+  (even empty) and from the directories in `SSL_CERT_DIR` when it names any,
+  and then never reads the platform store (checked on macOS in
+  [the Mac validation](macos-validation.md), A6). A missing or unreadable
+  file or directory, an error from the store and an empty result all refuse.
+  `python_default()` differs: it ignores an empty `SSL_CERT_FILE` and never
+  reads `SSL_CERT_DIR`. No product path calls `platform_roots()` yet. Root
   discovery is local; rustls never fetches AIA, OCSP or CA material.
 - `ca_file`, `backend_certificate` and `backend_pem` validate and retain an
   immutable DER snapshot (file/PEM input bounded to 8 MiB). Operator/backend

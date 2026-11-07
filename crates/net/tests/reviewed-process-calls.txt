@@ -26,6 +26,9 @@ crates/journals/tests/crash.rs|killed_writes_recover_complete_stale_books_on_sql
 crates/diagnostics/build.rs|main|std::process::Command::new(std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into()))
 crates/kassiber/tests/privacy_reports.rs|reference|let output = Command::new(python)
 crates/wallets/src/file_import/document/pdf.rs|run|let mut child = Command::new(program)
+# AI chat PDF previews: `pdfinfo`/`pdftotext`/`pdftoppm` resolved by `which`, as Python's
+# `shutil.which` + `subprocess.run(..., timeout=20)`; no network, local file arguments only.
+crates/ai/src/chat/files.rs|run|let mut child = Command::new(program)
 crates/kassiber/src/real_store/journals/hybrid.rs|replay|Command::new(std::env::var_os("KASSIBER_RUST_TEST_JOURNAL_PYTHON").ok_or_else(failed)?)
 crates/kassiber/tests/psbt_privacy.rs|reference|let output = std::process::Command::new(python)
 crates/kassiber/tests/legacy_privacy_transport.rs|reference|let result = Command::new(python)

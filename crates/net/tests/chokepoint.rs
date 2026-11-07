@@ -407,6 +407,8 @@ fn walk(path: &Path, root: &Path, own: &Path, in_crate: bool, failures: &mut Vec
         "ui-tauri/node_modules",
         "ui-tauri/dist",
         "ui-tauri/src-tauri/target",
+        // Sidecar binaries the desktop build copies in; not checked-in source.
+        "ui-tauri/src-tauri/binaries",
     ]
     .iter()
     .any(|name| relative == Path::new(name))
@@ -874,4 +876,25 @@ fn disappearing_unrelated_cache_files_do_not_mask_missing_crate_sources() {
         );
     }
     assert_eq!(failures.len(), 4);
+}
+
+#[test]
+fn copied_sidecar_binaries_are_skipped_but_only_at_their_checkout_root() {
+    let root = tempfile::tempdir().unwrap();
+    let tauri = root.path().join("ui-tauri/src-tauri");
+    fs::create_dir_all(tauri.join("binaries")).unwrap();
+    fs::create_dir_all(tauri.join("src/binaries")).unwrap();
+    fs::write(
+        tauri.join("Cargo.toml"),
+        "[package]\nname = \"example\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    let networked = "std::net::TcpStream::connect(\"localhost:9\");";
+    // A built sidecar contains every string its dependencies do.
+    fs::write(tauri.join("binaries/kassiber-cli-aarch64-apple-darwin"), networked).unwrap();
+    fs::write(tauri.join("src/binaries/x.rs"), networked).unwrap();
+    let mut failures = Vec::new();
+    scan(root.path(), &root.path().join("net"), &mut failures);
+    assert_eq!(failures.len(), 1, "{failures:?}");
+    assert!(failures[0].ends_with("src/binaries/x.rs"), "{failures:?}");
 }
