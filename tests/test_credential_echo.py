@@ -698,3 +698,103 @@ class AiProviderCredentialEchoTest(CredentialEchoAssertions, unittest.TestCase):
             with self.assertRaises(AppError) as raised:
                 list(self._client(server).stream_chat(messages=[{"role": "user", "content": "hi"}], model="m"))
         self.assertErrorWithheld(raised.exception, (AI_KEY,))
+
+
+# --- Error text an existing book already stored ------------------------------------
+
+
+class StoredErrorMigrationTest(CredentialEchoAssertions, unittest.TestCase):
+    def test_reopening_a_book_withholds_its_credentials_from_stored_errors(self):
+        from pathlib import Path
+
+        from kassiber.db import STORED_ERROR_CREDENTIALS_MIGRATION, open_db
+
+        proxy_password = "stored/proxy-Pass-1"
+        rpc_password = "stored-rpc-pass-22"
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = str(Path(tmp) / "data")
+            conn = open_db(data_root)
+            now = "2026-11-07T00:00:00Z"
+            conn.execute("INSERT INTO workspaces(id, label, created_at) VALUES('ws', 'W', ?)", (now,))
+            conn.execute(
+                "INSERT INTO profiles(id, workspace_id, label, fiat_currency, created_at) VALUES('prof', 'ws', 'P', 'EUR', ?)",
+                (now,),
+            )
+            conn.execute(
+                "INSERT INTO backends(name, kind, url, token, tor_proxy, config_json, created_at, updated_at) "
+                "VALUES('shop', 'btcpay', 'https://pay.example', ?, ?, '{}', ?, ?)",
+                (BTCPAY_KEY, f"socks5h://u:{quote(proxy_password, safe='')}@127.0.0.1:9050", now, now),
+            )
+            conn.execute(
+                "INSERT INTO backends(name, kind, url, config_json, created_at, updated_at) "
+                "VALUES('core', 'bitcoinrpc', 'http://127.0.0.1:8332', ?, ?, ?)",
+                (json.dumps({"username": "rpc-user-x", "password": rpc_password}), now, now),
+            )
+            conn.execute(
+                "INSERT INTO ai_providers(name, kind, base_url, api_key, created_at, updated_at) "
+                "VALUES('remote', 'remote', 'https://ai.example/v1', ?, ?, ?)",
+                (AI_KEY, now, now),
+            )
+            # What a failed sync stored before servers' echoes were scrubbed.
+            stored = {
+                "code": "protocol_error",
+                "message": f"BTCPay returned HTTP 500: bad key {BTCPAY_KEY} via {proxy_password}",
+                "details": {"btcpay_code": BTCPAY_KEY.upper(), f"k-{rpc_password}": [json.dumps(AI_KEY)]},
+            }
+            conn.execute(
+                "INSERT INTO freshness_jobs(id, profile_id, job_type, source_key, source_type, source_label, status, "
+                "phase, error_json, created_at, updated_at) VALUES('job', 'prof', 'btcpay_wallet_source', 'wallet:ln', "
+                "'wallet', 'L', 'error', 'error', ?, ?, ?)",
+                (json.dumps(stored), now, now),
+            )
+            conn.execute(
+                "INSERT INTO btcpay_store_sync_states(profile_id, backend_name, store_id, last_error_code, "
+                "last_error_message, updated_at) VALUES('prof', 'shop', 'S1', 'protocol_error', ?, ?)",
+                (f"BTCPay returned HTTP 500: {quote(BTCPAY_KEY)} {rpc_password}", now),
+            )
+            conn.execute(
+                "INSERT INTO ai_provider_checks(provider_name, check_kind, base_url, checked_at, stale, error_json, value_json) "
+                "VALUES('remote', 'models', 'https://ai.example/v1', ?, 0, ?, '[]')",
+                (now, json.dumps({"code": "ai_auth_failed", "message": f"no {AI_KEY}"})),
+            )
+            conn.execute("DELETE FROM schema_migration_audits WHERE migration_name = ?", (STORED_ERROR_CREDENTIALS_MIGRATION,))
+            conn.commit()
+            conn.close()
+
+            conn = open_db(data_root)
+            try:
+                error_json = conn.execute("SELECT error_json FROM freshness_jobs WHERE id = 'job'").fetchone()[0]
+                self.assertEqual(
+                    json.loads(error_json),
+                    {
+                        "code": "protocol_error",
+                        "message": "BTCPay returned HTTP 500: bad key <redacted> via <redacted>",
+                        "details": {"btcpay_code": "<redacted>", "k-<redacted>": ['"<redacted>"']},
+                    },
+                )
+                self.assertEqual(
+                    conn.execute("SELECT last_error_message FROM btcpay_store_sync_states").fetchone()[0],
+                    "BTCPay returned HTTP 500: <redacted> <redacted>",
+                )
+                audit = json.loads(
+                    conn.execute(
+                        "SELECT impact_json FROM schema_migration_audits WHERE migration_name = ?",
+                        (STORED_ERROR_CREDENTIALS_MIGRATION,),
+                    ).fetchone()[0]
+                )
+                self.assertEqual(audit["scrubbed_value_count"], 3)
+                texts = {
+                    f"{table}.{column}": "\n".join(
+                        str(row[0]) for row in conn.execute(f"SELECT {column} FROM {table}")
+                    )
+                    for table, column in (
+                        ("freshness_jobs", "error_json"),
+                        ("btcpay_store_sync_states", "last_error_message"),
+                        ("ai_provider_checks", "error_json"),
+                    )
+                }
+                self.assertWithheld(texts, (BTCPAY_KEY, proxy_password, rpc_password, AI_KEY))
+                # Credentials themselves stay where the book keeps them.
+                self.assertEqual(conn.execute("SELECT token FROM backends WHERE name = 'shop'").fetchone()[0], BTCPAY_KEY)
+            finally:
+                conn.close()
