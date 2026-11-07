@@ -4,9 +4,12 @@ Every temp book a test opens leaves a lock group in the account-home namespace
 behind for good, and one gate run creates thousands of throwaway ones.
 Ownership exclusion deliberately follows no environment override, so the
 namespace cannot be redirected for the child processes the cross-process tests
-spawn; the groups this session created are swept when it ends instead. A file
-another process still holds is skipped, so a concurrent preview or CLI keeps
-its exclusion.
+spawn; the groups this session touched are swept when it ends instead, once,
+in the process that started the run and after every xdist worker has ended.
+The sweep follows the product's own pruner (tests/owner_lock_sweep.py): each
+group's admission lock, so another run, the desktop or a CLI mid-acquire is
+never moved onto an unlinked record; a file another process still holds is
+skipped, so a concurrent preview or CLI keeps its exclusion.
 """
 
 from __future__ import annotations
@@ -22,6 +25,7 @@ import pytest
 
 from kassiber.operator import project as project_module
 from tests.integration.env import env_flag, no_egress_guard
+from tests.owner_lock_sweep import sweep_owner_locks
 
 
 _ROOT = Path(__file__).resolve().parent.parent
@@ -37,6 +41,7 @@ _OFFLINE_PREFERENCE_DIR: tempfile.TemporaryDirectory | None = None
 _TAX_RECORDS_DIR: tempfile.TemporaryDirectory | None = None
 _PREVIOUS_TAX_RECORDS: str | None = None
 _TAX_REPORT: tuple[list[str], list[str]] | None = None
+_OWNER_LOCK_SWEEP_STARTED: float | None = None
 
 
 def _isolate_offline_preference() -> None:
@@ -187,6 +192,7 @@ def pytest_configure(config: pytest.Config) -> None:
         "its calls on production without comparing them with the oracle",
     )
     _default_to_scope_distribution(config)
+    _start_owner_lock_sweep(config)
     _isolate_offline_preference()
     _select_tax_engine_backend(config)
     integration = env_flag("KASSIBER_INTEGRATION")
@@ -240,6 +246,7 @@ def pytest_runtest_protocol(item: pytest.Item, nextitem: pytest.Item | None):
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     """Check the session's route records, in the process that created them."""
+    _finish_owner_lock_sweep()
     global _TAX_REPORT
     if _TAX_RECORDS_DIR is None:
         return
@@ -303,40 +310,33 @@ def pytest_unconfigure(config: pytest.Config) -> None:
         os.environ["KASSIBER_TEST_NO_EGRESS"] = _PREVIOUS_TEST_NO_EGRESS
 
 
-@pytest.fixture(autouse=True, scope="session")
-def _sweep_session_owner_locks():
+def _start_owner_lock_sweep(config: pytest.Config) -> None:
+    """Arm the sweep in the process that started the run, never in a worker.
+
+    A worker that drained early would otherwise sweep while its siblings still
+    open books.
+    """
+    global _OWNER_LOCK_SWEEP_STARTED
+    if hasattr(config, "workerinput") or _OWNER_LOCK_SWEEP_STARTED is not None:
+        return
     # Filesystem timestamps are coarser than time.time(), so a file created
     # just after the session starts can carry a slightly earlier mtime.
-    started = time.time() - 5.0
-    yield
-    if os.name == "nt":
-        # Exclusion is decided by share modes at open time, so probing a live
-        # lock would itself fail rather than report the holder.
+    _OWNER_LOCK_SWEEP_STARTED = time.time() - 5.0
+
+
+def _finish_owner_lock_sweep() -> None:
+    global _OWNER_LOCK_SWEEP_STARTED
+    started, _OWNER_LOCK_SWEEP_STARTED = _OWNER_LOCK_SWEEP_STARTED, None
+    if started is None or os.name == "nt":
+        # Exclusion is decided by share modes at open time on Windows, so
+        # probing a live lock would itself fail rather than report the holder.
         return
     try:
         root = project_module._owner_lock_root()
     except Exception:
         return
-    for path in root.glob("*.lock*"):
-        try:
-            if path.stat().st_mtime < started:
-                continue
-            handle = project_module._open_owner_lock(path, "sweep")
-        except Exception:
-            continue
-        try:
-            # ponytail: unlink under our own lock only, not the group's
-            # admission lock. A holder mid-acquire on a group this session
-            # created could in principle end up on a replaced inode; take the
-            # admission lock per group if that ever shows up.
-            if project_module._try_lock_handle(handle):
-                path.unlink(missing_ok=True)
-        except OSError:
-            # One file that cannot be removed must not abort the sweep, and a
-            # session that already passed must not fail in teardown over it.
-            continue
-        finally:
-            try:
-                project_module._unlock_handle(handle)
-            finally:
-                handle.close()
+    try:
+        sweep_owner_locks(root, started)
+    except Exception:
+        # A session that already passed must not fail in teardown over it.
+        return
