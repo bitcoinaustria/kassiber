@@ -655,3 +655,46 @@ class ProxyCredentialEchoTest(CredentialEchoAssertions, unittest.TestCase):
         with self.assertRaises(AppError) as raised:
             proxy.SocksUrlResponse(f"ftp://user:{PROXY_PASSWORD}@host/", "socks5h://127.0.0.1:9050", 1, {}).__enter__()
         self.assertErrorWithheld(raised.exception, (PROXY_PASSWORD,))
+
+
+# --- AI providers -----------------------------------------------------------------
+
+# Not an `sk-` key, which pattern redaction would already recognize.
+AI_KEY = "ak-live_" + "Rt7q" * 8
+
+
+class AiProviderCredentialEchoTest(CredentialEchoAssertions, unittest.TestCase):
+    def _client(self, server):
+        from kassiber.ai.client import OpenAICompatibleClient
+
+        return OpenAICompatibleClient(
+            base_url=f"{server.url}/v1", api_key=AI_KEY, api_format="chat_completions", timeout=5
+        )
+
+    def test_http_errors_withhold_the_api_key(self):
+        for status in (400, 401, 403, 429, 500):
+            with self.subTest(status=status):
+                with EchoServer(json_echo(status)) as server:
+                    with self.assertRaises(AppError) as raised:
+                        self._client(server).list_models(strict=True)
+                self.assertIn("body", raised.exception.details)
+                self.assertErrorWithheld(raised.exception, (AI_KEY,))
+
+    def test_errors_inside_an_answer_withhold_the_api_key(self):
+        def respond(_handler, echo):
+            return 200, "application/json", json.dumps({"error": {"message": echo, "code": echo, "type": "invalid_request_error"}})
+
+        with EchoServer(respond) as server:
+            with self.assertRaises(AppError) as raised:
+                self._client(server).chat(messages=[{"role": "user", "content": "hi"}], model="m")
+        self.assertErrorWithheld(raised.exception, (AI_KEY,))
+
+    def test_errors_inside_a_stream_withhold_the_api_key(self):
+        def respond(_handler, echo):
+            event = json.dumps({"error": {"message": echo, "code": echo}})
+            return 200, "text/event-stream", f"data: {event}\n\ndata: [DONE]\n\n"
+
+        with EchoServer(respond) as server:
+            with self.assertRaises(AppError) as raised:
+                list(self._client(server).stream_chat(messages=[{"role": "user", "content": "hi"}], model="m"))
+        self.assertErrorWithheld(raised.exception, (AI_KEY,))
