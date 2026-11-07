@@ -601,12 +601,11 @@ fn read(
         return Err(not_native(&entry.name, owner).into());
     }
     let data_root = runtime.data_root.to_owned();
-    // Python tests the name as called: a model calls tools by their wire
-    // name, so only the planner's dotted auto-reads refresh journals
-    // (tests/rust_port/repro_ai_refresh_wire_name.py).
-    let refresh = AUTO_JOURNAL_REFRESH_TOOLS
-        .iter()
-        .any(|name| call.name.is(name))
+    // `_ai_read_wants_maintenance`: decided on the catalog entry, so a
+    // model's wire-name call refreshes like the planner's dotted auto-read
+    // (fix round 7, 09912e4c0). `ui.visuals.render` refreshes only for its
+    // journal sources; it is refused above until the visuals are ported.
+    let refresh = AUTO_JOURNAL_REFRESH_TOOLS.contains(&entry.name.as_str())
         && !runtime.is("read_maintenance", "disabled");
     let state = &mut *runtime.state;
     let mut work = |book: &mut dyn Book| -> Result<Value, ToolError> {
@@ -640,14 +639,17 @@ fn read(
                 ));
             }
         }
-        let mut payload = projections::read_for_ai(
-            entry,
+        let mut payload = projections::stale_journal_figures_for_ai(
             kind,
-            &call.arguments,
-            state,
-            auto_sync_data.as_ref(),
-            book,
-        )?;
+            projections::read_for_ai(
+                entry,
+                kind,
+                &call.arguments,
+                state,
+                auto_sync_data.as_ref(),
+                book,
+            )?,
+        );
         if SAFETY_COMPOSITES.contains(&kind) {
             if let Some(mut safety @ Value::Dict(_)) = get(&payload, "safety").cloned() {
                 let contacted = auto_sync_data.is_some();

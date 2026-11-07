@@ -607,6 +607,72 @@ def projection_cases():
     return cases
 
 
+def stale_journal_cases():
+    """`_project_stale_journal_figures_for_ai` (#681) over each kind's
+    stale, never-processed and current shapes."""
+    from kassiber import daemon
+
+    stamp = "2026-01-02T03:04:05Z"
+    status = {"workspace": "W", "profile": "P", "needsJournals": True, "lastProcessedAt": None, "quarantines": 2}
+    payloads = {
+        "ui.journals.transfers.list": [
+            {"summary": {"workspace": "W", "profile": "P", "limit": 5, "projection_status": "stale", "manual_pairs": 1, "extra": 2}, "pairs": [1]},
+            {"summary": {"profile": "P", "projection_status": "stale"}, "pairs": []},
+            {"summary": {"projection_status": "current", "manual_pairs": 1}, "pairs": [1]},
+            {"summary": None, "pairs": [1]},
+            {"pairs": [1]},
+        ],
+        "ui.reports.capital_gains": [
+            {"jurisdictionCode": "AT", "year": 2025, "availableYears": [2025], "status": status, "totals": {"x": 1}, "rows": [1]},
+            {"year": 2024, "status": {**status, "lastProcessedAt": stamp}, "kennzahlRows": []},
+            {"year": 2025, "status": {**status, "needsJournals": False}, "rows": [1]},
+            {"year": 2025, "status": None},
+            {"year": 2025},
+        ],
+        "ui.journals.events.list": [
+            {"summary": {**status, "count": 3, "reportableCount": 2}, "events": [1]},
+            {"summary": {**status, "lastProcessedAt": stamp, "entryTypes": ["a"]}, "events": []},
+            {"summary": {**status, "needsJournals": 0}, "events": [1]},
+            {"status": status, "events": [1]},
+        ],
+        "ui.journals.snapshot": [
+            {"status": status, "entryTypes": {"a": 1}, "recent": [1], "recentByType": {}, "other": 1},
+            {"status": {**status, "lastProcessedAt": stamp}, "recent": []},
+            {"status": {**status, "needsJournals": False}, "recent": [1]},
+            {"summary": status, "recent": [1]},
+        ],
+        "ui.overview.snapshot": [
+            {"priceEur": 3.0, "fiat": {"fiatCurrency": "EUR", "eurBalance": 1.5, "eurCostBasis": 0.0, "eurUnrealized": 1.5, "eurRealizedYTD": 0.0, "completeness": {"state": "stale"}}, "after": 1},
+            {"fiat": {"eurRealizedYTD": 1, "completeness": {"state": "stale"}, "availability": "old"}},
+            {"fiat": {"eurCostBasis": 1.0, "completeness": {"state": "complete"}}},
+            {"fiat": {"completeness": "stale"}},
+            {"fiat": None},
+            {"fiat": [1]},
+            {},
+        ],
+        "ui.journals.quarantine": [
+            {"summary": {"workspace": "W", "count": 1, "by_reason": [1], "groups": [], "freshness": {"needs_processing": True, "last_processed_at": None}, "limit": 20}, "items": [1]},
+            {"summary": {"count": 1, "freshness": {"needs_processing": True, "last_processed_at": stamp}}, "items": [1], "projection": "old"},
+            {"summary": {"count": 1, "freshness": {"needs_processing": False}}, "items": [1]},
+            {"summary": {"count": 1}, "items": [1]},
+            {"items": [1]},
+        ],
+        "ui.journals.quarantine.groups": [
+            {"needs_processing": True, "last_processed_at": None, "groups": [1], "definitions": {"a": "b"}},
+            {"needs_processing": True, "last_processed_at": stamp, "groups": [1]},
+            {"needs_processing": True, "groups": [1]},
+            {"needs_processing": False, "groups": [1]},
+        ],
+        "ui.wallets.list": [{"summary": {"needsJournals": True}}],
+    }
+    cases = []
+    for kind, variants in payloads.items():
+        for payload in [*variants, [1], None, "x"]:
+            projected = daemon._project_stale_journal_figures_for_ai(kind, copy.deepcopy(payload))
+            cases.append({"kind": kind, "payload": payload, "projected": projected})
+    return cases
+
+
 def review_operation_cases():
     conversion = {"conservation_mode": "conversion", "legs": []}
     values = [
@@ -927,6 +993,7 @@ def document():
         "context": context_cases(),
         "provenance": provenance_cases(),
         "projection": projection_cases(),
+        "stale_journals": stale_journal_cases(),
         "review_operations": review_operation_cases(),
         "export_target": export_target_cases(),
         "planned_artifact": planned_artifact_cases(),

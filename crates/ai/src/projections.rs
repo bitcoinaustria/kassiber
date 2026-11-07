@@ -894,3 +894,241 @@ pub fn ai_safe_egress_snapshot(after_id: i64, snapshot: &Value) -> Value {
         ),
     ])
 }
+
+/// `_AI_PROCESS_JOURNALS_REMEDIATION`.
+fn process_journals_remediation() -> Value {
+    dict([
+        ("action", s("process_journals")),
+        ("tool", s("ui.journals.process")),
+        ("target", Value::Dict(Vec::new())),
+        ("desktop_only", Value::Bool(false)),
+    ])
+}
+
+/// `_ai_journal_unavailable(reason, as_of=..., freshness=...)`: an explicit
+/// stand-in for journal figures the model must not quote. Zeros and empty
+/// lists read as "nothing booked"; `null` figures with a status, reason and
+/// remediation cannot be mistaken for that.
+fn journal_unavailable(reason: &str, as_of: Value) -> Vec<(Key, Value)> {
+    let message = if reason == "journals_never_processed" {
+        "Journals have never been processed for this book, so there are no figures yet."
+    } else {
+        "Journal inputs changed since the last processing; these figures are withheld until journals are processed again."
+    };
+    vec![
+        (Key::from("status"), s("unavailable")),
+        (Key::from("reason"), s(reason)),
+        (Key::from("message"), s(message)),
+        (Key::from("as_of"), as_of),
+        (Key::from("journal_freshness"), Value::Null),
+        (Key::from("remediation"), process_journals_remediation()),
+    ]
+}
+
+/// `_ai_journal_stale(as_of)`: quarantine is the last processing's verdict;
+/// say so instead of hiding it.
+fn journal_stale(as_of: Value) -> Value {
+    dict([
+        ("status", s("stale")),
+        ("reason", s("journals_stale")),
+        ("as_of", as_of),
+        (
+            "message",
+            s("These rows are what the last journal processing held. Inputs changed since; process journals before treating the counts as current."),
+        ),
+        ("remediation", process_journals_remediation()),
+    ])
+}
+
+/// `payload.get(key) or {}`, as a dict to read and spread.
+fn section(payload: &Value, key: &str) -> Value {
+    match get(payload, key) {
+        Some(found @ Value::Dict(_)) => found.clone(),
+        _ => Value::Dict(Vec::new()),
+    }
+}
+
+fn field(value: &Value, key: &str) -> Value {
+    get(value, key).cloned().unwrap_or(Value::Null)
+}
+
+fn flag(value: &Value, key: &str) -> bool {
+    get(value, key).is_some_and(kassiber_envelope::truthy)
+}
+
+/// `{**base, key: None, ...}`.
+fn nulled(mut base: Value, keys: &[&str]) -> Value {
+    for key in keys {
+        set(&mut base, key, Value::Null);
+    }
+    base
+}
+
+/// `{**marker, **rest}`.
+fn marked(mut marker: Vec<(Key, Value)>, rest: Vec<(&str, Value)>) -> Value {
+    for (key, value) in rest {
+        marker.retain(|(existing, _)| *existing != Key::from(key));
+        marker.push((Key::from(key), value));
+    }
+    Value::Dict(marker)
+}
+
+/// `_project_stale_journal_figures_for_ai(kind, payload)` (#681): stale
+/// journal-derived figures in an AI read become `null` with an explicit
+/// state. The desktop pages read the same builders and show their own stale
+/// state, so this lives only in the AI projection. It runs after the read's
+/// own journal refresh: figures stay stale only when that refresh failed or
+/// was disabled (an MCP read).
+pub fn stale_journal_figures_for_ai(kind: &str, payload: Value) -> Value {
+    if !matches!(payload, Value::Dict(_)) {
+        return payload;
+    }
+    match kind {
+        "ui.journals.transfers.list" => {
+            let summary = section(&payload, "summary");
+            if get(&summary, "projection_status") != Some(&s("stale")) {
+                return payload;
+            }
+            let mut kept = Value::Dict(Vec::new());
+            for key in ["workspace", "profile", "limit"] {
+                set(&mut kept, key, field(&summary, key));
+            }
+            let kept = nulled(
+                kept,
+                &[
+                    "manual_pairs",
+                    "same_asset_pairs",
+                    "cross_asset_pairs",
+                    "journal_transfer_entries",
+                ],
+            );
+            marked(
+                journal_unavailable("journals_stale", Value::Null),
+                vec![("summary", kept), ("pairs", Value::Null)],
+            )
+        }
+        "ui.reports.capital_gains" | "ui.journals.events.list" | "ui.journals.snapshot" => {
+            let status = section(
+                &payload,
+                if kind == "ui.journals.events.list" {
+                    "summary"
+                } else {
+                    "status"
+                },
+            );
+            if !flag(&status, "needsJournals") {
+                return payload;
+            }
+            let as_of = field(&status, "lastProcessedAt");
+            let reason = if kassiber_envelope::truthy(&as_of) || kind == "ui.reports.capital_gains"
+            {
+                "journals_stale"
+            } else {
+                "journals_never_processed"
+            };
+            let marker = journal_unavailable(reason, as_of);
+            match kind {
+                "ui.reports.capital_gains" => marked(
+                    marker,
+                    vec![
+                        ("year", field(&payload, "year")),
+                        ("availableYears", field(&payload, "availableYears")),
+                        ("journal_status", status),
+                        ("totals", Value::Null),
+                        ("kennzahlRows", Value::Null),
+                        ("rows", Value::Null),
+                    ],
+                ),
+                "ui.journals.events.list" => marked(
+                    marker,
+                    vec![
+                        (
+                            "summary",
+                            nulled(status, &["count", "reportableCount", "entryTypes"]),
+                        ),
+                        ("events", Value::Null),
+                    ],
+                ),
+                _ => marked(
+                    marker,
+                    vec![
+                        ("journal_status", status),
+                        ("entryTypes", Value::Null),
+                        ("recent", Value::Null),
+                        ("recentByType", Value::Null),
+                    ],
+                ),
+            }
+        }
+        "ui.overview.snapshot" => {
+            let Some(fiat @ Value::Dict(_)) = get(&payload, "fiat").cloned() else {
+                return payload;
+            };
+            let stale = matches!(get(&fiat, "completeness"), Some(completeness @ Value::Dict(_))
+                if get(completeness, "state") == Some(&s("stale")));
+            if !stale {
+                return payload;
+            }
+            let mut fiat = nulled(fiat, &["eurCostBasis", "eurUnrealized", "eurRealizedYTD"]);
+            set(
+                &mut fiat,
+                "availability",
+                Value::Dict(journal_unavailable("journals_stale", Value::Null)),
+            );
+            let mut payload = payload;
+            set(&mut payload, "fiat", fiat);
+            payload
+        }
+        "ui.journals.quarantine" => {
+            let summary = section(&payload, "summary");
+            let freshness = section(&summary, "freshness");
+            if !flag(&freshness, "needs_processing") {
+                return payload;
+            }
+            let as_of = field(&freshness, "last_processed_at");
+            if kassiber_envelope::truthy(&as_of) {
+                let mut payload = payload;
+                set(&mut payload, "projection", journal_stale(as_of));
+                return payload;
+            }
+            marked(
+                journal_unavailable("journals_never_processed", Value::Null),
+                vec![
+                    (
+                        "summary",
+                        nulled(
+                            summary,
+                            &[
+                                "count",
+                                "by_reason",
+                                "attention_count",
+                                "waiting_count",
+                                "blocking_count",
+                                "scope_count",
+                                "groups",
+                                "group_count",
+                            ],
+                        ),
+                    ),
+                    ("items", Value::Null),
+                ],
+            )
+        }
+        "ui.journals.quarantine.groups" => {
+            if !flag(&payload, "needs_processing") {
+                return payload;
+            }
+            let as_of = field(&payload, "last_processed_at");
+            if kassiber_envelope::truthy(&as_of) {
+                let mut payload = payload;
+                set(&mut payload, "projection", journal_stale(as_of));
+                return payload;
+            }
+            marked(
+                journal_unavailable("journals_never_processed", Value::Null),
+                vec![("definitions", field(&payload, "definitions"))],
+            )
+        }
+        _ => payload,
+    }
+}

@@ -1351,5 +1351,55 @@
       "every_tool_is_offered_unless_the_caller_narrows_it"
     ],
     "rule": "An absent permission mode asks for every change."
+  },
+  {
+    "id": "S12-stale-overview-cost-basis",
+    "file": "crates/ai/src/projections.rs",
+    "find": "let mut fiat = nulled(fiat, &[\"eurCostBasis\", \"eurUnrealized\", \"eurRealizedYTD\"]);",
+    "replace": "let mut fiat = nulled(fiat, &[\"eurUnrealized\", \"eurRealizedYTD\"]);",
+    "expect_failing": [
+      "stale_journal_figures_are_withheld_as_python_withholds_them"
+    ],
+    "rule": "A stale overview withholds the cost basis as well as the unrealized and realized figures (#681)."
+  },
+  {
+    "id": "S12-stale-capital-gains-always-stale",
+    "file": "crates/ai/src/projections.rs",
+    "find": "|| kind == \"ui.reports.capital_gains\"",
+    "replace": "|| kind == \"ui.journals.snapshot\"",
+    "expect_failing": [
+      "stale_journal_figures_are_withheld_as_python_withholds_them"
+    ],
+    "rule": "Withheld capital gains are always `journals_stale`; the journal reads say `journals_never_processed` before any processing."
+  },
+  {
+    "id": "S12-stale-transfers-only-when-stale",
+    "file": "crates/ai/src/projections.rs",
+    "find": "if get(&summary, \"projection_status\") != Some(&s(\"stale\")) {",
+    "replace": "if get(&summary, \"projection_status\") == Some(&s(\"current\")) {",
+    "expect_failing": [
+      "stale_journal_figures_are_withheld_as_python_withholds_them"
+    ],
+    "rule": "Journal transfer pairs are withheld only when their projection is stale."
+  },
+  {
+    "id": "S12-stale-projection-applied",
+    "file": "crates/ai/src/executor.rs",
+    "find": "        let mut payload = projections::stale_journal_figures_for_ai(\n            kind,\n",
+    "replace": "        let mut payload = (|_: &str, payload: Value| payload)(\n            kind,\n",
+    "expect_failing": [
+      "stale_journal_figures_never_reach_the_model"
+    ],
+    "rule": "Every AI read passes the stale-journal projection before it leaves the executor."
+  },
+  {
+    "id": "S12-refresh-by-catalog-entry",
+    "file": "crates/ai/src/executor.rs",
+    "find": "    let refresh = AUTO_JOURNAL_REFRESH_TOOLS.contains(&entry.name.as_str())",
+    "replace": "    let refresh = AUTO_JOURNAL_REFRESH_TOOLS.iter().any(|name| call.name.is(name))",
+    "expect_failing": [
+      "refresh_reads_report_journal_processing_unless_disabled"
+    ],
+    "rule": "A model's wire-name read refreshes stale journals like the planner's dotted one (09912e4c0)."
   }
 ]

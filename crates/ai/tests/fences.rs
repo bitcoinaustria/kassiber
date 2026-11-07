@@ -566,6 +566,35 @@ fn results_are_redacted_before_they_leave_the_executor() {
 }
 
 #[test]
+fn stale_journal_figures_never_reach_the_model() {
+    // #681: an AI read of unprocessed journals gets an explicit state and
+    // `null` figures, never zeros that read as "nothing booked".
+    let mut fake = book();
+    fake.payload = Some(dict([
+        (
+            "status",
+            dict([
+                ("needsJournals", Value::Bool(true)),
+                ("lastProcessedAt", Value::Null),
+            ]),
+        ),
+        ("recent", Value::List(vec![s("entry")])),
+    ]));
+    let mut state = empty();
+    let result = run(
+        &mut fake,
+        &mut state,
+        "ui.journals.snapshot",
+        empty(),
+        false,
+    );
+    let data = get(get(&result, "envelope").unwrap(), "data").unwrap();
+    assert_eq!(get(data, "status"), Some(&s("unavailable")));
+    assert_eq!(get(data, "reason"), Some(&s("journals_never_processed")));
+    assert_eq!(get(data, "recent"), Some(&Value::Null));
+}
+
+#[test]
 fn scoped_reads_check_the_frozen_project_and_book() {
     let mut fake = book();
     fake.in_scope = false;
@@ -601,6 +630,15 @@ fn refresh_reads_report_journal_processing_unless_disabled() {
     assert!(get(&result, "auto_journal_process").is_none());
     let result = run(&mut fake, &mut empty(), "ui.rates.summary", empty(), false);
     assert!(get(&result, "auto_journal_process").is_none());
+    // A model calls by wire name and refreshes the same (09912e4c0).
+    let result = run(
+        &mut fake,
+        &mut empty(),
+        "ui_reports_summary",
+        empty(),
+        false,
+    );
+    assert!(get(&result, "auto_journal_process").is_some());
 }
 
 #[test]

@@ -206,6 +206,7 @@ def tool_requests(attachment=None):
 
     extra = _extra_arguments()
     # An external agent at the `read` grant with restricted access (#686).
+    mcp_reads = {tool.entry.name for tool in available_tools(grant="read", agent_access="restricted")}
     mcp_state = {
         **REMOTE,
         "advertised_tools": [
@@ -244,7 +245,7 @@ def tool_requests(attachment=None):
             ]
         if tool.name == "ui.profiles.snapshot":
             states.append({**REMOTE, "cross_book_read_allowed": True, "scope_workspace_id": "w", "scope_profile_id": "p"})
-        if tool.name in MCP_SOURCE_TOOL_NAMES:
+        if tool.name in mcp_reads:
             states.append(mcp_state)
         for arguments in cases:
             for state in states:

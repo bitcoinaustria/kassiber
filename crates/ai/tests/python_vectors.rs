@@ -296,6 +296,19 @@ fn chain_analysis_projection_matches_python() {
     }
 }
 
+#[test]
+fn stale_journal_figures_are_withheld_as_python_withholds_them() {
+    let cases = section("stale_journals");
+    assert!(cases.len() > 40);
+    for case in cases {
+        let projected = kassiber_ai::projections::stale_journal_figures_for_ai(
+            text(field(case, "kind")),
+            field(case, "payload").clone(),
+        );
+        assert_eq!(&projected, field(case, "projected"), "{case:?}");
+    }
+}
+
 /// The Python `outcome()` record for a Rust result with a value; a Python
 /// exception other than `AppError` compares by its presence only.
 fn value_outcome(result: Result<Value, ToolError>, expected: &Value) -> Value {
