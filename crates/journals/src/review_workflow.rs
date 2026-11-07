@@ -85,7 +85,7 @@ pub fn plan(
     as_of: &str,
     sources: &dyn Sources,
 ) -> Result<Value, Error> {
-    let normalized = review_operations::normalize(operations)?;
+    let mut normalized = review_operations::normalize(operations)?;
     let clone = pipeline::memory_snapshot(conn, || {
         conn.query_row("SELECT lower(hex(randomblob(32)))", [], |row| row.get(0))
             .map_err(Refusal::from)
@@ -95,17 +95,26 @@ pub fn plan(
     let _simulation = clone.unchecked_transaction().map_err(sql::error)?;
     let prepared = prepare(&clone, scope, as_of)?;
     let state = prepared.review_state(&clone, derived_ids())?;
-    let before = review_effects::effects(&state, &clone, scope, &normalized)?;
+    let before = review_effects::effects(&state, &clone, scope, &normalized, sources)?;
     let cases = review_simulation::Cases::from_state(&state);
-    let Value::List(operations) = &normalized else {
+    let Value::List(operations) = &mut normalized else {
         unreachable!("normalized operations")
     };
-    review_simulation::apply(&clone, scope, operations, sources, "user", cases, |conn| {
-        facts(conn, scope, as_of)
-    })?;
+    // An acceptance that names no transaction is filled in with the cases it
+    // accepts, so the artifact names each one.
+    review_simulation::apply(
+        &clone,
+        scope,
+        operations,
+        sources,
+        "user",
+        true,
+        cases,
+        |conn| facts(conn, scope, as_of),
+    )?;
     let prepared = prepare(&clone, scope, as_of)?;
     let state = prepared.review_state(&clone, derived_ids())?;
-    let after = review_effects::effects(&state, &clone, scope, &normalized)?;
+    let after = review_effects::effects(&state, &clone, scope, &normalized, sources)?;
     Ok(review_artifact::assemble(
         scope,
         expected_input_version.clone(),
@@ -150,8 +159,9 @@ pub fn validate(
     Ok(fresh)
 }
 
-/// Build economic and policy effects on one live read snapshot. This is not a
-/// plan: ordered operations and their simulated effects are still required.
+/// Build economic and policy effects on one live read snapshot, without the
+/// per-year tax figures (those store the state). This is not a plan: ordered
+/// operations and their simulated effects are still required.
 pub fn inspect_effects(
     conn: &Connection,
     scope: &Scope<'_>,
@@ -174,7 +184,9 @@ pub fn inspect_effects(
     .ok_or_else(|| AppError::new("not_found", "Review profile was not found"))?;
     let prepared = Prepared::load(conn, profile, as_of)?;
     let state = prepared.review_state(conn, ids)?;
-    Ok(review_effects::effects(&state, conn, scope, operations)?)
+    Ok(review_effects::effects_without_tax(
+        &state, conn, scope, operations,
+    )?)
 }
 
 /// Resolve cursor, profile, canonical facts and freshness on one live snapshot.
@@ -363,18 +375,26 @@ pub fn execute(
         ),
         // `validate_review`: the consent preview's recomputation.
         "review.validate" => validate(conn, scope, &value(args, "artifact"), &as_of, sources),
-        "review.apply" => apply(
-            conn,
-            scope,
-            Apply {
-                artifact: &value(args, "artifact"),
-                idempotency_key: &value(args, "idempotency_key"),
-                authored_source,
-                commit: true,
-            },
-            &as_of,
-            sources,
-        ),
+        "review.apply" => {
+            let artifact = value(args, "artifact");
+            let receipt = apply(
+                conn,
+                scope,
+                Apply {
+                    artifact: &artifact,
+                    idempotency_key: &value(args, "idempotency_key"),
+                    authored_source,
+                    commit: true,
+                },
+                &as_of,
+                sources,
+            )?;
+            if review_operations::changes_transfer_candidates(&artifact) {
+                // The shared review count caches open moves; keep it with the book.
+                kassiber_transfers::pairing::recount_candidates(conn, scope, sources);
+            }
+            Ok(receipt)
+        }
         _ => Err(AppError::new("validation", "Unsupported review command").into()),
     }
 }

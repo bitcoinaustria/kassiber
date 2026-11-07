@@ -457,6 +457,9 @@ impl Daemon {
             &mut config,
         )?;
         let journals = kind == "ui.journals.process";
+        // The desktop action pairs automatically unless the Review screen
+        // recalculates after the owner's own decisions.
+        let journal_auto_pair = request.auto_pair;
         let plan = if journals {
             None
         } else {
@@ -520,8 +523,7 @@ impl Daemon {
                     if journals {
                         let result = book.refresh_journals(
                             journal_context.as_ref().expect("captured journal context"),
-                            // The desktop action pairs automatically.
-                            true,
+                            journal_auto_pair,
                             &worker_cancel,
                             &mut emit,
                         )?;

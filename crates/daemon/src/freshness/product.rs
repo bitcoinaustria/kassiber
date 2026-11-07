@@ -72,25 +72,30 @@ fn boolean(args: &Value, key: &str, kind: &str, details: bool) -> Result<Option<
 
 pub(crate) fn parse(kind: &str, args: &Value, id: &RequestId) -> Result<Invocation, AppError> {
     if kind == "ui.journals.process" {
+        // Only `auto_pair` may be turned off: the Review screen recalculates
+        // after the owner's own decisions and must not pair anything else.
+        let mut auto_pair = true;
         if let Value::Dict(pairs) = args {
-            if !pairs.is_empty() {
-                let mut unknown = pairs
-                    .iter()
-                    .filter_map(|(key, _)| match key {
-                        Key::Str(value) => Some(value.clone()),
-                        _ => None,
-                    })
-                    .collect::<Vec<_>>();
+            let mut unknown = pairs
+                .iter()
+                .filter_map(|(key, _)| match key {
+                    Key::Str(value) if !value.is("auto_pair") => Some(value.clone()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+            let flag = get(args, "auto_pair");
+            if !unknown.is_empty() || flag.is_some_and(|flag| !matches!(flag, Value::Bool(_))) {
                 unknown.sort();
                 return Err(AppError::new(
                     "validation",
-                    "ui.journals.process does not accept arguments",
+                    "ui.journals.process accepts only a boolean auto_pair",
                 )
                 .with_details(dict([(
                     "unknown",
                     Value::List(unknown.into_iter().map(Value::Str).collect()),
                 )])));
             }
+            auto_pair = !matches!(flag, Some(Value::Bool(false)));
         }
         if !valid_id(id) {
             return Err(fallback());
@@ -102,7 +107,7 @@ pub(crate) fn parse(kind: &str, args: &Value, id: &RequestId) -> Result<Invocati
                 rates: Some(false),
                 journals: Some(true),
                 force_full: false,
-                auto_pair: true,
+                auto_pair,
                 wallets_sync: false,
             },
             options: Options {
@@ -358,7 +363,7 @@ pub(crate) fn handle(
             Some(value) => {
                 return Err(AppError::new(
                     "validation",
-                    "ui.journals.process does not accept arguments",
+                    "ui.journals.process accepts only a boolean auto_pair",
                 )
                 .with_details(dict([("type", s(type_name(value)))]))
                 .into())

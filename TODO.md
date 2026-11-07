@@ -261,11 +261,23 @@ against the Rust port and slices the gaps; Python stays the reference.
   and their kinds; suggestion `exclusions`.
 - [x] S11: custody component remediation on blocked plans and activations.
   The AI-only revision boundary stays with S12.
-- [ ] S4 as the inventory lists it: the review workflow.
-- [ ] Refresh the transfer fixtures S1's added transaction column broke
-  (`component_reads.json`, `pairing_services.json`), and port the #684
-  result changes they will expose (`transfers rules delete` returns the
-  rule, `transfers unpair` the pair).
+- [x] S4: the review workflow's term operations (`pair`, `dismiss_pair`,
+  `undismiss_pair`, `custody_gap`) and `accept_coarse_prices`; per-year tax
+  figures in plan effects and the `delta` in artifacts and receipts; cases'
+  `fiat_currency`; badges' `review` and `definitions`; the cached transfer
+  candidate recounts and `ui.journals.process`'s `auto_pair`.
+- [x] Refresh the transfer fixtures S1's added transaction column broke
+  (`component_reads.json`, `pairing_services.json`) and port #684's results
+  (`transfers rules delete` returns the rule, `transfers unpair` the pair).
+- [ ] Keep one port of the indicative tax and the 1 March 2022 Kennzahl rule.
+  S7 (`kassiber_reports::tax_estimate`, used by `gains_desktop`) and S4
+  (`kassiber_journals::review_tax`, `kassiber_reports::review_figures`) each
+  carry one; the S4/S7 merge shares only the E 1kv row read
+  (`austrian::e1kv_rows`). Move the Reports screen onto S4's port.
+- [ ] Regenerate the stored Python dumps that predate S1's 113-table schema:
+  `crates/journals/tests/data/persistence.json` (journals `persistence`,
+  `process` and the prebuild binaries) and the `kassiber-reports` vectors
+  that assert 112 tables, including the privacy hygiene and mirror seeds.
 - [ ] S12: rebase the R6 branches (AI catalog, providers, tools, MCP grants,
   chat) onto the synced stack. Its AI projections drop the desktop-only
   `indicativeTax`, breakdown `transactionIds` and `explanationReference`, as

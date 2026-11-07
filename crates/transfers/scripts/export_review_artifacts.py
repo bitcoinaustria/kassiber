@@ -19,10 +19,15 @@ from kassiber.errors import AppError
 
 DESTINATION = ROOT / "crates/transfers/tests/review_artifacts.json"
 PROFILE = dict(id="p", workspace_id="w")
+# Since #680 effects carry per-year tax figures and the artifact their delta.
+TAX = dict(fiat_currency="EUR", jurisdiction=None, years_omitted=0)
+BEFORE = dict(journal_digest="before", report_ready=False,
+              tax=dict(TAX, years=[dict(year=2024, realized_gain_loss="10.00", income="0.00")]))
+AFTER = dict(journal_digest="after", report_ready=True,
+             tax=dict(TAX, years=[dict(year=2024, realized_gain_loss="12.50", income="0.00")]))
 BASE = dict(schema_version=1, workspace_id="w", profile_id="p", base_input_version=17,
             operations=[dict(type="exclude", transaction_id="tx", reason="Reviewed")],
-            before=dict(journal_digest="before", report_ready=False),
-            after=dict(journal_digest="after", report_ready=True))
+            before=BEFORE, after=AFTER, delta=review._tax_delta(BEFORE, AFTER))
 
 
 def signed(payload):
@@ -47,6 +52,9 @@ def admission(artifact, key):
         return dict(result=review._operations(artifact["operations"]))
     except AppError as error:
         return dict(error=dict(code=error.code, message=str(error), hint=error.hint, details=error.details))
+    except AttributeError as error:
+        # A bare exception: the daemon's internal_error envelope.
+        return dict(error=dict(code="internal_error", message=str(error), hint=None, details=None))
     raise AssertionError("apply crossed the pre-transaction boundary")
 
 
@@ -97,19 +105,27 @@ def candidates():
     yield "operations-before-key", signed({**BASE, "operations": None}), None
     yield "nonfinite-before-digest", {**artifact, "before": float("nan")}, None
     yield "nonfinite-malformed", {**artifact, "extra": float("nan")}, None
+    # The delta is checked after the operations and before the key.
+    yield "delta-mismatch", signed({**BASE, "delta": dict(years=[])}), None
+    yield "delta-malformed", signed({**BASE, "before": dict(BEFORE, tax=None)}), None
+    yield "delta-attribute", signed({**BASE, "before": dict(BEFORE, tax=dict(TAX, years=[
+        dict(year=2024, realized_gain_loss="1", income="0", kennzahlen=[172])]))}), "key"
+    yield "delta-before-key", signed({**BASE, "delta": None}), None
+    yield "operations-before-delta", signed({**BASE, "operations": None, "delta": None}), "key"
 
 
 def export():
     result = dict(assembly=[], admission=[])
     for name, artifact, key in candidates():
         result["admission"].append(dict(name=name, artifact=artifact, key=key, **admission(artifact, key)))
-    for name, payload in (("base", BASE), ("unicode", {**BASE, "before": dict(note="钱 🦀")}),
-                          ("exact", {**BASE, "before": dict(amount=9007199254740993, number=-0.0)}),
-                          ("ordered", {**BASE, "operations": BASE["operations"] * 2})):
+    for name, payload in (("base", BASE), ("unicode", {**BASE, "before": dict(note="钱 🦀", tax=BEFORE["tax"])}),
+                          ("exact", {**BASE, "before": dict(amount=9007199254740993, number=-0.0, tax=BEFORE["tax"])}),
+                          ("ordered", {**BASE, "operations": BASE["operations"] * 2}),
+                          ("no-tax-change", {**BASE, "after": dict(AFTER, tax=BEFORE["tax"])})):
         result["assembly"].append(dict(name=name, payload=payload, **assembly(payload)))
     for character in ("a", "é", "🦀"):
         payload = deepcopy(BASE)
-        payload["before"] = dict(padding="")
+        payload["before"] = dict(padding="", tax=BEFORE["tax"])
         overhead = len(review._json(signed(payload)).encode())
         width = len(review._json(character).encode()) - 2
         for count in ((review.MAX_ARTIFACT_BYTES - overhead) // width,

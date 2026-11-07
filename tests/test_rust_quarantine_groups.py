@@ -150,18 +150,6 @@ def test_quarantine_summary_carries_currency_and_definitions(tmp_path, environme
     ]
 
 
-def without_recount(dump):
-    """Python's rebuild recounts transfer candidates since #707 (main-sync
-    slice S4, not ported yet); mask that cached count and the chain-index
-    revisions its write bumps."""
-    for name, column in (("profiles", "swap_candidate_count"),
-                         ("chain_index_clock", "revision"), ("chain_index_dirty", "revision")):
-        table = dump[name]
-        index = table["columns"].index(column)
-        table["rows"] = [[*row[:index], None, *row[index + 1:]] for row in table["rows"]]
-    return dump
-
-
 REFUSALS = [
     {"action": "exclude", "reason": "r"},
     {"transaction": None, "group_id": None, "action": "exclude", "reason": "r"},
@@ -212,7 +200,7 @@ def test_resolve_by_group_reports_the_same_effect_and_book(tmp_path, environment
     actual = resolve(native, environment, True, cipher, [request_args])
     (tmp_path / "resolve.json").write_text(json.dumps({"actual": actual, "expected": expected}, indent=1))
     assert json.dumps(masked(actual[0])) == json.dumps(masked(normalized(expected)[0]))
-    assert without_recount(masked_book(native, cipher)) == without_recount(masked_book(reference, cipher))
+    assert masked_book(native, cipher) == masked_book(reference, cipher)
     data = actual[0]["data"]
     if request_args.get("reprocess", True):
         assert data["quarantine_delta"]["status"] == "measured"

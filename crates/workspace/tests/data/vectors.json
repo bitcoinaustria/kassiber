@@ -85,7 +85,15 @@
       "quarantine": 0,
       "quarantine_attention": 0,
       "journals_needs_processing": false,
-      "swaps": null
+      "swaps": null,
+      "review": 0,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": null,
@@ -253,7 +261,15 @@
       "quarantine": 0,
       "quarantine_attention": 0,
       "journals_needs_processing": false,
-      "swaps": null
+      "swaps": null,
+      "review": 0,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": null,
@@ -579,7 +595,15 @@
       "quarantine": 1,
       "quarantine_attention": 1,
       "journals_needs_processing": true,
-      "swaps": null
+      "swaps": null,
+      "review": 1,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -3866,7 +3890,15 @@
       "quarantine": 1,
       "quarantine_attention": 1,
       "journals_needs_processing": true,
-      "swaps": null
+      "swaps": null,
+      "review": 1,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -7151,7 +7183,15 @@
       "quarantine": 1,
       "quarantine_attention": 1,
       "journals_needs_processing": true,
-      "swaps": null
+      "swaps": null,
+      "review": 1,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -10434,7 +10474,15 @@
       "quarantine": 1,
       "quarantine_attention": 1,
       "journals_needs_processing": false,
-      "swaps": null
+      "swaps": null,
+      "review": 1,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -13708,7 +13756,15 @@
       "quarantine": 0,
       "quarantine_attention": 0,
       "journals_needs_processing": false,
-      "swaps": null
+      "swaps": null,
+      "review": 0,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -16963,7 +17019,15 @@
       "quarantine": 0,
       "quarantine_attention": 0,
       "journals_needs_processing": false,
-      "swaps": null
+      "swaps": null,
+      "review": 0,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -20207,7 +20271,15 @@
       "quarantine": 1,
       "quarantine_attention": 1,
       "journals_needs_processing": false,
-      "swaps": null
+      "swaps": null,
+      "review": 1,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -23378,7 +23450,15 @@
       "quarantine": 0,
       "quarantine_attention": 0,
       "journals_needs_processing": false,
-      "swaps": null
+      "swaps": null,
+      "review": 0,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": null,
@@ -25804,7 +25884,15 @@
       "quarantine": 0,
       "quarantine_attention": 0,
       "journals_needs_processing": false,
-      "swaps": null
+      "swaps": null,
+      "review": 0,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": null,
@@ -28317,7 +28405,15 @@
       "quarantine": 0,
       "quarantine_attention": 0,
       "journals_needs_processing": true,
-      "swaps": null
+      "swaps": null,
+      "review": 0,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -30986,7 +31082,15 @@
       "quarantine": 1,
       "quarantine_attention": 1,
       "journals_needs_processing": false,
-      "swaps": null
+      "swaps": null,
+      "review": 1,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -33474,7 +33578,15 @@
       "quarantine": 0,
       "quarantine_attention": 0,
       "journals_needs_processing": false,
-      "swaps": null
+      "swaps": null,
+      "review": 0,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -34426,7 +34538,15 @@
       "quarantine": 0,
       "quarantine_attention": 0,
       "journals_needs_processing": false,
-      "swaps": null
+      "swaps": null,
+      "review": 0,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -35957,7 +36077,15 @@
       "quarantine": 1,
       "quarantine_attention": 1,
       "journals_needs_processing": true,
-      "swaps": 0
+      "swaps": 0,
+      "review": 1,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -39244,7 +39372,15 @@
       "quarantine": 1,
       "quarantine_attention": 1,
       "journals_needs_processing": true,
-      "swaps": 19
+      "swaps": 19,
+      "review": 20,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -42529,7 +42665,15 @@
       "quarantine": 1,
       "quarantine_attention": 1,
       "journals_needs_processing": false,
-      "swaps": null
+      "swaps": null,
+      "review": 1,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -45663,7 +45807,15 @@
       "quarantine": 1,
       "quarantine_attention": 1,
       "journals_needs_processing": true,
-      "swaps": null
+      "swaps": null,
+      "review": 1,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -48946,7 +49098,15 @@
       "quarantine": 1,
       "quarantine_attention": 1,
       "journals_needs_processing": false,
-      "swaps": null
+      "swaps": null,
+      "review": 1,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -52080,7 +52240,15 @@
       "quarantine": 1,
       "quarantine_attention": 1,
       "journals_needs_processing": true,
-      "swaps": null
+      "swaps": null,
+      "review": 1,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -55365,7 +55533,15 @@
       "quarantine": 1,
       "quarantine_attention": 1,
       "journals_needs_processing": true,
-      "swaps": null
+      "swaps": null,
+      "review": 1,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -58650,7 +58826,15 @@
       "quarantine": 1,
       "quarantine_attention": 1,
       "journals_needs_processing": true,
-      "swaps": 4
+      "swaps": 4,
+      "review": 5,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -61937,7 +62121,15 @@
       "quarantine": 1,
       "quarantine_attention": 1,
       "journals_needs_processing": true,
-      "swaps": null
+      "swaps": null,
+      "review": 1,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -65214,7 +65406,15 @@
       "quarantine": 0,
       "quarantine_attention": 0,
       "journals_needs_processing": true,
-      "swaps": null
+      "swaps": null,
+      "review": 0,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -68486,7 +68686,15 @@
       "quarantine": 0,
       "quarantine_attention": 0,
       "journals_needs_processing": false,
-      "swaps": null
+      "swaps": null,
+      "review": 0,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -71741,7 +71949,15 @@
       "quarantine": 0,
       "quarantine_attention": 0,
       "journals_needs_processing": true,
-      "swaps": null
+      "swaps": null,
+      "review": 0,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -75013,7 +75229,15 @@
       "quarantine": 2,
       "quarantine_attention": 1,
       "journals_needs_processing": false,
-      "swaps": null
+      "swaps": null,
+      "review": 1,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -78293,7 +78517,15 @@
       "quarantine": 2,
       "quarantine_attention": 2,
       "journals_needs_processing": false,
-      "swaps": null
+      "swaps": null,
+      "review": 2,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -81573,7 +81805,15 @@
       "quarantine": 3,
       "quarantine_attention": 1,
       "journals_needs_processing": false,
-      "swaps": null
+      "swaps": null,
+      "review": 1,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -84859,7 +85099,15 @@
       "quarantine": 3,
       "quarantine_attention": 3,
       "journals_needs_processing": false,
-      "swaps": null
+      "swaps": null,
+      "review": 3,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -88145,7 +88393,15 @@
       "quarantine": 2,
       "quarantine_attention": 1,
       "journals_needs_processing": false,
-      "swaps": null
+      "swaps": null,
+      "review": 1,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -91425,7 +91681,15 @@
       "quarantine": 2,
       "quarantine_attention": 1,
       "journals_needs_processing": false,
-      "swaps": null
+      "swaps": null,
+      "review": 1,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -94705,7 +94969,15 @@
       "quarantine": 2,
       "quarantine_attention": 1,
       "journals_needs_processing": false,
-      "swaps": null
+      "swaps": null,
+      "review": 1,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -97985,7 +98257,15 @@
       "quarantine": 2,
       "quarantine_attention": 2,
       "journals_needs_processing": false,
-      "swaps": null
+      "swaps": null,
+      "review": 2,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -101265,7 +101545,15 @@
       "quarantine": 2,
       "quarantine_attention": 1,
       "journals_needs_processing": false,
-      "swaps": null
+      "swaps": null,
+      "review": 1,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -104545,7 +104833,15 @@
       "quarantine": 3,
       "quarantine_attention": 3,
       "journals_needs_processing": false,
-      "swaps": null
+      "swaps": null,
+      "review": 3,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -107831,7 +108127,15 @@
       "quarantine": 2,
       "quarantine_attention": 2,
       "journals_needs_processing": false,
-      "swaps": null
+      "swaps": null,
+      "review": 2,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -111111,7 +111415,15 @@
       "quarantine": 2,
       "quarantine_attention": 2,
       "journals_needs_processing": false,
-      "swaps": null
+      "swaps": null,
+      "review": 2,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -114391,7 +114703,15 @@
       "quarantine": 2,
       "quarantine_attention": 2,
       "journals_needs_processing": false,
-      "swaps": null
+      "swaps": null,
+      "review": 2,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -117673,7 +117993,15 @@
       "quarantine": 1,
       "quarantine_attention": 1,
       "journals_needs_processing": true,
-      "swaps": null
+      "swaps": null,
+      "review": 1,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -120958,7 +121286,15 @@
       "quarantine": 1,
       "quarantine_attention": 1,
       "journals_needs_processing": false,
-      "swaps": null
+      "swaps": null,
+      "review": 1,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -124262,7 +124598,15 @@
       "quarantine": 1,
       "quarantine_attention": 1,
       "journals_needs_processing": false,
-      "swaps": null
+      "swaps": null,
+      "review": 1,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -127570,7 +127914,15 @@
       "quarantine": 1,
       "quarantine_attention": 1,
       "journals_needs_processing": false,
-      "swaps": null
+      "swaps": null,
+      "review": 1,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -130874,7 +131226,15 @@
       "quarantine": 1,
       "quarantine_attention": 1,
       "journals_needs_processing": false,
-      "swaps": null
+      "swaps": null,
+      "review": 1,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -134176,7 +134536,15 @@
       "quarantine": 1,
       "quarantine_attention": 1,
       "journals_needs_processing": false,
-      "swaps": null
+      "swaps": null,
+      "review": 1,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -137489,7 +137857,15 @@
       "quarantine": 1,
       "quarantine_attention": 1,
       "journals_needs_processing": true,
-      "swaps": null
+      "swaps": null,
+      "review": 1,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -140779,7 +141155,15 @@
       "quarantine": 1,
       "quarantine_attention": 1,
       "journals_needs_processing": false,
-      "swaps": null
+      "swaps": null,
+      "review": 1,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -144092,7 +144476,15 @@
       "quarantine": 1,
       "quarantine_attention": 1,
       "journals_needs_processing": false,
-      "swaps": null
+      "swaps": null,
+      "review": 1,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -147337,7 +147729,15 @@
       "quarantine": 1,
       "quarantine_attention": 1,
       "journals_needs_processing": true,
-      "swaps": null
+      "swaps": null,
+      "review": 1,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -151164,7 +151564,15 @@
       "quarantine": 1,
       "quarantine_attention": 1,
       "journals_needs_processing": false,
-      "swaps": null
+      "swaps": null,
+      "review": 1,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -154968,7 +155376,15 @@
       "quarantine": 1,
       "quarantine_attention": 1,
       "journals_needs_processing": false,
-      "swaps": null
+      "swaps": null,
+      "review": 1,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -158176,7 +158592,15 @@
       "quarantine": 1,
       "quarantine_attention": 1,
       "journals_needs_processing": false,
-      "swaps": null
+      "swaps": null,
+      "review": 1,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -161483,7 +161907,15 @@
       "quarantine": 1,
       "quarantine_attention": 1,
       "journals_needs_processing": false,
-      "swaps": null
+      "swaps": null,
+      "review": 1,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",
@@ -164801,7 +165233,15 @@
       "quarantine": 1,
       "quarantine_attention": 1,
       "journals_needs_processing": true,
-      "swaps": null
+      "swaps": null,
+      "review": 1,
+      "definitions": {
+        "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+        "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+        "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+        "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+        "review": "What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."
+      }
     },
     "coverage": {
       "workspace": "Main",

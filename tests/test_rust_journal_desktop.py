@@ -118,6 +118,22 @@ def test_desktop_journals_match_ordered_envelopes_events_and_all_tables(tmp_path
 
 
 @pytest.mark.parametrize("cipher", [False, True])
+@pytest.mark.parametrize("current", [False, True])
+@pytest.mark.parametrize("scenario", ["exact", "dismissal", "ownership"])
+def test_desktop_journals_without_auto_pair_recount_like_python(tmp_path, environment, cipher, current, scenario):
+    """Review recalculates after the owner's own decisions (#707): nothing is
+    paired, and the rebuild recounts the cached transfer candidates."""
+    reference = seed_auto(tmp_path / "python", cipher, scenario, current)
+    native = tmp_path / "rust"
+    shutil.copytree(reference, native)
+    expected = run(reference, environment, cipher=cipher, native=False, args={"auto_pair": False})
+    actual = run(native, environment, cipher=cipher, args={"auto_pair": False})
+    assert "auto_pair" not in actual[0]["data"], actual
+    assert_wire(actual, expected)
+    assert scalar_exact(book_dump(native, cipher), book_dump(reference, cipher))
+
+
+@pytest.mark.parametrize("cipher", [False, True])
 @pytest.mark.parametrize("shape", ["unchanged", "changed", "blocked", "empty", "build-refusal", "admission-refusal"])
 def test_desktop_journals_plain_books_and_refusal_envelopes(tmp_path, environment, cipher, shape):
     reference = seed(tmp_path / "python", cipher=cipher, shape=shape)
@@ -154,7 +170,9 @@ def test_desktop_journals_unresolved_active_profile_matches_python_plain_resolut
     assert scalar_exact(book_dump(native), book_dump(reference))
 
 
-@pytest.mark.parametrize("args", [[], False, 7, "text", {"auto_pair": False}, {"profile": "foreign"},
+# A boolean auto_pair is a valid request since #707 (see the test above).
+@pytest.mark.parametrize("args", [[], False, 7, "text", {"auto_pair": "no"}, {"auto_pair": None},
+                                  {"auto_pair": False, "profile": "foreign"}, {"profile": "foreign"},
                                   {"wallet": "foreign", "all": True}, {"consent": True}])
 def test_desktop_journal_arguments_cannot_change_scope_or_pairing_authority(tmp_path, environment, args):
     reference = seed_auto(tmp_path / "python")

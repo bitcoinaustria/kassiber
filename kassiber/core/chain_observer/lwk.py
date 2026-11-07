@@ -309,6 +309,37 @@ def _fee_sats_by_asset(outputs: list[Any]) -> dict[str, int]:
     return fees
 
 
+def _explicit_owned_deltas(owned_inputs: list[Any], owned_outputs: list[Any]) -> dict[str, int]:
+    """Return the wallet delta carried by explicit (unblinded) owned outputs.
+
+    LWK 0.18.0 lists an explicit output to a wallet script among the owned
+    inputs and outputs, but leaves secrets with zero blinding factors out of
+    `WalletTx.balance()` and `Wollet.utxos()`. Its amount and asset are
+    public, so it is booked exactly like a confidential receipt or spend.
+    """
+
+    deltas: dict[str, int] = {}
+    for sign, items in ((1, owned_outputs), (-1, owned_inputs)):
+        for item in items:
+            if item is None:
+                continue
+            secrets = item.unblinded()
+            if not secrets.is_explicit():
+                continue
+            asset_id = str(secrets.asset())
+            deltas[asset_id] = deltas.get(asset_id, 0) + sign * int(secrets.value())
+    return deltas
+
+
+def _wallet_tx_balance(wallet_tx: Any, owned_inputs: list[Any], owned_outputs: list[Any]) -> dict[str, int]:
+    """LWK's confidential balance plus the explicit owned deltas it omits."""
+
+    balance = {str(asset): int(value) for asset, value in wallet_tx.balance().items()}
+    for asset_id, delta in _explicit_owned_deltas(owned_inputs, owned_outputs).items():
+        balance[asset_id] = balance.get(asset_id, 0) + delta
+    return balance
+
+
 def _allocated_liquid_fee(
     *,
     net_sats: int,
@@ -472,9 +503,8 @@ class LwkObserver:
             raw_inputs
         )
         records = []
-        for asset_id, signed_value in sorted(wallet_tx.balance().items(), key=lambda item: str(item[0])):
-            asset_id = str(asset_id)
-            net = int(signed_value)
+        balance = _wallet_tx_balance(wallet_tx, owned_inputs, owned_outputs)
+        for asset_id, net in sorted(balance.items()):
             transaction_fee = fee_sats_by_asset.get(asset_id, 0)
             fee, amount_includes_fee = _allocated_liquid_fee(
                 net_sats=net,
@@ -558,7 +588,24 @@ class LwkObserver:
         for output in wollet.txos():
             branch_key = "change" if str(output.ext_int()).lower().endswith("internal") else "receive"
             highest[branch_key] = max(highest.get(branch_key, -1), int(output.wildcard_index()))
-        for output in wollet.utxos():
+        # LWK's UTXO set omits explicit outputs (see `_explicit_owned_deltas`).
+        # An explicit TXO no wallet transaction spends is still held.
+        def outpoint_key(outpoint: Any) -> tuple[str, int]:
+            return str(outpoint.txid()), int(outpoint.vout())
+
+        unspent = list(wollet.utxos())
+        listed_or_spent = {outpoint_key(output.outpoint()) for output in unspent}
+        listed_or_spent.update(
+            outpoint_key(txin.outpoint())
+            for wallet_tx in transactions
+            for txin in wallet_tx.tx().inputs()
+        )
+        unspent.extend(
+            output
+            for output in wollet.txos()
+            if output.unblinded().is_explicit() and outpoint_key(output.outpoint()) not in listed_or_spent
+        )
+        for output in unspent:
             branch_key = "change" if str(output.ext_int()).lower().endswith("internal") else "receive"
             index = int(output.wildcard_index())
             secrets = output.unblinded()
@@ -580,9 +627,11 @@ class LwkObserver:
                     "address": str(output.address()),
                     "script_pubkey": bytes(output.script_pubkey().to_bytes()).hex(),
                     "derivation_path": None, "derivation_paths": [], "key_origins": [],
-                    "raw": {"source": "lwk_wollet", "confidential": True},
+                    "raw": {"source": "lwk_wollet", "confidential": not secrets.is_explicit()},
                 }
             )
+        # LWK lists UTXOs in hash-map order, which differs between processes.
+        outputs.sort(key=lambda output: (output["txid"], output["vout"]))
         coverage = _lwk_coverage(
             branch_keys=self.identity.branch_keys,
             scan_to_index=scan_to_index,

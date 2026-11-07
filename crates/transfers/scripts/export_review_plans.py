@@ -167,6 +167,56 @@ def export():
         authored["request"]["components"][0]["legs"][1] = dict(role="destination", untracked_wallet="🚀 missing " + suffix,
             occurred_at="2022-01-01T00:00:00Z", amount_msat=100000000000)
         record("component-author-wallet" + str(len(suffix)), "empty", [authored], component_setup, group="authoring")
+    # Per-year tax figures (#680): Vienna tax years, Kennzahlen, rows before
+    # 1 March 2022, and the indicative tax withheld by the report blockers.
+    def row(id, direction, msat, occurred, rate=None):
+        priced = "NULL,NULL" if rate is None else f"{rate},'{rate}'"
+        return ("INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,occurred_at,direction,asset,"
+                f"amount,fee,kind,fiat_rate,fiat_rate_exact,fiat_currency,raw_json,created_at) VALUES('{id}','w','p','source','{id}',"
+                f"'{occurred}','{direction}','BTC',{msat},0,'{'buy' if direction == 'inbound' else 'sell'}',{priced},'EUR','{{}}','2020')")
+    tax = [*basic[:2], "UPDATE profiles SET tax_country='at',fiat_currency='EUR' WHERE id='p'",
+           "INSERT OR REPLACE INTO settings(key,value) VALUES('context_workspace','w'),('context_profile','p')",
+           row("a", "inbound", 100000000000, "2021-06-01T10:00:00Z", 30000),
+           row("b", "outbound", 20000000000, "2022-02-15T10:00:00Z", 40000),
+           row("c", "outbound", 30000000000, "2022-06-01T10:00:00Z", 25000),
+           row("d", "inbound", 5000000000, "2023-01-01T10:00:00Z"),
+           row("e", "outbound", 10000000000, "2023-05-01T10:00:00Z", 50000),
+           row("f", "outbound", 1000000000, "2024-12-31T23:30:00Z", 60000)]
+    record("tax-austrian", "empty", [price("d")], tax, group="tax")
+    record("tax-austrian-loss", "empty", [{**price("d"), "fiat_rate": "90000"}], tax, group="tax")
+    record("tax-austrian-inactive", "empty", [price("d")],
+           [*tax, "UPDATE settings SET value='other' WHERE key='context_profile'"], group="tax")
+    record("tax-austrian-usd", "empty", [price("d")],
+           [*tax, "UPDATE profiles SET fiat_currency=' usd ' WHERE id='p'"], group="tax")
+    record("tax-generic", "empty", [price("d")],
+           [*tax, "UPDATE profiles SET tax_country='generic' WHERE id='p'"], group="tax")
+    record("tax-many-years", "empty", [price("d")],
+           [*tax, row("y2009", "inbound", 100000000000, "2009-06-01T00:00:00Z", 300),
+            *(row(f"y{year}", "outbound", 1000000000, f"{year}-07-01T00:00:00Z", 1000 * year % 7 + 20000)
+              for year in range(2010, 2021))], group="tax")
+    # Term operations (#680) and coarse-price acceptance (#708).
+    def term(kind, out="b", inbound="c", **extra):
+        return dict(type=kind, out_transaction_id=out, in_transaction_id=inbound, reason="Owner reviewed", **extra)
+    accept = dict(type="accept_coarse_prices", reason="Daily averages reviewed")
+    coarse = [*component_setup, "UPDATE profiles SET require_coarse_review=1 WHERE id='p'",
+              "UPDATE transactions SET pricing_quality='coarse_fallback',pricing_source_kind='fmv_provider',"
+              "pricing_granularity='daily' WHERE id IN ('b','c')"]
+    record("term-pair", "empty", [term("pair")], component_setup, group="terms")
+    record("term-pair-taxable", "empty", [term("pair", policy="taxable")], component_setup, group="terms")
+    record("term-pair-reversed", "empty", [term("pair", "c", "b")], component_setup, group="terms")
+    record("term-pair-missing", "empty", [term("pair", "absent")], component_setup, group="terms")
+    record("term-dismiss", "empty", [term("dismiss_pair", expires_in_days=30)], component_setup, group="terms")
+    record("term-dismiss-undismiss", "empty", [term("dismiss_pair"), term("undismiss_pair")], component_setup, group="terms")
+    record("term-undismiss-missing", "empty", [term("undismiss_pair")], component_setup, group="terms")
+    record("term-gap-missing", "empty", [dict(type="custody_gap", action="dismiss", gap_id="absent", reason="r")],
+           component_setup, group="terms")
+    record("term-accept-none", "empty", [accept], component_setup, group="terms")
+    record("term-accept-all", "empty", [accept], coarse, group="terms")
+    record("term-accept-named", "empty", [{**accept, "transaction_ids": ["b"]}], coarse, group="terms")
+    record("term-accept-stale", "empty", [{**accept, "transaction_ids": ["a", "b"]}], coarse, group="terms")
+    record("term-accept-after-price", "empty", [price("b"), accept], coarse, group="terms")
+    # An earlier exclusion clears a coarse case the acceptance must not name.
+    record("term-accept-after-exclude", "empty", [exclude("b"), accept], coarse, group="terms")
     record("price-component", "empty", [price(), component], component_setup, group="components")
     record("component-price", "empty", [component, price()], component_setup, group="components")
     record("component-guards-acquisition", "empty", [component, kind("c")], component_setup, group="components")

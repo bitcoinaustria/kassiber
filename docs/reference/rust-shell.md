@@ -3938,6 +3938,30 @@ dismiss` marks journals stale; `transfers dismissals list|delete` and
 transfer review context report `exclusions`. Blocked component plans,
 revisions and activations carry the remediation Python names.
 
+S4 ports the review workflow's changes (main #680, #684, #707, #708, #711;
+see the [inventory](rust-main-sync.md#after-s4)). `review plan`/`apply` and
+`ui.review.plan`/`apply` take the term operations `pair`, `dismiss_pair`
+(1 to 3650 days), `undismiss_pair` and `custody_gap` over the existing
+transfer services, and `accept_coarse_prices`, which a plan fills with the
+current cases when it names none and which records S3's acceptance per
+transaction. Effects carry `tax`: per-year realized gain/loss and income
+from the journal entries the state would store (written inside a savepoint
+that is always rolled back), and for an Austrian EUR book the Kennzahlen
+and the indicative tax, withheld by the active book's report blockers and
+by rows dated before 1 March 2022 (`kassiber_journals` `review_tax`,
+`kassiber_reports::review_figures`). Artifacts and receipts carry the
+`delta`; apply recomputes it from the artifact's own effects with Python's
+`_tax_delta` semantics (`kassiber_transfers::review_delta`), so a malformed
+artifact is refused as Python refuses it. Cases name the book's
+`fiat_currency` and offer `accept_coarse_prices` for a case held on its own
+coarse price; badges add `review` and `definitions`; a reviewed price is
+stored in the book's currency. The cached `swap_candidate_count` leaves out
+ownership-graph moves and is recounted after a rebuild without automatic
+pairing (or one that paired something), after `journals process` without
+`--auto-pair` and after a review apply that pairs or dismisses;
+`ui.journals.process` takes a boolean `auto_pair`. `transfers unpair` and
+`transfers rules delete` return what they removed.
+
 CLI fd input is bounded, consumed once, closed and zeroized by `UnlockSession`.
 Its remaining chain is bound unattended remembered unlock, then a no-echo TTY
 prompt when allowed; noninteractive manual unlock returns `interaction_required`.

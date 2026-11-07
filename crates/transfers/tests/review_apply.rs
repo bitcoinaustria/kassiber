@@ -317,6 +317,7 @@ fn redigest(artifact: &mut Value) {
             "operations",
             "before",
             "after",
+            "delta",
         ]
         .into_iter()
         .map(|key| (key, field(artifact, key).clone())),
@@ -565,6 +566,7 @@ fn review_apply_receipts_keep_python_transport_key_order() {
         "operations",
         "transaction_ids",
         "before",
+        "delta",
         "proposed_operations",
         "verification",
         "authored_source",

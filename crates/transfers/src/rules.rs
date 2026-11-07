@@ -298,7 +298,8 @@ pub(super) fn write(
             if operation == "transfers.rules.delete" {
                 conn.execute("DELETE FROM swap_matching_rules WHERE id=?", [&id])
                     .map_err(error)?;
-                return Ok(dict([("deleted", s(id))]));
+                // The removed rule, so it can be created again.
+                return Ok(dict([("deleted", s(id)), ("rule", loaded(&row)?)]));
             }
             let enabled = operation == "transfers.rules.enable";
             if enabled {

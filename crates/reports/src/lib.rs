@@ -42,6 +42,7 @@ mod privacy_hygiene;
 pub mod privacy_mirror;
 pub mod psbt_privacy;
 pub mod report_design;
+pub mod review_figures;
 mod snapshot_write;
 mod snapshots;
 mod source_funds_assemble;

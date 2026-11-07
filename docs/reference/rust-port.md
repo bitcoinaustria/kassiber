@@ -63,20 +63,20 @@ the classifier's `summary` output and is checked by preflight.
 | Group | boundary-fixture | subprocess-scenario | rust-test | oracle | python-only | Total |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | store | 2 | 13 | 174 | 67 | 0 | 256 |
-| custody | 0 | 42 | 395 | 146 | 1 | 584 |
-| journals | 4 | 15 | 242 | 236 | 8 | 505 |
-| imports | 67 | 51 | 174 | 50 | 0 | 342 |
+| custody | 0 | 43 | 395 | 176 | 1 | 615 |
+| journals | 4 | 15 | 242 | 237 | 8 | 506 |
+| imports | 67 | 51 | 178 | 50 | 0 | 346 |
 | reports | 56 | 36 | 249 | 171 | 0 | 512 |
-| chain/sync | 38 | 81 | 1297 | 154 | 0 | 1570 |
+| chain/sync | 38 | 81 | 1305 | 154 | 0 | 1578 |
 | network/egress | 7 | 15 | 81 | 35 | 10 | 148 |
-| transactions/metadata/transfers/reviews | 46 | 111 | 591 | 64 | 0 | 812 |
+| transactions/metadata/transfers/reviews | 46 | 112 | 593 | 64 | 0 | 815 |
 | source-funds | 51 | 50 | 139 | 0 | 0 | 240 |
 | secrets/backup | 7 | 18 | 106 | 59 | 0 | 190 |
 | daemon runtime | 8 | 26 | 227 | 111 | 1 | 373 |
-| AI/MCP/operator | 64 | 174 | 724 | 49 | 0 | 1011 |
+| AI/MCP/operator | 64 | 175 | 725 | 49 | 0 | 1013 |
 | CLI shell | 20 | 4 | 31 | 170 | 3 | 228 |
 | packaging/CI | 0 | 2 | 166 | 10 | 29 | 207 |
-| **Total** | **370** | **638** | **4596** | **1322** | **52** | **6978** |
+| **Total** | **370** | **641** | **4611** | **1353** | **52** | **7027** |
 <!-- disposition-counts:end -->
 
 Plan 21's five migration choices include Python-only retirement explicitly;

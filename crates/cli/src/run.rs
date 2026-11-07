@@ -948,19 +948,28 @@ fn book_command(
             return emit(book.journal_view(operation, Some(&args))?);
         }
         if operation == "journals.process" {
+            let auto_pair = namespace.flag("auto_pair");
             let result = book
                 .process_journals(
                     namespace.get("workspace"),
                     namespace.get("profile"),
-                    namespace.flag("auto_pair"),
+                    auto_pair,
                     &mut |_| {},
                 )
                 .map_err(|failure| {
                     diagnostics.journal_replay_shape = failure.replay_shape;
                     *failure.error
                 })?;
-            emit(result.payload().clone())?;
-            return result.after_reply();
+            if auto_pair {
+                emit(result.payload().clone())?;
+                return result.after_reply();
+            }
+            // A pair or dismissal made since the last run leaves the shared
+            // review count's cached moves behind otherwise.
+            let payload = result.payload().clone();
+            result.after_reply()?;
+            book.recount_transfer_candidates(namespace.get("workspace"), namespace.get("profile"))?;
+            return emit(payload);
         }
         if crate::chain_analysis_ops::COMMANDS.contains(&operation) {
             return emit(crate::chain_analysis_ops::execute(

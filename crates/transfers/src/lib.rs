@@ -22,6 +22,7 @@ mod records;
 pub mod review_artifact;
 pub mod review_cases;
 mod review_context;
+pub mod review_delta;
 pub mod review_operations;
 pub mod review_reading;
 mod rules;
@@ -149,6 +150,20 @@ fn integer(value: &Value) -> Result<kassiber_pyjson::BigInt> {
                 ),
             )
         }),
+        // `int(b" +2 ")` reads ASCII bytes as text; anything else is a ValueError.
+        Value::Bytes(raw) => std::str::from_utf8(raw)
+            .ok()
+            .filter(|text| text.is_ascii())
+            .and_then(|text| kassiber_pytext::parse_int(text).ok())
+            .ok_or_else(|| {
+                AppError::new(
+                    "internal_error",
+                    format!(
+                        "invalid literal for int() with base 10: {}",
+                        kassiber_envelope::py_repr(value)
+                    ),
+                )
+            }),
         Value::Float(n) if n.is_finite() => format!("{:.0}", n.trunc())
             .parse()
             .map_err(|_| AppError::new("internal_error", "cannot convert float to integer")),

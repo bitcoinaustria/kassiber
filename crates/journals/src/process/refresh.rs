@@ -58,7 +58,7 @@ pub fn refresh_native_checked<'a>(
     journal_progress: &mut impl FnMut(&'static str),
     writes: &mut impl storage::WriteObserver,
 ) -> Result<Committed<'a>, Refusal> {
-    refresh(
+    let committed = refresh(
         conn,
         scope.profile_id,
         &mut NativePrebuild {
@@ -88,7 +88,17 @@ pub fn refresh_native_checked<'a>(
             journal: journal_progress,
         },
         writes,
-    )
+    )?;
+    // Counted on the rebuilt projection: the pairing pass counted before its
+    // own pairs were booked, and a run without it still follows the owner's
+    // manual pairs and dismissals.
+    let paired = kassiber_envelope::get(&committed.ordered_payload, "auto_pair").map(|summary| {
+        kassiber_envelope::get(summary, "applied").is_some_and(kassiber_envelope::truthy)
+    });
+    if paired.unwrap_or(true) {
+        pairing::recount_candidates(conn, scope, sources);
+    }
+    Ok(committed)
 }
 
 struct Progress<'a, P, J> {

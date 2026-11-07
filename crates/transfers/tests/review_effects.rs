@@ -211,7 +211,7 @@ fn check(state: &JournalState<'_>, case: &Value, conn: &Connection) {
         );
         assert_eq!(
             canonical(&failure(
-                review_effects::effects(state, conn, &scope, &operations).unwrap_err()
+                review_effects::effects_without_tax(state, conn, &scope, &operations).unwrap_err()
             ))
             .unwrap(),
             canonical(&py(&case["error"])).unwrap()
@@ -227,7 +227,7 @@ fn check(state: &JournalState<'_>, case: &Value, conn: &Connection) {
         "{}",
         case["name"]
     );
-    let actual = match review_effects::effects(state, conn, &scope, &operations) {
+    let actual = match review_effects::effects_without_tax(state, conn, &scope, &operations) {
         Ok(result) => dict([("result", result)]),
         Err(error) => dict([(
             "error",
@@ -258,8 +258,10 @@ fn check(state: &JournalState<'_>, case: &Value, conn: &Connection) {
         transaction == kassiber_store::rusqlite::TransactionState::Write
     );
     assert_eq!(
-        canonical(&review_effects::effects(state, conn, &scope, &Py::List(vec![])).unwrap())
-            .unwrap(),
+        canonical(
+            &review_effects::effects_without_tax(state, conn, &scope, &Py::List(vec![])).unwrap()
+        )
+        .unwrap(),
         canonical(&economic).unwrap()
     );
 }
@@ -347,9 +349,13 @@ fn review_effects_read_pending_policy_and_need_no_database_for_unclassified_oper
         check(&state, base, &conn);
     }
     let conn = Connection::open_in_memory().unwrap();
-    assert!(
-        review_effects::effects(&state, &conn, &scope, &py(&json!([{"type":"exclude"}]))).is_ok()
-    );
+    assert!(review_effects::effects_without_tax(
+        &state,
+        &conn,
+        &scope,
+        &py(&json!([{"type":"exclude"}]))
+    )
+    .is_ok());
 }
 
 #[test]

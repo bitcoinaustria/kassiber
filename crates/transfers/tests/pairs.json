@@ -29771,7 +29771,25 @@
           "id": "6e4ceb7f-07ba-5944-b5b2-f8b418aeec94",
           "now": "2025-06-01T10:00:00Z",
           "result": {
-            "deleted": "dd8032b3-1303-5939-9eb2-3cd67f381cb2"
+            "deleted": "dd8032b3-1303-5939-9eb2-3cd67f381cb2",
+            "pair": {
+              "id": "dd8032b3-1303-5939-9eb2-3cd67f381cb2",
+              "component_id": "74b9861a-026a-56be-aeb3-7a558e3fc15c",
+              "workspace_id": "w",
+              "profile_id": "p",
+              "out_transaction_id": "d",
+              "in_transaction_id": "e",
+              "kind": "manual",
+              "policy": "carrying-value",
+              "notes": null,
+              "swap_fee_msat": null,
+              "swap_fee_kind": null,
+              "confidence_at_pair": null,
+              "pair_source": "manual",
+              "out_amount": 1000,
+              "deleted_at": null,
+              "created_at": "2025-06-01T08:00:00Z"
+            }
           },
           "rows": {
             "chain_index_clock": "d798af09ab454e64b18359aedd4fc43027a626605c7c33d1075bbfaa6426e728",
@@ -30133,7 +30151,25 @@
           "id": "021c0112-52bf-5fb8-ab12-5ec5127a747c",
           "now": "2025-06-01T06:00:00Z",
           "result": {
-            "deleted": "557927cb-cd9d-5e1c-8861-5830f6fbf7ac"
+            "deleted": "557927cb-cd9d-5e1c-8861-5830f6fbf7ac",
+            "pair": {
+              "id": "557927cb-cd9d-5e1c-8861-5830f6fbf7ac",
+              "component_id": "d28005d3-c435-5f5b-8534-31b18b27c544",
+              "workspace_id": "w",
+              "profile_id": "p",
+              "out_transaction_id": "a",
+              "in_transaction_id": "b",
+              "kind": "manual",
+              "policy": "carrying-value",
+              "notes": "changed",
+              "swap_fee_msat": null,
+              "swap_fee_kind": null,
+              "confidence_at_pair": null,
+              "pair_source": "manual",
+              "out_amount": 600,
+              "deleted_at": null,
+              "created_at": "2025-06-01T03:00:00Z"
+            }
           },
           "rows": {
             "chain_index_clock": "8b2d0f2bac3a48d08e1ff5f6555a32c3e1ec3e2dcda0a4edd33144faa51c455b",
@@ -30158,7 +30194,25 @@
           "id": "61bab769-e4c5-5a56-8a8d-a18c347762b9",
           "now": "2025-06-01T07:00:00Z",
           "result": {
-            "deleted": "3e8bccc8-2622-5964-9b5a-3878819e7c31"
+            "deleted": "3e8bccc8-2622-5964-9b5a-3878819e7c31",
+            "pair": {
+              "id": "3e8bccc8-2622-5964-9b5a-3878819e7c31",
+              "component_id": "d01ea880-bbbd-521e-b1ae-78db3cac3e9b",
+              "workspace_id": "w",
+              "profile_id": "p",
+              "out_transaction_id": "a",
+              "in_transaction_id": "c",
+              "kind": "coinjoin",
+              "policy": "carrying-value",
+              "notes": null,
+              "swap_fee_msat": null,
+              "swap_fee_kind": null,
+              "confidence_at_pair": null,
+              "pair_source": "manual",
+              "out_amount": 400,
+              "deleted_at": null,
+              "created_at": "2025-06-01T06:00:00Z"
+            }
           },
           "rows": {
             "chain_index_clock": "18eca13e9aa991c36a2ac4a8ebdcf6eb51131836de006ff92a1c0eff21596599",
@@ -30224,7 +30278,25 @@
           "id": "d4ef4fce-21ec-5f98-ad83-01550d854357",
           "now": "2025-06-01T09:00:00Z",
           "result": {
-            "deleted": "fcb8a583-2031-5959-96a6-ea5bb2de325f"
+            "deleted": "fcb8a583-2031-5959-96a6-ea5bb2de325f",
+            "pair": {
+              "id": "fcb8a583-2031-5959-96a6-ea5bb2de325f",
+              "component_id": "a56cb127-f457-5bba-8417-9070c54eb0af",
+              "workspace_id": "w",
+              "profile_id": "p",
+              "out_transaction_id": "d",
+              "in_transaction_id": "e",
+              "kind": "manual",
+              "policy": "carrying-value",
+              "notes": null,
+              "swap_fee_msat": null,
+              "swap_fee_kind": null,
+              "confidence_at_pair": null,
+              "pair_source": "manual",
+              "out_amount": 1000,
+              "deleted_at": null,
+              "created_at": "2025-06-01T08:00:00Z"
+            }
           },
           "rows": {
             "chain_index_clock": "eddada09c62d5a2fade2de643e3db73dc6562e021d640285cfc0a0d12b337ec8",
@@ -30474,7 +30546,25 @@
           "id": "5f3a64a7-225c-526a-a214-c4b5e0b8034a",
           "now": "2025-06-01T05:00:00Z",
           "result": {
-            "deleted": "0b1548ac-e275-51fa-8f77-a9c41cefdbc8"
+            "deleted": "0b1548ac-e275-51fa-8f77-a9c41cefdbc8",
+            "pair": {
+              "id": "0b1548ac-e275-51fa-8f77-a9c41cefdbc8",
+              "component_id": "5f00fdbc-63de-5332-ac62-8346fa37fb72",
+              "workspace_id": "w",
+              "profile_id": "p",
+              "out_transaction_id": "f",
+              "in_transaction_id": "g",
+              "kind": "chain-swap",
+              "policy": "carrying-value",
+              "notes": null,
+              "swap_fee_msat": 210,
+              "swap_fee_kind": "combined",
+              "confidence_at_pair": null,
+              "pair_source": "manual",
+              "out_amount": 1000,
+              "deleted_at": null,
+              "created_at": "2025-06-01T04:00:00Z"
+            }
           },
           "rows": {
             "chain_index_clock": "8b2d0f2bac3a48d08e1ff5f6555a32c3e1ec3e2dcda0a4edd33144faa51c455b",
@@ -30582,7 +30672,25 @@
           "id": "f94a347c-f427-5fac-aee2-cc5347a3bdf6",
           "now": "2025-06-01T08:00:00Z",
           "result": {
-            "deleted": "574a8b6e-5bab-5ee1-a305-43cbbf0d66bd"
+            "deleted": "574a8b6e-5bab-5ee1-a305-43cbbf0d66bd",
+            "pair": {
+              "id": "574a8b6e-5bab-5ee1-a305-43cbbf0d66bd",
+              "component_id": "114da8df-eead-554b-9e54-8f8e5bff9fdb",
+              "workspace_id": "w",
+              "profile_id": "p",
+              "out_transaction_id": "j",
+              "in_transaction_id": "h",
+              "kind": "manual",
+              "policy": "carrying-value",
+              "notes": "native residual",
+              "swap_fee_msat": 100,
+              "swap_fee_kind": "combined",
+              "confidence_at_pair": null,
+              "pair_source": "manual",
+              "out_amount": 800,
+              "deleted_at": null,
+              "created_at": "2025-06-01T07:00:00Z"
+            }
           },
           "rows": {
             "chain_index_clock": "eddada09c62d5a2fade2de643e3db73dc6562e021d640285cfc0a0d12b337ec8",
@@ -32206,7 +32314,25 @@
           "id": "1e0b2697-6792-5d58-953b-07c353c17123",
           "now": "2025-06-01T03:00:00Z",
           "result": {
-            "deleted": "5c60bea8-fc3e-5b93-bbe0-c398a8fa3ff2"
+            "deleted": "5c60bea8-fc3e-5b93-bbe0-c398a8fa3ff2",
+            "pair": {
+              "id": "5c60bea8-fc3e-5b93-bbe0-c398a8fa3ff2",
+              "component_id": "7a94f88f-ab32-5c0e-829d-3af1820cd989",
+              "workspace_id": "w",
+              "profile_id": "p",
+              "out_transaction_id": "d",
+              "in_transaction_id": "b",
+              "kind": "swap-refund",
+              "policy": "carrying-value",
+              "notes": null,
+              "swap_fee_msat": 400,
+              "swap_fee_kind": "combined",
+              "confidence_at_pair": null,
+              "pair_source": "manual",
+              "out_amount": 600,
+              "deleted_at": null,
+              "created_at": "2025-06-01T02:00:00Z"
+            }
           },
           "rows": {
             "chain_index_clock": "66469b2c8c85545dae0064e779e25ab7994dfc2e6f96cfa31b616a25a25eca01",
@@ -32334,7 +32460,25 @@
           "id": "a6366540-c579-526b-9028-822711c22977",
           "now": "2025-06-01T02:00:00Z",
           "result": {
-            "deleted": "e9f4fe30-9411-50cf-8405-9f61ea4964bd"
+            "deleted": "e9f4fe30-9411-50cf-8405-9f61ea4964bd",
+            "pair": {
+              "id": "e9f4fe30-9411-50cf-8405-9f61ea4964bd",
+              "component_id": "ff9c864f-8f9a-5d3f-963b-ea2513a4a3fa",
+              "workspace_id": "w",
+              "profile_id": "p",
+              "out_transaction_id": "d",
+              "in_transaction_id": "h",
+              "kind": "manual",
+              "policy": "taxable",
+              "notes": null,
+              "swap_fee_msat": 300,
+              "swap_fee_kind": "combined",
+              "confidence_at_pair": null,
+              "pair_source": "manual",
+              "out_amount": 1000,
+              "deleted_at": null,
+              "created_at": "2025-06-01T00:00:00Z"
+            }
           },
           "rows": {
             "chain_index_clock": "e066565737bb2c0ff689db42483d4ad7f8700b421423e2be3082b1f351b63503",
@@ -32441,7 +32585,25 @@
           "id": "7267db8a-e6e8-5157-9175-0ed97a7942c4",
           "now": "2025-06-01T05:00:00Z",
           "result": {
-            "deleted": "3f8f01c8-03c4-5b75-9801-403034964cfb"
+            "deleted": "3f8f01c8-03c4-5b75-9801-403034964cfb",
+            "pair": {
+              "id": "3f8f01c8-03c4-5b75-9801-403034964cfb",
+              "component_id": "59011c1f-7433-589e-8330-cb9ab34a6efc",
+              "workspace_id": "w",
+              "profile_id": "p",
+              "out_transaction_id": "f",
+              "in_transaction_id": "g",
+              "kind": "manual",
+              "policy": "carrying-value",
+              "notes": null,
+              "swap_fee_msat": 210,
+              "swap_fee_kind": "combined",
+              "confidence_at_pair": null,
+              "pair_source": "manual",
+              "out_amount": 1000,
+              "deleted_at": null,
+              "created_at": "2025-06-01T04:00:00Z"
+            }
           },
           "rows": {
             "chain_index_clock": "81e3a0a163fe61a54a66a6b21fbbb737ccca71deb80976e2436a521244ee9c8c",
@@ -33421,7 +33583,25 @@
           "id": "63f3b95f-7bda-58cf-aa7b-dc939a32e286",
           "now": "2025-06-01T02:00:00Z",
           "result": {
-            "deleted": "d53f8501-7ad4-5193-a019-4e5dda2abfbb"
+            "deleted": "d53f8501-7ad4-5193-a019-4e5dda2abfbb",
+            "pair": {
+              "id": "d53f8501-7ad4-5193-a019-4e5dda2abfbb",
+              "component_id": "9f03478f-0a27-500d-a686-4b3dd6dc9f15",
+              "workspace_id": "w",
+              "profile_id": "p",
+              "out_transaction_id": "a",
+              "in_transaction_id": "h",
+              "kind": "peg-out",
+              "policy": "carrying-value",
+              "notes": null,
+              "swap_fee_msat": 300,
+              "swap_fee_kind": "combined",
+              "confidence_at_pair": null,
+              "pair_source": "manual",
+              "out_amount": 1000,
+              "deleted_at": null,
+              "created_at": "2025-06-01T01:00:00Z"
+            }
           },
           "rows": {
             "chain_index_clock": "bddf6f68a3462122fb7951f9773cc01ee23f099d574e31145cfaad8cd8c3649a",
@@ -33559,7 +33739,25 @@
           "id": "b872f156-cfea-54d2-8806-73dccae02b84",
           "now": "2025-06-01T02:00:00Z",
           "result": {
-            "deleted": "54aa9397-a69d-5e11-a145-9aa3a6d737fe"
+            "deleted": "54aa9397-a69d-5e11-a145-9aa3a6d737fe",
+            "pair": {
+              "id": "54aa9397-a69d-5e11-a145-9aa3a6d737fe",
+              "component_id": "021bc082-485d-569a-8a7d-301acb37a38d",
+              "workspace_id": "w",
+              "profile_id": "p",
+              "out_transaction_id": "d",
+              "in_transaction_id": "e",
+              "kind": "manual",
+              "policy": "carrying-value",
+              "notes": null,
+              "swap_fee_msat": null,
+              "swap_fee_kind": null,
+              "confidence_at_pair": null,
+              "pair_source": "manual",
+              "out_amount": 1000,
+              "deleted_at": null,
+              "created_at": "2025-06-01T00:00:00Z"
+            }
           },
           "rows": {
             "chain_index_clock": "bddf6f68a3462122fb7951f9773cc01ee23f099d574e31145cfaad8cd8c3649a",
@@ -33584,7 +33782,25 @@
           "id": "583fb9b7-70f9-53d9-ac27-e1be1eaeebc0",
           "now": "2025-06-01T03:00:00Z",
           "result": {
-            "deleted": "453a3c7f-0d20-582b-a626-ee728b4b22e1"
+            "deleted": "453a3c7f-0d20-582b-a626-ee728b4b22e1",
+            "pair": {
+              "id": "453a3c7f-0d20-582b-a626-ee728b4b22e1",
+              "component_id": "4d8617af-58da-563b-949a-ebd2f4d33b36",
+              "workspace_id": "w",
+              "profile_id": "p",
+              "out_transaction_id": "f",
+              "in_transaction_id": "g",
+              "kind": "manual",
+              "policy": "carrying-value",
+              "notes": null,
+              "swap_fee_msat": 210,
+              "swap_fee_kind": "combined",
+              "confidence_at_pair": null,
+              "pair_source": "manual",
+              "out_amount": 1000,
+              "deleted_at": null,
+              "created_at": "2025-06-01T01:00:00Z"
+            }
           },
           "rows": {
             "chain_index_clock": "66469b2c8c85545dae0064e779e25ab7994dfc2e6f96cfa31b616a25a25eca01",
@@ -33765,7 +33981,25 @@
           "id": "eeef0704-be62-59cc-912c-3b60a5e7e463",
           "now": "2025-06-01T03:00:00Z",
           "result": {
-            "deleted": "99d98fdb-926b-5faf-af1d-8c459be52e8e"
+            "deleted": "99d98fdb-926b-5faf-af1d-8c459be52e8e",
+            "pair": {
+              "id": "99d98fdb-926b-5faf-af1d-8c459be52e8e",
+              "component_id": "26d4d2e5-002d-57e2-b643-e2f8fdefbb7e",
+              "workspace_id": "w",
+              "profile_id": "p",
+              "out_transaction_id": "a",
+              "in_transaction_id": "c",
+              "kind": "manual",
+              "policy": "carrying-value",
+              "notes": null,
+              "swap_fee_msat": null,
+              "swap_fee_kind": null,
+              "confidence_at_pair": null,
+              "pair_source": "manual",
+              "out_amount": 200,
+              "deleted_at": null,
+              "created_at": "2025-06-01T02:00:00Z"
+            }
           },
           "rows": {
             "chain_index_clock": "2d6acb396660688c5c31fde6a8989776c10801758e0c4ab6f958f5f4458ccb33",
@@ -33790,7 +34024,25 @@
           "id": "9f670077-1eab-5eec-ad29-53bb1c5a4326",
           "now": "2025-06-01T04:00:00Z",
           "result": {
-            "deleted": "48a490bc-6b4c-5abb-bb05-c904ae5bac65"
+            "deleted": "48a490bc-6b4c-5abb-bb05-c904ae5bac65",
+            "pair": {
+              "id": "48a490bc-6b4c-5abb-bb05-c904ae5bac65",
+              "component_id": "ab70b98b-43cf-581a-a43e-ae0e33fe0d42",
+              "workspace_id": "w",
+              "profile_id": "p",
+              "out_transaction_id": "a",
+              "in_transaction_id": "b",
+              "kind": "manual",
+              "policy": "carrying-value",
+              "notes": "retained residual",
+              "swap_fee_msat": null,
+              "swap_fee_kind": null,
+              "confidence_at_pair": null,
+              "pair_source": "manual",
+              "out_amount": 600,
+              "deleted_at": null,
+              "created_at": "2025-06-01T03:00:00Z"
+            }
           },
           "rows": {
             "chain_index_clock": "81e3a0a163fe61a54a66a6b21fbbb737ccca71deb80976e2436a521244ee9c8c",
@@ -33888,7 +34140,25 @@
           "id": "c7307de1-b2e2-5296-8de4-d47e4b4583fd",
           "now": "2025-06-01T01:00:00Z",
           "result": {
-            "deleted": "2283ae9a-0551-5982-8293-fc34e13afe9d"
+            "deleted": "2283ae9a-0551-5982-8293-fc34e13afe9d",
+            "pair": {
+              "id": "2283ae9a-0551-5982-8293-fc34e13afe9d",
+              "component_id": "d98c8879-9b8b-5a85-ad3b-13967e935d39",
+              "workspace_id": "w",
+              "profile_id": "p",
+              "out_transaction_id": "a",
+              "in_transaction_id": "h",
+              "kind": "manual",
+              "policy": "carrying-value",
+              "notes": null,
+              "swap_fee_msat": 100,
+              "swap_fee_kind": "combined",
+              "confidence_at_pair": null,
+              "pair_source": "manual",
+              "out_amount": 800,
+              "deleted_at": null,
+              "created_at": "2025-06-01T00:00:00Z"
+            }
           },
           "rows": {
             "chain_index_clock": "a7f0169bf926a545e9082bb952a507397e711aa39352d535e65aed3e316473ed",
@@ -34090,7 +34360,25 @@
           "id": "abc81088-0b0b-5f1c-b3a6-62080a941087",
           "now": "2025-06-01T01:00:00Z",
           "result": {
-            "deleted": "985834bf-0fc2-53de-8997-1bdf00f7685c"
+            "deleted": "985834bf-0fc2-53de-8997-1bdf00f7685c",
+            "pair": {
+              "id": "985834bf-0fc2-53de-8997-1bdf00f7685c",
+              "component_id": "cfd65ae0-1662-5398-a5b0-3e3138ced7f2",
+              "workspace_id": "w",
+              "profile_id": "p",
+              "out_transaction_id": "d",
+              "in_transaction_id": "e",
+              "kind": "manual",
+              "policy": "carrying-value",
+              "notes": null,
+              "swap_fee_msat": null,
+              "swap_fee_kind": null,
+              "confidence_at_pair": null,
+              "pair_source": "manual",
+              "out_amount": 1000,
+              "deleted_at": null,
+              "created_at": "2025-06-01T00:00:00Z"
+            }
           },
           "rows": {
             "chain_index_clock": "a7f0169bf926a545e9082bb952a507397e711aa39352d535e65aed3e316473ed",

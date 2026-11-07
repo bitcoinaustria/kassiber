@@ -2233,6 +2233,8 @@ def _ui_swap_matching_payload_from_conn(
                 activate=True if activate is None else activate,
             )
         resolved_workspace, resolved_profile = resolve_scope(conn, workspace, profile)
+        if not isinstance(action, str):
+            raise AppError("Custody component review action is unsupported", code="validation")
         if authored_source == "ai_tool" and action in {"revise", "activate"}:
             _validate_ai_custody_state_boundary(
                 conn,
@@ -8021,6 +8023,8 @@ def _validate_ai_review_operations(
         if not isinstance(operation, dict):
             raise AppError("Review operation must be an object", code="validation")
         kind = operation.get("type")
+        if not isinstance(kind, str):
+            raise AppError("Review operation type is unsupported", code="validation")
         request = operation.get("request")
         action = request.get("action", "create") if isinstance(request, dict) else None
         if not full_access and (
@@ -10986,9 +10990,9 @@ def _run_ai_chat_tool_loop(
     )
     response_context = responses_request_context(messages)
     finish_reason = None
-    content = ""
     # Every leg streams its text to the user, who sends all of it back as the
-    # assistant message; the provider cursor is bound to that visible answer.
+    # assistant message; the provider cursor and the saved answer are bound
+    # to that visible answer.
     shown_parts: list[str] = []
     review_checkpoint: dict[str, Any] = {}
     for _iteration in range(validated["tool_loop_max_iterations"]):
@@ -11010,7 +11014,6 @@ def _run_ai_chat_tool_loop(
         notices = _ai_chat_notices(runtime)
         notices.extend(phase for phase in turn.notices if phase not in notices)
         tool_calls = turn.tool_calls
-        content = turn.content
         shown_parts.append(turn.content)
         finish_reason = turn.finish_reason
         if cancel_event.is_set():
@@ -11050,6 +11053,20 @@ def _run_ai_chat_tool_loop(
                 preview_arguments, consent_summary = _ai_plan_consent_preview(
                     runtime, entry, call.arguments
                 )
+            summary_refusal = None
+            if (
+                entry is not None
+                and advertised
+                and entry.requires_consent
+                and not call.argument_error
+                and consent_summary is None
+            ):
+                # A call the consent card cannot describe is malformed: the
+                # model gets a validation result instead of a consent prompt.
+                try:
+                    consent_summary = summarize_tool_call(entry, call.arguments)
+                except AppError as exc:
+                    summary_refusal = exc
             proposal_seen_at = now_iso()
             consent_applies = (
                 entry is not None
@@ -11057,6 +11074,7 @@ def _run_ai_chat_tool_loop(
                 and not duplicate_call_id
                 and entry.requires_consent
                 and not call.argument_error
+                and summary_refusal is None
             )
             # The chat's permission mode (or an earlier "allow for this chat")
             # may approve the call without asking.
@@ -11118,6 +11136,8 @@ def _run_ai_chat_tool_loop(
                 result = _tool_result_denied("duplicate_tool_call_id")
             elif entry is not None and not advertised:
                 result = _tool_result_denied("tool_not_advertised")
+            elif summary_refusal is not None:
+                result = _tool_result_from_app_error(summary_refusal, entry)
             elif entry is not None and entry.requires_consent and not call.argument_error:
                 consent_requested_at = proposal_seen_at
                 if needs_consent:
@@ -11128,8 +11148,7 @@ def _run_ai_chat_tool_loop(
                                 {
                                     "call_id": call.call_id,
                                     "name": display_name,
-                                    "summary": consent_summary
-                                    or summarize_tool_call(entry, call.arguments),
+                                    "summary": consent_summary,
                                     "arguments_preview": preview_arguments,
                                     "reversible": entry.reversible,
                                     "egresses": entry.egresses,
@@ -11277,7 +11296,6 @@ def _run_ai_chat_tool_loop(
                 "unapplied proposals must be planned again. Applied receipts remain available.\n"
                 "```json\n" + json.dumps({"review_checkpoint": review_checkpoint}, sort_keys=True) + "\n```"
             )
-            content = (content or "") + continuation
             shown_parts.append(continuation)
             out.write(_with_request_id(build_envelope(
                 "ai.chat.delta", {"delta": {"content": continuation}},
@@ -11305,7 +11323,7 @@ def _run_ai_chat_tool_loop(
         validated,
         finish_reason,
         runtime,
-        assistant_content=content or "",
+        assistant_content="".join(shown_parts),
     )
 
 

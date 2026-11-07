@@ -315,7 +315,8 @@ fn detail(row: Value) -> Result<Value> {
         ),
     ]))
 }
-fn details(conn: &Connection, profile: &Value, year: i64) -> Result<Vec<Value>> {
+/// `_austrian_e1kv_rows`: the year's classified rows, in journal order.
+pub(crate) fn e1kv_rows(conn: &Connection, profile: &Value, year: i64) -> Result<Vec<Value>> {
     let (start, end) = calendar::window(year);
     let raw = rows(conn,"SELECT je.occurred_at,je.transaction_id,je.entry_type,je.asset,je.quantity,COALESCE(je.cost_basis,0) AS cost_basis,COALESCE(je.proceeds,0) AS proceeds,COALESCE(je.gain_loss,0) AS gain_loss,COALESCE(je.description,'') AS description,je.at_category,je.at_kennzahl,w.label AS wallet,t.external_id AS transaction_external_id,COALESCE(NULLIF(t.kind_override,''),t.kind) AS transaction_kind,t.note AS transaction_note FROM journal_entries je JOIN wallets w ON w.id=je.wallet_id LEFT JOIN transactions t ON t.id=je.transaction_id WHERE je.profile_id=? AND je.at_category IS NOT NULL AND je.at_category!='neu_swap' AND je.entry_type NOT IN ('fee','transfer_fee') AND COALESCE(t.taxability_override,1)!=0 AND je.occurred_at>=? AND je.occurred_at<? ORDER BY je.occurred_at ASC,je.created_at ASC,je.id ASC",[&text(profile, "id"),&start,&end])?;
     let mut details = Vec::new();
@@ -348,7 +349,7 @@ pub(super) fn rows_before_crypto_kennzahlen(
     year: i64,
 ) -> Result<i64> {
     validate(profile)?;
-    Ok(count_before_crypto_kennzahlen(&details(
+    Ok(count_before_crypto_kennzahlen(&e1kv_rows(
         conn, profile, year,
     )?))
 }
@@ -361,11 +362,16 @@ pub(super) fn kennzahl_summary(
     year: i64,
 ) -> Result<Vec<Value>> {
     validate(profile)?;
-    let mut rows = summary_rows(&details(conn, profile, year)?);
+    let mut rows = summary_rows(&e1kv_rows(conn, profile, year)?);
     if !e1kv_applies(year) {
         rows.retain(|row| !E1KV_KENNZAHLEN.contains(&int(row, "kennzahl")));
     }
     Ok(rows)
+}
+
+/// The Kennzahl a category is stated in, for the review figures.
+pub(crate) fn kennzahl_for_category(category: &str) -> Option<i64> {
+    mapping(category)
 }
 
 fn summary_rows(details: &[Value]) -> Vec<Value> {
@@ -422,7 +428,7 @@ pub fn report(
     }
     let id = text(profile, "id");
     let (start, end) = calendar::window(year);
-    let details = details(conn, profile, year)?;
+    let details = e1kv_rows(conn, profile, year)?;
     let old_rule_rows = count_before_crypto_kennzahlen(&details);
     if old_rule_rows > 0 {
         // January-February 2022: the old rules applied unless the taxpayer

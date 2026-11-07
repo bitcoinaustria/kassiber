@@ -10,7 +10,13 @@ const CLOCK: &str = "2026-10-31T12:00:00Z";
 struct Clock;
 impl Sources for Clock {
     fn uuid(&self, _: &Connection) -> Result<String, AppError> {
-        Ok("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa".into())
+        // Distinct ids: a plan's tax preview stores rows it then rolls back.
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static NEXT: AtomicU64 = AtomicU64::new(1);
+        Ok(format!(
+            "aaaaaaaa-aaaa-4aaa-8aaa-{:012x}",
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        ))
     }
     fn now(&self, _: &Connection) -> Result<String, AppError> {
         Ok(CLOCK.into())
@@ -179,6 +185,16 @@ fn review_plans_preserve_confirmed_sibling_unpair_baselines() {
 #[test]
 fn review_plans_refresh_state_and_fingerprints_after_intervening_operations() {
     check_group("refresh");
+}
+
+#[test]
+fn review_plans_carry_python_per_year_tax_figures_and_delta() {
+    check_group("tax");
+}
+
+#[test]
+fn review_plans_match_python_term_operations_and_coarse_acceptance() {
+    check_group("terms");
 }
 
 #[test]

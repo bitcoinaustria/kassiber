@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Freeze economic/policy effects from unchanged Python; never authorize a plan."""
 import argparse
+from unittest.mock import patch
 from copy import deepcopy
 from decimal import Decimal
 import json
@@ -175,7 +176,28 @@ def export():
     return json.dumps(result, ensure_ascii=True, separators=(",", ":")) + "\n"
 
 
+def without_tax(export):
+    """Since #680 `_effects` adds per-year tax figures read from a stored
+    journal, which these synthetic states and toy connections do not have.
+    The figures are compared on real books by tests/test_rust_review_terms.py;
+    here `tax` is stubbed out and dropped, so the rest of `_effects` stays pinned."""
+    original = review._effects
+
+    def effects(state, conn=None, profile=None, operations=()):
+        # The economic part alone, as `_effects(state)` read before #680.
+        result = original(state, conn, profile, operations)
+        assert result.pop("tax") is None
+        return result
+
+    def run():
+        with patch.object(review, "_tax_effects", lambda *args, **kwargs: None), \
+                patch.object(review, "_effects", effects):
+            return export()
+    return run
+
+
 if __name__ == "__main__":
+    export = without_tax(export)
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()

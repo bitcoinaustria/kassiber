@@ -509,11 +509,12 @@ struct Arguments {
 /// `_component_review_arguments`.
 fn arguments(args: &Value) -> Result<Arguments> {
     let action = field(args, "action");
-    if matches!(action, Value::List(_) | Value::Dict(_)) {
-        return Err(internal(format!(
-            "unhashable type: '{}'",
-            kassiber_envelope::type_name(action)
-        )));
+    if !matches!(action, Value::Str(_)) {
+        return Err(refuse(
+            "Custody component review action is unsupported",
+            "validation",
+            vec![],
+        ));
     }
     let name = match action {
         Value::Str(text) => text.as_str().filter(|a| ACTIONS.contains(a)),
