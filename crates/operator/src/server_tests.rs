@@ -58,15 +58,31 @@ fn build() -> Value {
     ])
 }
 
-/// A native-auth bridge that accepts one helper identity and supplies a
-/// passphrase, for the handler paths R6-4 will reach.
-struct Signed;
+/// A native-auth bridge that accepts one helper identity, supplies a
+/// passphrase and records what the broker asked of it.
+#[derive(Default)]
+struct Signed {
+    /// `None`: bound as `p` * 64 / `d` * 32; `Some(code)`: refused.
+    binding_error: Option<&'static str>,
+    calls: std::sync::Mutex<Vec<String>>,
+    stored: std::sync::Mutex<Vec<Vec<u8>>>,
+}
+
+impl Signed {
+    fn calls(&self) -> Vec<String> {
+        self.calls.lock().unwrap().clone()
+    }
+    fn record(&self, call: String) {
+        self.calls.lock().unwrap().push(call);
+    }
+}
 
 impl NativeAuth for Signed {
     fn helper_identity(&self) -> Result<String> {
         Ok("signed-helper".into())
     }
     fn validate(&self, expected: &str) -> Result<()> {
+        self.record(format!("validate {expected}"));
         if expected == "signed-helper" {
             return Ok(());
         }
@@ -75,12 +91,25 @@ impl NativeAuth for Signed {
             "helper mismatch",
         )))
     }
-    fn unlock_passphrase(&self, _: &str, _: &str) -> Result<(Zeroizing<Vec<u8>>, String, String)> {
-        Ok((
-            Zeroizing::new(b"native-secret".to_vec()),
-            "p".repeat(64),
-            "d".repeat(32),
-        ))
+    fn binding(&self, data_root: &str) -> Result<(String, String)> {
+        self.record(format!("binding {data_root}"));
+        match self.binding_error {
+            Some(code) => Err(Error::App(AppError::new(code, "unbound"))),
+            None => Ok(("p".repeat(64), "d".repeat(32))),
+        }
+    }
+    fn passphrase(&self, data_root: &str, expected: &str) -> Result<Zeroizing<Vec<u8>>> {
+        self.record(format!("passphrase {data_root} {expected}"));
+        Ok(Zeroizing::new(b"native-secret".to_vec()))
+    }
+    fn store(&self, data_root: &str, passphrase: &[u8], expected: &str) -> Result<()> {
+        self.record(format!("store {data_root} {expected}"));
+        self.stored.lock().unwrap().push(passphrase.to_vec());
+        Ok(())
+    }
+    fn delete(&self, data_root: &str, expected: &str) -> Result<()> {
+        self.record(format!("delete {data_root} {expected}"));
+        Ok(())
     }
 }
 
@@ -742,7 +771,7 @@ fn test_ping_and_status_name_the_brokers_build() {
     assert_eq!(get(&status, "broker_build"), Some(&build()));
     assert_eq!(get(&status, "leases"), Some(&Value::List(vec![])));
     // A signed helper is advertised by its public-safe identity.
-    let (signed, _closing) = broker(&fake, Arc::new(Signed));
+    let (signed, _closing) = broker(&fake, Arc::new(Signed::default()));
     let ping = signed
         .handle(&mut channel(), &request(vec![("action", s("ping"))]))
         .unwrap();
@@ -937,7 +966,7 @@ fn test_password_unlock_is_challenge_bound() {
 fn test_touch_id_method_is_assigned_by_the_broker() {
     let tmp = tempfile::tempdir().unwrap();
     let fake = Fake::new();
-    let (server, closing) = broker(&fake, Arc::new(Signed));
+    let (server, closing) = broker(&fake, Arc::new(Signed::default()));
     let mut channel = channel();
     let result = server.handle(
         &mut channel,
@@ -966,11 +995,131 @@ fn test_touch_id_method_is_assigned_by_the_broker() {
     assert_eq!(code(result), "native_auth_unavailable");
 }
 
+/// The binding is checked before the lease arguments, as in Python, and
+/// the bridge is asked for nothing after a refusal.
+#[test]
+fn test_touch_id_unlock_checks_the_binding_before_lease_arguments() {
+    let tmp = tempfile::tempdir().unwrap();
+    let fake = Fake::new();
+    let native = Arc::new(Signed {
+        binding_error: Some("operator_policy_binding_required"),
+        ..Signed::default()
+    });
+    let (server, closing) = broker(&fake, Arc::clone(&native) as Arc<dyn NativeAuth>);
+    let result = server.handle(
+        &mut channel(),
+        &request(vec![
+            ("action", s("unlock_touch_id")),
+            ("data_root", s(&root(&tmp))),
+            ("capability", s("not-a-capability")),
+            ("native_auth_identity", s("signed-helper")),
+        ]),
+    );
+    assert_eq!(code(result), "operator_policy_binding_required");
+    let canonical = root(&tmp);
+    assert_eq!(
+        native.calls(),
+        [
+            "validate signed-helper".to_owned(),
+            format!("binding {canonical}")
+        ]
+    );
+    assert!(closing.state().leases.is_empty());
+}
+
+/// `test_touch_id_configuration_is_challenge_bound_and_wipes_auth`, through
+/// the real service: a `fresh_native_auth` challenge, fresh authentication,
+/// the policy binding, then the signed helper's store or delete.
+#[test]
+fn test_touch_id_configuration_is_challenge_bound_and_binds_the_policy() {
+    let tmp = tempfile::tempdir().unwrap();
+    let fake = Fake::new();
+    let canonical = root(&tmp);
+    for configured in [true, false] {
+        let native = Arc::new(Signed::default());
+        let (server, _closing) = broker(&fake, Arc::clone(&native) as Arc<dyn NativeAuth>);
+        let mut channel = channel();
+        channel.0.secrets.push_back(b"fresh-passphrase".to_vec());
+        let response = server
+            .handle(
+                &mut channel,
+                &request(vec![
+                    ("action", s("touch_id_configure")),
+                    ("data_root", s(&canonical)),
+                    ("configured", Value::Bool(configured)),
+                    ("native_auth_identity", s("signed-helper")),
+                ]),
+            )
+            .unwrap();
+        assert_eq!(text(&channel.0.sent[0], "label"), "fresh_native_auth");
+        assert_eq!(
+            channel.0.secret_challenges,
+            [text(&channel.0.sent[0], "challenge")]
+        );
+        assert_eq!(
+            data(&response),
+            dict([
+                ("configured", Value::Bool(configured)),
+                ("auth", s("touch_id")),
+            ])
+        );
+        let action = if configured { "store" } else { "delete" };
+        assert_eq!(
+            native.calls(),
+            [
+                "validate signed-helper".to_owned(),
+                format!("{action} {canonical} signed-helper")
+            ]
+        );
+        if configured {
+            assert_eq!(
+                *native.stored.lock().unwrap(),
+                [b"fresh-passphrase".to_vec()]
+            );
+        }
+        let binds = fake.bind_calls.lock().unwrap().clone();
+        let (bound_root, database, project) = binds.last().unwrap().clone();
+        assert_eq!(bound_root, canonical);
+        let identity = fake.canonical_project(&canonical).unwrap().identity;
+        assert_eq!(database, identity[..32]);
+        assert_eq!(project, Some(identity));
+    }
+}
+
+/// A failed fresh authentication binds nothing and leaves the helper alone.
+#[test]
+fn test_touch_id_configuration_refuses_a_wrong_passphrase_before_the_helper() {
+    let tmp = tempfile::tempdir().unwrap();
+    let fake = Fake::new();
+    fake.open_with(|_, _, _| {
+        Err(Error::App(AppError::new(
+            "unlock_failed",
+            "the passphrase did not unlock the database",
+        )))
+    });
+    let native = Arc::new(Signed::default());
+    let (server, _closing) = broker(&fake, Arc::clone(&native) as Arc<dyn NativeAuth>);
+    let mut channel = channel();
+    channel.0.secrets.push_back(b"wrong".to_vec());
+    let result = server.handle(
+        &mut channel,
+        &request(vec![
+            ("action", s("touch_id_configure")),
+            ("data_root", s(&root(&tmp))),
+            ("configured", Value::Bool(true)),
+            ("native_auth_identity", s("signed-helper")),
+        ]),
+    );
+    assert_eq!(code(result), "unlock_failed");
+    assert_eq!(native.calls(), ["validate signed-helper".to_owned()]);
+    assert!(fake.bind_calls.lock().unwrap().is_empty());
+}
+
 #[test]
 fn test_touch_id_configuration_rejects_non_boolean_state() {
     let tmp = tempfile::tempdir().unwrap();
     let fake = Fake::new();
-    let (server, _closing) = broker(&fake, Arc::new(Signed));
+    let (server, _closing) = broker(&fake, Arc::new(Signed::default()));
     let mut channel = channel();
     let result = server.handle(
         &mut channel,
@@ -990,7 +1139,7 @@ fn test_touch_id_configuration_rejects_helper_mismatch_before_challenge() {
     let tmp = tempfile::tempdir().unwrap();
     let fake = Fake::new();
     for native in [
-        Arc::new(Signed) as Arc<dyn NativeAuth>,
+        Arc::new(Signed::default()) as Arc<dyn NativeAuth>,
         Arc::new(NativeAuthUnavailable),
     ] {
         let (server, _closing) = broker(&fake, native);

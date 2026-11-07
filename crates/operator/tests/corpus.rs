@@ -287,9 +287,12 @@ fn run(client: &BrokerClient<ScriptedHost>, call: &[Value]) -> kassiber_operator
             flag(&call[3]),
             &base64(&call[4]).unwrap(),
         ),
-        "unlock_touch_id" => {
-            client.unlock_touch_id(&text(&call[1]), opt_int(&call[2]), &text(&call[3]), None)
-        }
+        "unlock_touch_id" => client.unlock_touch_id(
+            &text(&call[1]),
+            opt_int(&call[2]).map(Into::into),
+            &text(&call[3]),
+            None,
+        ),
         "configure_touch_id" => client.configure_touch_id(
             &text(&call[1]),
             &base64(&call[2]).unwrap(),

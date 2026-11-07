@@ -1,8 +1,10 @@
 //! `kassiber operator ...` and brokered routing (`kassiber/operator/cli.py`).
 //!
-//! The seven password-authenticated leaves talk to the per-user broker
-//! through `kassiber_operator::client`; `operator touch-id ...` and
-//! `operator unlock --auth touch-id` past its interaction check are R6-4.
+//! The leaves talk to the per-user broker through
+//! `kassiber_operator::client`. `operator touch-id status` asks the signed
+//! helper directly; `enroll`, `forget` and `unlock --auth touch-id` go
+//! through the broker, bound to this CLI's signed launcher
+//! (`kassiber_operator::native_auth`).
 //! [`route_brokered`] hands an ordinary command of a `brokered` book to the
 //! broker: it never starts one, sends work only to this build's broker,
 //! names the accepted operation on stderr, waits for the result, cancels on
@@ -14,6 +16,7 @@ use std::io::Write;
 
 use kassiber_envelope::{dict, s, AppError};
 use kassiber_operator::client::{BrokerClient, Host, PreparedArguments, SubmitOptions};
+use kassiber_operator::native_auth::NativeAuthHelper;
 use kassiber_operator::values::{as_str, get, py_eq};
 use kassiber_pyjson::{PyStr, Value};
 use kassiber_runtime::capabilities::{cli_capability, Capability};
@@ -77,6 +80,33 @@ pub(crate) fn dispatch<H: Host>(
     }
     let data_root = store.selected_data_root(selection)?;
     match command {
+        "touch-id" => {
+            let native = NativeAuthHelper::default();
+            if args.text("operator_touch_id_command") == Some("status") {
+                return native
+                    .status(&|| {
+                        store
+                            .operator_touch_id_account(&data_root)
+                            .map_err(kassiber_operator::Error::App)
+                    })
+                    .map_err(app_error);
+            }
+            let authentication = password_secret(
+                fd_value(args.get("passphrase_fd")),
+                interaction,
+                "Fresh database passphrase: ",
+                "--passphrase-fd",
+            )?;
+            let caller = || native.caller_identity();
+            client
+                .configure_touch_id(
+                    &data_root,
+                    &authentication,
+                    args.text("operator_touch_id_command") == Some("enroll"),
+                    caller_identity(&native, &caller),
+                )
+                .map_err(app_error)
+        }
         "status" => {
             let all = args.flag("all");
             let mut broker = client
@@ -100,10 +130,16 @@ pub(crate) fn dispatch<H: Host>(
             let capability = args.text("capability").unwrap_or("accounting_decisions");
             if args.text("auth") == Some("touch-id") {
                 require_interactive_auth(interaction, None)?;
-                return Err(kassiber_runtime::store::not_implemented(
-                    "operator",
-                    "Touch ID unlock",
-                ));
+                let native = NativeAuthHelper::default();
+                let caller = || native.caller_identity();
+                return client
+                    .unlock_touch_id(
+                        &data_root,
+                        duration_seconds(args.text("duration"))?,
+                        capability,
+                        caller_identity(&native, &caller),
+                    )
+                    .map_err(app_error);
             }
             let passphrase = password_secret(
                 fd_value(args.get("passphrase_fd")),
@@ -142,6 +178,15 @@ pub(crate) fn dispatch<H: Host>(
         }
         _ => Err(AppError::new("unknown_command", "unknown operator command")),
     }
+}
+
+/// `ensure_native_auth_running` binds the broker to this CLI's signed
+/// launcher only on macOS with `KASSIBER_NATIVE_AUTH_HELPER` set.
+fn caller_identity<'a>(
+    native: &NativeAuthHelper,
+    caller: &'a dyn Fn() -> kassiber_operator::Result<String>,
+) -> kassiber_operator::client::CallerIdentity<'a> {
+    native.caller_gate().then_some(caller)
 }
 
 /// `parse_duration(args.duration) if args.duration else None`.

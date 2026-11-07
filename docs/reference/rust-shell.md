@@ -16856,9 +16856,9 @@ R6-4. As the owner settled, Python and Rust brokers share the one endpoint.
 Slice R6-3 of the [R6 design](r6-ai-operator-port.md#r6-3-operator-cli-brokered-routing-agent-sessions-and-agent-access).
 The seven password `operator` leaves, `--operator-auth-fd`, brokered routing,
 `config/agent-access.json` and the five `ui.agent_access.*` daemon kinds are
-native. `operator touch-id ...` stays unregistered and
-`operator unlock --auth touch-id` answers `not_implemented` after its
-interaction check (R6-4); `mcp ...` is R6-8.
+native. `operator touch-id ...` stayed unregistered and
+`operator unlock --auth touch-id` answered `not_implemented` after its
+interaction check until [R6-4](#operator-touch-id-r6-4); `mcp ...` is R6-8.
 
 ### What is native
 
@@ -16993,7 +16993,7 @@ interaction check (R6-4); `mcp ...` is R6-8.
 
 ### Reviewed differences
 
-- Interactive `operator unlock --auth touch-id` answers `not_implemented`
+- Interactive `operator unlock --auth touch-id` answered `not_implemented`
   until R6-4; a machine or piped caller gets Python's `interaction_required`.
 - A secret descriptor that cannot be read reports the Rust CLI's existing
   `invalid_passphrase` wording, as `--db-passphrase-fd` does elsewhere.
@@ -17042,6 +17042,80 @@ interaction check (R6-4); `mcp ...` is R6-8.
   call with its token; routing already sends `mcp call` through
   `route_brokered`. The MCP integration scenario then runs unskipped under
   the Rust broker switch.
+
+## Operator Touch ID (R6-4)
+
+Slice R6-4 of the [R6 design](r6-ai-operator-port.md#r6-4-native-auth-and-touch-id).
+`operator touch-id status`/`enroll`/`forget` and `operator unlock --auth
+touch-id` are native, as are the broker's `unlock_touch_id` and
+`touch_id_configure`. The Tauri helper is unchanged: the Rust sidecar keeps
+the `kassiber-cli-<arch>-apple-darwin` name, location and signing identifier
+it checks.
+
+### What is native
+
+- **The bridge** (`crates/operator/src/native_auth.rs`, Python's
+  `operator/native_auth.py`): the configured helper
+  (`KASSIBER_NATIVE_AUTH_HELPER`, macOS only) must resolve to an executable
+  `<bundle>.app/Contents/MacOS/kassiber-ui`; `/usr/bin/codesign -dv` must
+  report identifier `at.bitcoinaustria.kassiber`, a ten-character uppercase
+  team and a 40/64-hex cdhash, and `codesign --verify --strict -R=<req>`
+  must accept the Developer ID requirement. Every launch passes the ready/go
+  gate (5 s for `R`, then the live pid against the helper's requirement,
+  then `G`); secrets cross only inherited pipes, at most 16 KiB. Exit 4 is
+  `operator_native_auth_not_configured`, other failures
+  `native_auth_failed` with the helper's stripped stderr. Off macOS or
+  without the variable every action refuses before starting anything.
+- **The account** (`kassiber_secrets::modes::operator_touch_id_account`):
+  sha256 of `kassiber-operator-touch-id-v1:<project identity>:<generation>`
+  while the policy is bound; `initial` when unset, `invalid` when not a
+  string.
+- **The CLI**: `status` asks the helper directly; `enroll`/`forget` read a
+  fresh passphrase (`--passphrase-fd` or the TTY) and go through the broker;
+  `unlock --auth touch-id` keeps the interaction check. On macOS with the
+  variable set, the client binds the broker to `native_auth_caller_identity`
+  (the CLI's parent must be the signed helper itself), evaluated after the
+  broker is up as in Python, with the existing restart handoff.
+- **The broker**: `unlock_touch_id` validates the helper, then the policy
+  binding, then the lease arguments, then fetches the passphrase;
+  `touch_id_configure` asks for a `fresh_native_auth` secret and runs
+  `configure_touch_id_authenticated` (fresh authentication, policy binding
+  to the authenticated database and project, then the helper's store or
+  delete). The binary wires the bridge in `crates/kassiber/src/broker.rs`.
+
+### Parity and tests
+
+- The ten `test_operator_native_auth.py` tests are ported over a platform
+  seam (`native_auth_tests.rs`), with identity, exit-code, limit, caller and
+  path cases; the opaque identity and account are pinned to Python vectors.
+  The launch-gate test runs a real child.
+- Server and service: binding-before-lease ordering, the challenge-bound
+  configure for both states with the policy binding, and a wrong passphrase
+  reaching neither the binding nor the helper.
+- `tests/test_rust_operator_cli.py` adds seven touch-id steps (before and
+  after a broker, unbound and bound); both runtimes answer byte-identically.
+- 16 operator and 2 secrets mutation entries (`r64-*`, `S-touch-id-*`) are
+  all killed.
+
+### Reviewed differences
+
+- Python's `ensure_native_auth_running` pings, then computes the caller
+  identity; Rust takes it as a closure and does the same. The touch-id
+  duration is a big integer, as for password unlock.
+- Helper launches use `kassiber-ipc` with `stdin`/`stdout` on `/dev/null`;
+  the ready wait is a reader thread with a 5 s receive timeout instead of
+  `select`.
+
+### Signed hardware run (macOS 27.0.1, 2026-11-07)
+
+A Developer-ID-signed copy of the Rust app (no provisioning profile, so no
+Keychain entitlements) on a throwaway book:
+[macOS validation](macos-validation.md#b-touch-id-r6-4) records the steps.
+The helper accepted the Rust sidecar as its parent and refused an ad-hoc,
+a wrongly identified and an out-of-bundle sidecar; the CLI refused a shell
+parent. Enrollment reached the helper's protected-keychain store and failed
+there without the profile, so the Touch ID prompt itself is still to run
+with the Developer ID provisioning profile.
 
 ## AI tool executor and read tools (R6-5a)
 

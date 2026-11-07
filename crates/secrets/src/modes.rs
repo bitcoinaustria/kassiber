@@ -132,6 +132,34 @@ pub fn require_project_policy_binding(
     ))
 }
 
+/// The managed setting whose rotation retires every operator Touch ID
+/// credential (`OPERATOR_NATIVE_AUTH_GENERATION_SETTING`).
+pub const OPERATOR_NATIVE_AUTH_GENERATION_SETTING: &str = "operator_native_auth_generation";
+
+/// `operator_touch_id_account(data_root)` (`native_auth.py`): the opaque
+/// keychain account of this book's operator Touch ID credential, usable only
+/// while the policy stays bound to this file. It hashes the project identity
+/// with the native-auth generation, `"initial"` when unset and `"invalid"`
+/// when not a string, so neither the path nor the identity leaves.
+pub fn operator_touch_id_account(namespace: &OwnerNamespace, data_root: &Path) -> Result<String> {
+    use sha2::{Digest, Sha256};
+    let located = locate(namespace, data_root)?;
+    require_project_policy_binding(namespace, &located.root)?;
+    let generation = match load(&located.settings).get(OPERATOR_NATIVE_AUTH_GENERATION_SETTING) {
+        None => "initial".to_owned(),
+        Some(Json::String(generation)) => generation.clone(),
+        Some(_) => "invalid".to_owned(),
+    };
+    let digest = Sha256::digest(
+        format!(
+            "kassiber-operator-touch-id-v1:{}:{generation}",
+            located.identity
+        )
+        .as_bytes(),
+    );
+    Ok(digest.iter().map(|byte| format!("{byte:02x}")).collect())
+}
+
 /// `effective_unlock_mode(data_root)`: the configured mode, `manual` when
 /// unset or when a reusable mode lost its binding.
 pub fn effective_unlock_mode(namespace: &OwnerNamespace, data_root: &Path) -> Result<String> {

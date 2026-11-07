@@ -42,7 +42,7 @@ fn signed_cli_restarts_an_idle_mismatched_helper_broker() {
     let client = BrokerClient::new(host);
     assert_eq!(
         client
-            .ensure_native_auth_running(Some("signed-helper"))
+            .ensure_native_auth_running(Some(&|| Ok("signed-helper".to_owned())))
             .unwrap(),
         parse(replacement)
     );
@@ -68,7 +68,7 @@ fn native_auth_handoff_is_skipped_without_a_signed_helper() {
         )]),
     ]);
     let error = BrokerClient::new(failing)
-        .ensure_native_auth_running(Some("signed"))
+        .ensure_native_auth_running(Some(&|| Ok("signed".to_owned())))
         .unwrap_err();
     assert_eq!(code(&error), "native_auth_unavailable");
     assert_eq!(

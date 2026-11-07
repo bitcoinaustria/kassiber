@@ -928,6 +928,14 @@ pub trait BookStore: Send + Sync {
             "reading the project's unlock mode",
         ))
     }
+    /// `operator_touch_id_account(data_root)`: the opaque keychain account
+    /// of the book's operator Touch ID credential, while its policy is bound.
+    fn operator_touch_id_account(&self, _data_root: &str) -> Result<String, AppError> {
+        Err(not_implemented(
+            "store",
+            "reading the project's Touch ID account",
+        ))
+    }
     /// `_verify_operator_child_database`: authenticate a broker child's
     /// bound database with the lease passphrase and close it, before a
     /// command that does not bootstrap a database runs.

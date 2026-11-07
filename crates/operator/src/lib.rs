@@ -9,6 +9,7 @@
 //! - [`arguments`]: secret-bearing command arguments and durations;
 //! - [`service`]: leases, per-project queues and operation state (R6-2);
 //! - [`backoff`]: the persisted passphrase-attempt backoff;
+//! - [`native_auth`]: the signed macOS Touch ID helper bridge (R6-4);
 //! - [`telemetry`]: the bounded RAM lifecycle log.
 //!
 //! Platform calls live in `kassiber-ipc`; this crate forbids `unsafe`.
@@ -19,6 +20,7 @@ pub mod build;
 pub mod client;
 pub mod clock;
 pub mod error;
+pub mod native_auth;
 pub mod peers;
 pub mod protocol;
 pub mod runner;

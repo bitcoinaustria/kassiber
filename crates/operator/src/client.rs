@@ -73,6 +73,10 @@ pub trait Host: Send + Sync {
     fn warn(&self, text: &str);
 }
 
+/// `native_auth_caller_identity`, when this CLI hands a signed launcher's
+/// identity to the broker.
+pub type CallerIdentity<'a> = Option<&'a dyn Fn() -> Result<String>>;
+
 /// The command line and the secret values its fd/stdin flags carried, by
 /// label in the order they were read.
 #[derive(Default)]
@@ -204,13 +208,16 @@ impl<H: Host> BrokerClient<H> {
     }
 
     /// `ensure_native_auth_running`: hand a helper-less idle broker over to
-    /// this signed CLI. `expected_identity` is `native_auth_caller_identity()`
-    /// on macOS with `KASSIBER_NATIVE_AUTH_HELPER` set, otherwise `None`.
-    pub fn ensure_native_auth_running(&self, expected_identity: Option<&str>) -> Result<Value> {
+    /// this signed CLI. `caller_identity` is `native_auth_caller_identity`
+    /// on macOS with `KASSIBER_NATIVE_AUTH_HELPER` set, otherwise `None`; it
+    /// runs after the broker is up, as in Python.
+    pub fn ensure_native_auth_running(&self, caller_identity: CallerIdentity<'_>) -> Result<Value> {
         let broker = self.ensure_running()?;
-        let Some(expected) = expected_identity else {
+        let Some(caller_identity) = caller_identity else {
             return Ok(broker);
         };
+        let expected = caller_identity()?;
+        let expected = expected.as_str();
         let matches = |broker: &Value| {
             is_true(get(broker, "native_auth_available"))
                 && as_str(get(broker, "native_auth_identity")).is_some_and(|id| id.is(expected))
@@ -377,11 +384,11 @@ impl<H: Host> BrokerClient<H> {
     pub fn unlock_touch_id(
         &self,
         data_root: &str,
-        duration_seconds: Option<i64>,
+        duration_seconds: Option<BigInt>,
         capability: &str,
-        expected_identity: Option<&str>,
+        caller_identity: CallerIdentity<'_>,
     ) -> Result<Value> {
-        let broker = self.ensure_native_auth_running(expected_identity)?;
+        let broker = self.ensure_native_auth_running(caller_identity)?;
         self.require_same_build(&broker)?;
         let identity = broker_native_auth_identity(&broker)?;
         self.with_channel(CONNECT_TIMEOUT, None, |channel| {
@@ -389,7 +396,10 @@ impl<H: Host> BrokerClient<H> {
                 "unlock_touch_id",
                 vec![
                     ("data_root", s(data_root)),
-                    ("duration_seconds", optional_int(duration_seconds)),
+                    (
+                        "duration_seconds",
+                        duration_seconds.map_or(Value::Null, Value::Int),
+                    ),
                     ("capability", s(capability)),
                     ("native_auth_identity", Value::Str(identity)),
                 ],
@@ -482,9 +492,9 @@ impl<H: Host> BrokerClient<H> {
         data_root: &str,
         authentication: &[u8],
         configured: bool,
-        expected_identity: Option<&str>,
+        caller_identity: CallerIdentity<'_>,
     ) -> Result<Value> {
-        let broker = self.ensure_native_auth_running(expected_identity)?;
+        let broker = self.ensure_native_auth_running(caller_identity)?;
         self.require_same_build(&broker)?;
         let identity = broker_native_auth_identity(&broker)?;
         self.with_channel(CONNECT_TIMEOUT, None, |channel| {
