@@ -42,6 +42,7 @@ from typing import Any, Callable, Mapping, MutableMapping, Sequence
 
 from ... import egress_policy
 from ...backends import backend_timeout, backend_value, redact_backend_url
+from ...redaction import backend_credentials, withhold_credentials
 from ...envelope import json_ready
 from ...errors import AppError
 from ...msat import msat_to_btc
@@ -327,7 +328,12 @@ def call_core_lightning(
             retryable=True,
         ) from exc
     if completed.returncode != 0:
-        stderr = (completed.stderr or completed.stdout or "").strip()
+        # lightning-cli's output may repeat the rune (a commando error quoting
+        # its arguments); withhold it before keeping the tail.
+        stderr = withhold_credentials(
+            (completed.stderr or completed.stdout or "").strip(),
+            backend_credentials(backend),
+        )
         raise AppError(
             f"Core Lightning RPC method '{method}' failed",
             code="sync_error",

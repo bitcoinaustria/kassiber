@@ -415,3 +415,51 @@ class LndCredentialEchoTest(CredentialEchoAssertions, unittest.TestCase):
         error = self._request(lambda _h, echo: (200, "text/plain", "<html>" + echo))
         self.assertIn("response_preview", error.details)
         self.assertErrorWithheld(error, (MACAROON,))
+
+
+# --- Core Lightning ------------------------------------------------------------
+
+RUNE = "tU-RWxo6VjFbHkRmsN5HmwAkZYUcbkWxKZwIG4vSaCw9MyZtZXRob2Q9bGlzdGZ1bmRz"
+
+
+class ClnCredentialEchoTest(CredentialEchoAssertions, unittest.TestCase):
+    def test_lightning_cli_output_withholds_the_rune(self):
+        import os
+        import stat
+        import sys
+
+        from kassiber.core.lightning import cln
+
+        with tempfile.TemporaryDirectory() as tmp:
+            # A lightning-cli that fails and prints its arguments, rune included.
+            script = os.path.join(tmp, "lightning-cli")
+            with open(script, "w", encoding="utf-8") as handle:
+                handle.write(
+                    f"#!{sys.executable}\nimport json, sys, urllib.parse\n"
+                    "args = ' '.join(sys.argv[1:])\n"
+                    "sys.stderr.write('commando failed: ' + args + ' ' + urllib.parse.quote(args, safe='') + ' ' + json.dumps(args))\n"
+                    "sys.exit(1)\n"
+                )
+            os.chmod(script, stat.S_IRWXU)
+            backend = {
+                "name": "node",
+                "url": "cln://commando",
+                "lightning_cli": script,
+                "commando_peer_id": "02" + "11" * 32,
+                "token": RUNE,
+            }
+            with patch_online():
+                with self.assertRaises(AppError) as raised:
+                    cln.call_core_lightning(backend, "getinfo")
+        self.assertIn("commando failed", raised.exception.details["stderr"])
+        self.assertErrorWithheld(raised.exception, (RUNE,))
+
+
+def patch_online():
+    """Lightning calls refuse to start in offline mode; tests run online."""
+
+    from unittest.mock import patch
+
+    from kassiber import egress_policy
+
+    return patch.object(egress_policy, "require_online", lambda *_a, **_k: None)
