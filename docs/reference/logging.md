@@ -331,6 +331,18 @@ are masked. `credentials` remains a secret alias. Colon status literals `none`,
 `expired` and `(not set)` remain readable on their own; `=` assignments are
 secret-bearing.
 
+One exception sits before the scanner, in `sanitize_traceback_text` (Python
+`log_ring.py`, Rust `kassiber_envelope::redaction`): the macOS Touch ID helper
+reports failures as `kassiber native auth: <text>`, which reads as an
+`auth: <secret>` pair. When the whole message is that prefix followed by one
+of the helper's fixed texts (`NATIVE_AUTH_ERROR_MESSAGES`), or by one of four
+texts that end in an OSStatus number (`NATIVE_AUTH_ERROR_STATUS_TEMPLATES`, at
+most ten ASCII digits with an optional minus), it passes unchanged. Anything
+else after `auth:`, including a known text with more appended, stays redacted.
+Both runtimes share the vectors in
+`crates/envelope/tests/data/native_auth_errors.json`, and a test checks that
+every allowlisted text is still one the helper source can print.
+
 An unquoted value after a secret key is masked through the end of its line and
 any following lines indented deeper than that line's own indent (past YAML
 `- ` markers), so multi-word passphrases, shell `\` continuations and a stray

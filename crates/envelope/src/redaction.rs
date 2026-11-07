@@ -491,9 +491,87 @@ fn relativize_path_for(path: &str, home: &str) -> String {
     }
 }
 
+/// The macOS Touch ID helper reports failures as `kassiber native auth:
+/// <text>`, which the credential scanner reads as an `auth: <secret>` pair.
+/// Exactly these fixed texts, as the whole message, pass unchanged; anything
+/// else after `auth:` is still redacted. `log_ring.NATIVE_AUTH_ERROR_*` in
+/// Python keeps the same lists.
+pub const NATIVE_AUTH_ERROR_PREFIX: &str = "kassiber native auth: ";
+pub const NATIVE_AUTH_ERROR_MESSAGES: &[&str] = &[
+    "missing native auth action",
+    "missing native auth account",
+    "unsupported native auth action",
+    "native auth output must be an inherited pipe",
+    "native auth secret exceeds 16 KiB",
+    "native auth launch gate requires inherited pipes",
+    "native auth launch gate received an invalid release",
+    "missing --ready-fd",
+    "missing --go-fd",
+    "missing --output-fd",
+    "missing --secret-fd",
+    "invalid --ready-fd",
+    "invalid --go-fd",
+    "invalid --output-fd",
+    "invalid --secret-fd",
+    "Touch ID is unavailable on this platform",
+    "native-auth helper is not inside a signed app bundle",
+    "native-auth helper does not support this macOS architecture",
+    "native-auth helper parent is not the bundled Kassiber sidecar",
+    "native-auth helper and broker signatures do not match",
+    "native-auth helper parent has an unexpected signing identifier",
+    "native-auth sidecar signing identifier is invalid",
+    "native-auth helper has an invalid TeamIdentifier",
+    "could not inspect native-auth parent process",
+    "native-auth code signature verification failed",
+    "native-auth code signature inspection failed",
+    "native-auth code signature has no Identifier",
+    "native-auth helper requires a production TeamIdentifier",
+    "database passphrase must not be empty",
+    "Touch ID operator account is invalid.",
+    "Touch ID operator unlock is only available in the macOS desktop app.",
+    "This build cannot access the protected Keychain item; reopen a production-entitled build to manage it.",
+    "No saved desktop biometric passphrase was found.",
+    "LocalAuthentication is unavailable on this Mac",
+    "Touch ID is not available or not enrolled for this Mac user.",
+    "The credential remained in the native store after deletion.",
+    "secret_ref_missing",
+    "secret_store_locked_or_denied",
+];
+/// Texts that end in an OSStatus: `<head><signed 32-bit integer><tail>`.
+pub const NATIVE_AUTH_ERROR_STATUS_TEMPLATES: &[(&str, &str)] = &[
+    ("macOS protected Keychain rejected the operation (", ")."),
+    ("could not resolve the running native-auth parent code (", ")"),
+    ("could not compile the native-auth sidecar requirement (", ")"),
+    ("running native-auth parent did not match the bundled sidecar requirement (", ")"),
+];
+
+fn is_status_code(text: &str) -> bool {
+    let digits = text.strip_prefix('-').unwrap_or(text);
+    (1..=10).contains(&digits.len()) && digits.bytes().all(|b| b.is_ascii_digit())
+}
+
+/// `log_ring.is_known_native_auth_error`: whether `text` is, in full, one of
+/// the Touch ID helper's fixed errors.
+pub fn is_known_native_auth_error(text: &str) -> bool {
+    let Some(message) = text.strip_prefix(NATIVE_AUTH_ERROR_PREFIX) else {
+        return false;
+    };
+    NATIVE_AUTH_ERROR_MESSAGES.contains(&message)
+        || NATIVE_AUTH_ERROR_STATUS_TEMPLATES.iter().any(|(head, tail)| {
+            message
+                .strip_prefix(head)
+                .and_then(|rest| rest.strip_suffix(tail))
+                .is_some_and(is_status_code)
+        })
+}
+
 /// `log_ring.sanitize_traceback_text(text)`: relativize paths, redact
-/// secrets and operational ids, and cap at 8,000 code points.
+/// secrets and operational ids, and cap at 8,000 code points. A known Touch
+/// ID helper error (`is_known_native_auth_error`) passes as is.
 pub fn sanitize_traceback_text(text: &str) -> String {
+    if is_known_native_auth_error(text) {
+        return text.to_owned();
+    }
     static PATH: OnceLock<Regex> = OnceLock::new();
     let path = PATH.get_or_init(|| {
         let segment = format!("(?:{REGEX_WORD}|[@.+ -])");

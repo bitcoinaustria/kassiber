@@ -18177,3 +18177,17 @@ Rust syncs are recorded on the test thread by a `cfg(test)` seam
 `in_place_exports_are_flushed_but_special_files_are_not`. The three report
 call sites themselves have no unit test of their own; the helper they share does.
 
+
+## Touch ID helper errors through the broker (2026-11-07)
+
+The Mac validation (B) saw every helper failure as `kassiber native auth:
+[redacted]`: the credential scanner reads the helper's `auth:` prefix as a
+secret pair. Both runtimes' `sanitize_traceback_text` now pass the helper's
+fixed texts, and four texts ending in an OSStatus number, when they are the
+whole message; anything else after `auth:` stays redacted (see
+[logging](logging.md)). Python (`log_ring.NATIVE_AUTH_ERROR_*`) and Rust
+(`kassiber_envelope::redaction::NATIVE_AUTH_ERROR_*`) check the same vectors,
+`crates/envelope/tests/data/native_auth_errors.json`, and
+`tests/test_native_auth_error_redaction.py` also checks that each allowed text
+still occurs in the helper source. `crates/operator/scripts/native_auth_redaction_mutations.json`
+lists the ten mutations the tests kill.

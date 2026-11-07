@@ -162,6 +162,9 @@ architecture-specific sidecar signing identifier and the helper's verified
 TeamIdentifier. It also validates the bundle path and both static signatures.
 It has no caller-selected socket or general
 raw-secret "get" action and never returns the passphrase to the invoking CLI.
+A failing helper exits 1 with `kassiber native auth: <text>` on stderr; the
+broker returns its fixed texts unredacted as `native_auth_failed` messages and
+redacts anything else (see [logging](logging.md)).
 Production-entitled builds use an item-level current-biometry policy. Unlike
 the separate desktop remembered-unlock feature, operator Touch ID has no
 preview-build application-level fallback: unsigned/ad-hoc builds report it as

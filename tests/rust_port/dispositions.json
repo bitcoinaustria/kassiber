@@ -1768,6 +1768,13 @@
     "tests/test_msat_migration.py": {
       "MsatMigrationTests": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "store", "reason": "calls kassiber.db directly", "reviewed": false, "tests": 2}
     },
+    "tests/test_native_auth_error_redaction.py": {
+      "test_python_lists_match_the_shared_vectors": {"disposition": "oracle", "flags": [], "group": "ai-mcp-operator", "reason": "pins the Touch ID helper-error allowlist against the vectors crates/envelope/tests/native_auth_errors.rs checks in Rust, and against the helper source", "reviewed": true, "tests": 1},
+      "test_known_helper_errors_pass_unchanged": {"disposition": "oracle", "flags": [], "group": "ai-mcp-operator", "reason": "pins the Touch ID helper-error allowlist against the vectors crates/envelope/tests/native_auth_errors.rs checks in Rust, and against the helper source", "reviewed": true, "tests": 1},
+      "test_anything_else_after_auth_is_still_redacted": {"disposition": "oracle", "flags": [], "group": "ai-mcp-operator", "reason": "pins the Touch ID helper-error allowlist against the vectors crates/envelope/tests/native_auth_errors.rs checks in Rust, and against the helper source", "reviewed": true, "tests": 1},
+      "test_broker_error_response_shows_the_helper_message": {"disposition": "oracle", "flags": [], "group": "ai-mcp-operator", "reason": "pins the Touch ID helper-error allowlist against the vectors crates/envelope/tests/native_auth_errors.rs checks in Rust, and against the helper source", "reviewed": true, "tests": 1},
+      "test_every_allowlisted_message_is_one_the_helper_can_print": {"disposition": "oracle", "flags": [], "group": "ai-mcp-operator", "reason": "pins the Touch ID helper-error allowlist against the vectors crates/envelope/tests/native_auth_errors.rs checks in Rust, and against the helper source", "reviewed": true, "tests": 1}
+    },
     "tests/test_no_egress_guard.py": {
       "test_guard_blocks_dns": {"disposition": "python-only", "flags": [], "group": "network-egress", "reason": "Python socket monkeypatch and sitecustomize guard installation disappear", "replacement": "Rust no-egress guard with child-process discrepancy injection and transport coverage", "reviewed": true, "tests": 1},
       "test_guard_blocks_other_dns_apis": {"disposition": "python-only", "flags": [], "group": "network-egress", "reason": "Python socket monkeypatch and sitecustomize guard installation disappear", "replacement": "Rust no-egress guard with child-process discrepancy injection and transport coverage", "reviewed": true, "tests": 1},

@@ -1597,3 +1597,24 @@ fn test_decisions_need_the_control_secret_frame() {
     assert_eq!(error_code(&malformed.0.sent[0]), "operator_protocol_error");
     assert!(malformed.0.secret_challenges.is_empty());
 }
+
+/// Mirrors `test_broker_error_response_shows_the_helper_message`: a fixed
+/// Touch ID helper error reaches the caller; other text after `auth:` does not.
+#[test]
+fn test_error_response_shows_known_native_auth_helper_errors() {
+    let message = |text: &str| {
+        let response = error_response(&AppError::new("native_auth_failed", text));
+        let error = kassiber_envelope::get(&response, "error").unwrap().clone();
+        kassiber_envelope::get(&error, "message").unwrap().clone()
+    };
+    for known in [
+        "kassiber native auth: This build cannot access the protected Keychain item; reopen a production-entitled build to manage it.",
+        "kassiber native auth: macOS protected Keychain rejected the operation (-34018).",
+    ] {
+        assert_eq!(message(known), s(known));
+    }
+    assert_eq!(
+        message("kassiber native auth: hunter2"),
+        s("kassiber native auth: [redacted]")
+    );
+}
