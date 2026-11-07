@@ -215,6 +215,23 @@ therefore reaches the user as `kassiber native auth: [redacted]`.
   lock files under `~/.kassiber/run/operator-owners` for its disposable book.
   They are harmless and unrelated to real books.
 
+## Follow-ups (`t3code/rust-mac-followups`, 2026-11-07)
+
+Done on Linux; the macOS checks below are for the next Mac run.
+
+| Report item | Change |
+| --- | --- |
+| Hazard (A2) | `tests/test_rust_secrets_lifecycle.py` runs on Linux only; `tests/test_keyring_isolation_guard.py` fails on any module that sets an unreachable D-Bus address without a module-level Linux-only skip. |
+| A8 durability | Both runtimes set `fullfsync` and `checkpoint_fullfsync` on macOS for every book connection; Python syncs through `kassiber/durable_sync.py` (`F_FULLFSYNC`); the listed write paths sync ([database compatibility](database-compatibility.md#macos-full-sync-durability), [Rust shell](rust-shell.md#macos-durability-follow-ups-2026-11-07)). |
+| B helper errors | The helper's fixed error texts pass the broker unredacted in both runtimes; anything else after `auth:` stays redacted ([logging](logging.md)). |
+| A2 harness | CLN fixture budgets, LND connect budget, `/tmp` socket directory, `getsid`, platform state root, case-insensitive tzdata names, host platform in the interop probe. |
+| A6, chokepoint | `platform_roots()` documented ([egress](rust-port-egress.md)); the AI chat PDF tools are a reviewed process; the scanner skips `ui-tauri/src-tauri/binaries/`. |
+| A2 restore restart | Product bug, fixed: Rust brokered routing admitted `settings.json` before recovering a pending restore ([Rust shell](rust-shell.md#restart-after-a-restore-interrupted-in-its-settings-2026-11-07)). |
+
+The other drift failures (source-funds vectors, journals refresh precedence,
+the ninth migration audit, the component-review `null` action and the
+`agent-access-keeps-other-field` mutation entry) are left to the cleanup slice.
+
 ## Branches and commits
 
 - `mac-validation` (from `origin/t3code/rust-mac-validation` `acd3f3e00`):
