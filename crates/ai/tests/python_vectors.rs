@@ -465,3 +465,47 @@ fn undo_hints_match_python() {
         assert_eq!(&have, field(case, "hint"), "{case:?}");
     }
 }
+
+#[test]
+fn chat_visuals_match_python() {
+    use kassiber_ai::visuals::{
+        build_chat_visual, model_digest, normalize_visual_args, readiness_from_blockers,
+    };
+    let visuals = field(vectors(), "visuals");
+    let list = |key: &str| match field(visuals, key) {
+        Value::List(items) => items.as_slice(),
+        other => panic!("{key}: {other:?}"),
+    };
+    for case in list("normalize") {
+        let have = match normalize_visual_args(field(case, "args")) {
+            Ok(spec) => dict([("ok", spec)]),
+            Err(error) => outcome(Err(ToolError::App(error))),
+        };
+        assert_eq!(&have, field(case, "outcome"), "{case:?}");
+    }
+    for case in list("readiness") {
+        assert_eq!(
+            &readiness_from_blockers(field(case, "payload")),
+            field(case, "readiness"),
+            "{case:?}"
+        );
+    }
+    let now = kassiber_pytext::iso_datetime(text(field(vectors(), "visuals_now")))
+        .unwrap()
+        .utc_us();
+    let optional = |value: &'static Value| (*value != Value::Null).then_some(value);
+    assert!(list("build").len() > 40);
+    for case in list("build") {
+        let built = build_chat_visual(
+            field(case, "spec"),
+            field(case, "payload"),
+            text(field(case, "fiat_currency")),
+            optional(field(case, "readiness")),
+            optional(field(case, "local_reference")),
+            field(case, "context"),
+            now,
+        );
+        assert_eq!(&built, field(case, "visual"), "{:?}", field(case, "spec"));
+        assert_eq!(&model_digest(&built), field(case, "model_digest"));
+    }
+}

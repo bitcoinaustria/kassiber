@@ -588,6 +588,7 @@ pub fn read_for_ai(
         }
         "ui.report.blockers" => book.report_blockers(auto_sync),
         "ui.wallets.request_input" => crate::import_runs::wallet_input_request(book, arguments),
+        "ui.visuals.render" => crate::visuals::render(book, arguments),
         "ui.imports.list" => {
             crate::import_runs::list_for_ai(book, arguments, crate::executor::full_access(state))
         }

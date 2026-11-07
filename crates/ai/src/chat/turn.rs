@@ -1067,7 +1067,14 @@ impl Worker {
                 response_context.input_items.push(dict([
                     ("type", s("function_call_output")),
                     ("call_id", Value::Str(call.call_id.clone())),
-                    ("output", s(model_output(&result))),
+                    // A visual's rows are for the screen; the model reads
+                    // its digest.
+                    (
+                        "output",
+                        s(model_output(&crate::visuals::tool_result_for_model(
+                            &redact_ai_tool_result(&result),
+                        ))),
+                    ),
                 ]));
                 if chat.is_cancelled() {
                     finish_reason = Some("cancelled".into());

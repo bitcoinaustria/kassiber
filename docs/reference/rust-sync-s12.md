@@ -31,7 +31,7 @@ inspection. "Now" is the state on this branch.
 | PR | Python change | Kinds, tools and fields | Rust R6 | Before | Now |
 | --- | --- | --- | --- | --- | --- |
 | #675 | `ai/provider_checks.py`, `providers.list_with_default`, `discovery_cache.seed`: each provider's last explicit check is stored in `ai_provider_checks` (per base URL, models capped at 1000) and read back; `last_checked_at` and `set_up` on every listed provider; a key or address change clears the checks | `ai.providers.list`, `ai.provider_runtime.status`, `ai.list_models`, `ai.test_connection`, `ai.providers.update/set_api_key` | `crates/ai/src/providers`, `crates/ai/src/service.rs`, `crates/ai/src/discovery` | Differs: rows lack `last_checked_at` and `set_up`; checks are neither stored nor seeded | see [state](#state-on-this-branch) |
-| #676 | `core/chat_visuals.py` (997 lines): charts rendered from local report and transaction reads | tool `ui.visuals.render` | none | Missing from the catalog | Catalog entry; refused (`not_implemented`) |
+| #676 | `core/chat_visuals.py` (997 lines): charts rendered from local report and transaction reads | tool `ui.visuals.render` | none | Missing from the catalog | Ported; see [visuals](#chat-visuals-676) |
 | #677 | `ai/tools.py`, `ai/prompt.py`: the tool-area index in the system prompt, `load_tools`, `TOOL_AREA_SUMMARIES`; "what can you do" no longer offers every schema; `/review` selects the review pack; report keywords for gains, income and charts. `tax_estimate.py` core tax figures (S7) | `ai.chat` system prompt and advertised tools; tool `load_tools` | `crates/ai/src/select.rs`, `prompt.rs`, `executor.rs`, `chat/turn.rs` | Differs: selection and prompt are pre-#677 | Ported; see [catalog](#catalog-selection-and-summaries) |
 | #678 | `providers.agent_access` (`full` default, `restricted`), `_provider_has_full_agent_access`, `_ai_full_access`: a restricted off-device provider is kept to projected results and away from custody-gap, lineage, chain-analysis source and attachment-value tools; an on-device provider always has full access | provider rows and `create/update --agent-access`; `agent_access_restricted` denials replace `local_provider_required` | `crates/ai/src/providers`, `executor.rs`, `mutate.rs`, `projections.rs`, `previews.rs`, `file_analysis.rs`, `chat/screen.rs`, `select.rs` | Differs: Rust gates on `provider_kind == local` and has no `agent_access` | see [state](#state-on-this-branch) |
 | #679 | `custody_components` revise/supersede/undo/activate actions; `ui.transfers.dismissals.list`; qualified txids (S2) | tools `ui.transfers.components.plan/apply` (`action`, `component_id`, `activate`), `ui.transfers.dismissals.list` | `crates/ai/src/summary.rs`, `executor.rs`, `crates/transfers` | Differs: summaries, schemas | Summaries ported; dismissals list refused (owned by S6); component actions follow S11 |
@@ -324,6 +324,28 @@ compares its by-id cases; they match.
   Python's first checks until they are ported.
   `tests/rust_ai_tool_reference.py` applies the same card as the chat loop.
 
+### Chat visuals (#676)
+
+- `crates/ai/src/visuals.rs` is `core/chat_visuals.py`: the request
+  normalizer, every source's projection (overview, balance history,
+  portfolio, tax summary, cash flow, transactions, transaction flow,
+  readiness) with its caveats (stale journals, quarantines, missing prices,
+  truncation; never a zero for an unknown), and `model_digest`. Calendars
+  are floored in each moment's own offset and written in UTC, as Python's
+  aware datetimes are.
+- `ui.visuals.render` reads each source from the page's own native read
+  (the dashboard with its pairing for cash flow, the list from both ends
+  for a size order, the local graph and resolver for a flow) and the
+  report blockers for a report source's caveats; it contacts nothing. Only
+  the report sources refresh stale journals first.
+- The provider gets the digest, not the rows (`tool_result_for_model` on
+  the function output and the auto-read context); the screen gets the
+  whole visual.
+
+Vectors (`visuals` in `vectors.json`) cover the normalizer and 49 built
+visuals; the tools harness compares the tool on every fixture, masking the
+visual's own clock (`as_of`, a cash-flow window's end).
+
 ### Tools harness after these steps
 
 `tests/test_rust_ai_tools.py` now checks whole books against the store
@@ -370,9 +392,12 @@ The refresh by wire name (09912e4c0) is ported with the MCP grants step:
 the executor decides on the catalog entry, so a model's `ui_reports_summary`
 refreshes stale journals as the planner's dotted read does (on the desktop
 fixture this is what makes those reads refuse `book_network_review_required`
-as Python does). Not ported here: the wallet sync with an unreadable config
-(7bca137d4), the maintenance sync mode (a125129ed) and the CLI chat's
-Ctrl-C (c40e8fb32).
+as Python does). The maintenance sync mode (a125129ed) and the CLI chat's
+Ctrl-C (c40e8fb32) already held in Rust (`settings.rs` checks the type;
+the chat daemon leads its own process group). Not ported here: the wallet
+sync's typed `invalid_wallet_config` (7bca137d4); Rust's sync planner still
+answers `internal_error` for an unreadable wallet configuration, which is
+the wallet-sync owner's.
 
 At this point `tests/test_rust_ai_chat.py` passed 4 of 9; the permission
 modes above brought it to 8.

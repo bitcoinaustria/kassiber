@@ -99,6 +99,12 @@ _GENERATED_AT = re.compile(rb'(\\?"generated_at\\?":\\?")\d{4}-\d\d-\d\dT\d\d:\d
 _REFERENCE = re.compile(rb"ca-ref:[0-9a-f]{64}")
 
 
+_VISUAL_CLOCK = re.compile(
+    rb'((?:\\?"as_of\\?":\\?"(?=\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ\\?"(?:\},\\?"rows|,\\?"chart)))|\\?"until\\?":\\?")'
+    rb"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ"
+)
+
+
 def _mask(line: bytes, references: dict[bytes, bytes] | None = None) -> bytes:
     """Declared mappings, not field masks.
 
@@ -109,6 +115,8 @@ def _mask(line: bytes, references: dict[bytes, bytes] | None = None) -> bytes:
     distinct names.
     """
     line = _GENERATED_AT.sub(rb"\1<generated_at>", line)
+    # A visual's own clock: when it was drawn, and a cash-flow window's end.
+    line = _VISUAL_CLOCK.sub(rb"\1<now>", line)
     if references is not None:
         line = _REFERENCE.sub(
             lambda match: references.setdefault(match.group(0), b"ca-ref:#%d" % len(references)), line
@@ -1123,7 +1131,6 @@ REFUSED_READS = {
     "ui.journals.quarantine.groups",
     "ui.transactions.verify",
     "ui.transfers.dismissals.list",
-    "ui.visuals.render",
     "ui.wallets.import_attachment.plan",
     "ui.wallets.import_document.plan",
     "ui.wallets.read_document",

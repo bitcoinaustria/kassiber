@@ -160,6 +160,15 @@ impl AiBook for HostBook<'_> {
         .map_err(tool_error)
     }
 
+    fn profile_fiat_currency(&mut self) -> Result<String, ToolError> {
+        let book = self.daemon.book_mut().map_err(tool_error)?;
+        let (_, profile_id) = book.resolve_scope(None, None).map_err(tool_error)?;
+        Ok(book
+            .document_target(&profile_id, None)
+            .map_err(tool_error)?
+            .fiat_currency)
+    }
+
     fn import_runs(
         &mut self,
         request: kassiber_ai::import_runs::ImportRuns<'_>,

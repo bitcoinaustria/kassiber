@@ -62,7 +62,7 @@ pub const LOCAL_CUSTODY_READ_KINDS: [&str; 6] = [
 
 /// Read tools refused until the service behind them is native, with the
 /// work that owns it (design doc §2).
-pub const REFUSED_READS: [(&str, &str); 8] = [
+pub const REFUSED_READS: [(&str, &str); 7] = [
     (
         "ui.connections.node.snapshot",
         "the Lightning node snapshot route",
@@ -76,7 +76,6 @@ pub const REFUSED_READS: [(&str, &str); 8] = [
         "ui.transfers.dismissals.list",
         "main-sync S6 (transfer dismissals)",
     ),
-    ("ui.visuals.render", "the chat visuals (main-sync S12)"),
     ("ui.wallets.import_attachment.plan", ATTACHMENT_IMPORT_OWNER),
     ("ui.wallets.import_document.plan", DOCUMENT_IMPORT_OWNER),
     ("ui.wallets.read_document", DOCUMENT_IMPORT_OWNER),
@@ -383,6 +382,10 @@ pub trait Book {
     fn report_blockers(&mut self, _auto_sync: Option<&Value>) -> Result<Value, ToolError> {
         Err(not_native("ui.report.blockers", "this book").into())
     }
+    /// The active profile's fiat currency (a visual's unit).
+    fn profile_fiat_currency(&mut self) -> Result<String, ToolError> {
+        Err(not_native("ui.visuals.render", "this book").into())
+    }
     /// The book's import runs (#682): their list, a run's rollback plan with
     /// the book's input version, or its rollback.
     fn import_runs(
@@ -608,10 +611,14 @@ fn read(
     let data_root = runtime.data_root.to_owned();
     // `_ai_read_wants_maintenance`: decided on the catalog entry, so a
     // model's wire-name call refreshes like the planner's dotted auto-read
-    // (fix round 7, 09912e4c0). `ui.visuals.render` refreshes only for its
-    // journal sources; it is refused above until the visuals are ported.
-    let refresh = AUTO_JOURNAL_REFRESH_TOOLS.contains(&entry.name.as_str())
-        && !runtime.is("read_maintenance", "disabled");
+    // (fix round 7, 09912e4c0). A visual refreshes only for the report
+    // sources whose read tools already do.
+    let wants = AUTO_JOURNAL_REFRESH_TOOLS.contains(&entry.name.as_str())
+        && (entry.name != "ui.visuals.render"
+            || crate::visuals::JOURNAL_SOURCES
+                .iter()
+                .any(|source| get(&call.arguments, "source") == Some(&s(*source))));
+    let refresh = wants && !runtime.is("read_maintenance", "disabled");
     let state = &mut *runtime.state;
     let mut work = |book: &mut dyn Book| -> Result<Value, ToolError> {
         assert_scope(book, &data_root, state)?;

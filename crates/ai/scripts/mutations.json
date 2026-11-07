@@ -1395,8 +1395,8 @@
   {
     "id": "S12-refresh-by-catalog-entry",
     "file": "crates/ai/src/executor.rs",
-    "find": "    let refresh = AUTO_JOURNAL_REFRESH_TOOLS.contains(&entry.name.as_str())",
-    "replace": "    let refresh = AUTO_JOURNAL_REFRESH_TOOLS.iter().any(|name| call.name.is(name))",
+    "find": "    let wants = AUTO_JOURNAL_REFRESH_TOOLS.contains(&entry.name.as_str())",
+    "replace": "    let wants = AUTO_JOURNAL_REFRESH_TOOLS.iter().any(|name| call.name.is(name))",
     "expect_failing": [
       "refresh_reads_report_journal_processing_unless_disabled"
     ],
@@ -1501,5 +1501,45 @@
       "a_rollback_runs_only_on_the_plan_the_user_saw"
     ],
     "rule": "A restricted provider never gets an import run's recorded filename."
+  },
+  {
+    "id": "S12-visual-refresh-report-sources",
+    "file": "crates/ai/src/executor.rs",
+    "find": "        && (entry.name != \"ui.visuals.render\"",
+    "replace": "        && (true",
+    "expect_failing": [
+      "visuals_refresh_journals_only_for_report_sources"
+    ],
+    "rule": "A visual refreshes journals only for the report sources whose read tools do (#676)."
+  },
+  {
+    "id": "S12-visual-rows-only-while-few",
+    "file": "crates/ai/src/visuals.rs",
+    "find": "    if rows.len() <= MODEL_ROW_LIMIT {",
+    "replace": "    if true {",
+    "expect_failing": [
+      "chat_visuals_match_python"
+    ],
+    "rule": "The model reads a visual's rows only while they are few; the digest otherwise."
+  },
+  {
+    "id": "S12-visual-zero-value-is-missing-price",
+    "file": "crates/ai/src/visuals.rs",
+    "find": "            if quantity.is_some_and(|q| q != 0.0) && market_value.is_none_or(|v| v == 0.0) {\n                market_value = None;\n                missing_prices += 1;\n            }\n            rows.push(dict([\n                (\"period\"",
+    "replace": "            if false {\n                market_value = None;\n                missing_prices += 1;\n            }\n            rows.push(dict([\n                (\"period\"",
+    "expect_failing": [
+      "chat_visuals_match_python"
+    ],
+    "rule": "A held balance valued at zero is a missing price, never plotted as zero."
+  },
+  {
+    "id": "S12-visual-names-own-wallets-only",
+    "file": "crates/ai/src/visuals.rs",
+    "find": "                if [\"owned\", \"ambiguous\"].contains(&ownership.as_str())",
+    "replace": "                if true",
+    "expect_failing": [
+      "chat_visuals_match_python"
+    ],
+    "rule": "A flow visual names only the user's own wallets; other parties stay generic."
   }
 ]

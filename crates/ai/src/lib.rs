@@ -43,6 +43,7 @@ pub mod summary;
 pub mod transport;
 pub mod undo;
 pub mod validate;
+pub mod visuals;
 
 use kassiber_envelope::AppError;
 

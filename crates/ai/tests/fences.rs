@@ -129,6 +129,9 @@ impl Book for FakeBook {
         self.reads.push("review.preview".into());
         Ok(dict([("status", s("ready"))]))
     }
+    fn profile_fiat_currency(&mut self) -> Result<String, ToolError> {
+        Ok("EUR".into())
+    }
 }
 
 impl FakeBook {
@@ -563,6 +566,32 @@ fn results_are_redacted_before_they_leave_the_executor() {
         assert!(!output.contains(private), "{private} in {output}");
     }
     assert!(output.contains("<redacted-url>") && output.contains("<redacted-path>"));
+}
+
+#[test]
+fn visuals_refresh_journals_only_for_report_sources() {
+    for (source, refreshed) in [
+        ("overview", true),
+        ("tax_summary", true),
+        ("transactions", false),
+    ] {
+        let mut fake = book();
+        fake.maintained = Some(dict([("processed_transactions", Value::from(1))]));
+        let mut state = empty();
+        let result = run(
+            &mut fake,
+            &mut state,
+            "ui_visuals_render",
+            dict([("source", s(source))]),
+            false,
+        );
+        assert_eq!(get(&result, "ok"), Some(&Value::Bool(true)), "{result:?}");
+        assert_eq!(
+            get(&result, "auto_journal_process").is_some(),
+            refreshed,
+            "{source}"
+        );
+    }
 }
 
 #[test]

@@ -1106,7 +1106,10 @@ pub fn context_record(name: &str, arguments: &Value, result: &Value) -> Value {
     dict([
         ("tool", s(name)),
         ("arguments", redact_tool_arguments(arguments)),
-        ("result", redact_ai_tool_result(result)),
+        (
+            "result",
+            crate::visuals::tool_result_for_model(&redact_ai_tool_result(result)),
+        ),
     ])
 }
 

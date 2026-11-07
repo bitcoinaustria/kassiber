@@ -673,6 +673,163 @@ def stale_journal_cases():
     return cases
 
 
+VISUALS_NOW = "2025-06-15T12:00:00+00:00"
+
+
+def visual_cases():
+    """#676's `core/chat_visuals.py`: the request normalizer, every source's
+    projection over synthetic payloads (gaps, truncation, missing prices,
+    offsets), and the model's digest, at a pinned `now`."""
+    from datetime import datetime
+
+    from kassiber.core import chat_visuals as visuals
+
+    now = datetime.fromisoformat(VISUALS_NOW)
+    normalize = [
+        None, {}, {"source": "nope"}, {"source": ["overview"]}, {"source": "overview"},
+        {"source": "overview", "measure": "quantity"}, {"source": "overview", "interval": "day"},
+        {"source": "overview", "title": "  Net\u202e worth\n\tby  month \x00 "},
+        {"source": "overview", "title": "x" * 81}, {"source": "overview", "title": 5},
+        {"source": "balance_history"}, {"source": "balance_history", "measure": None},
+        {"source": "balance_history", "interval": "week", "limit": 12, "start": " 2024-01-01 ", "end": "", "wallet": "Cold", "asset": "BTC"},
+        {"source": "balance_history", "interval": "year"}, {"source": "balance_history", "interval": None},
+        {"source": "balance_history", "limit": 0}, {"source": "balance_history", "limit": 241},
+        {"source": "balance_history", "limit": True}, {"source": "balance_history", "limit": 2.0},
+        {"source": "balance_history", "limit": 10**30}, {"source": "balance_history", "start": "s" * 201},
+        {"source": "portfolio", "group_by": "asset", "asset": "lbtc"}, {"source": "portfolio", "group_by": ["wallet"]},
+        {"source": "tax_summary", "measure": "proceeds"}, {"source": "cash_flow"},
+        {"source": "cash_flow", "period": "30days", "wallet": "Hot"}, {"source": "cash_flow", "period": "decade"},
+        {"source": "transactions", "query": "coffee", "direction": "inbound", "status": "review", "period": "all", "sort": "largest", "limit": 25},
+        {"source": "transactions", "period": "ytd", "direction": "sideways"}, {"source": "transactions", "limit": 26},
+        {"source": "transaction_flow"}, {"source": "transaction_flow", "transaction": "  abc:in  "},
+        {"source": "readiness", "limit": 1}, {"source": "readiness", "b": 1, "a": 2},
+    ]
+    series = [
+        {"date": f"2024-{(i // 28) % 12 + 1:02d}-{i % 28 + 1:02d}", "balanceBtc": i / 100, "valueEur": i * 10.5, "costBasisEur": i * 7}
+        for i in range(200)
+    ]
+    overview = [
+        {
+            "fiat": {"eurBalance": 90000.5, "eurCostBasis": 30000, "eurUnrealized": 60000.5, "eurRealizedYTD": -12.25,
+                     "completeness": {"state": "complete", "costBasisComplete": True, "reasons": []}},
+            "balanceSummary": {"totalBtc": 1.5}, "marketRate": {"rate": 60000.5, "timestamp": "2025-06-01T00:00:00Z"},
+            "status": {"transactionCount": "12"}, "portfolioSeries": series + [{"date": None}, "x"],
+            "connections": [{"label": f"W{i}", "balance": b} for i, b in enumerate([0.5, -0.1, 0.5, 2, 0, None, "0.25", 1, 3])] + ["x"],
+        },
+        {
+            "fiat": {"eurBalance": 5, "completeness": {"state": "stale", "reasons": ["journals_stale", "custody_unresolved"],
+                                                       "quarantineCount": 2.0, "missingPriceCount": 3, "marketRateMissing": True}},
+            "connections": [{"label": "Only", "balance": 0}],
+        },
+        {"fiat": {"completeness": {"costBasisComplete": False}}},
+        {},
+    ]
+    history_rows = [
+        {"period_start": "2024-11-01T00:00:00Z", "asset": "BTC", "quantity": 1, "market_value": 50000, "cumulative_cost_basis": 30000},
+        {"period_start": "2024-11-01T00:00:00Z", "asset": "LBTC", "quantity": 0.5, "market_value": 0, "cumulative_cost_basis": 100},
+        {"period_start": "2025-01-01T00:00:00+01:00", "asset": "BTC", "quantity": "2", "market_value": None, "cumulative_cost_basis": "60000"},
+        {"period_start": "2025-02-03T10:15:00", "asset": "BTC", "quantity": 0, "market_value": 0},
+        {"period_start": "garbage", "asset": "BTC", "quantity": 9},
+        {"period_start": None, "asset": "BTC"},
+        {"period_start": "2025-01-01T00:00:00Z", "asset": "BTC", "quantity": 3, "market_value": 1e400},
+    ]
+    history = [
+        ({"source": "balance_history"}, {"rows": history_rows, "filters": {}, "summary": {}}),
+        ({"source": "balance_history", "limit": 3}, {"rows": history_rows, "filters": {"end": "2025-03-01"}, "summary": {}}),
+        ({"source": "balance_history", "interval": "week", "limit": 240}, {"rows": history_rows[:4], "filters": {"start": "2024-10-15T00:00:00Z", "end": "2025-01-10T00:00:00-05:00", "wallet": "Cold", "asset": ""}, "summary": {"truncated": False}}),
+        ({"source": "balance_history", "interval": "day", "limit": 5}, {"rows": history_rows, "filters": {"end": "2024-11-03T00:00:00Z"}, "summary": {"truncated": True}}),
+        ({"source": "balance_history", "interval": "hour", "limit": 4}, {"rows": history_rows[:2], "filters": {"end": "2024-11-01T02:30:00Z"}, "summary": {"truncated": True}}),
+        ({"source": "balance_history"}, {"rows": [], "filters": {}, "summary": {}}),
+        ({"source": "balance_history"}, {}),
+    ]
+    portfolio_rows = [
+        {"wallet": "Cold", "asset": "BTC", "quantity": 1, "market_value": 60000, "cost_basis": 30000, "unrealized_pnl": 30000},
+        {"wallet": "Hot", "asset": "lbtc", "quantity": 0.5, "market_value": 0, "cost_basis": 10, "unrealized_pnl": -10},
+        {"wallet": "Hot", "asset": "BTC", "quantity": 0, "market_value": -5, "cost_basis": None},
+        {"wallet": None, "asset": None, "quantity": None},
+    ]
+    portfolio = [
+        ({"source": "portfolio"}, {"rows": portfolio_rows}),
+        ({"source": "portfolio", "asset": "LBTC", "group_by": "asset"}, {"rows": portfolio_rows}),
+        ({"source": "portfolio"}, {"rows": [{"wallet": f"W{i % 7}", "asset": "BTC", "quantity": 1, "market_value": i % 9} for i in range(65)]}),
+    ]
+    tax_rows = [
+        {"row_type": "year_total", "year": 2024, "proceeds": 10, "cost_basis": 4, "gain_loss": 6},
+        {"row_type": "year_total", "year": "2025", "proceeds": "1.5", "cost_basis": None, "gain_loss": "x"},
+        {"row_type": "year_total", "year": "next"},
+        {"row_type": "detail", "year": 2024, "asset": "BTC", "transaction_type": "sell", "capital_gains_type": "short", "quantity": 0.1, "proceeds": 10, "cost_basis": 4, "gain_loss": 6},
+        {"row_type": "detail", "year": 2025.9, "asset": None},
+    ]
+    tax = [
+        ({"source": "tax_summary"}, {"rows": tax_rows}),
+        ({"source": "tax_summary", "measure": "proceeds"}, {"rows": [{"row_type": "detail", "year": 2020 + i % 5} for i in range(205)]}),
+    ]
+    stats = lambda n, btc, eur, missing=0, largest=None: {"count": n, "btc": btc, "eur": eur, "missingPrice": missing, **({"largest": largest} if largest else {})}  # noqa: E731
+    cash = [
+        ({"source": "cash_flow", "period": "3months", "wallet": "Hot"}, {
+            "buckets": [
+                {"bucketStart": "2025-04-01", "bucketKey": "2025-W14", "stats": {"incoming": stats(2, 0.5, 100, 1), "outgoing": stats(1, -0.1, None, 2), "transfers": {"count": 3}, "swaps": {}}},
+                {"bucketStart": "2025-04-08", "bucketKey": "2025-W15", "stats": {}},
+            ],
+            "summary": {"incoming": stats(2, 0.5, 100, 1, {"label": "Big", "btc": "0.4", "eur": 80}), "outgoing": stats(1, -0.1, 0), "transfers": None, "review": 2, "pending": "1"},
+            "window": {"since": "2025-03-15", "until": "2025-06-15"},
+        }),
+        ({"source": "cash_flow", "period": "all"}, {}),
+    ]
+    txs = [
+        {"id": "a", "occurredAt": "2025-06-01T00:00:00Z", "amountSat": 1500.5, "feeSat": 2, "eur": "12.5", "type": "Deposit", "asset": "BTC", "account": "Cold", "counter": "Alice", "note": "n" * 100, "queueStatus": "review", "tags": ["x", 2, None, "y", "z"]},
+        {"id": "b", "date": "2025-05-01", "amountSat": -300, "asset": "lbtc"},
+        {"id": None, "amountSat": 0},
+        "skip",
+    ]
+    transactions = [
+        ({"source": "transactions", "sort": "largest", "limit": 3, "query": "q"}, {"txs": txs, "total": 40}),
+        ({"source": "transactions"}, {"txs": txs[:1] + [{"id": "c", "amountSat": 5, "asset": "USDT"}], "total": None}),
+        ({"source": "transactions"}, {"txs": [], "total": "0"}),
+    ]
+    node = lambda **fields: {"valueSats": 1000, "ownership": "foreign", **fields}  # noqa: E731
+    flow = [
+        ({"source": "transaction_flow", "transaction": "abc"}, {
+            "inputs": [node(ownership="owned", wallet=" Cold "), node(ownership="ambiguous", wallet=""), node(valueSats=None, valueState="hidden")],
+            "outputs": [node(wallet="Theirs"), node(overflow=True, label="+12 more", overflowCount=12), node(valueSats=True), "x"],
+            "fee": {"valueSats": 210}, "supportLevel": "full", "accounting": {"quarantine": True},
+        }, {"transaction": {"id": "abc", "amountSat": -1000, "asset": "BTC"}}, {"route": "/transactions", "transaction": "abc"}),
+        ({"source": "transaction_flow", "transaction": "abc"}, {"supportLevel": "graphless"}, {}, None),
+    ]
+    readiness_payload = {
+        "ready": False,
+        "health": {"journals": {"needs_processing": True, "last_processed_at": "2025-01-01T00:00:00Z", "quarantine_count": 0},
+                   "review_queue": {"review": 4}, "counts": {"active_transactions": 0, "transactions": 3, "quarantines": 2}},
+        "rates_coverage": {"summary": {"missing_price_transactions": 5, "cache_coverable_missing": 2}},
+        "custody_quantity": {"issue_count": 1},
+        "blockers": [{"id": "journals_stale"}, {"id": "sync_failed", "severity": "blocking", "title": "Sync failed", "detail": "Electrum down"},
+                     {"id": "other", "severity": "warning", "detail": ""}, "x"],
+    }
+    readiness_flags = visuals.readiness_from_blockers(readiness_payload)
+    build = []
+    sources = [(spec, payload, {}, None) for spec, payload in [*[(s, p) for s, p in [({"source": "overview"}, o) for o in overview]], *history, *portfolio, *tax, *cash, *transactions]]
+    sources += flow
+    sources += [({"source": "readiness"}, readiness_payload, {}, None), ({"source": "readiness"}, {}, {}, None)]
+    for raw, payload, context, reference in sources:
+        spec = visuals.normalize_visual_args(raw)
+        for readiness in ([None, readiness_flags] if spec["source"] in visuals.JOURNAL_SOURCES else [None]):
+            for currency in (["eur", ""] if spec["source"] == "overview" else ["CHF"]):
+                built = visuals.build_chat_visual(
+                    spec, payload, fiat_currency=currency, readiness=readiness,
+                    local_reference=reference, context=context, now=now,
+                )
+                build.append({
+                    "spec": spec, "payload": payload, "fiat_currency": currency, "readiness": readiness,
+                    "local_reference": reference, "context": context, "visual": built,
+                    "model_digest": visuals.model_digest(built),
+                })
+    return {
+        "normalize": [{"args": args, "outcome": outcome(visuals.normalize_visual_args, args)} for args in normalize],
+        "readiness": [{"payload": payload, "readiness": visuals.readiness_from_blockers(payload)} for payload in (readiness_payload, {}, None)],
+        "build": build,
+    }
+
+
 def review_operation_cases():
     conversion = {"conservation_mode": "conversion", "legs": []}
     values = [
@@ -997,6 +1154,8 @@ def document():
         "review_operations": review_operation_cases(),
         "export_target": export_target_cases(),
         "planned_artifact": planned_artifact_cases(),
+        "visuals_now": VISUALS_NOW,
+        "visuals": visual_cases(),
         "undo_now": UNDO_NOW,
         "undo": undo_cases(),
         "wallets_sync": wallets_sync_cases(),
