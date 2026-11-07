@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import re
 import secrets
-from typing import Any
+from typing import Any, Iterable
+from urllib import parse as urlparse
 
 
 SENSITIVE_KEY_PARTS = (
@@ -220,6 +222,38 @@ def redact_secret_text(value: str) -> str:
     text = _ASSIGNED_SECRET_RE.sub(r"\g<key>\g<sep>\g<quote>[redacted]", text)
     text = _SK_SECRET_RE.sub("[redacted-secret]", text)
     return text
+
+
+WITHHELD_CREDENTIAL = "<redacted>"
+
+
+def withhold_credentials(value: str, credentials: Iterable[str | None]) -> str:
+    """Replace each literal credential a server echoed back with ``<redacted>``.
+
+    Pattern redaction cannot recognize a bare API key or secret, so callers
+    that hold the credential they sent scrub it from untrusted response text
+    before that text reaches an error. Percent- and JSON-escaped spellings are
+    withheld too.
+    """
+
+    forms: set[str] = set()
+    for credential in credentials:
+        if not credential:
+            continue
+        credential = str(credential)
+        escaped = json.dumps(credential)[1:-1]
+        forms.update(
+            (
+                credential,
+                urlparse.quote(credential, safe=""),
+                urlparse.quote_plus(credential, safe=""),
+                escaped,
+                escaped.replace("/", "\\/"),
+            )
+        )
+    for form in sorted(forms, key=len, reverse=True):
+        value = value.replace(form, WITHHELD_CREDENTIAL)
+    return value
 
 
 def redact_secret_value(value: Any, *, depth: int = 0) -> Any:

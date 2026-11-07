@@ -1,17 +1,29 @@
+import argparse
 import base64
+import io
 import json
+import logging
 import tempfile
+import traceback
 import unittest
+from decimal import Decimal
+from email.message import Message
 from pathlib import Path
-from urllib.parse import parse_qs
+from urllib import error as urlerror
+from urllib.parse import parse_qs, quote, quote_plus
 
 from kassiber.core.exchange_imports import (
+    fetch_binance_records,
+    fetch_coinbase_records,
     fetch_kraken_records,
     normalize_binance_records,
     normalize_coinbase_records,
     normalize_kraken_records,
 )
+from kassiber.diagnostics import collect_public_diagnostics
+from kassiber.envelope import build_error_envelope
 from kassiber.errors import AppError
+from kassiber.log_ring import LogRing, RingHandler, sanitize_traceback_text
 from kassiber.importers import (
     load_binance_supplemental_csv_records,
     load_import_records,
@@ -353,6 +365,209 @@ class ExchangeImporterTest(unittest.TestCase):
         self.assertEqual(binance[0]["fiat_currency"], "PLN")
         self.assertEqual(kraken[0]["asset"], "BTC")
         self.assertEqual(kraken[0]["fiat_currency"], "PLN")
+
+
+def _kraken_trades(sell_cost):
+    """A priced Kraken buy, then a sell whose trade row has no price."""
+
+    return normalize_kraken_records(
+        {"result": {"ledger": {
+            "buy": {"type": "trade", "asset": "XXBT", "amount": "0.02", "refid": "tb", "time": "1690000000"},
+            "sell": {"type": "trade", "asset": "XXBT", "amount": "-0.01", "refid": "ts", "time": "1700000000"},
+        }}},
+        {"result": {"trades": {
+            "tb": {"pair": "XXBTZEUR", "cost": "500", "fee": "1", "price": "25000"},
+            "ts": {"pair": "XXBTZEUR", "cost": sell_cost, "fee": "1"},
+        }}},
+    )
+
+
+def _coinbase_trades():
+    return normalize_coinbase_records({"currency": "BTC", "transactions": [
+        {"id": "cb-buy", "type": "buy", "created_at": "2023-07-22T00:00:00Z",
+         "amount": {"amount": "0.02", "currency": "BTC"},
+         "native_amount": {"amount": "500", "currency": "EUR"}},
+        {"id": "cb-sell", "type": "sell", "created_at": "2023-11-14T00:00:00Z",
+         "amount": {"amount": "-0.01", "currency": "BTC"},
+         "native_amount": {"amount": "-399", "currency": "EUR"}},
+    ]})
+
+
+class ExchangeSellPriceTest(unittest.TestCase):
+    """A sell without a quoted price is never given a negative rate."""
+
+    def test_sell_rates_are_positive_and_a_zero_value_sell_has_none(self):
+        kraken_sell = _kraken_trades("400")[1]
+        self.assertEqual(kraken_sell["direction"], "outbound")
+        # Kraken's price is cost / volume, the same as a priced trade's.
+        self.assertEqual(kraken_sell["fiat_rate"], Decimal("40000"))
+        self.assertEqual(kraken_sell["fiat_value"], Decimal("399"))
+        coinbase_sell = _coinbase_trades()[1]
+        self.assertEqual(coinbase_sell["fiat_rate"], Decimal("39900"))
+        self.assertEqual(coinbase_sell["fiat_value"], Decimal("399"))
+        worthless = _kraken_trades("0")[1]
+        self.assertIsNone(worthless["fiat_rate"])
+        self.assertEqual(worthless["fiat_value"], Decimal("0"))
+
+    def test_sells_are_priced_in_journals_and_a_zero_value_sell_is_held(self):
+        from kassiber.cli import handlers
+        from kassiber.core import accounts, imports as core_imports, wallets as core_wallets
+        from kassiber.db import open_db
+
+        with tempfile.TemporaryDirectory() as data_root:
+            conn = open_db(Path(data_root))
+            try:
+                workspace = accounts.create_workspace(conn, "W")
+                profile = accounts.create_profile(conn, workspace["id"], "P", "EUR", "FIFO", "generic", 365)
+                hooks = handlers._import_coordinator_hooks()
+                for kind, records in (
+                    ("kraken", _kraken_trades("400")),
+                    ("coinbase", _coinbase_trades()),
+                ):
+                    wallet = core_wallets.create_wallet(conn, workspace["id"], profile["id"], kind, kind)
+                    profile = handlers.resolve_scope(conn, workspace["id"], profile["id"])[1]
+                    wallet = handlers.resolve_wallet(conn, profile["id"], wallet["id"])
+                    core_imports.import_records_into_wallet(
+                        conn, profile, wallet, records, f"{kind}:api:{kind}", hooks, report_updates=True,
+                    )
+                rates = {
+                    row["external_id"]: row["fiat_rate_exact"]
+                    for row in conn.execute("SELECT external_id, fiat_rate_exact FROM transactions")
+                }
+                self.assertEqual(rates["kraken:sell"], "40000")
+                self.assertEqual(rates["coinbase:cb-sell"], "39900")
+                handlers.process_journals(conn, workspace["id"], profile["id"])
+                self.assertEqual(handlers.list_quarantines(conn, workspace["id"], profile["id"]), [])
+
+                # A sell worth nothing has no price to give: it is held for
+                # one, and disposals after it in the pool wait behind it.
+                wallet = core_wallets.create_wallet(conn, workspace["id"], profile["id"], "kraken-zero", "kraken")
+                wallet = handlers.resolve_wallet(conn, profile["id"], wallet["id"])
+                zero_sell = {**_kraken_trades("0")[1], "txid": "kraken:zero-sell"}
+                core_imports.import_records_into_wallet(
+                    conn, profile, wallet, [zero_sell], "kraken:api:zero", hooks, report_updates=True,
+                )
+                handlers.process_journals(conn, workspace["id"], profile["id"])
+                held = handlers.list_quarantines(conn, workspace["id"], profile["id"])
+                self.assertEqual(
+                    [row["external_id"] for row in held if row["category"] == "missing_price"],
+                    ["kraken:zero-sell"],
+                )
+                self.assertEqual(
+                    {row["external_id"]: row["reason"] for row in held}["kraken:zero-sell"],
+                    "missing_spot_price",
+                )
+            finally:
+                conn.close()
+
+
+# A key and secret with characters percent-encoding changes, so the escaped
+# spellings are exercised too.
+API_KEY = "kRk+Key/" + "A1b2C3d4" * 6
+API_SECRET = base64.b64encode(b"synthetic exchange secret bytes:" * 2).decode()
+
+
+class _Response:
+    def __init__(self, payload):
+        self.payload = payload
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+    def read(self):
+        return json.dumps(self.payload).encode()
+
+
+class _Opener:
+    """Answers every request with one JSON payload or one HTTP error body."""
+
+    def __init__(self, *, payload=None, status=None, body=b""):
+        self.payload = payload
+        self.status = status
+        self.body = body
+
+    def open(self, request, timeout=0):  # noqa: ARG002
+        if self.status is not None:
+            raise urlerror.HTTPError(request.full_url, self.status, "error", Message(), io.BytesIO(self.body))
+        return _Response(self.payload)
+
+
+class ExchangeCredentialEchoTest(unittest.TestCase):
+    """A provider that echoes the API key or secret never gets it shown."""
+
+    def _surfaces(self, error):
+        """The envelope, the bounded log ring and the public diagnostics."""
+
+        debug = sanitize_traceback_text(
+            "".join(traceback.format_exception(type(error), error, error.__traceback__))
+        )
+        envelope = build_error_envelope(
+            error.code, str(error), details=error.details, hint=error.hint,
+            retryable=error.retryable, debug=debug,
+        )
+        ring = LogRing()
+        logger = logging.getLogger("kassiber.tests.exchange_credential_echo")
+        handler = RingHandler(ring)
+        logger.addHandler(handler)
+        try:
+            logger.error("exchange sync failed: %s", error, exc_info=error,
+                         extra={"kb_fields": {"details": json.dumps(error.details)}})
+        finally:
+            logger.removeHandler(handler)
+        with tempfile.TemporaryDirectory() as data_root:
+            diagnostics = collect_public_diagnostics(
+                None, argparse.Namespace(data_root=data_root, env_file=None, runtime_config={}),
+                error=error,
+            )
+        return {
+            "envelope": json.dumps(envelope),
+            "log ring": json.dumps(ring.snapshot()),
+            "diagnostics": json.dumps(diagnostics),
+        }
+
+    def _assert_withheld(self, error):
+        for surface, text in self._surfaces(error).items():
+            for credential in (API_KEY, API_SECRET):
+                # Any 8-character run of a credential counts as a leak, which
+                # also catches a prefix cut off at a truncation boundary.
+                for start in range(len(credential) - 7):
+                    window = credential[start:start + 8]
+                    self.assertNotIn(window, text, f"{surface} shows {window!r}")
+
+    def _backend(self):
+        return {"url": "https://exchange.invalid", "token": API_KEY, "auth_header": API_SECRET}
+
+    def test_kraken_error_list_and_string_withhold_key_and_secret(self):
+        echoed = f"EGeneral:Permission denied for {API_KEY} signed with {API_SECRET}"
+        for errors in ([echoed, f"EAPI:Invalid key {quote(API_KEY, safe='')}"], echoed):
+            with self.subTest(errors=type(errors).__name__):
+                with self.assertRaises(AppError) as raised:
+                    fetch_kraken_records(self._backend(), opener=_Opener(payload={"error": errors}))
+                self.assertEqual(raised.exception.code, "auth_error")
+                details = raised.exception.details["kraken_errors"]
+                self.assertEqual(details[0], "EGeneral:Permission denied for <redacted> signed with <redacted>")
+                self._assert_withheld(raised.exception)
+
+    def test_http_error_bodies_withhold_key_and_secret_before_truncation(self):
+        # The key straddles the 200-character cut, where truncating first
+        # would have left its prefix in the message.
+        body = (
+            "x" * 190
+            + f" {API_KEY} {API_SECRET} {quote_plus(API_KEY)} {json.dumps(API_KEY)}"
+        ).encode()
+        for fetch in (fetch_kraken_records, fetch_coinbase_records, fetch_binance_records):
+            with self.subTest(fetch=fetch.__name__):
+                with self.assertRaises(AppError) as raised:
+                    fetch(self._backend(), opener=_Opener(status=401, body=body))
+                self.assertIn("HTTP 401", str(raised.exception))
+                self._assert_withheld(raised.exception)
+                with self.assertRaises(AppError) as raised:
+                    fetch(self._backend(), opener=_Opener(status=401, body=body[190:]))
+                self.assertIn("<redacted>", str(raised.exception))
+                self._assert_withheld(raised.exception)
 
 
 class JsonImportFormatTest(unittest.TestCase):

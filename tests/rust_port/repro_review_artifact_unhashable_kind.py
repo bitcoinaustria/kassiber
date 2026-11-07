@@ -1,11 +1,14 @@
-"""Python reference repro: a list or object artifact `kind` crashes `review apply`.
+"""Check a list or object artifact `kind` is a typed `review apply` refusal.
 
-`kassiber review apply --artifact-file` unwraps a saved plan envelope with
+    uv run --locked python -m tests.rust_port.repro_review_artifact_unhashable_kind
+
+`kassiber review apply --artifact-file` unwrapped a saved plan envelope with
 `artifact.get("kind") in {"review.plan", "ui.review.plan"}`. A file whose
-`kind` is a list or object raises a bare `TypeError: unhashable type`, which
-the CLI answers as `internal_error` instead of refusing the file as
-validation. `crates/cli/src/review.rs` mirrors the crash on purpose.
-Found while fixing the review operation `type` crash; not fixed here.
+`kind` was a list or object raised a bare `TypeError: unhashable type`, which
+the CLI answered as `internal_error`. Such a file now reaches the artifact
+validator like one with a number or an unknown string as its kind, and is
+refused as `review_artifact_invalid`. Exit 0 means fixed. Scratch stays under
+target/.
 """
 from argparse import Namespace
 import json
@@ -19,22 +22,33 @@ sys.path.insert(0, str(ROOT))
 
 def main():
     from kassiber.cli import review
+    from kassiber.core import accounts
+    from kassiber.db import open_db
+    from kassiber.errors import AppError
 
-    review.resolve_scope = lambda conn, workspace, profile: (None, {"id": "profile"})
-    with tempfile.TemporaryDirectory(dir=Path.cwd()) as scratch:
-        for kind in ([], {}):
-            path = Path(scratch) / "artifact.json"
-            path.write_text(json.dumps({"kind": kind, "data": {}}))
-            args = Namespace(workspace=None, profile=None, review_command="apply",
-                             artifact_file=str(path), idempotency_key="repro")
-            try:
-                review.dispatch_review(None, args)
-            except TypeError as error:
-                print(f"kind={kind!r}: Python reference bug reproduced: TypeError: {error}")
-            except Exception as error:  # noqa: BLE001
-                raise SystemExit(f"Reference behavior changed: {type(error).__name__}: {error}")
-            else:
-                raise SystemExit("Reference behavior changed: accepted")
+    scratch = ROOT / "target/review-artifact-kind-repro"
+    scratch.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=scratch.resolve()) as temporary:
+        conn = open_db(Path(temporary) / "book")
+        try:
+            workspace = accounts.create_workspace(conn, "W")
+            profile = accounts.create_profile(conn, workspace["id"], "P", "EUR", "FIFO", "generic", 365)
+            for kind in ([], {}, 5, "other"):
+                path = Path(temporary) / "artifact.json"
+                path.write_text(json.dumps({"kind": kind, "data": {}}))
+                args = Namespace(workspace=workspace["id"], profile=profile["id"], review_command="apply",
+                                 artifact_file=str(path), idempotency_key="repro")
+                try:
+                    review.dispatch_review(conn, args)
+                except AppError as error:
+                    assert error.code == "review_artifact_invalid", (kind, error.code)
+                    print(f"kind={kind!r}: {error.code}: {error}")
+                except Exception as error:  # noqa: BLE001
+                    raise SystemExit(f"kind={kind!r} still crashes: {type(error).__name__}: {error}")
+                else:
+                    raise SystemExit(f"kind={kind!r} accepted")
+        finally:
+            conn.close()
 
 
 if __name__ == "__main__":

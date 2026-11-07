@@ -29,6 +29,7 @@ from ..errors import AppError
 from ..http_client import request_with_retry
 from ..msat import dec
 from ..proxy import build_proxy_opener
+from ..redaction import withhold_credentials
 from ..util import str_or_none
 from ..wallet_descriptors import normalize_asset_code
 from . import pricing
@@ -124,8 +125,10 @@ def _record(
     pricing_source_kind = (
         pricing.SOURCE_EXCHANGE_EXECUTION if fiat_value is not None else None
     )
-    if fiat_rate is None and fiat_value is not None and amount:
-        fiat_rate = fiat_value / amount
+    # A sell's amount is negative; the unit price is not. A value that is not
+    # positive prices nothing, so the row stays unpriced (missing_spot_price).
+    if fiat_rate is None and fiat_value is not None and fiat_value > 0 and amount:
+        fiat_rate = fiat_value / abs(amount)
     return {
         "txid": external_id,
         "occurred_at": occurred_at,
@@ -267,10 +270,12 @@ def normalize_kraken_records(
                 raw={**raw, "trade": dict(trade)},
                 fiat_currency=fiat_currency,
                 fiat_value=fiat_value,
+                # Kraken's price is cost / volume. Without it, rebuild that
+                # rather than divide a sell's net-of-fee proceeds.
                 fiat_rate=(
                     _decimal(trade.get("price"))
                     if trade.get("price") not in (None, "")
-                    else None
+                    else (cost / abs(amount) if cost and amount else None)
                 ),
                 pricing_method="kraken_api",
                 pricing_external_ref=str(row.get("refid") or ledger_id),
@@ -552,14 +557,20 @@ def _backend_opener(backend: Mapping[str, Any], opener=None):
     return opener or build_proxy_opener(backend_value(backend, "tor_proxy"))
 
 
-def _read_json(opener, request: urlrequest.Request, timeout: int, source_label: str):
+def _read_json(
+    opener,
+    request: urlrequest.Request,
+    timeout: int,
+    source_label: str,
+    withheld: tuple[str, ...],
+):
     url = request.full_url
 
     def open_once():
         with opener.open(request, timeout=timeout) as response:
             return json.loads(response.read().decode("utf-8"))
 
-    return request_with_retry(url, open_once, source_label=source_label)
+    return request_with_retry(url, open_once, source_label=source_label, withheld=withheld)
 
 
 def fetch_kraken_records(
@@ -657,17 +668,22 @@ def _kraken_private_post(opener, base, path, key, secret, timeout, *, params=Non
         },
         method="POST",
     )
-    payload = _read_json(opener, request, timeout, "Kraken")
+    payload = _read_json(opener, request, timeout, "Kraken", (key, secret))
     errors = payload.get("error") if isinstance(payload, Mapping) else None
     if errors:
+        # One error string is one item: split into characters, an echoed
+        # credential would slip past the scrub below one letter at a time.
+        items = [str(errors)] if isinstance(errors, str) else [str(item) for item in errors]
         raise AppError(
             "Kraken API returned an error",
             code=(
                 "auth_error"
-                if any("permission" in str(item).lower() for item in errors)
+                if any("permission" in item.lower() for item in items)
                 else "protocol_error"
             ),
-            details={"kraken_errors": [str(item) for item in errors]},
+            details={
+                "kraken_errors": [withhold_credentials(item, (key, secret)) for item in items]
+            },
             retryable=False,
         )
     return payload
@@ -738,7 +754,7 @@ def _coinbase_get_paginated(opener, base, path, key, secret, timeout):
                 "CB-ACCESS-TIMESTAMP": timestamp,
             },
         )
-        payload = _read_json(opener, request, timeout, "Coinbase")
+        payload = _read_json(opener, request, timeout, "Coinbase", (key, secret))
         if not isinstance(payload, Mapping):
             raise AppError("Coinbase response was not a JSON object", code="protocol_error")
         data = payload.get("data")
@@ -839,7 +855,7 @@ def _binance_signed_get(opener, base, path, key, secret, timeout, params):
         url,
         headers={"Accept": "application/json", "X-MBX-APIKEY": key},
     )
-    return _read_json(opener, request, timeout, "Binance")
+    return _read_json(opener, request, timeout, "Binance", (key, secret))
 
 
 def fetch_exchange_records(
