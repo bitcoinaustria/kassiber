@@ -1150,7 +1150,12 @@ pub fn auto_tool_context_for_model(context: &[Value]) -> String {
 /// `_insert_auto_tool_context_message(messages, content)`: before the
 /// latest user message.
 pub fn insert_auto_tool_context_message(messages: &mut Vec<Value>, content: &str) {
-    let message = dict([("role", s("user")), ("content", s(content))]);
+    insert_auto_tool_context_content(messages, s(content));
+}
+
+/// The same with text or content parts (`str | list[dict]`).
+pub fn insert_auto_tool_context_content(messages: &mut Vec<Value>, content: Value) {
+    let message = dict([("role", s("user")), ("content", content)]);
     match messages.iter().rposition(
         |message| matches!(get(message, "role"), Some(Value::Str(role)) if role.is("user")),
     ) {

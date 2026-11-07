@@ -6,6 +6,7 @@
 
 pub mod args;
 pub mod client;
+pub mod files;
 pub mod history;
 pub mod registry;
 pub mod screen;

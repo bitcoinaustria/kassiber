@@ -361,6 +361,49 @@ fn content_text(content: &Value) -> Value {
     }
 }
 
+/// `_content_images(content)`: a message's inline images as the broker
+/// carries them, media type and base64 (#693). Only data URLs: the daemon
+/// inlines every image it shows, and a remote URL would let the provider
+/// fetch something the user never attached.
+fn content_images(content: &Value) -> Vec<Value> {
+    let Value::List(parts) = content else {
+        return Vec::new();
+    };
+    let mut images = Vec::new();
+    for part in parts {
+        if !matches!(part, Value::Dict(_))
+            || !(field(part, "type").is("input_image") || field(part, "type").is("image_url"))
+        {
+            continue;
+        }
+        // Responses parts carry the URL itself; Chat parts nest it.
+        let mut url = field(part, "image_url");
+        if matches!(url, Value::Dict(_)) {
+            url = field(url, "url");
+        }
+        let Value::Str(url) = url else { continue };
+        let url = crate::pyval::lossy(url);
+        let Some(rest) = url.strip_prefix("data:") else {
+            continue;
+        };
+        let (header, data) = rest.split_once(',').unwrap_or((rest, ""));
+        let (media_type, encoding) = header.split_once(';').unwrap_or((header, ""));
+        if encoding == "base64" && media_type.starts_with("image/") && !data.is_empty() {
+            images.push(dict([("media_type", s(media_type)), ("data", s(data))]));
+        }
+    }
+    images
+}
+
+/// One broker message: its text, and a user message's inline images.
+fn broker_message(role: Value, content: Value, images: Vec<Value>) -> Value {
+    let mut message = vec![("role", role), ("content", content)];
+    if !images.is_empty() {
+        message.push(("images", Value::List(images)));
+    }
+    dict(message)
+}
+
 /// `_broker_messages_for_context(context)`.
 fn messages_for_context(context: &RequestContext) -> Vec<Value> {
     let mut messages = Vec::new();
@@ -375,8 +418,13 @@ fn messages_for_context(context: &RequestContext) -> Vec<Value> {
             s("user")
         };
         let content = content_text(field(item, "content"));
-        if truthy(&content) {
-            messages.push(dict([("role", role), ("content", content)]));
+        let images = if role.is("user") {
+            content_images(field(item, "content"))
+        } else {
+            Vec::new()
+        };
+        if truthy(&content) || !images.is_empty() {
+            messages.push(broker_message(role, content, images));
         }
     }
     messages
@@ -729,27 +777,27 @@ impl BrokerClient {
                 .unwrap_or_default()
                 .iter()
                 .filter(|message| matches!(message, Value::Dict(_)))
+                // `_broker_messages_for_chat(messages)`: text and image parts
+                // split as for a tool turn, roles kept in place.
                 .map(|message| {
                     let role = field(message, "role");
-                    let content = field(message, "content");
-                    dict([
-                        (
-                            "role",
-                            if truthy(role) {
-                                py_str_value(role)
-                            } else {
-                                s("user")
-                            },
-                        ),
-                        (
-                            "content",
-                            if truthy(content) {
-                                py_str_value(content)
-                            } else {
-                                s("")
-                            },
-                        ),
-                    ])
+                    let role = if truthy(role) {
+                        py_str_value(role)
+                    } else {
+                        s("user")
+                    };
+                    let raw = field(message, "content");
+                    let content = match raw {
+                        Value::List(_) => content_text(raw),
+                        raw if truthy(raw) => py_str_value(raw),
+                        _ => s(""),
+                    };
+                    let images = if role.is("user") {
+                        content_images(raw)
+                    } else {
+                        Vec::new()
+                    };
+                    broker_message(role, content, images)
                 })
                 .collect(),
         };
@@ -1023,5 +1071,52 @@ impl Drop for Watchdog {
         if let Some(stop) = self.stop.take() {
             let _ = stop.send(());
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_inline_image_data_reaches_the_broker() {
+        let content = Value::List(vec![
+            dict([("type", s("text")), ("text", s("look"))]),
+            dict([
+                ("type", s("image_url")),
+                (
+                    "image_url",
+                    dict([("url", s("data:image/png;base64,iVBORw0KGgo="))]),
+                ),
+            ]),
+            dict([
+                ("type", s("input_image")),
+                ("image_url", s("data:image/jpeg;base64,/9j/4AAQ")),
+            ]),
+            // Neither a remote URL, a non-image nor an empty payload.
+            dict([
+                ("type", s("image_url")),
+                ("image_url", dict([("url", s("https://example.com/a.png"))])),
+            ]),
+            dict([
+                ("type", s("image_url")),
+                (
+                    "image_url",
+                    dict([("url", s("data:text/plain;base64,aGk="))]),
+                ),
+            ]),
+            dict([
+                ("type", s("image_url")),
+                ("image_url", dict([("url", s("data:image/png;base64,"))])),
+            ]),
+        ]);
+        assert_eq!(
+            content_images(&content),
+            vec![
+                dict([("media_type", s("image/png")), ("data", s("iVBORw0KGgo="))]),
+                dict([("media_type", s("image/jpeg")), ("data", s("/9j/4AAQ"))]),
+            ]
+        );
+        assert!(content_images(&s("text only")).is_empty());
     }
 }

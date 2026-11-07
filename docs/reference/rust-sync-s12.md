@@ -42,7 +42,7 @@ inspection. "Now" is the state on this branch.
 | #686 | `agent_access.py` grants (`read`, `operator`, `accounting_decisions`) and access mode; `mcp/tools.py` registry over the broker's exact-path classification; writes through the assistant executor, audited `mcp_host` | `mcp serve` tool list and calls, `mcp enable --grant --agent-access`, `mcp call --grant --client`, `ui.agent_access.configure` | `crates/mcp`, `crates/daemon/src/agent_access.rs`, `crates/setup/src/agent_access.rs` | Differs: Rust lists the 44 read tools and refuses writes | Ported; see [MCP grants](#mcp-grants-686) |
 | #689 | `daemon_chat_uploads.py`: pasted files in chunks to an owner-only temporary file, staged like a picked file | kind `ui.chat.attachments.upload`; `internal.document_import.stage` `purpose` and the staged `kind` | none | Refused (`not_implemented`) | Ported; see [chat files](#chat-files-staging-and-uploads-689-698) |
 | #690 | hints say "Settings → Assistant" instead of "Settings → AI providers" | provider and transport errors | `crates/ai/src/transport/errors.rs`, `providers` | Differs (hint text) | see [state](#state-on-this-branch) |
-| #693, #697 | `core/chat_files.py`: several files per turn; images and PDFs shown to a full-access provider; expired files dropped | `ai.chat` `files`, chat history | `chat/args.rs`, `chat/screen.rs`, `broker` | Differs: one attachment only | Not ported |
+| #693, #697 | `core/chat_files.py`: several files per turn; images and PDFs shown to a full-access provider; expired files dropped | `ai.chat` `attachments`, its terminal `expired_attachments`, chat history | `chat/args.rs`, `chat/screen.rs`, `broker` | Differs: one attachment only | Ported; see [chat files](#chat-files-in-the-turn-693-697) |
 | #698 | `core/document_chat_import.py`, `document_import.py` read step without a database and its detected API format | tools `ui.wallets.read_document`, `ui.wallets.import_document.plan/apply` | `crates/imports` (document core) | Missing | Catalog entries; refused until ported |
 | #700, #709 | desktop only: one composer permission control; the model picker folds reasoning, speed and permission mode | `ai.chat.permission_mode` (from #684) | none | — | No Rust change |
 | #714 | provider broker (TypeScript): OpenCode 2, Codex fast mode; desktop saved model inventories | none in Python | none | — | No Rust change: the broker script is shared |
@@ -264,6 +264,43 @@ upload sequence (refusals, renaming, order, completion, analysis, lock);
 its five tests pass, as do the document CLI and ingestion harnesses.
 `tests/rust_port/repro_stage_purpose_unhashable.py` records a Python crash
 on a list or object `purpose` that Rust refuses as validation.
+
+### Chat files in the turn (#693, #697)
+
+- `ai.chat` takes `attachments`: up to eight staging grants with `label` and
+  `new` (the message that first sends a file); the single `attachment` of
+  before is no longer read. The daemon resolves them to `chat_files`
+  (`file-1` .. `file-8` in the order attached, with the file's `kind`); a
+  grant that expired or belongs to another book is left out, named in the
+  turn's note, and its token returned as the terminal's
+  `expired_attachments`.
+- `chat/files.rs`: the turn's note (a restricted provider gets the
+  extension only, never the name), and for a full-access provider the
+  images as themselves and PDFs as their `pdftotext` text or `pdftoppm`
+  page images, at most eight images and 12 MB a message. A resumed session
+  gets the note on the user's message and earlier files in a message of
+  their own. Tool turns and plain ones attach them alike; an export offers
+  the wallets pack, any file offers `ui.attachments.add_from_chat`, an image
+  or PDF the document reader.
+- Tools name a file by `file` (`files::ai_chat_file`); the analysis tool
+  reads only exports. The user row keeps the cards (name, kind, size) of
+  the files its message first sent.
+- The broker carries a user message's inline images apart from its text
+  (`images`, base64 data URLs only), on tool turns and plain ones.
+- `kassiber chat --file` repeats (up to eight, with matching
+  `--file-context`), stages with the chat purpose and marks the files new
+  on the first turn only. It reads the grant as `document_token`; Python's
+  CLI reads `token` and so never attaches a file
+  (`tests/rust_port/repro_chat_file_token_key.py`).
+- Without an image codec an image above 3.7 MB (or a larger rendered PDF
+  page) is not shown, where Python reduces it with Pillow; images within
+  the limits are sent byte for byte as Python sends them.
+
+`tests/test_rust_ai_chat.py` gains the files scenario (an export read by id,
+a PDF's text, an image, an expired grant, a plain follow-up, the stored
+cards) and a broker scenario with images over a resumed session; all 11
+tests pass. The tools harness now feeds the analysis tool `chat_files` and
+compares its by-id cases; they match.
 
 ### Tools harness after these steps
 

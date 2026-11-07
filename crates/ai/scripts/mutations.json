@@ -1401,5 +1401,65 @@
       "refresh_reads_report_journal_processing_unless_disabled"
     ],
     "rule": "A model's wire-name read refreshes stale journals like the planner's dotted one (09912e4c0)."
+  },
+  {
+    "id": "S12-files-name-only-with-full-access",
+    "file": "crates/ai/src/chat/files.rs",
+    "find": "        let described = if full_access && !filename.is_empty() {",
+    "replace": "        let described = if !filename.is_empty() {",
+    "expect_failing": [
+      "a_restricted_provider_is_told_extensions_only"
+    ],
+    "rule": "A restricted provider is told a file's extension, never its name (#693)."
+  },
+  {
+    "id": "S12-files-shown-only-with-full-access",
+    "file": "crates/ai/src/chat/files.rs",
+    "find": "    if crate::executor::full_access(state) {",
+    "replace": "    if true {",
+    "expect_failing": [
+      "only_a_full_access_provider_sees_an_image"
+    ],
+    "rule": "Only a full-access provider is shown an attached image or PDF."
+  },
+  {
+    "id": "S12-files-earlier-in-own-message",
+    "file": "crates/ai/src/chat/files.rs",
+    "find": "                let target = if resumed && !is_new(entry) {",
+    "replace": "                let target = if false && resumed && !is_new(entry) {",
+    "expect_failing": [
+      "only_a_full_access_provider_sees_an_image"
+    ],
+    "rule": "A resumed session gets earlier files in a message of their own, which it skips."
+  },
+  {
+    "id": "S12-files-tool-reads-its-kinds",
+    "file": "crates/ai/src/chat/files.rs",
+    "find": "        if !reads(found) {",
+    "replace": "        if false && !reads(found) {",
+    "expect_failing": [
+      "files_are_chosen_by_id_and_kind"
+    ],
+    "rule": "A tool reads only the kinds of file it takes, by id."
+  },
+  {
+    "id": "S12-history-keeps-file-cards",
+    "file": "crates/ai/src/chat/history.rs",
+    "find": "    let user_provenance = if exchange.user_attachments.is_empty() {",
+    "replace": "    let user_provenance = if true {",
+    "expect_failing": [
+      "persist_follows_the_stored_policy_and_the_frozen_book"
+    ],
+    "rule": "The user row keeps the cards of the files its message first sent (#697)."
+  },
+  {
+    "id": "S12-broker-images-inline-only",
+    "file": "crates/ai/src/broker/mod.rs",
+    "find": "        if encoding == \"base64\" && media_type.starts_with(\"image/\") && !data.is_empty() {",
+    "replace": "        if !data.is_empty() {",
+    "expect_failing": [
+      "only_inline_image_data_reaches_the_broker"
+    ],
+    "rule": "The broker gets only base64 image data URLs, never a remote URL or other content."
   }
 ]

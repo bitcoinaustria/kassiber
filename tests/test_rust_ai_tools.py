@@ -175,7 +175,7 @@ def _extra_arguments() -> dict[str, list[dict]]:
             {"addresses": ["bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq", "not-an-address"]},
             {"txids": ["0" * 64], "text": "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"},
         ],
-        "ui.wallets.analyze_file": [{"sample_rows": 1}, {"column_map": {"date": "Date", "amount": "Amount"}}, {"column_map": {"amount_header_asset": "BTC"}}],
+        "ui.wallets.analyze_file": [{"sample_rows": 1}, {"column_map": {"date": "Date", "amount": "Amount"}}, {"column_map": {"amount_header_asset": "BTC"}}, {"file": "file-1"}, {"file": "file-2"}],
         "ui.egress.snapshot": [{"after_id": 0, "limit": 5}, {"after_id": 3}],
         "ui.reports.lightning_profitability": [{"connection": "missing"}, {"connection": "cold", "window_days": 7}],
         "ui.connections.node.snapshot": [{"connection": "missing"}],
@@ -234,7 +234,11 @@ def tool_requests(attachment=None):
         if tool.egresses:
             states = [{**state, "consented_call_ids": ["call_x"]} for state in [REMOTE, LOCAL]]
         if tool.name == "ui.wallets.analyze_file" and attachment is not None:
-            staged = {"attachment_source_file": str(attachment), "attachment_label": "Exchange export"}
+            # The chat's files as the daemon resolves them (#693).
+            staged = {"chat_files": [{
+                "id": "file-1", "source_file": str(attachment), "filename": attachment.name,
+                "label": "Exchange export", "kind": "delimited", "new": True, "token": "t",
+            }]}
             states = [REMOTE, {**REMOTE, **staged}, {**LOCAL, **staged}]
         if tool.name == "ui.workspace.overview.snapshot":
             states = [

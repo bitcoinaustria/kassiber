@@ -18,9 +18,10 @@ use sha2::{Digest, Sha256};
 
 use super::args::Validated;
 use super::client::{ChatClient, ProviderSnapshot};
+use super::files;
 use super::history::Persist;
 use super::registry::{ActiveChat, ActiveChats};
-use super::screen::{attachment_context_for_model, screen_context_for_model};
+use super::screen::screen_context_for_model;
 use crate::broker::Locate;
 use crate::catalog::load_tools_entry;
 use crate::catalog::{get_tool_py, KindClass};
@@ -570,9 +571,12 @@ impl Worker {
             } else {
                 None
             };
+            let resumed = cursor.is_some();
             if let Some(cursor) = cursor {
                 set(&mut options, "provider_session_id", s(cursor));
             }
+            let mut messages = messages;
+            files::attach_chat_files_to_turn(&mut messages, &self.turn.state, resumed);
             let chat = Arc::clone(&self.turn.chat);
             let model = lossy(&self.turn.validated.model);
             let state = &mut self.turn.state;
@@ -664,6 +668,7 @@ impl Worker {
         } else {
             None
         };
+        let resumed = cursor.is_some();
         if let Some(cursor) = cursor {
             set(
                 &mut self.turn.validated.options,
@@ -683,10 +688,22 @@ impl Worker {
         if let Some(context @ Value::Dict(_)) = &screen_context {
             insert_auto_tool_context_message(&mut messages, &screen_context_for_model(context));
         }
-        // An attached file is the signal that the analysis tool matters.
-        if validated.attachment.is_some()
-            && get(&self.turn.state, "attachment_source_file")
-                .is_some_and(kassiber_envelope::truthy)
+        // An attached export is the signal that the analysis tool matters,
+        // more reliably than a keyword in the question.
+        let chat_kinds: Vec<String> = match get(&self.turn.state, "chat_files") {
+            Some(Value::List(files)) => files
+                .iter()
+                .map(|entry| {
+                    get(entry, "kind")
+                        .map(kassiber_envelope::py_str)
+                        .unwrap_or_default()
+                })
+                .collect(),
+            _ => Vec::new(),
+        };
+        if chat_kinds
+            .iter()
+            .any(|kind| files::CHAT_TABLE_KINDS.contains(&kind.as_str()))
         {
             let mut capabilities: Vec<String> = match screen_context
                 .as_ref()
@@ -707,11 +724,9 @@ impl Worker {
                 Value::List(capabilities.into_iter().map(s).collect()),
             );
             screen_context = Some(context);
-            insert_auto_tool_context_message(
-                &mut messages,
-                &attachment_context_for_model(&self.turn.state),
-            );
         }
+        // The files' note, and the images and PDFs the provider may see.
+        files::attach_chat_files_to_turn(&mut messages, &self.turn.state, resumed);
         let mut entries = build_responses_tools(
             Some(&validated.messages),
             screen_context
@@ -726,6 +741,30 @@ impl Worker {
         let planned = planned_auto_reads(kind, &validated.messages);
         for read in &planned {
             if let Some(entry) = crate::catalog::get_tool(read.name) {
+                if !entries
+                    .iter()
+                    .any(|offered| offered.provider_name() == entry.provider_name())
+                {
+                    entries.push(entry);
+                }
+            }
+        }
+        // The note names the evidence tool for any attached file, and an
+        // image or PDF offers the document reader (no pack offers it).
+        let mut offered_for_files: Vec<&str> = Vec::new();
+        if !chat_kinds.is_empty() {
+            offered_for_files.push("ui.attachments.add_from_chat");
+        }
+        if chat_kinds
+            .iter()
+            .any(|kind| files::CHAT_DOCUMENT_KINDS.contains(&kind.as_str()))
+        {
+            let mut names = crate::select::CHAT_DOCUMENT_TOOL_NAMES.to_vec();
+            names.sort_unstable();
+            offered_for_files.extend(names);
+        }
+        for name in offered_for_files {
+            if let Some(entry) = crate::catalog::get_tool(name) {
                 if !entries
                     .iter()
                     .any(|offered| offered.provider_name() == entry.provider_name())
@@ -1125,16 +1164,23 @@ impl Worker {
             session_id.as_ref().map(lossy).as_deref(),
             &self.turn.chat.consent.session_allows(),
         );
-        host.emit(success(
-            "ai.chat",
-            dict([
-                ("provider", s(&self.turn.provider.name)),
-                ("model", Value::Str(self.turn.validated.model.clone())),
-                ("finish_reason", finish_reason.map_or(Value::Null, s)),
-                ("provenance", provenance),
-                ("session_id", session_id.map_or(Value::Null, Value::Str)),
-            ]),
-        ));
+        let mut payload = dict([
+            ("provider", s(&self.turn.provider.name)),
+            ("model", Value::Str(self.turn.validated.model.clone())),
+            ("finish_reason", finish_reason.map_or(Value::Null, s)),
+            ("provenance", provenance),
+            ("session_id", session_id.map_or(Value::Null, Value::Str)),
+        ]);
+        // The renderer's own tokens for files this turn could no longer
+        // read, so the chat drops them.
+        if let Some(expired @ Value::List(tokens)) =
+            get(&self.turn.state, "expired_attachment_tokens")
+        {
+            if !tokens.is_empty() {
+                set(&mut payload, "expired_attachments", expired.clone());
+            }
+        }
+        host.emit(success("ai.chat", payload));
     }
 
     /// `_persist_ai_chat_exchange(...)`: only with a persistence intent;
@@ -1187,6 +1233,7 @@ impl Worker {
                 Vec::new()
             },
             seed_notices: validated.seed_notices.clone(),
+            user_attachments: files::chat_message_attachments(&self.turn.state),
         };
         host.persist(request).ok().flatten()
     }

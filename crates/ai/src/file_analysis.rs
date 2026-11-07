@@ -248,14 +248,15 @@ pub fn analyze_attached_file(
     state: &Value,
     book: &mut dyn Book,
 ) -> Result<Value, ToolError> {
-    let source_file = match get(state, "attachment_source_file") {
-        Some(file) if kassiber_envelope::truthy(file) => kassiber_envelope::py_str(file),
-        _ => {
-            return Err(AppError::new("ai_attachment_missing", "No file is attached to this chat")
-                .with_hint("Ask the user to attach the export, then analyze it. In the CLI that is `kassiber chat --file <path>`.")
-                .into())
-        }
-    };
+    // The file by the id the turn's note gave it (#693); never a path.
+    let chat_file = crate::chat::files::ai_chat_file(
+        state,
+        arguments,
+        Some(&crate::chat::files::CHAT_TABLE_KINDS),
+    )?;
+    let source_file = get(&chat_file, "source_file")
+        .map(kassiber_envelope::py_str)
+        .unwrap_or_default();
     let column_map = match get(arguments, "column_map") {
         None | Some(Value::Null) => None,
         Some(map @ Value::Dict(_)) => Some(map),
@@ -283,10 +284,8 @@ pub fn analyze_attached_file(
         }
     }
     let mut analysis = book.analyze_file(&source_file, arguments)?;
-    if let Some(label) =
-        get(state, "attachment_label").filter(|label| kassiber_envelope::truthy(label))
-    {
-        kassiber_envelope::set(&mut analysis, "user_description", label.clone());
+    if let Some(label) = crate::chat::files::label(&chat_file) {
+        kassiber_envelope::set(&mut analysis, "user_description", Value::Str(label));
     }
     if !crate::executor::full_access(state) {
         return Ok(redact_for_egress(&analysis));
