@@ -121,12 +121,12 @@
       "name": "KASSIBER_OPERATOR_CHILD"
     },
     {
-      "at": "kassiber/db.py:76",
+      "at": "kassiber/db.py:77",
       "default": null,
       "name": "XDG_DATA_HOME"
     },
     {
-      "at": "kassiber/db.py:72",
+      "at": "kassiber/db.py:73",
       "default": null,
       "name": "LOCALAPPDATA"
     },
@@ -216,12 +216,12 @@
       "name": "KASSIBER_OPERATOR_CHILD"
     },
     {
-      "at": "kassiber/secrets/sqlcipher.py:262",
+      "at": "kassiber/secrets/sqlcipher.py:264",
       "default": null,
       "name": "KASSIBER_OPERATOR_EXPECTED_DATABASE_IDENTITY"
     },
     {
-      "at": "kassiber/secrets/sqlcipher.py:260",
+      "at": "kassiber/secrets/sqlcipher.py:262",
       "default": null,
       "name": "KASSIBER_OPERATOR_CHILD"
     },
@@ -364,7 +364,7 @@
       "kassiber/secrets/cli.py:186",
       "kassiber/secrets/cli.py:266",
       "kassiber/secrets/prompt.py:61",
-      "kassiber/secrets/sqlcipher.py:260",
+      "kassiber/secrets/sqlcipher.py:262",
       "kassiber/update_check.py:552"
     ],
     "KASSIBER_OPERATOR_DIRECT": [
@@ -378,7 +378,7 @@
       "kassiber/core/runtime.py:384",
       "kassiber/operator/runner.py:61",
       "kassiber/secrets/cli.py:80",
-      "kassiber/secrets/sqlcipher.py:262"
+      "kassiber/secrets/sqlcipher.py:264"
     ],
     "KASSIBER_OPERATOR_EXPECTED_PROJECT_IDENTITY": [
       "kassiber/cli/main.py:7038",
@@ -412,7 +412,7 @@
       "kassiber/core/chain_observer/bdk.py:34"
     ],
     "LOCALAPPDATA": [
-      "kassiber/db.py:72"
+      "kassiber/db.py:73"
     ],
     "NO_COLOR": [
       "kassiber/update_check.py:509"
@@ -445,7 +445,7 @@
       "kassiber/update_check.py:508"
     ],
     "XDG_DATA_HOME": [
-      "kassiber/db.py:76"
+      "kassiber/db.py:77"
     ],
     "XDG_RUNTIME_DIR": [
       "kassiber/ai/broker_client.py:201",

@@ -398,28 +398,28 @@
       }
     },
     {
-      "at": "kassiber/core/reports.py:91",
+      "at": "kassiber/core/reports.py:92",
       "name": "AUSTRIAN_KENNZAHL_FORM_BY_CODE",
       "value": {
         "expression": "{172: 'E 1kv', 174: 'E 1kv', 176: 'E 1kv', 801: 'E 1'}"
       }
     },
     {
-      "at": "kassiber/core/reports.py:97",
+      "at": "kassiber/core/reports.py:98",
       "name": "AUSTRIAN_KENNZAHL_FORM_SECTION_BY_CODE",
       "value": {
         "expression": "{172: AUSTRIAN_E1KV_FORM_SECTION, 174: AUSTRIAN_E1KV_FORM_SECTION, 176: AUSTRIAN_E1KV_FORM_SECTION, 801: 'E 1 Spekulationsgeschaefte'}"
       }
     },
     {
-      "at": "kassiber/core/reports.py:6870",
+      "at": "kassiber/core/reports.py:6871",
       "name": "_LIST_DRAFT_CODES",
       "value": {
         "expression": "frozenset({'custody_component_incomplete', 'custody_quantity_unresolved'})"
       }
     },
     {
-      "at": "kassiber/core/reports.py:4333",
+      "at": "kassiber/core/reports.py:4334",
       "name": "codes",
       "value": {
         "expression": "[*AUSTRIAN_E1KV_SUPPORTED_KENNZAHL_ORDER, *AUSTRIAN_OUTSIDE_E1KV_KENNZAHL_ORDER]"
@@ -545,14 +545,14 @@
       }
     },
     {
-      "at": "kassiber/db.py:490",
+      "at": "kassiber/db.py:484",
       "name": "error_code",
       "value": {
         "expression": "getattr(exc, 'sqlite_errorcode', None)"
       }
     },
     {
-      "at": "kassiber/db.py:512",
+      "at": "kassiber/db.py:506",
       "name": "error_code",
       "value": {
         "expression": "details.get('sqlite_error_code')"
@@ -683,14 +683,14 @@
       }
     },
     {
-      "at": "kassiber/secrets/sqlcipher.py:175",
+      "at": "kassiber/secrets/sqlcipher.py:177",
       "name": "_LOCK_CONTENTION_CODES",
       "value": {
         "expression": "frozenset({5, 6})"
       }
     },
     {
-      "at": "kassiber/secrets/sqlcipher.py:181",
+      "at": "kassiber/secrets/sqlcipher.py:183",
       "name": "code",
       "value": {
         "expression": "getattr(exc, 'sqlite_errorcode', None)"
@@ -734,7 +734,7 @@
       "function": "add"
     },
     {
-      "at": "kassiber/core/reports.py:343",
+      "at": "kassiber/core/reports.py:344",
       "code": null,
       "function": "_safe_count"
     },
@@ -1841,133 +1841,133 @@
       "retryable": false
     },
     {
-      "at": "kassiber/backup/install.py:41",
+      "at": "kassiber/backup/install.py:42",
       "callee": "AppError",
       "code": "unsafe_restore_target",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/backup/install.py:100",
+      "at": "kassiber/backup/install.py:101",
       "callee": "AppError",
       "code": "restore_recovery_required",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/backup/install.py:274",
+      "at": "kassiber/backup/install.py:275",
       "callee": "AppError",
       "code": "restore_rollback_failed",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/backup/install.py:279",
+      "at": "kassiber/backup/install.py:280",
       "callee": "AppError",
       "code": "restore_install_failed",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/backup/pack.py:105",
+      "at": "kassiber/backup/pack.py:106",
       "callee": "AppError",
       "code": "plaintext_database",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/backup/pack.py:166",
+      "at": "kassiber/backup/pack.py:167",
       "callee": "AppError",
       "code": "secret_ref_inline_secret",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/backup/pack.py:313",
+      "at": "kassiber/backup/pack.py:314",
       "callee": "AppError",
       "code": "invalid_backup_call",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/backup/pack.py:331",
+      "at": "kassiber/backup/pack.py:332",
       "callee": "AppError",
       "code": "missing_database",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/backup/pack.py:454",
+      "at": "kassiber/backup/pack.py:456",
       "callee": "AppError",
       "code": "invalid_backup_call",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/backup/pack.py:465",
+      "at": "kassiber/backup/pack.py:467",
       "callee": "AppError",
       "code": "missing_backup",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/backup/pack.py:492",
+      "at": "kassiber/backup/pack.py:494",
       "callee": "AppError",
       "code": "invalid_backup",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/backup/pack.py:499",
+      "at": "kassiber/backup/pack.py:501",
       "callee": "AppError",
       "code": "invalid_backup",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/backup/pack.py:506",
+      "at": "kassiber/backup/pack.py:508",
       "callee": "AppError",
       "code": "invalid_backup",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/backup/pack.py:512",
+      "at": "kassiber/backup/pack.py:514",
       "callee": "AppError",
       "code": "invalid_backup",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/backup/pack.py:529",
+      "at": "kassiber/backup/pack.py:531",
       "callee": "AppError",
       "code": "invalid_backup",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/backup/pack.py:537",
+      "at": "kassiber/backup/pack.py:539",
       "callee": "AppError",
       "code": "invalid_backup",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/backup/pack.py:544",
+      "at": "kassiber/backup/pack.py:546",
       "callee": "AppError",
       "code": "invalid_backup",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/backup/pack.py:551",
+      "at": "kassiber/backup/pack.py:553",
       "callee": "AppError",
       "code": "invalid_backup",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/backup/pack.py:573",
+      "at": "kassiber/backup/pack.py:575",
       "callee": "AppError",
       "code": "restore_cleanup_failed",
       "form": "call",
@@ -4306,7 +4306,7 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/book_network_migration.py:191",
+      "at": "kassiber/core/book_network_migration.py:192",
       "callee": "_error",
       "code": "validation",
       "form": "call",
@@ -4314,7 +4314,7 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/book_network_migration.py:196",
+      "at": "kassiber/core/book_network_migration.py:197",
       "callee": "_error",
       "code": "validation",
       "form": "call",
@@ -4322,7 +4322,7 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/book_network_migration.py:198",
+      "at": "kassiber/core/book_network_migration.py:199",
       "callee": "_error",
       "code": "validation",
       "form": "call",
@@ -4330,7 +4330,7 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/book_network_migration.py:202",
+      "at": "kassiber/core/book_network_migration.py:203",
       "callee": "_error",
       "code": "validation",
       "form": "call",
@@ -4338,19 +4338,19 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/book_network_migration.py:230",
+      "at": "kassiber/core/book_network_migration.py:231",
       "code": "legacy_ledger_present",
       "form": "record",
       "retryable": null
     },
     {
-      "at": "kassiber/core/book_network_migration.py:233",
+      "at": "kassiber/core/book_network_migration.py:234",
       "code": "relation_crosses_partition",
       "form": "record",
       "retryable": null
     },
     {
-      "at": "kassiber/core/book_network_migration.py:238",
+      "at": "kassiber/core/book_network_migration.py:239",
       "callee": "_error",
       "code": "validation",
       "form": "call",
@@ -4358,25 +4358,25 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/book_network_migration.py:243",
+      "at": "kassiber/core/book_network_migration.py:244",
       "code": "incompatible_wallet_history",
       "form": "record",
       "retryable": null
     },
     {
-      "at": "kassiber/core/book_network_migration.py:245",
+      "at": "kassiber/core/book_network_migration.py:246",
       "code": "scope_declaration_required",
       "form": "record",
       "retryable": null
     },
     {
-      "at": "kassiber/core/book_network_migration.py:258",
+      "at": "kassiber/core/book_network_migration.py:259",
       "code": "unresolved_relation",
       "form": "record",
       "retryable": null
     },
     {
-      "at": "kassiber/core/book_network_migration.py:271",
+      "at": "kassiber/core/book_network_migration.py:272",
       "callee": "_error",
       "code": "stale_context",
       "form": "call",
@@ -4384,7 +4384,7 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/book_network_migration.py:273",
+      "at": "kassiber/core/book_network_migration.py:274",
       "callee": "_error",
       "code": "book_network_review_required",
       "form": "call",
@@ -4392,7 +4392,7 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/book_network_migration.py:275",
+      "at": "kassiber/core/book_network_migration.py:276",
       "callee": "_error",
       "code": "validation",
       "form": "call",
@@ -4400,7 +4400,7 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/book_network_migration.py:278",
+      "at": "kassiber/core/book_network_migration.py:279",
       "callee": "_error",
       "code": "conflict",
       "form": "call",
@@ -4408,7 +4408,7 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/book_network_migration.py:281",
+      "at": "kassiber/core/book_network_migration.py:282",
       "callee": "_error",
       "code": "validation",
       "form": "call",
@@ -4416,7 +4416,7 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/book_network_migration.py:283",
+      "at": "kassiber/core/book_network_migration.py:284",
       "callee": "_error",
       "code": "validation",
       "form": "call",
@@ -4424,7 +4424,7 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/book_network_migration.py:285",
+      "at": "kassiber/core/book_network_migration.py:286",
       "callee": "_error",
       "code": "validation",
       "form": "call",
@@ -4432,7 +4432,7 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/book_network_migration.py:287",
+      "at": "kassiber/core/book_network_migration.py:288",
       "callee": "_error",
       "code": "passphrase_required",
       "form": "call",
@@ -4440,7 +4440,7 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/book_network_migration.py:313",
+      "at": "kassiber/core/book_network_migration.py:314",
       "callee": "_error",
       "code": "book_network_review_required",
       "form": "call",
@@ -4448,7 +4448,7 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/book_network_migration.py:331",
+      "at": "kassiber/core/book_network_migration.py:332",
       "callee": "_error",
       "code": "attachment_missing",
       "form": "call",
@@ -4456,7 +4456,7 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/book_network_migration.py:336",
+      "at": "kassiber/core/book_network_migration.py:337",
       "callee": "_error",
       "code": "attachment_changed",
       "form": "call",
@@ -12324,7 +12324,7 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/reports.py:356",
+      "at": "kassiber/core/reports.py:357",
       "code": {
         "expression": "code or 'count_unavailable'"
       },
@@ -12332,290 +12332,290 @@
       "retryable": null
     },
     {
-      "at": "kassiber/core/reports.py:685",
+      "at": "kassiber/core/reports.py:686",
       "code": "local_only_no_probe",
       "form": "record",
       "retryable": null
     },
     {
-      "at": "kassiber/core/reports.py:690",
+      "at": "kassiber/core/reports.py:691",
       "code": "redacted_payload",
       "form": "record",
       "retryable": null
     },
     {
-      "at": "kassiber/core/reports.py:805",
+      "at": "kassiber/core/reports.py:806",
       "callee": "_safe_count",
       "code": "transactions_count_unavailable",
       "form": "call",
-      "policy_at": "kassiber/core/reports.py:343",
+      "policy_at": "kassiber/core/reports.py:344",
       "retryable": null
     },
     {
-      "at": "kassiber/core/reports.py:812",
+      "at": "kassiber/core/reports.py:813",
       "callee": "_safe_count",
       "code": "excluded_transactions_count_unavailable",
       "form": "call",
-      "policy_at": "kassiber/core/reports.py:343",
+      "policy_at": "kassiber/core/reports.py:344",
       "retryable": null
     },
     {
-      "at": "kassiber/core/reports.py:819",
+      "at": "kassiber/core/reports.py:820",
       "callee": "_safe_count",
       "code": "transaction_raw_json_count_unavailable",
       "form": "call",
-      "policy_at": "kassiber/core/reports.py:343",
+      "policy_at": "kassiber/core/reports.py:344",
       "retryable": null
     },
     {
-      "at": "kassiber/core/reports.py:832",
+      "at": "kassiber/core/reports.py:833",
       "callee": "_safe_count",
       "code": "privacy_boundary_count_unavailable",
       "form": "call",
-      "policy_at": "kassiber/core/reports.py:343",
+      "policy_at": "kassiber/core/reports.py:344",
       "retryable": null
     },
     {
-      "at": "kassiber/core/reports.py:875",
+      "at": "kassiber/core/reports.py:876",
       "callee": "_safe_count",
       "code": "utxo_count_unavailable",
       "form": "call",
-      "policy_at": "kassiber/core/reports.py:343",
+      "policy_at": "kassiber/core/reports.py:344",
       "retryable": null
     },
     {
-      "at": "kassiber/core/reports.py:882",
+      "at": "kassiber/core/reports.py:883",
       "callee": "_safe_count",
       "code": "active_utxo_count_unavailable",
       "form": "call",
-      "policy_at": "kassiber/core/reports.py:343",
+      "policy_at": "kassiber/core/reports.py:344",
       "retryable": null
     },
     {
-      "at": "kassiber/core/reports.py:889",
+      "at": "kassiber/core/reports.py:890",
       "callee": "_safe_count",
       "code": "utxo_address_count_unavailable",
       "form": "call",
-      "policy_at": "kassiber/core/reports.py:343",
+      "policy_at": "kassiber/core/reports.py:344",
       "retryable": null
     },
     {
-      "at": "kassiber/core/reports.py:902",
+      "at": "kassiber/core/reports.py:903",
       "callee": "_safe_count",
       "code": "utxo_script_count_unavailable",
       "form": "call",
-      "policy_at": "kassiber/core/reports.py:343",
+      "policy_at": "kassiber/core/reports.py:344",
       "retryable": null
     },
     {
-      "at": "kassiber/core/reports.py:915",
+      "at": "kassiber/core/reports.py:916",
       "callee": "_safe_count",
       "code": "utxo_derivation_count_unavailable",
       "form": "call",
-      "policy_at": "kassiber/core/reports.py:343",
+      "policy_at": "kassiber/core/reports.py:344",
       "retryable": null
     },
     {
-      "at": "kassiber/core/reports.py:946",
+      "at": "kassiber/core/reports.py:947",
       "callee": "_safe_count",
       "code": "journal_entry_count_unavailable",
       "form": "call",
-      "policy_at": "kassiber/core/reports.py:343",
+      "policy_at": "kassiber/core/reports.py:344",
       "retryable": null
     },
     {
-      "at": "kassiber/core/reports.py:953",
+      "at": "kassiber/core/reports.py:954",
       "callee": "_safe_count",
       "code": "quarantine_count_unavailable",
       "form": "call",
-      "policy_at": "kassiber/core/reports.py:343",
+      "policy_at": "kassiber/core/reports.py:344",
       "retryable": null
     },
     {
-      "at": "kassiber/core/reports.py:960",
+      "at": "kassiber/core/reports.py:961",
       "callee": "_safe_count",
       "code": "privacy_quarantine_count_unavailable",
       "form": "call",
-      "policy_at": "kassiber/core/reports.py:343",
+      "policy_at": "kassiber/core/reports.py:344",
       "retryable": null
     },
     {
-      "at": "kassiber/core/reports.py:1115",
+      "at": "kassiber/core/reports.py:1116",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/reports.py:1654",
+      "at": "kassiber/core/reports.py:1655",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/reports.py:1668",
+      "at": "kassiber/core/reports.py:1669",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/reports.py:1685",
+      "at": "kassiber/core/reports.py:1686",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/reports.py:1697",
+      "at": "kassiber/core/reports.py:1698",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/reports.py:1977",
+      "at": "kassiber/core/reports.py:1978",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/reports.py:1997",
+      "at": "kassiber/core/reports.py:1998",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/reports.py:2688",
+      "at": "kassiber/core/reports.py:2689",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/reports.py:2886",
+      "at": "kassiber/core/reports.py:2887",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/reports.py:4053",
+      "at": "kassiber/core/reports.py:4054",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/reports.py:4061",
+      "at": "kassiber/core/reports.py:4062",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/reports.py:4071",
+      "at": "kassiber/core/reports.py:4072",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/reports.py:4075",
+      "at": "kassiber/core/reports.py:4076",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/reports.py:4077",
+      "at": "kassiber/core/reports.py:4078",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/reports.py:4136",
+      "at": "kassiber/core/reports.py:4137",
       "callee": "AppError",
       "code": "internal",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/reports.py:4543",
+      "at": "kassiber/core/reports.py:4544",
       "code": "AT-E1KV-FOREIGN-SELF-CUSTODY",
       "form": "record",
       "retryable": null
     },
     {
-      "at": "kassiber/core/reports.py:4548",
+      "at": "kassiber/core/reports.py:4549",
       "code": "AT-E1KV-DETAIL-LIMITATION",
       "form": "record",
       "retryable": null
     },
     {
-      "at": "kassiber/core/reports.py:4553",
+      "at": "kassiber/core/reports.py:4554",
       "code": "AT-E1KV-KENNZAHL-REPROCESS",
       "form": "record",
       "retryable": null
     },
     {
-      "at": "kassiber/core/reports.py:4558",
+      "at": "kassiber/core/reports.py:4559",
       "code": "AT-COST-BASIS-POOL-SCOPE",
       "form": "record",
       "retryable": null
     },
     {
-      "at": "kassiber/core/reports.py:4569",
+      "at": "kassiber/core/reports.py:4570",
       "code": "AT-002",
       "form": "record",
       "retryable": null
     },
     {
-      "at": "kassiber/core/reports.py:4577",
+      "at": "kassiber/core/reports.py:4578",
       "code": "AT-001",
       "form": "record",
       "retryable": null
     },
     {
-      "at": "kassiber/core/reports.py:4584",
+      "at": "kassiber/core/reports.py:4585",
       "code": "AT-REVIEW-GATE",
       "form": "record",
       "retryable": null
     },
     {
-      "at": "kassiber/core/reports.py:4656",
+      "at": "kassiber/core/reports.py:4657",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/reports.py:4671",
+      "at": "kassiber/core/reports.py:4672",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/reports.py:5570",
+      "at": "kassiber/core/reports.py:5571",
       "callee": "AppError",
       "code": "export_write_failed",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/reports.py:6850",
+      "at": "kassiber/core/reports.py:6851",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/reports.py:7406",
+      "at": "kassiber/core/reports.py:7407",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
@@ -21165,112 +21165,112 @@
       "retryable": false
     },
     {
-      "at": "kassiber/db.py:156",
+      "at": "kassiber/db.py:150",
       "callee": "AppError",
       "code": "state_root_migration_failed",
       "form": "call",
       "retryable": true
     },
     {
-      "at": "kassiber/db.py:163",
+      "at": "kassiber/db.py:157",
       "callee": "AppError",
       "code": "state_root_migration_failed",
       "form": "call",
       "retryable": true
     },
     {
-      "at": "kassiber/db.py:194",
+      "at": "kassiber/db.py:188",
       "callee": "AppError",
       "code": "state_root_migration_failed",
       "form": "call",
       "retryable": true
     },
     {
-      "at": "kassiber/db.py:201",
+      "at": "kassiber/db.py:195",
       "callee": "AppError",
       "code": "state_root_migration_failed",
       "form": "call",
       "retryable": true
     },
     {
-      "at": "kassiber/db.py:240",
+      "at": "kassiber/db.py:234",
       "callee": "AppError",
       "code": "state_root_migration_failed",
       "form": "call",
       "retryable": true
     },
     {
-      "at": "kassiber/db.py:262",
+      "at": "kassiber/db.py:256",
       "callee": "AppError",
       "code": "state_root_migration_in_use",
       "form": "call",
       "retryable": true
     },
     {
-      "at": "kassiber/db.py:274",
+      "at": "kassiber/db.py:268",
       "callee": "AppError",
       "code": "state_root_migration_failed",
       "form": "call",
       "retryable": true
     },
     {
-      "at": "kassiber/db.py:296",
+      "at": "kassiber/db.py:290",
       "callee": "AppError",
       "code": "state_root_migration_failed",
       "form": "call",
       "retryable": true
     },
     {
-      "at": "kassiber/db.py:312",
+      "at": "kassiber/db.py:306",
       "callee": "AppError",
       "code": "state_root_migration_in_use",
       "form": "call",
       "retryable": true
     },
     {
-      "at": "kassiber/db.py:323",
+      "at": "kassiber/db.py:317",
       "callee": "AppError",
       "code": "state_root_migration_failed",
       "form": "call",
       "retryable": true
     },
     {
-      "at": "kassiber/db.py:366",
+      "at": "kassiber/db.py:360",
       "callee": "AppError",
       "code": "state_root_migration_failed",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/db.py:375",
+      "at": "kassiber/db.py:369",
       "callee": "AppError",
       "code": "state_root_conflict",
       "form": "call",
       "retryable": true
     },
     {
-      "at": "kassiber/db.py:473",
+      "at": "kassiber/db.py:467",
       "callee": "AppError",
       "code": "state_root_migration_failed",
       "form": "call",
       "retryable": true
     },
     {
-      "at": "kassiber/db.py:3408",
+      "at": "kassiber/db.py:3403",
       "callee": "AppError",
       "code": "unsafe_project_database",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/db.py:3414",
+      "at": "kassiber/db.py:3409",
       "callee": "AppError",
       "code": "unsafe_project_database",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/db.py:3499",
+      "at": "kassiber/db.py:3494",
       "callee": "AppError",
       "code": "database_journal_mode_unavailable",
       "form": "call",
@@ -21279,98 +21279,98 @@
       }
     },
     {
-      "at": "kassiber/db.py:3512",
+      "at": "kassiber/db.py:3507",
       "callee": "AppError",
       "code": "database_journal_mode_unavailable",
       "form": "call",
       "retryable": true
     },
     {
-      "at": "kassiber/db.py:3593",
+      "at": "kassiber/db.py:3589",
       "callee": "AppError",
       "code": "invalid_project_database",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/db.py:3603",
+      "at": "kassiber/db.py:3599",
       "callee": "AppError",
       "code": "passphrase_required",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/db.py:3613",
+      "at": "kassiber/db.py:3609",
       "callee": "AppError",
       "code": "invalid_project_database",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/db.py:3638",
+      "at": "kassiber/db.py:3634",
       "callee": "AppError",
       "code": "plaintext_database",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/db.py:3653",
+      "at": "kassiber/db.py:3649",
       "callee": "AppError",
       "code": "invalid_project_database",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/db.py:3716",
+      "at": "kassiber/db.py:3712",
       "callee": "AppError",
       "code": "invalid_project_database",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/db.py:3730",
+      "at": "kassiber/db.py:3726",
       "callee": "AppError",
       "code": "operator_project_replaced",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/db.py:3736",
+      "at": "kassiber/db.py:3732",
       "callee": "AppError",
       "code": "operator_project_replaced",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/db.py:3768",
+      "at": "kassiber/db.py:3764",
       "callee": "AppError",
       "code": "scope_pinned",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/db.py:4257",
+      "at": "kassiber/db.py:4253",
       "callee": "AppError",
       "code": "custody_schema_migration_failed",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/db.py:4279",
+      "at": "kassiber/db.py:4275",
       "callee": "AppError",
       "code": "custody_schema_migration_failed",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/db.py:4381",
+      "at": "kassiber/db.py:4377",
       "callee": "AppError",
       "code": "custody_schema_migration_failed",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/db.py:4604",
+      "at": "kassiber/db.py:4600",
       "callee": "AppError",
       "code": "custody_review_relation_migration_conflict",
       "form": "call",
@@ -23759,56 +23759,56 @@
       "retryable": false
     },
     {
-      "at": "kassiber/projects.py:228",
+      "at": "kassiber/projects.py:229",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/projects.py:234",
+      "at": "kassiber/projects.py:235",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/projects.py:384",
+      "at": "kassiber/projects.py:388",
       "callee": "AppError",
       "code": "project_not_found",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/projects.py:402",
+      "at": "kassiber/projects.py:406",
       "callee": "AppError",
       "code": "project_not_found",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/projects.py:486",
+      "at": "kassiber/projects.py:490",
       "callee": "AppError",
       "code": "project_exists",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/projects.py:498",
+      "at": "kassiber/projects.py:502",
       "callee": "AppError",
       "code": "database_exists",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/projects.py:740",
+      "at": "kassiber/projects.py:744",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/projects.py:759",
+      "at": "kassiber/projects.py:763",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
@@ -23962,14 +23962,14 @@
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:76",
+      "at": "kassiber/release_verification.py:77",
       "callee": "AppError",
       "code": "invalid_release_fingerprint",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:125",
+      "at": "kassiber/release_verification.py:126",
       "callee": "AppError",
       "code": {
         "expression": "code"
@@ -23978,7 +23978,7 @@
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:135",
+      "at": "kassiber/release_verification.py:136",
       "callee": "AppError",
       "code": {
         "expression": "code"
@@ -23987,359 +23987,359 @@
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:145",
+      "at": "kassiber/release_verification.py:146",
       "callee": "_single_key_line",
       "code": "invalid_release_public_key",
       "form": "call",
-      "policy_at": "kassiber/release_verification.py:121",
+      "policy_at": "kassiber/release_verification.py:122",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:149",
+      "at": "kassiber/release_verification.py:150",
       "callee": "AppError",
       "code": "invalid_release_public_key",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:156",
+      "at": "kassiber/release_verification.py:157",
       "callee": "AppError",
       "code": "invalid_release_public_key",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:184",
+      "at": "kassiber/release_verification.py:185",
       "callee": "_single_key_line",
       "code": "invalid_release_signing_policy",
       "form": "call",
-      "policy_at": "kassiber/release_verification.py:121",
+      "policy_at": "kassiber/release_verification.py:122",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:192",
+      "at": "kassiber/release_verification.py:193",
       "callee": "AppError",
       "code": "invalid_release_signing_policy",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:199",
+      "at": "kassiber/release_verification.py:200",
       "callee": "AppError",
       "code": "invalid_release_signing_policy",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:208",
+      "at": "kassiber/release_verification.py:209",
       "callee": "AppError",
       "code": "invalid_release_signing_policy",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:216",
+      "at": "kassiber/release_verification.py:217",
       "callee": "AppError",
       "code": "invalid_release_signing_policy",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:244",
+      "at": "kassiber/release_verification.py:245",
       "callee": "AppError",
       "code": "invalid_release_signing_policy",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:249",
+      "at": "kassiber/release_verification.py:250",
       "callee": "AppError",
       "code": "invalid_release_signing_policy",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:267",
+      "at": "kassiber/release_verification.py:268",
       "callee": "AppError",
       "code": "invalid_release_signing_policy",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:272",
+      "at": "kassiber/release_verification.py:273",
       "callee": "AppError",
       "code": "invalid_release_signing_policy",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:295",
+      "at": "kassiber/release_verification.py:296",
       "callee": "AppError",
       "code": "invalid_release_signing_policy",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:300",
+      "at": "kassiber/release_verification.py:301",
       "callee": "AppError",
       "code": "release_signing_not_enabled",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:316",
+      "at": "kassiber/release_verification.py:317",
       "callee": "AppError",
       "code": "invalid_release_signing_policy",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:331",
+      "at": "kassiber/release_verification.py:332",
       "callee": "AppError",
       "code": "invalid_release_signing_policy",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:347",
+      "at": "kassiber/release_verification.py:348",
       "callee": "AppError",
       "code": "release_verification_file_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:356",
+      "at": "kassiber/release_verification.py:357",
       "callee": "AppError",
       "code": "release_verification_file_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:363",
+      "at": "kassiber/release_verification.py:364",
       "callee": "AppError",
       "code": "release_verification_file_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:375",
+      "at": "kassiber/release_verification.py:376",
       "callee": "AppError",
       "code": "release_verification_file_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:384",
+      "at": "kassiber/release_verification.py:385",
       "callee": "AppError",
       "code": "release_verification_file_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:390",
+      "at": "kassiber/release_verification.py:391",
       "callee": "AppError",
       "code": "release_verification_file_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:407",
+      "at": "kassiber/release_verification.py:408",
       "callee": "AppError",
       "code": "invalid_release_version",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:422",
+      "at": "kassiber/release_verification.py:423",
       "callee": "AppError",
       "code": "invalid_release_manifest",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:438",
+      "at": "kassiber/release_verification.py:439",
       "callee": "AppError",
       "code": "invalid_release_manifest",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:446",
+      "at": "kassiber/release_verification.py:447",
       "callee": "AppError",
       "code": "invalid_release_manifest",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:453",
+      "at": "kassiber/release_verification.py:454",
       "callee": "AppError",
       "code": "release_manifest_version_mismatch",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:468",
+      "at": "kassiber/release_verification.py:469",
       "callee": "AppError",
       "code": "invalid_release_manifest",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:475",
+      "at": "kassiber/release_verification.py:476",
       "callee": "AppError",
       "code": "invalid_release_manifest",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:482",
+      "at": "kassiber/release_verification.py:483",
       "callee": "AppError",
       "code": "invalid_release_manifest",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:515",
+      "at": "kassiber/release_verification.py:516",
       "callee": "AppError",
       "code": "release_verification_file_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:541",
+      "at": "kassiber/release_verification.py:542",
       "callee": "AppError",
       "code": "artifact_not_in_release_manifest",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:548",
+      "at": "kassiber/release_verification.py:549",
       "callee": "AppError",
       "code": "release_artifact_hash_mismatch",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:565",
+      "at": "kassiber/release_verification.py:566",
       "callee": "AppError",
       "code": "release_verification_file_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:575",
+      "at": "kassiber/release_verification.py:576",
       "callee": "AppError",
       "code": "release_verification_file_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:583",
+      "at": "kassiber/release_verification.py:584",
       "callee": "AppError",
       "code": "release_artifact_set_mismatch",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:594",
+      "at": "kassiber/release_verification.py:595",
       "callee": "AppError",
       "code": "release_artifact_set_mismatch",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:641",
+      "at": "kassiber/release_verification.py:642",
       "callee": "AppError",
       "code": "release_artifact_set_mismatch",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:666",
+      "at": "kassiber/release_verification.py:667",
       "callee": "AppError",
       "code": "ssh_keygen_unavailable",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:688",
+      "at": "kassiber/release_verification.py:689",
       "callee": "AppError",
       "code": "ssh_keygen_unsupported",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:715",
+      "at": "kassiber/release_verification.py:716",
       "callee": "AppError",
       "code": "release_fingerprint_mismatch",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:722",
+      "at": "kassiber/release_verification.py:723",
       "callee": "AppError",
       "code": "release_signature_verification_failed",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:763",
+      "at": "kassiber/release_verification.py:764",
       "callee": "AppError",
       "code": "release_signature_verification_failed",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:781",
+      "at": "kassiber/release_verification.py:782",
       "callee": "AppError",
       "code": "release_signature_verification_failed",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:918",
+      "at": "kassiber/release_verification.py:919",
       "callee": "AppError",
       "code": "release_artifact_set_mismatch",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:923",
+      "at": "kassiber/release_verification.py:924",
       "callee": "AppError",
       "code": "release_artifact_set_mismatch",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:967",
+      "at": "kassiber/release_verification.py:968",
       "callee": "AppError",
       "code": "release_verification_file_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:978",
+      "at": "kassiber/release_verification.py:979",
       "callee": "AppError",
       "code": "invalid_release_artifact_name",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:983",
+      "at": "kassiber/release_verification.py:984",
       "callee": "AppError",
       "code": "release_verification_file_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:989",
+      "at": "kassiber/release_verification.py:990",
       "callee": "AppError",
       "code": "empty_release_artifact_set",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/release_verification.py:1012",
+      "at": "kassiber/release_verification.py:1013",
       "callee": "AppError",
       "code": "release_verification_file_error",
       "form": "call",
@@ -24514,91 +24514,91 @@
       "retryable": false
     },
     {
-      "at": "kassiber/secrets/migration.py:151",
+      "at": "kassiber/secrets/migration.py:152",
       "callee": "AppError",
       "code": "missing_database",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/secrets/migration.py:157",
+      "at": "kassiber/secrets/migration.py:158",
       "callee": "AppError",
       "code": "not_plaintext_database",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/secrets/migration.py:168",
+      "at": "kassiber/secrets/migration.py:169",
       "callee": "AppError",
       "code": "resume_required",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/secrets/migration.py:176",
+      "at": "kassiber/secrets/migration.py:177",
       "callee": "AppError",
       "code": "backup_exists",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/secrets/migration.py:199",
+      "at": "kassiber/secrets/migration.py:201",
       "callee": "AppError",
       "code": "database_busy",
       "form": "call",
       "retryable": true
     },
     {
-      "at": "kassiber/secrets/migration.py:210",
+      "at": "kassiber/secrets/migration.py:212",
       "callee": "AppError",
       "code": "database_busy",
       "form": "call",
       "retryable": true
     },
     {
-      "at": "kassiber/secrets/migration.py:219",
+      "at": "kassiber/secrets/migration.py:221",
       "callee": "AppError",
       "code": "database_busy",
       "form": "call",
       "retryable": true
     },
     {
-      "at": "kassiber/secrets/migration.py:247",
+      "at": "kassiber/secrets/migration.py:249",
       "callee": "AppError",
       "code": "database_busy",
       "form": "call",
       "retryable": true
     },
     {
-      "at": "kassiber/secrets/migration.py:266",
+      "at": "kassiber/secrets/migration.py:268",
       "callee": "AppError",
       "code": "migration_verification_failed",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/secrets/migration.py:275",
+      "at": "kassiber/secrets/migration.py:277",
       "callee": "AppError",
       "code": "migration_verification_failed",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/secrets/migration.py:286",
+      "at": "kassiber/secrets/migration.py:288",
       "callee": "AppError",
       "code": "migration_verification_failed",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/secrets/migration.py:302",
+      "at": "kassiber/secrets/migration.py:304",
       "callee": "AppError",
       "code": "migration_leaks_plaintext",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/secrets/migration.py:340",
+      "at": "kassiber/secrets/migration.py:346",
       "callee": "AppError",
       "code": "database_exists",
       "form": "call",
@@ -24640,70 +24640,70 @@
       "retryable": false
     },
     {
-      "at": "kassiber/secrets/sqlcipher.py:49",
+      "at": "kassiber/secrets/sqlcipher.py:50",
       "callee": "AppError",
       "code": "sqlcipher_unavailable",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/secrets/sqlcipher.py:68",
+      "at": "kassiber/secrets/sqlcipher.py:69",
       "callee": "AppError",
       "code": "invalid_passphrase",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/secrets/sqlcipher.py:74",
+      "at": "kassiber/secrets/sqlcipher.py:75",
       "callee": "AppError",
       "code": "invalid_passphrase",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/secrets/sqlcipher.py:81",
+      "at": "kassiber/secrets/sqlcipher.py:82",
       "callee": "AppError",
       "code": "invalid_passphrase",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/secrets/sqlcipher.py:87",
+      "at": "kassiber/secrets/sqlcipher.py:88",
       "callee": "AppError",
       "code": "invalid_passphrase",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/secrets/sqlcipher.py:160",
+      "at": "kassiber/secrets/sqlcipher.py:162",
       "callee": "AppError",
       "code": "database_busy",
       "form": "call",
       "retryable": true
     },
     {
-      "at": "kassiber/secrets/sqlcipher.py:166",
+      "at": "kassiber/secrets/sqlcipher.py:168",
       "callee": "AppError",
       "code": "unlock_failed",
       "form": "call",
       "retryable": true
     },
     {
-      "at": "kassiber/secrets/sqlcipher.py:264",
+      "at": "kassiber/secrets/sqlcipher.py:266",
       "callee": "AppError",
       "code": "operator_project_binding_invalid",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/secrets/sqlcipher.py:274",
+      "at": "kassiber/secrets/sqlcipher.py:276",
       "callee": "AppError",
       "code": "operator_project_replaced",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/secrets/sqlcipher.py:281",
+      "at": "kassiber/secrets/sqlcipher.py:283",
       "callee": "AppError",
       "code": "operator_project_replaced",
       "form": "call",
