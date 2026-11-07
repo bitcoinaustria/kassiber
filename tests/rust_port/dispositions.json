@@ -1567,6 +1567,9 @@
       "test_nested_journal_cache_restores_each_scope_after_an_exception": {"disposition": "rust-test", "flags": ["sql"], "group": "journals", "reason": "calls kassiber.core.journal_storage, kassiber.db directly", "reviewed": false, "tests": 1},
       "test_review_cache_preserves_caller_transaction_and_commit_false": {"disposition": "rust-test", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "journals", "reason": "calls kassiber.core.review_workflow, kassiber.cli.handlers directly", "reviewed": false, "tests": 1}
     },
+    "tests/test_keyring_isolation_guard.py": {
+      "KeyringIsolationGuardTest": {"disposition": "oracle", "flags": [], "group": "secrets-backup", "reason": "keeps the cross-runtime secrets parity modules that hide the keyring behind an unreachable bus off macOS and Windows, where they would use the real credential store", "reviewed": true, "tests": 3}
+    },
     "tests/test_ledger_preview_security.py": {
       "LedgerPreviewSecurityTests": {"disposition": "subprocess-scenario", "flags": [], "group": "imports", "reason": "drives the daemon entry in process", "reviewed": false, "tests": 3}
     },

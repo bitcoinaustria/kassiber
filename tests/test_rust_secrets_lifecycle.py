@@ -1,7 +1,10 @@
 """CLI/daemon secrets parity on disposable books; native stores are gated.
 
 The ordinary cases give both processes an unreachable private bus address.
-They never consult the account's actual credential store.
+They never consult the account's actual credential store. That address only
+isolates Linux's Secret Service: on macOS and Windows both runtimes would
+write and delete real login-keychain or Credential Manager items, so the
+module runs on Linux only (`tests/test_keyring_isolation_guard.py`).
 """
 from __future__ import annotations
 
@@ -22,7 +25,10 @@ from tests.test_rust_secrets_services import KEY, RUST_BIN, ROOT, cli as base_cl
 from tests.test_rust_store_migrations import normalized_dump
 from tests.test_rust_shell_parity import _environment
 
-pytestmark = pytest.mark.skipif(not RUST_BIN, reason="set KASSIBER_RUST_BIN to a test-harness build")
+pytestmark = [
+    pytest.mark.skipif(sys.platform != "linux", reason="an unreachable D-Bus address isolates only Linux's keyring; elsewhere this would use the account's real credential store"),
+    pytest.mark.skipif(not RUST_BIN, reason="set KASSIBER_RUST_BIN to a test-harness build"),
+]
 NEW = "Synthetic replacement 🔐"
 TOKEN = "ab" * 16
 TIME = "2026-01-02T03:04:05Z"
