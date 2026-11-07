@@ -1676,7 +1676,9 @@ The importer fetches Kraken private `TradesHistory` and `Ledgers`, imports
 BTC/LBTC deposits and withdrawals as wallet movement, and imports fiat-quoted
 BTC/LBTC trades as exact `exchange_execution` pricing (`pricing_method =
 "kraken_api"`). BTC trades without matching trade history or without a fiat
-quote fail safe.
+quote fail safe. A trade row without `price` takes its cost / volume, which is
+what Kraken's price is; one without a cost stays unpriced, and `journals
+process` holds it as `missing_spot_price`.
 
 ### Coinbase API
 
@@ -1693,7 +1695,8 @@ python3 -m kassiber wallets sync-coinbase \
 ```
 
 BTC account `buy`, `sell`, `trade`, and `advanced_trade_fill` rows import as
-exact execution evidence when Coinbase supplies a usable fiat native amount.
+exact execution evidence when Coinbase supplies a usable fiat native amount;
+the unit rate is that amount over the BTC amount, positive for buys and sells.
 BTC sends/exchange transfers import as wallet movement without exact execution
 pricing. Unsupported BTC row types raise validation errors rather than guessing.
 
