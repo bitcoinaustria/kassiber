@@ -5,7 +5,9 @@ mod matcher;
 mod provider;
 mod service;
 
-pub use matcher::{finalize, suggest, Candidate, MatchOptions, Population};
+pub use matcher::{
+    dismissal_is_active, exclusion_counts, finalize, suggest, Candidate, MatchOptions, Population,
+};
 pub use service::{
     apply_rules, auto_pair_before_journals, auto_pair_before_journals_captured, bulk_pair,
     suggestions, AutomaticPairingError, PairingOptions, ProjectionGuards,

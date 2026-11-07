@@ -1262,6 +1262,9 @@ fn apply_foreign_asset(node: &mut Value, asset: Option<String>, axis: &str) -> b
         return false;
     }
     set(node, "asset", short_asset(asset.as_deref()));
+    // `asset` may be a shortened label for a 64-hex Liquid asset id; the full
+    // id travels separately so nothing passes the label on as an id.
+    set(node, "assetId", asset.map_or(Value::Null, s));
     set(node, "valueSats", Value::Null);
     set(node, "valueBtc", Value::Null);
     set(node, "valueState", s("other_asset"));
@@ -3004,5 +3007,26 @@ mod tests {
         assert_eq!(from_hex("a ab"), None);
         assert!(exact_change("m/1 Change"));
         assert!(!exact_change("receive"));
+    }
+
+    #[test]
+    fn foreign_asset_nodes_carry_the_full_asset_id_beside_the_label() {
+        let full = "ce".repeat(32);
+        let mut node = dict([
+            ("asset", s("BTC")),
+            ("valueSats", Value::Int(5.into())),
+            ("valueBtc", Value::Null),
+            ("valueState", s("known")),
+        ]);
+        assert!(apply_foreign_asset(&mut node, Some(full.clone()), "BTC"));
+        let Value::Dict(pairs) = &node else { panic!() };
+        let keys: Vec<_> = pairs.iter().map(|(k, _)| format!("{k:?}")).collect();
+        assert_eq!(keys.len(), 5);
+        assert!(keys[4].contains("assetId"), "{keys:?}");
+        assert_eq!(get(&node, "assetId"), Some(&s(full.as_str())));
+        assert_ne!(get(&node, "asset"), Some(&s(full.as_str())));
+        let mut same = dict([("asset", s("BTC"))]);
+        assert!(!apply_foreign_asset(&mut same, Some("BTC".into()), "BTC"));
+        assert_eq!(get(&same, "assetId"), None);
     }
 }

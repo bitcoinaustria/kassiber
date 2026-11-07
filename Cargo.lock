@@ -2800,6 +2800,7 @@ dependencies = [
  "kassiber-rates",
  "kassiber-setup",
  "kassiber-store",
+ "kassiber-transactions",
  "kassiber-wallets",
  "kassiber-xlsx",
  "serde_json",
@@ -2926,6 +2927,7 @@ dependencies = [
  "kassiber-pyjson",
  "kassiber-pytext",
  "kassiber-store",
+ "kassiber-transactions",
  "serde_json",
  "tempfile",
 ]

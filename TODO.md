@@ -255,9 +255,17 @@ against the Rust port and slices the gaps; Python stays the reference.
   empty-root `jurisdictionCode`), the crypto Kennzahlen from 1 March 2022 in
   every report and export, the E 1kv refusals, the exit-tax old rules and
   `explanationReference` on journal events.
-- [ ] S2, S4, S6 and S11 as the inventory lists them: qualified transaction
-  references, the review workflow, transfer dismissals and custody component
-  revision.
+- [x] S2: qualified transaction references through one lookup, including
+  `ui.transactions.resolve`'s shared-txid rows.
+- [x] S6: dismissals mark journals stale; `transfers dismissals list|delete`
+  and their kinds; suggestion `exclusions`.
+- [x] S11: custody component remediation on blocked plans and activations.
+  The AI-only revision boundary stays with S12.
+- [ ] S4 as the inventory lists it: the review workflow.
+- [ ] Refresh the transfer fixtures S1's added transaction column broke
+  (`component_reads.json`, `pairing_services.json`), and port the #684
+  result changes they will expose (`transfers rules delete` returns the
+  rule, `transfers unpair` the pair).
 - [ ] S12: rebase the R6 branches (AI catalog, providers, tools, MCP grants,
   chat) onto the synced stack. Its AI projections drop the desktop-only
   `indicativeTax`, breakdown `transactionIds` and `explanationReference`, as

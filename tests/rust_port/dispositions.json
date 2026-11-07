@@ -2598,6 +2598,10 @@
       "test_journals_process_holds_only_unaccepted_or_changed_coarse_prices": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "journals", "reason": "compares journals process (envelope and every table) and the history reads and reverts of an accepted coarse price with the unchanged Python CLI and daemon on both codecs", "reviewed": true, "tests": 1},
       "test_history_labels_and_reverts_the_acceptance_like_python": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "journals", "reason": "compares journals process (envelope and every table) and the history reads and reverts of an accepted coarse price with the unchanged Python CLI and daemon on both codecs", "reviewed": true, "tests": 1}
     },
+    "tests/test_rust_component_remediation.py": {
+      "ComponentRemediationParity": {"disposition": "oracle", "flags": ["sql"], "group": "custody", "reason": "compares component plan/apply/activate sessions and their remediation details with Python daemon bytes and all 113 tables on a copy taken before each Python session, plaintext and unlocked SQLCipher", "reviewed": true, "tests": 1},
+      "EncryptedComponentRemediationParity": {"disposition": "oracle", "flags": ["sql"], "group": "custody", "reason": "compares component plan/apply/activate sessions and their remediation details with Python daemon bytes and all 113 tables on a copy taken before each Python session, plaintext and unlocked SQLCipher", "reviewed": true, "tests": 1}
+    },
     "tests/test_rust_cross_check.py": {
       "test_cross_check_service_bytes_workbooks_and_all_database_tables": {"disposition": "oracle", "flags": ["mock", "sql", "subprocess"], "group": "reports", "reason": "compares native diagnostic cross-check response bytes, openpyxl workbook content and all 112 database tables with Python over parser, matching, stale and source-blocked cases; requires zero CLI/daemon fallbacks and preserves the reference no-snapshot boundary", "reviewed": true, "tests": 1},
       "test_cross_check_cli_bytes_workbooks_all_tables_and_zero_fallbacks": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "compares native diagnostic cross-check response bytes, openpyxl workbook content and all 112 database tables with Python over parser, matching, stale and source-blocked cases; requires zero CLI/daemon fallbacks and preserves the reference no-snapshot boundary", "reviewed": true, "tests": 1},
@@ -3370,6 +3374,10 @@
     "tests/test_rust_transaction_listing.py": {
       "RustTransactionListingTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "compares observed Rust CLI pages, all filters, sort and cursor bytes, exact msat values and fail-closed export/desktop barriers with Python on disposable books", "reviewed": true, "tests": 5}
     },
+    "tests/test_rust_transaction_references.py": {
+      "TransactionReferenceParity": {"disposition": "oracle", "flags": ["sql", "subprocess"], "group": "transactions", "reason": "compares every reference-taking CLI leaf and daemon kind (qualified txids, shared-txid ambiguity, unmatched qualifiers) with Python byte for byte and all 113 tables on copies of one disposable book, plaintext and unlocked SQLCipher", "reviewed": true, "tests": 3},
+      "EncryptedTransactionReferenceParity": {"disposition": "oracle", "flags": ["sql", "subprocess"], "group": "transactions", "reason": "compares every reference-taking CLI leaf and daemon kind (qualified txids, shared-txid ambiguity, unmatched qualifiers) with Python byte for byte and all 113 tables on copies of one disposable book, plaintext and unlocked SQLCipher", "reviewed": true, "tests": 3}
+    },
     "tests/test_rust_transaction_resolve.py": {
       "RustTransactionResolveTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "compares native desktop resolution raw JSONL and all 112 tables with Python, including aliases, focused pair amounts, stale journals and reviewed fingerprints", "reviewed": true, "tests": 4}
     },
@@ -3378,6 +3386,10 @@
     },
     "tests/test_rust_transaction_services.py": {
       "RustTransactionServicesTest": {"disposition": "subprocess-scenario", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.db", "reviewed": false, "tests": 4}
+    },
+    "tests/test_rust_transfer_dismissals.py": {
+      "TransferDismissalParity": {"disposition": "oracle", "flags": ["sql", "subprocess"], "group": "custody", "reason": "compares dismiss, dismissals list/delete and suggestion exclusions over the CLI and daemon with Python byte for byte and all 113 tables, plaintext and unlocked SQLCipher; hybrid routing proves Rust execution", "reviewed": true, "tests": 3},
+      "EncryptedTransferDismissalParity": {"disposition": "oracle", "flags": ["sql", "subprocess"], "group": "custody", "reason": "compares dismiss, dismissals list/delete and suggestion exclusions over the CLI and daemon with Python byte for byte and all 113 tables, plaintext and unlocked SQLCipher; hybrid routing proves Rust execution", "reviewed": true, "tests": 3}
     },
     "tests/test_rust_transfer_reads.py": {
       "RustTransferReadsTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "Compares CLI and daemon component/gap read bytes, complete unchanged database rows, private evidence projections and hybrid Rust routing", "reviewed": true, "tests": 4}

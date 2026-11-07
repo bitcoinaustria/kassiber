@@ -32795,7 +32795,41 @@
                         "transaction_id": "d",
                         "component_id": "099c604c-611f-5470-aa51-abc4aa3dad3e"
                       }
-                    ]
+                    ],
+                    "remediation": {
+                      "action": "revise_conflicting_component",
+                      "target": {
+                        "component_ids": [
+                          "099c604c-611f-5470-aa51-abc4aa3dad3e"
+                        ],
+                        "transaction_ids": [
+                          "d"
+                        ]
+                      },
+                      "tool": "ui_transfers_components_plan",
+                      "arguments_hint": {
+                        "action": "revise",
+                        "component_id": "099c604c-611f-5470-aa51-abc4aa3dad3e",
+                        "activate": true,
+                        "spec": {
+                          "legs": "<corrected legs>",
+                          "allocations": "<if N:M>"
+                        }
+                      },
+                      "desktop_only": false,
+                      "message": "These transactions already belong to an active custody component. To replace that interpretation, revise the conflicting component (same anchors allowed) with activate=true; to retire it without a replacement, supersede it.",
+                      "alternatives": [
+                        {
+                          "action": "supersede",
+                          "tool": "ui_transfers_components_plan",
+                          "arguments_hint": {
+                            "action": "supersede",
+                            "component_id": "099c604c-611f-5470-aa51-abc4aa3dad3e",
+                            "reason": "<why the old interpretation was wrong>"
+                          }
+                        }
+                      ]
+                    }
                   }
                 ],
                 "suspense_msat": 0,
@@ -32900,6 +32934,40 @@
                     }
                   ]
                 }
+              },
+              "remediation": {
+                "action": "revise_conflicting_component",
+                "target": {
+                  "component_ids": [
+                    "099c604c-611f-5470-aa51-abc4aa3dad3e"
+                  ],
+                  "transaction_ids": [
+                    "d"
+                  ]
+                },
+                "tool": "ui_transfers_components_plan",
+                "arguments_hint": {
+                  "action": "revise",
+                  "component_id": "099c604c-611f-5470-aa51-abc4aa3dad3e",
+                  "activate": true,
+                  "spec": {
+                    "legs": "<corrected legs>",
+                    "allocations": "<if N:M>"
+                  }
+                },
+                "desktop_only": false,
+                "message": "These transactions already belong to an active custody component. To replace that interpretation, revise the conflicting component (same anchors allowed) with activate=true; to retire it without a replacement, supersede it.",
+                "alternatives": [
+                  {
+                    "action": "supersede",
+                    "tool": "ui_transfers_components_plan",
+                    "arguments_hint": {
+                      "action": "supersede",
+                      "component_id": "099c604c-611f-5470-aa51-abc4aa3dad3e",
+                      "reason": "<why the old interpretation was wrong>"
+                    }
+                  }
+                ]
               }
             }
           },
@@ -32987,8 +33055,52 @@
           "error": {
             "code": "ambiguous_reference",
             "message": "Transaction external_id 'd-ext' matches multiple outbound transactions",
-            "hint": "Use the Kassiber transaction id from `transactions list` or narrow the command to an unambiguous row.",
-            "details": null
+            "hint": "Several rows share this reference, which is normal for CoinJoins and batched deposits. Use the full transaction id of the intended row, or qualify the reference as '<txid>:<wallet>' and/or ':in' / ':out'.",
+            "details": {
+              "reference": "d-ext",
+              "candidate_count": 2,
+              "candidates": [
+                {
+                  "transaction_id": "f",
+                  "external_id": "d-ext",
+                  "wallet_id": "source",
+                  "wallet": "source",
+                  "direction": "outbound",
+                  "asset": "BTC",
+                  "amount_msat": 1010,
+                  "fee_msat": 10,
+                  "occurred_at": "2025-02-01T00:00:00Z"
+                },
+                {
+                  "transaction_id": "d",
+                  "external_id": "d-ext",
+                  "wallet_id": "source",
+                  "wallet": "source",
+                  "direction": "outbound",
+                  "asset": "BTC",
+                  "amount_msat": 1000,
+                  "fee_msat": 0,
+                  "occurred_at": "2025-02-01T00:00:00Z"
+                }
+              ],
+              "candidates_truncated": false,
+              "remediation": {
+                "action": "retry_with_full_transaction_id",
+                "target": {
+                  "transaction_ids": [
+                    "f",
+                    "d"
+                  ]
+                },
+                "tool": null,
+                "arguments_hint": {
+                  "transaction_id": "<one candidate's transaction_id>",
+                  "qualified_reference": "d-ext:<wallet id or label>:<in|out>"
+                },
+                "desktop_only": false,
+                "message": "Retry the same call with one candidate's full transaction_id. Do not choose between candidates yourself when the user's intent does not single one out; ask."
+              }
+            }
           },
           "rows": {
             "chain_index_clock": "4ac9f1a3b90ce21813d5954b63c19f09c4eb38e31d19eda88c6a7b789073c1b6",

@@ -90,6 +90,8 @@ pub fn execute_with_sources(
         }
         "transfers.payouts.delete" => payout_delete::execute(conn, scope, args, sources),
         "transfers.dismiss" => dismissals::dismiss(conn, scope, args, sources),
+        "transfers.dismissals.list" => dismissals::list(conn, scope, args, sources),
+        "transfers.dismissals.delete" => dismissals::delete(conn, scope, args),
         "transfers.rules.create"
         | "transfers.rules.delete"
         | "transfers.rules.enable"

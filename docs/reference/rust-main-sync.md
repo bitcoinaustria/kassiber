@@ -79,14 +79,14 @@ Rust code was read instead.
 
 | PR | Python | Kinds and leaves | Rust state | Rust location |
 | --- | --- | --- | --- | --- |
-| #679 | `core/transaction_lookup.py`, `handlers.resolve_transaction`: a reference resolves by id, then an unambiguous external id, then a qualified `<external id>:<wallet or in/out>`; ambiguity lists every candidate | every leaf and kind taking a transaction reference | **Differs**: `metadata notes set --transaction <txid>:in` succeeds in Python, Rust answers "not found"; the bare shared txid's `ambiguous_reference` hint differs | eight resolver copies: `crates/transactions/src/{metadata,attachments}.rs`, `crates/transfers/src/{dismissals,pair_authoring,component_reads}.rs`, `crates/reports/src/source_funds_reads.rs`, `crates/journals/src/evidence_summary.rs`, `crates/kassiber/src/real_store/journals.rs` |
+| #679 | `core/transaction_lookup.py`, `handlers.resolve_transaction`: a reference resolves by id, then an unambiguous external id, then a qualified `<external id>:<wallet or in/out>`; ambiguity lists every candidate | every leaf and kind taking a transaction reference | **Done (S2)**; see [after S2, S6 and S11](#after-s2-s6-and-s11). Before: `metadata notes set --transaction <txid>:in` succeeded in Python and Rust answered "not found"; the bare shared txid's `ambiguous_reference` hint differed | `crates/transactions/src/lookup.rs`, replacing nine copies (the eight listed before plus the planner's in `crates/transfers/src/component_review.rs`); `ui.transactions.resolve` in `crates/transactions/src/desktop/resolve.rs` |
 | #680 | `review_workflow.py`: plans carry journal-meaning term operations (`pair`, `dismiss_pair`, `undismiss_pair`, `custody_gap`) and a per-year tax `delta`; apply checks the delta; receipts keep it | `ui.review.plan`, `ui.review.apply`, `ui.review.receipt`, `ui.review.cases` | **Refused**: a `pair` or `dismiss_pair` plan returns a plan in Python and "Review operation type is unsupported" in Rust. No Rust artifact carries `delta`, so an artifact either side makes is refused by the other | `crates/transfers/src/review_operations.rs`, `crates/daemon/src/review.rs`, `crates/journals/src/review_effects.rs` |
 | #708 | `pricing.reviewed_price`, `metadata.py`, `transaction_history.py`, `ledger_request._coarse_needs_review`, `custody_tax_projection._base_row`: an accepted coarse price is no longer held for review while the price the journals read is unchanged (compared by decimal value); a changed price is held again; projected rows carry their transaction's reviewed price; history shows the acceptance | `ui.review.plan/apply` (`accept_coarse_prices`), `ui.transactions.history`, `ui.transactions.history.revert`, `ui.activity.stale`, `journals process` | **Done (S3)** for the request builder, the projection, the metadata service and history; see [after S3 and S5](#after-s3-and-s5). `accept_coarse_prices` stays an unsupported review operation until S4, which calls the ported `accept_coarse_price` | `crates/custody/src/coarse_review.rs`, `crates/custody/src/ledger_request.rs` (`coarse_needs_review`), `crates/custody/src/finalized_projection.rs`, `crates/transactions/src/metadata/{grouped,history}.rs` |
 | #707, #711, bd162caca | `review_workflow.py`, `ui_snapshot.py`, `daemon_freshness.py`: cases name `fiat_currency`; badges add `review` and `definitions`; freshness pairs automatically before journals | `ui.review.cases`, `ui.review.badges`, `ui.freshness.run`, `ui.workspace.freshness.run` | **Differs**: `ui.review.cases` lacks `fiat_currency`; `ui.review.badges` lacks `review` and `definitions` (fresh root too). Freshness: inspection | `crates/daemon/src/review.rs`, `crates/daemon/src/workspace_reads.rs`, `crates/wallets` (freshness) |
 | #681 | `quarantine_review.py` (+453): quarantine rolled up by root cause, groups, attention count, definitions; resolving by `group_id` with `reprocess` | `ui.journals.quarantine`, `journals quarantine groups`, `ui.journals.quarantine.resolve`, `ui.review.badges`, AI kind `ui.journals.quarantine.groups` | **Done (S5)** for the summary (`definitions`, `fiat_currency`), the groups core and its CLI leaf, and resolve by `group_id` with the measured or unmeasured effect; see [after S3 and S5](#after-s3-and-s5). The AI-only kind `ui.journals.quarantine.groups` follows with S12; the CLI leaves `journals quarantine resolve price-override/exclude` were not native before and stay with Python; `ui.review.badges` is S4 | `crates/journals/src/quarantine.rs`, `crates/journals/src/quarantine/groups.rs`, `crates/kassiber/src/real_store/journals.rs`, `crates/cli/src/run.rs` |
 | #681 | `wallet_completeness.py`, `transaction_verify.py` | `ui.wallets.list`, `wallets list`, `transactions verify`, AI kind `ui.transactions.verify` | **Done (S8)**; see [after S8 to S10](#after-s8-to-s10). Before: wallets lacked `completeness_class` and `scan_bounds`; `transactions verify` was not native. The AI-only kind follows with S12 | `crates/wallets/src/completeness.rs`, `crates/journals/src/transaction_graph/verify.rs` |
-| #679, #683 | `custody_review_terms.dismiss_pair_candidate`, `transfer_matching.active_dismissed_pairs`, `handlers.suggest_transfer_candidates`: a dismissal marks journals stale, can be listed and deleted, and suggestions report exclusions (active pair, already journaled moves, dismissal) | `ui.transfers.dismiss`, `transfers dismiss`, `ui.transfers.suggest`, `ui.transfers.dismissals.list/delete`, `transfers dismissals list/delete` | **Differs**: after `transfers dismiss` Python bumps `journal_input_version`, Rust does not; `ui.transfers.suggest` lacks `exclusions`; list/delete kinds and leaves are not native | `crates/transfers/src/dismissals.rs`, `crates/transfers/src/pairing/service.rs`, `crates/daemon/src/transfers.rs` |
-| #679 | `custody_components.py`, `custody_component_planner.py`: revision planning and activation errors with remediation; qualified references | `ui.transfers.components.plan/apply`, review `custody_component` operations | Inspection: a revise plan for an unknown component answers the same; activation remediation and qualified references follow S2 | `crates/transfers` (components), `crates/custody` |
+| #679, #683 | `custody_review_terms.dismiss_pair_candidate`, `transfer_matching.active_dismissed_pairs`, `handlers.suggest_transfer_candidates`: a dismissal marks journals stale, can be listed and deleted, and suggestions report exclusions (active pair, already journaled moves, dismissal) | `ui.transfers.dismiss`, `transfers dismiss`, `ui.transfers.suggest`, `ui.transfers.dismissals.list/delete`, `transfers dismissals list/delete` | **Done (S6)**. Before: after `transfers dismiss` Python bumped `journal_input_version` and Rust did not; `ui.transfers.suggest` lacked `exclusions`; the list/delete kinds and leaves were not native | `crates/transfers/src/dismissals.rs`, `crates/transfers/src/pairing/{matcher,service}.rs`, `crates/transfers/src/review_context.rs`, `crates/daemon/src/transfers.rs` |
+| #679 | `custody_components.py`, `custody_component_planner.py`: revision planning and activation errors with remediation; qualified references | `ui.transfers.components.plan/apply`, review `custody_component` operations | **Done (S11)**, except the AI-only revision boundary (`_validate_ai_custody_state_boundary`, `authored_source == "ai_tool"`), which belongs to the R6 tool executor (S12) | `crates/custody/src/components/remediation.rs`, `crates/transfers/src/component_{review,rows,store}.rs` |
 | #701 | `ui_snapshot.build_transactions_dashboard_snapshot`: automatic bucket size and a `history.years` index for the period picker | `ui.transactions.dashboard` | **Done (S9)**. Before: lacked `bucketSize` and `history.years` (fresh root too), refused the four-year range and auto-selected the old ranges | `crates/transactions/src/desktop/dashboard.rs` |
 | #682, #698, #714 | `document_import.py`: the read step needs no database and records the detected API format; chat imports reuse it | `ui.wallets.document_import.preview/import` | Inspection: needs an AI provider, not exercised | `crates/imports` (document core) |
 
@@ -110,13 +110,13 @@ above.
 
 ## Desktop kinds the Rust daemon does not serve
 
-The Rust daemon advertises 258 of Python's 307 kinds. 43 of the 49 others
-are called by `ui-tauri/src`; all 49 are in the Tauri allowlist except
-`ui.connections.bullbitcoin_wallet.create` and `ui.transfers.dismissals.list`.
+The Rust daemon advertises 260 of Python's 307 kinds (258 before S6 added
+`ui.transfers.dismissals.list` and `.delete`). 42 of the 47 others are
+called by `ui-tauri/src`; all 47 are in the Tauri allowlist except
+`ui.connections.bullbitcoin_wallet.create`.
 
 | Screen | Kinds |
 | --- | --- |
-| Review (#707, #711) | `ui.transfers.dismissals.delete` (undo a dismissal) |
 | Reports (#706) | `ui.reports.export_pdf`, `ui.reports.export_summary_pdf`, `ui.reports.export_austrian_e1kv_pdf`, `ui.reports.export_exit_tax_pdf`, `ui.reports.export_audit_package` (PDF work is on `t3code/r5-pdf-1`) |
 | Settings → Assistant, provider wizard (#673, #674, #675, #690) | `ai.providers.list`, `ai.providers.create`, `ai.providers.update`, `ai.providers.delete`, `ai.providers.set_default`, `ai.providers.set_api_key`, `ai.providers.move_api_key`, `ai.providers.acknowledge`, `ai.test_connection`, `ai.list_models`, `ai.provider_runtime.status` |
 | Settings → External agents (#686) | `ui.agent_access.status`, `ui.agent_access.configure`, `ui.agent_access.lock`, `ui.agent_access.unlock`, `ui.agent_access.pairing` |
@@ -126,7 +126,7 @@ are called by `ui-tauri/src`; all 49 are in the Tauri allowlist except
 
 Not called by the UI: `ai.providers.clear_default`, `ai.providers.get`,
 `ui.btcpay.provenance.sync`, `ui.connections.btcpay.test`,
-`ui.connections.sources`, `ui.transfers.dismissals.list` (the AI tool reads it).
+`ui.connections.sources`.
 
 The lock screen (#704, #705), the light theme (#695) and the Overview (#713)
 need no new kinds. The Overview, wallet detail (#703) and transaction panel
@@ -204,7 +204,8 @@ XL above.
    (`argparse_parity`, three `describe_drift` tests,
    `capabilities::tables_match_python`). Everything else needs it: until it
    lands the Rust app cannot open a book the current Python app has opened.
-2. ★ **S2 Qualified transaction references** (M). One resolver following
+2. ★ **S2 Qualified transaction references** (M). **Done**; see
+   [after S2, S6 and S11](#after-s2-s6-and-s11). One resolver following
    `core/transaction_lookup.py`, replacing the eight copies. Needs S1.
 3. ★ **S3 Coarse-price acceptance** (M). **Done**; see [after S3 and S5](#after-s3-and-s5).
    The request builder's accepted-price rule, the acceptance column on price
@@ -217,8 +218,8 @@ XL above.
 5. ★ **S5 Quarantine root causes** (L). **Done**; see [after S3 and S5](#after-s3-and-s5).
    Groups, attention counts, definitions, `journals quarantine groups`,
    resolve by group with `reprocess`. Needs S1.
-6. ★ **S6 Transfer dismissals** (M). Stale journals on dismiss, list and
-   delete leaves and kinds, suggestion exclusions. Needs S2.
+6. ★ **S6 Transfer dismissals** (M). **Done**. Stale journals on dismiss,
+   list and delete leaves and kinds, suggestion exclusions. Needs S2.
 7. ★ **S7 Reports screen** (L). **Done**; see [after S7](#after-s7). The capital-gains payload and indicative tax
    (including the empty-root `jurisdictionCode` and country fallback),
    the E 1kv refusal before 2022 and the empty Kennzahl before 1 March 2022
@@ -232,8 +233,8 @@ XL above.
 10. **S10 Readiness definitions** (S). **Done**. `definitions` on `ui.workspace.health`
     and `ui.next_actions`, and on `ui.report.blockers` through its embedded
     health.
-11. **S11 Custody component revision** (S). Activation remediation and the
-    planner changes. Needs S2.
+11. **S11 Custody component revision** (S). **Done**. Activation remediation
+    and the planner changes. Needs S2.
 12. ★ **S12 R6 rebase** (XL, on the R6 branches). Regenerate the AI catalog
     and add `reversible`; then providers (R6-6a: `agent_access`, checks,
     inventories), the tool executor (R6-5b: new tools, consent, refresh sets,
@@ -259,7 +260,7 @@ refused. The 12, each with its slice:
 | `ui.review.cases` | `fiat_currency` missing | S4 |
 | `ui.review.badges` | `definitions` missing | S4 |
 | `ui.journals.quarantine` | `summary.definitions` missing | S5 |
-| `ui.transfers.suggest` | `exclusions` missing | S6 |
+| `ui.transfers.suggest` | `exclusions` missing | S6 (**done**) |
 | `ui.reports.capital_gains` | `asset` and the Reports payload | S7 (done) |
 | `ui.journals.events.list` | `explanationReference` missing | S7 (done) |
 | `ui.wallets.list` | `completeness_class` missing | S8 |
@@ -546,6 +547,107 @@ Found on the way, not S7: `ui.report.blockers` lacks `definitions` through
 its embedded workspace health (four `test_rust_report_blockers.py` tests);
 it follows S10. S1's 113th table broke the reports crate's 112-table
 assertions and export-sequence fixtures, now updated.
+
+## After S2, S6 and S11
+
+**S2.** `crates/transactions/src/lookup.rs` ports `core/transaction_lookup.py`
+and replaces nine resolver copies: the eight listed above and the component
+planner's (`crates/transfers/src/component_review.rs`, which keeps its own
+`not_found` wording). References are stripped and stringified as
+`str(reference or "")` does, so a falsy non-string reads as empty, and a
+string with surrogates fails at the bind as in Python. `ui.transactions.resolve`
+falls back to the qualified lookup and adds `sharedExternalIdCount` and
+`sharedExternalIdMatches`, which the inventory did not list;
+`ui.transactions.review_context` resolves through it. Transaction graph
+nodes in a foreign asset carry `assetId` (#679). The shared
+`details.remediation` shape is `kassiber_envelope::remediation`.
+
+**S6.** `transfers dismiss` and `ui.transfers.dismiss` mark journals stale.
+`transfers dismissals list|delete` and `ui.transfers.dismissals.list|delete`
+are native (`crates/transfers/src/dismissals.rs`): the list applies the
+matcher's expiry rule (an expiry at or before now lifts the veto, an
+unreadable one never does) and validates `limit` and, in the daemon,
+`include_expired` before the scope as Python does; delete takes an id or two
+(qualified) legs. `ui.transfers.suggest`, `transfers suggest` and
+`ui.transfers.review_context` report `exclusions`.
+
+**S11.** Membership conflicts carry `revise_conflicting_component`
+remediation in the custody stage, plans, revisions and activations; a second
+draft carries `revise_existing_draft`, a batch anchoring one transaction
+twice `merge_planned_components`, and non-activatable and incomplete
+refusals their issues' remediation. `review_field_order.json` and the
+validation projection order the new fields. The AI-only revision boundary
+(`_validate_ai_custody_state_boundary`) runs only for `authored_source ==
+"ai_tool"`, which the R6 tool executor owns (S12).
+
+### Verification
+
+- Rust vectors from CPython: `gen_lookup_vectors.py` (64 references, seven
+  modes each, and 12 `ui.transactions.resolve` snapshots),
+  `export_dismissals.py` (dismiss, list, delete, suggest and review context
+  with injected clock and ids, plus 15 exclusion-count cases), the regenerated
+  `components.json` and `pairs.json`, the five changed custody stage vectors
+  in `tests/fixtures/custody_component_cases.json`, the `resolve` group of
+  `desktop-vectors.json` and the dismiss rows of `authoring.json`.
+- Differential process tests on disposable roots, plaintext and unlocked
+  SQLCipher, all 113 tables: `tests/test_rust_transaction_references.py`,
+  `tests/test_rust_transfer_dismissals.py` and
+  `tests/test_rust_component_remediation.py` (14 tests, all pass) over the
+  shared `tests/rust_port/sync_parity.py`.
+- Mutation catalogs, every entry killed: transactions 20/20, transfers
+  23/23, custody 6/6, journals 1/1 (`sync_mutation_check.py` in each
+  crate's `scripts/`). One S2 candidate, the `len(shared) > 1` guard on
+  `sharedExternalIdMatches`, is equivalent (a one-row txid is the shown row,
+  which the filter already drops) and has no entry.
+- Crate tests: `kassiber-transactions` (lookup, desktop), `kassiber-custody`
+  (all), `kassiber-transfers` (all but the two binaries below), the
+  `kassiber-journals` graph unit tests, `kassiber-cli` and `kassiber-daemon`
+  (all); clippy with `-D warnings` on every touched crate.
+- No new egress: every change is local SQL, so no consent regression was
+  added.
+- Not run for these slices: the other workspace crates' tests, the full
+  Python lanes and the loopback tests. `cargo fmt --check` and the preflight
+  shard (57 tests) pass.
+
+### Desktop read diff
+
+`desktop_read_diff.py` on the Python-built `austria` book (built with this
+checkout's Python CLI by `report_design_books.py`'s build steps), release
+binaries of 6159f8f39 (before) and of this branch (after):
+
+| Set | Before: same, differing | After: same, differing |
+| --- | --- | --- |
+| default 103 read kinds, the seven report reads, `ui.review.plan/worklist/receipt` (113) | 101, 12 | 102, 11 |
+| S2/S6/S11 kinds with shared-txid arguments (7) | 0, 7 | 7, 0 |
+
+The default set's one change is `ui.transfers.suggest` (`exclusions`); the
+other 11 are the S1 list's other slices and pre-merge differences. The
+targeted set ran `ui.transactions.resolve` on a txid the transfer legs share,
+`ui.transactions.review_context` with `<txid>:in`,
+`ui.transfers.components.list` with `<txid>:out`, `ui.audit.evidence.summary`
+with `<txid>:<wallet label>`, `ui.transfers.suggest`,
+`ui.transfers.dismissals.list` (not native before) and
+`ui.transfers.review_context`. The Rust daemon now advertises 260 kinds.
+
+### Found while porting
+
+- `tests/rust_desktop_parity.py` asserted 112 tables; S1's
+  `ai_provider_checks` makes 113, so every `DesktopParity` test failed before
+  comparing. Fixed. Its encrypted sessions also compared only the
+  `auth_required` answers; the main-sync harness unlocks first.
+- `crates/transfers/tests/component_reads.rs` (3 tests) and
+  `pairing_services.rs` (7) fail at 6159f8f39 already: their frozen SQL has 47
+  transaction values for S1's 48 columns. Regenerating them from current
+  Python also brings in #684's result changes that Rust lacks (`transfers
+  rules delete` returns the deleted `rule`, `transfers unpair` the removed
+  `pair`) and #711's auto-pair `ownership` counts, so it is left to a slice
+  that ports those. `authoring.json` and `pairs.json` keep their pre-#684
+  `rules delete` and `unpair` results for the same reason, so rerunning their
+  exporters reproduces those differences.
+- `ui.transfers.review_context` refreshes stale journals before it reads, in
+  both runtimes; it is not a read-only kind.
+- `tests/custody_component_vectors.py` regenerates inputs with S3's
+  `pricing_review_accepted_price`; only the five changed outputs were taken.
 
 ## Verification of the merge
 

@@ -4,7 +4,7 @@ use super::component_store as store;
 use super::*;
 use kassiber_custody::{
     codec,
-    components::review,
+    components::{remediation, review},
     snapshot::{Component, Record, Snapshot},
 };
 use kassiber_envelope::{set, truthy};
@@ -104,6 +104,34 @@ pub(super) fn fail(
 }
 fn invalid(message: impl Into<String>, details: Vec<(&str, Value)>) -> AppError {
     fail("custody_component_validation", message, details)
+}
+/// `issues_remediation(issues)`: the first remediation an issue carries.
+pub(super) fn issues_remediation(issues: &Value) -> Option<Value> {
+    let Value::List(items) = issues else {
+        return None;
+    };
+    items
+        .iter()
+        .find_map(|issue| match get(issue, "remediation") {
+            Some(remediation @ Value::Dict(_)) => Some(remediation.clone()),
+            _ => None,
+        })
+}
+/// `_activation_error(component)`: the projected validation, and the
+/// remediation its issues carry.
+pub(super) fn activation_error(id: &str, validation: Value) -> AppError {
+    let mut details = vec![("component_id", s(id))];
+    let remediation =
+        issues_remediation(&get(&validation, "issues").cloned().unwrap_or(Value::Null));
+    details.push(("validation", validation));
+    if let Some(remediation) = remediation {
+        details.push(("remediation", remediation));
+    }
+    fail(
+        "custody_component_incomplete",
+        "custody component is incomplete or does not conserve",
+        details,
+    )
 }
 pub(super) fn internal(message: impl Into<String>) -> AppError {
     AppError::new("internal_error", message)
@@ -945,11 +973,10 @@ pub(super) fn validate_plan(
     if !conflicts.is_empty() {
         validation["activatable"] = serde_json::json!(false);
         let mut issues = validation["issues"].as_array().cloned().unwrap_or_default();
-        issues.push(serde_json::json!({
-            "code": "active_transaction_membership_conflict",
-            "message": "a transaction belongs to another active component",
-            "conflicts": conflicts,
-        }));
+        issues.push(remediation::membership_conflict_issue(
+            conflicts,
+            "a transaction belongs to another active component",
+        ));
         validation["issues"] = serde_json::json!(issues);
     }
     Ok(PlanCheck {
@@ -1494,17 +1521,16 @@ pub(super) fn activation(
     if !conflicts.is_empty() {
         component["validation"]["activatable"] = serde_json::json!(false);
         if let Some(issues) = component["validation"]["issues"].as_array_mut() {
-            issues.push(serde_json::json!({"code":"active_transaction_membership_conflict","message":"a transaction belongs to another active component","conflicts":conflicts}));
+            issues.push(remediation::membership_conflict_issue(
+                conflicts,
+                "a transaction belongs to another active component",
+            ));
         }
     }
     if component["validation"]["activatable"] != true {
-        return Err(fail(
-            "custody_component_incomplete",
-            "custody component is incomplete or does not conserve",
-            vec![
-                ("component_id", s(id)),
-                ("validation", project_validation(&component["validation"])?),
-            ],
+        return Err(activation_error(
+            id,
+            project_validation(&component["validation"])?,
         ));
     }
     Ok((snapshot, component))

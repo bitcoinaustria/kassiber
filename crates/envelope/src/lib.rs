@@ -13,6 +13,7 @@
 //! rules the daemon applies to error messages, hints, and details.
 
 pub mod redaction;
+pub mod remediation;
 
 use std::fmt;
 

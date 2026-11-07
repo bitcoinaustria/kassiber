@@ -420,22 +420,8 @@ pub(crate) fn resolve_transaction(
     profile: &str,
     reference: &str,
 ) -> Result<String> {
-    let exact = rows(
-        conn,
-        "SELECT id FROM transactions WHERE profile_id=? AND id=?",
-        [profile, reference],
-    )?;
-    if let Some(row) = exact.first() {
-        return Ok(text(row, "id").into());
-    }
-    let found=rows(conn,"SELECT id FROM transactions WHERE profile_id=? AND external_id=? ORDER BY occurred_at DESC,created_at DESC,id DESC LIMIT 2",[profile,reference])?;
-    if found.len() > 1 {
-        return Err(AppError::new("ambiguous_reference",format!("Transaction external_id '{reference}' matches multiple transactions")).with_hint("Use the Kassiber transaction id from `transactions list` or narrow the command to an unambiguous row."));
-    }
-    found
-        .first()
-        .map(|r| text(r, "id").to_owned())
-        .ok_or_else(|| AppError::new("app_error", format!("Transaction '{reference}' not found")))
+    crate::lookup::resolve_transaction_str(conn, profile, reference, None)
+        .map(|row| crate::lookup::row_id(&row))
 }
 
 fn list(

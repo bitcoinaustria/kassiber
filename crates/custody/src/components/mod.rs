@@ -3,6 +3,7 @@
 mod anchors;
 mod commitments;
 mod conservation;
+pub mod remediation;
 pub mod review;
 mod scope;
 pub(crate) mod time;
@@ -506,7 +507,10 @@ fn materialize(
         Vec::new()
     };
     if !conflicts.is_empty() {
-        issues.push(json!({"code":"active_transaction_membership_conflict","message":"a transaction belongs to another authored active component","conflicts":conflicts}));
+        issues.push(remediation::membership_conflict_issue(
+            conflicts,
+            "a transaction belongs to another authored active component",
+        ));
     }
     let effective = if issues.is_empty() { "active" } else { "draft" };
     validation["activatable"] = json!(issues.is_empty());

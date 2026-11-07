@@ -1,0 +1,12 @@
+[
+ {
+  "id": "graph-foreign-asset-id",
+  "file": "crates/journals/src/transaction_graph.rs",
+  "find": "    set(node, \"assetId\", asset.map_or(Value::Null, s));\n",
+  "replace": "",
+  "expect_failing": [
+   "foreign_asset_nodes_carry_the_full_asset_id_beside_the_label"
+  ],
+  "rule": "A foreign-asset node carries the full asset id beside its shortened label."
+ }
+]

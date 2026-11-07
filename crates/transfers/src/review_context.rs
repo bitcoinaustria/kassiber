@@ -591,6 +591,13 @@ pub(crate) fn execute(conn: &Connection, scope: &Scope<'_>, payload: &Value) -> 
                 counts
             },
         ),
+        (
+            "exclusions",
+            match value(&suggestion, "exclusions") {
+                Value::Null => dict::<&str>([]),
+                exclusions => exclusions,
+            },
+        ),
         ("review_items", Value::List(items)),
         ("active_pairs", bounded(&pairs)),
         ("rules", bounded(&rules)),

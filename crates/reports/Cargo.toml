@@ -30,6 +30,8 @@ kassiber-pyjson = { path = "../pyjson" }
 kassiber-pytext = { path = "../pytext" }
 kassiber-setup = { path = "../setup" }
 kassiber-store = { path = "../store" }
+# Transaction references resolve through the one shared lookup.
+kassiber-transactions = { path = "../transactions" }
 kassiber-wallets = { path = "../wallets" }
 kassiber-xlsx = { path = "../xlsx" }
 serde_json = "1"

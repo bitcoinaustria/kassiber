@@ -632,43 +632,23 @@ pub(super) fn quarantine_resolve(
 
     let sql =
         |error: kassiber_store::rusqlite::Error| AppError::new("internal_error", error.to_string());
-    let rows = |query: &str,
-                params: &[&dyn kassiber_store::rusqlite::ToSql]|
-     -> Result<Vec<(String, i64)>, AppError> {
-        let mut statement = conn.prepare(query).map_err(sql)?;
-        let found = statement
-            .query_map(params, |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
-            })
-            .map_err(sql)?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(sql)?;
-        Ok(found)
-    };
-    // handlers.resolve_transaction: id first, then a unique external id.
-    let mut found = rows(
-        "SELECT id, amount FROM transactions WHERE profile_id = ? AND id = ?",
-        &[&profile_id, &transaction],
+    let row = kassiber_transactions::lookup::resolve_transaction_str(
+        conn,
+        profile_id,
+        &transaction,
+        None,
     )?;
-    if found.is_empty() {
-        found = rows(
-            "SELECT id, amount FROM transactions WHERE profile_id = ? AND external_id = ? ORDER BY occurred_at DESC, created_at DESC, id DESC LIMIT 2",
-            &[&profile_id, &transaction],
-        )?;
-        if found.len() > 1 {
-            return Err(AppError::new(
-                "ambiguous_reference",
-                format!("Transaction external_id '{transaction}' matches multiple transactions"),
-            )
-            .with_hint("Use the Kassiber transaction id from `transactions list` or narrow the command to an unambiguous row."));
-        }
+    let transaction_id = kassiber_transactions::lookup::row_id(&row);
+    let amount: i64 = match get(&row, "amount") {
+        Some(Value::Int(n)) => n.to_string().parse().ok(),
+        _ => None,
     }
-    let Some((transaction_id, amount)) = found.into_iter().next() else {
-        return Err(AppError::new(
-            "app_error",
-            format!("Transaction '{transaction}' not found"),
-        ));
-    };
+    .ok_or_else(|| {
+        AppError::new(
+            "internal_error",
+            "stored transaction amount is not an integer",
+        )
+    })?;
     let quarantined: bool = conn
         .query_row(
             "SELECT EXISTS(SELECT 1 FROM journal_quarantines WHERE profile_id = ? AND transaction_id = ?)",

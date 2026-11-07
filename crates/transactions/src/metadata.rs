@@ -143,23 +143,7 @@ fn code(label: &str) -> Result<String> {
 }
 
 fn transaction(conn: &Connection, profile: &str, reference: &str) -> Result<Value> {
-    let exact = rows(
-        conn,
-        "SELECT * FROM transactions WHERE profile_id=? AND id=?",
-        [profile, reference],
-    )?;
-    if let Some(row) = exact.into_iter().next() {
-        return Ok(row);
-    }
-    let found = rows(conn, "SELECT * FROM transactions WHERE profile_id=? AND external_id=? ORDER BY occurred_at DESC, created_at DESC, id DESC LIMIT 2", [profile, reference])?;
-    if found.len() > 1 {
-        return Err(AppError::new("ambiguous_reference", format!("Transaction external_id '{reference}' matches multiple transactions"))
-            .with_hint("Use the Kassiber transaction id from `transactions list` or narrow the command to an unambiguous row."));
-    }
-    found
-        .into_iter()
-        .next()
-        .ok_or_else(|| AppError::new("app_error", format!("Transaction '{reference}' not found")))
+    crate::lookup::resolve_transaction_str(conn, profile, reference, None)
 }
 
 fn tags(conn: &Connection, tx: &str) -> Result<Vec<Value>> {

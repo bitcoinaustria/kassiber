@@ -14,6 +14,8 @@ pub const KINDS: &[&str] = &[
     "ui.transfers.update",
     "ui.transfers.bulk_pair",
     "ui.transfers.dismiss",
+    "ui.transfers.dismissals.list",
+    "ui.transfers.dismissals.delete",
     "ui.transfers.components.list",
     "ui.transfers.components.get",
     "ui.transfers.components.plan",
@@ -100,6 +102,15 @@ pub fn execute_as(
             },
             &payload,
         );
+    }
+    if kind == "ui.transfers.dismissals.list"
+        && !matches!(get(args, "include_expired"), None | Some(Value::Bool(_)))
+    {
+        // `exact_bool("include_expired")` runs before the scope resolves.
+        return Err(AppError::new(
+            "validation",
+            format!("{kind} include_expired must be a boolean"),
+        ));
     }
     if matches!(kind, "ui.custody.review.plan" | "ui.custody.review.apply") {
         return gaps(book, kind, args, source);
@@ -207,7 +218,10 @@ pub fn execute_as(
             };
         }
     }
-    if kind == "ui.transfers.dismiss" {
+    if matches!(
+        kind,
+        "ui.transfers.dismiss" | "ui.transfers.dismissals.delete"
+    ) {
         for (name, alias) in [("tx_out", "out_id"), ("tx_in", "in_id")] {
             let id = get(&args, name)
                 .filter(|v| kassiber_envelope::truthy(v))
@@ -216,6 +230,8 @@ pub fn execute_as(
                 .unwrap_or(Value::Null);
             kassiber_envelope::set(&mut args, name, id);
         }
+    }
+    if kind == "ui.transfers.dismiss" {
         // Preserve Python's desktop `value or 90` independently of the CLI's
         // explicit zero (never expire).
         let raw = get(&args, "expires_in_days")
