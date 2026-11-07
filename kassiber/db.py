@@ -530,7 +530,16 @@ def begin_write_savepoint(conn, name: str) -> None:
     RELEASE of an outermost savepoint still commits. Read-only snapshots keep
     a plain SAVEPOINT; they never upgrade.
     """
+    # Every Kassiber book has `settings`; partial test schemas may not. Look
+    # before the savepoint opens, so this read holds no lock afterwards.
+    reservable = bool(
+        conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'settings'"
+        ).fetchall()
+    )
     conn.execute(f"SAVEPOINT {name}")
+    if not reservable:
+        return
     try:
         # Changes nothing; requesting the writer lock is its only effect.
         conn.execute("UPDATE settings SET value = value WHERE 0")
@@ -538,6 +547,8 @@ def begin_write_savepoint(conn, name: str) -> None:
         conn.execute(f"ROLLBACK TO SAVEPOINT {name}")
         conn.execute(f"RELEASE SAVEPOINT {name}")
         raise
+
+
 LEGACY_DATA_ROOT = os.path.expanduser(f"~/.local/share/{LEGACY_APP_NAME}")
 DEFAULT_DB_FILENAME = f"{APP_NAME}.sqlite3"
 LEGACY_DB_FILENAME = f"{LEGACY_APP_NAME}.sqlite3"
