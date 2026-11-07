@@ -96,6 +96,7 @@ pub(super) fn state(conn: &Connection, tx: &Value, field: &str) -> Result<Value>
         "kind" => value(tx, "kind_override"),
         "at_regime" => value(tx, "at_regime_override"),
         "at_category" => value(tx, "at_category_override"),
+        "pricing_review_accepted" => value(tx, "pricing_review_accepted_price"),
         "fiat_rate" | "fiat_value" => {
             let exact = value(tx, &format!("{field}_exact"));
             if !matches!(&exact, Value::Null) && exact != s("") {
@@ -210,6 +211,7 @@ pub(super) fn revert(
                 "kind" => "kind_override",
                 "at_regime" => "at_regime_override",
                 "at_category" => "at_category_override",
+                "pricing_review_accepted" => "pricing_review_accepted_price",
                 _ if FIELDS.iter().any(|f| f.0 == field) => field,
                 _ => {
                     return Err(
@@ -343,6 +345,19 @@ fn label(field: &str, value: &Value) -> String {
         .into();
     }
     let text = py_str(value);
+    if field == "pricing_review_accepted" {
+        return match text.split_once(':') {
+            Some((kind, amount)) if !amount.is_empty() => format!(
+                "Accepted {} {amount}",
+                if kind == "rate" {
+                    "price per unit"
+                } else {
+                    "value"
+                }
+            ),
+            _ => text,
+        };
+    }
     if let Some((_, _, label)) = VALUE_LABELS
         .iter()
         .find(|(f, v, _)| *f == field && *v == text)
@@ -726,6 +741,11 @@ pub(super) const FIELDS: &[(&str, &str, &str)] = &[
     ("fiat_price_source", "Legacy price source", "pricing"),
     ("pricing_source_kind", "Pricing source", "pricing"),
     ("pricing_quality", "Pricing quality", "pricing"),
+    (
+        "pricing_review_accepted",
+        "Approximate price accepted",
+        "pricing",
+    ),
     ("pricing_provider", "Pricing provider", "pricing"),
     ("pricing_pair", "Pricing pair", "pricing"),
     ("pricing_timestamp", "Pricing timestamp", "pricing"),

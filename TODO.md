@@ -235,10 +235,18 @@ against the Rust port and slices the gaps; Python stays the reference.
   ranges the page offers.
 - [x] S10: `ui.workspace.health`, `health`, `ui.next_actions` and
   `next-actions` define each counter (`definitions`).
-- [ ] S2 to S7 and S11 as the inventory lists them: qualified transaction
-  references, coarse-price acceptance, the review workflow, quarantine root
-  causes, transfer dismissals, the Reports screen (including the empty-root
-  `jurisdictionCode`) and custody component revision.
+- [x] S3: the request builder holds only an unaccepted or changed coarse
+  price; projected rows carry the reviewed price; the metadata service
+  records, lists and reverts an acceptance. `accept_coarse_prices` arrives
+  with S4.
+- [x] S5: quarantine rolled up by root cause: `journals quarantine groups`,
+  resolve by `root:` group with the measured or unmeasured effect, and the
+  summary's `fiat_currency`, counter definitions and semantics-aware
+  freshness. The AI-only `ui.journals.quarantine.groups` arrives with S12.
+- [ ] S2, S4, S6, S7 and S11 as the inventory lists them: qualified
+  transaction references, the review workflow, transfer dismissals, the
+  Reports screen (including the empty-root `jurisdictionCode`) and custody
+  component revision.
 - [ ] S12: rebase the R6 branches (AI catalog, providers, tools, MCP grants,
   chat) onto the synced stack.
 - [x] S1b: every workspace crate's tests pass on the S1 schema. Whole-book

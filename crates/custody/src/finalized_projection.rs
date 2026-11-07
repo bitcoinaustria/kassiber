@@ -9,7 +9,7 @@ use std::str::FromStr;
 mod composition;
 mod conversions;
 mod fees;
-mod money;
+pub(crate) mod money;
 mod payouts;
 mod principal;
 mod quarantines;
@@ -410,6 +410,15 @@ fn base_row_with_rows<'a>(
             money::Money::finite_field(value, &label)?;
         }
     }
+    // A coarse-price review was accepted for the transaction's own price; the
+    // projection re-slices that price, so keep what was reviewed.
+    let reviewed = crate::coarse_review::reviewed_price(|key| Some(&result[key]))
+        .map_err(|(code, message)| Error {
+            code: code.into(),
+            message,
+        })?
+        .map_or(Value::Null, Value::String);
+    result.set("pricing_review_price", reviewed);
     // The projected source row is the row `rows` holds for this id.
     let order = chain_order(result.source())?;
     result.set("custody_chain_order", order);

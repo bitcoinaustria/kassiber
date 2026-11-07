@@ -64,7 +64,7 @@ the classifier's `summary` output and is checked by preflight.
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | store | 2 | 13 | 174 | 67 | 0 | 256 |
 | custody | 0 | 42 | 395 | 138 | 1 | 576 |
-| journals | 4 | 15 | 242 | 230 | 8 | 499 |
+| journals | 4 | 15 | 242 | 236 | 8 | 505 |
 | imports | 67 | 51 | 172 | 48 | 0 | 338 |
 | reports | 56 | 36 | 249 | 163 | 0 | 504 |
 | chain/sync | 38 | 81 | 1296 | 153 | 0 | 1568 |
@@ -76,7 +76,7 @@ the classifier's `summary` output and is checked by preflight.
 | AI/MCP/operator | 64 | 172 | 719 | 47 | 0 | 1002 |
 | CLI shell | 20 | 4 | 31 | 166 | 3 | 224 |
 | packaging/CI | 0 | 2 | 166 | 10 | 29 | 207 |
-| **Total** | **370** | **636** | **4584** | **1279** | **52** | **6921** |
+| **Total** | **370** | **636** | **4584** | **1285** | **52** | **6927** |
 <!-- disposition-counts:end -->
 
 Plan 21's five migration choices include Python-only retirement explicitly;

@@ -2647,7 +2647,7 @@
     "expect_failing": [
       "storage_encodings_and_markers_match_python"
     ],
-    "rule": "UUID hex retains each digest byte’s high nibble."
+    "rule": "UUID hex retains each digest byte\u2019s high nibble."
   },
   {
     "id": "JP-uuid-low-digit",
@@ -2657,7 +2657,7 @@
     "expect_failing": [
       "storage_encodings_and_markers_match_python"
     ],
-    "rule": "UUID hex retains each digest byte’s low nibble."
+    "rule": "UUID hex retains each digest byte\u2019s low nibble."
   },
   {
     "id": "JP-padding-shortcut-negative-limit",
@@ -4968,6 +4968,106 @@
       "refresh_matches_complete_python_books_ordered_results_phases_and_tapes"
     ],
     "rule": "Coerce byte-valued legacy freshness markers exactly like Python integers."
+  },
+  {
+    "id": "S5-waiting-row-own-group",
+    "file": "crates/journals/src/quarantine/groups.rs",
+    "find": "let group_id = if let Some(root) = waiting.get(id) {\n            format!(\"{GROUP_ROOT}{root}\")",
+    "replace": "let group_id = if let Some(_root) = waiting.get(id) {\n            format!(\"{GROUP_ROOT}{id}\")",
+    "expect_failing": [
+      "quarantine::groups::tests::groups_roll_up_by_reason_and_root_like_python"
+    ],
+    "rule": "A row that waits on a named root belongs to that root's group."
+  },
+  {
+    "id": "S5-dependent-count-includes-root",
+    "file": "crates/journals/src/quarantine/groups.rs",
+    "find": "members.len() as i64 - i64::from(in_group)",
+    "replace": "members.len() as i64",
+    "expect_failing": [
+      "quarantine::groups::tests::groups_roll_up_by_reason_and_root_like_python"
+    ],
+    "rule": "A root group's dependent count leaves out the root itself."
+  },
+  {
+    "id": "S5-amount-direction-swapped",
+    "file": "crates/journals/src/quarantine/groups.rs",
+    "find": "bucket[1] = &bucket[1] + &member.amount_msat;",
+    "replace": "bucket[2] = &bucket[2] + &member.amount_msat;",
+    "expect_failing": [
+      "quarantine::groups::tests::groups_roll_up_by_reason_and_root_like_python"
+    ],
+    "rule": "Inbound rows add to inbound_msat; every other direction to outbound_msat."
+  },
+  {
+    "id": "S5-largest-roots-last",
+    "file": "crates/journals/src/quarantine/groups.rs",
+    "find": "            by_group[b]\n                .len()\n                .cmp(&by_group[a].len())\n",
+    "replace": "            by_group[a]\n                .len()\n                .cmp(&by_group[b].len())\n",
+    "expect_failing": [
+      "quarantine::groups::tests::groups_roll_up_by_reason_and_root_like_python"
+    ],
+    "rule": "Root groups list the largest first."
+  },
+  {
+    "id": "S5-digest-unsorted",
+    "file": "crates/journals/src/quarantine/groups.rs",
+    "find": "    triples.sort();\n",
+    "replace": "",
+    "expect_failing": [
+      "quarantine::groups::tests::groups_roll_up_by_reason_and_root_like_python"
+    ],
+    "rule": "The membership digest hashes the sorted membership, independent of row order."
+  },
+  {
+    "id": "S5-cursor-repeats-last",
+    "file": "crates/journals/src/quarantine/groups.rs",
+    "find": "(BigInt::from(r), a, i) > (rank.clone(), at.clone(), id.clone())",
+    "replace": "(BigInt::from(r), a, i) >= (rank.clone(), at.clone(), id.clone())",
+    "expect_failing": [
+      "quarantine::groups::tests::group_members_page_by_python_cursors"
+    ],
+    "rule": "A page starts strictly after its cursor's member."
+  },
+  {
+    "id": "S5-cursor-scope-ignored",
+    "file": "crates/journals/src/quarantine/groups.rs",
+    "find": "if !python_equal(&stored_scope, &scope) {",
+    "replace": "if false && !python_equal(&stored_scope, &scope) {",
+    "expect_failing": [
+      "quarantine::groups::tests::only_a_current_root_group_resolves_and_cursors_bind_to_the_quarantine"
+    ],
+    "rule": "A cursor read after the quarantine changed is stale."
+  },
+  {
+    "id": "S5-cleared-means-held",
+    "file": "crates/journals/src/quarantine/groups.rs",
+    "find": "        .filter(|id| !held_after(id))\n        .collect();\n    let still",
+    "replace": "        .filter(|id| held_after(id))\n        .collect();\n    let still",
+    "expect_failing": [
+      "quarantine::groups::tests::resolution_effect_reports_cleared_waiting_and_new_rows_like_python"
+    ],
+    "rule": "dependents_cleared lists the waiting rows no longer held."
+  },
+  {
+    "id": "S5-unmeasured-as-zero",
+    "file": "crates/journals/src/quarantine/groups.rs",
+    "find": "            (\"dependents_cleared\", Py::Null),\n",
+    "replace": "            (\"dependents_cleared\", Py::from(0)),\n",
+    "expect_failing": [
+      "quarantine::groups::tests::resolution_effect_reports_cleared_waiting_and_new_rows_like_python"
+    ],
+    "rule": "Without a reprocess the cleared rows are unmeasured, not zero."
+  },
+  {
+    "id": "S5-stale-root-accepted",
+    "file": "crates/journals/src/quarantine/groups.rs",
+    "find": "if !current.member(transaction_id).is_some_and(|m| m.is_root) {",
+    "replace": "if current.member(transaction_id).is_none() {",
+    "expect_failing": [
+      "quarantine::groups::tests::only_a_current_root_group_resolves_and_cursors_bind_to_the_quarantine"
+    ],
+    "rule": "Only a current root group can be resolved."
   },
   {
     "id": "JV-row-get",

@@ -98,6 +98,27 @@ def vectors(*, include_goldens=False):
     add('row-field-fallback', [{**row, 'fiat_rate_exact': '1.2500', 'fiat_rate': 9,
                                'fiat_value_exact': '-0.00', 'fiat_value': 8,
                                'note': 'note', 'description': 'description', 'kind': 'income'}])
+    # Coarse-price acceptance (#708): only an unaccepted or changed coarse
+    # price is held; a projected row is judged by its transaction's price.
+    coarse = {**row, 'pricing_quality': 'coarse_fallback', 'fiat_rate_exact': '3197.6'}
+    for name, change in [
+        ('unaccepted', {}),
+        ('accepted-trailing-zero', {'pricing_review_accepted_price': 'rate:3197.60'}),
+        ('accepted-projected', {'fiat_rate_exact': '1', 'pricing_review_price': 'rate:3197.6',
+                                'pricing_review_accepted_price': 'rate:3197.6'}),
+        ('changed', {'pricing_review_accepted_price': 'rate:3197.5'}),
+        ('kind-changed', {'pricing_review_accepted_price': 'value:3197.6'}),
+        ('projected-unpriced', {'pricing_review_price': None, 'pricing_review_accepted_price': 'rate:1'}),
+        ('malformed', {'pricing_review_accepted_price': 'rate:abc'}),
+        ('signaling', {'pricing_review_accepted_price': 'rate:sNaN'}),
+        ('empty', {'pricing_review_accepted_price': ''}),
+        ('value-only', {'fiat_rate_exact': None, 'fiat_value_exact': '12.50',
+                        'pricing_review_accepted_price': 'value:12.5'}),
+        ('nan-rate', {'fiat_rate_exact': 'NaN', 'pricing_review_accepted_price': 'rate:NaN'}),
+        ('integer-acceptance', {'pricing_review_accepted_price': 5}),
+        ('exact-quality', {'pricing_quality': 'exact', 'pricing_review_accepted_price': 'rate:abc'}),
+    ]:
+        add(f'row-coarse-{name}', [{**coarse, **change}], config={'require_coarse_review': True})
     add('row-order-and-wallet-order', [{**row, 'id': 'custody-tax:z'}, {**row, 'id': 'custody-tax:a'}],
         refs={'z': {'id': 'z', 'label': 'Unused'}, 'w': {'id': 'w', 'label': 'Wallet'}})
     from kassiber.core.ownership_transfers import ChainConfirmationObservation

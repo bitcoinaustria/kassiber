@@ -144,7 +144,7 @@ pub(super) fn plain_finite(v: &Value) -> bool {
 }
 
 #[derive(Clone)]
-pub(super) enum Money {
+pub(crate) enum Money {
     Finite(Decimal),
     Special(String),
 }
@@ -174,7 +174,7 @@ impl Money {
         })
     }
 
-    pub(super) fn parse(v: &Value) -> Result<Self, String> {
+    pub(crate) fn parse(v: &Value) -> Result<Self, String> {
         let raw = string(v);
         let s = raw.py_strip();
         match Decimal::from_str(s) {
@@ -230,14 +230,14 @@ impl Money {
             _ => Err("AppError".into()),
         }
     }
-    pub(super) fn positive(&self) -> Result<bool, String> {
+    pub(crate) fn positive(&self) -> Result<bool, String> {
         match self {
             Self::Finite(d) => Ok(d.is_positive()),
             Self::Special(s) if s.contains("NaN") => Err("InvalidOperation".into()),
             Self::Special(s) => Ok(!s.starts_with('-')),
         }
     }
-    pub(super) fn fixed(&self) -> Result<String, String> {
+    pub(crate) fn fixed(&self) -> Result<String, String> {
         match self {
             Self::Finite(d) => d.to_fixed_string().map_err(error),
             Self::Special(s) => Ok(s.clone()),

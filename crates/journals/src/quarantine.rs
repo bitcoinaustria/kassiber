@@ -16,12 +16,25 @@ use crate::views::{
     unknown, Row,
 };
 
+pub mod groups;
+
 const KIND: &str = "ui.journals.quarantine";
 const MAX_UI_PREVIEW_LIMIT: i64 = 100;
 const MAX_GROUPS: usize = 50;
 const MAX_ASSUMPTION_ITEMS: usize = 50;
 const MAX_GROUP_ROOTS: usize = 25;
 const SCOPES: [&str; 3] = ["all", "attention", "waiting"];
+
+/// `QUARANTINE_SUMMARY_DEFINITIONS`: one sentence per summary counter.
+const SUMMARY_DEFINITIONS: [(&str, &str); 7] = [
+    ("count", "Every quarantined row in the active book, one per transaction."),
+    ("by_reason", "Rows per stored primary reason."),
+    ("attention_count", "Root causes plus downstream rows whose root cannot be named; the review badge's quarantine_attention counts the same set."),
+    ("waiting_count", "Downstream rows that wait on a named root and clear when it is resolved."),
+    ("blocking_count", "Rows named by a report-blocking custody quantity issue."),
+    ("scope_count", "Rows the chosen scope lists; items pages through them."),
+    ("group_count", "Cause groups in summary.groups; ui.journals.quarantine.groups counts per root transaction instead."),
+];
 
 const DOWNSTREAM: &str = "downstream";
 const CATEGORIES: [&str; 7] = [
@@ -484,6 +497,7 @@ fn iso_utc(value: &str) -> Option<i64> {
 
 /// `quarantine_review._journal_freshness`.
 fn journal_freshness(conn: &Connection, profile_id: &str) -> Result<Py, AppError> {
+    let id = Sql::Text(profile_id.to_owned());
     let marker = query(
         conn,
         "SELECT p.*,
@@ -492,10 +506,11 @@ fn journal_freshness(conn: &Connection, profile_id: &str) -> Result<Py, AppError
                        AS active_transaction_count
             FROM profiles p
             WHERE p.id = ?",
-        &[Sql::Text(profile_id.to_owned())],
+        std::slice::from_ref(&id),
     )?
     .into_iter()
     .next();
+    // `custody_journal.projection_freshness`, calculation semantics included.
     let (status, needs, processed_at) = match &marker {
         None => ("no_profile", false, Py::Null),
         Some(row) => {
@@ -1586,12 +1601,30 @@ pub fn snapshot(conn: &Connection, args: Option<&Py>) -> Result<Py, AppError> {
             Key::from("profile_id"),
             s(py_str(&py(profile.get("id"))).as_str()),
         ),
+        // A price entered for a held row is in this currency.
+        (Key::from("fiat_currency"), {
+            let currency = py(profile.get("fiat_currency"));
+            let upper = if py_truthy(&currency) {
+                kassiber_pytext::upper(&py_str(&currency))
+            } else {
+                String::new()
+            };
+            if upper.is_empty() {
+                Py::Null
+            } else {
+                s(upper)
+            }
+        }),
         (Key::from("count"), Py::Int(total)),
         (Key::from("by_reason"), Py::List(by_reason)),
         (Key::from("limit"), Py::Int(limit.into())),
         (Key::from("offset"), Py::Int(offset)),
     ];
     summary.extend(review_summary);
+    summary.push((
+        Key::from("definitions"),
+        dict(SUMMARY_DEFINITIONS.iter().map(|(k, v)| (*k, s(*v)))),
+    ));
     let items = page
         .into_iter()
         .map(|item| {

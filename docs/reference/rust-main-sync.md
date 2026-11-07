@@ -71,7 +71,7 @@ Rust code was read instead.
 | PR | Python | Kinds and leaves | Rust state | Rust location |
 | --- | --- | --- | --- | --- |
 | #675, #678, #684, #686, #708 | `db.py`: `transactions.pricing_review_accepted_price`, `ai_providers.agent_access`, table `ai_provider_checks`, custody AI audit `consent_decision` CHECK widened to `mode_auto`, `mode_full_access`, `mcp_host` (table rebuild) | every kind and leaf that opens a book | **Done (S1)**. Before: every book the merged Python created or opened answered `requires_python_migration` (`object: ai_provider_secret_refs`, `reason: schema_structure`) on every database kind, 99 of the 103 read kinds on the Python-built `austria` book | `crates/store` (`schema.rs`, `compat*.rs`, `creation.rs`) |
-| #679, #681 | new CLI leaves `journals quarantine groups`, `transactions verify`, `transfers dismissals list`, `transfers dismissals delete`; kind derivation for `transfers_dismissals_command` | the four leaves | Kind derivation **done (S1)**. `transactions verify` **done (S8)**; the others stay `not_implemented` until S5 and S6 | `crates/envelope/src/lib.rs` (subcommand attrs), `crates/cli` |
+| #679, #681 | new CLI leaves `journals quarantine groups`, `transactions verify`, `transfers dismissals list`, `transfers dismissals delete`; kind derivation for `transfers_dismissals_command` | the four leaves | Kind derivation **done (S1)**. `journals quarantine groups` **done (S5)**, `transactions verify` **done (S8)**; the dismissals leaves stay `not_implemented` until S6 | `crates/envelope/src/lib.rs` (subcommand attrs), `crates/cli` |
 | #678, #684, #686 | changed arguments: `mcp enable` (`--grant`, `--agent-access`), `mcp call` (`--grant`, `--client`, effect now `mutating`), `chat` (`--permission-mode`, file options), `ai providers create/update` (`--agent-access`), `journals quarantine resolve price-override/exclude` (`--group-id`, `--reprocess`) | those leaves | `describe` **done (S1)**. None of these leaves is native | `crates/cli/src/describe.rs` |
 | #679, #681, #684, #689 | `command_capabilities.py`: four CLI leaves and four daemon kinds | `ui.transfers.dismissals.list/delete`, `ui.chat.attachments.upload`, `ai.chat.permission_mode` | **Done (S1)**: 317 entries each. The kinds stay `not_implemented` until S6 and S12 | `crates/runtime/src/capabilities.rs` |
 
@@ -81,9 +81,9 @@ Rust code was read instead.
 | --- | --- | --- | --- | --- |
 | #679 | `core/transaction_lookup.py`, `handlers.resolve_transaction`: a reference resolves by id, then an unambiguous external id, then a qualified `<external id>:<wallet or in/out>`; ambiguity lists every candidate | every leaf and kind taking a transaction reference | **Differs**: `metadata notes set --transaction <txid>:in` succeeds in Python, Rust answers "not found"; the bare shared txid's `ambiguous_reference` hint differs | eight resolver copies: `crates/transactions/src/{metadata,attachments}.rs`, `crates/transfers/src/{dismissals,pair_authoring,component_reads}.rs`, `crates/reports/src/source_funds_reads.rs`, `crates/journals/src/evidence_summary.rs`, `crates/kassiber/src/real_store/journals.rs` |
 | #680 | `review_workflow.py`: plans carry journal-meaning term operations (`pair`, `dismiss_pair`, `undismiss_pair`, `custody_gap`) and a per-year tax `delta`; apply checks the delta; receipts keep it | `ui.review.plan`, `ui.review.apply`, `ui.review.receipt`, `ui.review.cases` | **Refused**: a `pair` or `dismiss_pair` plan returns a plan in Python and "Review operation type is unsupported" in Rust. No Rust artifact carries `delta`, so an artifact either side makes is refused by the other | `crates/transfers/src/review_operations.rs`, `crates/daemon/src/review.rs`, `crates/journals/src/review_effects.rs` |
-| #708 | `pricing.reviewed_price`, `metadata.py`, `transaction_history.py`, `ledger_request._coarse_needs_review`: an accepted coarse price is no longer held for review while the price is unchanged; a price edit drops the acceptance; history shows it | `ui.review.plan/apply` (`accept_coarse_prices`), `ui.transactions.metadata.update`, `ui.transactions.history`, `journals process` | **Refused**: `accept_coarse_prices` is an unsupported operation in Rust (Python: `review_case_changed`, nothing waiting). Rust's request builder sends `coarse` for every `coarse_fallback` row (`crates/custody/src/ledger_request.rs:654`), so after S1 an accepted book would quarantine again under Rust. Today such a book is refused by S1 | `crates/custody/src/ledger_request.rs`, `crates/journals/src/prebuild/pricing.rs`, `crates/transactions/src/metadata/history.rs` |
+| #708 | `pricing.reviewed_price`, `metadata.py`, `transaction_history.py`, `ledger_request._coarse_needs_review`, `custody_tax_projection._base_row`: an accepted coarse price is no longer held for review while the price the journals read is unchanged (compared by decimal value); a changed price is held again; projected rows carry their transaction's reviewed price; history shows the acceptance | `ui.review.plan/apply` (`accept_coarse_prices`), `ui.transactions.history`, `ui.transactions.history.revert`, `ui.activity.stale`, `journals process` | **Done (S3)** for the request builder, the projection, the metadata service and history; see [after S3 and S5](#after-s3-and-s5). `accept_coarse_prices` stays an unsupported review operation until S4, which calls the ported `accept_coarse_price` | `crates/custody/src/coarse_review.rs`, `crates/custody/src/ledger_request.rs` (`coarse_needs_review`), `crates/custody/src/finalized_projection.rs`, `crates/transactions/src/metadata/{grouped,history}.rs` |
 | #707, #711, bd162caca | `review_workflow.py`, `ui_snapshot.py`, `daemon_freshness.py`: cases name `fiat_currency`; badges add `review` and `definitions`; freshness pairs automatically before journals | `ui.review.cases`, `ui.review.badges`, `ui.freshness.run`, `ui.workspace.freshness.run` | **Differs**: `ui.review.cases` lacks `fiat_currency`; `ui.review.badges` lacks `review` and `definitions` (fresh root too). Freshness: inspection | `crates/daemon/src/review.rs`, `crates/daemon/src/workspace_reads.rs`, `crates/wallets` (freshness) |
-| #681 | `quarantine_review.py` (+453): quarantine rolled up by root cause, groups, attention count, definitions; resolving by `group_id` with `reprocess` | `ui.journals.quarantine`, `journals quarantine groups`, `ui.journals.quarantine.resolve`, `ui.review.badges`, AI kind `ui.journals.quarantine.groups` | **Differs**: summary lacks `definitions` and `fiat_currency`; resolve with `group_id` is refused as an unsupported field (Python validates it). The books have no quarantine, so group rows were not compared | `crates/journals/src/quarantine.rs`, `crates/journals/src/views.rs`, `crates/daemon/src/journals.rs` |
+| #681 | `quarantine_review.py` (+453): quarantine rolled up by root cause, groups, attention count, definitions; resolving by `group_id` with `reprocess` | `ui.journals.quarantine`, `journals quarantine groups`, `ui.journals.quarantine.resolve`, `ui.review.badges`, AI kind `ui.journals.quarantine.groups` | **Done (S5)** for the summary (`definitions`, `fiat_currency`), the groups core and its CLI leaf, and resolve by `group_id` with the measured or unmeasured effect; see [after S3 and S5](#after-s3-and-s5). The AI-only kind `ui.journals.quarantine.groups` follows with S12; the CLI leaves `journals quarantine resolve price-override/exclude` were not native before and stay with Python; `ui.review.badges` is S4 | `crates/journals/src/quarantine.rs`, `crates/journals/src/quarantine/groups.rs`, `crates/kassiber/src/real_store/journals.rs`, `crates/cli/src/run.rs` |
 | #681 | `wallet_completeness.py`, `transaction_verify.py` | `ui.wallets.list`, `wallets list`, `transactions verify`, AI kind `ui.transactions.verify` | **Done (S8)**; see [after S8 to S10](#after-s8-to-s10). Before: wallets lacked `completeness_class` and `scan_bounds`; `transactions verify` was not native. The AI-only kind follows with S12 | `crates/wallets/src/completeness.rs`, `crates/journals/src/transaction_graph/verify.rs` |
 | #679, #683 | `custody_review_terms.dismiss_pair_candidate`, `transfer_matching.active_dismissed_pairs`, `handlers.suggest_transfer_candidates`: a dismissal marks journals stale, can be listed and deleted, and suggestions report exclusions (active pair, already journaled moves, dismissal) | `ui.transfers.dismiss`, `transfers dismiss`, `ui.transfers.suggest`, `ui.transfers.dismissals.list/delete`, `transfers dismissals list/delete` | **Differs**: after `transfers dismiss` Python bumps `journal_input_version`, Rust does not; `ui.transfers.suggest` lacks `exclusions`; list/delete kinds and leaves are not native | `crates/transfers/src/dismissals.rs`, `crates/transfers/src/pairing/service.rs`, `crates/daemon/src/transfers.rs` |
 | #679 | `custody_components.py`, `custody_component_planner.py`: revision planning and activation errors with remediation; qualified references | `ui.transfers.components.plan/apply`, review `custody_component` operations | Inspection: a revise plan for an unknown component answers the same; activation remediation and qualified references follow S2 | `crates/transfers` (components), `crates/custody` |
@@ -205,17 +205,17 @@ XL above.
    lands the Rust app cannot open a book the current Python app has opened.
 2. ★ **S2 Qualified transaction references** (M). One resolver following
    `core/transaction_lookup.py`, replacing the eight copies. Needs S1.
-3. ★ **S3 Coarse-price acceptance** (M). The request builder's accepted-price
-   rule, the acceptance column on price edits and history, the history labels.
-   Needs S1.
+3. ★ **S3 Coarse-price acceptance** (M). **Done**; see [after S3 and S5](#after-s3-and-s5).
+   The request builder's accepted-price rule, the acceptance column on price
+   edits and history, the history labels. Needs S1.
 4. ★ **S4 Review workflow** (L). Term operations, `accept_coarse_prices`,
    the per-year tax delta in plan, apply and receipt, `fiat_currency` on
    cases, `review` and `definitions` on badges, automatic pairing before
    journals in freshness. Needs S2 and S3, and S6's dismissal storage for
    `dismiss_pair`.
-5. ★ **S5 Quarantine root causes** (L). Groups, attention counts,
-   definitions, `journals quarantine groups`, resolve by group with
-   `reprocess`. Needs S1.
+5. ★ **S5 Quarantine root causes** (L). **Done**; see [after S3 and S5](#after-s3-and-s5).
+   Groups, attention counts, definitions, `journals quarantine groups`,
+   resolve by group with `reprocess`. Needs S1.
 6. ★ **S6 Transfer dismissals** (M). Stale journals on dismiss, list and
    delete leaves and kinds, suggestion exclusions. Needs S2.
 7. ★ **S7 Reports screen** (L). The capital-gains payload and indicative tax
@@ -393,6 +393,96 @@ predate `ai_provider_checks` (the 113th table, S1), and many Python harnesses
 still assert 112 tables (`tests/test_rust_*.py`, `gen_lightning_vectors.py`).
 This slice moved only the ones it uses (`tests/rust_desktop_parity.py`,
 `tests/test_rust_workspace_shell.py`, the workspace vectors).
+
+## After S3 and S5
+
+### S3
+
+`journals process` on a coarse-review book (`require_coarse_review`, two
+coarse prices) gives the same envelope and the same book as Python in seven
+shapes, plaintext and SQLCipher: unaccepted, accepted, accepted then rebuilt
+with trailing zeros, accepted then changed, accepted as a value, accepted as
+a value then priced by a rate, and review not required. Only the unaccepted
+and changed prices are held. `ui.transactions.history`, `ui.activity.history`
+and `ui.transactions.history.revert` render and revert the acceptance like
+Python (`tests/test_rust_coarse_price_acceptance.py`, 18 cases). Thirteen
+Python-oracle builder cases (`row-coarse-*` in `custody_fusion_builder.json`)
+cover the rule's edges, including an sNaN acceptance, a NaN rate
+(`InvalidOperation`) and a non-text acceptance (`AttributeError`).
+
+Before S3, 26 Python/Rust oracle tests failed on this base: the merged
+Python's projection rows carry `pricing_review_price`, which the committed
+projection fixtures and the Rust projection lacked
+(`test_custody_projection_port`, `_composition_port`, `_quarantines_port`,
+`_stage` and the fusion-builder probe). The fixtures were regenerated from
+the merged Python, refusing any change but that key and, in one DB-built
+adapter case, the new column; all 26 pass, with the ledger goldens and the
+builder probe over them. The S3 mutation entries (8 custody, 6 transactions)
+are all killed.
+
+Found while comparing, owned by S4: since #707 Python's journal rebuild
+recounts transfer candidates and caches `profiles.swap_candidate_count`
+(bumping the chain-index revision); Rust does not. Every `journals process`
+book comparison differs there; the S3 and S5 tests mask exactly that column
+and revision and compare the rest. The existing auto-pair comparison in
+`test_rust_journal_commands.py` also fails on this base, on the envelope
+(first case `exact-generic-False-False`); not investigated here.
+
+### S5
+
+`journals quarantine groups` answers byte for byte as Python's CLI on a
+book with a root two rows wait on, a root of its own and an unrooted
+downstream row: the overview, `--limit` bounds, each group kind, unknown and
+malformed groups, and paging by Python's own cursors, including truncated,
+foreign, retyped and stale ones (`tests/test_rust_quarantine_groups.py`,
+plaintext and SQLCipher). `ui.journals.quarantine.resolve` by `root:` group
+gives Python's envelope and book with and without a reprocess, for a root
+with dependents, a root of its own, a transaction and an unmeasured
+downstream row, and every refusal (target, group kind, stale group, price
+arguments) leaves the book unchanged. Rust unit tests compare the overview,
+member pages, cursors and the resolution effect with Python's
+`json.dumps` of `quarantine_review` on one fixture
+(`gen_quarantine_group_vectors.py`).
+
+The quarantine summary now evaluates freshness with the calculation-semantics
+term, as Python's `projection_freshness` does; before, Rust reported a book
+whose journal semantics had moved on as current. This predates the merge.
+`ui.journals.snapshot` and `ui.journals.events.list` keep that gap in
+`views.rs` (`freshnessReason`, `needsJournals`; fixed on
+`t3code/r6-5b-ai-tools`), so `test_rust_journal_views.py` still fails on
+those kinds; none of its differences is in `ui.journals.quarantine`. The S5
+mutation entries (10 journals, 6 desktop daemon and CLI entries run through
+`crates/wallets/scripts/freshness_mutation_check.py`) are all killed.
+
+### Verification of S3 and S5
+
+Workspace fmt and clippy with `-D warnings` (custody, transactions,
+journals, cli, daemon, kassiber with `test-harness`) pass. Every test binary
+of `kassiber-custody`, `-transactions`, `-cli`, `-daemon`, `-runtime`,
+`-envelope` and `kassiber` passes. In `kassiber-journals` the library and 12
+integration binaries pass; seven fail identically at 6159f8f39, with the
+same pass counts, so they predate these slices: `crash` (its `cipher`
+vector, `kill=1`; not investigated), and `persistence` (15),
+`prebuild_legacy` (6), `prebuild_pipeline` (4), `prebuild_pricing` (10),
+`prebuild_sources` (10) and `probe` (1), whose stored Python table dumps
+predate S1's schema (`ai_providers.agent_access` first). Those dumps need
+regenerating against the 113-table schema; that belongs with S1, not here.
+
+### Read diff after S3 and S5
+
+`desktop_read_diff.py` on the Python-built `austria` book (built by
+`report_design_books.py`'s steps with this checkout's Python CLI), the
+default read kinds plus the seven report reads and
+`ui.review.plan/worklist/receipt`, debug binaries: 113 kinds compared;
+before (6159f8f39) 12 differ, after 11. `ui.journals.quarantine` no longer
+differs; the other 11 are the after-S1 list's other kinds. A targeted run
+with arguments (`ui.journals.quarantine` with `scope`,
+`ui.transactions.history` for a transaction, `ui.activity.history`,
+`ui.activity.stale`, `ui.journals.quarantine.resolve` with an unknown
+`root:` group) has 2 of 5 differing before (`ui.journals.quarantine`; the
+resolve answered `validation` for the unsupported field where Python answers
+`quarantine_group_stale`) and none after. The book holds no quarantine and no
+coarse price, so the differential tests above cover those paths.
 
 ## Verification of the merge
 

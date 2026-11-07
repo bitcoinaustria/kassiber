@@ -18,6 +18,8 @@ pub struct GroupedUpdate {
     pub at_regime: Option<Value>,
     pub at_category: Option<Value>,
     pub kind: Option<Value>,
+    /// Accept the transaction's current coarse price as reviewed.
+    pub accept_coarse_price: bool,
     pub source: String,
     pub reason: Option<kassiber_pyjson::PyStr>,
 }
@@ -168,6 +170,68 @@ fn decimal(raw: &Value, field: &str) -> Result<Option<Decimal>> {
 
 fn arithmetic(error: DecimalError) -> AppError {
     AppError::new("internal_error", error.to_string())
+}
+
+/// `pricing.reviewed_price`: the price an acceptance is bound to, as journals
+/// read it (the rate first, then the value): `rate:<exact>` or `value:<exact>`.
+fn reviewed_price(tx: &Value) -> Result<Option<String>> {
+    for (kind, exact, field) in [
+        ("rate", "fiat_rate_exact", "fiat_rate"),
+        ("value", "fiat_value_exact", "fiat_value"),
+    ] {
+        let Some(raw) = [value(tx, exact), value(tx, field)]
+            .into_iter()
+            .find(|v| !matches!(v, Value::Null) && *v != s(""))
+        else {
+            continue;
+        };
+        let text = py_str(&raw);
+        let fixed = match strip(&text).parse::<Decimal>() {
+            Ok(number) if number.is_positive() => number.to_fixed_string().map_err(arithmetic)?,
+            Ok(_) => continue,
+            Err(DecimalError::NonFinite) => {
+                let special = lower(strip(&text)).replace('_', "");
+                match special.as_str() {
+                    "inf" | "infinity" | "+inf" | "+infinity" => "Infinity".to_owned(),
+                    "-inf" | "-infinity" => continue,
+                    // `NaN > 0` raises InvalidOperation in Python.
+                    _ => {
+                        return Err(AppError::new(
+                            "internal_error",
+                            "[<class 'decimal.InvalidOperation'>]",
+                        ))
+                    }
+                }
+            }
+            Err(_) => {
+                return Err(AppError::new(
+                    "app_error",
+                    format!("Invalid decimal value: {text}"),
+                ))
+            }
+        };
+        return Ok(Some(format!("{kind}:{fixed}")));
+    }
+    Ok(None)
+}
+
+/// The acceptance `accept_coarse_price` records: the transaction's current
+/// coarse price, so a later price change is reviewed again.
+fn accepted_coarse_price(tx: &Value, pricing: bool) -> Result<String> {
+    if pricing {
+        return Err(AppError::new(
+            "validation",
+            "accept the current coarse price or set a new one, not both",
+        ));
+    }
+    if text(tx, "pricing_quality") != "coarse_fallback" {
+        return Err(
+            AppError::new("validation", "only a coarse price can be accepted")
+                .with_details(dict([("pricing_quality", value(tx, "pricing_quality"))])),
+        );
+    }
+    reviewed_price(tx)?
+        .ok_or_else(|| AppError::new("validation", "the coarse price has no value to accept"))
 }
 
 fn pricing(
@@ -337,6 +401,10 @@ fn pricing(
 
 pub(super) fn update(conn: &Connection, scope: &Scope<'_>, input: &GroupedUpdate) -> Result<Value> {
     let tx = transaction(conn, scope.profile_id, &input.transaction)?;
+    let accepted = input
+        .accept_coarse_price
+        .then(|| accepted_coarse_price(&tx, input.pricing.is_some()))
+        .transpose()?;
     let mut updates = BTreeMap::<String, Value>::new();
     if let Some(note) = &input.note {
         if !matches!(note, Value::Null) {
@@ -420,6 +488,10 @@ pub(super) fn update(conn: &Connection, scope: &Scope<'_>, input: &GroupedUpdate
                 .with_details(dict([("kind", s(kind)), ("direction", value(&tx, "direction"))])));
         }
     }
+    if let Some(accepted) = accepted {
+        // Bound to this exact value: a changed price is reviewed again.
+        updates.insert("pricing_review_accepted_price".into(), s(accepted));
+    }
     if let Some(input) = &input.pricing {
         updates.extend(pricing(conn, scope, &tx, input)?);
     }
@@ -448,6 +520,7 @@ pub(super) fn update(conn: &Connection, scope: &Scope<'_>, input: &GroupedUpdate
             "at_category" => "at_category_override",
             "fiat_rate" => "fiat_rate_exact",
             "fiat_value" => "fiat_value_exact",
+            "pricing_review_accepted" => "pricing_review_accepted_price",
             _ => field,
         };
         let after = if field == "tags" {
