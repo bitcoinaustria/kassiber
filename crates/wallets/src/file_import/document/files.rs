@@ -130,6 +130,9 @@ pub(super) fn mime(path: &Path) -> &'static str {
         ".webp" => "image/webp",
         ".gif" => "image/gif",
         ".pdf" => "application/pdf",
+        // Python's own table; `.xlsx` and `.xlsm` are not in it.
+        ".csv" => "text/csv",
+        ".tsv" => "text/tab-separated-values",
         _ => "application/octet-stream",
     }
 }

@@ -40,7 +40,7 @@ inspection. "Now" is the state on this branch.
 | #683 | system prompt evidence rules; journals stale on dismiss (S6) | `ai.chat` system prompt | `prompt.rs` (embedded) | Differs | Prompt regenerated |
 | #684 | `ai/undo.py`, `REVERSIBLE_TOOLS`, `AI_PERMISSION_MODES`, `AiToolConsentState.preapproval/set_permission_mode`; custody AI audit decisions `mode_auto`, `mode_full_access` | `ai.chat` `permission_mode`, kind `ai.chat.permission_mode`, `ai.chat.tool_call` `approval`, consent card `reversible`, `egresses`, `can_allow_session`, result `undo` | `crates/ai/src/consent.rs`, `chat/turn.rs`, `mutate.rs`, `crates/daemon/src/ai_chat.rs` | Missing: kind refused, no `reversible` | see [state](#state-on-this-branch) |
 | #686 | `agent_access.py` grants (`read`, `operator`, `accounting_decisions`) and access mode; `mcp/tools.py` registry over the broker's exact-path classification; writes through the assistant executor, audited `mcp_host` | `mcp serve` tool list and calls, `mcp enable --grant --agent-access`, `mcp call --grant --client`, `ui.agent_access.configure` | `crates/mcp`, `crates/daemon/src/agent_access.rs`, `crates/setup/src/agent_access.rs` | Differs: Rust lists the 44 read tools and refuses writes | Ported; see [MCP grants](#mcp-grants-686) |
-| #689 | `daemon_chat_uploads.py`: pasted files in chunks to an owner-only temporary file, staged like a picked file | kind `ui.chat.attachments.upload` | none | Refused (`not_implemented`) | Refused |
+| #689 | `daemon_chat_uploads.py`: pasted files in chunks to an owner-only temporary file, staged like a picked file | kind `ui.chat.attachments.upload`; `internal.document_import.stage` `purpose` and the staged `kind` | none | Refused (`not_implemented`) | Ported; see [chat files](#chat-files-staging-and-uploads-689-698) |
 | #690 | hints say "Settings → Assistant" instead of "Settings → AI providers" | provider and transport errors | `crates/ai/src/transport/errors.rs`, `providers` | Differs (hint text) | see [state](#state-on-this-branch) |
 | #693, #697 | `core/chat_files.py`: several files per turn; images and PDFs shown to a full-access provider; expired files dropped | `ai.chat` `files`, chat history | `chat/args.rs`, `chat/screen.rs`, `broker` | Differs: one attachment only | Not ported |
 | #698 | `core/document_chat_import.py`, `document_import.py` read step without a database and its detected API format | tools `ui.wallets.read_document`, `ui.wallets.import_document.plan/apply` | `crates/imports` (document core) | Missing | Catalog entries; refused until ported |
@@ -238,6 +238,32 @@ single burst exceeded the server's 32 calls in flight, so most calls on
 both sides were the same overload refusal. All 11 tests pass. Tools whose
 replies differ for another slice are listed in its `PENDING` map with their
 slice (S2, S4, S5, S6, S7, S8, S10) and are not compared until it lands.
+
+### Chat files: staging and uploads (#689, #698)
+
+- `internal.document_import.stage` takes `purpose`: `chat_attachment` stages
+  an export as well as a statement or photo (`chat_uploads::chat_attachment_source`:
+  an existing file of a chat type, at most 64 MB, its own errors), and the
+  staged `kind` is `file_kind`'s (`spreadsheet`, `delimited`, `pdf`,
+  `image`). The daemon keeps sixteen staging grants (#698).
+- `ui.chat.attachments.upload` (`crates/daemon/src/chat_uploads.rs`): a
+  pasted file in base64 chunks of up to 512 KiB, decoded as Python's
+  `b64decode(validate=True)`, into an owner-only file in a private 0700
+  directory; two uploads at a time, five minutes idle. The last chunk stages
+  it; the file is deleted with the last grant that names it, on lock, and
+  the upload root when the daemon ends.
+- #698's preview resolves the OCR provider and checks it is contactable
+  before the document's arguments, as Python's `preview_document_import`
+  now does. `tests/test_rust_document_cli.py` pins the Rust AI clock, since
+  that resolution seeds the built-in providers.
+- No image codec: Python adds a Pillow `thumbnail` to a staged chat image;
+  the Rust daemon, like Python without Pillow, sends none.
+
+`tests/test_rust_wallet_document_import.py` gains the chat picks and the
+upload sequence (refusals, renaming, order, completion, analysis, lock);
+its five tests pass, as do the document CLI and ingestion harnesses.
+`tests/rust_port/repro_stage_purpose_unhashable.py` records a Python crash
+on a list or object `purpose` that Rust refuses as validation.
 
 ### Tools harness after these steps
 

@@ -28,10 +28,11 @@ impl Providers {
         request: &DocumentPreview,
         consent: Option<DocumentConsent>,
     ) -> Result<Py, AppError> {
+        let provider = resolve_provider(conn, request.provider_name.as_deref())?;
+        kassiber_ai::providers::require_contactable(&provider)?;
         let path = files::source_path(&request.source_file)?;
         let threshold = threshold(&request.confidence_threshold)?;
         let page_limit = max_pages(&request.max_pages)?;
-        let provider = resolve_provider(conn, request.provider_name.as_deref())?;
         let consent = consent.ok_or_else(consent_error)?;
         consent.verify(conn, request, &provider)?;
         validate_local(&provider)?;

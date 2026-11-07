@@ -6,6 +6,7 @@
 //! rows stay inside the daemon until the import succeeds, the bounded session
 //! expires, or the book is locked, switched or restored. A document grants no
 //! ownership, basis or tax fact; its rows are observations like any import.
+use crate::chat_uploads::{self, ChatUploads, Received};
 use crate::{
     imports::optional_string,
     output::{with_request_id, RequestId},
@@ -15,17 +16,19 @@ use kassiber_envelope::{dict, get, py_str, s, success, truthy, AppError};
 use kassiber_pyjson::{Key, Value};
 use kassiber_runtime::store::ReviewedDocument;
 use kassiber_wallets::file_import::document::{staged_source, DocumentPreview};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
 pub const KINDS: &[&str] = &[
     "internal.document_import.stage",
+    chat_uploads::KIND,
     "ui.wallets.document_import.preview",
     "ui.wallets.document_import.import",
 ];
 
 const SESSION_TTL: Duration = Duration::from_secs(30 * 60);
-const MAX_SESSIONS: usize = 8;
+/// `MAX_DOCUMENT_IMPORT_SESSIONS`: sixteen since a chat holds up to eight files (#698).
+const MAX_SESSIONS: usize = 16;
 const RENDERER_FIELDS: [&str; 6] = [
     "source_file",
     "file",
@@ -56,6 +59,10 @@ pub(crate) struct Scope<'a> {
 #[derive(Default)]
 pub(crate) struct Sessions {
     sessions: HashMap<String, Session>,
+    /// Files the daemon wrote for a pasted attachment; deleted with the last
+    /// session that refers to them.
+    owned_files: HashSet<String>,
+    pub(crate) uploads: ChatUploads,
 }
 
 pub(crate) fn unavailable() -> AppError {
@@ -76,13 +83,18 @@ pub(crate) fn source_unavailable() -> AppError {
 
 /// `secrets.token_urlsafe(32)`.
 fn token() -> Result<String, AppError> {
+    token_urlsafe(32)
+}
+
+/// `secrets.token_urlsafe(n)`.
+pub(crate) fn token_urlsafe(n: usize) -> Result<String, AppError> {
     use std::io::Read;
-    let mut bytes = [0u8; 32];
+    let mut bytes = vec![0u8; n];
     std::fs::File::open("/dev/urandom")
         .and_then(|mut file| file.read_exact(&mut bytes))
         .map_err(|_| AppError::new("internal_error", "Could not create a document session"))?;
     const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-    let mut out = String::with_capacity(43);
+    let mut out = String::with_capacity(n * 4 / 3 + 1);
     for chunk in bytes.chunks(3) {
         let n =
             chunk.iter().fold(0u32, |acc, b| acc << 8 | u32::from(*b)) << (8 * (3 - chunk.len()));
@@ -95,8 +107,33 @@ fn token() -> Result<String, AppError> {
 
 impl Sessions {
     fn prune(&mut self, now: Instant) {
-        self.sessions
-            .retain(|_, session| now.duration_since(session.last_accessed) < SESSION_TTL);
+        let expired: Vec<String> = self
+            .sessions
+            .iter()
+            .filter(|(_, session)| now.duration_since(session.last_accessed) >= SESSION_TTL)
+            .map(|(token, _)| token.clone())
+            .collect();
+        for token in expired {
+            self.drop_session(&token);
+        }
+    }
+
+    /// `_drop_locked(token)`: an uploaded file goes with the last session
+    /// that refers to it.
+    fn drop_session(&mut self, token: &str) {
+        let Some(session) = self.sessions.remove(token) else {
+            return;
+        };
+        if !self.owned_files.contains(&session.source_file)
+            || self
+                .sessions
+                .values()
+                .any(|other| other.source_file == session.source_file)
+        {
+            return;
+        }
+        self.owned_files.remove(&session.source_file);
+        chat_uploads::discard_upload(&session.source_file);
     }
 
     fn evict(&mut self) {
@@ -107,7 +144,7 @@ impl Sessions {
                 .min_by_key(|(_, session)| session.last_accessed)
                 .map(|(token, _)| token.clone())
                 .expect("sessions");
-            self.sessions.remove(&oldest);
+            self.drop_session(&oldest);
         }
     }
 
@@ -125,10 +162,18 @@ impl Sessions {
         }
     }
 
-    fn stage(&mut self, source_file: String, scope: &Scope<'_>) -> Result<String, AppError> {
+    fn stage(
+        &mut self,
+        source_file: String,
+        scope: &Scope<'_>,
+        owned: bool,
+    ) -> Result<String, AppError> {
         let now = Instant::now();
         let token = token()?;
         self.prune(now);
+        if owned {
+            self.owned_files.insert(source_file.clone());
+        }
         self.sessions.insert(
             token.clone(),
             Session {
@@ -188,11 +233,15 @@ impl Sessions {
     }
 
     fn consume(&mut self, token: &str) {
-        self.sessions.remove(token);
+        self.drop_session(token);
     }
 
     pub(crate) fn clear(&mut self) {
-        self.sessions.clear();
+        let tokens: Vec<String> = self.sessions.keys().cloned().collect();
+        for token in tokens {
+            self.drop_session(&token);
+        }
+        self.uploads.clear();
     }
 }
 
@@ -331,7 +380,27 @@ impl Daemon {
     /// `_document_import_stage_payload`.
     fn stage_document(&mut self, args: &Value) -> Result<Value, AppError> {
         let source = required(args, "source_file", "Selected document")?;
-        let (path, size, media_type) = staged_source(&source).map_err(|_| source_unavailable())?;
+        let chat = match get(args, "purpose") {
+            None => false,
+            Some(purpose) if *purpose == s("document_import") => false,
+            Some(purpose) if *purpose == s("chat_attachment") => true,
+            // Python's set membership raises on a list or object purpose
+            // (tests/rust_port/repro_stage_purpose_unhashable.py); refused.
+            Some(_) => return Err(AppError::new("validation", "Unknown staging purpose")),
+        };
+        let (path, size) = if chat {
+            // Exports as well as statements and photos; the OCR preview still
+            // refuses anything but an image or PDF when it reads the token.
+            let path = chat_uploads::chat_attachment_source(&source)?;
+            let size = std::fs::metadata(&path)
+                .map_err(|_| source_unavailable())?
+                .len();
+            (path, size)
+        } else {
+            let (path, size, _) = staged_source(&source).map_err(|_| source_unavailable())?;
+            (path, size)
+        };
+        let media_type = kassiber_wallets::file_import::document::media_type(&path);
         let (workspace_id, profile_id) = self.document_scope()?;
         if !has(args, "review_case_id")
             && (has(args, "review_recipe") || has(args, "expected_review_fingerprint"))
@@ -365,16 +434,18 @@ impl Daemon {
         let data_root = self.data_root.clone();
         let source_file = path.to_string_lossy().into_owned();
         let token = self.document_sessions.stage(
-            source_file,
+            source_file.clone(),
             &Scope {
                 workspace_id: &workspace_id,
                 profile_id: &profile_id,
                 data_root: &data_root,
             },
+            false,
         )?;
-        let pdf = path
-            .extension()
-            .is_some_and(|ext| ext.to_string_lossy().to_lowercase() == "pdf");
+        // Python adds a `thumbnail` of a chat image when Pillow is present;
+        // the Rust daemon has no image codec and, like Python without
+        // Pillow, sends none.
+        let kind = kassiber_wallets::file_import::analysis::file_kind(&source_file);
         Ok(dict([
             ("document_token", s(token)),
             (
@@ -390,7 +461,62 @@ impl Daemon {
                     ),
                     ("media_type", s(media_type)),
                     ("size_bytes", Value::from(size as i64)),
-                    ("kind", s(if pdf { "pdf" } else { "image" })),
+                    ("kind", s(kind)),
+                ]),
+            ),
+        ]))
+    }
+
+    /// `_chat_attachment_upload_payload`: take one chunk of a pasted file;
+    /// the last one stages it like a pick.
+    fn upload_chat_attachment(&mut self, args: &Value) -> Result<Value, AppError> {
+        let (workspace_id, profile_id) = self.document_scope()?;
+        let data_root = self.data_root.clone();
+        let received =
+            self.document_sessions
+                .uploads
+                .receive(args, &workspace_id, &profile_id, &data_root)?;
+        let completed = match received {
+            Received::Progress {
+                upload_id,
+                received_bytes,
+            } => {
+                return Ok(dict([
+                    ("complete", Value::Bool(false)),
+                    ("upload_id", s(upload_id)),
+                    ("received_bytes", Value::from(received_bytes)),
+                ]));
+            }
+            Received::Complete(completed) => completed,
+        };
+        let token = self.document_sessions.stage(
+            completed.path.clone(),
+            &Scope {
+                workspace_id: &workspace_id,
+                profile_id: &profile_id,
+                data_root: &data_root,
+            },
+            true,
+        )?;
+        let path = std::path::Path::new(&completed.path);
+        Ok(dict([
+            ("complete", Value::Bool(true)),
+            ("document_token", s(token)),
+            (
+                "source",
+                dict([
+                    ("filename", s(completed.filename.as_str())),
+                    (
+                        "media_type",
+                        s(kassiber_wallets::file_import::document::media_type(path)),
+                    ),
+                    ("size_bytes", Value::from(completed.size_bytes)),
+                    (
+                        "kind",
+                        s(kassiber_wallets::file_import::analysis::file_kind(
+                            &completed.path,
+                        )),
+                    ),
                 ]),
             ),
         ]))
@@ -545,6 +671,13 @@ pub(super) fn handle(
                 false,
             ))
         }
+        chat_uploads::KIND => {
+            let payload = daemon.upload_chat_attachment(&args)?;
+            Ok((
+                Some(with_request_id(success(kind, payload), request_id)),
+                false,
+            ))
+        }
         "ui.wallets.document_import.preview" => {
             let payload = daemon.preview_document(&args)?;
             Ok((
@@ -584,7 +717,7 @@ mod tests {
     fn document_grants_stay_bound_to_their_book_and_preview() {
         let mut sessions = Sessions::default();
         let token = sessions
-            .stage("/files/receipt.png".into(), &scope("p"))
+            .stage("/files/receipt.png".into(), &scope("p"), false)
             .unwrap();
         assert_eq!(token.len(), 43);
         assert!(token
@@ -642,7 +775,7 @@ mod tests {
         let tokens: Vec<String> = (0..=MAX_SESSIONS)
             .map(|index| {
                 sessions
-                    .stage(format!("/files/{index}.png"), &scope("p"))
+                    .stage(format!("/files/{index}.png"), &scope("p"), false)
                     .unwrap()
             })
             .collect();
@@ -652,6 +785,34 @@ mod tests {
         assert!(sessions
             .source_for_preview(&tokens[MAX_SESSIONS], &scope("p"))
             .is_ok());
+    }
+
+    #[test]
+    fn an_uploaded_file_goes_with_the_last_grant_that_names_it() {
+        let directory = tempfile::tempdir().unwrap();
+        let holder = directory.path().join("upload");
+        std::fs::create_dir(&holder).unwrap();
+        let file = holder.join("paste.csv");
+        std::fs::write(&file, b"a").unwrap();
+        let path = file.to_string_lossy().into_owned();
+        let mut sessions = Sessions::default();
+        let token = sessions.stage(path.clone(), &scope("p"), true).unwrap();
+        let preview = sessions
+            .create_preview(&token, dict([("rows", Value::List(vec![]))]), &scope("p"))
+            .unwrap();
+        sessions.consume(&token);
+        assert!(file.exists(), "the preview grant still names it");
+        sessions.consume(&preview);
+        assert!(!file.exists() && !holder.exists());
+        // A picked file is the user's own and is never deleted.
+        let picked = directory.path().join("picked.csv");
+        std::fs::write(&picked, b"a").unwrap();
+        let token = sessions
+            .stage(picked.to_string_lossy().into_owned(), &scope("p"), false)
+            .unwrap();
+        sessions.consume(&token);
+        sessions.clear();
+        assert!(picked.exists());
     }
 
     #[test]

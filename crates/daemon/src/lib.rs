@@ -22,6 +22,7 @@ mod attachments;
 mod backends;
 mod backup;
 mod chain_analysis_reads;
+mod chat_uploads;
 pub mod control;
 mod diagnostics;
 mod documents;
@@ -218,6 +219,7 @@ pub fn supported_kinds() -> Vec<&'static str> {
     );
     kinds.push("ui.wallets.import_file");
     kinds.push("internal.document_import.stage");
+    kinds.push(chat_uploads::KIND);
     kinds.push("ui.wallets.document_import.preview");
     kinds.push("ui.wallets.document_import.import");
     kinds.push("ui.wallets.import_samourai");

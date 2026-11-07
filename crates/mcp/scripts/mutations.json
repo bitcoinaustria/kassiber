@@ -485,5 +485,55 @@
       "the_audit_admits_pythons_consent_decisions"
     ],
     "rule": "The custody AI audit records an MCP host's approval (`mcp_host`)."
+  },
+  {
+    "id": "chat-upload-file-goes-with-last-grant",
+    "file": "crates/daemon/src/documents_import.rs",
+    "find": "        if !self.owned_files.contains(&session.source_file)\n            || self\n                .sessions\n                .values()\n                .any(|other| other.source_file == session.source_file)\n        {",
+    "replace": "        if !self.owned_files.contains(&session.source_file) {",
+    "expect_failing": [
+      "an_uploaded_file_goes_with_the_last_grant_that_names_it"
+    ],
+    "rule": "A pasted file stays while any grant (a preview's too) still names it (#689)."
+  },
+  {
+    "id": "chat-upload-picked-file-kept",
+    "file": "crates/daemon/src/documents_import.rs",
+    "find": "        if !self.owned_files.contains(&session.source_file)\n            || self",
+    "replace": "        if false\n            || self",
+    "expect_failing": [
+      "an_uploaded_file_goes_with_the_last_grant_that_names_it"
+    ],
+    "rule": "Only files the daemon wrote are deleted; a picked file is the user's."
+  },
+  {
+    "id": "chat-upload-chunks-in-order",
+    "file": "crates/daemon/src/chat_uploads.rs",
+    "find": "        if offset != upload.received_bytes {",
+    "replace": "        if false && offset != upload.received_bytes {",
+    "expect_failing": [
+      "out_of_order_or_oversized_chunks_end_the_upload"
+    ],
+    "rule": "A chunk out of order ends the upload."
+  },
+  {
+    "id": "chat-upload-chat-types-only",
+    "file": "crates/daemon/src/chat_uploads.rs",
+    "find": "    if !CHAT_ATTACHMENT_EXTENSIONS.contains(&extension_lower.as_str()) {",
+    "replace": "    if extension_lower.is_empty() {",
+    "expect_failing": [
+      "filenames_keep_the_name_and_the_chat_types_only"
+    ],
+    "rule": "The chat takes exports, statements and photos only."
+  },
+  {
+    "id": "chat-upload-strict-base64",
+    "file": "crates/daemon/src/chat_uploads.rs",
+    "find": "        2 => padding == 2,",
+    "replace": "        2 => padding >= 1,",
+    "expect_failing": [
+      "strict_base64_follows_python"
+    ],
+    "rule": "Chunks decode as Python's b64decode(validate=True) does."
   }
 ]
