@@ -204,6 +204,35 @@ class ChatAttachmentUploadTests(unittest.TestCase):
                 self.assertEqual(envelope["kind"], "error")
                 self.assertEqual(envelope["error"]["code"], "validation")
 
+    def test_chat_file_attaches_the_grant_the_daemon_staged(self):
+        from types import SimpleNamespace
+
+        from kassiber.cli import chat
+
+        picked = os.path.join(self._tmp.name, "export.csv")
+        with open(picked, "w", encoding="utf-8") as handle:
+            handle.write("time,amount\n2025-01-01,1\n")
+        test = self
+
+        class Client:
+            """`kassiber chat`'s two calls, answered by this daemon's handler."""
+
+            replies = []
+
+            def send(self, request):
+                envelope, _ = daemon.handle_request(test.ctx, request, out=None)
+                self.replies.append(envelope)
+
+            def read(self):
+                return self.replies.pop(0)
+
+        grants = chat._stage_chat_attachments(
+            Client(), SimpleNamespace(file=[picked], file_context=[" statement "]),
+        )
+        self.assertEqual(len(grants), 1)
+        self.assertEqual(grants[0]["label"], "statement")
+        self.assertEqual(self.staged_path(grants[0]["token"]), os.path.realpath(picked))
+
     def test_refusals_leave_nothing_behind(self):
         def code(envelope):
             return envelope["error"]["code"]

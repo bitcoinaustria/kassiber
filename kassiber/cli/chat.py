@@ -568,7 +568,8 @@ def _stage_chat_attachments(
         )
         response = _read_control_response(client, request_id)
         data = response.get("data") if isinstance(response.get("data"), dict) else {}
-        token = data.get("token")
+        # The stage reply names the grant `document_token`.
+        token = data.get("document_token")
         if not isinstance(token, str) or not token:
             raise AppError(
                 "could not attach the file to this chat",
