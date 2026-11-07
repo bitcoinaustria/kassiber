@@ -28,6 +28,7 @@ from ..backends import backend_timeout, backend_value
 from ..errors import AppError
 from ..http_client import request_with_retry
 from ..proxy import build_proxy_opener
+from ..redaction import backend_credentials, withhold_credentials, withhold_credentials_value
 
 SOURCE_LABEL = "BTCPay"
 API_PREFIX = "/api/v1"
@@ -167,6 +168,9 @@ class GreenfieldClient:
     opener: Any = None
     source_label: str = SOURCE_LABEL
     request_log: list[str] = field(default_factory=list)
+    # Credentials besides the API key the backend config holds (proxy
+    # userinfo); a server error that repeats one shows ``<redacted>``.
+    withheld: tuple[str, ...] = ()
 
     @classmethod
     def from_backend(
@@ -195,6 +199,7 @@ class GreenfieldClient:
             token=token,
             timeout=backend_timeout(backend),
             opener=opener,
+            withheld=backend_credentials(backend),
         )
 
     def url(self, path: str, query: Mapping[str, Any] | list[tuple[str, Any]] | None = None) -> str:
@@ -240,6 +245,7 @@ class GreenfieldClient:
             },
         )
         self.request_log.append(url)
+        credentials = (self.token, *self.withheld)
 
         def open_once():
             try:
@@ -248,7 +254,10 @@ class GreenfieldClient:
             except urlerror.HTTPError as exc:
                 if exc.code in {429, 503}:
                     raise
-                raise GreenfieldHttpError(exc.code, _decode_error_body(exc)) from exc
+                # BTCPay's error body is the server's text: a `message` that
+                # repeats the API key must not carry it into an error.
+                body = withhold_credentials_value(_decode_error_body(exc), credentials)
+                raise GreenfieldHttpError(exc.code, body) from exc
             if not raw:
                 return None
             try:
@@ -261,7 +270,9 @@ class GreenfieldClient:
                 ) from exc
 
         try:
-            return request_with_retry(url, open_once, source_label=self.source_label)
+            return request_with_retry(
+                url, open_once, source_label=self.source_label, withheld=credentials
+            )
         except AppError as exc:
             cause = exc.__cause__
             if isinstance(cause, urlerror.URLError) and not isinstance(cause, urlerror.HTTPError):
@@ -272,7 +283,11 @@ class GreenfieldClient:
                     hint=(
                         "Check the server URL, your network or Tor proxy, and that BTCPay is running."
                     ),
-                    details={"reason": str(getattr(cause, "reason", "") or "")[:200]},
+                    details={
+                        "reason": withhold_credentials(
+                            str(getattr(cause, "reason", "") or ""), credentials
+                        )[:200]
+                    },
                 ) from cause
             raise
 

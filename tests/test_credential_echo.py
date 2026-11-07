@@ -169,3 +169,99 @@ class WithholdCredentialsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# --- BTCPay Greenfield -------------------------------------------------------
+
+BTCPAY_KEY = "0123456789abcdef0123456789abcdef01234567"
+BTCPAY_PROXY_PASSWORD = "proxy-pass-Word-42"
+
+
+def _btcpay_echo_body(key):
+    return {
+        "code": f"bad-key-{key}",
+        "message": f"Key {key} / {quote(key)} / {key.upper()} is invalid " + "x" * 190 + key,
+        "missingPermission": f"btcpay.store.{key}",
+    }
+
+
+class BtcpayCredentialEchoTest(CredentialEchoAssertions, unittest.TestCase):
+    def _client(self, routes):
+        from kassiber.btcpay.client import GreenfieldClient
+        from tests.test_sync_btcpay_greenfield import _RoutedOpener
+
+        return GreenfieldClient.from_backend(
+            {
+                "url": "https://pay.example.com",
+                "token": BTCPAY_KEY,
+                "tor_proxy": f"socks5h://user:{BTCPAY_PROXY_PASSWORD}@127.0.0.1:9050",
+            },
+            opener=_RoutedOpener(routes),
+        )
+
+    def test_every_greenfield_status_withholds_the_key(self):
+        for status in (400, 401, 403, 404, 422, 500):
+            with self.subTest(status=status):
+                body = _btcpay_echo_body(BTCPAY_KEY)
+                body["message"] += f" via {BTCPAY_PROXY_PASSWORD}"
+                client = self._client({"/api/v1/stores": (status, body)})
+                with self.assertRaises(AppError) as raised:
+                    client.get_json("/api/v1/stores", context="stores")
+                self.assertErrorWithheld(raised.exception, (BTCPAY_KEY, BTCPAY_PROXY_PASSWORD))
+
+    def test_tolerated_failures_withhold_the_key_in_the_body(self):
+        client = self._client({"/api/v1/stores": (403, _btcpay_echo_body(BTCPAY_KEY))})
+        _payload, failure = client.get_optional_json("/api/v1/stores")
+        self.assertWithheld({"body": json.dumps(failure.body)}, (BTCPAY_KEY,))
+        self.assertIn("<redacted>", failure.missing_permission)
+
+    def test_a_failed_sync_stores_no_key_in_the_book(self):
+        from unittest.mock import patch
+
+        from kassiber import sync_btcpay
+        from kassiber.cli import handlers
+        from kassiber.core import freshness
+        from tests.test_btcpay_ledger_and_fees import _BookTest
+        from tests.test_sync_btcpay_greenfield import _RoutedOpener
+
+        class Book(_BookTest):
+            def runTest(self):
+                pass
+
+        book = Book()
+        book.setUp()
+        self.addCleanup(book.tearDown)
+        book.runtime_config["backends"]["shop"]["token"] = BTCPAY_KEY
+        wallet = book._wallet(
+            "ln",
+            "Shop Lightning",
+            {
+                "sync_source": "btcpay",
+                "source_mode": "payments",
+                "backend": "shop",
+                "store_id": "S1",
+                "payment_method_id": "BTC-LN",
+                "chain": "bitcoin",
+            },
+        )
+        opener = _RoutedOpener({"/api/v1/stores/S1/invoices": (500, _btcpay_echo_body(BTCPAY_KEY))})
+        job = freshness.enqueue_job(
+            book.conn,
+            profile_id="prof",
+            job_type=freshness.JOB_BTCPAY_WALLET,
+            source_key=freshness.source_key("wallet", "ln"),
+            source_type="wallet",
+            source_label="Shop Lightning",
+        )
+        book.conn.commit()
+
+        def handler(conn, _job, _progress, _check):
+            return handlers._sync_btcpay_wallet(conn, book.runtime_config, book.profile, wallet)
+
+        with patch.object(sync_btcpay, "_backend_http_opener", lambda backend: opener):
+            outcome = freshness.run_job(book.conn, job["id"], {freshness.JOB_BTCPAY_WALLET: handler})
+        self.assertEqual(outcome["status"], freshness.JOB_ERROR)
+        stored = book_text(book.conn)
+        self.assertIn("btcpay_store_sync_states", stored)
+        self.assertIn("BTCPay returned HTTP 500", stored)
+        self.assertWithheld({"book": stored}, (BTCPAY_KEY,))

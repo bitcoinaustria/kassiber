@@ -108,6 +108,7 @@ from ..envelope import (
     print_table,
 )
 from ..errors import AppError
+from ..redaction import backend_credentials, withhold_error_credentials
 from ..msat import (
     MSAT_PER_BTC,
     SATS_PER_BTC,
@@ -3343,6 +3344,10 @@ def sync_btcpay_commercial_provenance(
         if include_payouts:
             payouts = fetch_btcpay_payouts(backend, store_id, metadata=payout_meta)
     except AppError as exc:
+        # The client withholds credentials from server text; scrub the error
+        # again with every credential the backend holds before it is stored
+        # here and, through the caller, in a freshness job.
+        withhold_error_credentials(exc, backend_credentials(backend))
         core_commercial.record_btcpay_store_sync(
             conn,
             profile["id"],
