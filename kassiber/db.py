@@ -34,6 +34,7 @@ import uuid
 from contextlib import contextmanager, suppress
 from pathlib import Path
 
+from .durable_sync import apply_sqlite_durability, full_fsync, sync_directory
 from .errors import AppError
 from .fingerprints import make_transaction_fingerprint
 from .msat import btc_to_msat, dec, msat_to_btc
@@ -117,14 +118,7 @@ def _state_root_migration_lock_path(preferred: Path) -> Path:
 
 
 def _fsync_directory(path: Path) -> None:
-    if os.name == "nt":
-        return
-    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
-    fd = os.open(path, flags)
-    try:
-        os.fsync(fd)
-    finally:
-        os.close(fd)
+    sync_directory(path)
 
 
 def _write_migration_json(
@@ -138,7 +132,7 @@ def _write_migration_json(
             json.dump(payload, handle, indent=2, sort_keys=True)
             handle.write("\n")
             handle.flush()
-            os.fsync(handle.fileno())
+            full_fsync(handle.fileno())
         os.replace(temporary_name, path)
         _fsync_directory(path.parent)
     finally:
@@ -3592,8 +3586,9 @@ def _atomic_write_managed_settings(settings_path, payload):
             json.dump(payload, handle, indent=2, sort_keys=True)
             handle.write("\n")
             handle.flush()
-            os.fsync(handle.fileno())
+            full_fsync(handle.fileno())
         os.replace(temporary_path, settings_path)
+        sync_directory(settings_path.parent)
     finally:
         with suppress(FileNotFoundError):
             temporary_path.unlink()
@@ -3797,6 +3792,7 @@ def _configure_connection_pragmas(conn, *, encrypted=False):
     if not encrypted:
         conn.execute(f"PRAGMA mmap_size = {DB_MMAP_SIZE_BYTES}")
     conn.execute("PRAGMA foreign_keys = ON")
+    apply_sqlite_durability(conn)
 
 
 def _preflight_schema_index_columns(conn):

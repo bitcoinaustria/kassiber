@@ -19,6 +19,7 @@ from typing import Any, Callable, Mapping, Sequence
 from urllib.parse import urlparse
 
 from ..ai.contracts import is_cli_provider_locator
+from ..durable_sync import full_fsync
 from . import custody_filed_reports as core_custody_filed_reports
 from . import custody_journal as core_custody_journal
 from . import pricing
@@ -5623,7 +5624,7 @@ def _write_csv_rows(path, rows):
             if mode is not None:
                 os.chmod(staged, mode)
             handle.flush()
-            os.fsync(handle.fileno())
+            full_fsync(handle.fileno())
         try:
             os.replace(staged, target)
         except OSError as exc:
@@ -5648,7 +5649,7 @@ def _fsync_csv_directory(directory):
         return
     try:
         try:
-            os.fsync(descriptor)
+            full_fsync(descriptor)
         except OSError as exc:
             if exc.errno not in unsupported:
                 raise

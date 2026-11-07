@@ -35,6 +35,22 @@ Primary automated coverage:
 - `tests/test_samourai_import.py`
 - `tests/test_legacy_ledger.py`
 
+## macOS full-sync durability
+
+On macOS `fsync(2)` leaves data in the drive's cache. Both runtimes set
+`PRAGMA fullfsync = ON` and `PRAGMA checkpoint_fullfsync = ON` there on every
+book connection (plaintext and SQLCipher opens, every keyed SQLCipher open,
+and the plaintext source of `secrets init`), so commits and WAL checkpoints
+use `fcntl(F_FULLFSYNC)`. Other platforms keep SQLite's defaults. The pragmas
+are per connection and change no stored byte, schema object or journal mode.
+Python's file and directory syncs go through `kassiber/durable_sync.py`
+(`F_FULLFSYNC` on macOS, falling back to `fsync` where a file system refuses
+it, as SQLite does); Rust's `File::sync_all` already uses `F_FULLFSYNC`.
+`tests/test_durable_sync.py` and the store's
+`macos_connections_set_both_fullfsync_pragmas` check the macOS branch on any
+host through a platform seam; `crates/store/scripts/durability_mutations.json`
+lists the mutations they kill.
+
 ## Austrian consumed-regime journal migration
 
 The `at-outflow-consumed-regime-v2` semantic migration supersedes the earlier

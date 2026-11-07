@@ -42,6 +42,7 @@ from ..db import (
     resolve_exports_root,
     resolve_settings_path,
 )
+from ..durable_sync import full_fsync, sync_directory
 from ..errors import AppError
 from ..projects import project_metadata_for_data_root
 from ..secrets.sqlcipher import (
@@ -419,9 +420,10 @@ def export_backup(
                     backend=backend,
                 )
                 dst.flush()
-                os.fsync(dst.fileno())
+                full_fsync(dst.fileno())
             os.replace(tmp_output_path, output_path)
             tmp_output_path = None
+            sync_directory(output_path.parent)
         finally:
             if tmp_output_path is not None:
                 tmp_output_path.unlink(missing_ok=True)
