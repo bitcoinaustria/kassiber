@@ -1,16 +1,17 @@
-"""Disposable repro: a list or object `sync` escapes `ui.maintenance.run`.
+"""Check: a list or object `sync` is a typed `ui.maintenance.run` refusal.
 
-`_maintenance_run_payload` tests `sync_mode not in {"never", "if_enabled",
-"always"}` before its typed validation, so an unhashable value raises a bare
-TypeError and the daemon answers `internal_error` with a traceback on stderr.
-Rust returns the same envelope without the traceback. Python product code is
-unchanged. Run with TMPDIR under the worktree's target/.
+`_maintenance_run_payload` tested `sync_mode not in {"never", "if_enabled",
+"always"}` before its typed validation, so an unhashable value raised a bare
+TypeError and the daemon answered `internal_error` with a traceback on
+stderr. It now checks the type first and refuses with `validation`, as Rust
+does. Run with TMPDIR under the worktree's target/.
 """
 from pathlib import Path
 import tempfile
 
 from kassiber.daemon_freshness import _maintenance_run_payload
 from kassiber.db import open_db
+from kassiber.errors import AppError
 
 
 def main():
@@ -20,10 +21,11 @@ def main():
             for value in ([], {}):
                 try:
                     _maintenance_run_payload(conn, {}, {"sync": value}, state={})
-                except TypeError as error:
-                    print(f"Python reference bug reproduced: {type(error).__name__}: {error}")
+                except AppError as error:
+                    assert error.code == "validation", error.code
+                    print(f"fixed: {value!r} refused with {error.code}")
                 else:
-                    raise SystemExit("expected an unhandled TypeError")
+                    raise SystemExit("expected a validation refusal")
         finally:
             conn.close()
 

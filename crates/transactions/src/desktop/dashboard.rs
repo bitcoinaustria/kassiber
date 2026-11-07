@@ -180,6 +180,21 @@ fn isoformat(zone: &Zone, at: Wall) -> String {
     }
     text
 }
+/// `_UI_TRANSACTION_PERIOD_BY_DAYS`: every accepted spelling of a period
+/// sizes buckets like its canonical name.
+fn canonical_period(period: &str) -> &str {
+    match period {
+        "30day" | "30d" => "30days",
+        "3month" | "3m" => "3months",
+        "6month" | "6m" => "6months",
+        "1years" | "1y" => "1year",
+        "4year" | "4y" => "4years",
+        "5year" | "5y" => "5years",
+        "10year" | "10y" => "10years",
+        "15year" | "15y" => "15years",
+        other => other,
+    }
+}
 fn empty_stats() -> Value {
     dict([
         ("count", Value::Int(0.into())),
@@ -438,7 +453,7 @@ fn auto_period(auto: Auto<'_>) -> Result<String> {
             continue;
         }
         qualifying.push(period);
-        let size = bucket_size(period, history_years);
+        let size = bucket_size(canonical_period(period), history_years);
         let buckets: BTreeSet<_> = visible.iter().map(|date| bucket(**date, size).0).collect();
         if buckets.len() >= AUTO_MIN_BUCKETS {
             return Ok(period.into());
@@ -828,9 +843,18 @@ pub(super) fn execute(
     for key in ["review", "pending", "failed"] {
         set(&mut summary, key, Value::Int(0.into()));
     }
+    // Python sizes by the canonical period and measures "all" to `until`
+    // when the request gives one.
     let size = match &earliest_text {
-        Some(earliest) => bucket_size(&period, history_years(earliest, now_us(conn)?)?),
-        None => bucket_size(&period, 0.0),
+        Some(earliest) => {
+            let end_us = if until.is_empty() {
+                now_us(conn)?
+            } else {
+                parse(&until, "until")?
+            };
+            bucket_size(canonical_period(&period), history_years(earliest, end_us)?)
+        }
+        None => bucket_size(canonical_period(&period), 0.0),
     };
     let mut buckets: Vec<(String, Value)> = Vec::new();
     let new_bucket = |key: &str, start: Wall| {
@@ -1114,4 +1138,28 @@ fn activity(
         }
     }
     Ok(output)
+}
+
+#[cfg(test)]
+mod period_tests {
+    /// tests/rust_port/repro_dashboard_bucket_aliases.py
+    #[test]
+    fn every_period_spelling_buckets_like_its_canonical_name() {
+        for (canonical, aliases) in [
+            ("30days", &["30days", "30day", "30d"][..]),
+            ("3months", &["3months", "3month", "3m"]),
+            ("6months", &["6months", "6month", "6m"]),
+            ("1year", &["1year", "1years", "1y"]),
+            ("4years", &["4years", "4year", "4y"]),
+            ("5years", &["5years", "5year", "5y"]),
+            ("10years", &["10years", "10year", "10y"]),
+            ("15years", &["15years", "15year", "15y"]),
+            ("ytd", &["ytd"]),
+            ("all", &["all"]),
+        ] {
+            for alias in aliases {
+                assert_eq!(super::canonical_period(alias), canonical, "{alias}");
+            }
+        }
+    }
 }

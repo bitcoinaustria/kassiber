@@ -4175,3 +4175,71 @@ fn wasabi_missing_file_refusal_is_atomic() {
 }
 
 const WASABI_HISTORY: &str = r#"{"gethistory":[{"tx":"abababababababababababababababababababababababababababababababab","datetime":"2025-01-02","amount":12345,"label":"receipt","islikelycoinjoin":true}],"listcoins":[{"txid":"abababababababababababababababababababababababababababababababab","vout":0,"amount":12345,"keyPath":"m/84'/0'/0'/1/5","anonymityScore":12}],"wallet_json":{"EncryptedSecret":"secret","SegWitAccountKeyPath":"m/84'/0'/7'"}}"#;
+
+/// tests/rust_port/repro_import_json_format_on_csv.py: a file under a JSON
+/// format that is not UTF-8 JSON is a wrong-format choice.
+#[test]
+fn json_formats_refuse_a_non_json_file_as_validation() {
+    let dir = std::env::temp_dir().join(format!(
+        "kassiber-json-refusal-{}-{:?}",
+        std::process::id(),
+        std::thread::current().id()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    let write = |name: &str, bytes: &[u8]| {
+        let path = dir.join(name);
+        std::fs::write(&path, bytes).unwrap();
+        path.to_string_lossy().into_owned()
+    };
+    let csv = write(
+        "export.csv",
+        b"date,txid,direction,asset,amount\n2025-01-02,ab,inbound,BTC,0.1\n",
+    );
+    let latin = write("latin.json", b"[{\"description\": \"caf\xe9\"}]");
+    let bom = write("bom.json", b"\xef\xbb\xbf[]");
+    let refusals = [
+        ("json", "JSON import"),
+        ("btcpay_json", "BTCPay JSON export"),
+        ("wasabi_bundle", "Wasabi bundle"),
+    ];
+    for file in [&csv, &latin, &bom] {
+        for (format, label) in refusals {
+            let error = match format {
+                "json" => generic_json::load(file).err(),
+                "btcpay_json" => btcpay::load(file, true).err(),
+                _ => wasabi::load(file).err(),
+            }
+            .unwrap();
+            assert_eq!(
+                (
+                    error.code.as_str(),
+                    error.message.as_str(),
+                    error.hint.as_deref()
+                ),
+                (
+                    "validation",
+                    format!("{label} is not valid UTF-8 JSON").as_str(),
+                    Some("Choose the import format that matches the file.")
+                ),
+                "{file} as {format}"
+            );
+        }
+    }
+    // RecursionError is not a ValueError: it stays an internal error.
+    let deep = write("deep.json", "[".repeat(1100).as_bytes());
+    assert_eq!(
+        generic_json::load(&deep).err().unwrap().code,
+        "internal_error"
+    );
+    // A missing file keeps the coordinator's own refusal.
+    let missing = dir.join("absent.json").to_string_lossy().into_owned();
+    assert_eq!(
+        generic_json::load(&missing).err().unwrap().code,
+        "not_found"
+    );
+    assert_eq!(
+        btcpay::load(&missing, true).err().unwrap().code,
+        "not_found"
+    );
+    std::fs::remove_dir_all(dir).unwrap();
+}

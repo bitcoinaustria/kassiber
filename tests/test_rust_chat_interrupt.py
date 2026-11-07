@@ -12,10 +12,11 @@ open after the first delta, so the Ctrl-C lands mid-turn:
 - at the prompt it ends the REPL normally;
 - a one-shot `--machine` chat returns the cancelled turn as its payload.
 
-Python's own CLI cannot pass the first case: its daemon child shares the
-terminal's process group and dies
-(tests/rust_port/repro_chat_ctrl_c_kills_daemon.py), so this runs against
-Rust alone.
+Python's CLI used to fail the first case: its daemon child shared the
+terminal's process group and died. Since round r7-6 it starts the child in
+its own group too; tests/rust_port/repro_chat_ctrl_c_kills_daemon.py checks
+that on Python (its cancel waits for the provider's next chunk, so the held
+answer here would stall it), and this runs against Rust.
 """
 
 from __future__ import annotations

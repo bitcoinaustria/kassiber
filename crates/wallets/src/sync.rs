@@ -115,14 +115,16 @@ fn selected(
             [profile],
         )?
         .into_iter()
-        .filter_map(|row| match config(&row) {
-            Ok(c) => match crate::config::boolean(c.get("deprecated")) {
-                Ok(true) => None,
-                Ok(false) => Some(Ok(row)),
+        .filter_map(
+            |row| match crate::freshness::sources::stored_wallet_config(&row) {
+                Ok(c) => match crate::config::boolean(c.get("deprecated")) {
+                    Ok(true) => None,
+                    Ok(false) => Some(Ok(row)),
+                    Err(e) => Some(Err(e)),
+                },
                 Err(e) => Some(Err(e)),
             },
-            Err(e) => Some(Err(e)),
-        })
+        )
         .collect();
     }
     let reference = reference

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import queue
 import subprocess
 import sys
@@ -79,6 +80,19 @@ class ChatSessionResult:
         }
 
 
+def _away_from_terminal_interrupts() -> dict[str, Any]:
+    """Keep the terminal's Ctrl-C for the chat, which cancels cooperatively.
+
+    A terminal sends SIGINT to its whole foreground process group; a daemon
+    child in that group would die mid-turn before the cancel reaches it.
+    """
+    if os.name == "nt":
+        return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+    if sys.version_info >= (3, 11):
+        return {"process_group": 0}
+    return {"start_new_session": True}
+
+
 class _DaemonChatClient:
     def __init__(self, args: Any, *, transcript: TextIO | None = None) -> None:
         self._transcript = transcript
@@ -103,6 +117,7 @@ class _DaemonChatClient:
             stderr=subprocess.PIPE,
             text=True,
             bufsize=1,
+            **_away_from_terminal_interrupts(),
         )
         if self._proc.stderr is not None:
             self._stderr_thread = threading.Thread(

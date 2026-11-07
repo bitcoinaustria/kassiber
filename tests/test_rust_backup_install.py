@@ -40,12 +40,16 @@ def observe(label):
     if label == request.get('kill_at'):
         print(json.dumps({'checkpoint': label}), flush=True)
         sys.stdin.readline()
-with project.exclusive_project_maintenance(data, active_owner_kind=None):
-    if request['op'] == 'restore-install':
-        recovery = install.install_staged_backup(Path(request['staging']), data, _observer=observe)
-    else:
-        install.recover_staged_restore(data, _observer=observe)
-        recovery = None
+try:
+    with project.exclusive_project_maintenance(data, active_owner_kind=None):
+        if request['op'] == 'restore-install':
+            recovery = install.install_staged_backup(Path(request['staging']), data, _observer=observe)
+        else:
+            install.recover_staged_restore(data, _observer=observe)
+            recovery = None
+except install.AppError as error:
+    print(json.dumps({'ok': False, 'error': {'code': error.code, 'message': str(error)}}))
+    sys.exit(1)
 print(json.dumps({'ok': True, 'data': {'recovery': str(recovery) if recovery else None, 'points': points}}))
 '''
 
@@ -137,6 +141,24 @@ def _run(runtime, request, *, kill=False):
             process.communicate(timeout=10)
 
 
+def _refusal(runtime, request):
+    command = [str(PROBE)] if runtime == "rust" else [sys.executable, "-c", PYTHON_PROBE]
+    result = subprocess.run(command, input=(json.dumps(request) + "\n").encode(), capture_output=True,
+                            env={**os.environ, "KASSIBER_NO_EGRESS": "1"}, timeout=30)
+    assert result.returncode == 1 and not result.stderr, (result.stdout, result.stderr)
+    error = json.loads(result.stdout)["error"]
+    return error["code"], error["message"]
+
+
+def _symlinked_temp_root(root):
+    # macOS stages under /var/folders/...; /var links to /private/var.
+    (root / "private-var").mkdir()
+    (root / "var").symlink_to("private-var")
+    folders = root / "var/folders"
+    folders.mkdir()
+    return folders
+
+
 def _assert_files(request, books, populated, committed):
     data = Path(request["data_root"])
     for name, target in install.restore_targets(data).items():
@@ -164,6 +186,42 @@ def test_frozen_durable_step_inventory_matches_both_implementations(tmp_path, bo
     request = _setup(tmp_path, books, populated)
     assert _run(runtime, request)["points"] == _points(populated)
     _assert_files(request, books, populated, True)
+
+
+@pytest.mark.parametrize("runtime", ["python", "rust"])
+@pytest.mark.parametrize("populated", [True, False])
+def test_staging_under_a_symlinked_temp_root_installs_in_both_runtimes(tmp_path, books, runtime, populated):
+    # tests/rust_port/repro_restore_staging_symlinked_tmpdir.py
+    root = tmp_path.resolve()
+    request = _setup(root, books, populated)
+    stage = _symlinked_temp_root(root) / "kassiber-restore-x"
+    Path(request["staging"]).rename(stage)
+    request["staging"] = str(stage)
+    assert _run(runtime, request)["points"] == _points(populated)
+    _assert_files(request, books, populated, True)
+
+
+@pytest.mark.parametrize("link", ["stage", "stage/kassiber.sqlite3", "stage/attachments/new"])
+def test_a_link_at_or_below_the_staging_root_refuses_alike(tmp_path, books, link):
+    refusals = []
+    for runtime in ("python", "rust"):
+        root = (tmp_path / runtime).resolve()
+        root.mkdir()
+        request = _setup(root, books, True)
+        folders = _symlinked_temp_root(root)
+        outside = root / "outside"
+        outside.write_bytes(b"not staged")
+        if link == "stage":
+            (folders / "stage").symlink_to(request["staging"])
+        else:
+            Path(request["staging"]).rename(folders / "stage")
+            (folders / link).unlink()
+            (folders / link).symlink_to(outside)
+        refusals.append(_refusal(runtime, {**request, "staging": str(folders / "stage")}))
+        _assert_files(request, books, True, False)
+        assert outside.read_bytes() == b"not staged"
+        assert not list(Path(request["data_root"]).parent.glob(".restore-install-*"))
+    assert refusals[0] == refusals[1] == ("unsafe_restore_target", "Restore destination contains a symbolic link")
 
 
 @pytest.mark.parametrize("starter", ["python", "rust"])
@@ -365,6 +423,44 @@ def test_install_success_wire_bytes_use_only_declared_recovery_path_mapping(cli,
             assert (recovery / install.NAMES[0]).read_bytes() == books[1][0][0]
             raw = raw.replace(str(recovery).encode(), b'<retained-copy>')
         responses.append((result.returncode, raw, result.stderr))
+    assert responses[0] == responses[1]
+
+
+@pytest.mark.parametrize("populated", [True, False])
+def test_cli_restore_staged_under_a_symlinked_tmpdir_matches_wire_bytes(cli, tmp_path, books, populated):
+    # backup import stages under $TMPDIR, which macOS reaches through /var.
+    temporary = _symlinked_temp_root(tmp_path.resolve())
+    target = tmp_path / "linked/data"
+    archive = tmp_path / "linked.kassiber"
+    _bundle(archive, [(install.NAMES[0], books[1][1][0]), ("attachments/a", b"count only")], _manifest(1))
+    responses = []
+    for reference in (True, False):
+        if target.parent.exists():
+            shutil.rmtree(target.parent)
+        if populated:
+            target.mkdir(parents=True)
+            (target / install.NAMES[0]).write_bytes(books[1][0][0])
+        before = sorted(temporary.iterdir())
+        cli.env["TMPDIR"] = str(temporary)
+        try:
+            result = cli("backup", "import", str(archive), "--backup-passphrase-fd", cli_runner.InputFd(OUTER.encode()),
+                         "--install", "--target-data-root", str(target), reference=reference)
+        finally:
+            del cli.env["TMPDIR"]
+        payload = ok(result)
+        assert payload["installed_data_root"] == str(target)
+        assert sorted(temporary.iterdir()) == before
+        conn = open_encrypted(target / install.NAMES[0], KEY, enforce_operator_identity=False) if books[0] == "sqlcipher" else __import__("sqlite3").connect(target / install.NAMES[0])
+        try:
+            dump = normalized_dump(conn)
+        finally:
+            conn.close()
+        assert dump == books[1][1][1]
+        assert (target.parent / "attachments/a").read_bytes() == b"count only"
+        raw = result.stdout
+        if populated:
+            raw = raw.replace(str(Path(payload["pre_restore_backup"])).encode(), b"<retained-copy>")
+        responses.append((result.returncode, raw, result.stderr, dump))
     assert responses[0] == responses[1]
 
 

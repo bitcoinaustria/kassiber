@@ -690,12 +690,7 @@ pub(super) fn rows(records: &[Py]) -> Result<Vec<csv::Row>, AppError> {
         .collect())
 }
 pub(super) fn load(file: &str) -> Result<Bundle, AppError> {
-    let raw = csv::read_text_direct(file)?
-        .replace("\r\n", "\n")
-        .replace('\r', "\n");
-    let payload =
-        kassiber_pytext::loads(&raw).map_err(|e| AppError::new("internal_error", e.to_string()))?;
-    load_payload(payload)
+    load_payload(csv::read_json(file, "Wasabi bundle", false)?)
 }
 
 /// `load_wasabi_bundle_payload`: a bundle the desktop sent inline.

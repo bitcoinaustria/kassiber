@@ -286,8 +286,12 @@ class RustAiChatParityTest(unittest.TestCase):
         self.assertEqual((code, stderr), (0, b""), f"{runtime} exited badly")
         return lines
 
-    def session(self, steps, *, setup=None, prepare=None):
-        """One session per side; returns the Rust records."""
+    def session(self, steps, *, setup=None, prepare=None, mask=None):
+        """One session per side; returns the Rust records.
+
+        ``mask`` normalizes response lines, table text and broker request
+        lines on both sides alike."""
+        mask = mask or (lambda text: text)
         outcomes = []
         for runtime in ("python", "rust"):
             # One path for both sides: status payloads name it.
@@ -303,14 +307,16 @@ class RustAiChatParityTest(unittest.TestCase):
                 grouped.setdefault(json.loads(line).get("request_id"), []).append(line)
             labels: dict[bytes, bytes] = {}
             ordered = sorted(grouped.items(), key=lambda item: _rid_order(item[0]))
-            mapped = {rid: [_label(line, labels) for line in group] for rid, group in ordered}
+            mapped = {rid: [mask(_label(line, labels)) for line in group] for rid, group in ordered}
             requests = [
                 (request["method"], request["path"], request["body"], request["authorization"])
                 for request in self.provider.requests
             ]
             log = Path(str(self.broker) + ".log")
-            broker = log.read_bytes() if log.exists() else b""
-            outcomes.append((mapped, self.tables(root, labels), requests, broker))
+            broker = mask(log.read_bytes()) if log.exists() else b""
+            tables = {name: [tuple(mask(value.encode()).decode() if isinstance(value, str) else value for value in row)
+                             for row in rows] for name, rows in self.tables(root, labels).items()}
+            outcomes.append((mapped, tables, requests, broker))
         (python, python_tables, python_requests, python_broker), (rust, rust_tables, rust_requests, rust_broker) = outcomes
         self.assertEqual(sorted(rust), sorted(python))
         mismatches = [
@@ -611,26 +617,51 @@ class RustAiChatParityTest(unittest.TestCase):
         self.assertEqual([request[1] for request in self.requests], ["/v1/responses", "/v1/chat/completions", "/v1/chat/completions"])
 
     def test_broker_chat_tool_round_and_resumed_cursor(self):
+        hello = {"role": "user", "content": "hello"}
+        shown = {"role": "assistant", "content": "Checking all good"}
+        thanks = {"role": "user", "content": "thanks"}
+
+        def turn(messages, **extra):
+            return {"request": lambda seen: {"kind": "ai.chat", "args": {
+                "provider": "codex", "model": "default", "session_id": seen["session_id"],
+                "messages": messages, **extra}}}
+
         self.session(
             [
                 {"request": {"kind": "ai.providers.acknowledge", "args": {"name": "codex"}}},
                 {"request": {"kind": "ai.providers.update", "args": {"name": "codex", "enabled": True}}},
                 {"request": {"kind": "ui.chat.history.configure", "args": {"history": "on"}}},
-                {"request": {"kind": "ai.chat", "args": {"provider": "codex", "model": "default", "tools_enabled": True, "persist": True, "options": {"fast_mode": True}, "messages": [{"role": "user", "content": "hello"}]}}},
-                {"request": lambda seen: {"kind": "ai.chat", "args": {"provider": "codex", "model": "default", "session_id": seen["session_id"], "messages": [{"role": "user", "content": "hello"}, {"role": "assistant", "content": "Checking all good"}, {"role": "user", "content": "thanks"}]}}},
+                {"request": {"kind": "ai.chat", "args": {"provider": "codex", "model": "default", "tools_enabled": True, "persist": True, "options": {"fast_mode": True}, "messages": [hello]}}},
+                # A tool turn in the saved session: the broker streams
+                # "Checking ", runs a tool, then "all good".
+                turn([hello, shown, thanks], tools_enabled=True),
+                # The next prompt resumes the cursor: it was bound to every
+                # leg's text the user saw, the transcript before the prompt.
+                turn([hello, shown, thanks, shown, {"role": "user", "content": "more"}]),
+                # A branch holding only the tool turn's last leg is not the
+                # answer the user saw.
+                turn([hello, shown, thanks, {"role": "assistant", "content": "all good"}, {"role": "user", "content": "more"}]),
+                # The plain turn's cursor resumes on the prompt after it.
+                turn([hello, shown, thanks, {"role": "assistant", "content": "all good"}, {"role": "user", "content": "more"},
+                      {"role": "assistant", "content": "plain answer"}, {"role": "user", "content": "again"}]),
                 {"request": {"kind": "ai.chat", "args": {"provider": "codex", "model": "default", "persist": False, "messages": [{"role": "user", "content": "private"}]}}},
-            ]
+            ],
+            mask=_without_main_sync_gaps,
         )
         sent = [json.loads(line) for line in self.broker_log.splitlines()]
         chats = [line for line in sent if line.get("command") == "chat"]
-        self.assertEqual(len(chats), 3)
-        # Python records the cursor against the turn's transcript plus the
-        # last leg's answer, then looks it up against the next request's
-        # whole transcript, which already holds the new prompt: a cursor is
-        # never resumed (tests/rust_port/repro_chat_cursor_never_resumes.py).
-        # Rust keeps that behaviour.
-        self.assertNotIn("provider_session_id", chats[1].get("options") or {})
-        self.assertTrue(chats[2]["options"].get("stateless_session"))
+        self.assertEqual(len(chats), 6)
+        # tests/rust_port/repro_chat_cursor_never_resumes.py: a cursor is
+        # recorded against the transcript plus every leg's text the user saw
+        # and resumed by the next request, the transcript before its prompt.
+        # The new session's first turn has no session id yet, so its cursor
+        # is not kept (both runtimes).
+        options = [chat.get("options") or {} for chat in chats]
+        self.assertEqual(
+            [option.get("provider_session_id") for option in options],
+            [None, None, "native-cursor-1", None, "native-cursor-2", None],
+        )
+        self.assertTrue(options[5].get("stateless_session"))
 
     def test_offline_mode_refuses_a_remote_provider_before_contact(self):
         offline = self.base / "preferences" / "offline.json"
@@ -651,6 +682,31 @@ class RustAiChatParityTest(unittest.TestCase):
         )
         self.assertEqual(self.requests, [])
         self.assertEqual(self.broker_log, b"")
+
+
+_MAIN_SYNC_FIELDS = (
+    (re.compile(rb',"agent_access":"[a-z]+"'), b""),
+    (re.compile(rb'"approval":"[a-z_]+",|,"approval":"[a-z_]+"'), b""),
+    (re.compile(rb'"advertised_tool_count": ?\d+'), b'"advertised_tool_count":-1'),
+)
+
+
+def _without_main_sync_gaps(text):
+    """Mask the fields main #672 to #714 changed that the Rust AI slices have
+    not ported yet (docs/reference/rust-main-sync.md): provider
+    ``agent_access``, a tool call's ``approval``, the advertised tool count,
+    and the broker's tool list and instructions."""
+    for pattern, replacement in _MAIN_SYNC_FIELDS:
+        text = pattern.sub(replacement, text)
+    if text.startswith(b'{"command"'):
+        lines = []
+        for line in text.splitlines():
+            request = json.loads(line)
+            request.pop("instructions", None)
+            request.pop("tools", None)
+            lines.append(json.dumps(request, sort_keys=True).encode())
+        text = b"\n".join(lines)
+    return text
 
 
 def _rid_order(rid):

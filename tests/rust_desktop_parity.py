@@ -1,8 +1,8 @@
 """Shared harness for native desktop projections compared with the Python daemon.
 
 Each comparison sends one JSONL session to the unchanged Python reference and
-to the Rust candidate, requires identical response bytes, and checks that all
-113 logical tables are unchanged by both. Served-by evidence is appended to
+to the Rust candidate, requires identical response bytes, and checks that
+every table of the store's schema manifest is unchanged by both. Served-by evidence is appended to
 ``KASSIBER_DESKTOP_COUNTS`` when set.
 """
 from contextlib import closing
@@ -22,6 +22,12 @@ from tests.test_rust_shell_parity import _environment
 ROOT = Path(__file__).resolve().parent.parent
 RUST_BIN = os.environ.get("KASSIBER_RUST_BIN")
 DESKTOP_SQL = ROOT / "crates/transactions/tests/data/desktop.sql"
+# The book's tables, from the store's checked-in schema manifest.
+BOOK_TABLES = sorted(
+    name
+    for kind, name, *_ in json.loads((ROOT / "crates/store/fixtures/current-schema.json").read_text())["objects"]
+    if kind == "table"
+)
 
 
 def run_candidate(args, *, env, input):
@@ -87,7 +93,7 @@ class DesktopParity:
         try:
             tables = sorted(row[0] for row in conn.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"))
-            self.assertEqual(len(tables), 113)
+            self.assertEqual(tables, BOOK_TABLES)
             return {table: sorted(conn.execute('SELECT * FROM "' + table + '"').fetchall(), key=repr)
                     for table in tables}
         finally:

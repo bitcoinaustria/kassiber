@@ -2603,7 +2603,11 @@ def _annotate_graph(
 
     row_id = str(_row_get(row, "id"))
     row_annotations = semantics.get("by_row", {}).get(row_id, [])
-    group_ids = {annotation.get("groupId") for annotation in row_annotations if annotation.get("groupId")}
+    # Sorted, not set order: the annotation order must not follow PYTHONHASHSEED.
+    group_ids = sorted(
+        {annotation.get("groupId") for annotation in row_annotations if annotation.get("groupId")},
+        key=str,
+    )
     for node in graph["outputs"]:
         if node.get("role") == "owned_destination":
             for group_id in group_ids:

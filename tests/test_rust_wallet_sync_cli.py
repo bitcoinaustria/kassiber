@@ -283,3 +283,34 @@ def test_sync_cli_missing_capability_implementation_fails_closed(tmp_path):
     error = json.loads(result.stdout)["error"]
     assert error["code"] == "not_implemented"
     assert "wallet sync capability" in error["message"]
+
+
+@pytest.mark.parametrize("stored", ["bad", "[]", "null"])
+def test_sync_cli_unreadable_wallet_config_matches_python(tmp_path, stored):
+    # tests/rust_port/repro_ai_wallets_sync_bad_config.py: planning refuses with
+    # invalid_wallet_config naming the wallet, before any source or traffic.
+    # Python's --wallet path still crashes before planning
+    # (tests/rust_port/repro_cli_wallet_sync_bad_config_explicit.py).
+    config, chain, _ = _fixture("empty")
+    roots, books = _books(tmp_path, config)
+    for book in books:
+        conn = connect(book)
+        conn.execute("INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) "
+                     "VALUES('bad','w','p','Bad','descriptor',?,'fixed')", (stored,))
+        conn.commit()
+        conn.close()
+    args = ["--all"]
+    with serve(chain, "esplora") as url:
+        env = _environment(tmp_path, "esplora", url)
+        reference = subprocess.run([sys.executable, "-m", "tests.rust_sync_cli_reference",
+                                    *_args(roots[0])[:-2], *args], capture_output=True, env=env, timeout=90)
+        result = subprocess.run([sys.executable, str(HYBRID), *_args(roots[1])[:-2], *args],
+                                capture_output=True, env=env, timeout=90)
+        assert (result.returncode, result.stdout, result.stderr) == (
+            reference.returncode, reference.stdout, reference.stderr)
+        error = json.loads(result.stdout)["error"]
+        assert (error["code"], error["details"]) == ("invalid_wallet_config", {"wallet": "Bad"})
+        assert not chain.hits
+    assert dump_bytes(books[1]) == dump_bytes(books[0])
+    assert json.loads((tmp_path / "served.jsonl").read_text()) == {
+        "command": "wallets.sync", "served_by": "rust"}

@@ -142,6 +142,41 @@ class FreshnessTest(unittest.TestCase):
         )
         self.assertEqual([spec["payload"]["wallet_label"] for spec in explicit], ["Old"])
 
+    def test_unreadable_wallet_config_refuses_the_sync_plan_with_a_typed_error(self):
+        for stored in ("bad", "[]", "null", '"text"'):
+            conn = self._db()
+            profile_id = _seed_profile(conn)
+            conn.executemany(
+                """
+                INSERT INTO wallets(
+                    id, workspace_id, profile_id, account_id, label, kind,
+                    config_json, created_at
+                )
+                VALUES(?, 'ws', ?, NULL, ?, 'address', ?, '2026-06-04T00:00:00Z')
+                """,
+                [
+                    ("good", profile_id, "Good", json.dumps({"addresses": ["bc1qgood"]})),
+                    ("bad", profile_id, "Bad", stored),
+                ],
+            )
+            conn.execute("INSERT INTO settings(key, value) VALUES('context_workspace', 'ws'), ('context_profile', ?)", (profile_id,))
+            conn.commit()
+            for plan in (
+                lambda: daemon_freshness._freshness_wallet_source_specs(
+                    conn, profile_id, include_rates=False, include_journals=False
+                ),
+                lambda: cli_handlers.sync_wallet(conn, {}, None, None, sync_all=True),
+            ):
+                with self.assertRaises(AppError) as raised:
+                    plan()
+                self.assertEqual(raised.exception.code, "invalid_wallet_config", stored)
+                self.assertEqual(raised.exception.details, {"wallet": "Bad"})
+            # The healthy wallet alone still plans.
+            specs = daemon_freshness._freshness_wallet_source_specs(
+                conn, profile_id, wallet_ref="Good", include_rates=False, include_journals=False
+            )
+            self.assertEqual([spec["payload"]["wallet_label"] for spec in specs], ["Good"])
+
     def test_cli_wallet_sync_reuses_persisted_freshness_checkpoint(self):
         conn = self._db()
         profile_id = _seed_profile(conn)

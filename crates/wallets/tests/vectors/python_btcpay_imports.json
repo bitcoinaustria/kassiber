@@ -6086,9 +6086,9 @@
       255
     ],
     "error": {
-      "code": "internal_error",
-      "message": "'utf-8' codec can't decode byte 0xff in position 0: invalid start byte",
-      "hint": null
+      "code": "validation",
+      "message": "BTCPay JSON export is not valid UTF-8 JSON",
+      "hint": "Choose the import format that matches the file."
     }
   },
   {
@@ -8922,9 +8922,9 @@
     "format": "btcpay_json",
     "text": "\ufeff[{\"TransactionId\": \"abababababababababababababababababababababababababababababababab\", \"Timestamp\": \"2025-01-02 03:04:05\", \"Currency\": \"BTC\", \"Amount\": \"-0.002 BTC\", \"Comment\": \" imported note \", \"Labels\": \"Shop, two words, Shop\"}]",
     "error": {
-      "code": "internal_error",
-      "message": "Unexpected UTF-8 BOM (decode using utf-8-sig): line 1 column 1 (char 0)",
-      "hint": null
+      "code": "validation",
+      "message": "BTCPay JSON export is not valid UTF-8 JSON",
+      "hint": "Choose the import format that matches the file."
     }
   },
   {
@@ -9022,9 +9022,9 @@
     "format": "btcpay_json",
     "text": "[\r invalid]",
     "error": {
-      "code": "internal_error",
-      "message": "Expecting value: line 2 column 2 (char 3)",
-      "hint": null
+      "code": "validation",
+      "message": "BTCPay JSON export is not valid UTF-8 JSON",
+      "hint": "Choose the import format that matches the file."
     }
   },
   {

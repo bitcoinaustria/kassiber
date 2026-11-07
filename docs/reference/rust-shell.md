@@ -16099,10 +16099,10 @@ explicit `allowPublicLookup` that would reach a backend refuses with
 Python connection it opens and reopens once, so open-time backfills settle
 before a baseline is taken; the Rust-binary check is unchanged.
 
-Python reference bug kept and recorded: a list or object `sync` argument
-escapes `ui.maintenance.run` as an unhandled `TypeError`
-(`tests/rust_port/repro_maintenance_unhashable_sync.py`); Rust answers the same
-envelope without the traceback.
+A list or object `sync` argument is the ordinary `validation` refusal with
+its value in `details`. Python used to let an unhashable `TypeError` escape
+(`tests/rust_port/repro_maintenance_unhashable_sync.py`); round r7-6 fixed it
+and Rust follows ([r7-6 port](rust-pyfix-6.md)).
 
 A second reference bug: with two or more linked transfer groups, Python's
 graph annotation order follows `PYTHONHASHSEED` because the group ids pass
@@ -17053,9 +17053,10 @@ pre-request maintenance. Additions to native code:
 
 **Python quirks kept.**
 
-- Journal refresh is decided by the name as called. Models use wire names, so
-  only the planner's dotted auto-reads ever refresh
-  (`tests/rust_port/repro_ai_refresh_wire_name.py`).
+- Journal refresh used to be decided by the name as called, so only the
+  planner's dotted auto-reads refreshed. Since round r7-6 both runtimes decide
+  on the catalog entry, so wire-name reads refresh too
+  (`tests/rust_port/repro_ai_refresh_wire_name.py`, [r7-6 port](rust-pyfix-6.md)).
 - Design §7 item 10 (trailing-newline patterns, key-substring blanking,
   ASCII-escaped length limits) and item 12 (unredacted consent summaries).
 
@@ -17430,10 +17431,13 @@ stream, or while consent waits still ends with a terminal `cancelled`.
   kills a daemon child that outlives its input instead of sending SIGTERM
   first, and starts the child in the caller's working directory.
 
-**Python quirks kept.** A provider session cursor is recorded against the
-turn's transcript plus the last leg's answer and looked up against the next
-request's whole transcript, so it is never resumed
-(`tests/rust_port/repro_chat_cursor_never_resumes.py`). Design §7 item 11 is
+**Provider session cursors.** A cursor is recorded against the turn's
+transcript plus every leg's text the user saw and looked up against the next
+request's transcript before its new prompt, so CLI providers resume their
+native session (`tests/rust_port/repro_chat_cursor_never_resumes.py`, round
+r7-6, [r7-6 port](rust-pyfix-6.md)). The saved answer of a tool turn is still
+only its last leg's text in both runtimes
+(`tests/rust_port/repro_chat_history_tool_turn_last_leg.py`). Design §7 item 11 is
 taken as recommended: a provider row without a name is named "selected
 provider" in the model hint.
 
@@ -17770,11 +17774,11 @@ is native (`reads::ai_context` plus the `ca-ref:` projection).
 - Native journal view and quarantine freshness ignored calculation semantics,
   so books built under older semantics read as current with a shorter reason.
 
-**Python reference bug, kept unfixed.** One wallet whose stored
-configuration is not JSON makes Python's AI `ui.wallets.sync` fail as a
-generic `tool_error` with a traceback, for the whole book
-(`tests/rust_port/repro_ai_wallets_sync_bad_config.py`). Rust refuses such
-books as needing the direct-sync path.
+**Unreadable wallet configuration.** One wallet whose stored configuration
+is not a JSON object makes the sync plan refuse with `invalid_wallet_config`,
+naming the wallet, in the AI `ui.wallets.sync`, the desktop freshness kinds
+and `wallets sync` (`tests/rust_port/repro_ai_wallets_sync_bad_config.py`,
+round r7-6, [r7-6 port](rust-pyfix-6.md)).
 
 **Reviewed differences.**
 
@@ -17920,3 +17924,29 @@ pinned SHA-256 digests, the pinned extra seeds, and seeds 1001 and 1002 for
 each generator). In a release build every scaling and stress shape's
 400k/40k CPU-time ratio was between 7.6 and 11.2. The 27 entries of
 `crates/envelope/scripts/mutations.json` cover each rule family.
+
+## Python fix round r7-6
+
+`t3code/rust-pyfix-6` merges the nine r7-6 Python reference fixes into the
+r10b line and follows them; [the port page](rust-pyfix-6.md) lists each fix,
+the Rust code, the differential run against the unported Rust and the
+mutation entries.
+
+- Restores staged under a symlinked temp root (macOS `/var`) install; a link
+  at or below the staging directory is still refused
+  (`crates/store/src/restore.rs`).
+- CLI-provider chats resume their native session: the cursor is looked up by
+  the transcript before the new prompt and bound to every leg's text the user
+  saw (`crates/ai/src/chat/turn.rs`, `registry.rs`).
+- AI reads called by wire name refresh stale journals like catalog names
+  (`crates/ai/src/executor.rs`).
+- An unreadable stored wallet configuration is `invalid_wallet_config` in the
+  freshness planner, the desktop sync kinds, `wallets sync --all` and the AI
+  `ui.wallets.sync`, whose refusal now carries the error's hint.
+- A list or object `ui.maintenance.run` sync mode is a `validation` refusal.
+- A CSV or non-UTF-8 file under `json`, `btcpay_json` or `wasabi_bundle` is a
+  `validation` refusal.
+- Dashboard period aliases bucket like their canonical names; the "all"
+  cutover to `until` waits for S8 to S10's yearly buckets.
+
+The chat Ctrl-C process group and the linked-group order already matched.

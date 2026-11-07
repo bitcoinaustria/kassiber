@@ -2390,6 +2390,16 @@
     "rule": "Resolver queries strip Python whitespace."
   },
   {
+    "id": "dashboard-alias-canonical",
+    "file": "crates/transactions/src/desktop/dashboard.rs",
+    "find": "        \"30day\" | \"30d\" => \"30days\",",
+    "replace": "        \"30day\" => \"30days\",",
+    "expect_failing": [
+      "every_period_spelling_buckets_like_its_canonical_name"
+    ],
+    "rule": "Every accepted spelling of a dashboard period buckets like its canonical name."
+  },
+  {
     "id": "S3-acceptance-not-recorded",
     "file": "crates/transactions/src/metadata/grouped.rs",
     "find": "        updates.insert(\"pricing_review_accepted_price\".into(), s(accepted));\n",

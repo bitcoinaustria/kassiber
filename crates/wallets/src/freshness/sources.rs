@@ -56,6 +56,24 @@ pub(crate) fn wallet_config(row: &Value) -> Result<Json> {
     Ok(parsed)
 }
 
+/// `core_wallets.stored_wallet_config(wallet)`: a wallet row's stored
+/// configuration, refusing one that is not an object. Planning a sync from a
+/// guessed configuration could skip or misroute the wallet's sources.
+pub(crate) fn stored_wallet_config(row: &Value) -> Result<Json> {
+    wallet_config(row).map_err(|_| {
+        let label = field(row, "label");
+        AppError::new(
+            "invalid_wallet_config",
+            format!(
+                "Wallet '{}' has an unreadable stored configuration",
+                kassiber_envelope::py_str(label)
+            ),
+        )
+        .with_hint("Edit or remove this wallet, then sync again.")
+        .with_details(dict([("wallet", label.clone())]))
+    })
+}
+
 fn wallet_payload(wallet: &Value, force: bool) -> Value {
     let mut payload = vec![
         ("wallet_id", field(wallet, "id").clone()),
@@ -108,7 +126,7 @@ fn wallet_spec(
 pub fn build(conn: &Connection, profile: &str, options: &Options) -> Result<Vec<Value>> {
     let mut specs = Vec::new();
     for wallet in wallets(conn, profile, options.wallet.as_deref())? {
-        let mut config = wallet_config(&wallet)?;
+        let mut config = stored_wallet_config(&wallet)?;
         if options.wallet.is_none() && config::boolean(config.get("deprecated"))? {
             continue;
         }

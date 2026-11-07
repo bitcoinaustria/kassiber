@@ -163,19 +163,21 @@ impl ActiveChats {
     }
 
     /// `provider_session(...)`: the cursor recorded for this chat session
-    /// and provider, only while the visible history is the one it saw.
+    /// and provider, only while the visible history is the one it saw. A
+    /// request with no resumable branch (`None`) resumes nothing.
     pub fn provider_session(
         &self,
         chat_session_id: Option<&str>,
         provider: &str,
-        fingerprint: &str,
+        fingerprint: Option<&str>,
     ) -> Option<String> {
         let chat_session_id = chat_session_id.filter(|id| !id.is_empty())?;
+        let fingerprint = fingerprint?;
         let state = self.lock();
         let (cursor, recorded) = state
             .provider_sessions
             .get(&(chat_session_id.to_owned(), provider.to_owned()))?;
-        (recorded == fingerprint).then(|| cursor.clone())
+        (recorded.as_str() == fingerprint).then(|| cursor.clone())
     }
 
     /// `remember_provider_session(...)`.
@@ -294,18 +296,25 @@ mod tests {
         chats.remember_provider_session(Some("s1"), "codex", Some("cursor-1"), "fp-a");
         assert_eq!(
             chats
-                .provider_session(Some("s1"), "codex", "fp-a")
+                .provider_session(Some("s1"), "codex", Some("fp-a"))
                 .as_deref(),
             Some("cursor-1")
         );
-        assert_eq!(chats.provider_session(Some("s1"), "codex", "fp-b"), None);
-        assert_eq!(chats.provider_session(Some("s1"), "claude", "fp-a"), None);
-        assert_eq!(chats.provider_session(None, "codex", "fp-a"), None);
+        assert_eq!(
+            chats.provider_session(Some("s1"), "codex", Some("fp-b")),
+            None
+        );
+        assert_eq!(
+            chats.provider_session(Some("s1"), "claude", Some("fp-a")),
+            None
+        );
+        assert_eq!(chats.provider_session(None, "codex", Some("fp-a")), None);
+        assert_eq!(chats.provider_session(Some("s1"), "codex", None), None);
         chats.remember_provider_session(None, "codex", Some("cursor-2"), "fp-a");
         chats.remember_provider_session(Some("s1"), "codex", None, "fp-c");
         assert_eq!(
             chats
-                .provider_session(Some("s1"), "codex", "fp-a")
+                .provider_session(Some("s1"), "codex", Some("fp-a"))
                 .as_deref(),
             Some("cursor-1")
         );

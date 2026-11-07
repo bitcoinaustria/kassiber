@@ -482,7 +482,7 @@
       }
     },
     {
-      "at": "kassiber/core/transaction_graph.py:3557",
+      "at": "kassiber/core/transaction_graph.py:3561",
       "name": "code",
       "value": {
         "expression": "str(warning.get('code') or '')"
@@ -566,70 +566,70 @@
       }
     },
     {
-      "at": "kassiber/importers.py:3866",
+      "at": "kassiber/importers.py:3882",
       "name": "LEDGER_ASSET_HINT_CODES",
       "value": {
         "expression": "frozenset(_BYO_HEADER_ASSET_ALIASES.values())"
       }
     },
     {
-      "at": "kassiber/importers.py:2758",
+      "at": "kassiber/importers.py:2774",
       "name": "incoming_code",
       "value": {
         "expression": "_currency_cell(incoming_asset)"
       }
     },
     {
-      "at": "kassiber/importers.py:2759",
+      "at": "kassiber/importers.py:2775",
       "name": "outgoing_code",
       "value": {
         "expression": "_currency_cell(outgoing_asset)"
       }
     },
     {
-      "at": "kassiber/importers.py:2768",
+      "at": "kassiber/importers.py:2784",
       "name": "fee_code",
       "value": {
         "expression": "_currency_cell(fee_asset)"
       }
     },
     {
-      "at": "kassiber/importers.py:2790",
+      "at": "kassiber/importers.py:2806",
       "name": "opposing_code",
       "value": {
         "expression": "outgoing_code if incoming_btc else incoming_code"
       }
     },
     {
-      "at": "kassiber/importers.py:2827",
+      "at": "kassiber/importers.py:2843",
       "name": "fiat_code",
       "value": {
         "expression": "outgoing_code if incoming_btc else incoming_code"
       }
     },
     {
-      "at": "kassiber/importers.py:3078",
+      "at": "kassiber/importers.py:3094",
       "name": "code",
       "value": {
         "expression": "str_or_none(value)"
       }
     },
     {
-      "at": "kassiber/importers.py:3870",
+      "at": "kassiber/importers.py:3886",
       "name": "code",
       "value": {
         "expression": "str_or_none(value)"
       }
     },
     {
-      "at": "kassiber/importers.py:2781",
+      "at": "kassiber/importers.py:2797",
       "name": "outgoing_code",
       "value": {
         "expression": "fee_code"
       }
     },
     {
-      "at": "kassiber/importers.py:2785",
+      "at": "kassiber/importers.py:2801",
       "name": "fee_code",
       "value": null
     },
@@ -1841,21 +1841,21 @@
       "retryable": false
     },
     {
-      "at": "kassiber/backup/install.py:90",
+      "at": "kassiber/backup/install.py:100",
       "callee": "AppError",
       "code": "restore_recovery_required",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/backup/install.py:262",
+      "at": "kassiber/backup/install.py:274",
       "callee": "AppError",
       "code": "restore_rollback_failed",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/backup/install.py:267",
+      "at": "kassiber/backup/install.py:279",
       "callee": "AppError",
       "code": "restore_install_failed",
       "form": "call",
@@ -2196,14 +2196,14 @@
       "retryable": false
     },
     {
-      "at": "kassiber/cli/chat.py:128",
+      "at": "kassiber/cli/chat.py:143",
       "callee": "AppError",
       "code": "daemon_start_failed",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/chat.py:159",
+      "at": "kassiber/cli/chat.py:174",
       "callee": "AppError",
       "code": {
         "expression": "error.get('code', 'daemon_unlock_failed')"
@@ -2214,63 +2214,63 @@
       }
     },
     {
-      "at": "kassiber/cli/chat.py:222",
+      "at": "kassiber/cli/chat.py:237",
       "callee": "AppError",
       "code": "daemon_closed",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/chat.py:247",
+      "at": "kassiber/cli/chat.py:262",
       "callee": "AppError",
       "code": "daemon_timeout",
       "form": "call",
       "retryable": true
     },
     {
-      "at": "kassiber/cli/chat.py:259",
+      "at": "kassiber/cli/chat.py:274",
       "callee": "AppError",
       "code": "daemon_closed",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/chat.py:268",
+      "at": "kassiber/cli/chat.py:283",
       "callee": "AppError",
       "code": "daemon_protocol_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/chat.py:275",
+      "at": "kassiber/cli/chat.py:290",
       "callee": "AppError",
       "code": "daemon_protocol_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/chat.py:346",
+      "at": "kassiber/cli/chat.py:361",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/chat.py:353",
+      "at": "kassiber/cli/chat.py:368",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/chat.py:366",
+      "at": "kassiber/cli/chat.py:381",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/chat.py:427",
+      "at": "kassiber/cli/chat.py:442",
       "callee": "AppError",
       "code": {
         "expression": "error.get('code', code)"
@@ -2281,133 +2281,119 @@
       }
     },
     {
-      "at": "kassiber/cli/chat.py:440",
+      "at": "kassiber/cli/chat.py:455",
       "callee": "AppError",
       "code": "passphrase_required",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/chat.py:460",
+      "at": "kassiber/cli/chat.py:475",
       "callee": "_error_from_envelope",
       "code": "daemon_request_failed",
       "form": "call",
-      "policy_at": "kassiber/cli/chat.py:425",
+      "policy_at": "kassiber/cli/chat.py:440",
       "retryable": {
         "expression": "bool(error.get('retryable'))"
       }
     },
     {
-      "at": "kassiber/cli/chat.py:486",
+      "at": "kassiber/cli/chat.py:501",
       "callee": "AppError",
       "code": "not_found",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/chat.py:524",
+      "at": "kassiber/cli/chat.py:539",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/chat.py:531",
+      "at": "kassiber/cli/chat.py:546",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/chat.py:540",
+      "at": "kassiber/cli/chat.py:555",
       "callee": "AppError",
       "code": "not_found",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/chat.py:558",
+      "at": "kassiber/cli/chat.py:573",
       "callee": "AppError",
       "code": "ai_attachment_failed",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/chat.py:632",
+      "at": "kassiber/cli/chat.py:647",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/chat.py:645",
+      "at": "kassiber/cli/chat.py:660",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/chat.py:802",
+      "at": "kassiber/cli/chat.py:817",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/chat.py:1041",
+      "at": "kassiber/cli/chat.py:1056",
       "callee": "_error_from_envelope",
       "code": "chat_control_failed",
       "form": "call",
-      "policy_at": "kassiber/cli/chat.py:425",
+      "policy_at": "kassiber/cli/chat.py:440",
       "retryable": {
         "expression": "bool(error.get('retryable'))"
       }
     },
     {
-      "at": "kassiber/cli/chat.py:1052",
+      "at": "kassiber/cli/chat.py:1067",
       "callee": "_error_from_envelope",
       "code": "chat_failed",
       "form": "call",
-      "policy_at": "kassiber/cli/chat.py:425",
+      "policy_at": "kassiber/cli/chat.py:440",
       "retryable": {
         "expression": "bool(error.get('retryable'))"
       }
     },
     {
-      "at": "kassiber/cli/chat.py:1178",
+      "at": "kassiber/cli/chat.py:1193",
       "callee": "AppError",
       "code": "cancelled",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/chat.py:1180",
+      "at": "kassiber/cli/chat.py:1195",
       "callee": "_error_from_envelope",
       "code": "chat_failed",
       "form": "call",
-      "policy_at": "kassiber/cli/chat.py:425",
+      "policy_at": "kassiber/cli/chat.py:440",
       "retryable": {
         "expression": "bool(error.get('retryable'))"
       }
     },
     {
-      "at": "kassiber/cli/chat.py:1206",
+      "at": "kassiber/cli/chat.py:1221",
       "callee": "AppError",
       "code": "validation",
-      "form": "call",
-      "retryable": false
-    },
-    {
-      "at": "kassiber/cli/chat.py:1212",
-      "callee": "AppError",
-      "code": "validation",
-      "form": "call",
-      "retryable": false
-    },
-    {
-      "at": "kassiber/cli/chat.py:1218",
-      "callee": "AppError",
-      "code": "interaction_required",
       "form": "call",
       "retryable": false
     },
@@ -2421,12 +2407,26 @@
     {
       "at": "kassiber/cli/chat.py:1233",
       "callee": "AppError",
-      "code": "validation",
+      "code": "interaction_required",
       "form": "call",
       "retryable": false
     },
     {
       "at": "kassiber/cli/chat.py:1242",
+      "callee": "AppError",
+      "code": "validation",
+      "form": "call",
+      "retryable": false
+    },
+    {
+      "at": "kassiber/cli/chat.py:1248",
+      "callee": "AppError",
+      "code": "validation",
+      "form": "call",
+      "retryable": false
+    },
+    {
+      "at": "kassiber/cli/chat.py:1257",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
@@ -15417,7 +15417,7 @@
       "callee": "_node_annotation",
       "code": "coinbase",
       "form": "call",
-      "policy_at": "kassiber/core/transaction_graph.py:3542",
+      "policy_at": "kassiber/core/transaction_graph.py:3546",
       "retryable": null
     },
     {
@@ -15425,7 +15425,7 @@
       "callee": "_node_annotation",
       "code": "peg_in",
       "form": "call",
-      "policy_at": "kassiber/core/transaction_graph.py:3542",
+      "policy_at": "kassiber/core/transaction_graph.py:3546",
       "retryable": null
     },
     {
@@ -15433,7 +15433,7 @@
       "callee": "_node_annotation",
       "code": "peg_out",
       "form": "call",
-      "policy_at": "kassiber/core/transaction_graph.py:3542",
+      "policy_at": "kassiber/core/transaction_graph.py:3546",
       "retryable": null
     },
     {
@@ -15441,7 +15441,7 @@
       "callee": "_node_annotation",
       "code": "op_return",
       "form": "call",
-      "policy_at": "kassiber/core/transaction_graph.py:3542",
+      "policy_at": "kassiber/core/transaction_graph.py:3546",
       "retryable": null
     },
     {
@@ -15449,7 +15449,7 @@
       "callee": "_node_annotation",
       "code": "recorded_incoming_amount",
       "form": "call",
-      "policy_at": "kassiber/core/transaction_graph.py:3542",
+      "policy_at": "kassiber/core/transaction_graph.py:3546",
       "retryable": null
     },
     {
@@ -15457,7 +15457,7 @@
       "callee": "_node_annotation",
       "code": "ambiguous_owned_output",
       "form": "call",
-      "policy_at": "kassiber/core/transaction_graph.py:3542",
+      "policy_at": "kassiber/core/transaction_graph.py:3546",
       "retryable": null
     },
     {
@@ -15467,7 +15467,7 @@
         "expression": "node['role']"
       },
       "form": "call",
-      "policy_at": "kassiber/core/transaction_graph.py:3542",
+      "policy_at": "kassiber/core/transaction_graph.py:3546",
       "retryable": null
     },
     {
@@ -15475,7 +15475,7 @@
       "callee": "_node_annotation",
       "code": "incoming_payment",
       "form": "call",
-      "policy_at": "kassiber/core/transaction_graph.py:3542",
+      "policy_at": "kassiber/core/transaction_graph.py:3546",
       "retryable": null
     },
     {
@@ -15483,41 +15483,41 @@
       "callee": "_node_annotation",
       "code": "owned_destination",
       "form": "call",
-      "policy_at": "kassiber/core/transaction_graph.py:3542",
+      "policy_at": "kassiber/core/transaction_graph.py:3546",
       "retryable": null
     },
     {
-      "at": "kassiber/core/transaction_graph.py:2611",
+      "at": "kassiber/core/transaction_graph.py:2615",
       "callee": "_node_annotation",
       "code": "linked_transfer_group",
       "form": "call",
-      "policy_at": "kassiber/core/transaction_graph.py:3542",
+      "policy_at": "kassiber/core/transaction_graph.py:3546",
       "retryable": null
     },
     {
-      "at": "kassiber/core/transaction_graph.py:2674",
+      "at": "kassiber/core/transaction_graph.py:2678",
       "code": "conflicting_local_spends",
       "form": "record",
       "retryable": null
     },
     {
-      "at": "kassiber/core/transaction_graph.py:2806",
+      "at": "kassiber/core/transaction_graph.py:2810",
       "callee": "_node_annotation",
       "code": {
         "expression": "'ambiguous_ownership' if len(wallet_ids) > 1 else owned_code"
       },
       "form": "call",
-      "policy_at": "kassiber/core/transaction_graph.py:3542",
+      "policy_at": "kassiber/core/transaction_graph.py:3546",
       "retryable": null
     },
     {
-      "at": "kassiber/core/transaction_graph.py:2862",
+      "at": "kassiber/core/transaction_graph.py:2866",
       "code": "custody_projection_stale",
       "form": "record",
       "retryable": null
     },
     {
-      "at": "kassiber/core/transaction_graph.py:2873",
+      "at": "kassiber/core/transaction_graph.py:2877",
       "code": {
         "expression": "annotation.get('code')"
       },
@@ -15525,17 +15525,17 @@
       "retryable": null
     },
     {
-      "at": "kassiber/core/transaction_graph.py:2876",
+      "at": "kassiber/core/transaction_graph.py:2880",
       "callee": "_humanize_code",
       "code": {
         "expression": "annotation.get('code')"
       },
       "form": "call",
-      "policy_at": "kassiber/core/transaction_graph.py:3549",
+      "policy_at": "kassiber/core/transaction_graph.py:3553",
       "retryable": null
     },
     {
-      "at": "kassiber/core/transaction_graph.py:2887",
+      "at": "kassiber/core/transaction_graph.py:2891",
       "code": {
         "expression": "str(reason)"
       },
@@ -15543,25 +15543,25 @@
       "retryable": null
     },
     {
-      "at": "kassiber/core/transaction_graph.py:2890",
+      "at": "kassiber/core/transaction_graph.py:2894",
       "callee": "_humanize_code",
       "code": {
         "expression": "str(reason)"
       },
       "form": "call",
-      "policy_at": "kassiber/core/transaction_graph.py:3549",
+      "policy_at": "kassiber/core/transaction_graph.py:3553",
       "retryable": null
     },
     {
-      "at": "kassiber/core/transaction_graph.py:3147",
+      "at": "kassiber/core/transaction_graph.py:3151",
       "callee": "_node_annotation",
       "code": "miner_fee",
       "form": "call",
-      "policy_at": "kassiber/core/transaction_graph.py:3542",
+      "policy_at": "kassiber/core/transaction_graph.py:3546",
       "retryable": null
     },
     {
-      "at": "kassiber/core/transaction_graph.py:3543",
+      "at": "kassiber/core/transaction_graph.py:3547",
       "code": {
         "expression": "code"
       },
@@ -15569,17 +15569,17 @@
       "retryable": null
     },
     {
-      "at": "kassiber/core/transaction_graph.py:3558",
+      "at": "kassiber/core/transaction_graph.py:3562",
       "callee": "_humanize_code",
       "code": {
         "expression": "code"
       },
       "form": "call",
-      "policy_at": "kassiber/core/transaction_graph.py:3549",
+      "policy_at": "kassiber/core/transaction_graph.py:3553",
       "retryable": null
     },
     {
-      "at": "kassiber/core/transaction_graph.py:3564",
+      "at": "kassiber/core/transaction_graph.py:3568",
       "code": {
         "expression": "code"
       },
@@ -15860,56 +15860,56 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:5415",
+      "at": "kassiber/core/ui_snapshot.py:5423",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:5461",
+      "at": "kassiber/core/ui_snapshot.py:5469",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:5470",
+      "at": "kassiber/core/ui_snapshot.py:5478",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:5475",
+      "at": "kassiber/core/ui_snapshot.py:5483",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:5762",
+      "at": "kassiber/core/ui_snapshot.py:5777",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:5822",
+      "at": "kassiber/core/ui_snapshot.py:5837",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:5830",
+      "at": "kassiber/core/ui_snapshot.py:5845",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:6091",
+      "at": "kassiber/core/ui_snapshot.py:6106",
       "code": {
         "expression": "str(row['kennzahl'])"
       },
@@ -15917,56 +15917,56 @@
       "retryable": null
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:6265",
+      "at": "kassiber/core/ui_snapshot.py:6280",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:6267",
+      "at": "kassiber/core/ui_snapshot.py:6282",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:6937",
+      "at": "kassiber/core/ui_snapshot.py:6952",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:6946",
+      "at": "kassiber/core/ui_snapshot.py:6961",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:6954",
+      "at": "kassiber/core/ui_snapshot.py:6969",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:7080",
+      "at": "kassiber/core/ui_snapshot.py:7095",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:7090",
+      "at": "kassiber/core/ui_snapshot.py:7105",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:7381",
+      "at": "kassiber/core/ui_snapshot.py:7396",
       "code": {
         "expression": "row['account_code'] or ''"
       },
@@ -15974,28 +15974,28 @@
       "retryable": null
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:7442",
+      "at": "kassiber/core/ui_snapshot.py:7457",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:7449",
+      "at": "kassiber/core/ui_snapshot.py:7464",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:7482",
+      "at": "kassiber/core/ui_snapshot.py:7497",
       "callee": "AppError",
       "code": "not_found",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:7671",
+      "at": "kassiber/core/ui_snapshot.py:7686",
       "code": {
         "expression": "wallet['account_code'] or ''"
       },
@@ -16003,96 +16003,96 @@
       "retryable": null
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:7754",
+      "at": "kassiber/core/ui_snapshot.py:7769",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:7767",
+      "at": "kassiber/core/ui_snapshot.py:7782",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:8005",
+      "at": "kassiber/core/ui_snapshot.py:8020",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:8014",
+      "at": "kassiber/core/ui_snapshot.py:8029",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:8021",
+      "at": "kassiber/core/ui_snapshot.py:8036",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:8099",
+      "at": "kassiber/core/ui_snapshot.py:8114",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:8109",
+      "at": "kassiber/core/ui_snapshot.py:8124",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:8129",
+      "at": "kassiber/core/ui_snapshot.py:8144",
       "callee": "AppError",
       "code": "no_active_profile",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:8150",
+      "at": "kassiber/core/ui_snapshot.py:8165",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:8362",
+      "at": "kassiber/core/ui_snapshot.py:8377",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:8598",
+      "at": "kassiber/core/ui_snapshot.py:8613",
       "code": "silent_payment_scan_pending",
       "form": "record",
       "retryable": null
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:8620",
+      "at": "kassiber/core/ui_snapshot.py:8635",
       "code": "silent_payment_scan_incomplete",
       "form": "record",
       "retryable": null
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:9068",
+      "at": "kassiber/core/ui_snapshot.py:9083",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/ui_snapshot.py:9078",
+      "at": "kassiber/core/ui_snapshot.py:9093",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
@@ -16113,56 +16113,56 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:258",
+      "at": "kassiber/core/wallets.py:230",
+      "callee": "AppError",
+      "code": "invalid_wallet_config",
+      "form": "call",
+      "retryable": false
+    },
+    {
+      "at": "kassiber/core/wallets.py:279",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:268",
+      "at": "kassiber/core/wallets.py:289",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:297",
+      "at": "kassiber/core/wallets.py:318",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:304",
+      "at": "kassiber/core/wallets.py:325",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:310",
+      "at": "kassiber/core/wallets.py:331",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:329",
+      "at": "kassiber/core/wallets.py:350",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:337",
-      "callee": "AppError",
-      "code": "validation",
-      "form": "call",
-      "retryable": false
-    },
-    {
-      "at": "kassiber/core/wallets.py:345",
+      "at": "kassiber/core/wallets.py:358",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
@@ -16176,161 +16176,168 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:378",
+      "at": "kassiber/core/wallets.py:387",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:402",
+      "at": "kassiber/core/wallets.py:399",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:410",
+      "at": "kassiber/core/wallets.py:423",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:416",
+      "at": "kassiber/core/wallets.py:431",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:434",
+      "at": "kassiber/core/wallets.py:437",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:441",
+      "at": "kassiber/core/wallets.py:455",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:492",
+      "at": "kassiber/core/wallets.py:462",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:528",
+      "at": "kassiber/core/wallets.py:513",
+      "callee": "AppError",
+      "code": "validation",
+      "form": "call",
+      "retryable": false
+    },
+    {
+      "at": "kassiber/core/wallets.py:549",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:530",
+      "at": "kassiber/core/wallets.py:551",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:617",
+      "at": "kassiber/core/wallets.py:638",
       "callee": "AppError",
       "code": "conflict",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:637",
+      "at": "kassiber/core/wallets.py:658",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:642",
+      "at": "kassiber/core/wallets.py:663",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:684",
+      "at": "kassiber/core/wallets.py:705",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:695",
+      "at": "kassiber/core/wallets.py:716",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:701",
+      "at": "kassiber/core/wallets.py:722",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:706",
+      "at": "kassiber/core/wallets.py:727",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:712",
+      "at": "kassiber/core/wallets.py:733",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:717",
+      "at": "kassiber/core/wallets.py:738",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:723",
+      "at": "kassiber/core/wallets.py:744",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:1077",
+      "at": "kassiber/core/wallets.py:1098",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:1096",
+      "at": "kassiber/core/wallets.py:1117",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:1136",
+      "at": "kassiber/core/wallets.py:1157",
       "callee": "AppError",
       "code": "conflict",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:1193",
+      "at": "kassiber/core/wallets.py:1214",
       "callee": "AppError",
       "code": "conflict",
       "form": "call",
@@ -18429,35 +18436,35 @@
       "retryable": true
     },
     {
-      "at": "kassiber/daemon.py:10548",
+      "at": "kassiber/daemon.py:10561",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:10578",
+      "at": "kassiber/daemon.py:10591",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:10583",
+      "at": "kassiber/daemon.py:10596",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:10683",
+      "at": "kassiber/daemon.py:10696",
       "callee": "AppError",
       "code": "stale_context",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:11467",
+      "at": "kassiber/daemon.py:11485",
       "callee": "_error_envelope",
       "code": {
         "expression": "exc.code or 'app_error'"
@@ -18469,7 +18476,7 @@
       }
     },
     {
-      "at": "kassiber/daemon.py:11481",
+      "at": "kassiber/daemon.py:11499",
       "callee": "_error_envelope",
       "code": "internal_error",
       "form": "call",
@@ -18477,7 +18484,7 @@
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:11630",
+      "at": "kassiber/daemon.py:11648",
       "callee": "_error_envelope",
       "code": "local_auth_denied",
       "form": "call",
@@ -18485,91 +18492,77 @@
       "retryable": true
     },
     {
-      "at": "kassiber/daemon.py:11641",
+      "at": "kassiber/daemon.py:11659",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:11657",
+      "at": "kassiber/daemon.py:11675",
       "callee": "AppError",
       "code": "state_not_ready",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:11705",
+      "at": "kassiber/daemon.py:11723",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:11727",
+      "at": "kassiber/daemon.py:11745",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:11753",
+      "at": "kassiber/daemon.py:11771",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:11761",
+      "at": "kassiber/daemon.py:11779",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:11778",
+      "at": "kassiber/daemon.py:11796",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:11795",
+      "at": "kassiber/daemon.py:11813",
       "callee": "AppError",
       "code": "conflict",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:11815",
+      "at": "kassiber/daemon.py:11833",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:11826",
+      "at": "kassiber/daemon.py:11844",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:11839",
-      "callee": "AppError",
-      "code": "validation",
-      "form": "call",
-      "retryable": false
-    },
-    {
-      "at": "kassiber/daemon.py:11855",
-      "callee": "AppError",
-      "code": "validation",
-      "form": "call",
-      "retryable": false
-    },
-    {
-      "at": "kassiber/daemon.py:11863",
+      "at": "kassiber/daemon.py:11857",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
@@ -18583,21 +18576,21 @@
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:11914",
+      "at": "kassiber/daemon.py:11881",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:11976",
+      "at": "kassiber/daemon.py:11891",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:11984",
+      "at": "kassiber/daemon.py:11932",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
@@ -18611,322 +18604,336 @@
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:12074",
+      "at": "kassiber/daemon.py:12002",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:12088",
+      "at": "kassiber/daemon.py:12012",
+      "callee": "AppError",
+      "code": "validation",
+      "form": "call",
+      "retryable": false
+    },
+    {
+      "at": "kassiber/daemon.py:12092",
+      "callee": "AppError",
+      "code": "validation",
+      "form": "call",
+      "retryable": false
+    },
+    {
+      "at": "kassiber/daemon.py:12106",
       "callee": "AppError",
       "code": "conflict",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:12097",
+      "at": "kassiber/daemon.py:12115",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:12104",
+      "at": "kassiber/daemon.py:12122",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:12117",
+      "at": "kassiber/daemon.py:12135",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:12131",
+      "at": "kassiber/daemon.py:12149",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:12139",
+      "at": "kassiber/daemon.py:12157",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:12146",
+      "at": "kassiber/daemon.py:12164",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:12156",
+      "at": "kassiber/daemon.py:12174",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:12166",
+      "at": "kassiber/daemon.py:12184",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:12172",
+      "at": "kassiber/daemon.py:12190",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:12183",
+      "at": "kassiber/daemon.py:12201",
       "callee": "AppError",
       "code": "conflict",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:12192",
+      "at": "kassiber/daemon.py:12210",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:12322",
+      "at": "kassiber/daemon.py:12340",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:12346",
+      "at": "kassiber/daemon.py:12364",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:12354",
+      "at": "kassiber/daemon.py:12372",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:12367",
+      "at": "kassiber/daemon.py:12385",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:12380",
+      "at": "kassiber/daemon.py:12398",
       "callee": "AppError",
       "code": "conflict",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:12394",
+      "at": "kassiber/daemon.py:12412",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:12430",
+      "at": "kassiber/daemon.py:12448",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:12443",
+      "at": "kassiber/daemon.py:12461",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:12458",
+      "at": "kassiber/daemon.py:12476",
       "callee": "AppError",
       "code": "not_found",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:12613",
+      "at": "kassiber/daemon.py:12631",
       "callee": "AppError",
       "code": "lightning_adapter_unavailable",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:12835",
+      "at": "kassiber/daemon.py:12853",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:12844",
+      "at": "kassiber/daemon.py:12862",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:12866",
+      "at": "kassiber/daemon.py:12884",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:12887",
+      "at": "kassiber/daemon.py:12905",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:12899",
+      "at": "kassiber/daemon.py:12917",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:13055",
+      "at": "kassiber/daemon.py:13073",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:13082",
+      "at": "kassiber/daemon.py:13100",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:13138",
+      "at": "kassiber/daemon.py:13156",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:13166",
+      "at": "kassiber/daemon.py:13184",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:13176",
+      "at": "kassiber/daemon.py:13194",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:13183",
+      "at": "kassiber/daemon.py:13201",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:13189",
+      "at": "kassiber/daemon.py:13207",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:13225",
+      "at": "kassiber/daemon.py:13243",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:13241",
+      "at": "kassiber/daemon.py:13259",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:13255",
+      "at": "kassiber/daemon.py:13273",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:13265",
+      "at": "kassiber/daemon.py:13283",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:13285",
+      "at": "kassiber/daemon.py:13303",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:13305",
+      "at": "kassiber/daemon.py:13323",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:13385",
+      "at": "kassiber/daemon.py:13403",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:13419",
+      "at": "kassiber/daemon.py:13437",
       "callee": "AppError",
       "code": "ai_attachment_missing",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:13432",
+      "at": "kassiber/daemon.py:13450",
       "callee": "AppError",
       "code": "ai_attachment_missing",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:13440",
+      "at": "kassiber/daemon.py:13458",
       "callee": "AppError",
       "code": "ai_attachment_unsupported",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:13451",
+      "at": "kassiber/daemon.py:13469",
       "callee": "AppError",
       "code": {
         "expression": "'ai_attachment_ambiguous' if candidates else 'ai_attachment_unsupported'"
@@ -18935,42 +18942,42 @@
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:13492",
+      "at": "kassiber/daemon.py:13510",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:13527",
+      "at": "kassiber/daemon.py:13545",
       "callee": "AppError",
       "code": "ai_attachment_missing",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:13551",
+      "at": "kassiber/daemon.py:13569",
       "callee": "AppError",
       "code": "document_reader_unavailable",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:13766",
+      "at": "kassiber/daemon.py:13784",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:13778",
+      "at": "kassiber/daemon.py:13796",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:13821",
+      "at": "kassiber/daemon.py:13839",
       "code": {
         "expression": "exc.code or 'tool_error'"
       },
@@ -18978,245 +18985,245 @@
       "retryable": null
     },
     {
-      "at": "kassiber/daemon.py:13947",
+      "at": "kassiber/daemon.py:13965",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:13970",
+      "at": "kassiber/daemon.py:13988",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:13979",
+      "at": "kassiber/daemon.py:13997",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:13992",
+      "at": "kassiber/daemon.py:14010",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:14055",
+      "at": "kassiber/daemon.py:14073",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:14081",
+      "at": "kassiber/daemon.py:14099",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:14109",
+      "at": "kassiber/daemon.py:14127",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:14116",
+      "at": "kassiber/daemon.py:14134",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:14222",
+      "at": "kassiber/daemon.py:14240",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:14234",
+      "at": "kassiber/daemon.py:14252",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:14248",
+      "at": "kassiber/daemon.py:14266",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:14250",
+      "at": "kassiber/daemon.py:14268",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:14276",
+      "at": "kassiber/daemon.py:14294",
       "callee": "AppError",
       "code": "document_import_source_unavailable",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:14304",
+      "at": "kassiber/daemon.py:14322",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:14321",
+      "at": "kassiber/daemon.py:14339",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:14326",
+      "at": "kassiber/daemon.py:14344",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:14334",
+      "at": "kassiber/daemon.py:14352",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:14337",
+      "at": "kassiber/daemon.py:14355",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:14486",
+      "at": "kassiber/daemon.py:14504",
       "callee": "AppError",
       "code": "document_import_preview_required",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:14494",
+      "at": "kassiber/daemon.py:14512",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:14507",
+      "at": "kassiber/daemon.py:14525",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:14570",
+      "at": "kassiber/daemon.py:14588",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:14578",
+      "at": "kassiber/daemon.py:14596",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:14586",
+      "at": "kassiber/daemon.py:14604",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:14610",
+      "at": "kassiber/daemon.py:14628",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:14629",
+      "at": "kassiber/daemon.py:14647",
       "callee": "AppError",
       "code": "not_found",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:14636",
+      "at": "kassiber/daemon.py:14654",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:14721",
+      "at": "kassiber/daemon.py:14739",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:14747",
+      "at": "kassiber/daemon.py:14765",
       "callee": "AppError",
       "code": "conflict",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:14763",
+      "at": "kassiber/daemon.py:14781",
       "callee": "AppError",
       "code": "conflict",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:14807",
+      "at": "kassiber/daemon.py:14825",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:14828",
+      "at": "kassiber/daemon.py:14846",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:14838",
+      "at": "kassiber/daemon.py:14856",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:14851",
+      "at": "kassiber/daemon.py:14869",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:14933",
+      "at": "kassiber/daemon.py:14951",
       "code": {
         "expression": "exc.code"
       },
@@ -19226,182 +19233,175 @@
       }
     },
     {
-      "at": "kassiber/daemon.py:14970",
+      "at": "kassiber/daemon.py:14988",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:14987",
+      "at": "kassiber/daemon.py:15005",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:15001",
+      "at": "kassiber/daemon.py:15019",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:15025",
+      "at": "kassiber/daemon.py:15043",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:15036",
+      "at": "kassiber/daemon.py:15054",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:15045",
+      "at": "kassiber/daemon.py:15063",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:15055",
+      "at": "kassiber/daemon.py:15073",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:15121",
+      "at": "kassiber/daemon.py:15139",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:15143",
+      "at": "kassiber/daemon.py:15161",
       "callee": "AppError",
       "code": "conflict",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:15185",
+      "at": "kassiber/daemon.py:15203",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:15196",
+      "at": "kassiber/daemon.py:15214",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:15205",
+      "at": "kassiber/daemon.py:15223",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:15219",
+      "at": "kassiber/daemon.py:15237",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:15301",
+      "at": "kassiber/daemon.py:15319",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:15334",
+      "at": "kassiber/daemon.py:15352",
       "callee": "AppError",
       "code": "conflict",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:15377",
+      "at": "kassiber/daemon.py:15395",
       "callee": "AppError",
       "code": "not_found",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:15402",
+      "at": "kassiber/daemon.py:15420",
       "callee": "AppError",
       "code": "not_found",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:15464",
+      "at": "kassiber/daemon.py:15482",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:15544",
+      "at": "kassiber/daemon.py:15562",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:15547",
+      "at": "kassiber/daemon.py:15565",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:15573",
+      "at": "kassiber/daemon.py:15591",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:15595",
+      "at": "kassiber/daemon.py:15613",
       "callee": "AppError",
       "code": "unavailable",
       "form": "call",
       "retryable": true
     },
     {
-      "at": "kassiber/daemon.py:15614",
+      "at": "kassiber/daemon.py:15632",
       "callee": "AppError",
       "code": "unavailable",
       "form": "call",
       "retryable": true
     },
     {
-      "at": "kassiber/daemon.py:15618",
+      "at": "kassiber/daemon.py:15636",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:15635",
-      "callee": "AppError",
-      "code": "unavailable",
-      "form": "call",
-      "retryable": true
-    },
-    {
-      "at": "kassiber/daemon.py:15645",
+      "at": "kassiber/daemon.py:15653",
       "callee": "AppError",
       "code": "unavailable",
       "form": "call",
@@ -19410,37 +19410,37 @@
     {
       "at": "kassiber/daemon.py:15663",
       "callee": "AppError",
+      "code": "unavailable",
+      "form": "call",
+      "retryable": true
+    },
+    {
+      "at": "kassiber/daemon.py:15681",
+      "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:15694",
+      "at": "kassiber/daemon.py:15712",
       "callee": "AppError",
       "code": "unavailable",
       "form": "call",
       "retryable": true
     },
     {
-      "at": "kassiber/daemon.py:15713",
+      "at": "kassiber/daemon.py:15731",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:15745",
+      "at": "kassiber/daemon.py:15763",
       "callee": "AppError",
       "code": "unavailable",
       "form": "call",
       "retryable": true
-    },
-    {
-      "at": "kassiber/daemon.py:15748",
-      "callee": "AppError",
-      "code": "validation",
-      "form": "call",
-      "retryable": false
     },
     {
       "at": "kassiber/daemon.py:15766",
@@ -19450,133 +19450,140 @@
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:15806",
+      "at": "kassiber/daemon.py:15784",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:15816",
+      "at": "kassiber/daemon.py:15824",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:15825",
+      "at": "kassiber/daemon.py:15834",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:15828",
+      "at": "kassiber/daemon.py:15843",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:15855",
+      "at": "kassiber/daemon.py:15846",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:15871",
+      "at": "kassiber/daemon.py:15873",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:15874",
+      "at": "kassiber/daemon.py:15889",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:15877",
+      "at": "kassiber/daemon.py:15892",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:15891",
+      "at": "kassiber/daemon.py:15895",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:15894",
+      "at": "kassiber/daemon.py:15909",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:15907",
+      "at": "kassiber/daemon.py:15912",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:15919",
+      "at": "kassiber/daemon.py:15925",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:15935",
+      "at": "kassiber/daemon.py:15937",
+      "callee": "AppError",
+      "code": "validation",
+      "form": "call",
+      "retryable": false
+    },
+    {
+      "at": "kassiber/daemon.py:15953",
       "callee": "AppError",
       "code": "not_found",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:15940",
+      "at": "kassiber/daemon.py:15958",
       "callee": "AppError",
       "code": "not_found",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:15944",
+      "at": "kassiber/daemon.py:15962",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:15949",
+      "at": "kassiber/daemon.py:15967",
       "callee": "AppError",
       "code": "not_found",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:15959",
+      "at": "kassiber/daemon.py:15977",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:16057",
+      "at": "kassiber/daemon.py:16075",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:16159",
+      "at": "kassiber/daemon.py:16177",
       "code": {
         "expression": "error.code"
       },
@@ -19584,49 +19591,49 @@
       "retryable": null
     },
     {
-      "at": "kassiber/daemon.py:16416",
+      "at": "kassiber/daemon.py:16434",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:16497",
+      "at": "kassiber/daemon.py:16515",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:16507",
+      "at": "kassiber/daemon.py:16525",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:16576",
+      "at": "kassiber/daemon.py:16594",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:16595",
+      "at": "kassiber/daemon.py:16613",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:16619",
+      "at": "kassiber/daemon.py:16637",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:16695",
+      "at": "kassiber/daemon.py:16713",
       "code": {
         "expression": "exc.code"
       },
@@ -19634,7 +19641,7 @@
       "retryable": null
     },
     {
-      "at": "kassiber/daemon.py:16721",
+      "at": "kassiber/daemon.py:16739",
       "code": {
         "expression": "exc.code"
       },
@@ -19642,21 +19649,21 @@
       "retryable": null
     },
     {
-      "at": "kassiber/daemon.py:16736",
+      "at": "kassiber/daemon.py:16754",
       "callee": "AppError",
       "code": "bitcoinrpc_unexpected_response",
       "form": "call",
       "retryable": true
     },
     {
-      "at": "kassiber/daemon.py:16743",
+      "at": "kassiber/daemon.py:16761",
       "callee": "AppError",
       "code": "bitcoinrpc_unexpected_response",
       "form": "call",
       "retryable": true
     },
     {
-      "at": "kassiber/daemon.py:16813",
+      "at": "kassiber/daemon.py:16831",
       "code": {
         "expression": "exc.code"
       },
@@ -19666,133 +19673,119 @@
       }
     },
     {
-      "at": "kassiber/daemon.py:16893",
+      "at": "kassiber/daemon.py:16911",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:16910",
+      "at": "kassiber/daemon.py:16928",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:16916",
+      "at": "kassiber/daemon.py:16934",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:16922",
+      "at": "kassiber/daemon.py:16940",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:16969",
+      "at": "kassiber/daemon.py:16987",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:17047",
+      "at": "kassiber/daemon.py:17065",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:17105",
+      "at": "kassiber/daemon.py:17123",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:17116",
+      "at": "kassiber/daemon.py:17134",
       "callee": "AppError",
       "code": "not_found",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:17157",
+      "at": "kassiber/daemon.py:17175",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:17165",
+      "at": "kassiber/daemon.py:17183",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:17212",
+      "at": "kassiber/daemon.py:17230",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:17221",
+      "at": "kassiber/daemon.py:17239",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:17228",
+      "at": "kassiber/daemon.py:17246",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:17234",
+      "at": "kassiber/daemon.py:17252",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:17248",
+      "at": "kassiber/daemon.py:17266",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:17258",
+      "at": "kassiber/daemon.py:17276",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:17265",
-      "callee": "AppError",
-      "code": "validation",
-      "form": "call",
-      "retryable": false
-    },
-    {
-      "at": "kassiber/daemon.py:17312",
-      "callee": "AppError",
-      "code": "validation",
-      "form": "call",
-      "retryable": false
-    },
-    {
-      "at": "kassiber/daemon.py:17320",
+      "at": "kassiber/daemon.py:17283",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
@@ -19806,70 +19799,84 @@
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:17377",
+      "at": "kassiber/daemon.py:17338",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:17399",
+      "at": "kassiber/daemon.py:17348",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:17405",
+      "at": "kassiber/daemon.py:17395",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:17410",
+      "at": "kassiber/daemon.py:17417",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:17437",
+      "at": "kassiber/daemon.py:17423",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:17443",
+      "at": "kassiber/daemon.py:17428",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:17471",
+      "at": "kassiber/daemon.py:17455",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:17479",
+      "at": "kassiber/daemon.py:17461",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:17507",
+      "at": "kassiber/daemon.py:17489",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:17537",
+      "at": "kassiber/daemon.py:17497",
+      "callee": "AppError",
+      "code": "validation",
+      "form": "call",
+      "retryable": false
+    },
+    {
+      "at": "kassiber/daemon.py:17525",
+      "callee": "AppError",
+      "code": "validation",
+      "form": "call",
+      "retryable": false
+    },
+    {
+      "at": "kassiber/daemon.py:17555",
       "callee": "_error_envelope",
       "code": "validation",
       "form": "call",
@@ -19877,7 +19884,7 @@
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:17551",
+      "at": "kassiber/daemon.py:17569",
       "callee": "_error_envelope",
       "code": "unsupported_kind",
       "form": "call",
@@ -19885,28 +19892,21 @@
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:17569",
+      "at": "kassiber/daemon.py:17587",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:17589",
+      "at": "kassiber/daemon.py:17607",
       "callee": "AppError",
       "code": "stale_context",
       "form": "call",
       "retryable": true
     },
     {
-      "at": "kassiber/daemon.py:17602",
-      "callee": "AppError",
-      "code": "stale_context",
-      "form": "call",
-      "retryable": false
-    },
-    {
-      "at": "kassiber/daemon.py:17605",
+      "at": "kassiber/daemon.py:17620",
       "callee": "AppError",
       "code": "stale_context",
       "form": "call",
@@ -19915,17 +19915,16 @@
     {
       "at": "kassiber/daemon.py:17623",
       "callee": "AppError",
-      "code": "project_in_use",
+      "code": "stale_context",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:17690",
-      "callee": "_error_envelope",
-      "code": "local_auth_denied",
+      "at": "kassiber/daemon.py:17641",
+      "callee": "AppError",
+      "code": "project_in_use",
       "form": "call",
-      "policy_at": "kassiber/daemon.py:1581",
-      "retryable": true
+      "retryable": false
     },
     {
       "at": "kassiber/daemon.py:17708",
@@ -19936,7 +19935,7 @@
       "retryable": true
     },
     {
-      "at": "kassiber/daemon.py:17752",
+      "at": "kassiber/daemon.py:17726",
       "callee": "_error_envelope",
       "code": "local_auth_denied",
       "form": "call",
@@ -19944,35 +19943,43 @@
       "retryable": true
     },
     {
-      "at": "kassiber/daemon.py:17842",
+      "at": "kassiber/daemon.py:17770",
+      "callee": "_error_envelope",
+      "code": "local_auth_denied",
+      "form": "call",
+      "policy_at": "kassiber/daemon.py:1581",
+      "retryable": true
+    },
+    {
+      "at": "kassiber/daemon.py:17860",
       "callee": "AppError",
       "code": "remembered_unlock_legacy_cleanup_failed",
       "form": "call",
       "retryable": true
     },
     {
-      "at": "kassiber/daemon.py:17870",
+      "at": "kassiber/daemon.py:17888",
       "callee": "AppError",
       "code": "remembered_unlock_settings_failed",
       "form": "call",
       "retryable": true
     },
     {
-      "at": "kassiber/daemon.py:17921",
+      "at": "kassiber/daemon.py:17939",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:17928",
+      "at": "kassiber/daemon.py:17946",
       "callee": "AppError",
       "code": "plaintext_database",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:17937",
+      "at": "kassiber/daemon.py:17955",
       "callee": "_error_envelope",
       "code": "local_auth_denied",
       "form": "call",
@@ -19980,21 +19987,21 @@
       "retryable": true
     },
     {
-      "at": "kassiber/daemon.py:18100",
+      "at": "kassiber/daemon.py:18118",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:18107",
+      "at": "kassiber/daemon.py:18125",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:18176",
+      "at": "kassiber/daemon.py:18194",
       "callee": "_error_envelope",
       "code": "unsupported_kind",
       "form": "call",
@@ -20002,91 +20009,91 @@
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:18718",
+      "at": "kassiber/daemon.py:18736",
       "callee": "AppError",
       "code": "not_found",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:19026",
+      "at": "kassiber/daemon.py:19044",
       "callee": "AppError",
       "code": "scope_changed",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:19568",
+      "at": "kassiber/daemon.py:19586",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:19576",
+      "at": "kassiber/daemon.py:19594",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:19583",
+      "at": "kassiber/daemon.py:19601",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:19614",
+      "at": "kassiber/daemon.py:19632",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:19622",
+      "at": "kassiber/daemon.py:19640",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:19629",
+      "at": "kassiber/daemon.py:19647",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:19641",
+      "at": "kassiber/daemon.py:19659",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:20046",
+      "at": "kassiber/daemon.py:20064",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:20053",
+      "at": "kassiber/daemon.py:20071",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:20056",
+      "at": "kassiber/daemon.py:20074",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:20122",
+      "at": "kassiber/daemon.py:20140",
       "callee": "_error_envelope",
       "code": "validation",
       "form": "call",
@@ -20094,7 +20101,7 @@
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:20175",
+      "at": "kassiber/daemon.py:20193",
       "callee": "_error_envelope",
       "code": "validation",
       "form": "call",
@@ -20102,217 +20109,217 @@
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:20224",
+      "at": "kassiber/daemon.py:20242",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:20229",
+      "at": "kassiber/daemon.py:20247",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:20236",
+      "at": "kassiber/daemon.py:20254",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:20272",
+      "at": "kassiber/daemon.py:20290",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:20279",
+      "at": "kassiber/daemon.py:20297",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:20281",
+      "at": "kassiber/daemon.py:20299",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:20288",
+      "at": "kassiber/daemon.py:20306",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:20348",
+      "at": "kassiber/daemon.py:20366",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:20351",
+      "at": "kassiber/daemon.py:20369",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:20373",
+      "at": "kassiber/daemon.py:20391",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:20376",
+      "at": "kassiber/daemon.py:20394",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:20379",
+      "at": "kassiber/daemon.py:20397",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:20400",
+      "at": "kassiber/daemon.py:20418",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:20417",
+      "at": "kassiber/daemon.py:20435",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:20439",
+      "at": "kassiber/daemon.py:20457",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:20453",
+      "at": "kassiber/daemon.py:20471",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:20467",
+      "at": "kassiber/daemon.py:20485",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:20473",
+      "at": "kassiber/daemon.py:20491",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:20476",
+      "at": "kassiber/daemon.py:20494",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:20508",
+      "at": "kassiber/daemon.py:20526",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:20559",
+      "at": "kassiber/daemon.py:20577",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:20570",
+      "at": "kassiber/daemon.py:20588",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:20632",
+      "at": "kassiber/daemon.py:20650",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:20651",
+      "at": "kassiber/daemon.py:20669",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:20656",
+      "at": "kassiber/daemon.py:20674",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:20677",
+      "at": "kassiber/daemon.py:20695",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:20691",
+      "at": "kassiber/daemon.py:20709",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:20707",
+      "at": "kassiber/daemon.py:20725",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:20726",
+      "at": "kassiber/daemon.py:20744",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:20751",
+      "at": "kassiber/daemon.py:20769",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:20923",
+      "at": "kassiber/daemon.py:20941",
       "callee": "_error_envelope",
       "code": "daemon_unavailable",
       "form": "call",
@@ -20320,7 +20327,7 @@
       "retryable": true
     },
     {
-      "at": "kassiber/daemon.py:20938",
+      "at": "kassiber/daemon.py:20956",
       "callee": "_error_envelope",
       "code": "unsupported_kind",
       "form": "call",
@@ -20328,7 +20335,7 @@
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:20971",
+      "at": "kassiber/daemon.py:20989",
       "callee": "_error_envelope",
       "code": "validation",
       "form": "call",
@@ -20336,7 +20343,7 @@
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:20996",
+      "at": "kassiber/daemon.py:21014",
       "callee": "_error_envelope",
       "code": {
         "expression": "exc.code or 'auth_error'"
@@ -20348,7 +20355,7 @@
       }
     },
     {
-      "at": "kassiber/daemon.py:21092",
+      "at": "kassiber/daemon.py:21110",
       "callee": "_error_envelope",
       "code": "request_too_large",
       "form": "call",
@@ -20356,7 +20363,7 @@
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:21108",
+      "at": "kassiber/daemon.py:21126",
       "callee": "_error_envelope",
       "code": "invalid_json",
       "form": "call",
@@ -20364,7 +20371,7 @@
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:21119",
+      "at": "kassiber/daemon.py:21137",
       "callee": "_error_envelope",
       "code": "validation",
       "form": "call",
@@ -20372,7 +20379,7 @@
       "retryable": false
     },
     {
-      "at": "kassiber/daemon.py:21164",
+      "at": "kassiber/daemon.py:21182",
       "callee": "_error_envelope",
       "code": {
         "expression": "exc.code or 'app_error'"
@@ -20384,7 +20391,7 @@
       }
     },
     {
-      "at": "kassiber/daemon.py:21192",
+      "at": "kassiber/daemon.py:21210",
       "callee": "_error_envelope",
       "code": "database_busy",
       "form": "call",
@@ -20392,7 +20399,7 @@
       "retryable": true
     },
     {
-      "at": "kassiber/daemon.py:21214",
+      "at": "kassiber/daemon.py:21232",
       "callee": "_error_envelope",
       "code": "internal_error",
       "form": "call",
@@ -21058,7 +21065,7 @@
       "retryable": false
     },
     {
-      "at": "kassiber/daemon_freshness.py:2914",
+      "at": "kassiber/daemon_freshness.py:2915",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
@@ -21416,140 +21423,140 @@
       "retryable": true
     },
     {
-      "at": "kassiber/importers.py:106",
+      "at": "kassiber/importers.py:96",
+      "callee": "AppError",
+      "code": "validation",
+      "form": "call",
+      "retryable": false
+    },
+    {
+      "at": "kassiber/importers.py:125",
       "callee": "AppError",
       "code": "not_found",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:117",
+      "at": "kassiber/importers.py:135",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:153",
+      "at": "kassiber/importers.py:171",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:230",
+      "at": "kassiber/importers.py:248",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:272",
+      "at": "kassiber/importers.py:290",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:277",
+      "at": "kassiber/importers.py:295",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:286",
+      "at": "kassiber/importers.py:304",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:589",
+      "at": "kassiber/importers.py:606",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:646",
+      "at": "kassiber/importers.py:663",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:730",
+      "at": "kassiber/importers.py:746",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:735",
+      "at": "kassiber/importers.py:751",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:840",
+      "at": "kassiber/importers.py:856",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:846",
+      "at": "kassiber/importers.py:862",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:863",
+      "at": "kassiber/importers.py:879",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:867",
+      "at": "kassiber/importers.py:883",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:909",
+      "at": "kassiber/importers.py:925",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:1037",
+      "at": "kassiber/importers.py:1053",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:1112",
+      "at": "kassiber/importers.py:1128",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:1160",
-      "callee": "AppError",
-      "code": "app_error",
-      "form": "call",
-      "retryable": false
-    },
-    {
-      "at": "kassiber/importers.py:1163",
+      "at": "kassiber/importers.py:1176",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
@@ -21563,455 +21570,462 @@
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:1204",
+      "at": "kassiber/importers.py:1195",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:1310",
+      "at": "kassiber/importers.py:1220",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:1384",
+      "at": "kassiber/importers.py:1326",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:1451",
+      "at": "kassiber/importers.py:1400",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:1560",
+      "at": "kassiber/importers.py:1467",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:1652",
+      "at": "kassiber/importers.py:1576",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:1730",
+      "at": "kassiber/importers.py:1668",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:1751",
+      "at": "kassiber/importers.py:1746",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:1762",
+      "at": "kassiber/importers.py:1767",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:1837",
+      "at": "kassiber/importers.py:1778",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:1978",
+      "at": "kassiber/importers.py:1853",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:2061",
+      "at": "kassiber/importers.py:1994",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:2122",
-      "callee": "AppError",
-      "code": "validation",
-      "form": "call",
-      "retryable": false
-    },
-    {
-      "at": "kassiber/importers.py:2133",
-      "callee": "AppError",
-      "code": "validation",
-      "form": "call",
-      "retryable": false
-    },
-    {
-      "at": "kassiber/importers.py:2173",
+      "at": "kassiber/importers.py:2077",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:2211",
+      "at": "kassiber/importers.py:2138",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:2248",
+      "at": "kassiber/importers.py:2149",
+      "callee": "AppError",
+      "code": "validation",
+      "form": "call",
+      "retryable": false
+    },
+    {
+      "at": "kassiber/importers.py:2189",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:2250",
+      "at": "kassiber/importers.py:2227",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:2260",
-      "callee": "AppError",
-      "code": "validation",
-      "form": "call",
-      "retryable": false
-    },
-    {
-      "at": "kassiber/importers.py:2306",
+      "at": "kassiber/importers.py:2264",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:2360",
+      "at": "kassiber/importers.py:2266",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:2562",
+      "at": "kassiber/importers.py:2276",
+      "callee": "AppError",
+      "code": "validation",
+      "form": "call",
+      "retryable": false
+    },
+    {
+      "at": "kassiber/importers.py:2322",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:2707",
+      "at": "kassiber/importers.py:2376",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:2717",
+      "at": "kassiber/importers.py:2578",
+      "callee": "AppError",
+      "code": "app_error",
+      "form": "call",
+      "retryable": false
+    },
+    {
+      "at": "kassiber/importers.py:2723",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:2727",
+      "at": "kassiber/importers.py:2733",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:2763",
+      "at": "kassiber/importers.py:2743",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:2792",
+      "at": "kassiber/importers.py:2779",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:2834",
+      "at": "kassiber/importers.py:2808",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:2963",
+      "at": "kassiber/importers.py:2850",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:3177",
+      "at": "kassiber/importers.py:2979",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:3190",
+      "at": "kassiber/importers.py:3193",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:3205",
+      "at": "kassiber/importers.py:3206",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:3228",
+      "at": "kassiber/importers.py:3221",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:3240",
+      "at": "kassiber/importers.py:3244",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:3247",
+      "at": "kassiber/importers.py:3256",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:3285",
+      "at": "kassiber/importers.py:3263",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:3291",
+      "at": "kassiber/importers.py:3301",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:3310",
+      "at": "kassiber/importers.py:3307",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:3325",
+      "at": "kassiber/importers.py:3326",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:3346",
+      "at": "kassiber/importers.py:3341",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:3355",
+      "at": "kassiber/importers.py:3362",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:3481",
+      "at": "kassiber/importers.py:3371",
+      "callee": "AppError",
+      "code": "validation",
+      "form": "call",
+      "retryable": false
+    },
+    {
+      "at": "kassiber/importers.py:3497",
       "callee": "AppError",
       "code": "dependency_missing",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:3489",
+      "at": "kassiber/importers.py:3505",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:3529",
+      "at": "kassiber/importers.py:3545",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:3832",
+      "at": "kassiber/importers.py:3848",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:3843",
+      "at": "kassiber/importers.py:3859",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:3851",
+      "at": "kassiber/importers.py:3867",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:3875",
+      "at": "kassiber/importers.py:3891",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:3901",
+      "at": "kassiber/importers.py:3917",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:3910",
+      "at": "kassiber/importers.py:3926",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:3935",
+      "at": "kassiber/importers.py:3951",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:3943",
+      "at": "kassiber/importers.py:3959",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:3971",
+      "at": "kassiber/importers.py:3987",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:3988",
+      "at": "kassiber/importers.py:4004",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:4155",
+      "at": "kassiber/importers.py:4171",
       "callee": "AppError",
       "code": "not_found",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:4185",
+      "at": "kassiber/importers.py:4201",
       "callee": "AppError",
       "code": "ledger_unrecognized",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:4214",
+      "at": "kassiber/importers.py:4230",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:4409",
+      "at": "kassiber/importers.py:4425",
       "callee": "AppError",
       "code": "dependency_missing",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:4474",
+      "at": "kassiber/importers.py:4490",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:4497",
+      "at": "kassiber/importers.py:4513",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:4501",
+      "at": "kassiber/importers.py:4517",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:4503",
+      "at": "kassiber/importers.py:4519",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:4506",
+      "at": "kassiber/importers.py:4522",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:4508",
+      "at": "kassiber/importers.py:4524",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/importers.py:4534",
+      "at": "kassiber/importers.py:4550",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",

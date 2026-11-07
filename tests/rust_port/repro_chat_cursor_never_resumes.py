@@ -1,13 +1,14 @@
-"""Repro: a CLI provider's native session cursor is never resumed.
+"""Check: a CLI provider's native session cursor resumes on the next turn.
 
 After a turn, ``_run_ai_chat_tool_loop`` (and the tool-free stream) records
 the provider's cursor under ``_provider_session_history_fingerprint`` of the
 turn's messages plus the answer. The next request carries the whole visible
-transcript, which already ends with the new prompt, and the lookup
-fingerprints that, so the two never match and every turn starts a fresh
-native thread. In the tool loop the recorded answer is also only the last
-leg's text, not what the user saw. The Rust port keeps this for parity
-(tests/test_rust_ai_chat.py).
+transcript, which already ends with the new prompt. The lookup used to
+fingerprint that, so the two never matched and every turn started a fresh
+native thread; it now uses ``_provider_session_resume_fingerprint``, the
+transcript before the new prompt. The tool loop also used to record only the
+last leg's text, not what the user saw. The Rust port still keeps the old
+behaviour (crates/ai/src/chat/turn.rs, tests/test_rust_ai_chat.py).
 
     uv run --locked python tests/rust_port/repro_chat_cursor_never_resumes.py
 """
@@ -38,10 +39,10 @@ def main() -> int:
     resumed = registry.provider_session(
         chat_session_id="chat-1",
         provider_name="codex",
-        history_fingerprint=daemon._provider_session_history_fingerprint(second),
+        history_fingerprint=daemon._provider_session_resume_fingerprint(second),
     )
     print(f"cursor resumed for the next turn: {resumed!r}")
-    return 0 if resumed is None else 1
+    return 0 if resumed == "native-cursor-1" else 1
 
 
 if __name__ == "__main__":

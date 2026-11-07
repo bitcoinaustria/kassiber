@@ -444,6 +444,25 @@ fn refresh_reads_report_journal_processing_unless_disabled() {
     assert!(get(&result, "auto_journal_process").is_none());
 }
 
+/// tests/rust_port/repro_ai_refresh_wire_name.py: models call tools by wire
+/// name, and the refresh decides on the catalog entry.
+#[test]
+fn wire_name_reads_refresh_like_catalog_names() {
+    let mut fake = book();
+    fake.maintained = Some(dict([("processed_transactions", Value::from(2))]));
+    for name in [
+        "ui_reports_summary",
+        "ui.reports.summary",
+        "ui_review_worklist",
+    ] {
+        let mut state = empty();
+        let result = run(&mut fake, &mut state, name, empty(), false);
+        assert!(get(&result, "auto_journal_process").is_some(), "{name}");
+    }
+    let result = run(&mut fake, &mut empty(), "ui_rates_summary", empty(), false);
+    assert!(get(&result, "auto_journal_process").is_none());
+}
+
 #[test]
 fn refused_reads_never_touch_the_book() {
     let mut fake = book();

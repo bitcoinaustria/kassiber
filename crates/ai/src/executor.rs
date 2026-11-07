@@ -401,12 +401,10 @@ fn read(
         return Err(not_native(&entry.name, owner).into());
     }
     let data_root = runtime.data_root.to_owned();
-    // Python tests the name as called: a model calls tools by their wire
-    // name, so only the planner's dotted auto-reads refresh journals
+    // Models call tools by wire name (`ui_reports_summary`); decide on the
+    // catalog name the refresh set uses
     // (tests/rust_port/repro_ai_refresh_wire_name.py).
-    let refresh = AUTO_JOURNAL_REFRESH_TOOLS
-        .iter()
-        .any(|name| call.name.is(name))
+    let refresh = AUTO_JOURNAL_REFRESH_TOOLS.contains(&entry.name.as_str())
         && !runtime.is("read_maintenance", "disabled");
     let state = &mut *runtime.state;
     let mut work = |book: &mut dyn Book| -> Result<Value, ToolError> {

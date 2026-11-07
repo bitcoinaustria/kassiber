@@ -64,6 +64,19 @@ pub fn targets(data: &Path) -> Result<Vec<(&'static str, PathBuf)>> {
         })
         .collect())
 }
+/// `_staging_root(staging)`: resolve links above the staging directory, such
+/// as macOS `/var` -> `/private/var`. The system temp root is not Kassiber's
+/// to vet; the staging directory itself and everything below it still must
+/// not be a link.
+fn staging_root(staging: &Path) -> Result<PathBuf> {
+    let staging = std::path::absolute(staging).map_err(Error::io)?;
+    match (staging.parent(), staging.file_name()) {
+        (Some(parent), Some(name)) => {
+            Ok(kassiber_paths::canonicalize_allow_missing(parent)?.join(name))
+        }
+        _ => Ok(staging),
+    }
+}
 fn state(data: &Path) -> Result<PathBuf> {
     Ok(targets(data)?[4].1.parent().ok_or_else(invalid)?.to_owned())
 }
@@ -376,6 +389,8 @@ fn install_observed(
     for (_, target) in &targets {
         safe(target)?;
     }
+    let staging = &staging_root(staging)?;
+    safe(staging)?;
     recover(data, observer)?;
     durable::directory(&state)?;
     let mut builder = tempfile::Builder::new();
@@ -879,6 +894,46 @@ mod tests {
                 "unsafe_restore_target"
             );
             assert_eq!(fs::read_to_string(other).unwrap(), "outside");
+        }
+    }
+
+    /// macOS stages under `/var/folders/...`, and `/var` links to
+    /// `/private/var` (tests/rust_port/repro_restore_staging_symlinked_tmpdir.py).
+    #[cfg(unix)]
+    #[test]
+    fn a_link_above_the_staging_root_installs_and_one_at_or_below_refuses() {
+        use std::os::unix::fs::symlink;
+        let root = tempfile::tempdir().unwrap();
+        let root = &fs::canonicalize(root.path()).unwrap();
+        fs::create_dir(root.join("private-var")).unwrap();
+        symlink("private-var", root.join("var")).unwrap();
+        let (data, real) = setup(root, true);
+        let stage = root.join("var/folders/stage");
+        fs::create_dir_all(stage.parent().unwrap()).unwrap();
+        fs::rename(&real, &stage).unwrap();
+        install(&stage, &data).unwrap();
+        assert_tree(&data, true, true);
+        for link in ["stage", "stage/kassiber.sqlite3", "stage/attachments/new"] {
+            let case = root.join(format!("case-{}", link.replace('/', "-")));
+            let (data, real) = setup(&case, false);
+            let parent = root.join("var/folders").join(case.file_name().unwrap());
+            fs::create_dir_all(&parent).unwrap();
+            let outside = case.join("outside");
+            fs::write(&outside, "not staged").unwrap();
+            if link == "stage" {
+                symlink(&real, parent.join("stage")).unwrap();
+            } else {
+                fs::rename(&real, parent.join("stage")).unwrap();
+                fs::remove_file(parent.join(link)).unwrap();
+                symlink(&outside, parent.join(link)).unwrap();
+            }
+            assert_eq!(
+                install(&parent.join("stage"), &data).unwrap_err().code,
+                "unsafe_restore_target",
+                "{link}"
+            );
+            assert_tree(&data, false, false);
+            assert_eq!(fs::read_to_string(&outside).unwrap(), "not staged");
         }
     }
 

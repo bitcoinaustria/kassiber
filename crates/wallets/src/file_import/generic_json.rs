@@ -20,12 +20,7 @@ fn py_str(value: &Py) -> String {
     }
 }
 pub(super) fn load(file: &str) -> Result<Vec<csv::Row>, AppError> {
-    // open(..., encoding="utf-8") uses universal newlines, unlike csv's newline="".
-    let text = csv::read_text(file)?
-        .replace("\r\n", "\n")
-        .replace('\r', "\n");
-    let mut payload = kassiber_pytext::loads(&text)
-        .map_err(|e| AppError::new("internal_error", e.to_string()))?;
+    let mut payload = csv::read_json(file, "JSON import", true)?;
     if matches!(payload, Py::Dict(_)) {
         payload = get(&payload, "transactions")
             .cloned()

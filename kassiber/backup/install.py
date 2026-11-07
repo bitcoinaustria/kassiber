@@ -47,6 +47,16 @@ def _reject_links(path: Path) -> None:
             raise _unsafe()
 
 
+def _staging_root(staging: Path) -> Path:
+    """Resolve links above staging, such as macOS `/var` -> `/private/var`.
+
+    The system temp root is not Kassiber's to vet; the staging directory
+    itself and everything below it still must not be a link.
+    """
+    staging = Path(staging).expanduser().absolute()
+    return staging.parent.resolve() / staging.name
+
+
 def _sync(path: Path) -> None:
     if os.name != "nt":
         fd = os.open(path, os.O_RDONLY)
@@ -196,6 +206,8 @@ def install_staged_backup(staging: Path, data_root: Path, *, _observer: Observer
     state = targets["attachments"].parent
     for target in targets.values():
         _reject_links(target)
+    staging = _staging_root(staging)
+    _reject_links(staging)
     recover_staged_restore(data_root, _observer=_observer)
     state.mkdir(parents=True, exist_ok=True)
     prepared = Path(tempfile.mkdtemp(prefix=".restore-install-", dir=state))

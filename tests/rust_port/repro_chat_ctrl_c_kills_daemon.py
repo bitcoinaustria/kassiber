@@ -1,20 +1,21 @@
-"""Repro: a terminal Ctrl-C ends `kassiber chat`'s daemon child.
+"""Check: a terminal Ctrl-C no longer ends `kassiber chat`'s daemon child.
 
-`_DaemonChatClient` starts `python -m kassiber ... daemon` with
+`_DaemonChatClient` used to start `python -m kassiber ... daemon` with
 `subprocess.Popen` and no `start_new_session` or `process_group`, so the
-child shares the chat's process group. A terminal delivers Ctrl-C as
+child shared the chat's process group. A terminal delivers Ctrl-C as
 SIGINT to the whole foreground group: the chat catches its
 `KeyboardInterrupt` to send `ai.chat.cancel`, but the daemon child gets
 SIGINT too, has no handler, and dies with an uncaught `KeyboardInterrupt`
 in its request loop. The cooperative cancel then meets a dead daemon
 (`BrokenPipeError` or `daemon_closed`) instead of a cancelled turn.
 
-The Rust port starts the child in its own process group, so only the chat
-sees the terminal's Ctrl-C (crates/cli/src/chat/client.rs).
+Python and the Rust port now start the child in its own process group, so
+only the chat sees the terminal's Ctrl-C (crates/cli/src/chat/client.rs).
 
     uv run --locked python tests/rust_port/repro_chat_ctrl_c_kills_daemon.py
 
-Exit 0 means the bug reproduced: the child shared the group and died.
+Exit 0 means fixed: the child led its own group, survived, and answered the
+cancel.
 """
 from __future__ import annotations
 
@@ -70,13 +71,15 @@ def main() -> int:
                 time.sleep(0.05)
             status = child.poll()
             print(f"chat saw: {received}; daemon child exit status: {status}")
+            answered = False
             try:
                 chat._send_cancel(client, "chat-x")
                 record = client.read()
                 print(f"cancel answered: {record.get('kind')}")
-            except Exception as exc:  # noqa: BLE001 - the repro reports it
+                answered = True
+            except Exception as exc:  # noqa: BLE001 - the check reports it
                 print(f"cancel failed: {type(exc).__name__}: {exc}")
-            return 0 if same_group and status is not None else 1
+            return 0 if not same_group and status is None and answered else 1
         finally:
             try:
                 client.close()

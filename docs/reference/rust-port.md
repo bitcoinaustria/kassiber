@@ -65,18 +65,18 @@ the classifier's `summary` output and is checked by preflight.
 | store | 2 | 13 | 174 | 67 | 0 | 256 |
 | custody | 0 | 42 | 395 | 138 | 1 | 576 |
 | journals | 4 | 15 | 242 | 236 | 8 | 505 |
-| imports | 67 | 51 | 172 | 48 | 0 | 338 |
+| imports | 67 | 51 | 174 | 50 | 0 | 342 |
 | reports | 56 | 36 | 249 | 163 | 0 | 504 |
-| chain/sync | 38 | 81 | 1296 | 153 | 0 | 1568 |
+| chain/sync | 38 | 81 | 1297 | 154 | 0 | 1570 |
 | network/egress | 7 | 15 | 81 | 35 | 10 | 148 |
-| transactions/metadata/transfers/reviews | 46 | 111 | 590 | 56 | 0 | 803 |
+| transactions/metadata/transfers/reviews | 46 | 111 | 591 | 58 | 0 | 806 |
 | source-funds | 51 | 50 | 139 | 0 | 0 | 240 |
-| secrets/backup | 7 | 18 | 104 | 56 | 0 | 185 |
-| daemon runtime | 8 | 26 | 226 | 110 | 1 | 371 |
-| AI/MCP/operator | 64 | 172 | 719 | 47 | 0 | 1002 |
+| secrets/backup | 7 | 18 | 106 | 59 | 0 | 190 |
+| daemon runtime | 8 | 26 | 227 | 111 | 1 | 373 |
+| AI/MCP/operator | 64 | 174 | 724 | 49 | 0 | 1011 |
 | CLI shell | 20 | 4 | 31 | 166 | 3 | 224 |
 | packaging/CI | 0 | 2 | 166 | 10 | 29 | 207 |
-| **Total** | **370** | **636** | **4584** | **1285** | **52** | **6927** |
+| **Total** | **370** | **638** | **4596** | **1296** | **52** | **6952** |
 <!-- disposition-counts:end -->
 
 Plan 21's five migration choices include Python-only retirement explicitly;

@@ -105,21 +105,53 @@ pub(super) fn read_sig(file: &str) -> Result<String, AppError> {
     read_encoded(file, true)
 }
 fn read_encoded(file: &str, sig: bool) -> Result<String, AppError> {
+    exists(file)?;
+    read_encoded_direct(file, sig)
+}
+fn exists(file: &str) -> Result<(), AppError> {
     if !std::path::Path::new(file).exists() {
         return Err(
             AppError::new("not_found", format!("Import file not found: {file}"))
                 .with_hint("Check the wallet source_file or pass an existing --file path."),
         );
     }
-    read_encoded_direct(file, sig)
+    Ok(())
 }
 
 pub(super) fn read_text_direct(file: &str) -> Result<String, AppError> {
     read_encoded_direct(file, false)
 }
 
-fn read_encoded_direct(file: &str, sig: bool) -> Result<String, AppError> {
-    let bytes = std::fs::read(file).map_err(|e| {
+/// `_read_json_file(file_path, label)`: parse a JSON import file, refusing
+/// one that is not UTF-8 JSON. A CSV export imported with a JSON format, or a
+/// file in another encoding, is a wrong-format choice, not an internal error.
+/// `checked` is the coordinator's missing-file check, which the Wasabi loader
+/// does not make.
+pub(super) fn read_json(file: &str, label: &str, checked: bool) -> Result<Py, AppError> {
+    if checked {
+        exists(file)?;
+    }
+    let refuse = || {
+        AppError::new("validation", format!("{label} is not valid UTF-8 JSON"))
+            .with_hint("Choose the import format that matches the file.")
+    };
+    let bytes = read_bytes(file)?;
+    // open(..., encoding="utf-8") uses universal newlines.
+    let text = std::str::from_utf8(&bytes)
+        .map_err(|_| refuse())?
+        .replace("\r\n", "\n")
+        .replace('\r', "\n");
+    kassiber_pytext::loads(&text).map_err(|error| match error.kind {
+        // RecursionError is not a ValueError.
+        kassiber_pytext::JsonErrorKind::TooDeep { .. } => {
+            AppError::new("internal_error", error.to_string())
+        }
+        _ => refuse(),
+    })
+}
+
+fn read_bytes(file: &str) -> Result<Vec<u8>, AppError> {
+    std::fs::read(file).map_err(|e| {
         let reason = e
             .raw_os_error()
             .map(|n| std::io::Error::from_raw_os_error(n).to_string());
@@ -137,7 +169,11 @@ fn read_encoded_direct(file: &str, sig: bool) -> Result<String, AppError> {
                 kassiber_pytext::repr_str(file)
             ),
         )
-    })?;
+    })
+}
+
+fn read_encoded_direct(file: &str, sig: bool) -> Result<String, AppError> {
+    let bytes = read_bytes(file)?;
     let bytes = if sig {
         bytes.strip_prefix(&[0xef, 0xbb, 0xbf]).unwrap_or(&bytes)
     } else {

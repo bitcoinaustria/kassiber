@@ -6683,16 +6683,6 @@
     "rule": "Refuse non-list BTCPay JSON with its specific message."
   },
   {
-    "id": "W-btcpay-json-newlines",
-    "file": "crates/wallets/src/file_import/btcpay.rs",
-    "find": ".replace('\\r', \"\\n\")",
-    "replace": ".replace('\\r', \"\\r\")",
-    "expect_failing": [
-      "python_btcpay_import_vectors"
-    ],
-    "rule": "JSON file reads use universal newline translation."
-  },
-  {
     "id": "W-btcpay-label-map-fallback",
     "file": "crates/wallets/src/file_import/btcpay.rs",
     "find": "label(&Py::Str(key.clone()))",
@@ -7815,8 +7805,8 @@
   {
     "id": "W-wasabi-file-open",
     "file": "crates/wallets/src/file_import/wasabi.rs",
-    "find": "csv::read_text_direct(file)?",
-    "replace": "csv::read_text(file)?",
+    "find": "csv::read_json(file, \"Wasabi bundle\", false)?",
+    "replace": "csv::read_json(file, \"Wasabi bundle\", true)?",
     "expect_failing": [
       "wasabi_missing_file_refusal_is_atomic"
     ],
@@ -8671,5 +8661,75 @@
       "document_pdf_render_failures_remove_all_temporary_images"
     ],
     "rule": "Renderer output must have the PNG signature before image encoding."
+  },
+  {
+    "id": "invalid-wallet-config-code",
+    "file": "crates/wallets/src/freshness/sources.rs",
+    "find": "            \"invalid_wallet_config\",",
+    "replace": "            \"internal_error\",",
+    "expect_failing": [
+      "sync::tests::sync_service_preflight_rejects_malformed_inputs_and_node_routes_without_io"
+    ],
+    "rule": "An unreadable stored wallet configuration is the typed invalid_wallet_config refusal naming the wallet."
+  },
+  {
+    "id": "invalid-wallet-config-planner",
+    "file": "crates/wallets/src/freshness/sources.rs",
+    "find": "        let mut config = stored_wallet_config(&wallet)?;",
+    "replace": "        let mut config = wallet_config(&wallet)?;",
+    "expect_failing": [
+      "sync::tests::sync_service_preflight_rejects_malformed_inputs_and_node_routes_without_io"
+    ],
+    "rule": "The freshness source plan refuses an unreadable wallet configuration as invalid_wallet_config."
+  },
+  {
+    "id": "invalid-wallet-config-cli-all",
+    "file": "crates/wallets/src/sync.rs",
+    "find": "        .filter_map(|row| match crate::freshness::sources::stored_wallet_config(&row) {",
+    "replace": "        .filter_map(|row| match config(&row) {",
+    "expect_failing": [
+      "sync::tests::sync_service_preflight_rejects_malformed_inputs_and_node_routes_without_io"
+    ],
+    "rule": "wallets sync --all refuses an unreadable wallet configuration as invalid_wallet_config."
+  },
+  {
+    "id": "json-import-decode-refusal",
+    "file": "crates/wallets/src/file_import/csv.rs",
+    "find": "        .map_err(|_| refuse())?",
+    "replace": "        .map_err(|_| AppError::new(\"internal_error\", \"decode\"))?",
+    "expect_failing": [
+      "file_import::tests::json_formats_refuse_a_non_json_file_as_validation"
+    ],
+    "rule": "A non-UTF-8 file under a JSON import format is a validation refusal."
+  },
+  {
+    "id": "json-import-parse-refusal",
+    "file": "crates/wallets/src/file_import/csv.rs",
+    "find": "        _ => refuse(),",
+    "replace": "        _ => AppError::new(\"internal_error\", error.to_string()),",
+    "expect_failing": [
+      "file_import::tests::json_formats_refuse_a_non_json_file_as_validation"
+    ],
+    "rule": "A file that is not JSON under a JSON import format is a validation refusal."
+  },
+  {
+    "id": "json-import-recursion-stays-internal",
+    "file": "crates/wallets/src/file_import/csv.rs",
+    "find": "        kassiber_pytext::JsonErrorKind::TooDeep { .. } => {",
+    "replace": "        kassiber_pytext::JsonErrorKind::Constant { .. } => {",
+    "expect_failing": [
+      "file_import::tests::json_formats_refuse_a_non_json_file_as_validation"
+    ],
+    "rule": "Nesting past Python's recursion limit is not a ValueError and stays an internal error."
+  },
+  {
+    "id": "json-import-btcpay-reader",
+    "file": "crates/wallets/src/file_import/btcpay.rs",
+    "find": "        let payload = csv::read_json(file, \"BTCPay JSON export\", true)?;",
+    "replace": "        let payload = csv::read_json(file, \"JSON import\", true)?;",
+    "expect_failing": [
+      "file_import::tests::json_formats_refuse_a_non_json_file_as_validation"
+    ],
+    "rule": "The BTCPay JSON loader names its own label in the refusal."
   }
 ]
