@@ -696,14 +696,13 @@ rows, and stack locals. `--save` writes the artifact under
   copies then deletes state or merges roots. Unknown top-level entries count as
   state; only `bin` and `run` are excluded and remain fixed. Unsupported or
   conflicting layouts stay legacy. `kassiber status` shows the effective path.
-- **Lightning node wallet kinds.** `coreln` can sync through read-only
-  Core Lightning RPC methods. Prefer a commando rune restricted to list,
-  get, and `bkpr-list*` methods with a rate cap (e.g.
-  `restrictions='[["method^list","method^get","method^bkpr-list","method=summary"],["method/listdatastore"],["rate=60"]]'`).
-  Kassiber passes the rune through the `LIGHTNING_RUNE` environment
-  variable so it does not appear in `/proc/<pid>/cmdline`. Local
-  `lightning-rpc` file access is also supported but is not least-privilege
-  on its own. `lnd` and `nwc` remain declared but inactive.
+- **Lightning node wallet kinds.** `coreln` syncs through read-only
+  Core Lightning RPC methods over local `lightning-rpc` access, which is
+  not least-privilege on its own; the method allowlist keeps Kassiber
+  read-only. Commando connections are refused before `lightning-cli`
+  starts: it accepts a rune only in argv (`--commando=peerid:rune`), which
+  every local user can read from `/proc/<pid>/cmdline`, and Kassiber never
+  puts a secret there. `lnd` and `nwc` remain declared but inactive.
 
 ## AI provider configuration
 

@@ -424,7 +424,7 @@ RUNE = "tU-RWxo6VjFbHkRmsN5HmwAkZYUcbkWxKZwIG4vSaCw9MyZtZXRob2Q9bGlzdGZ1bmRz"
 
 
 class ClnCredentialEchoTest(CredentialEchoAssertions, unittest.TestCase):
-    def test_lightning_cli_output_withholds_the_rune(self):
+    def test_commando_rune_never_reaches_lightning_cli(self):
         import os
         import stat
         import sys
@@ -432,13 +432,16 @@ class ClnCredentialEchoTest(CredentialEchoAssertions, unittest.TestCase):
         from kassiber.core.lightning import cln
 
         with tempfile.TemporaryDirectory() as tmp:
-            # A lightning-cli that fails and prints its arguments, rune included.
+            # A lightning-cli that would print its arguments, rune included.
+            # lightning-cli takes a rune only in argv, so commando is refused
+            # and this never runs.
             script = os.path.join(tmp, "lightning-cli")
+            marker = os.path.join(tmp, "spawned")
             with open(script, "w", encoding="utf-8") as handle:
                 handle.write(
-                    f"#!{sys.executable}\nimport json, sys, urllib.parse\n"
-                    "args = ' '.join(sys.argv[1:])\n"
-                    "sys.stderr.write('commando failed: ' + args + ' ' + urllib.parse.quote(args, safe='') + ' ' + json.dumps(args))\n"
+                    f"#!{sys.executable}\nimport sys\n"
+                    f"open({marker!r}, 'w').write(' '.join(sys.argv[1:]))\n"
+                    "sys.stderr.write('commando failed: ' + ' '.join(sys.argv[1:]))\n"
                     "sys.exit(1)\n"
                 )
             os.chmod(script, stat.S_IRWXU)
@@ -452,7 +455,8 @@ class ClnCredentialEchoTest(CredentialEchoAssertions, unittest.TestCase):
             with patch_online():
                 with self.assertRaises(AppError) as raised:
                     cln.call_core_lightning(backend, "getinfo")
-        self.assertIn("commando failed", raised.exception.details["stderr"])
+            self.assertFalse(os.path.exists(marker))
+        self.assertEqual(raised.exception.code, "validation")
         self.assertErrorWithheld(raised.exception, (RUNE,))
 
 

@@ -155,7 +155,10 @@ class CliCredentialEchoTest(CredentialEchoAssertions, unittest.TestCase):
         )
         self.cli("wallets", "create", "--label", "Node", "--kind", "coreln", "--backend", "cln")
         output = self.output("wallets", "sync", "--wallet", "Node")
-        self.assertIn("commando failed", output)
+        # lightning-cli takes a rune only in argv, so commando is refused
+        # before the script that would echo it can run.
+        self.assertIn("Core Lightning commando connections are not supported", output)
+        self.assertNotIn("commando failed", output)
         self.assertNoEcho(output, (RUNE,))
 
 
