@@ -191,6 +191,19 @@ class ChatAttachmentUploadTests(unittest.TestCase):
         )
         self.assertEqual(refused["error"]["code"], "chat_attachment_unsupported")
 
+    def test_an_unknown_staging_purpose_is_refused_as_validation(self):
+        picked = os.path.join(self._tmp.name, "mine.csv")
+        with open(picked, "w", encoding="utf-8") as handle:
+            handle.write("a,b\n1,2\n")
+        for purpose in (["chat_attachment"], {}, {"chat_attachment": True}, None, 1, "x"):
+            with self.subTest(purpose=purpose):
+                envelope = self.request(
+                    "internal.document_import.stage",
+                    {"source_file": picked, "purpose": purpose},
+                )
+                self.assertEqual(envelope["kind"], "error")
+                self.assertEqual(envelope["error"]["code"], "validation")
+
     def test_refusals_leave_nothing_behind(self):
         def code(envelope):
             return envelope["error"]["code"]

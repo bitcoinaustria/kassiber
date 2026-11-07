@@ -14343,7 +14343,8 @@ def _document_import_stage_payload(
 ) -> dict[str, Any]:
     source_file = _required_str_arg(args, "source_file", "Selected document")
     purpose = args.get("purpose", "document_import")
-    if purpose not in {"document_import", "chat_attachment"}:
+    # A list or object purpose is refused like any unknown one, not hashed.
+    if not isinstance(purpose, str) or purpose not in {"document_import", "chat_attachment"}:
         raise AppError("Unknown staging purpose", code="validation", retryable=False)
     if purpose == "chat_attachment":
         # Exports as well as statements and photos; the OCR preview still
