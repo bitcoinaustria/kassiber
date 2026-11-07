@@ -326,7 +326,8 @@ def authorization_credentials(value: Any) -> list[str]:
     """The credentials one ``Authorization``-style header value carries.
 
     The whole value, the part after its scheme, and for ``Basic`` the decoded
-    ``user:password`` with its two halves.
+    ``user:password`` and the password. A user name alone is an identifier,
+    not a credential; withholding a short one would garble any message.
     """
 
     text = str(value or "").strip()
@@ -344,21 +345,24 @@ def authorization_credentials(value: Any) -> list[str]:
                 decoded = ""
             if decoded:
                 found.append(decoded)
-                user, separator, password = decoded.partition(":")
-                if separator:
-                    found.extend((user, password))
+                _user, separator, password = decoded.partition(":")
+                if separator and password:
+                    found.append(password)
     return found
 
 
 def basic_credentials(username: Any, password: Any) -> list[str]:
-    """``user``, ``password``, ``user:password`` and its ``Basic`` base64."""
+    """``password``, ``user:password`` and its ``Basic`` base64.
+
+    The user name alone is not withheld (see ``authorization_credentials``).
+    """
 
     user = str(username or "")
     secret = str(password or "")
-    if not user and not secret:
+    if not secret:
         return []
     pair = f"{user}:{secret}"
-    return [user, secret, pair, base64.b64encode(pair.encode("utf-8")).decode("ascii")]
+    return [secret, pair, base64.b64encode(pair.encode("utf-8")).decode("ascii")]
 
 
 def url_credentials(url: Any, *, default_scheme: str | None = None) -> list[str]:
@@ -381,10 +385,14 @@ def url_credentials(url: Any, *, default_scheme: str | None = None) -> list[str]
     found: list[str] = []
     userinfo, at, _host = parts.netloc.rpartition("@")
     if at and userinfo:
-        user, _separator, password = userinfo.partition(":")
-        found.append(userinfo)
-        found.extend(basic_credentials(urlparse.unquote(user), urlparse.unquote(password)))
-        found.extend((user, password))
+        user, separator, password = userinfo.partition(":")
+        if separator and password:
+            found.append(userinfo)
+            found.extend(basic_credentials(urlparse.unquote(user), urlparse.unquote(password)))
+            found.append(password)
+        elif not separator:
+            # Userinfo without a password is a token in the user position.
+            found.extend((userinfo, urlparse.unquote(userinfo)))
     for key, item in urlparse.parse_qsl(parts.query, keep_blank_values=False):
         lowered = key.lower()
         if is_sensitive_key(key) or any(part in lowered for part in _QUERY_CREDENTIAL_PARTS):
@@ -436,7 +444,7 @@ def backend_credentials(backend: Any) -> tuple[str, ...]:
     users = [text(key) for key in _BACKEND_USERNAME_FIELDS if text(key)]
     passwords = [text(key) for key in _BACKEND_PASSWORD_FIELDS if text(key)]
     for user in users or [""]:
-        for password in passwords or [""]:
+        for password in passwords:
             found.extend(basic_credentials(user, password))
     found.extend(url_credentials(text("url")))
     for key in ("tor_proxy", "proxy"):

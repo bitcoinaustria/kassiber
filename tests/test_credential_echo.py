@@ -145,7 +145,7 @@ class WithholdCredentialsTest(unittest.TestCase):
         basic = base64.b64encode(b"rpcuser:rpc-pass-word").decode()
         self.assertEqual(
             authorization_credentials(f"Basic {basic}"),
-            [f"Basic {basic}", basic, "rpcuser:rpc-pass-word", "rpcuser", "rpc-pass-word"],
+            [f"Basic {basic}", basic, "rpcuser:rpc-pass-word", "rpc-pass-word"],
         )
         self.assertEqual(authorization_credentials("Bearer tok-123"), ["Bearer tok-123", "tok-123"])
         self.assertIn("p/w", url_credentials("https://user:p%2Fw@host/api?api_key=K-1&address=bc1q"))
