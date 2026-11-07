@@ -17,6 +17,7 @@ import re
 import tempfile
 import traceback
 import unittest
+from pathlib import Path
 from urllib.parse import quote, quote_plus
 
 from kassiber.diagnostics import collect_public_diagnostics
@@ -798,3 +799,55 @@ class StoredErrorMigrationTest(CredentialEchoAssertions, unittest.TestCase):
                 self.assertEqual(conn.execute("SELECT token FROM backends WHERE name = 'shop'").fetchone()[0], BTCPAY_KEY)
             finally:
                 conn.close()
+
+
+# --- Paths that keep no server text, or send no credential ---------------------------
+
+
+class NoEchoPathTest(CredentialEchoAssertions, unittest.TestCase):
+    def test_chain_acquisition_errors_are_categorical(self):
+        from kassiber.core import chain_analysis_acquisition as acquisition
+
+        with EchoServer(json_echo(401)) as server:
+            backend = {"name": "explorer", "kind": "esplora", "url": f"{server.url}/api", "token": ESPLORA_TOKEN}
+            reader = acquisition._Reader(backend, acquisition._Budget(4))
+            with self.assertRaises(AppError) as raised:
+                reader.http("/blocks/tip/height", text=True)
+        self.assertEqual(str(raised.exception), "Backend could not supply the requested observation")
+        self.assertErrorWithheld(raised.exception, (ESPLORA_TOKEN,))
+
+    def test_update_check_errors_keep_no_response_text_and_send_no_credential(self):
+        import io
+        from email.message import Message
+        from urllib import error as urlerror
+
+        from kassiber import update_check
+
+        canary = "GhCanaryZ" + "q9X" * 6
+        seen = []
+
+        def opener(request, *, timeout):  # noqa: ARG001
+            seen.append(dict(request.header_items()))
+            raise urlerror.HTTPError(request.full_url, 401, "no", Message(), io.BytesIO(canary.encode()))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            consent = update_check.set_update_checks_enabled(True, path=Path(tmp) / "consent.json")
+            with self.assertRaises(AppError) as raised:
+                update_check.fetch_latest_release(opener=opener, consent=consent)
+        self.assertEqual(raised.exception.code, "update_check_failed")
+        self.assertFalse(any(header.lower() in {"authorization", "cookie"} for header in seen[0]))
+        self.assertErrorWithheld(raised.exception, (canary,))
+
+    def test_credentialed_esplora_backends_never_reach_the_bdk_observer(self):
+        from types import SimpleNamespace
+
+        from kassiber.core.chain_observer.bdk import bdk_compatibility_reason
+
+        state = SimpleNamespace(chain="bitcoin", descriptor_plan=SimpleNamespace(kind="descriptor"))
+        for credential in ({"token": ESPLORA_TOKEN}, {"auth_header": f"Bearer {ESPLORA_TOKEN}"},
+                           {"tor_proxy": "socks5h://u:pw@127.0.0.1:9050"}):
+            with self.subTest(credential=sorted(credential)):
+                backend = {"name": "explorer", "kind": "esplora", "url": "https://esplora.example/api", **credential}
+                # Any reason keeps the Python transport, which withholds them.
+                self.assertIsNotNone(bdk_compatibility_reason(backend, state))
+

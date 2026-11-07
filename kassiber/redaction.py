@@ -433,8 +433,14 @@ def backend_credentials(backend: Any) -> tuple[str, ...]:
         return ()
 
     def text(key: str) -> str:
+        # Only text and integers are credential values; anything else (a
+        # float, bool or list in config JSON) is not sent as one.
         value = backend.get(key)
-        return str(value).strip() if value is not None else ""
+        if isinstance(value, str):
+            return value.strip()
+        if isinstance(value, int) and not isinstance(value, bool):
+            return str(value)
+        return ""
 
     found: list[str] = []
     token = text("token")

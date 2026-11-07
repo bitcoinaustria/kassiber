@@ -851,9 +851,10 @@ def _stored_error_credentials(conn) -> tuple[str, ...]:
             credentials.extend(backend_credentials(backend))
     if "ai_providers" in tables:
         for row in conn.execute("SELECT api_key, base_url FROM ai_providers ORDER BY name").fetchall():
-            if row[0]:
-                credentials.append(str(row[0]))
-            credentials.extend(url_credentials(row[1]))
+            if isinstance(row[0], str) and row[0]:
+                credentials.append(row[0])
+            if isinstance(row[1], str):
+                credentials.extend(url_credentials(row[1]))
     return tuple(credentials)
 
 
