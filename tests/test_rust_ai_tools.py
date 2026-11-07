@@ -29,6 +29,8 @@ import sys
 import tempfile
 import unittest
 
+from tests.rust_port.book_schema import TABLES as BOOK_TABLES
+
 ROOT = Path(__file__).resolve().parent.parent
 RUST_BIN = os.environ.get("KASSIBER_RUST_BIN")
 REFERENCE = ROOT / "tests" / "rust_ai_tool_reference.py"
@@ -200,12 +202,16 @@ def tool_requests(attachment=None):
     records it, so their native routes run on both sides.
     """
     from kassiber.ai.tools import TOOL_CATALOG
-    from kassiber.mcp.tools import MCP_SOURCE_TOOL_NAMES
+    from kassiber.mcp.tools import available_tools
 
     extra = _extra_arguments()
+    # An external agent at the `read` grant with restricted access (#686).
     mcp_state = {
         **REMOTE,
-        "advertised_tools": [entry.provider_name for entry in TOOL_CATALOG if entry.name in MCP_SOURCE_TOOL_NAMES],
+        "advertised_tools": [
+            tool.entry.provider_name
+            for tool in available_tools(grant="read", agent_access="restricted")
+        ],
         "cross_book_read_allowed": False,
         "read_maintenance": "disabled",
         "auto_sync_attempted": True,
@@ -473,13 +479,13 @@ class AiToolExecutorParityTest(unittest.TestCase):
         try:
             tables = sorted(row[0] for row in conn.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"))
-            self.assertEqual(len(tables), 112)
+            self.assertEqual(tuple(tables), BOOK_TABLES)
             return {table: sorted(conn.execute(f'SELECT * FROM "{table}"').fetchall(), key=repr) for table in tables}
         finally:
             conn.close()
 
     def compare_writes(self, fixture, requests, seed, unchanged=False):
-        """Envelope and model bytes per call, then all 112 tables, on copies."""
+        """Envelope and model bytes per call, then every table, on copies."""
         if not requests:
             return []
         base = Path(tempfile.mkdtemp(prefix="writes-", dir=self.base))
@@ -526,7 +532,7 @@ class AiToolExecutorParityTest(unittest.TestCase):
         return [json.loads(line) for line in actual[1:-1]]
 
     def test_mutating_tools_match_python_on_every_fixture(self):
-        """Every mutating tool: whole envelope and all 112 tables after the calls."""
+        """Every mutating tool: whole envelope and every table after the calls."""
         from concurrent.futures import ThreadPoolExecutor
         from kassiber.ai.tools import TOOL_CATALOG
 

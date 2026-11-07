@@ -186,6 +186,26 @@ encrypted-book scenario; all 9 tests pass (all 8 failed on the merge).
 chat-files `attachments` argument. It gains a turn that resumes a provider
 cursor inside a saved session.
 
+### Tools harness after these steps
+
+`tests/test_rust_ai_tools.py` now checks whole books against the store
+manifest (113 tables) instead of a fixed 112 and builds its MCP state from
+#686's grant registry (`available_tools(grant="read",
+agent_access="restricted")`). It fails 15 of 27 test functions, 198 subtests
+pass (211 failed before these steps). Every remaining record difference
+belongs to another main-sync slice:
+
+| Difference | Tools | Slice |
+| --- | --- | --- |
+| `group_id`, "exactly one of transaction or group_id" | `ui.journals.quarantine.resolve` | S5 |
+| `completeness_class`, `scan_bounds` | auto-read `ui.wallets.list` | S8 |
+| suggestion `exclusions` | auto-read `ui.transfers.suggest` | S6 |
+| journals stale after a dismissal (`journal_input_version`) | `ui.transfers.dismiss` | S6 |
+| `definitions`, badges `review` | auto-read health and badges, `ui.maintenance.run` | S10, S4 |
+| `fiat_currency` on cases | review flow, acquisition receipts | S4 |
+| export sections and sheets | `ui.reports.export` | S7 |
+| `book_network_review_required` hint | review flow | not yet traced |
+
 ### Python fix round 7 (eabbe6606)
 
 `t3code/python-reference-fixes-r7-7` is merged as a pure merge (2b523c060).

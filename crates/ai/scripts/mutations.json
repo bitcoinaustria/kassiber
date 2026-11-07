@@ -311,7 +311,7 @@
     "find": "workspace, profile, audit, \"executed\", None,",
     "replace": "workspace, profile, audit, \"failed\", None,",
     "expect_failing": [
-      "custody_writes_need_a_local_provider_and_are_audited"
+      "custody_writes_need_full_agent_access_and_are_audited"
     ],
     "rule": "A consented custody write is audited as executed."
   },
