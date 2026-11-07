@@ -136,6 +136,19 @@ fn options(selection: &Selection) -> ResolveOptions {
 fn path(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
+/// The data root `resolve_runtime_paths` selects, without admitting its
+/// settings: Python reads none there. Brokered routing and the operator
+/// commands call this before anything recovers an interrupted restore, which
+/// may have left a partial `settings.json` that recovery puts back. Every
+/// later step that reads settings recovers first (`restore::resolve_for_bootstrap`).
+fn selected_data_root_in(
+    context: &Context,
+    selection: &Selection,
+) -> Result<PathBuf, kassiber_paths::Error> {
+    context
+        .resolve_for_recovery(&options(selection))
+        .map(|located| located.data_root)
+}
 fn paths(p: &kassiber_paths::RuntimePaths) -> RuntimePaths {
     RuntimePaths {
         data_root: path(&p.data_root),
@@ -578,8 +591,8 @@ impl BookStore for RealStore {
         // resolve_runtime_paths: the selected catalog project is created on
         // first use, an explicit root need not have a layout yet.
         let context = context()?;
-        match context.resolve_for_bootstrap(&options(selection)) {
-            Ok(resolved) => Ok(path(&resolved.data_root)),
+        match selected_data_root_in(&context, selection) {
+            Ok(resolved) => Ok(path(&resolved)),
             Err(e)
                 if selection.data_root.is_none()
                     && selection.project.is_none()
@@ -596,9 +609,8 @@ impl BookStore for RealStore {
                     &mut |_| Ok(()),
                 )
                 .map_err(error)?;
-                context
-                    .resolve_for_bootstrap(&options(selection))
-                    .map(|resolved| path(&resolved.data_root))
+                selected_data_root_in(&context, selection)
+                    .map(|resolved| path(&resolved))
                     .map_err(error)
             }
             Err(e) => Err(error(e)),
@@ -3082,3 +3094,35 @@ mod project_clock_tests {
         }
     }
 }
+
+#[cfg(test)]
+mod selected_data_root_tests {
+    use super::*;
+
+    /// A restore interrupted after installing a partial `settings.json` must
+    /// not stop the ordinary restart that recovers it: selecting the book
+    /// reads no settings, as Python's `_selected_data_root` does.
+    #[test]
+    fn selecting_a_book_does_not_admit_its_settings() {
+        let root = tempfile::tempdir().unwrap();
+        let data = root.path().join("book/data");
+        std::fs::create_dir_all(root.path().join("book/config")).unwrap();
+        std::fs::create_dir_all(&data).unwrap();
+        std::fs::write(
+            root.path().join("book/config/settings.json"),
+            "invalid partial incoming settings",
+        )
+        .unwrap();
+        let mut context = Context::from_env().unwrap();
+        context.home = root.path().join("home");
+        context.environ.clear();
+        let selection = Selection {
+            data_root: Some(path(&data)),
+            ..Default::default()
+        };
+        assert!(context.resolve_for_bootstrap(&options(&selection)).is_err());
+        let selected = selected_data_root_in(&context, &selection).unwrap();
+        assert_eq!(selected, kassiber_paths::canonicalize_allow_missing(&data).unwrap());
+    }
+}
+

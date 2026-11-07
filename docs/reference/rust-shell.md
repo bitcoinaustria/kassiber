@@ -18191,3 +18191,18 @@ whole message; anything else after `auth:` stays redacted (see
 `tests/test_native_auth_error_redaction.py` also checks that each allowed text
 still occurs in the helper source. `crates/operator/scripts/native_auth_redaction_mutations.json`
 lists the ten mutations the tests kill.
+
+## Restart after a restore interrupted in its settings (2026-11-07)
+
+A restore killed after it installed a partial `config/settings.json`
+(`restore.after_install.config/settings.json`) left the Rust CLI refusing
+every command with `unsafe_configuration`: brokered routing selected the book
+with `Context::resolve_for_bootstrap`, which admits `settings.json`, before
+anything recovered the pending restore. Python's `_selected_data_root` reads no
+settings, and its `effective_unlock_mode` recovers first, so the ordinary
+restart rolls back. Rust now selects with `resolve_for_recovery`
+(`selected_data_root_in`), and every later settings read still recovers first.
+`test_rust_backup_install.py::test_ordinary_cli_restart_recovers_before_layout_and_database_open`
+passes for all four starter/book cases, and
+`selecting_a_book_does_not_admit_its_settings` kills the entry in
+`crates/kassiber/scripts/restart_recovery_mutations.json`.

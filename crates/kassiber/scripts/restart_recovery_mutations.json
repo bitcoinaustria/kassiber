@@ -1,0 +1,12 @@
+[
+  {
+    "id": "selection-admits-settings",
+    "file": "crates/kassiber/src/real_store.rs",
+    "find": "        .resolve_for_recovery(&options(selection))\n        .map(|located| located.data_root)",
+    "replace": "        .resolve_for_bootstrap(&options(selection))\n        .map(|located| located.data_root)",
+    "expect_failing": [
+      "selecting_a_book_does_not_admit_its_settings"
+    ],
+    "rule": "Selecting the book for brokered routing reads no settings, so an interrupted restore's partial settings.json cannot block the restart that recovers it."
+  }
+]
