@@ -37,7 +37,7 @@ Pinned crates, wheels and npm packages were downloaded once for the builds
 | A7 Restore under `/var` | PASS | Raw `TMPDIR=/var/folders/…/T/` (→ `/private/var`): `backup export` + `import --install` for Py→Py, Py→Rust, Rust→Py, Rust→Rust. All install, tables identical, nothing left in TMPDIR. `test_rust_backup_install.py` + `test_backup_recovery.py`: 1391 passed, 4 failed (they also fail with a resolved TMPDIR; see A2). | `crates/backup/src/lib.rs:351`, `crates/store/src/restore.rs:70` | — |
 | A8 Durability | REPORTED (gap) | Rust file writes (`durable::atomic_write`, restore staging and journal, encryption migration, credentials) call `File::sync_all`. On Apple targets std implements it as `fcntl(F_FULLFSYNC)`, including for directory syncs. SQLite in both runtimes: no `PRAGMA fullfsync`/`checkpoint_fullfsync` (no match in the repo), so commits use plain `fsync`. Python: every `os.fsync` is plain `fsync(2)`. | Rust: `crates/store/src/durable.rs:105-147`, `lib.rs:909-937`. Python: `kassiber/db.py:3465-3519`, `private_files.py:17-37` | Set `PRAGMA fullfsync=ON` (and `checkpoint_fullfsync=ON` for WAL books) on macOS in the Rust store. Use `fcntl(F_FULLFSYNC)` in Python's helpers while it still writes books. Fix the Rust and Python write paths that skip a file or directory sync (A8 notes). |
 | A9 `/bin/ps` labels | PASS | `peers::tests` pass on macOS. For all 1356 live processes, Rust `process_label` and Python `peers.process_label` return identical labels (951 `None`, then `launchd_sim`, `codex`, `ChatGPT`, `Claude`, …). | `crates/operator/src/peers.rs:143-190` | — |
-| B Touch ID (R6-4) | PASS (port, signed identity checks); BLOCKED (Touch ID prompt) | Native `operator touch-id status/enroll/forget` and `unlock --auth touch-id`. 19 native-auth unit tests, server and service tests, 7 byte-identical differential steps, 18/18 mutations killed. Signed run: status `available: true`; enroll reached the helper's data-protection store and failed there without a provisioning profile; unlock under a pty → `operator_native_auth_not_configured`; a shell-parented CLI refused. Rust and Python derive the same account for the test book. | `crates/operator/src/native_auth.rs`, `server.rs`, `service/mod.rs`, `crates/secrets/src/modes.rs`, `crates/cli/src/operator_cli.rs` | Rerun with the Developer ID provisioning profile to see the Touch ID prompt (steps in B notes). |
+| B Touch ID (R6-4) | PASS (port, signed identity checks); BLOCKED (Touch ID prompt) | Native `operator touch-id status/enroll/forget` and `unlock --auth touch-id`. 19 native-auth unit tests, server and service tests, 7 byte-identical differential steps, 18/18 mutations killed. Signed run: status `available: true`; enroll reached the helper's data-protection store and failed there, inferred to be the missing provisioning profile; unlock under a pty → `operator_native_auth_not_configured`; a shell-parented CLI refused. Rust and Python derive the same account for the test book. | `crates/operator/src/native_auth.rs`, `server.rs`, `service/mod.rs`, `crates/secrets/src/modes.rs`, `crates/cli/src/operator_cli.rs` | Rerun with the Developer ID provisioning profile to see the Touch ID prompt (steps in B notes). |
 
 ## A2 notes: failing tests
 
@@ -155,9 +155,9 @@ Each step (`$APP/Contents/MacOS/kassiber-ui --cli --machine --data-root <book> �
 2. `operator touch-id enroll --passphrase-fd 3`: the broker starts, the
    caller and helper checks pass, fresh authentication binds the policy and
    the broker-launched helper fails. The error is `native_auth_failed`,
-   message `kassiber native auth: [redacted]`. Touch ID is enrolled on this
-   Mac, so the cause is the missing Keychain entitlement
-   (`errSecMissingEntitlement`).
+   message `kassiber native auth: [redacted]`. The redaction hides the
+   helper's text. Touch ID is enrolled on this Mac, so the cause is inferred
+   to be the missing Keychain entitlement (`errSecMissingEntitlement`).
 3. `operator touch-id status`, bound: `{"available": true, "configured":
    false}`. The helper ran with the Rust sidecar as its parent and exited 4.
 4. The same `status` through `bin/kassiber`: identical. The helper's parent
