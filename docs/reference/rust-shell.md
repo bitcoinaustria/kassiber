@@ -3873,6 +3873,8 @@ it is not a generic database-passphrase or filesystem dispatch API.
 | What | Command |
 | --- | --- |
 | Crate tests, including the CPython and Python golden vectors | `cargo test --workspace` |
+| The secret floor against the six redaction generators (Python writes the corpus) | `.venv/bin/python crates/envelope/scripts/gen_scanner_vectors.py generators "$(realpath target)/redaction-corpus"`, then `KASSIBER_REDACTION_CORPUS="$(realpath target)/redaction-corpus" cargo test --release -p kassiber-envelope --test scanner_corpus -- --ignored` |
+| The secret floor's linear scaling (thread CPU time) | `cargo test --release -p kassiber-envelope --test scanner_scaling` |
 | The binary under the desktop supervisor's routing rules | `cargo test -p kassiber --features test-harness` |
 | Python against the binary, same argv and daemon input | `cargo build -p kassiber --features test-harness`, then `KASSIBER_RUST_BIN=target/debug/kassiber uv run --locked python -m pytest tests/test_rust_shell_parity.py` |
 
@@ -3913,6 +3915,7 @@ Golden data and the scripts that write it, all run with the locked Python
 | `crates/pytext/src/unicode_tables.rs` | `crates/pytext/scripts/gen_unicode_tables.py` |
 | `crates/pytext/tests/data/vectors.txt` | `crates/pytext/scripts/gen_vectors.py` |
 | `crates/envelope/tests/data/golden.txt` | `crates/envelope/scripts/gen_golden.py` |
+| `crates/envelope/tests/data/secret_floor.txt`, `scanner_families.json` | `crates/envelope/scripts/gen_scanner_vectors.py fixtures` |
 | `crates/cli/src/spec_data.rs` | `crates/cli/scripts/gen_parser_spec.py` |
 | `crates/cli/tests/data/argparse_cases.txt` | `crates/cli/scripts/gen_cli_fixtures.py` |
 | `crates/cli/tests/data/render_cases.txt` | `crates/cli/scripts/gen_render_cases.py` |
@@ -17846,3 +17849,27 @@ all five against Python (identical envelopes but for the rendered pages,
 bytes and hash, identical errors, files, saved and filed markers and tables;
 all served by Rust); the model tests are listed in the design document. The
 rollout table there tracks the remaining reports.
+
+## Secret floor scanner (5i mirror)
+
+`kassiber-envelope` mirrors the Python secret floor of rounds 5h and 5i:
+`redaction/scanner.rs` is `kassiber/redaction_scanner.py` (word-level and
+count-shaped names, value and flag ends, linear continuations, URL userinfo,
+chat-bot path tokens, the keyed, XML, named-pair, CLI and bare-userinfo
+scanners, the decoded view, span union and the 1,000,000-code-point limit),
+and `redaction/floor.rs` the key, descriptor and token patterns and
+`is_sensitive_key` of `kassiber/redaction.py`. They replace the earlier regex
+rules, which Python dropped. The matchers are hand-written to accept exactly
+what Python's `re` accepts and use only the standard library; the desktop
+supervisor compiles the same two files instead of keeping its own token
+floor. The operational pass (`redact_operational_text`) follows Python's
+segment-wise amount-ID shielding. See [logging](logging.md#rust-mirror) for
+the contract and tests.
+
+Verification on 2026-11-05 at the merge of `t3code/python-reference-fixes-5i`:
+zero differences from Python on the 1,087 fixture cases and on all six
+generators, 1,060,000 cases over 27 seed runs (pinned seeds reproducing the
+pinned SHA-256 digests, the pinned extra seeds, and seeds 1001 and 1002 for
+each generator). In a release build every scaling and stress shape's
+400k/40k CPU-time ratio was between 7.6 and 11.2. The 27 entries of
+`crates/envelope/scripts/mutations.json` cover each rule family.

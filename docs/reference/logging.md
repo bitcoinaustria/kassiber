@@ -78,12 +78,25 @@ itself, so it must not become a health checker or background probe.
 **Secret floor — applied at insert, in every buffer.** Seed phrases,
 extended private/public keys, descriptors, Silent Payments `sp()` / `spscan` /
 `spspend` material, BDK/LWK observer blobs or opaque store values, API keys,
-bearer tokens, passphrase assignments. These are
-scrubbed by
+bearer tokens, and passphrase assignments. These are scrubbed by
 [`kassiber/redaction.py`](../../kassiber/redaction.py) (Python),
-`redact_sensitive_text` (Rust), and `redactSecretFloorText` (TypeScript)
+`kassiber_envelope::redaction` (Rust backend and desktop supervisor), and
+`redactSecretFloorText` (TypeScript)
 before a record is stored, so this material never exists in any buffer and
 cannot leak through later code paths, exports, or memory dumps.
+
+The Python and webview floors also scrub `rpcpassword`, `rpcauth`, `password`,
+`macaroon`, `cookie`, `secret_key` and `private_key` assignments. Their shared
+scanners handle key-based secrets before URL userinfo, including escaped and
+truncated diagnostics. Exact examples live in
+`tests/fixtures/secret_redaction_cases.json`; six seeded generators
+each add 100,000 compositions with secret-fragment and non-secret preservation
+checks. Nostr `nsec` private keys also pass through the key-material backstop.
+See [the scanner design and limits](#free-text-credential-scanner-and-limits)
+for encoding support, ambiguous URL text and prose-safe flag handling.
+
+The Rust backend and the desktop supervisor run the same floor as Python: see
+[the Rust mirror](#rust-mirror).
 
 **Operational redaction — applied at render/export time.** Amounts,
 addresses, txids, paths, URLs, labels. The Logs page renders redacted by
@@ -129,6 +142,10 @@ excluded from both free-text amount passes, including keyed sat values and
 currency-symbol matches. Matching is case-insensitive and requires token
 boundaries (no adjacent ASCII letters, digits, underscores or hyphens). Partial
 UUID lookalikes are not exempt. The txid pass still runs first and is unchanged.
+Only the ID's own characters are shielded: a comma or decimal point followed
+by a separate amount is still redacted even when the ID ends entirely in
+digits. Python and webview regression tests share exact output vectors and a
+fixed test salt; runtime amount salts remain private and random.
 
 Prefer typed fields over free text when adding log producers: a field
 typed `address`/`txid`/`path` is masked by type at render time, while free
@@ -213,3 +230,272 @@ RP2's import-time file log from a scratch temp directory (see
 An always-on log file is a rejected design. If session recording to disk
 is ever added, it must be opt-in, visibly active, tier-redacted at write
 time, and deleted on toggle-off by default.
+
+## Free-text credential scanner and limits
+
+Redaction fails closed: when a credential's extent is ambiguous, mask more.
+Losing a following flag name, query parameter, hostname or malformed record tail
+is acceptable; exposing part of a credential is not. Ordinary prose words are
+the exception, so help text remains readable. Producers must use typed secret
+fields rather than rely on inference from arbitrary text.
+
+Python and the shipped webview run mirrored forward scanners before the remaining
+key/descriptor backstops. Each scanner (URL userinfo, schemeless userinfo, XML,
+name/value pairs, command flags and key assignments) reports spans in the
+original text, over both the raw text and the decoded view. Their union is
+masked; overlapping spans merge into one `[redacted]`. One detector therefore
+cannot erase the context another needs, and a URL scan cannot swallow a later
+secret key and expose the part of its value after `@`.
+The keyed pass also retains URL credential context across malformed slashes and
+whitespace, so masking a keyed value cannot erase the terminator and expose its
+surrounding username. Complete endpoints and clear quoted record boundaries with
+literal delimiters end that context; numeric URL ports remain readable. Encoded
+quotes and record-like text inside malformed userinfo cannot establish a boundary.
+Secret names are matched word by word, never as raw substrings. Identifiers
+split on separators, camelCase and digit-to-letter boundaries. A concatenated
+part that segments entirely into known secret and qualifier words is read as
+those words (`rpcpassword`, `PGPASSWORD`, `dbprivkeyraw`, `masterseedwords`,
+`BTCPAYPWD`). A part that does not segment fails closed: it is secret when it
+contains a secret word or compound outside a listed ordinary word, whatever
+unknown prefix or suffix surrounds it (`krakenpassword`, `btcpass`, `hdseed`,
+`nodewif`, `lnrune`, `cardpin`, `smsotp`, `passwordbackup`, `PASSWORDconfirm`,
+`tokenstring`, `macaroonhexstring`, `seedbackup`, `rpcpasswordish`). The
+ordinary list is explicit: `bypass`, `compass`, `encompass`, `surpass`,
+`trespass`, `overpass`, `underpass`, `passable`, `passage`, `passed`,
+`passenger`, `passerby`, `passing`, `passive`, `passover`, `passport`,
+`passthrough`, `passwordless`, `dnsseed`, `seednode`, `seeded`, `seeder`,
+`prune`, `spin`, `swift`, `wifi`, and the stems `tokeniz` (`tokenizer`,
+`tokenized`) and `secretar` (`secretary`). An ordinary word counts only at the
+start of the part or after known qualifier words (`mytokenizer`), so
+`ftprune` (`ftp` + `rune`) and `autoprune` are secret. Case runs are hints:
+`rpcSECRETkeyOLD` and `myPASSWORDbackup` are also read concatenated. So
+`prune`, `pruneheight`, `dnsseed`, `seednode`, `seeders`, `passed`,
+`bypass_cache`, `passive`, `wifi`, `tokenizer`, `spinner` and `sighash` stay
+ordinary vocabulary. Adjacent words form the explicit compounds
+`access key`, `api key`, `auth key`, `hmac key`, `private key`, `secret key`,
+`subscription key`, `seed words`, `recovery phrase`, `recovery code`,
+`backup code`, `session id`, `pin code`, `otp code`, `totp code`, `mfa code`,
+`2fa code`, `verification code` and the Silent Payments names, with their
+plurals (`backup_codes`, `recoverycodes`). `passwd`, `pwd`, `passcode`,
+`credential`, `bearer`, `jwt`, `session`, `sessid` (`PHPSESSID`), `sid`,
+`sig`, `sign` (`CB-ACCESS-SIGN`, `API-Sign`, `X-BAPI-SIGN`), `signature`
+(`X-Amz-Signature`), `mfa`, `twofa`/`2fa` and a `?key=`/`&key=` query
+parameter are aliases. `user`, `auth`, `jwt`, `session`, `sid`, `sig`, `sign`
+and `signature` must be a whole identifier part, and `pw`, `pin`, `otp`,
+`totp`, `mfa`, `twofa` and `sign` the final word, optionally followed only by
+the modifiers `old`, `new`, `backup`, `confirm`, `repeat`, `copy`, `value`,
+`hex`, `raw`, `enc`, `encoded` and `plain` (`db_pw`, `pwold`, `pin_new`; not
+`spinner`, `pw_hash`, `mfa_method` or `X-BAPI-SIGN-TYPE`). A spaced name such
+as `api key:`, `PIN code:` or `"Secret Key":` is secret when the second word
+changes the first word's meaning; `user name:`, `token count:` and
+`see details:` are not.
+Metadata suffixes `-file`, `-path`, `-fd`, `-stdin`, `_hint`, `_statistics`,
+`_enabled` and `_disabled` do not become inline secret values, including in
+concatenated forms such as `rpccookiefile` and `macaroonpath`.
+
+An integer, decimal or boolean after a count-shaped name (a plural such as
+`max_tokens`, `descriptors` or the compound `disable_private_keys`, or a
+`count`, `max`, `min`, `limit`, `length`, `len`, `size` or `ttl` word) is
+metadata and stays readable when it is the whole value: only whitespace
+follows through the end of its line and any continuation, closers and a
+record boundary (`,`/`;` before a quoted key, whitespace or prose), or, in a
+command flag or a recognized command line, whitespace before a known flag or
+a `name=` argument. So `bitcoin-cli -named createwallet wallet_name=cold
+descriptors=true disable_private_keys=true blank=true` stays readable, while
+`tokens=5 remaining`, `descriptors=true Pw9Leak` and `token_ttl=3600 Pw9Leak`
+are masked; `num` is not a count word and `password=true` is a password.
+A JSON literal closed by `}`, `]` or `)` ends at that closer even when an
+indented line follows (`{"pin": 7368}` then `  next=1` keeps `next=1`); a bare
+literal still owns its indented continuation. After a quoted JSON or `repr()` key,
+`null`, booleans (`None`, `True`, `False`), sampling `seed` numbers, numeric
+counts and a flat object of numeric members (`"prompt_tokens_details":
+{"cached_tokens": 0}`) stay readable, so redacted provider error bodies still
+parse; any other JSON literal is masked on its own (`{"pin":[redacted],…}`).
+A string value never stays readable. Assignments accept `=`, `:`, `=>`, `:=`, `->` and repeated/spaced
+`=` operators. Unquoted `&` and `|` remain part of an ambiguous value, including
+query tails. Cookie/cookies assignments, objects, headers and curl `-b` lose all
+cookie pairs; authorization and cookie headers include indented continuations.
+The short `-u` and `-b` forms also work without a command prefix. A bare flag
+can consume a value on the next line; trailing flags in help prose cannot.
+
+The short aliases `pass`, `user` and `auth` are credential-bearing after a glued
+colon, in assignments and command flags, and in prefixed/list/comment contexts.
+Only a spaced colon followed by recognized ordinary user/status prose is exempt
+(for example `user: alice logged in`, `auth: ok`, or `tests pass: 12`). A lowercase
+password such as `pass: correcthorse` remains secret. The XML equivalents
+`<user>alice</user>` and `<auth>required</auth>` require the whole value to match
+the prose exception. Every exception applies only when it is the entire value,
+including indented continuation lines: `user: alice Pw9Leak`,
+`password: none Pw9Leak`, `--password the Pw9Leak` and `--seed-words 24 Pw9Leak`
+are masked. `credentials` remains a secret alias. Colon status literals `none`,
+`expired` and `(not set)` remain readable on their own; `=` assignments are
+secret-bearing.
+
+An unquoted value after a secret key is masked through the end of its line and
+any following lines indented deeper than that line's own indent (past YAML
+`- ` markers), so multi-word passphrases, shell `\` continuations and a stray
+quote inside the value (`password=x" Pw9Leak`) cannot expose later words. Every
+later secret key on the masked line still establishes its own block, quoted
+value or continuation (`rpcpassword=x macaroon: |`). A value ends earlier only
+when its end is unambiguous: a closing quote, a JSON literal after a quoted
+key, or, for a command flag or a key inside a recognized command line,
+whitespace followed by a known flag: a long `--flag`, a `-name=` assignment, a
+letter flag before a `NAME=` argument (`docker run -e NETWORK=mainnet`), `-h`
+or one of Bitcoin Core's argument-free options such as `-named`, `-txindex`,
+`-regtest` or `-daemon`, optionally negated with `-no` (`-rpcpassword=x
+-prune=550` keeps `-prune=550`). Any other word beginning with `-` is
+passphrase data: `--passphrase correct -horse battery` and
+`cmd --token Pw9 -v Leak` mask through the line. Losing the rest of a line
+otherwise, such as a following `other=public` pair or a positional argument,
+is the deliberate cost.
+
+XML scanning covers namespaces, opening-tag attributes, key/value attributes
+such as `<add key="Password" value="…"/>`, unquoted attributes,
+`<input type=password value=…>`, `<meta name="csrf-token" content="…">`, plist
+`<key>password</key><string>…</string>` pairs and named parameter contents.
+Name/value records such as Kubernetes `name: X_PASSWORD` / `value: …` (separated
+by any line break, including U+0085 and U+2028) and JSON
+`{"name":"password","value":"…"}` mask their value. Tag and plist text is
+trimmed of space, tab, CR, LF, VT and FF only, identically in both runtimes. Only a
+complete matching closing tag ends an element value; a longer tag name sharing
+the same prefix cannot expose the remaining value. A secret key/name attribute
+also overrides an outer element's ordinary alias prose exception.
+Structured `{…}`, `[…]`, `(…)`, `$(…)` and `${…}` values consume their
+contents, including ambiguous glued tails. Unclosed openers (`"`, `'`, `"""`,
+`(`, backtick, `<`) fail closed through their indented continuation. YAML `|`/`>-` blocks, triple quotes and adjacent quoted values are masked
+through the extended value rather than only the first token.
+
+Quoted values use escape-run counting rather than a backtracking expression.
+Ordinary JSON, enclosing JSON string layers and their Python `repr()` forms do
+not have a fixed nesting cap: delimiter runs are counted directly, without
+recursive JSON decoding. Complete quoted values may span lines; truncated values
+are masked through their line, and ambiguous glued quote tails fail closed
+through the line. A comma followed by a quoted key must include the closing
+key delimiter and assignment separator to establish a record boundary; glued
+text after closing brackets/braces remains part of the ambiguous value.
+This is a credential syntax scanner, not an arbitrary data format parser.
+Arbitrary encodings, unknown aliases and unmarked prose values remain outside
+its contract.
+
+Secret-named space-separated flags consume their next token even when it begins
+with `-`, so `--password --verbose` masks `--verbose`. Outside recognized command
+lines, common help words and lowercase prose words ending in sentence punctuation
+remain readable. Credential-shaped tokens do not become prose merely because
+they end in punctuation. Command lines beginning with `cmd`, `kassiber`,
+`bitcoind`, `bitcoin-cli`, `electrs`, `lncli`, `lightning-cli`, `curl`, `python`,
+`node`, `env`, `sudo` or `docker` establish value context, including a leading `$`
+or `>` prompt. `--seed-words` followed by a standard mnemonic word count remains
+help/count metadata. Both runtimes treat CR, LF, U+0085, U+2028 and U+2029 as
+line starts and use ASCII identifier/scheme boundaries, including next to
+non-ASCII prose.
+
+The `://` and `//` delimiters establish URL context whatever precedes them, so a
+lookalike, zero-width or punctuation character in the scheme (`httpѕ://`,
+`http\u200b://`, `http_://`) cannot exempt userinfo, and quoted or glued
+scheme-relative `"//user:password@host"` is covered. The scanning view
+normalizes fullwidth ASCII, the long-s and small-commercial-at lookalikes.
+Schemeless `token:token@host` userinfo is masked with or without a key
+(`https_proxy=`, `DATABASE_URL=`, `dsn=`), including before a later scheme in
+the same token; `mailto:`, `xmpp:` and `sip:` addresses remain readable. Every scheme occurrence gets a bounded candidate, including URLs
+inside paths, query values, archives and comma/semicolon/pipe lists. Ambiguous
+prefixes survive nested-scheme
+detection so a credential cannot hide by containing `://` itself.
+
+All RFC 3986 userinfo characters, percent escapes and repeated `@` are covered;
+masking reaches the last ambiguous userinfo terminator. A nested delimiter glued
+to an unfinished authority (`a%40b:#x%2F%2F@host`) continues that userinfo
+rather than starting a new URL. A decoded space or line
+break remains credential data: only whitespace present literally in the original
+text can establish a token boundary. Malformed or ambiguous credentials can
+extend across literal slashes, whitespace and line breaks and may remove host
+context. This is deliberate: losing context is preferable to leaking a byte.
+
+Readability exceptions apply only to clearly credential-free URLs: ordinary
+paths, handles and package/version references (such as `medium.com/@bob/post`,
+`@scope/name` and `pkg@1.2.3`), and a following email on another line, without a
+user:password shape or opaque credential-looking token. A recognized ordinary
+host/path before `@` cannot acquire userinfo from that later `@`. Opaque runs,
+malformed authority prefixes, ambiguous ports and credential-shaped path text
+remain conservatively masked. For example, `HTTP://~/opaqueCredential@host`
+is not treated as an ordinary public path. A complete credential endpoint also
+ends at original whitespace, preserving an unrelated following line; an encoded
+`@` ends it only before a dotted, bracketed or port host or ordinary words, since
+`%40q (TOKEN@host` may be one malformed userinfo. A line break after an encoded
+`@` never ends it when the next line's first token reaches an `@`
+(`https://admin:Pw9%40Le` wrapped before `ak@db.example.org`): the wrapped line
+is still password. A literal `#` after a bare token that is not a dotted, port
+or bracketed host starts no fragment when a later `@` follows
+(`https://Pw9#Leak@host` is userinfo through the `@`), while
+`https://example.com/#/user@host` stays readable. A dotted user with a numeric
+password (`https://alice.smith:12/34@host`) is userinfo, not a host and port.
+A complete public URL followed by literal whitespace and a later email, handle
+or path (`https://example.com/documentation please email a@b.c`) stays readable,
+however long its path words, unless those words or the text before the later
+`@` contain capital runs or mixed letter/digit runs; named query values are left
+to the keyed scanner. A public `@handle` path cannot license `handle:password`.
+
+The offset-preserving view recognizes JSON escaped slash runs and Unicode
+escapes, numeric HTML entities (and `&colon;`, `&sol;`, `&commat;`, `&quot;`,
+`&apos;`, `&lt;`, `&gt;`, `&amp;`, `&equals;`, `&Tab;`, `&NewLine;`) and up to three
+percent-encoding
+layers, including fully encoded nested URLs and keyed parameters. Both raw and
+decoded views undergo keyed detection. Output retains original spelling outside
+masked spans. Deeper percent encoding and other arbitrary encodings remain
+best-effort. Never emit raw secret-bearing argv, payloads or configuration on
+the assumption that this backstop can recover their schema.
+
+Telegram `/bot<id>:<token>` paths, Slack `hooks.slack.com/services/…/…/<token>`
+paths, Discord `/api/webhooks/<id>/<token>` and versioned `/api/v10/webhooks/…`
+paths and Slack `xox?-` tokens for any letter (`xoxb-`, `xoxe-`, `xoxc-`) and
+`xapp-` app tokens are masked through the next literal whitespace. Slack
+`workflows/` and `triggers/` paths, and a `services/` path without both IDs,
+are masked from the path kind onward. Once a URL's path, query or fragment starts, a literal line
+break ends it unless the next line's first token continues the userinfo with an
+`@`; a non-public URL therefore cannot merge with a later email or credential
+URL on another line.
+
+Candidate segments and structured scopes advance once; suffixes are not repeatedly
+rescanned. Each record's line table (indents, the next shallower line and YAML
+block ends) is built once, so a continuation end is a lookup however many keys
+and lines share it, including an indentation staircase; name/value, userinfo
+and count checks scan forward without backtracking. Escape-run counting and the fixed percent-decoding
+passes are linear in input length; each adversarial shape is checked on its own
+to 400,000 characters. A record longer than 1,000,000 code points is replaced
+whole by `[redacted-oversized]` before any scanner runs. Six seeded generators
+each run 100,000 compositions in Python and through the webview insert path. The
+second to sixth retain the reviewers' independently authored distributions and
+Python RNG; the fourth to sixth also run further seeds. The sixth checks every
+planted name, flag, URL, provider and chat-service secret, including the
+concatenated names, split flags and chat paths it was written to find. The fifth checks
+planted secrets and numeric PIN/OTP codes inside the contract; zero-width noise
+inside a key, prose-only provider errors, bare `twofa` and count-shaped numeric
+names are outside it. All six assert
+that no four-character planted secret fragment survives and that complete output
+streams have the same SHA-256 digest in both runtimes; the first four also assert
+that planted identifiers, hostnames, prose and help remain readable. The webview bare-mnemonic heuristic retains its three
+known corpus differences from Python.
+
+### Rust mirror
+
+[`crates/envelope/src/redaction/scanner.rs`](../../crates/envelope/src/redaction/scanner.rs)
+mirrors `kassiber/redaction_scanner.py` function by function, and
+[`floor.rs`](../../crates/envelope/src/redaction/floor.rs) the key, descriptor
+and token patterns and `is_sensitive_key` of `redaction.py`. Python's regular
+expressions are written out as matchers that accept exactly what `re` accepts,
+over code points, with no regex engine; a surrogate stands in as a
+private-use character, as elsewhere in the envelope. Both files use only the
+standard library, so the desktop supervisor
+([`secret_floor.rs`](../../ui-tauri/src-tauri/src/secret_floor.rs)) compiles
+the same source for its stderr tail, lifecycle records and error details,
+including the eight-level `[truncated]` depth of `redact_secret_value`.
+Every Rust caller (daemon errors and log ring, chain and wallet diagnostics,
+metadata history, provider previews) goes through these functions.
+
+`crates/envelope/tests/scanner_corpus.rs` checks Rust output byte for byte
+against Python's for every case of the shared fixture corpora, and, from
+`crates/envelope/scripts/gen_scanner_vectors.py generators`, for all six
+generators at their pinned seeds (reproducing the pinned digests), their pinned
+extra seeds and two more seeds each. `scanner_scaling.rs` times every scaling
+and stress shape at 40,000 and 400,000 characters in thread CPU time (release
+build); `scanner_families.rs` names one test per rule family, which the entries
+of `crates/envelope/scripts/mutations.json` must make fail.

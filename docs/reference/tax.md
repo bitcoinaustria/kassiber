@@ -177,7 +177,12 @@ so they keep their normal payment/receipt treatment.
 source-qualified canonical Lightning hash with compatible whole-row semantics;
 a unique provider key with canonical route txids and explicit full-row integer
 msat principals; or a witness-proven unique HTLC funding outpoint with amount
-coverage. Everything else stays strong/manual, except same-asset legs already
+coverage. Provider send/receive msat amounts accept nonnegative JSON integers
+or strings of ASCII decimal digits with optional surrounding whitespace.
+Booleans, fractional numbers, signs, separators, superscripts and other
+non-ASCII digits do not establish amount evidence. Malformed values supply no
+principal claim and never abort matching or establish exactness.
+Everything else stays strong/manual, except same-asset legs already
 observed inside two *different* on-chain transactions: one movement between two
 of your wallets is one physical transaction, so distinct txids are never paired
 from time/amount proximity (use `transfers pair` if a multi-hop route really
@@ -386,17 +391,40 @@ it does not expand to cover a 25-hour autumn departure day.
 
 ## Rates and tax input quality
 
+CSV exports stage ordinary files in the destination directory, preserve file
+modes, flush and fsync before replacement, and fsync the directory where
+supported. Symlinks are written through. Devices and pipes are written directly;
+report exports to these non-regular targets succeed and explicitly report that
+saved-artifact registration was skipped. No saved report snapshot is created.
+Hard-linked files and existing writable files whose directory cannot hold a
+staged sibling are written in place. These compatibility paths are not atomic:
+an interrupted write can leave partial output, as with `open("w")`.
+Storage exhaustion (`ENOSPC` or `EDQUOT`) during staging raises without opening
+the existing destination for writing, so the previous complete report survives.
+CSV storage failures return `export_write_failed` with only the requested
+destination and OS error number, including staging failures and when the target
+becomes a directory during writing; random staging filenames are not exposed.
+
 If transactions do not already include usable fiat pricing, Kassiber first tries to fill them from the local rates cache during journal processing. When a transaction has a known `confirmed_at` timestamp, Kassiber prices from that confirmation time; otherwise it falls back to `occurred_at`. `LBTC` / `L-BTC` transactions use the BTC fiat rate because Liquid Bitcoin is pegged one-to-one with BTC.
 
 All price write paths use shared finite decimal validation, including overrides,
-manual/cached rates, BTCPay, imports, documents and source-of-funds sources. Values must
+history reverts, manual/cached rates, BTCPay, imports, documents and source-of-funds sources. Values must
 fit finite numeric output, use exponents between -308 and 308, and have zero or
-magnitude at least 1e-13 so the tax engine cannot compare a positive price as zero.
-Negative zero normalizes to zero. Invalid stored transaction pricing produces a
-typed validation error naming the transaction; raw transaction exports leave
-invalid prices blank. Invalid legacy payouts remain listable and deletable;
+magnitude at least 1e-13 and below 1e19. The upper bound reserves the engine's
+13 decimal places within its 32-digit precision; numeric mirrors must also stay
+below that limit after float conversion. The lower bound prevents the engine
+from comparing a positive price as zero.
+Negative zero normalizes to zero. Derived totals (`rate * amount`) and unit
+rates (`value / amount`) obey the same limits at write time. Invalid stored
+transaction pricing is quarantined as `invalid_transaction_price`, with the
+transaction and cause, while the rest of the rebuild completes. An unusable
+cached valuation stores no derived price and receives the same quarantine.
+These holds block dependent basis through the existing exposure-pool barriers.
+Raw transaction exports leave invalid prices blank. Invalid legacy payouts remain listable and deletable;
 correct the source price or delete and recreate the invalid review before
-rebuilding journals. Split payout allocations fail closed until reviewed. Legacy payout migration records a blocking migration issue
+rebuilding journals. Split payout allocations quarantine their whole source as
+`split_payout_requires_review` until reviewed, without pricing a residual or
+aborting other transactions. Legacy payout migration records a blocking migration issue
 when its stored price is invalid.
 
 Pricing now carries provenance alongside the legacy numeric fields: source kind,

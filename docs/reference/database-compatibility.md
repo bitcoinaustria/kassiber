@@ -68,7 +68,10 @@ commits consolidation changes, journal processing owns its writer transaction,
 and review/component/gap authoring boundaries commit their completed operation.
 No caller in these paths requires an outermost savepoint release to persist it.
 
-`tests/test_custody_authoring_atomicity.py` injects late failures and compares
+`tests/test_custody_authoring_atomicity.py` injects component/gap failures after
+the outermost authoring savepoint has actually been released, before the caller
+commits. A failure inside that savepoint cannot expose an accidental release
+commit. The suite compares
 all persisted tables after rollback, including input versions, memberships and
 audit records. It also pins rollback of successful `commit=False` applies.
 There is no reliable historical failed-request marker from which to reconstruct

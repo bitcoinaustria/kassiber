@@ -43,6 +43,28 @@ def _refuse_version(conn, offset):
         BEGIN SELECT RAISE(ABORT, 'late invalidation'); END""")
 
 
+class _FailAfterAuthoringRelease:
+    """Fail after SQLite actually releases the outer authoring savepoint."""
+    def __init__(self, conn):
+        self.conn = conn
+        self.released = False
+
+    def __getattr__(self, name):
+        return getattr(self.conn, name)
+
+    def execute(self, sql, *args, **kwargs):
+        result = self.conn.execute(sql, *args, **kwargs)
+        if sql.startswith((
+            'RELEASE SAVEPOINT custody_component_apply_',
+            'RELEASE SAVEPOINT custody_component_revision_apply_',
+            'RELEASE SAVEPOINT custody_component_state_apply_',
+            'RELEASE SAVEPOINT custody_gap_review_apply',
+        )):
+            self.released = True
+            raise sqlite3.IntegrityError('after outer authoring release')
+        return result
+
+
 def _payout(conn):
     return handlers.create_direct_swap_payout(conn, 'ws', 'profile', 'out',
         payout_asset='EUR', payout_amount='1', policy='taxable', payout_fiat_value='10')
@@ -109,9 +131,10 @@ def test_component_apply_late_failure(book, action):
         plan = planner.plan_component_state_change(conn, **args)
         apply = lambda: planner.apply_component_state_change(conn, **args, expected_input_version=plan['input_version'])
     assert _snapshot(conn) == before  # planning is read-only
-    _refuse_version(conn, 1)
-    with pytest.raises(sqlite3.IntegrityError, match='late invalidation'):
+    conn = _FailAfterAuthoringRelease(conn)
+    with pytest.raises(sqlite3.IntegrityError, match='after outer authoring release'):
         apply()
+    assert conn.released
     conn.rollback()
     assert _snapshot(conn) == before
 
@@ -162,7 +185,7 @@ def gap_book():
 
 
 @pytest.mark.parametrize('action', ['create', 'dismiss', 'reopen', 'revise', 'classify_residual'])
-def test_gap_apply_last_step_failure(gap_book, action, monkeypatch):
+def test_gap_apply_last_step_failure(gap_book, action):
     from kassiber.core import custody_gap_reviews as gaps
     from tests.test_custody_gap_lifecycle import _apply_review
     fixture = gap_book
@@ -183,19 +206,10 @@ def test_gap_apply_last_step_failure(gap_book, action, monkeypatch):
     before = _snapshot(conn)
     plan = gaps.plan_review(conn, **args)
     assert _snapshot(conn) == before
-    # For bridges, impact recording is after activation, audit and invalidation.
-    # Dismissals finish with invalidation and have no impact append.
-    if action == 'dismiss':
-        _refuse_version(conn, 1)
-    else:
-        def fail(*args, **kwargs):
-            raise sqlite3.IntegrityError('late invalidation')
-        if action in {'create', 'revise'}:
-            monkeypatch.setattr(gaps.custody_filed_reports, 'append_custody_impacts', fail)
-        else:
-            monkeypatch.setattr(gaps, '_append_snapshot_impacts', fail)
-    with pytest.raises(sqlite3.IntegrityError, match='late invalidation'):
+    conn = _FailAfterAuthoringRelease(conn)
+    with pytest.raises(sqlite3.IntegrityError, match='after outer authoring release'):
         gaps.apply_review(conn, **args, expected_input_version=plan['input_version'])
+    assert conn.released
     conn.rollback()
     assert _snapshot(conn) == before
 
@@ -234,9 +248,10 @@ def test_payout_component_revision_late_failure(book):
                 component_id=component_id, spec={'notes': 'revised payout'}, activate=True)
     before = _snapshot(book)
     plan = planner.plan_component_revision(book, **args)
-    _refuse_version(book, 1)
-    with pytest.raises(sqlite3.IntegrityError, match='late invalidation'):
-        planner.apply_component_revision(book, **args, expected_input_version=plan['input_version'])
+    conn = _FailAfterAuthoringRelease(book)
+    with pytest.raises(sqlite3.IntegrityError, match='after outer authoring release'):
+        planner.apply_component_revision(conn, **args, expected_input_version=plan['input_version'])
+    assert conn.released
     book.rollback()
     assert _snapshot(book) == before
 

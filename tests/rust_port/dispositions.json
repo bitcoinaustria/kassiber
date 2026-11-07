@@ -84,7 +84,7 @@
       "ToolCatalogPromptTest": {"disposition": "rust-test", "flags": [], "group": "ai-mcp-operator", "reason": "calls kassiber.ai.prompt directly", "reviewed": false, "tests": 11},
       "ToolCatalogPromptTest::test_review_worklist_commercial_section_reads_instead_of_suggesting": {"disposition": "subprocess-scenario", "flags": ["mock", "mock-internal"], "group": "ai-mcp-operator", "reason": "drives the daemon entry in process; patches internals", "reviewed": false, "tests": 1},
       "ResponsesToolCallAccumulatorTest": {"disposition": "rust-test", "flags": [], "group": "ai-mcp-operator", "reason": "Responses tool-call slots by output index and ids", "replacement": "crates/ai/src/transport/accumulate.rs::responses_calls_merge_by_index_and_ids", "reviewed": true, "tests": 5},
-      "HttpErrorMappingTest": {"disposition": "rust-test", "flags": [], "group": "ai-mcp-operator", "reason": "status mapping and the redacted 512-character body preview", "replacement": "crates/ai/src/transport/errors.rs::status_codes_map_like_python; crates/ai/tests/http_transport.rs::http_errors_map_status_and_redact_the_body", "reviewed": true, "tests": 8},
+      "HttpErrorMappingTest": {"disposition": "rust-test", "flags": [], "group": "ai-mcp-operator", "reason": "status mapping and the redacted 512-character body preview", "replacement": "crates/ai/src/transport/errors.rs::status_codes_map_like_python; crates/ai/tests/http_transport.rs::http_errors_map_status_and_redact_the_body", "reviewed": true, "tests": 9},
       "BrokerToolProtocolTest": {"disposition": "rust-test", "flags": [], "group": "ai-mcp-operator", "reason": "calls kassiber.ai.broker_client directly", "reviewed": false, "tests": 2},
       "ClientDefaultsTest": {"disposition": "rust-test", "flags": [], "group": "ai-mcp-operator", "reason": "calls kassiber.ai.client directly", "reviewed": false, "tests": 2},
       "ProviderRouteConsentTest": {"disposition": "rust-test", "flags": ["mock"], "group": "ai-mcp-operator", "reason": "calls kassiber.ai.client directly", "reviewed": false, "tests": 3},
@@ -676,7 +676,7 @@
       "test_component_apply_late_failure": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.custody_component_planner, kassiber.db directly", "reviewed": false, "tests": 1},
       "test_component_commit_false_leaves_success_rollbackable": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.custody_component_planner, kassiber.db directly", "reviewed": false, "tests": 1},
       "test_single_statement_authoring_failure": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.cli.handlers, kassiber.db directly", "reviewed": false, "tests": 1},
-      "test_gap_apply_last_step_failure": {"disposition": "rust-test", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.custody_gap_reviews, kassiber.core.custody_gaps directly", "reviewed": false, "tests": 1},
+      "test_gap_apply_last_step_failure": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.custody_gap_reviews, kassiber.core.custody_gaps directly", "reviewed": false, "tests": 1},
       "test_gap_commit_false_leaves_success_rollbackable": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.custody_gap_reviews, kassiber.core.custody_gaps directly", "reviewed": false, "tests": 1},
       "test_batch_pairing_late_invalidation_rolls_back": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.cli.handlers, kassiber.db directly", "reviewed": false, "tests": 1},
       "test_payout_component_revision_late_failure": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.custody_component_planner, kassiber.cli.handlers directly", "reviewed": false, "tests": 1},
@@ -841,7 +841,8 @@
       "test_import_batch_rejects_bad_price_before_writes": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.imports, kassiber.db directly", "reviewed": false, "tests": 1},
       "test_component_write_rejects_nonfinite_terms_atomically": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.custody_components, kassiber.cli.handlers directly", "reviewed": false, "tests": 1},
       "test_payout_admission_rejects_derived_rate_overflow": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.cli.handlers, kassiber.db directly", "reviewed": false, "tests": 1},
-      "test_sliced_absolute_value_refuses_derived_rate_overflow": {"disposition": "rust-test", "flags": [], "group": "custody", "reason": "calls kassiber.core.custody_quantity, kassiber.core.custody_tax_projection directly", "reviewed": false, "tests": 1}
+      "test_sliced_absolute_value_refuses_derived_rate_overflow": {"disposition": "rust-test", "flags": [], "group": "custody", "reason": "calls kassiber.core.custody_quantity, kassiber.core.custody_tax_projection directly", "reviewed": false, "tests": 1},
+      "test_exact_price_inside_limit_cannot_round_its_float_mirror_to_limit": {"disposition": "rust-test", "flags": [], "group": "custody", "reason": "calls kassiber.core.custody_pricing directly", "reviewed": false, "tests": 1}
     },
     "tests/test_custody_observation_consistency.py": {
       "test_late_descriptor_reconciles_receipts_without_rewriting_imports": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.cli.handlers, kassiber.core.chain_observer directly", "reviewed": false, "tests": 1},
@@ -1051,6 +1052,10 @@
     },
     "tests/test_daemon_detect_script_types.py": {
       "DetectScriptTypesTests": {"disposition": "subprocess-scenario", "flags": ["mock", "mock-internal"], "group": "chain-sync", "reason": "drives the daemon entry in process", "reviewed": false, "tests": 6}
+    },
+    "tests/test_daemon_main_thread_atomicity.py": {
+      "test_failed_main_thread_task_releases_writer_and_discards_writes": {"disposition": "subprocess-scenario", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "daemon-runtime", "reason": "drives the daemon entry in process; patches internals", "reviewed": false, "tests": 1},
+      "test_failed_rollback_still_answers_waiting_worker": {"disposition": "rust-test", "flags": ["mock", "mock-internal", "sql"], "group": "daemon-runtime", "reason": "calls kassiber.daemon, kassiber.daemon.current_request_id directly", "reviewed": false, "tests": 1}
     },
     "tests/test_daemon_ownership_verify.py": {
       "FinishIdentifyTests": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "chain-sync", "reason": "calls kassiber.core.ownership directly", "reviewed": false, "tests": 2},
@@ -1501,7 +1506,8 @@
     "tests/test_journal_freshness_readers.py": {
       "test_chain_readers_withhold_current_custody_without_a_stamp": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "journals", "reason": "canonical calculation-stamp freshness must gate retained graph, AI, diagnostic and SQL-list projections; native report/store regressions cover the shared stamp and affected readers retain their own contracts", "reviewed": true, "tests": 1},
       "test_diagnostics_counts_unstamped_book_as_stale": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "journals", "reason": "canonical calculation-stamp freshness must gate retained graph, AI, diagnostic and SQL-list projections; native report/store regressions cover the shared stamp and affected readers retain their own contracts", "reviewed": true, "tests": 1},
-      "test_sql_predicate_matches_shared_evaluator": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "journals", "reason": "canonical calculation-stamp freshness must gate retained graph, AI, diagnostic and SQL-list projections; native report/store regressions cover the shared stamp and affected readers retain their own contracts", "reviewed": true, "tests": 1}
+      "test_sql_predicate_matches_shared_evaluator": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "journals", "reason": "canonical calculation-stamp freshness must gate retained graph, AI, diagnostic and SQL-list projections; native report/store regressions cover the shared stamp and affected readers retain their own contracts", "reviewed": true, "tests": 1},
+      "test_flow_filter_evaluates_freshness_once": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "journals", "reason": "canonical calculation-stamp freshness must gate retained graph, AI, diagnostic and SQL-list projections; native report/store regressions cover the shared stamp and affected readers retain their own contracts", "reviewed": true, "tests": 1}
     },
     "tests/test_journal_prebuild_campaign.py": {
       "test_prebuild_recorder_preserves_pending_caller_writes": {"disposition": "oracle", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "journals", "reason": "retains complete scenario-vector regeneration from unchanged Python and the rollback-only recorder transaction contract for native whole-stage comparison", "reviewed": true, "tests": 1},
@@ -1840,7 +1846,8 @@
       "test_pre_fix_historical_book_requires_rebuild": {"disposition": "subprocess-scenario", "flags": ["sql", "subprocess"], "group": "transactions", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.cli.handlers, kassiber.db", "reviewed": false, "tests": 1},
       "test_whole_principal_payout_with_included_fee_stays_current": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "transactions", "reason": "calls kassiber.cli.handlers, kassiber.db directly", "reviewed": false, "tests": 1},
       "test_older_rebuild_cannot_reuse_current_semantics_stamp": {"disposition": "subprocess-scenario", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.cli.handlers, kassiber.core.custody_journal", "reviewed": false, "tests": 1},
-      "test_first_older_build_in_new_book_requires_semantics_stamp": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "transactions", "reason": "calls kassiber.cli.handlers, kassiber.core.custody_journal directly", "reviewed": false, "tests": 1}
+      "test_first_older_build_in_new_book_requires_semantics_stamp": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "transactions", "reason": "calls kassiber.cli.handlers, kassiber.core.custody_journal directly", "reviewed": false, "tests": 1},
+      "test_daemon_rebuilds_semantics_stale_historical_lots": {"disposition": "subprocess-scenario", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "transactions", "reason": "drives the daemon entry in process; patches internals", "reviewed": false, "tests": 1}
     },
     "tests/test_payment_hash_promotion.py": {
       "PhoenixNormalizerTests": {"disposition": "rust-test", "flags": [], "group": "imports", "reason": "frozen Python Phoenix CSV vectors pin promoted, normalized, missing and malformed payment hashes", "replacement": "crates/wallets/src/file_import/tests.rs::python_file_import_vectors", "reviewed": true, "tests": 6},
@@ -1898,12 +1905,23 @@
       "test_price_writes_reject_unsupported_values": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "transactions", "reason": "calls kassiber.core.commercial, kassiber.core.rates directly", "reviewed": false, "tests": 1},
       "test_btcpay_rejects_nonfinite_fiat": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "transactions", "reason": "calls kassiber.core.commercial, kassiber.db directly", "reviewed": false, "tests": 1},
       "test_import_validates_value_derived_rate": {"disposition": "rust-test", "flags": [], "group": "transactions", "reason": "calls kassiber.core.imports directly", "reviewed": false, "tests": 1},
+      "test_value_only_import_stores_no_inferred_rate_or_rescaled_total": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "transactions", "reason": "calls kassiber.core.imports, kassiber.db directly", "reviewed": false, "tests": 1},
       "test_decimal_text_normalizes_exactly": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "transactions", "reason": "calls kassiber.cli.handlers, kassiber.db directly", "reviewed": false, "tests": 1},
       "test_invalid_legacy_payout_list_and_delete": {"disposition": "subprocess-scenario", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "spawns `python -m kassiber` (daemon) but also calls kassiber.core.custody_review_terms, kassiber.cli.handlers", "reviewed": false, "tests": 1},
       "test_split_payout_fails_closed": {"disposition": "rust-test", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "transactions", "reason": "calls kassiber.core.custody_journal, kassiber.cli.handlers directly", "reviewed": false, "tests": 1},
-      "test_legacy_price_error_identifies_transaction": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "transactions", "reason": "calls kassiber.cli.handlers, kassiber.db directly", "reviewed": false, "tests": 1},
+      "test_legacy_price_quarantine_identifies_transaction": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "transactions", "reason": "calls kassiber.cli.handlers, kassiber.db directly", "reviewed": false, "tests": 1},
+      "test_metadata_rejects_unsupported_derived_price_without_writes": {"disposition": "subprocess-scenario", "flags": ["sql", "sql-seed"], "group": "transactions", "reason": "drives the daemon entry in process", "reviewed": false, "tests": 1},
+      "test_cached_rate_with_unsupported_derived_value_quarantines_only_its_transaction": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "transactions", "reason": "calls kassiber.cli.handlers, kassiber.core.rates directly", "reviewed": false, "tests": 1},
+      "test_amount_refresh_validates_recomputed_fiat_value": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "transactions", "reason": "calls kassiber.core.imports, kassiber.db directly", "reviewed": false, "tests": 1},
+      "test_supplied_value_does_not_bypass_derived_value_bound": {"disposition": "rust-test", "flags": [], "group": "transactions", "reason": "calls kassiber.core.imports directly", "reviewed": false, "tests": 1},
+      "test_history_revert_rejects_unsupported_derived_price_without_writes": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "transactions", "reason": "calls kassiber.core.metadata, kassiber.cli.handlers directly", "reviewed": false, "tests": 1},
+      "test_component_terms_validate_derived_payout_rate": {"disposition": "rust-test", "flags": [], "group": "transactions", "reason": "calls kassiber.core.custody_components directly", "reviewed": false, "tests": 1},
+      "test_invalid_price_preserves_prior_entries_and_blocks_later_basis": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "transactions", "reason": "calls kassiber.cli.handlers, kassiber.db directly", "reviewed": false, "tests": 1},
       "test_export_survives_legacy_nonfinite_price": {"disposition": "subprocess-scenario", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.db", "reviewed": false, "tests": 1},
-      "test_daemon_metadata_rejects_price_without_writes": {"disposition": "subprocess-scenario", "flags": ["sql", "sql-seed"], "group": "transactions", "reason": "drives the daemon entry in process", "reviewed": false, "tests": 1}
+      "test_daemon_metadata_rejects_price_without_writes": {"disposition": "subprocess-scenario", "flags": ["sql", "sql-seed"], "group": "transactions", "reason": "drives the daemon entry in process", "reviewed": false, "tests": 1},
+      "test_largest_supported_prices_process_without_quantize_failure": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "transactions", "reason": "calls kassiber.cli.handlers, kassiber.core.custody_pricing directly", "reviewed": false, "tests": 1},
+      "test_large_legacy_price_quarantines_sale_without_aborting_book": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "transactions", "reason": "calls kassiber.cli.handlers, kassiber.core.rates directly", "reviewed": false, "tests": 1},
+      "test_invalid_price_barrier_preserves_later_missing_price_cause": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "transactions", "reason": "calls kassiber.cli.handlers, kassiber.db directly", "reviewed": false, "tests": 1}
     },
     "tests/test_pyinstaller_entry.py": {
       "test_frozen_ca_prefers_existing_linux_system_bundle": {"disposition": "python-only", "flags": ["mock"], "group": "packaging-ci", "reason": "PyInstaller CA bootstrap disappears with the Python launcher", "replacement": "Rust TLS trust-selection and packaged host/explicit/bundled CA tests", "reviewed": true, "tests": 1},
@@ -1954,6 +1972,17 @@
       "KrakenCsvRatesTest::test_desktop_rebuild_without_pair_defaults_to_active_profile_btc_pair": {"disposition": "subprocess-scenario", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "imports", "reason": "drives the daemon entry in process; patches internals", "reviewed": false, "tests": 1},
       "KrakenCsvRatesTest::test_desktop_daemon_rebuild_reprices_active_profile": {"disposition": "subprocess-scenario", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "imports", "reason": "drives the daemon entry in process; patches internals", "reviewed": false, "tests": 1},
       "KrakenCsvRatesTest::test_desktop_daemon_rebuild_returns_journal_error_after_price_sync": {"disposition": "subprocess-scenario", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "imports", "reason": "drives the daemon entry in process; patches internals", "reviewed": false, "tests": 1}
+    },
+    "tests/test_redaction_shared_corpus.py": {
+      "test_operational_redaction_shared_corpus": {"disposition": "rust-test", "flags": ["mock", "mock-internal"], "group": "secrets-backup", "reason": "calls kassiber.redaction directly", "reviewed": false, "tests": 1},
+      "test_secret_redaction_shared_corpus": {"disposition": "rust-test", "flags": [], "group": "secrets-backup", "reason": "calls kassiber.redaction directly", "reviewed": false, "tests": 1},
+      "test_rpc_and_lightning_secret_fields": {"disposition": "rust-test", "flags": [], "group": "secrets-backup", "reason": "calls kassiber.redaction directly", "reviewed": false, "tests": 1},
+      "test_long_identifier_redaction_is_linear": {"disposition": "rust-test", "flags": ["subprocess"], "group": "secrets-backup", "reason": "runs helper processes without the product entry", "reviewed": false, "tests": 1},
+      "test_adversarial_secret_shapes_keep_a_bounded_deadline": {"disposition": "rust-test", "flags": ["subprocess"], "group": "secrets-backup", "reason": "runs helper processes without the product entry", "reviewed": false, "tests": 1},
+      "test_adversarial_secret_shapes_scale_linearly_to_400k": {"disposition": "rust-test", "flags": ["subprocess"], "group": "secrets-backup", "reason": "runs helper processes without the product entry", "reviewed": false, "tests": 1}
+    },
+    "tests/test_redaction_timing.py": {
+      "test_redaction_deadline_excludes_interpreter_startup": {"disposition": "rust-test", "flags": ["mock", "subprocess"], "group": "secrets-backup", "reason": "runs helper processes without the product entry", "reviewed": false, "tests": 1}
     },
     "tests/test_regtest_backend_stack.py": {
       "RegtestBackendStackTest": {"disposition": "rust-test", "flags": ["mock"], "group": "packaging-ci", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 11}
@@ -2038,7 +2067,22 @@
       "test_an_interrupted_write_keeps_the_previous_report": {"disposition": "rust-test", "flags": [], "group": "reports", "reason": "native store report_csv tests retain interrupted-publication cleanup, umask creation, overwrite modes and final-symlink behavior", "reviewed": true, "tests": 1},
       "test_a_new_report_gets_the_umask_default_mode": {"disposition": "rust-test", "flags": [], "group": "reports", "reason": "native store report_csv tests retain interrupted-publication cleanup, umask creation, overwrite modes and final-symlink behavior", "reviewed": true, "tests": 1},
       "test_an_existing_report_keeps_its_mode": {"disposition": "rust-test", "flags": [], "group": "reports", "reason": "native store report_csv tests retain interrupted-publication cleanup, umask creation, overwrite modes and final-symlink behavior", "reviewed": true, "tests": 1},
-      "test_a_final_symlink_is_written_through": {"disposition": "rust-test", "flags": [], "group": "reports", "reason": "native store report_csv tests retain interrupted-publication cleanup, umask creation, overwrite modes and final-symlink behavior", "reviewed": true, "tests": 1}
+      "test_a_final_symlink_is_written_through": {"disposition": "rust-test", "flags": [], "group": "reports", "reason": "native store report_csv tests retain interrupted-publication cleanup, umask creation, overwrite modes and final-symlink behavior", "reviewed": true, "tests": 1},
+      "test_csv_directory_error_names_only_the_requested_destination": {"disposition": "rust-test", "flags": [], "group": "reports", "reason": "native store report_csv tests retain interrupted-publication cleanup, umask creation, overwrite modes and final-symlink behavior", "reviewed": true, "tests": 1},
+      "test_csv_character_devices_and_stdout_pipe": {"disposition": "rust-test", "flags": ["subprocess"], "group": "reports", "reason": "native store report_csv tests retain interrupted-publication cleanup, umask creation, overwrite modes and final-symlink behavior", "reviewed": true, "tests": 1},
+      "test_cli_csv_export_to_device": {"disposition": "rust-test", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "native store report_csv tests retain interrupted-publication cleanup, umask creation, overwrite modes and final-symlink behavior", "reviewed": true, "tests": 1},
+      "test_cli_reports_export_csv_skips_non_regular_artifact_registration": {"disposition": "rust-test", "flags": ["sql", "sql-seed", "subprocess"], "group": "reports", "reason": "native store report_csv tests retain interrupted-publication cleanup, umask creation, overwrite modes and final-symlink behavior", "reviewed": true, "tests": 1},
+      "test_csv_named_pipe": {"disposition": "rust-test", "flags": [], "group": "reports", "reason": "native store report_csv tests retain interrupted-publication cleanup, umask creation, overwrite modes and final-symlink behavior", "reviewed": true, "tests": 1},
+      "test_csv_hard_links_see_in_place_updates": {"disposition": "rust-test", "flags": [], "group": "reports", "reason": "native store report_csv tests retain interrupted-publication cleanup, umask creation, overwrite modes and final-symlink behavior", "reviewed": true, "tests": 1},
+      "test_csv_long_target_name_uses_short_staged_name": {"disposition": "rust-test", "flags": [], "group": "reports", "reason": "native store report_csv tests retain interrupted-publication cleanup, umask creation, overwrite modes and final-symlink behavior", "reviewed": true, "tests": 1},
+      "test_csv_writable_file_falls_back_when_sibling_cannot_be_created": {"disposition": "rust-test", "flags": ["mock"], "group": "reports", "reason": "native store report_csv tests retain interrupted-publication cleanup, umask creation, overwrite modes and final-symlink behavior", "reviewed": true, "tests": 1},
+      "test_csv_storage_exhaustion_never_truncates_previous_export": {"disposition": "rust-test", "flags": ["mock"], "group": "reports", "reason": "native store report_csv tests retain interrupted-publication cleanup, umask creation, overwrite modes and final-symlink behavior", "reviewed": true, "tests": 1},
+      "test_csv_fsync_orders_file_replace_directory": {"disposition": "rust-test", "flags": ["mock"], "group": "reports", "reason": "native store report_csv tests retain interrupted-publication cleanup, umask creation, overwrite modes and final-symlink behavior", "reviewed": true, "tests": 1},
+      "test_csv_cleans_stage_on_exception": {"disposition": "rust-test", "flags": ["mock"], "group": "reports", "reason": "native store report_csv tests retain interrupted-publication cleanup, umask creation, overwrite modes and final-symlink behavior", "reviewed": true, "tests": 1},
+      "test_csv_directory_fsync_handles_platform_limits_and_reports_io_errors": {"disposition": "rust-test", "flags": ["mock"], "group": "reports", "reason": "native store report_csv tests retain interrupted-publication cleanup, umask creation, overwrite modes and final-symlink behavior", "reviewed": true, "tests": 1},
+      "test_staging_error_names_requested_destination": {"disposition": "rust-test", "flags": ["mock"], "group": "reports", "reason": "native store report_csv tests retain interrupted-publication cleanup, umask creation, overwrite modes and final-symlink behavior", "reviewed": true, "tests": 1},
+      "test_cli_staging_error_is_typed_and_hides_private_stage": {"disposition": "rust-test", "flags": ["mock", "sql", "sql-seed"], "group": "reports", "reason": "native store report_csv tests retain interrupted-publication cleanup, umask creation, overwrite modes and final-symlink behavior", "reviewed": true, "tests": 1},
+      "test_cli_csv_parent_creation_errors_are_typed": {"disposition": "rust-test", "flags": ["mock", "sql", "sql-seed"], "group": "reports", "reason": "native store report_csv tests retain interrupted-publication cleanup, umask creation, overwrite modes and final-symlink behavior", "reviewed": true, "tests": 1}
     },
     "tests/test_report_explanation.py": {
       "test_actual_engine_fragments_reconcile_without_read_writes": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.core.custody_journal, kassiber.core.report_explanation directly", "reviewed": false, "tests": 1},
@@ -2065,6 +2109,10 @@
       "TaxableConversionExportTests": {"disposition": "boundary-fixture", "flags": ["subprocess"], "group": "reports", "reason": "spawns `python -m kassiber` (cli) and checks its output only", "reviewed": false, "tests": 1},
       "AltConversionExportTests": {"disposition": "boundary-fixture", "flags": ["subprocess"], "group": "reports", "reason": "spawns `python -m kassiber` (cli) and checks its output only", "reviewed": false, "tests": 1},
       "EventMappingTests": {"disposition": "rust-test", "flags": [], "group": "reports", "reason": "calls kassiber.core.transaction_classification, kassiber.core.transaction_formats directly", "reviewed": false, "tests": 3}
+    },
+    "tests/test_report_verification_banner.py": {
+      "test_cached_verification_banner_matches_all_check_columns": {"disposition": "rust-test", "flags": [], "group": "reports", "reason": "calls kassiber.core.report_verify directly", "reviewed": false, "tests": 1},
+      "test_empty_workbook_cached_verification_passes": {"disposition": "rust-test", "flags": [], "group": "reports", "reason": "calls kassiber.core.report_verify directly", "reviewed": false, "tests": 1}
     },
     "tests/test_report_year_handoff.py": {
       "AccountingYearsTests": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.core.year_handoff directly", "reviewed": false, "tests": 2},
@@ -3418,6 +3466,44 @@
       "FreshSchemaTests::test_active_payout_component_freezes_and_retires_with_review": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "transactions", "reason": "Deletion and idempotence are pinned by payout_deletions_match_python_complete_database_rows_and_refusals; native payout creation remains open and the Python setup is retained", "reviewed": true, "tests": 1},
       "LegacyUniqueMigrationTests": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "store", "reason": "calls kassiber.db directly", "reviewed": false, "tests": 1}
     },
+    "tests/test_secret_redaction_5e.py": {
+      "test_fail_closed_redaction": {"disposition": "rust-test", "flags": [], "group": "secrets-backup", "reason": "calls kassiber.redaction directly", "reviewed": false, "tests": 1}
+    },
+    "tests/test_secret_redaction_5f.py": {
+      "test_fail_closed_redaction": {"disposition": "rust-test", "flags": [], "group": "secrets-backup", "reason": "calls kassiber.redaction directly", "reviewed": false, "tests": 1}
+    },
+    "tests/test_secret_redaction_5g.py": {
+      "test_fail_closed_redaction": {"disposition": "rust-test", "flags": [], "group": "secrets-backup", "reason": "calls kassiber.redaction directly", "reviewed": false, "tests": 1}
+    },
+    "tests/test_secret_redaction_5h.py": {
+      "test_5h_redaction": {"disposition": "rust-test", "flags": [], "group": "secrets-backup", "reason": "calls kassiber.redaction directly", "reviewed": false, "tests": 1},
+      "test_oversized_records_are_masked_whole": {"disposition": "rust-test", "flags": [], "group": "secrets-backup", "reason": "calls kassiber.redaction directly", "reviewed": false, "tests": 1},
+      "test_each_shape_scales_linearly_to_400k": {"disposition": "rust-test", "flags": ["subprocess"], "group": "secrets-backup", "reason": "runs helper processes without the product entry", "reviewed": false, "tests": 1}
+    },
+    "tests/test_secret_redaction_5i.py": {
+      "test_5i_redaction": {"disposition": "rust-test", "flags": [], "group": "secrets-backup", "reason": "calls kassiber.redaction directly", "reviewed": false, "tests": 1}
+    },
+    "tests/test_secret_redaction_fifth.py": {
+      "test_fifth_generated_secret_floor": {"disposition": "rust-test", "flags": [], "group": "secrets-backup", "reason": "calls kassiber.redaction directly", "reviewed": false, "tests": 1},
+      "test_fifth_generator_other_seeds": {"disposition": "rust-test", "flags": [], "group": "secrets-backup", "reason": "calls kassiber.redaction directly", "reviewed": false, "tests": 1}
+    },
+    "tests/test_secret_redaction_fourth.py": {
+      "test_fourth_generated_secret_floor": {"disposition": "rust-test", "flags": [], "group": "secrets-backup", "reason": "calls kassiber.redaction directly", "reviewed": false, "tests": 1},
+      "test_fourth_generator_other_seeds": {"disposition": "rust-test", "flags": [], "group": "secrets-backup", "reason": "calls kassiber.redaction directly", "reviewed": false, "tests": 1}
+    },
+    "tests/test_secret_redaction_generated.py": {
+      "test_generated_secret_floor": {"disposition": "rust-test", "flags": [], "group": "secrets-backup", "reason": "calls kassiber.redaction directly", "reviewed": false, "tests": 1}
+    },
+    "tests/test_secret_redaction_independent.py": {
+      "test_independent_generated_secret_floor": {"disposition": "rust-test", "flags": [], "group": "secrets-backup", "reason": "calls kassiber.redaction directly", "reviewed": false, "tests": 1}
+    },
+    "tests/test_secret_redaction_sixth.py": {
+      "test_sixth_generated_secret_floor": {"disposition": "rust-test", "flags": [], "group": "secrets-backup", "reason": "calls kassiber.redaction directly", "reviewed": false, "tests": 1},
+      "test_sixth_generator_other_seeds": {"disposition": "rust-test", "flags": [], "group": "secrets-backup", "reason": "calls kassiber.redaction directly", "reviewed": false, "tests": 1}
+    },
+    "tests/test_secret_redaction_third.py": {
+      "test_third_generated_secret_floor": {"disposition": "rust-test", "flags": [], "group": "secrets-backup", "reason": "calls kassiber.redaction directly", "reviewed": false, "tests": 1}
+    },
     "tests/test_secrets_smoke.py": {
       "EscapePassphraseTests": {"disposition": "rust-test", "flags": [], "group": "secrets-backup", "reason": "calls kassiber.secrets.sqlcipher directly", "reviewed": false, "tests": 2},
       "OpenDbPlaintextTests": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "secrets-backup", "reason": "calls kassiber.db directly", "reviewed": false, "tests": 5},
@@ -3588,6 +3674,14 @@
       "SpecificityTests": {"disposition": "rust-test", "flags": [], "group": "transactions", "reason": "calls kassiber.core.swap_rules directly", "reviewed": false, "tests": 1},
       "ApplyRulesTests": {"disposition": "rust-test", "flags": [], "group": "transactions", "reason": "calls kassiber.core.swap_rules, kassiber.core.transfer_matching directly", "reviewed": false, "tests": 8}
     },
+    "tests/test_sync_anchor_race.py": {
+      "test_compatibility_history_anchor_matrix": {"disposition": "rust-test", "flags": ["mock", "mock-internal"], "group": "chain-sync", "reason": "calls kassiber.core.sync_backends, kassiber.core.sync directly", "reviewed": false, "tests": 1},
+      "test_legacy_history_anchor_is_rebuilt": {"disposition": "rust-test", "flags": ["mock", "mock-internal"], "group": "chain-sync", "reason": "calls kassiber.core.sync_backends, kassiber.core.sync directly", "reviewed": false, "tests": 1},
+      "test_mid_sync_reorg_cannot_advance_anchor": {"disposition": "rust-test", "flags": ["mock", "mock-internal"], "group": "chain-sync", "reason": "calls kassiber.core.sync_backends, kassiber.core.sync directly", "reviewed": false, "tests": 1},
+      "test_esplora_checks_every_raced_block": {"disposition": "rust-test", "flags": ["mock", "mock-internal"], "group": "chain-sync", "reason": "calls kassiber.core.sync_backends, kassiber.core.sync directly", "reviewed": false, "tests": 1},
+      "test_electrum_checks_every_raced_header": {"disposition": "rust-test", "flags": ["mock", "mock-internal"], "group": "chain-sync", "reason": "calls kassiber.core.sync_backends, kassiber.core.sync directly", "reviewed": false, "tests": 1},
+      "test_electrum_version_two_anchor_is_rebuilt": {"disposition": "rust-test", "flags": ["mock", "mock-internal"], "group": "chain-sync", "reason": "calls kassiber.core.sync_backends, kassiber.core.sync directly", "reviewed": false, "tests": 1}
+    },
     "tests/test_sync_backends.py": {
       "NegativeBalanceRescanOrderingTest": {"disposition": "rust-test", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "chain-sync", "reason": "calls kassiber.core.sync, kassiber.cli.handlers directly", "reviewed": false, "tests": 13},
       "ForcedEsploraMembershipTest": {"disposition": "rust-test", "flags": ["mock", "mock-internal"], "group": "chain-sync", "reason": "calls kassiber.core.sync, kassiber.core.sync_backends directly", "reviewed": false, "tests": 3},
@@ -3630,6 +3724,12 @@
       "ElectrumDecoderPreservesWitnessesTests": {"disposition": "rust-test", "flags": [], "group": "chain-sync", "reason": "calls kassiber.core.sync_backends directly", "reviewed": false, "tests": 2},
       "LiquidWitnessExtractionTests": {"disposition": "rust-test", "flags": [], "group": "chain-sync", "reason": "calls kassiber.core.sync_backends directly", "reviewed": false, "tests": 4},
       "RefundLinkEnrichmentTests": {"disposition": "rust-test", "flags": [], "group": "chain-sync", "reason": "calls kassiber.core.sync_backends directly", "reviewed": false, "tests": 7}
+    },
+    "tests/test_sync_incremental_anchor.py": {
+      "test_normal_tip_advance_reuses_history_but_reorg_refreshes_it": {"disposition": "rust-test", "flags": ["mock", "mock-internal"], "group": "chain-sync", "reason": "calls kassiber.core.sync, kassiber.core.sync_backends directly", "reviewed": false, "tests": 1}
+    },
+    "tests/test_sync_utxo_confirmations.py": {
+      "test_unchanged_sync_updates_only_confirmations_for_its_source": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "chain-sync", "reason": "calls kassiber.core.sync, kassiber.core.book_network directly", "reviewed": false, "tests": 1}
     },
     "tests/test_tax_descriptions.py": {
       "DescriptionTest": {"disposition": "rust-test", "flags": [], "group": "journals", "reason": "calls kassiber.core.custody_authored_migration, kassiber.core.custody_evidence directly", "reviewed": false, "tests": 5},
@@ -3799,7 +3899,7 @@
       "DefaultKindTests": {"disposition": "rust-test", "flags": [], "group": "transactions", "reason": "calls kassiber.core.transfer_matching directly", "reviewed": false, "tests": 8},
       "DefaultPolicyTests": {"disposition": "rust-test", "flags": [], "group": "transactions", "reason": "calls kassiber.core.transfer_matching directly", "reviewed": false, "tests": 5},
       "PaymentHashExactMatchTests": {"disposition": "rust-test", "flags": [], "group": "transactions", "reason": "R4 pairing matcher byte oracle and hydrated full-database service oracle in crates/transfers/tests/pairing_matcher.rs and pairing_services.rs", "reviewed": true, "tests": 16},
-      "ProviderEvidenceExactMatchTests": {"disposition": "rust-test", "flags": [], "group": "transactions", "reason": "R4 pairing matcher byte oracle and hydrated full-database service oracle in crates/transfers/tests/pairing_matcher.rs and pairing_services.rs", "reviewed": true, "tests": 15},
+      "ProviderEvidenceExactMatchTests": {"disposition": "rust-test", "flags": [], "group": "transactions", "reason": "R4 pairing matcher byte oracle and hydrated full-database service oracle in crates/transfers/tests/pairing_matcher.rs and pairing_services.rs", "reviewed": true, "tests": 17},
       "ProviderEvidenceAdversarialTests": {"disposition": "rust-test", "flags": [], "group": "transactions", "reason": "R4 pairing matcher byte oracle and hydrated full-database service oracle in crates/transfers/tests/pairing_matcher.rs and pairing_services.rs", "reviewed": true, "tests": 9},
       "HeuristicMatchTests": {"disposition": "rust-test", "flags": [], "group": "transactions", "reason": "R4 pairing matcher byte oracle and hydrated full-database service oracle in crates/transfers/tests/pairing_matcher.rs and pairing_services.rs", "reviewed": true, "tests": 23},
       "HeuristicMatchTests::test_window_slice_matches_naive_all_pairs_reference": {"disposition": "oracle", "flags": [], "group": "transactions", "reason": "compares optimized window matching with an independent naive all-pairs reference; captured calls also pin the Rust matcher", "reviewed": true, "tests": 1},

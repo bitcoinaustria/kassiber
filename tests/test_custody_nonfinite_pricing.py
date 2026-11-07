@@ -215,3 +215,17 @@ def test_sliced_absolute_value_refuses_derived_rate_overflow():
         _projected_slice_row(source, QuantitySlice(source.quantity_hash, 0, 100),
             {'source': {'amount': 100, 'fiat_value': '1e308'}}, side='external')
     assert caught.value.code == 'validation'
+
+
+@pytest.mark.parametrize('value', ['9999999999999999999', '-9999999999999999999'])
+def test_exact_price_inside_limit_cannot_round_its_float_mirror_to_limit(value):
+    from decimal import Decimal
+    from kassiber.core.custody_pricing import TAX_DECIMAL_LIMIT, finite_decimal
+
+    assert abs(Decimal(value)) < TAX_DECIMAL_LIMIT
+    assert abs(float(value)) == float(TAX_DECIMAL_LIMIT)
+    with pytest.raises(AppError, match='outside the supported decimal range') as caught:
+        finite_decimal(value, 'fiat_rate')
+    assert caught.value.code == 'validation'
+    # A representable value safely below the limit remains usable.
+    assert finite_decimal('9999999999999997952', 'fiat_rate') == Decimal('9999999999999997952')

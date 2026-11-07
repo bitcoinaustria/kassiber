@@ -3,7 +3,10 @@
 //! The daemon passes error messages and hints through
 //! [`redact_secret_text`] and error details through
 //! [`redact_operational_value`] of [`redact_secret_value`] before they leave
-//! the process. The patterns are Python's, with three translations so the
+//! the process. The secret floor ([`floor`], running the credential
+//! [`scanner`]) mirrors Python with hand-written matchers and uses only the
+//! standard library, so the desktop supervisor compiles the same source. The
+//! operational patterns are Python's, with three translations so the
 //! backtracking engine matches what Python's `re` matches on `str`:
 //!
 //! - `\b` is a boundary between a word character (a letter, a number, or
@@ -16,10 +19,15 @@
 //! case. Amount pseudonyms hash with a
 //! salt drawn per process, as Python's do, so they agree only within one
 //! process. A string holding surrogates is redacted with each surrogate
-//! standing in as a private-use character, which every pattern treats as
-//! Python treats a surrogate (not a word, space, or digit character). If a
-//! pattern exceeds the engine's backtracking limit, the whole text becomes
-//! `[redacted]` rather than passing through unredacted.
+//! standing in as a private-use character, which every rule treats as
+//! Python treats a surrogate (not a word, space, or digit character). If an
+//! operational pattern exceeds the engine's backtracking limit, the whole
+//! text becomes `[redacted]` rather than passing through unredacted.
+
+pub mod floor;
+pub mod scanner;
+
+pub use floor::{is_sensitive_key, redact_secret_text, SENSITIVE_KEY_PARTS};
 
 use std::borrow::Cow;
 use std::collections::hash_map::RandomState;
@@ -30,36 +38,6 @@ use fancy_regex::{Captures, Regex};
 use kassiber_pyjson::{float_repr, Key, PyStr, Value};
 use kassiber_pytext::{is_space, REGEX_ASCII_CASES, REGEX_DIGIT, REGEX_SPACE, REGEX_WORD};
 
-/// `SENSITIVE_KEY_PARTS`.
-pub const SENSITIVE_KEY_PARTS: &[&str] = &[
-    "api_key",
-    "api-key",
-    "auth_header",
-    "auth-header",
-    "auth_response",
-    "blinding",
-    "cookie",
-    "descriptor",
-    "mnemonic",
-    "password",
-    "passphrase",
-    "private",
-    "recovery",
-    "secret",
-    "seed",
-    "scan_key",
-    "scankey",
-    "scan_private",
-    "scanprivate",
-    "silent_payment",
-    "silentpayment",
-    "sp_descriptor",
-    "spscan",
-    "spspend",
-    "token",
-    "xprv",
-];
-
 /// The depth past which `redact_secret_value` stops descending.
 const MAX_DEPTH: usize = 8;
 
@@ -69,24 +47,12 @@ const B: &str = r"\b";
 const S: &str = r"\s";
 /// Python's `$` without `MULTILINE`.
 const END: &str = r"$";
-const SECRET_KEYS: &str = r"api[_-]?key|auth[_-]?header|blinding(?:[_-]?key)?|cookie|descriptor|mnemonic|passphrase|password|recovery[_-]?phrase|scan[_-]?key|secret|seed(?:[_-]?(?:phrase|words))?|silent[_-]?payment[_-]?scan[_-]?key|sp[_-]?descriptor|spscan|spspend|token";
 const AMOUNT_UNITS: &str =
     "BTC|XBT|LBTC|sats?|msats?|EUR|USD|CHF|GBP|JPY|CAD|AUD|NZD|SEK|NOK|DKK|PLN|CZK|HUF";
 const AMOUNT_NUMBER: &str = r"[+-]?(?:(?:\d{1,3}(?:[,_ .]\d{3})+)|\d+)(?:[.,]\d+)?";
 const CURRENCY_SYMBOLS: &str = "€$£¥₿";
 
 struct Patterns {
-    recovery_assignment: Regex,
-    private_key: Regex,
-    extended_key: Regex,
-    sp_descriptor: Regex,
-    sp_key: Regex,
-    sp_address: Regex,
-    descriptor: Regex,
-    bearer: Regex,
-    json_secret: Regex,
-    assigned_secret: Regex,
-    sk_secret: Regex,
     txid: Regex,
     amount_id: Regex,
     keyed_amount: Regex,
@@ -191,33 +157,6 @@ fn patterns() -> &'static Patterns {
         let u = AMOUNT_UNITS;
         let c = CURRENCY_SYMBOLS;
         Patterns {
-            recovery_assignment: compile(&format!(
-                r#"(?i)(?P<key>{B}(?:mnemonic|recovery[_-]?phrase|seed(?:[_-]?(?:phrase|words))?){B})(?P<sep>{S}*[:=]{S}*)(?P<quote>['"]?)(?P<value>[^,;}}{{]*?)(?=(?:{S}+[A-Za-z0-9_.-]+{S}*[:=])|[,;}}'"]|{END})"#
-            )),
-            private_key: compile(&format!(
-                r"{B}(?:xprv|tprv|yprv|zprv|uprv|vprv)[1-9A-HJ-NP-Za-km-z]{{20,}}{B}"
-            )),
-            extended_key: compile(&format!(
-                r"{B}(?:xpub|tpub|ypub|zpub|upub|vpub)[1-9A-HJ-NP-Za-km-z]{{20,}}{B}"
-            )),
-            sp_descriptor: compile(&format!(r"(?i){B}sp\([^)\n]{{8,}}\)")),
-            sp_key: compile(&format!(
-                r"(?i){B}(?:t?spscan|t?spspend)1q[023456789acdefghjklmnpqrstuvwxyz]{{8,}}{B}"
-            )),
-            sp_address: compile(&format!(
-                r"(?i){B}(?:t?sp)1q[023456789acdefghjklmnpqrstuvwxyz]{{20,}}{B}"
-            )),
-            descriptor: compile(&format!(
-                r"(?i){B}(?:wpkh|sh|wsh|tr|pkh|combo)\([^)\n]{{16,}}\)"
-            )),
-            bearer: compile(&format!(r"{B}[Bb]earer{S}+[A-Za-z0-9._~+/-]+=*")),
-            json_secret: compile(&format!(
-                r#"(?i)(?P<prefix>['"](?:{SECRET_KEYS})['"]{S}*:{S}*['"])(?P<value>[^'"]+)"#
-            )),
-            assigned_secret: compile(&format!(
-                r#"(?i)(?P<key>{B}(?:{SECRET_KEYS}){B})(?P<sep>{S}*[:=]{S}*)(?P<quote>['"]?)(?P<value>[^'"\s\x1c-\x1f,;}}{{]+)"#
-            )),
-            sk_secret: compile(&format!(r"{B}sk-[A-Za-z0-9._~+/-]{{6,}}{B}")),
             txid: compile(&format!(r"(?i){B}[0-9a-f]{{64,}}{B}")),
             amount_id: compile(r"(?i)(?<![A-Za-z0-9_-])(?:[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}|[0-9a-f]{32})(?![A-Za-z0-9_-])"),
             keyed_amount: compile(&format!(
@@ -245,10 +184,6 @@ fn substitute(
         .try_replacen(text, 0, |caps: &Captures<'_, str>| replacement(caps))
         .map(Cow::into_owned)
         .map_err(|_| Withheld)
-}
-
-fn group<'a>(caps: &Captures<'a, str>, name: &str) -> &'a str {
-    caps.name(name).map_or("", |m| m.as_str())
 }
 
 fn nth<'a>(caps: &Captures<'a, str>, index: usize) -> &'a str {
@@ -316,30 +251,31 @@ fn operational_text(value: &str) -> Result<String, Withheld> {
     let text = substitute(&p.txid, value, |caps| {
         format!("txid#{}", stable_hash(&nth(caps, 0).to_lowercase()))
     })?;
-    let id_spans = amount_id_spans(&text)?;
-    let text = substitute(&p.keyed_amount, &text, |caps| {
-        if overlaps_id(caps, &id_spans) {
-            return nth(caps, 0).to_owned();
-        }
-        let (key, sep, num) = (nth(caps, 1), nth(caps, 2), nth(caps, 3));
-        let unit = if key.to_lowercase().contains("msat") {
-            "msat"
-        } else {
-            "sat"
-        };
-        format!("{key}{sep}{}", amount_pseudonym(num, unit))
-    })?;
-    let id_spans = amount_id_spans(&text)?;
+    // Shield only the ID itself. An amount regex can start in an all-digit ID
+    // tail and swallow a neighboring amount; exempting that whole match leaks
+    // the amount. Scan the surrounding segments independently instead.
+    let mut out = String::new();
+    let mut cursor = 0;
+    for identity in p.amount_id.find_iter(&text) {
+        let identity = identity.map_err(|_| Withheld)?;
+        out.push_str(&redact_segment(&text[cursor..identity.start()])?);
+        out.push_str(identity.as_str());
+        cursor = identity.end();
+    }
+    out.push_str(&redact_segment(&text[cursor..])?);
+    Ok(out)
+}
+
+/// `_redact_segment`: standalone amounts, then keyed (`amount_sat=`) ones.
+fn redact_segment(segment: &str) -> Result<String, Withheld> {
+    let p = patterns();
     let mut failed = false;
-    let result = substitute(&p.amount, &text, |caps| {
+    let text = substitute(&p.amount, segment, |caps| {
         let Some(whole) = caps.get(0) else {
             return String::new();
         };
         let token = whole.as_str();
-        if overlaps_id(caps, &id_spans) {
-            return token.to_owned();
-        }
-        match is_market_rate_tail(&text, whole.start()) {
+        match is_market_rate_tail(segment, whole.start()) {
             Ok(true) => return token.to_owned(),
             Ok(false) => {}
             Err(Withheld) => {
@@ -368,52 +304,19 @@ fn operational_text(value: &str) -> Result<String, Withheld> {
     if failed {
         return Err(Withheld);
     }
-    Ok(result)
-}
-
-fn amount_id_spans(text: &str) -> Result<Vec<(usize, usize)>, Withheld> {
-    patterns()
-        .amount_id
-        .find_iter(text)
-        .map(|found| found.map(|m| (m.start(), m.end())).map_err(|_| Withheld))
-        .collect()
-}
-
-fn overlaps_id(caps: &Captures<'_, str>, spans: &[(usize, usize)]) -> bool {
-    caps.get(0).is_some_and(|m| {
-        spans
-            .iter()
-            .any(|&(start, end)| m.start() < end && m.end() > start)
+    substitute(&p.keyed_amount, &text, |caps| {
+        let (key, sep, num) = (nth(caps, 1), nth(caps, 2), nth(caps, 3));
+        let unit = if key.to_lowercase().contains("msat") {
+            "msat"
+        } else {
+            "sat"
+        };
+        format!("{key}{sep}{}", amount_pseudonym(num, unit))
     })
 }
 
 fn secret_text(value: &str) -> Result<String, Withheld> {
-    let p = patterns();
-    let keep_key = |caps: &Captures<'_, str>| {
-        format!(
-            "{}{}{}[redacted]",
-            group(caps, "key"),
-            group(caps, "sep"),
-            group(caps, "quote")
-        )
-    };
-    let text = substitute(&p.recovery_assignment, value, keep_key)?;
-    let text = substitute(&p.private_key, &text, |_| "[redacted-private-key]".into())?;
-    let text = substitute(&p.extended_key, &text, |_| "[redacted-extended-key]".into())?;
-    let text = substitute(&p.sp_descriptor, &text, |_| {
-        "[redacted-silent-payment-descriptor]".into()
-    })?;
-    let text = substitute(&p.sp_key, &text, |_| "[redacted-silent-payment-key]".into())?;
-    let text = substitute(&p.sp_address, &text, |_| {
-        "[redacted-silent-payment-address]".into()
-    })?;
-    let text = substitute(&p.descriptor, &text, |_| "[redacted-descriptor]".into())?;
-    let text = substitute(&p.bearer, &text, |_| "Bearer [redacted]".into())?;
-    let text = substitute(&p.json_secret, &text, |caps| {
-        format!("{}[redacted]", group(caps, "prefix"))
-    })?;
-    let text = substitute(&p.assigned_secret, &text, keep_key)?;
-    substitute(&p.sk_secret, &text, |_| "[redacted-secret]".into())
+    Ok(redact_secret_text(value))
 }
 
 /// Runs `rule` over a string that may hold surrogates. Each surrogate
@@ -449,11 +352,6 @@ fn with_surrogates(text: &PyStr, rule: impl Fn(&str) -> Result<String, Withheld>
     PyStr::from_code_points(points).unwrap_or_else(|_| withheld())
 }
 
-/// `redact_secret_text(value)`.
-pub fn redact_secret_text(value: &str) -> String {
-    secret_text(value).unwrap_or_else(|_| "[redacted]".to_owned())
-}
-
 /// `redact_secret_text(value)` for a string that may hold surrogates.
 pub fn redact_secret_py(value: &PyStr) -> PyStr {
     with_surrogates(value, secret_text)
@@ -463,14 +361,6 @@ pub fn redact_secret_py(value: &PyStr) -> PyStr {
 /// stable pseudonyms.
 pub fn redact_operational_text(value: &str) -> String {
     operational_text(value).unwrap_or_else(|_| "[redacted]".to_owned())
-}
-
-/// `is_sensitive_key(key)`.
-pub fn is_sensitive_key(key: &str) -> bool {
-    let lowered = key.to_lowercase().replace('-', "_");
-    SENSITIVE_KEY_PARTS
-        .iter()
-        .any(|part| lowered.contains(&part.replace('-', "_")))
 }
 
 /// `str(key)` for a dict key.
@@ -639,21 +529,26 @@ mod tests {
 
     #[test]
     fn secret_text_matches_python_examples() {
+        // A plain value owns the rest of its line.
         assert_eq!(
             redact_secret_text("token=abc123 and password: hunter2"),
-            "token=[redacted] and password: [redacted]"
+            "token=[redacted]"
+        );
+        assert_eq!(
+            redact_secret_text("token=abc123\npassword: hunter2"),
+            "token=[redacted]\npassword: [redacted]"
         );
         assert_eq!(
             redact_secret_text("Authorization: Bearer abc.def=="),
-            "Authorization: Bearer [redacted]"
+            "Authorization: [redacted]"
         );
         assert_eq!(
             redact_secret_text("seed phrase: abandon ability able, next"),
-            "seed phrase: abandon ability able, next"
+            "seed phrase: [redacted]"
         );
         assert_eq!(
             redact_secret_text("mnemonic=abandon ability able next=1"),
-            "mnemonic=[redacted] next=1"
+            "mnemonic=[redacted]"
         );
         assert_eq!(redact_secret_text("sk-abcdefgh"), "[redacted-secret]");
         assert_eq!(
@@ -681,21 +576,19 @@ mod tests {
 
     #[test]
     fn surrogates_survive_and_are_not_word_characters() {
-        let text = PyStr::from_code_points(
-            [0xD800]
-                .into_iter()
-                .chain("token=abc ".chars().map(u32::from))
-                .chain([0xDC00]),
-        )
-        .unwrap();
-        let expected = PyStr::from_code_points(
-            [0xD800]
-                .into_iter()
-                .chain("token=[redacted] ".chars().map(u32::from))
-                .chain([0xDC00]),
-        )
-        .unwrap();
-        assert_eq!(redact_secret_py(&text), expected);
+        let py = |head: u32, middle: &str, tail: u32| {
+            PyStr::from_code_points(
+                [head]
+                    .into_iter()
+                    .chain(middle.chars().map(u32::from))
+                    .chain([tail]),
+            )
+            .unwrap()
+        };
+        assert_eq!(
+            redact_secret_py(&py(0xD800, "token=abc\n", 0xDC00)),
+            py(0xD800, "token=[redacted]\n", 0xDC00)
+        );
     }
 
     #[test]

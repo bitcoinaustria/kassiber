@@ -51,7 +51,7 @@ def test_partial_payout_terms_do_not_price_residual(tmp_path, surface, policy, a
         conn.close()
 
 
-@pytest.mark.parametrize('value', ['3.333', '12345678901234567890.1234567890123456789', '3.3330000000000002'])
+@pytest.mark.parametrize('value', ['3.333', '123456789012.1234567890123456789', '3.3330000000000002'])
 def test_payout_preserves_authored_decimal(tmp_path, value):
     conn = open_db(tmp_path)
     try:

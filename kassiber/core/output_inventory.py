@@ -300,6 +300,21 @@ def _with_samourai_raw_json(raw_json: str, metadata: dict[str, Any] | None) -> s
     return json.dumps(json_ready(raw), sort_keys=True)
 
 
+
+def refresh_wallet_output_confirmations(conn, profile, wallet, backend, sync_state, tip_height):
+    """Advance counts for a proven unchanged source without observing outputs anew."""
+    if type(tip_height) is not int or tip_height < 0:
+        return
+    conn.execute(
+        """UPDATE wallet_utxos SET confirmations = ? - block_height + 1
+           WHERE profile_id = ? AND wallet_id = ?
+             AND backend_name = ? AND backend_kind = ? AND chain = ? AND network = ?
+             AND spent_at IS NULL AND confirmation_status = 'confirmed'
+             AND block_height > 0 AND block_height <= ?""",
+        (tip_height, profile['id'], wallet['id'], backend['name'], backend['kind'],
+         sync_state.chain, sync_state.network, tip_height),
+    )
+
 def update_wallet_output_inventory(
     conn: sqlite3.Connection,
     profile: Mapping[str, Any],

@@ -62,13 +62,29 @@ is observed. The next SDK step is refused and no observer result is applied.
 Esplora remains on the compatibility route with per-request cancellation checks.
 
 Compatibility Esplora and Electrum history caches are bound to the observed
-chain tip, including block identity rather than height alone. An identical tip
-permits the existing counter/status cache checks. A changed, missing or invalid
-tip (including legacy checkpoints without an anchor) refreshes histories and
-Electrum confirmation timestamps, so unchanged statistics cannot hide a reorg
-from transaction evidence or saved-report impacts. This conservatively refreshes
-on ordinary block advances too; validated Electrum transaction graphs remain
-reusable. Tip reads occur only within the requested wallet sync.
+highest observed history/header block, including block identity rather than
+height alone. A history read that races above the initial tip advances the
+anchor to that exact block (and the exact timestamp-supplying Electrum header).
+Advancement also requires a post-read proof that the initial tip still belongs
+to the chain. Esplora verifies every history block above that initial tip;
+Electrum re-reads every timestamp-supplying header above it, including heights
+below the highest one. A failed, missing or malformed proof clears the anchor
+so the next sync refreshes instead of reusing mixed-fork entries. Esplora
+version-2 anchors and Electrum version-3 anchors rebuild older checkpoints
+once. Earlier Electrum anchors could accept a mixed-fork header batch even
+when the highest block and initial tip remained unchanged. An identical tip
+permits the existing counter/status cache checks. On a taller tip, the observer
+checks that the previously saved tip block still belongs to the current chain;
+Esplora also binds its new tip height to the observed hash. When unchanged histories
+allow UTXO membership reuse, sync derives current confirmation counts from
+the proven height locally, scoped to that wallet/backend/chain/network. This
+does not refresh output observation timestamps or create network traffic. Proven extensions
+reuse unchanged history and confirmation timestamps on Bitcoin and Liquid.
+A changed, missing or invalid anchor (including legacy checkpoints without a
+height) refreshes histories and Electrum confirmation timestamps, so unchanged
+statistics cannot hide a reorg from transaction evidence or saved-report
+impacts. Validated Bitcoin Electrum transaction graphs remain reusable during
+that refresh. Tip and ancestry reads occur only within the requested wallet sync.
 
 Widened discovery runs only for a provable inventory deficit. Missing occurrence
 times and equal-time movements cannot acquire an order from row IDs or import
