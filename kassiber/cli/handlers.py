@@ -2611,11 +2611,17 @@ def sync_wallet(
     return results
 
 
-def _is_missing_wallet_history_permission(exc):
+def _is_missing_wallet_history_permission(exc, store_id):
     details = exc.details if isinstance(exc.details, dict) else {}
     missing = str(details.get("missing_permission") or "")
+    # BTCPay may scope the missing permission to the store
+    # (`btcpay.store.canmodifystoresettings:<storeId>`). Only this store's
+    # scope marks a read-only key here; another store's scope is a different
+    # permission.
+    name, scoped, scope = missing.partition(":")
     return exc.code == "auth_error" and (
-        missing == BTCPAY_MODIFY_STORE_SETTINGS or (not missing and details.get("http_status") == 403)
+        (name == BTCPAY_MODIFY_STORE_SETTINGS and (not scoped or scope == store_id))
+        or (not missing and details.get("http_status") == 403)
     )
 
 
@@ -2991,7 +2997,7 @@ def enrich_wallet_from_btcpay_provenance(
                 metadata=btcpay_meta,
             )
         except AppError as exc:
-            if not _is_missing_wallet_history_permission(exc):
+            if not _is_missing_wallet_history_permission(exc, route["store_id"]):
                 raise
             records = None
             route_result.update(
