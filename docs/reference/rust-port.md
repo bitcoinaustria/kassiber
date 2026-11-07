@@ -67,16 +67,16 @@ the classifier's `summary` output and is checked by preflight.
 | journals | 4 | 15 | 242 | 230 | 8 | 499 |
 | imports | 67 | 51 | 172 | 48 | 0 | 338 |
 | reports | 56 | 36 | 249 | 163 | 0 | 504 |
-| chain/sync | 38 | 77 | 1293 | 153 | 0 | 1561 |
+| chain/sync | 38 | 81 | 1296 | 153 | 0 | 1568 |
 | network/egress | 7 | 15 | 81 | 35 | 10 | 148 |
-| transactions/metadata/transfers/reviews | 46 | 111 | 590 | 54 | 0 | 801 |
+| transactions/metadata/transfers/reviews | 46 | 111 | 590 | 56 | 0 | 803 |
 | source-funds | 51 | 50 | 139 | 0 | 0 | 240 |
 | secrets/backup | 7 | 18 | 104 | 56 | 0 | 185 |
 | daemon runtime | 8 | 26 | 226 | 110 | 1 | 371 |
 | AI/MCP/operator | 64 | 172 | 719 | 47 | 0 | 1002 |
 | CLI shell | 20 | 4 | 31 | 166 | 3 | 224 |
 | packaging/CI | 0 | 2 | 166 | 10 | 29 | 207 |
-| **Total** | **370** | **632** | **4581** | **1277** | **52** | **6912** |
+| **Total** | **370** | **636** | **4584** | **1279** | **52** | **6921** |
 <!-- disposition-counts:end -->
 
 Plan 21's five migration choices include Python-only retirement explicitly;

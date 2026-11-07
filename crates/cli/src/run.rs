@@ -929,6 +929,13 @@ fn book_command(
         if operation == "transactions.list" {
             return emit(crate::transactions::execute(book.as_mut(), namespace)?);
         }
+        if operation == "transactions.verify" {
+            return emit(book.verify_transaction(
+                namespace.get("workspace"),
+                namespace.get("profile"),
+                namespace.text("transaction").unwrap_or_default(),
+            )?);
+        }
         if operation == "journals.process" {
             let result = book
                 .process_journals(

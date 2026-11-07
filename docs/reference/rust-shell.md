@@ -3856,6 +3856,23 @@ and `.delete`, and the kinds `ui.transfers.dismissals.list` and `.delete`,
 `ui.chat.attachments.upload` and `ai.chat.permission_mode`. Those leaves and
 kinds answer `not_implemented` until their slices land.
 
+Slices S8 to S10 of main sync 1 follow #681, #701 and #677. `wallets list`
+and `ui.wallets.list` append each wallet's `completeness_class` and
+`scan_bounds` from one derivation (`crates/wallets/src/completeness.rs`,
+`core/wallet_completeness.py`) that reads only the kind, the presence of
+source configuration, the sync time and transaction rows. `wallets list`
+now fails a stored configuration that is not a JSON object with Python's
+exception text instead of a database error. `transactions verify` is native
+(`crates/journals/src/transaction_graph/verify.rs`): it reuses the graph read's
+local-only enrichment, parsing and owned index, never contacts the network
+and never writes. `ui.transactions.dashboard` reports `bucketSize` (`year`
+for "all" over a decade, by the wall clock as Python does) and
+`history.years` in the display zone, accepts the four-year range, and auto
+chooses among twelve months, four years, ten years and everything.
+`ui.workspace.health` and everything embedding it (`health`, `next-actions`,
+`ui.next_actions`, `ui.report.blockers`) carry the counter `definitions`.
+The AI-only `ui.transactions.verify` tool belongs to the R6 rebase (S12).
+
 CLI fd input is bounded, consumed once, closed and zeroized by `UnlockSession`.
 Its remaining chain is bound unattended remembered unlock, then a no-echo TTY
 prompt when allowed; noninteractive manual unlock returns `interaction_required`.

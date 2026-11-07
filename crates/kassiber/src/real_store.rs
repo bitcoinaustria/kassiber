@@ -1914,6 +1914,16 @@ impl Book for RealBook {
         kassiber_journals::transaction_graph::snapshot(self.conn()?, args)
     }
 
+    fn verify_transaction(
+        &mut self,
+        workspace: Option<&Value>,
+        profile: Option<&Value>,
+        transaction: &str,
+    ) -> Result<Value, AppError> {
+        let (_, profile_id) = self.resolve_scope(workspace, profile)?;
+        kassiber_journals::transaction_graph::verify(self.conn()?, &profile_id, transaction)
+    }
+
     fn evidence_summary(&mut self, args: &Value) -> Result<Value, AppError> {
         use kassiber_journals::evidence_summary;
         let options = evidence_summary::options(args)?;

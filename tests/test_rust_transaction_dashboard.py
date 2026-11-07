@@ -104,3 +104,46 @@ class RustTransactionDashboardTest(DesktopParity, unittest.TestCase):
         self.change(ACTIVITY + RELATION)
         self.compare([{"period": "all", "resolveAuto": True, "until": "2025-05-01T00:00:00Z"},
                       {"period": "1year", **WINDOW, "timezone": "Europe/Vienna"}, {"z": 1}])
+
+
+# Main sync S9 (#701): a decade of activity buckets "all" by year, and
+# history.years counts each year in the request's display calendar.
+DECADE = """
+INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,asset,direction,amount,fee,occurred_at,confirmed_at,created_at) VALUES
+ ('y2012','w','p','cold','y2012','BTC','inbound',5000000,0,'2012-12-31T23:30:00Z','2012','2012'),
+ ('y2013','w','p','cold','y2013','BTC','inbound',5000000,0,'2013-06-01T00:00:00Z','2013','2013'),
+ ('y2016','w','p','exchange','y2016','BTC','outbound',2000000,0,'2016-12-31T23:00:00Z','2016','2016'),
+ ('y2017','w','p','exchange','y2017','BTC','inbound',2000000,0,'2017-01-01T00:00:00Z','2017','2017'),
+ ('undated','w','p','cold','undated','BTC','inbound',2000000,0,'1970-01-01T00:00:00Z','2017','2017');
+"""
+
+
+@unittest.skipUnless(RUST_BIN, "set KASSIBER_RUST_BIN to the harness build")
+class RustTransactionDashboardYearsTest(DesktopParity, unittest.TestCase):
+    KIND = "ui.transactions.dashboard"
+
+    def test_years_index_and_bucket_sizes_match_wire_bytes(self):
+        self.change(ACTIVITY + DECADE)
+        args = []
+        for timezone in ("UTC", "Europe/Vienna", "America/New_York", "Pacific/Kiritimati"):
+            args.append({"period": "all", "timezone": timezone})
+            args.append({"period": "all", "timezone": timezone, "wallet": "exchange"})
+            args.append({"period": "all", "timezone": timezone, "resolveAuto": True})
+        for period in ("4years", "4y", "4 Year", "5years", "10y", "15years", "30days", "3months", "ytd", "1year"):
+            args.append({"period": period, "since": "2016-01-01T00:00:00Z", "until": "2025-06-30T23:59:59Z"})
+        for until in ("2014-01-01T00:00:00Z", "2017-06-01T00:00:00Z", "2025-04-30T00:00:00Z"):
+            args.append({"period": "all", "until": until, "resolveAuto": True})
+        responses = self.compare(args)
+        first = responses[0]["data"]
+        self.assertEqual(first["bucketSize"], "year")
+        self.assertEqual([year["year"] for year in first["history"]["years"]][-1], 2012)
+        self.assertNotIn(1970, [year["year"] for year in first["history"]["years"]])
+
+    def test_short_history_and_missing_context_match_wire_bytes(self):
+        self.change(ACTIVITY)
+        self.compare([{"period": "all"}, {"period": "all", "resolveAuto": True},
+                      {"period": "4years", **WINDOW}])
+        self.change("DELETE FROM transactions WHERE profile_id='p';")
+        self.compare([{"period": "all"}, {"period": "all", "resolveAuto": True}])
+        self.change("DELETE FROM settings WHERE key IN ('context_workspace','context_profile');")
+        self.compare([{"period": "all"}, {"resolveAuto": True}])

@@ -223,6 +223,18 @@ pub fn profile_readiness(wallets: i64, transactions: i64, freshness: &Value) -> 
 }
 
 /// `build_workspace_health_snapshot(conn, workspace_id, profile_id)`.
+/// `WORKSPACE_HEALTH_COUNT_DEFINITIONS`: one sentence per counter, so a
+/// reader can name why two surfaces count the same book differently.
+const COUNT_DEFINITIONS: [(&str, &str); 7] = [
+    ("wallets", "Wallets in the active book."),
+    ("transactions", "Transaction rows in the active book, excluded rows included."),
+    ("active_transactions", "Transaction rows that are not excluded."),
+    ("journal_entries", "Journal entries from the last processing; stale when journals.needs_processing is true."),
+    ("quarantines", "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count)."),
+    ("rate_pairs", "Distinct cached rate pairs on this device, shared by all books."),
+    ("review_queue", "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current."),
+];
+
 pub fn health(conn: &Connection, context: &Value, profile: Option<&Value>) -> Result<Value> {
     let freshness = journal_freshness(conn, profile)?;
     let Some(profile) = profile else {
@@ -318,6 +330,10 @@ pub fn health(conn: &Connection, context: &Value, profile: Option<&Value>) -> Re
         (
             "reports",
             dict([("ready", Value::Bool(ready)), ("hints", Value::List(hints))]),
+        ),
+        (
+            "definitions",
+            dict(COUNT_DEFINITIONS.map(|(key, text)| (key, s(text)))),
         ),
     ]))
 }

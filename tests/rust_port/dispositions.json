@@ -3335,7 +3335,8 @@
       "test_sync_hybrid_requires_an_empty_explicit_handoff": {"disposition": "python-only", "flags": ["mock", "mock-internal", "sql", "subprocess"], "group": "cli-shell", "reason": "pins the test-only Python hybrid launcher handoff, native-result refusal and preservation of consumable unlock inputs", "replacement": "retain while the hybrid Python launcher is required", "reviewed": true, "tests": 1}
     },
     "tests/test_rust_transaction_dashboard.py": {
-      "RustTransactionDashboardTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "compares native desktop dashboard raw JSONL and all 112 tables with Python, including periods, zone folds, candidates, reviewed pairs and stale journals", "reviewed": true, "tests": 6}
+      "RustTransactionDashboardTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "compares native desktop dashboard raw JSONL and all 112 tables with Python, including periods, zone folds, candidates, reviewed pairs and stale journals", "reviewed": true, "tests": 6},
+      "RustTransactionDashboardYearsTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "compares native desktop dashboard raw JSONL and all 112 tables with Python, including periods, zone folds, candidates, reviewed pairs and stale journals", "reviewed": true, "tests": 2}
     },
     "tests/test_rust_transaction_desktop.py": {
       "RustTransactionDesktopTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "compares desktop list/search/extremes raw daemon JSONL, all filters, grouped totals, queue scope, cursor pages and typed refusals with Python on disposable books", "reviewed": true, "tests": 3}
@@ -3368,6 +3369,10 @@
       "test_acquisition_matches_python_protocol_facts": {"disposition": "oracle", "flags": ["subprocess"], "group": "chain-sync", "reason": "compares Bitcoin Esplora/Electrum acquisition, graph decoding and complete normalized records against Python on owned loopback fixtures, including coinbase and changed-height/empty observations; no persisted book parity is claimed", "reviewed": true, "tests": 1},
       "test_acquisition_no_traffic_before_consent_or_while_offline": {"disposition": "oracle", "flags": ["subprocess"], "group": "chain-sync", "reason": "compares Bitcoin Esplora/Electrum acquisition, graph decoding and complete normalized records against Python on owned loopback fixtures, including coinbase and changed-height/empty observations; no persisted book parity is claimed", "reviewed": true, "tests": 1},
       "test_acquisition_product_defaults_match_python_without_wallets": {"disposition": "oracle", "flags": ["subprocess"], "group": "daemon-runtime", "reason": "compares the raw answers of the three product refresh routes with Python on a book without wallets under no-egress; the journal-only plan runs natively", "reviewed": true, "tests": 1}
+    },
+    "tests/test_rust_wallet_completeness.py": {
+      "RustWalletCompletenessTest": {"disposition": "subprocess-scenario", "flags": ["sql", "sql-seed", "subprocess"], "group": "chain-sync", "reason": "spawns `python -m kassiber` (cli/daemon) but also calls kassiber.db, kassiber.secrets.sqlcipher", "reviewed": false, "tests": 4},
+      "RustTransactionVerifyTest": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "chain-sync", "reason": "calls kassiber.db directly", "reviewed": false, "tests": 3}
     },
     "tests/test_rust_wallet_discovery.py": {
       "test_compatibility_discovery_matches_python_targets_progress_and_queries": {"disposition": "oracle", "flags": ["subprocess"], "group": "chain-sync", "reason": "compares compatibility descriptor discovery targets, progress and queries with Python on owned loopback fakes; this preparation helper does not establish product sync or book persistence parity", "reviewed": true, "tests": 1},

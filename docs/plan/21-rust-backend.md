@@ -181,7 +181,10 @@ reference while it still exists:
 
 Main keeps moving while the stack grows. Each merge of main into the stack
 inventories the Python changes the port must follow and slices them;
-[main sync 1](../reference/rust-main-sync.md) covers #672 to #714.
+[main sync 1](../reference/rust-main-sync.md) covers #672 to #714; its
+slices S1 and S8 to S10 (store and registry, wallet completeness and
+`transactions verify`, the transaction dashboard's years, readiness
+definitions) are done.
 
 ## Verification
 

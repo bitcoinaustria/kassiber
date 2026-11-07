@@ -203,12 +203,26 @@ pub fn snapshot(
                 r.get::<_, Option<String>>(8)?,
             ))
         })
+        .map_err(database_error)?
+        .collect::<Result<Vec<_>, _>>()
         .map_err(database_error)?;
+    // How complete each source can be, and the edges of what it has observed.
+    let completeness = crate::completeness::describe(
+        conn,
+        &profile.0,
+        &rows
+            .iter()
+            .map(|row| crate::completeness::Wallet {
+                id: row.0.clone(),
+                kind: s(row.2.as_str()),
+                config_json: row.3.as_deref().map_or(Py::Null, s),
+            })
+            .collect::<Vec<_>>(),
+    )?;
     let mut wallets = Vec::new();
     let mut total = 0;
-    for row in rows {
-        let (id, label, kind, raw, created, account_code, account_label, count, last) =
-            row.map_err(database_error)?;
+    for (id, label, kind, raw, created, account_code, account_label, count, last) in rows {
+        let (completeness_class, scan_bounds) = completeness[&id].clone();
         let c = raw
             .as_deref()
             .and_then(|v| serde_json::from_str::<Value>(v).ok())
@@ -357,6 +371,8 @@ pub fn snapshot(
             ("samourai", projection(&samourai(&c))),
             ("script_types", projection(&json!(types))),
             ("created_at", s(created)),
+            ("completeness_class", completeness_class),
+            ("scan_bounds", scan_bounds),
         ]));
         total += count;
     }

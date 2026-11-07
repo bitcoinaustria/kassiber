@@ -227,11 +227,18 @@ against the Rust port and slices the gaps; Python stays the reference.
   (accepted coarse price, provider `agent_access`, `ai_provider_checks`, the
   widened custody AI consent CHECK) and the command registry, `describe` and
   capabilities follow main. New leaves and kinds stay `not_implemented`.
-- [ ] S2 to S11 as the inventory lists them: qualified transaction
+- [x] S8: `wallets list` and `ui.wallets.list` carry each wallet's
+  `completeness_class` and `scan_bounds`; `transactions verify` is native.
+  The AI-only `ui.transactions.verify` tool follows with S12.
+- [x] S9: `ui.transactions.dashboard` reports `bucketSize` and
+  `history.years`, accepts the four-year range and auto-selects only the
+  ranges the page offers.
+- [x] S10: `ui.workspace.health`, `health`, `ui.next_actions` and
+  `next-actions` define each counter (`definitions`).
+- [ ] S2 to S7 and S11 as the inventory lists them: qualified transaction
   references, coarse-price acceptance, the review workflow, quarantine root
   causes, transfer dismissals, the Reports screen (including the empty-root
-  `jurisdictionCode`), wallet completeness, the transaction dashboard,
-  readiness definitions and custody component revision.
+  `jurisdictionCode`) and custody component revision.
 - [ ] S12: rebase the R6 branches (AI catalog, providers, tools, MCP grants,
   chat) onto the synced stack.
 - [x] S1b: every workspace crate's tests pass on the S1 schema. Whole-book

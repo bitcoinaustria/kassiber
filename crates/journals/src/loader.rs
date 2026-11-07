@@ -60,7 +60,7 @@ fn app_refusal(error: kassiber_envelope::AppError) -> Error {
 
 mod direct;
 pub use direct::{load, load_read_snapshot, LoadedSnapshot};
-pub use ownership::owned_index;
+pub use ownership::{owned_index, owned_index_and_wallets};
 
 pub(super) fn convert(value: Value) -> Result<serde_json::Value> {
     use serde_json::Value as J;
