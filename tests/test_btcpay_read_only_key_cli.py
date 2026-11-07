@@ -2,8 +2,8 @@
 
 `ReadOnlyKeyLabelsTest` (test_btcpay_ledger_and_fees) checks the decision in
 process. These tests run `wallets sync` through `tests/cli_runner.py`, so
-`KASSIBER_TEST_CLI` can point them at the Rust binary (the hybrid CLI hands
-BTCPay wallet syncs to Python), against a loopback Greenfield fake whose
+`KASSIBER_TEST_CLI` can point them at the Rust binary (which serves these
+BTCPay wallet syncs natively), against a loopback Greenfield fake whose
 wallet endpoint answers 403 with a `missingPermission` in both the bare and
 the store-scoped form.
 """
