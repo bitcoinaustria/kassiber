@@ -115,6 +115,32 @@ def build():
     for field in ('quantity','proceeds','cost_basis','gain_loss'):
         sql=tax+"UPDATE journal_entries SET capital_gains_type='short_term' WHERE id='hidden'; UPDATE journal_tax_summary SET "+field+"="+('100001' if field=='quantity' else '0.00000001')+" WHERE id='tax3';"
         case('tax-nonzero-'+field,'tax','reports.tax-summary',sql)
+    # Main sync 1 (#706): the crypto Kennzahlen start on 1 March 2022 in Vienna;
+    # earlier rows are stated in no field and the E 1kv refuses them.
+    later = "UPDATE journal_entries SET occurred_at='2022-05-10T10:00:00Z' WHERE id IN ('z','first','swap');"
+    for label, sql, year in (
+        ('early', at+later+"UPDATE journal_entries SET occurred_at='2022-02-10T10:00:00Z' WHERE id IN ('a','income');", 2022),
+        ('boundary', at+later+"UPDATE journal_entries SET occurred_at='2022-02-28T22:59:59Z' WHERE id='a'; UPDATE journal_entries SET occurred_at='2022-05-10T10:00:00Z' WHERE id='income';", 2022),
+        ('first-day', at+later+"UPDATE journal_entries SET occurred_at='2022-02-28T23:00:00Z' WHERE id IN ('a','income');", 2022),
+        ('alt-early', at+"UPDATE journal_entries SET occurred_at='2022-02-10T10:00:00Z',at_category='alt_spekulation',at_kennzahl=801 WHERE id='a';", 2022),
+        ('old', at+"UPDATE journal_entries SET occurred_at='2021-06-01T10:00:00Z';", 2021),
+        ('old-empty', at+"DELETE FROM journal_entries;", 2021),
+    ):
+        for command in ('austrian-e1kv', 'austrian-tax-summary'):
+            case(f'kz2022-{label}-{command}', 'austrian', 'reports.'+command, sql, {'year': year})
+        case(f'kz2022-csv-{label}', 'csv', 'reports.austrian-e1kv', sql, {'year': year, 'csv': True})
+        case(f'kz2022-text-{label}', 'austrian-text', 'reports.austrian-e1kv', sql, {'year': year, 'text': True})
+        case(f'kz2022-gains-{label}', 'gains', 'reports.capital-gains', sql)
+    for label, sql in (
+        ('text', "UPDATE journal_entries SET at_kennzahl='174' WHERE id='a';"),
+        ('text-early', "UPDATE journal_entries SET at_kennzahl='174',occurred_at='2021-05-01T00:00:00Z' WHERE id='a';"),
+        ('empty-text', "UPDATE journal_entries SET at_kennzahl='' WHERE id='a';"),
+        ('float', "UPDATE journal_entries SET at_kennzahl=174.0 WHERE id='a';"),
+        ('real-text', "UPDATE journal_entries SET at_kennzahl='174.5' WHERE id='a';"),
+        ('padded', "UPDATE journal_entries SET at_kennzahl=' 801 ',occurred_at='2019-05-01T00:00:00Z' WHERE id='a';"),
+        ('generic-early', "UPDATE journal_entries SET occurred_at='2020-05-01T00:00:00Z' WHERE id='a';"),
+    ):
+        case(f'kz2022-gains-stored-{label}', 'gains', 'reports.capital-gains', sql)
     case('at-zero-quantity','austrian','reports.austrian-e1kv',at+"UPDATE journal_entries SET quantity=0 WHERE id='a';",{'year':2025})
     case('at-year-required','austrian','reports.austrian-e1kv',at)
     case('at-year-malformed','austrian','reports.austrian-e1kv',at,{'year':'bad'})

@@ -251,12 +251,17 @@ against the Rust port and slices the gaps; Python stays the reference.
   resolve by `root:` group with the measured or unmeasured effect, and the
   summary's `fiat_currency`, counter definitions and semantics-aware
   freshness. The AI-only `ui.journals.quarantine.groups` arrives with S12.
-- [ ] S2, S4, S6, S7 and S11 as the inventory lists them: qualified
-  transaction references, the review workflow, transfer dismissals, the
-  Reports screen (including the empty-root `jurisdictionCode`) and custody
-  component revision.
+- [x] S7: the Reports screen payload and indicative tax (including the
+  empty-root `jurisdictionCode`), the crypto Kennzahlen from 1 March 2022 in
+  every report and export, the E 1kv refusals, the exit-tax old rules and
+  `explanationReference` on journal events.
+- [ ] S2, S4, S6 and S11 as the inventory lists them: qualified transaction
+  references, the review workflow, transfer dismissals and custody component
+  revision.
 - [ ] S12: rebase the R6 branches (AI catalog, providers, tools, MCP grants,
-  chat) onto the synced stack.
+  chat) onto the synced stack. Its AI projections drop the desktop-only
+  `indicativeTax`, breakdown `transactionIds` and `explanationReference`, as
+  `daemon.py` does.
 - [x] S1b: every workspace crate's tests pass on the S1 schema. Whole-book
   checks compare table names with the store manifest, and frozen oracle
   dumps are upgraded by `tests/rust_port/upgrade_schema_dumps.py`; see

@@ -70,6 +70,7 @@ mod standalone_csv;
 mod summary;
 pub mod summary_pdf;
 mod summary_text;
+pub mod tax_estimate;
 mod tax_summary;
 mod transaction_csv;
 mod verification;
@@ -136,6 +137,13 @@ fn replace(row: &mut Value, key: &str, v: Value) {
             fields.push((key.into(), v));
         }
     }
+}
+
+/// `report_explanation.result_reference`: the reference
+/// `ui.reports.explain_capital_gain` accepts for one journal entry of
+/// `profile` (a `profiles` row).
+pub fn result_reference(conn: &Connection, profile: &Value, entry_id: &Value) -> Result<Value> {
+    gain_explanation::reference(conn, profile, entry_id)
 }
 
 /// Each read holds one SQLite snapshot across admission and report construction.
@@ -482,6 +490,10 @@ fn capital_gains(conn: &Connection, profile: &Value) -> Result<Value> {
             ("entry_id", value(row, "journal_entry_id").clone()),
         ]);
         let quantity = int(row, "quantity");
+        // No crypto field before 1 March 2022, as Reports states it.
+        let stated =
+            austrian::stated_kennzahl(value(row, "at_kennzahl"), &text(row, "occurred_at"))?;
+        replace(row, "at_kennzahl", stated);
         if let Value::Dict(fields) = row {
             fields.retain(|(k,v)| *k != "journal_entry_id".into() && !(matches!(k,kassiber_pyjson::Key::Str(k) if k.as_str().is_some_and(|k|["at_category","at_kennzahl"].contains(&k))) && matches!(v,Value::Null)));
         }

@@ -9,5 +9,6 @@
   "_ASSUMPTION_FMV": "EXIT-005: Fair market value uses the closest cached or transaction quote strictly before the exclusive departure cutoff, at most 24 hours old. Older, future or undated quotes leave the asset unpriced. It does not imply intraday coverage.",
   "_ASSUMPTION_FUTURE_TIGHTENING": "EXIT-003: A planned 1 July 2026 tightening (annual proof when deferred gains exceed EUR 100,000) is not modelled \u2014 verify against enacted law.",
   "_ASSUMPTION_GENERIC": "EXIT: Non-Austrian profile \u2014 no Altbestand grandfathering or special rate is applied; this shows the total unrealized gain only. Have a local adviser set the applicable exit-tax treatment.",
+  "_ASSUMPTION_OLD_RULES": "EXIT-011: The 27.5% rate and KZ 174 cover realisations from 1 March 2022. A departure before it followed the old rules, so no tax is estimated; a Steuerberater states it.",
   "missing": "EXIT-005: No usable cached or transaction quote found for one or more assets \u2014 run `kassiber rates sync`; market value, gain, and estimated tax stay incomplete (null) until those holdings are priced."
 }

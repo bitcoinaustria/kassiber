@@ -2,8 +2,8 @@
 use super::*;
 use kassiber_rates::time;
 
-pub fn vienna(raw: &str) -> Result<(i64, String)> {
-    let us = time::parse(raw)
+fn instant(raw: &str) -> Result<i64> {
+    time::parse(raw)
         .filter(|_| raw == kassiber_pytext::strip(raw))
         .ok_or_else(|| {
             AppError::new(
@@ -13,7 +13,17 @@ pub fn vienna(raw: &str) -> Result<(i64, String)> {
                     kassiber_pytext::repr_str(raw)
                 ),
             )
-        })?;
+        })
+}
+
+/// Whether `raw` precedes 1 March 2022 in Europe/Vienna (CET, so
+/// 2022-02-28T23:00:00Z), when the E 1kv's crypto Kennzahlen begin.
+pub fn before_crypto_kennzahlen(raw: &str) -> Result<bool> {
+    Ok(instant(raw)? < time::parse("2022-02-28T23:00:00Z").unwrap())
+}
+
+pub fn vienna(raw: &str) -> Result<(i64, String)> {
+    let us = instant(raw)?;
     let table = value(super::austrian::metadata(), "vienna_transitions");
     let Value::List(transitions) = table else {
         unreachable!()
@@ -83,6 +93,15 @@ mod tests {
         }
         assert!(vienna(" 2024-01-01 ").is_err());
         assert!(vienna("bad").is_err());
+        // 23:59:59 on 28 February in Vienna is still the old rules.
+        assert!(before_crypto_kennzahlen("2022-02-28T22:59:59Z").unwrap());
+        assert!(!before_crypto_kennzahlen("2022-02-28T23:00:00Z").unwrap());
+        assert!(before_crypto_kennzahlen("2022-03-01T00:59:59+02:00").unwrap());
+        assert!(!before_crypto_kennzahlen("2022-03-01T00:00:00+01:00").unwrap());
+        // A naive timestamp is UTC.
+        assert!(before_crypto_kennzahlen("2022-02-28T22:59:59").unwrap());
+        assert!(!before_crypto_kennzahlen("2022-03-01").unwrap());
+        assert!(before_crypto_kennzahlen("bad").is_err());
         assert_eq!(
             window(2025),
             ("2024-12-31T00:00:00Z".into(), "2026-01-02T00:00:00Z".into())

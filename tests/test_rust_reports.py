@@ -92,8 +92,9 @@ def test_reports_match_reference_bytes_and_run_in_rust(tmp_path, monkeypatch, co
         _same(call, "reports", "balance-history", "--wallet", wallet,
               "--start", "2024-01-01", "--end", "2024-04-01")
     for command in ("austrian-e1kv", "austrian-tax-summary"):
+        # The E 1kv's crypto Kennzahlen start with tax year 2022 (#706).
         for year in (2020, 2024):
-            _same(call, "reports", command, "--year", str(year), success=country=="at")
+            _same(call, "reports", command, "--year", str(year), success=country=="at" and year >= 2022)
     _same(call, "reports", "summary", "--wallet", "Cold")
     _same(call, "reports", "summary", "--wallet", "absent", success=False)
     calls = [json.loads(line) for line in Path(env["KASSIBER_HYBRID_LOG"]).read_text().splitlines()]

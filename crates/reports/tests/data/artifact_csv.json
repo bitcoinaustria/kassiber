@@ -2535,122 +2535,15 @@
     "sql": "UPDATE profiles SET tax_country='at' WHERE id='p';",
     "args_json": "{\"year\": 2009}",
     "expected": {
-      "ok": {
-        "files": [
-          {
-            "name": "00_uebersicht.csv",
-            "sheet": "\u00dcbersicht",
-            "rows": 43,
-            "content": "I. \u00dcbersicht\r\n\r\n1. Steuerpflichtige Eink\u00fcnfte aus dem Handel mit Kryptow\u00e4hrungen\r\n1.1. Steuerpflichtige Eink\u00fcnfte aus dem An- und Verkauf von Kryptow\u00e4hrungen\r\nVer\u00e4u\u00dferungspreis,0.00,EUR\r\nAnschaffungskosten,0.00,EUR\r\nVer\u00e4u\u00dferungsgewinn,0.00,EUR\r\nVer\u00e4u\u00dferungspreis,0.00,EUR\r\nAnschaffungskosten,0.00,EUR\r\nVer\u00e4u\u00dferungsverlust,0.00,EUR\r\n\"1.2. Steuerpflichtige Eink\u00fcnfte aus Margin, Derivaten und Futures\"\r\n\"Gewinne aus Margin, Derivaten und Futures\",0.00,EUR\r\n\"Verluste aus Margin, Derivaten und Futures\",0.00,EUR\r\n1.3. Steuerpflichtige Eink\u00fcnfte aus Spekulationsgesch\u00e4ften (\u00a7 31 EStG)\r\nSumme Spekulationseink\u00fcnfte,0.00,EUR\r\n\r\n2. Steuerpflichtige laufende Eink\u00fcnfte\r\n2.1. Eink\u00fcnfte aus der \u00dcberlassung von Kryptow\u00e4hrungen\r\nSumme laufende Eink\u00fcnfte,0.00,EUR\r\n2.2. Eink\u00fcnfte aus Leistungen zur Transaktionsverarbeitung\r\nSumme laufende Eink\u00fcnfte,0.00,EUR\r\n\r\n3. Nicht steuerbare Eink\u00fcnfte\r\n3.1. Nicht steuerbare Eink\u00fcnfte aus Altverm\u00f6gen au\u00dferhalb der Spekulationsfrist\r\nSumme nicht steuerbare Eink\u00fcnfte,0.00,EUR\r\n3.2. Nicht steuerbare Eink\u00fcnfte gem. \u00a7 27b Abs 2 Z 2 Satz 2 EStG\r\nSumme nicht steuerbare Eink\u00fcnfte,0.00,EUR\r\n3.3. Nicht steuerbare Steuergeb\u00fchren und R\u00fcckerstattungen\r\nSumme entrichtete Steuergeb\u00fchren,0.00,EUR\r\nSumme R\u00fcckerstattungen,0.00,EUR\r\n\r\n4. Sonstige Ein- und Ausg\u00e4nge\r\n4.1. Eingegangene Spenden/Trinkgeld\r\nSumme Spenden/Trinkgeld,0.00,EUR\r\n4.2. Ausgegangene Spenden/Schenkungen\r\nSumme Spenden,0.00,EUR\r\nSumme Schenkungen,0.00,EUR\r\n\"4.3. Gestohlene, gehackte und verlorene Coins\"\r\nSumme gestohlen/gehackt/Betrug,0.00,EUR\r\nSumme Verlust,0.00,EUR\r\n4.4. Mining (kommerziell)\r\nSumme Mining,0.00,EUR\r\n4.5. Minting\r\nSumme Minting,0.00,EUR\r\n"
-          },
-          {
-            "name": "01_1.1.csv",
-            "sheet": "1.1.",
-            "rows": 5,
-            "content": "1.1. Steuerpflichtige Eink\u00fcnfte aus dem An- und Verkauf von Kryptow\u00e4hrungen gem. \u00a7 27b Abs 3 EStG\r\nB\u00f6rse,Anlage,Anzahl,Erwerbsdatum,Verkaufsdatum,Kauf/Eingang bei,Typ,Kostenbasis in EUR,Erl\u00f6s in EUR,Gewinn/Verlust in EUR\r\nNo rows in scope.\r\n\r\nSumme Eink\u00fcnfte realisierten Wertsteigerungen,,,,,,,,,0.00\r\nSumme realisierte Wertverluste,,,,,,,,,0.00\r\n"
-          },
-          {
-            "name": "02_1.2.csv",
-            "sheet": "1.2.",
-            "rows": 5,
-            "content": "\"1.2. Steuerpflichtige Eink\u00fcnfte aus Margin, Derivaten und Futures\"\r\nB\u00f6rse,Typ,Datum,Anzahl,W\u00e4hrung,Gesamt\r\nNo rows in scope.\r\n\r\n\"Summe Gewinne aus Margin, Derivaten, Futures\",,,,,0.00\r\n\"Summe Verluste aus Margin, Derivaten, Futures\",,,,,0.00\r\n"
-          },
-          {
-            "name": "03_1.3.csv",
-            "sheet": "1.3.",
-            "rows": 4,
-            "content": "1.3. Steuerpflichtige Eink\u00fcnfte aus Spekulationsgesch\u00e4ften mit Kryptow\u00e4hrungen (\u00a7 31 EStG)\r\nB\u00f6rse,Anlage,Anzahl,Erwerbsdatum,Verkaufsdatum,Kauf/Eingang bei,Haltedauer in Tagen,Typ,Kostenbasis in EUR,Erl\u00f6s in EUR,Gewinn/Verlust in EUR\r\nNo rows in scope.\r\n\r\nSumme Spekulationseink\u00fcnfte,,,,,,,,,,0.00\r\n"
-          },
-          {
-            "name": "04_2.1.csv",
-            "sheet": "2.1.",
-            "rows": 4,
-            "content": "2.1. Steuerpflichtige laufende Eink\u00fcnfte aus der \u00dcberlassung von Kryptow\u00e4hrungen\r\nB\u00f6rse,Typ,Datum des Eingangs,Anzahl,W\u00e4hrung,Hinweis,Wert in EUR zum Zeitpunkt des Eingangs\r\nNo rows in scope.\r\n\r\nSumme laufende Eink\u00fcnfte,,,,,,0.00\r\n"
-          },
-          {
-            "name": "05_2.2.csv",
-            "sheet": "2.2.",
-            "rows": 4,
-            "content": "2.2. Steuerpflichtige laufende Eink\u00fcnfte aus Leistungen zur Transaktionsverarbeitung\r\nB\u00f6rse,Typ,Datum des Eingangs,Anzahl,W\u00e4hrung,Hinweis,Wert in EUR zum Zeitpunkt des Eingangs\r\nNo rows in scope.\r\n\r\nSumme laufende Eink\u00fcnfte,,,,,,0.00\r\n"
-          },
-          {
-            "name": "06_3.1.csv",
-            "sheet": "3.1.",
-            "rows": 4,
-            "content": "3.1. Nicht steuerbare Eink\u00fcnfte aus Altverm\u00f6gen au\u00dferhalb der Spekulationsfrist\r\nB\u00f6rse,Anlage,Anzahl,Erwerbsdatum,Verkaufsdatum,Kauf/Eingang bei,Haltedauer in Tagen,Typ,Kostenbasis in EUR,Erl\u00f6s in EUR,Gewinn/Verlust in EUR\r\nNo rows in scope.\r\n\r\nSumme nicht steuerbare Eink\u00fcnfte,,,,,,,,,,0.00\r\n"
-          },
-          {
-            "name": "07_3.2.csv",
-            "sheet": "3.2.",
-            "rows": 4,
-            "content": "3.2. Nicht steuerbare Eink\u00fcnfte gem. \u00a7 27b Abs 2 Z 2 Satz 2 EStG\r\nB\u00f6rse,Typ,Datum des Eingangs,Anzahl,W\u00e4hrung,Hinweis,Wert in EUR zum Zeitpunkt des Eingangs\r\nNo rows in scope.\r\n\r\nSumme nicht steuerbare Eink\u00fcnfte,,,,,,0.00\r\n"
-          },
-          {
-            "name": "08_3.3.csv",
-            "sheet": "3.3.",
-            "rows": 5,
-            "content": "3.3. Nicht steuerbare Steuergeb\u00fchren und R\u00fcckerstattungen\r\nB\u00f6rse,Datum der Geb\u00fchr,Anzahl,W\u00e4hrung,Erl\u00f6s in EUR,Anzahl,W\u00e4hrung,Hinweis\r\nNo rows in scope.\r\n\r\nSumme entrichtete Steuergeb\u00fchren,,,,0.00,,,\r\nSumme der R\u00fcckerstattungen,,,,0.00,,,\r\n"
-          },
-          {
-            "name": "09_4.1.csv",
-            "sheet": "4.1.",
-            "rows": 4,
-            "content": "4.1. Eingegangene Spenden/Trinkgeld\r\nB\u00f6rse,Typ,Datum des Eingangs,Anzahl,W\u00e4hrung,Hinweis,Wert in EUR zum Zeitpunkt des Eingangs\r\nNo rows in scope.\r\n\r\nSumme Spenden/Trinkgeld,,,,,,0.00\r\n"
-          },
-          {
-            "name": "10_4.2.csv",
-            "sheet": "4.2.",
-            "rows": 5,
-            "content": "4.2. Ausgegangene Spenden/Schenkungen\r\nB\u00f6rse,Typ,Datum der Auszahlung,Anzahl,W\u00e4hrung,Hinweis,Kostenbasis in EUR,Wert bei Auszahlung in EUR\r\nNo rows in scope.\r\n\r\nSumme Spenden,,,,,,,0.00\r\nSumme Schenkungen,,,,,,,0.00\r\n"
-          },
-          {
-            "name": "11_4.3.csv",
-            "sheet": "4.3.",
-            "rows": 5,
-            "content": "\"4.3. Gestohlene, gehackte und verlorene Coins\"\r\nB\u00f6rse,Typ,Datum der Auszahlung,Anzahl,W\u00e4hrung,Hinweis,Kostenbasis in EUR,Wert bei Auszahlung in EUR\r\nNo rows in scope.\r\n\r\nSumme gestohlen/gehackt/Betrug,,,,,,,0.00\r\nSumme Verlust,,,,,,,0.00\r\n"
-          },
-          {
-            "name": "12_4.4.csv",
-            "sheet": "4.4.",
-            "rows": 4,
-            "content": "4.4. Mining (kommerziell)\r\nB\u00f6rse,Typ,Datum des Eingangs,Anzahl,W\u00e4hrung,Hinweis,Wert in EUR zum Zeitpunkt des Eingangs\r\nNo rows in scope.\r\n\r\nSumme Mining,,,,,,0.00\r\n"
-          },
-          {
-            "name": "13_4.5.csv",
-            "sheet": "4.5.",
-            "rows": 4,
-            "content": "4.5. Minting\r\nB\u00f6rse,Typ,Datum des Eingangs,Anzahl,W\u00e4hrung,Hinweis,Wert in EUR zum Zeitpunkt des Eingangs\r\nNo rows in scope.\r\n\r\nSumme Minting,,,,,,0.00\r\n"
-          },
-          {
-            "name": "99_erlaeuterungen_zum_steuerreport.csv",
-            "sheet": "Erl\u00e4uterungen zum Steuerreport",
-            "rows": 15,
-            "content": "Erl\u00e4uterungen zum Steuerreport\r\n\r\nBerichtsumfang\r\nDieser CSV-Bundle-Export ist als j\u00e4hrliche Arbeitsunterlage f\u00fcr die \u00f6sterreichische E 1kv-Pr\u00fcfung aufgebaut. Die \u00dcbersicht fasst die Betr\u00e4ge zusammen; die nummerierten Dateien enthalten Detailzeilen oder explizite Null-Platzhalter f\u00fcr noch nicht modellierte Bereiche.\r\nPr\u00fcfung\r\nReview this Austrian E 1kv export with a Steuerberater before filing; Kassiber is not tax advice.\r\nAktuelle Kassiber-Annahmen\r\n\"AT-E1KV-FOREIGN-SELF-CUSTODY: Kassiber currently maps crypto rows to the auslaendisch / self-custody E 1kv Kennzahlen 172, 174, and 176. It does not populate domestic-provider or withheld-KESt fields because that metadata is not stored yet.\"\r\nAT-E1KV-DETAIL-LIMITATION: Lot acquisition dates and holding-period day counts are not persisted in journal rows; the export relies on the tax engine's Austrian category classification and Kassiber's journal amounts.\r\nAT-E1KV-KENNZAHL-REPROCESS: Capital-yield income (income_capital_yield) now maps to Kennzahl 172 instead of the old 175. Re-run `journals process` after upgrading so stored at_kennzahl values match this export; any mismatches are listed in the Data Quality section.\r\nAT-COST-BASIS-POOL-SCOPE: Austrian cost basis was calculated using the reviewed 'global' pool scope.\r\nAT-REVIEW-GATE: Review this Austrian E 1kv export with a Steuerberater before filing; Kassiber is not tax advice.\r\nDatenqualit\u00e4t\r\n\"Quarant\u00e4ne-Gr\u00fcnde im Jahr: 0; abweichende gespeicherte Kennzahlen: 0. Quarantinierte Transaktionen bleiben au\u00dferhalb dieses Bundles, bis sie aufgel\u00f6st sind.\"\r\nNicht modellierte Dateien\r\n\"Margin/Derivate/Futures, Steuergeb\u00fchren, Spenden/Schenkungen, verlorene Coins, kommerzielles Mining und Minting werden heute als leere Nullabschnitte dargestellt, weil Kassiber daf\u00fcr noch keine strukturierten Steuerereignisse speichert.\"\r\n"
-          }
-        ],
-        "metadata": {
-          "form": "E 1kv",
+      "error": {
+        "code": "validation",
+        "message": "The Austrian crypto Kennzahlen (KZ 172, 174, 176) start with tax year 2022",
+        "hint": "Earlier years followed the old rules (Spekulationsgesch\u00e4fte on the E 1). Export the bookkeeping handoff and have a Steuerberater state that year.",
+        "details": {
           "tax_year": 2009,
-          "sheets": [
-            "\u00dcbersicht",
-            "1.1.",
-            "1.2.",
-            "1.3.",
-            "2.1.",
-            "2.2.",
-            "3.1.",
-            "3.2.",
-            "3.3.",
-            "4.1.",
-            "4.2.",
-            "4.3.",
-            "4.4.",
-            "4.5.",
-            "Erl\u00e4uterungen zum Steuerreport"
-          ],
-          "rows": 0,
-          "summary_rows": 4
-        }
+          "first_tax_year": 2022
+        },
+        "retryable": false
       }
     }
   },

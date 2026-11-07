@@ -132,6 +132,39 @@ def cases():
     for sqlname, sql in [('base',''),('at',"UPDATE profiles SET tax_country='at',gains_algorithm='HIFO' WHERE id='p';"),('stale',"UPDATE profiles SET journal_input_version=8 WHERE id='p';"),('unprocessed',"UPDATE profiles SET last_processed_at=NULL WHERE id='p';"),('no-context',"DELETE FROM settings WHERE key='context_profile';"),('crossed-context',"UPDATE settings SET value='missing' WHERE key='context_workspace';"),('empty', 'DELETE FROM journal_entries; DELETE FROM transactions;'),('long',"UPDATE journal_entries SET capital_gains_type='long';"),('income-zero',"UPDATE journal_entries SET gain_loss=0,proceeds=0 WHERE entry_type='income';"),('large-msat',"UPDATE journal_entries SET quantity=-9007199254740993 WHERE id='z';"),('null-proceeds',"UPDATE journal_entries SET proceeds=NULL WHERE id='z';"),('null-category',"UPDATE journal_entries SET at_category=NULL,at_kennzahl=NULL;"),('invalid-date',"UPDATE journal_entries SET occurred_at='broken' WHERE id='z';"),('offset',"UPDATE profiles SET tax_country='at' WHERE id='p'; UPDATE journal_entries SET occurred_at='2024-01-01T00:30:00+02:00' WHERE id='z';"),('out-of-bounds',"UPDATE journal_entries SET occurred_at='2008-01-01T00:00:00Z' WHERE id='z';"),('cap',"WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<205) INSERT INTO journal_entries(id,workspace_id,profile_id,transaction_id,wallet_id,occurred_at,entry_type,asset,quantity,cost_basis,proceeds,gain_loss,created_at) SELECT printf('cap%03d',x),'ws','p','out','cold','2024-01-01T00:00:00Z','disposal','BTC',-x,x,x+1,1,printf('%03d',x) FROM n;")]:
         for year in [None,2024,2025]:
             result.append((f'desktop-{sqlname}-{year}','ui.reports.capital_gains',dict(year=year),sql))
+    # Main sync 1 (#706): the Reports screen payload and the crypto Kennzahlen
+    # from 1 March 2022 (Europe/Vienna).
+    at="UPDATE profiles SET tax_country='at' WHERE id='p';"
+    conversions="INSERT INTO journal_custody_economic_relations(relation_id,workspace_id,profile_id,relation_kind,source_transaction_id,target_transaction_id,source_asset,target_asset,source_amount_msat,target_amount_msat,basis_state,occurred_at,target_occurred_at,created_at) VALUES(printf('%064d',6),'ws','p','conversion','out','earn','BTC','LBTC',5000,4999,'eligible','2024-12-31T23:30:00Z','2025-01-02T00:00:00Z','d'),(printf('%064d',7),'ws','p','conversion','out','in','BTC','BTC',5001,5001,'eligible','2024-12-31T23:30:00Z','2025-01-02T00:00:00Z','e');"
+    links="WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<{count}) INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,asset,direction,amount,fee,excluded,occurred_at,created_at) SELECT printf('tx%03d',x),'ws','p','cold',printf('tx%03d',x),'BTC','outbound',x,0,0,'2025-06-01T00:00:00Z','fixed' FROM n; UPDATE profiles SET last_processed_tx_count=last_processed_tx_count+{count} WHERE id='p';"+"WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<{count}) INSERT INTO journal_entries(id,workspace_id,profile_id,transaction_id,wallet_id,occurred_at,entry_type,asset,quantity,cost_basis,proceeds,gain_loss,at_category,at_kennzahl,capital_gains_type,created_at) SELECT printf('link%03d',x),'ws','p',printf('tx%03d',x),'cold','2025-06-01T00:00:00Z','disposal','BTC',-x,0.1,0.25,0.15,'neu_gain',174,'short_term',printf('%03d',x) FROM n;"
+    for sqlname, sql, years in [
+        ('at-fields', at+"UPDATE journal_entries SET at_category='alt_spekulation',at_kennzahl=801 WHERE id='z'; UPDATE journal_entries SET at_category='neu_loss',at_kennzahl=176,gain_loss=-0.5 WHERE id='first';", [None,2025]),
+        ('at-swaps', at+conversions, [2025]),
+        ('generic-swaps', conversions, [2024]),
+        ('at-old-rules', at+"UPDATE journal_entries SET occurred_at='2022-02-10T10:00:00Z' WHERE id IN ('a','swap'); UPDATE journal_entries SET occurred_at='2022-05-10T10:00:00Z' WHERE id IN ('income','z','first');", [None,2022]),
+        ('at-boundary', at+"UPDATE journal_entries SET occurred_at='2022-02-28T22:59:59Z' WHERE id='a'; UPDATE journal_entries SET occurred_at='2022-02-28T23:00:00Z' WHERE id='income';", [2022]),
+        ('at-after-boundary', at+"UPDATE journal_entries SET occurred_at='2022-02-28T23:00:00Z' WHERE id IN ('a','income');", [2022]),
+        ('at-before-e1kv', at+"UPDATE journal_entries SET occurred_at='2021-06-01T10:00:00Z'; UPDATE journal_entries SET at_category='alt_spekulation',at_kennzahl=801 WHERE id='z';", [None,2021]),
+        ('at-usd', "UPDATE profiles SET tax_country='at',fiat_currency='USD' WHERE id='p';", [2025]),
+        ('at-lower-eur', at+"UPDATE profiles SET fiat_currency='eur' WHERE id='p';", [2025]),
+        ('at-net-loss', at+"UPDATE journal_entries SET at_category='neu_loss',at_kennzahl=176,gain_loss=-5 WHERE id='a';", [2025]),
+        ('at-links-128', at+links.format(count=127), [2025]),
+        ('at-links-129', at+links.format(count=128), [2025]),
+        ('generic-links-129', links.format(count=129), [2025]),
+        ('generic-long-days', "UPDATE profiles SET tax_long_term_days=730 WHERE id='p';", [2024]),
+        ('generic-zero-days', "UPDATE profiles SET tax_long_term_days=0 WHERE id='p';", [2024]),
+        ('generic-negative-days', "UPDATE profiles SET tax_long_term_days=-1 WHERE id='p';", [2024]),
+        ('generic-text-days', "UPDATE profiles SET tax_long_term_days=' 400 ' WHERE id='p';", [2024]),
+        ('country-empty', "UPDATE profiles SET tax_country='' WHERE id='p';", [2024]),
+        ('country-padded-at', "UPDATE profiles SET tax_country=' at' WHERE id='p';", [2024]),
+        ('country-unsupported', "UPDATE profiles SET tax_country='xx' WHERE id='p';", [2024]),
+        ('fiat-empty', "UPDATE profiles SET fiat_currency='' WHERE id='p';", [2024]),
+        ('generic-income-long', "UPDATE journal_entries SET capital_gains_type='LONG' WHERE id='a'; UPDATE journal_entries SET gain_loss=0 WHERE id='income';", [2024,2025]),
+        ('half-cent', "UPDATE journal_entries SET cost_basis=0.005,proceeds=0.015,gain_loss=0.01 WHERE id IN ('a','z');", [2025]),
+        ('kennzahl-text', at+"UPDATE journal_entries SET at_kennzahl='174' WHERE id='a';", [2025]),
+    ]:
+        for year in years:
+            result.append((f'desktop-{sqlname}-{year}','ui.reports.capital_gains',dict(year=year),sql))
     for year in ['2024',' ２０２４ ',2024.9,True,False,2008,2101,[],{},'bad']:
         result.append(('desktop-year-'+repr(year),'ui.reports.capital_gains',dict(year=year),''))
     for missing in [False,True]:

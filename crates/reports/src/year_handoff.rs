@@ -622,13 +622,16 @@ pub(super) fn build(
                 s("")
             },
         );
+        // No crypto field before 1 March 2022, as Reports states it.
+        let form_field =
+            austrian::stated_kennzahl(value(row, "at_kennzahl"), &text(row, "occurred_at"))?;
         replace(
             &mut output,
             "tax_form_field",
-            if matches!(value(row, "at_kennzahl"), Value::Null) {
+            if matches!(form_field, Value::Null) {
                 s("")
             } else {
-                value(row, "at_kennzahl").clone()
+                form_field
             },
         );
         let pricing_source = value(&output, "pricing_source_kind").clone();
