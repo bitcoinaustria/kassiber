@@ -4,9 +4,10 @@
 
 Kraken API error details repeated the server's text verbatim, so a server
 that echoed the API key or secret put it into the error envelope. The key and
-secret now read `<redacted>`, as in Rust. A Kraken sell whose trade row has no
-`price` still gets a negative implicit rate (fixed separately). Exit 0 means
-the credential echo is fixed.
+secret now read `<redacted>`, as in Rust. A Kraken sell whose trade row had no
+`price` (and every Coinbase sell) divided its value by the negative amount, so
+it was stored with a negative rate and held as missing_spot_price; the rate is
+now Kraken's cost / volume. Exit 0 means both are fixed.
 """
 import base64
 import json
@@ -18,7 +19,7 @@ def main():
     records = normalize_kraken_records({"result": {"ledger": {"sell": {
         "type": "trade", "asset": "XXBT", "amount": "-0.01", "refid": "trade", "time": "1700000000",
     }}}}, {"result": {"trades": {"trade": {"pair": "XXBTZEUR", "cost": "400", "fee": "1"}}}})
-    assert records[0]["fiat_rate"] < 0
+    assert records[0]["fiat_rate"] == 40000, records[0]["fiat_rate"]
 
     class Response:
         def __enter__(self):
@@ -43,8 +44,7 @@ def main():
         assert "<redacted>" in details, details
     else:
         raise AssertionError("Expected reference API error")
-    print("Fixed: Kraken API error details withhold credentials. "
-          "Still open: implicit Kraken sell rate is negative.")
+    print("Fixed: implicit Kraken sell rate is positive; Kraken API error details withhold credentials.")
 
 
 if __name__ == "__main__":
