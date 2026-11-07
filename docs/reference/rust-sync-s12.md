@@ -21,6 +21,12 @@ directory is on the 860 EVO under load: a persisted failure takes seconds
 to sync, so the five-second lock reads back as one second. They pass when
 rerun at lower load; the R6 crates did not change in the merge.
 
+Where S12 ends: everything in the table below is ported except the
+attachment and document import tools (#682, #698), which need S8's wallet
+completeness, and the document reader, which needs its model call moved
+off the request loop. [Main sync's after S12](rust-main-sync.md#after-s12)
+summarises it.
+
 ## Inventory by pull request
 
 "Rust R6" names where the behaviour lives in the Rust crates. "Before"
@@ -43,7 +49,7 @@ inspection. "Now" is the state on this branch.
 | #689 | `daemon_chat_uploads.py`: pasted files in chunks to an owner-only temporary file, staged like a picked file | kind `ui.chat.attachments.upload`; `internal.document_import.stage` `purpose` and the staged `kind` | none | Refused (`not_implemented`) | Ported; see [chat files](#chat-files-staging-and-uploads-689-698) |
 | #690 | hints say "Settings → Assistant" instead of "Settings → AI providers" | provider and transport errors | `crates/ai/src/transport/errors.rs`, `providers` | Differs (hint text) | see [state](#state-on-this-branch) |
 | #693, #697 | `core/chat_files.py`: several files per turn; images and PDFs shown to a full-access provider; expired files dropped | `ai.chat` `attachments`, its terminal `expired_attachments`, chat history | `chat/args.rs`, `chat/screen.rs`, `broker` | Differs: one attachment only | Ported; see [chat files](#chat-files-in-the-turn-693-697) |
-| #698 | `core/document_chat_import.py`, `document_import.py` read step without a database and its detected API format | tools `ui.wallets.read_document`, `ui.wallets.import_document.plan/apply` | `crates/imports` (document core) | Missing | Catalog entries; refused until ported |
+| #698 | `core/document_chat_import.py`, `document_import.py` read step without a database and its detected API format | tools `ui.wallets.read_document`, `ui.wallets.import_document.plan/apply` | `crates/imports` (document core) | Missing | Staging's chat purpose, the sixteen grants and the preview's provider-first order ported; the three tools refused: the plans need S8's wallet completeness, the reader its model call off the request loop |
 | #700, #709 | desktop only: one composer permission control; the model picker folds reasoning, speed and permission mode | `ai.chat.permission_mode` (from #684) | none | — | No Rust change |
 | #714 | provider broker (TypeScript): OpenCode 2, Codex fast mode; desktop saved model inventories | none in Python | none | — | No Rust change: the broker script is shared |
 

@@ -17622,9 +17622,21 @@ product file changes.
 - macOS: the pseudo-terminal Ctrl-C test reads `/proc` and runs on Linux
   only.
 
+### Since main-sync S12
+
+The server follows #686: the user's grant (`read`, `operator`,
+`accounting_decisions`) and access mode decide the listing and each call,
+writes need a server pinned to a book and run through the assistant
+executor under a writable pin, audited as `mcp_host`, and the desktop's
+agent lease carries the grant. Of the 13 reads R6-5a refused, all are
+native now; the read tools still refused are the S5, S6 and S8 ones
+(quarantine groups, dismissals, row verification) and the Lightning node
+snapshot. See [the S12 record](rust-sync-s12.md#mcp-grants-686).
+
 ### Left
 
-- Turn the `native-mcp` gate on with the 13 refused read tools.
+- Turn the `native-mcp` gate on once the S5, S6 and S8 read tools and the
+  node snapshot are native.
 - `kassiber chat` line editing (R6-7's remaining difference).
 
 ## AI tool writes, previews and projections (R6-5b)

@@ -224,8 +224,12 @@ against the Rust port and slices the gaps; Python stays the reference.
   causes, transfer dismissals, the Reports screen (including the empty-root
   `jurisdictionCode`), wallet completeness, the transaction dashboard,
   readiness definitions and custody component revision.
-- [ ] S12: rebase the R6 branches (AI catalog, providers, tools, MCP grants,
-  chat) onto the synced stack.
+- [x] S12: the R6 crates follow main through #714 (AI catalog, providers,
+  tools, MCP grants, chat files and uploads, visuals); see
+  [after S12](docs/reference/rust-main-sync.md#after-s12).
+- [ ] S12 remainder: `ui.wallets.import_attachment.plan/apply` and
+  `import_document.plan/apply` (after S8's wallet completeness), and
+  `ui.wallets.read_document` (its model call off the request loop).
 - [x] S1b: every workspace crate's tests pass on the S1 schema. Whole-book
   checks compare table names with the store manifest, and frozen oracle
   dumps are upgraded by `tests/rust_port/upgrade_schema_dumps.py`; see
