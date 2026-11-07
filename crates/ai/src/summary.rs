@@ -2,7 +2,7 @@
 //! short consent text. Model-supplied strings are shown unredacted, as in
 //! Python; this is local display only (design doc §7 item 12).
 
-use kassiber_envelope::{get, truthy};
+use kassiber_envelope::{get, truthy, AppError};
 use kassiber_pyjson::{Key, PyStr, Value};
 
 use crate::catalog::ToolEntry;
@@ -80,10 +80,60 @@ fn with_target(prefix: &str, target: Option<PyStr>, fallback: &str) -> PyStr {
     }
 }
 
-/// `summarize_tool_call(tool, arguments)`.
-pub fn summarize_tool_call(tool: &ToolEntry, arguments: &Value) -> PyStr {
+/// The `label` of a `new_wallet` object, else the `wallet` argument.
+fn import_target(arguments: &Value) -> Option<PyStr> {
+    let label = match get(arguments, "new_wallet") {
+        Some(new_wallet @ Value::Dict(_)) => get(new_wallet, "label"),
+        _ => get(arguments, "wallet"),
+    };
+    match label {
+        Some(Value::Str(label)) => Some(kassiber_pytext::strip_py(label))
+            .filter(|label| label.code_points().next().is_some()),
+        _ => None,
+    }
+}
+
+/// A component action other than `create`: what the consent card says.
+fn component_effect(name: &str, arguments: &Value, action: &PyStr) -> Result<PyStr, AppError> {
+    let component = match stripped(arguments, "component_id") {
+        Some(target) => Text::default()
+            .push("custody component ")
+            .py(&target)
+            .done(),
+        None => text("custody component"),
+    };
+    let (prefix, suffix) = match action.as_str() {
+        Some("revise") if get(arguments, "activate") == Some(&Value::Bool(true)) => {
+            ("Replace ", " with a new active revision")
+        }
+        Some("revise") => ("Save a draft revision of ", ""),
+        Some("supersede") => ("Retire ", " (anchors return to raw booking)"),
+        Some("undo") => ("Restore superseded ", " as a draft"),
+        Some("activate") => ("Activate draft ", ""),
+        _ => ("Change ", ""),
+    };
+    if name == "ui.transfers.components.plan" {
+        let mut lowered = prefix.to_owned();
+        lowered[..1].make_ascii_lowercase();
+        return Ok(Text::default()
+            .push("Preview: ")
+            .push(&lowered)
+            .py(&component)
+            .push(suffix)
+            .done());
+    }
+    Ok(Text::default()
+        .push(prefix)
+        .py(&component)
+        .push(suffix)
+        .done())
+}
+
+/// `summarize_tool_call(tool, arguments)`: a validation error for a call
+/// the consent card cannot describe.
+pub fn summarize_tool_call(tool: &ToolEntry, arguments: &Value) -> Result<PyStr, AppError> {
     let name = tool.name.as_str();
-    match name {
+    Ok(match name {
         "ui.review.plan" | "ui.review.apply" => {
             let artifact = if name == "ui.review.apply" {
                 get(arguments, "artifact")
@@ -110,8 +160,42 @@ pub fn summarize_tool_call(tool: &ToolEntry, arguments: &Value) -> PyStr {
             "Refresh all watch-only sources",
         ),
         "ui.journals.process" => text("Process journals"),
+        "ui.wallets.import_attachment.apply" => with_target(
+            "Import the attached file into ",
+            import_target(arguments),
+            "Import the attached file",
+        ),
+        "ui.imports.rollback" => text("Delete the rows an import run created"),
+        "ui.wallets.import_document.apply" => with_target(
+            "Import rows from the attached document into ",
+            import_target(arguments),
+            "Import rows from the attached document",
+        ),
+        "ui.attachments.add_from_chat" => {
+            let what = match stripped(arguments, "file") {
+                Some(file) => Text::default().push("attached ").py(&file).done(),
+                None => text("the attached file"),
+            };
+            match stripped(arguments, "transaction") {
+                Some(transaction) => Text::default()
+                    .push("Keep ")
+                    .py(&what)
+                    .push(" as evidence on ")
+                    .py(&transaction)
+                    .done(),
+                None => Text::default()
+                    .push("Keep ")
+                    .py(&what)
+                    .push(" as evidence")
+                    .done(),
+            }
+        }
         "ui.journals.quarantine.resolve" => {
             let transaction = stripped(arguments, "transaction")
+                .or_else(|| {
+                    stripped(arguments, "group_id")
+                        .map(|group| Text::default().push("the root of ").py(&group).done())
+                })
                 .unwrap_or_else(|| text("quarantined transaction"));
             if matches!(get(arguments, "action"), Some(Value::Str(action)) if action.is("exclude"))
             {
@@ -203,7 +287,7 @@ pub fn summarize_tool_call(tool: &ToolEntry, arguments: &Value) -> PyStr {
                 );
             }
             if parts.is_empty() {
-                return text("Change freshness policy");
+                return Ok(text("Change freshness policy"));
             }
             let mut out = Text::default().push("Change freshness policy: ");
             for (index, part) in parts.iter().enumerate() {
@@ -342,6 +426,18 @@ pub fn summarize_tool_call(tool: &ToolEntry, arguments: &Value) -> PyStr {
             "Update reviewed transfer pair",
         ),
         "ui.transfers.components.plan" | "ui.transfers.components.apply" => {
+            let create = Value::Str(text("create"));
+            let Value::Str(action) = get(arguments, "action").unwrap_or(&create) else {
+                // Refused before any consent card: the card keys on the
+                // action (tests/rust_port/repro_component_summary_unhashable.py).
+                return Err(AppError::new(
+                    "validation",
+                    "Custody component review action is unsupported",
+                ));
+            };
+            if !action.is("create") {
+                return component_effect(name, arguments, action);
+            }
             let count = list_len(get(arguments, "components"));
             let noun = if count == 1 {
                 "component"
@@ -379,5 +475,5 @@ pub fn summarize_tool_call(tool: &ToolEntry, arguments: &Value) -> PyStr {
             Some(template) if !template.is_empty() => text(template),
             _ => text(name),
         },
-    }
+    })
 }

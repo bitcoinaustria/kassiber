@@ -109,9 +109,28 @@ impl Book for FakeBook {
             .into()),
         }
     }
-    fn review_consent_preview(&mut self, _arguments: &Value) -> Result<Value, ToolError> {
+    fn review(
+        &mut self,
+        kind: &str,
+        arguments: &Value,
+        _full_access: bool,
+    ) -> Result<Value, ToolError> {
+        // Review kinds are `ai_tool`-authored reads and writes.
+        if kind == "ui.review.apply" {
+            return self.mutate(kind, arguments, "ai_tool");
+        }
+        self.read(kind, arguments, "ai_tool")
+    }
+    fn review_consent_preview(
+        &mut self,
+        _arguments: &Value,
+        _full_access: bool,
+    ) -> Result<Value, ToolError> {
         self.reads.push("review.preview".into());
         Ok(dict([("status", s("ready"))]))
+    }
+    fn profile_fiat_currency(&mut self) -> Result<String, ToolError> {
+        Ok("EUR".into())
     }
 }
 
@@ -191,6 +210,112 @@ fn only_tools_advertised_this_turn_run() {
     assert!(is_advertised(get_tool("status").unwrap(), &empty()));
 }
 
+fn names(value: Option<&Value>) -> Vec<String> {
+    match value {
+        Some(Value::List(items)) => items
+            .iter()
+            .map(|item| match item {
+                Value::Str(text) => text.as_str().unwrap().to_owned(),
+                other => panic!("{other:?}"),
+            })
+            .collect(),
+        other => panic!("{other:?}"),
+    }
+}
+
+#[test]
+fn load_tools_adds_requested_areas_only_when_offered() {
+    let mut fake = book();
+    let areas = |areas: &[&str]| {
+        dict([(
+            "areas",
+            Value::List(areas.iter().map(|area| s(*area)).collect()),
+        )])
+    };
+    // A broker turn (or `full`) never enables loading.
+    let mut state = dict([("advertised_tools", Value::List(vec![s("load_tools")]))]);
+    let denied = run(
+        &mut fake,
+        &mut state,
+        "load_tools",
+        areas(&["loans"]),
+        false,
+    );
+    assert_eq!(reason(&denied).as_deref(), Some("tool_not_advertised"));
+    let enabled = |profile: &str, on_device: bool| {
+        dict([
+            ("advertised_tools", Value::List(vec![s("load_tools")])),
+            ("load_tools_enabled", Value::Bool(true)),
+            ("tool_profile", s(profile)),
+            ("provider_on_device", Value::Bool(on_device)),
+        ])
+    };
+    let mut state = enabled("scoped", false);
+    let loaded = run(
+        &mut fake,
+        &mut state,
+        "load_tools",
+        areas(&["loans", "loans"]),
+        false,
+    );
+    let data = get(get(&loaded, "envelope").unwrap(), "data").unwrap();
+    assert_eq!(names(get(data, "areas")), ["loans"]);
+    let added = names(get(data, "added_tools"));
+    let loans: Vec<&str> = tools()
+        .iter()
+        .filter(|tool| tool.name.starts_with("ui.loans."))
+        .map(|tool| tool.provider_name())
+        .collect();
+    assert_eq!(added, loans);
+    assert_eq!(get(data, "already_offered"), Some(&Value::from(0)));
+    let mut advertised = vec!["load_tools".to_owned()];
+    advertised.extend(added.iter().cloned());
+    assert_eq!(names(get(&state, "advertised_tools")), advertised);
+    assert!(
+        matches!(get(&state, "pending_tool_definitions"), Some(Value::List(pending)) if pending.len() == loans.len())
+    );
+    // Loading again adds nothing new.
+    let again = run(
+        &mut fake,
+        &mut state,
+        "load_tools",
+        areas(&["loans"]),
+        false,
+    );
+    let data = get(get(&again, "envelope").unwrap(), "data").unwrap();
+    assert!(names(get(data, "added_tools")).is_empty());
+    assert_eq!(
+        get(data, "already_offered"),
+        Some(&Value::from(loans.len()))
+    );
+    // A restricted provider never gets the on-device-only tools.
+    for on_device in [false, true] {
+        let mut state = enabled("scoped", on_device);
+        let loaded = run(
+            &mut fake,
+            &mut state,
+            "load_tools",
+            areas(&["privacy"]),
+            false,
+        );
+        let data = get(get(&loaded, "envelope").unwrap(), "data").unwrap();
+        let added = names(get(data, "added_tools"));
+        assert_eq!(added.iter().any(|name| on_device_only(name)), on_device);
+    }
+    // The `core` profile keeps its own limit.
+    let mut state = enabled("core", true);
+    let loaded = run(
+        &mut fake,
+        &mut state,
+        "load_tools",
+        areas(&["loans"]),
+        false,
+    );
+    let data = get(get(&loaded, "envelope").unwrap(), "data").unwrap();
+    assert!(names(get(data, "added_tools")).is_empty());
+    assert_eq!(fake.visits, 0);
+}
+
 #[test]
 fn mutating_and_unknown_tools_never_reach_the_read_executor() {
     let mut fake = book();
@@ -267,10 +392,15 @@ fn egressing_reads_need_a_consent_bound_to_the_call() {
 }
 
 #[test]
-fn custody_reads_stay_with_local_providers() {
+fn custody_reads_need_full_agent_access() {
     let mut fake = book();
-    for (kind, allowed) in [("remote", false), ("local", true)] {
-        let mut state = dict([("provider_kind", s(kind))]);
+    // A restricted off-device provider, then full access, then on device.
+    for (field, allowed) in [
+        ("provider_full_access_absent", false),
+        ("provider_full_access", true),
+        ("provider_on_device", true),
+    ] {
+        let mut state = dict([("provider_kind", s("remote")), (field, Value::Bool(true))]);
         let result = run(
             &mut fake,
             &mut state,
@@ -279,12 +409,26 @@ fn custody_reads_stay_with_local_providers() {
             false,
         );
         assert_eq!(
-            reason(&result).as_deref() == Some("local_provider_required"),
+            reason(&result).as_deref() == Some("agent_access_restricted"),
             !allowed,
-            "{kind}"
+            "{field}"
         );
+        if !allowed {
+            let remediation = get(&result, "remediation").unwrap();
+            assert_eq!(
+                get(remediation, "action"),
+                Some(&s("enable_full_agent_access"))
+            );
+            assert_eq!(get(remediation, "desktop_only"), Some(&Value::Bool(true)));
+        }
     }
-    assert_eq!(fake.reads, ["ui.custody.gaps.list:ai_tool"]);
+    assert_eq!(
+        fake.reads,
+        [
+            "ui.custody.gaps.list:ai_tool",
+            "ui.custody.gaps.list:ai_tool"
+        ]
+    );
 }
 
 #[test]
@@ -322,8 +466,16 @@ fn on_device_only_tools_are_never_offered_to_other_providers() {
         let result = run(&mut fake, &mut state, name, arguments, true);
         assert_eq!(
             reason(&result).as_deref(),
-            Some("local_provider_required"),
+            Some("agent_access_restricted"),
             "{name}: {result:?}"
+        );
+        assert_eq!(
+            get(&result, "hint"),
+            Some(&s("Set the provider's agent access to full in Settings → Assistant, or use the desktop workflow.")),
+        );
+        assert_eq!(
+            get(get(&result, "remediation").unwrap(), "action"),
+            Some(&s("enable_full_agent_access"))
         );
     }
     assert!(fake.reads.is_empty());
@@ -369,7 +521,17 @@ fn no_shell_filesystem_secret_or_configuration_tool_exists() {
                         "ui.wallets.utxos",
                         "ui.wallets.identify",
                         "ui.wallets.analyze_file",
-                        "ui.wallets.sync"
+                        "ui.wallets.sync",
+                        // Rows from an attached file or document into a file
+                        // wallet (kind custom): no descriptor, backend or key.
+                        "ui.wallets.import_attachment.plan",
+                        "ui.wallets.import_attachment.apply",
+                        "ui.wallets.import_document.plan",
+                        "ui.wallets.import_document.apply",
+                        "ui.wallets.read_document",
+                        // A desktop handoff card naming a source kind; the
+                        // user enters the source in the wizard.
+                        "ui.wallets.request_input"
                     ]
                     .contains(&kind),
                     "{kind} configures sources"
@@ -403,7 +565,64 @@ fn results_are_redacted_before_they_leave_the_executor() {
     ] {
         assert!(!output.contains(private), "{private} in {output}");
     }
-    assert!(output.contains("<redacted-url>") && output.contains("<redacted-path>"));
+    // Since the 5h/5i floor the URL's span runs to the end of the line and
+    // takes the path with it, as redact_ai_tool_result does ("see <redacted-url>").
+    assert!(output.contains("<redacted-url>"));
+}
+
+#[test]
+fn visuals_refresh_journals_only_for_report_sources() {
+    for (source, refreshed) in [
+        ("overview", true),
+        ("tax_summary", true),
+        ("transactions", false),
+    ] {
+        let mut fake = book();
+        fake.maintained = Some(dict([("processed_transactions", Value::from(1))]));
+        let mut state = empty();
+        let result = run(
+            &mut fake,
+            &mut state,
+            "ui_visuals_render",
+            dict([("source", s(source))]),
+            false,
+        );
+        assert_eq!(get(&result, "ok"), Some(&Value::Bool(true)), "{result:?}");
+        assert_eq!(
+            get(&result, "auto_journal_process").is_some(),
+            refreshed,
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn stale_journal_figures_never_reach_the_model() {
+    // #681: an AI read of unprocessed journals gets an explicit state and
+    // `null` figures, never zeros that read as "nothing booked".
+    let mut fake = book();
+    fake.payload = Some(dict([
+        (
+            "status",
+            dict([
+                ("needsJournals", Value::Bool(true)),
+                ("lastProcessedAt", Value::Null),
+            ]),
+        ),
+        ("recent", Value::List(vec![s("entry")])),
+    ]));
+    let mut state = empty();
+    let result = run(
+        &mut fake,
+        &mut state,
+        "ui.journals.snapshot",
+        empty(),
+        false,
+    );
+    let data = get(get(&result, "envelope").unwrap(), "data").unwrap();
+    assert_eq!(get(data, "status"), Some(&s("unavailable")));
+    assert_eq!(get(data, "reason"), Some(&s("journals_never_processed")));
+    assert_eq!(get(data, "recent"), Some(&Value::Null));
 }
 
 #[test]
@@ -442,6 +661,15 @@ fn refresh_reads_report_journal_processing_unless_disabled() {
     assert!(get(&result, "auto_journal_process").is_none());
     let result = run(&mut fake, &mut empty(), "ui.rates.summary", empty(), false);
     assert!(get(&result, "auto_journal_process").is_none());
+    // A model calls by wire name and refreshes the same (09912e4c0).
+    let result = run(
+        &mut fake,
+        &mut empty(),
+        "ui_reports_summary",
+        empty(),
+        false,
+    );
+    assert!(get(&result, "auto_journal_process").is_some());
 }
 
 /// tests/rust_port/repro_ai_refresh_wire_name.py: models call tools by wire
@@ -501,7 +729,14 @@ fn once_only_grants_are_never_remembered() {
             let state = Arc::clone(&state);
             let tool = tool.to_owned();
             std::thread::spawn(move || {
-                state.wait("c1", &tool, &AtomicBool::new(false), Duration::from_secs(5))
+                state.wait(
+                    "c1",
+                    &tool,
+                    &AtomicBool::new(false),
+                    Duration::from_secs(5),
+                    false,
+                    false,
+                )
             })
         };
         while !state.record("c1", "allow_session") {
@@ -517,7 +752,14 @@ fn once_only_grants_are_never_remembered() {
             }
         );
         assert_eq!(state.has_session_allow(tool), remembered, "{tool}");
-        let again = state.wait("c2", tool, &cancelled, Duration::from_millis(30));
+        let again = state.wait(
+            "c2",
+            tool,
+            &cancelled,
+            Duration::from_millis(30),
+            false,
+            false,
+        );
         assert_eq!(
             again,
             if remembered {
@@ -528,6 +770,73 @@ fn once_only_grants_are_never_remembered() {
             "{tool}"
         );
     }
+}
+
+#[test]
+fn permission_modes_approve_without_asking_or_release_waiting_calls() {
+    use kassiber_ai::consent::SessionAllows;
+    let allows = SessionAllows::default();
+    let state = Arc::new(ConsentState::new(Arc::clone(&allows)));
+    assert_eq!(state.permission_mode(), "approval");
+    // `approval` asks for everything.
+    assert_eq!(state.preapproval("ui.transfers.pair", true, false), None);
+    // `auto` approves a reversible tool that stays on this machine only.
+    state.set_permission_mode("auto");
+    assert_eq!(
+        state.preapproval("ui.transfers.pair", true, false),
+        Some("mode_auto")
+    );
+    assert_eq!(state.preapproval("ui.wallets.sync", true, true), None);
+    assert_eq!(
+        state.preapproval("ui.transfers.rules.apply", false, false),
+        None
+    );
+    // `full_access` approves everything, once-only and network tools too.
+    state.set_permission_mode("full_access");
+    assert_eq!(
+        state.preapproval("ui.review.apply", false, true),
+        Some("mode_full_access")
+    );
+    // A mode switch releases the waiting calls it approves, in order.
+    state.set_permission_mode("approval");
+    let spawn = |call: &'static str, reversible: bool, egresses: bool| {
+        let state = Arc::clone(&state);
+        std::thread::spawn(move || {
+            state.wait(
+                call,
+                "ui.transfers.pair",
+                &AtomicBool::new(false),
+                Duration::from_secs(5),
+                reversible,
+                egresses,
+            )
+        })
+    };
+    let reversible = spawn("c-rev", true, false);
+    let network = spawn("c-net", true, true);
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    while state.waiting() < 2 {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "waiters never registered"
+        );
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    let released = state.set_permission_mode("auto");
+    assert_eq!(released, ["c-rev"]);
+    assert_eq!(reversible.join().unwrap(), "mode_auto");
+    let released = state.set_permission_mode("full_access");
+    assert_eq!(released, ["c-net"]);
+    assert_eq!(network.join().unwrap(), "mode_full_access");
+    // "Allow for this chat" lives in the shared session set.
+    state.set_permission_mode("approval");
+    allows.lock().unwrap().insert("ui.transfers.pair".into());
+    assert_eq!(
+        state.preapproval("ui.transfers.pair", false, false),
+        Some("allow_session")
+    );
+    allows.lock().unwrap().insert("ui.review.apply".into());
+    assert_eq!(state.preapproval("ui.review.apply", false, false), None);
 }
 
 #[test]
@@ -544,7 +853,9 @@ fn consent_waits_end_on_decision_cancel_or_timeout() {
             "early",
             "ui.wallets.sync",
             &AtomicBool::new(false),
-            Duration::from_secs(1)
+            Duration::from_secs(1),
+            false,
+            false
         ),
         "deny"
     );
@@ -553,7 +864,9 @@ fn consent_waits_end_on_decision_cancel_or_timeout() {
             "x",
             "ui.wallets.sync",
             &AtomicBool::new(true),
-            Duration::from_secs(1)
+            Duration::from_secs(1),
+            false,
+            false
         ),
         "cancelled"
     );
@@ -563,7 +876,9 @@ fn consent_waits_end_on_decision_cancel_or_timeout() {
             "y",
             "ui.wallets.sync",
             &AtomicBool::new(false),
-            Duration::from_millis(40)
+            Duration::from_millis(40),
+            false,
+            false
         ),
         "consent_timeout"
     );
@@ -672,7 +987,7 @@ fn mutating_tools_run_only_with_a_consent_bound_to_the_call() {
             dict([("consented_call_ids", s("call_1"))]),
         ] {
             if name == "ui.custody.review.apply" {
-                kassiber_envelope::set(&mut state, "provider_kind", s("local"));
+                kassiber_envelope::set(&mut state, "provider_full_access", Value::Bool(true));
             }
             let result = write(&mut fake, &mut state, name, empty(), Some(&audit()));
             assert_eq!(
@@ -686,6 +1001,47 @@ fn mutating_tools_run_only_with_a_consent_bound_to_the_call() {
             (0, 0, 0),
             "{name}"
         );
+    }
+}
+
+#[test]
+fn a_chat_file_kept_as_evidence_never_names_the_file_to_a_restricted_provider() {
+    let stored = || {
+        dict([
+            ("id", s("att-1")),
+            ("original_filename", s("statement_max.mustermann.pdf")),
+            ("filename", s("statement_max.mustermann.pdf")),
+            ("label", s("statement_max.mustermann.pdf")),
+            ("display_label", s("statement_max.mustermann.pdf")),
+        ])
+    };
+    let chat_files = Value::List(vec![dict([
+        ("id", s("file-1")),
+        ("source_file", s("/chat/statement_max.mustermann.pdf")),
+        ("filename", s("statement_max.mustermann.pdf")),
+        ("kind", s("pdf")),
+    ])]);
+    for full_access in [false, true] {
+        let mut fake = book();
+        fake.payload = Some(stored());
+        let mut state = consented();
+        kassiber_envelope::set(&mut state, "chat_files", chat_files.clone());
+        kassiber_envelope::set(&mut state, "provider_full_access", Value::Bool(full_access));
+        let result = write(
+            &mut fake,
+            &mut state,
+            "ui.attachments.add_from_chat",
+            dict([("transaction", s("tx-1")), ("file", s("file-1"))]),
+            None,
+        );
+        assert_eq!(fake.writes, ["ui.attachments.add:ai_tool"]);
+        // The managed copy is made from the grant's file, named by it.
+        assert_eq!(
+            get(&fake.written[0], "file"),
+            Some(&s("/chat/statement_max.mustermann.pdf"))
+        );
+        let text = format!("{result:?}");
+        assert_eq!(text.contains("mustermann"), full_access, "{text}");
     }
 }
 
@@ -923,7 +1279,7 @@ fn the_executors_never_cross_kind_classes() {
 }
 
 #[test]
-fn custody_writes_need_a_local_provider_and_are_audited() {
+fn custody_writes_need_full_agent_access_and_are_audited() {
     let arguments = || {
         dict([
             ("action", s("reopen")),
@@ -941,12 +1297,13 @@ fn custody_writes_need_a_local_provider_and_are_audited() {
         arguments(),
         Some(&audit()),
     );
-    assert_eq!(reason(&denied).as_deref(), Some("local_provider_required"));
+    assert_eq!(reason(&denied).as_deref(), Some("agent_access_restricted"));
     assert_eq!(fake.visits, 0);
-    // A local provider without the consent audit context, or without the
-    // frozen book scope, is refused before any write.
+    // A provider with full access, without the consent audit context or
+    // the frozen book scope, is refused before any write.
     let mut local = consented();
-    kassiber_envelope::set(&mut local, "provider_kind", s("local"));
+    kassiber_envelope::set(&mut local, "provider_kind", s("remote"));
+    kassiber_envelope::set(&mut local, "provider_full_access", Value::Bool(true));
     let missing = write(
         &mut fake,
         &mut local,
@@ -1073,6 +1430,34 @@ fn mutating_results_are_redacted_before_they_leave_the_executor() {
 }
 
 #[test]
+fn reversible_writes_name_the_call_that_takes_them_back() {
+    let mut fake = book();
+    fake.payload = Some(dict([("id", s(" pair-9 "))]));
+    let mut state = consented();
+    let pair = dict([("tx_out", s("a")), ("tx_in", s("b"))]);
+    let result = write(&mut fake, &mut state, "ui.transfers.pair", pair, None);
+    let data = get(get(&result, "envelope").unwrap(), "data").unwrap();
+    assert_eq!(
+        get(data, "undo"),
+        Some(&dict([
+            ("tool", s("ui_transfers_unpair")),
+            ("arguments", dict([("pair_id", s("pair-9"))])),
+        ]))
+    );
+    // A tool that is not reversible gets no hint, whatever its result.
+    let mut state = consented();
+    let saved = write(
+        &mut fake,
+        &mut state,
+        "ui.saved_views.delete",
+        dict([("view_id", s("v"))]),
+        None,
+    );
+    let data = get(get(&saved, "envelope").unwrap(), "data").unwrap();
+    assert_eq!(get(data, "undo"), None);
+}
+
+#[test]
 fn consent_previews_never_write() {
     let mut fake = book();
     let mut state = dict([("provider_on_device", Value::Bool(false))]);
@@ -1097,7 +1482,7 @@ fn consent_previews_never_write() {
             data_root: "/data",
             state: &mut state,
         };
-        let card = consent_request(entry, &call, &mut runtime, &mut fake);
+        let card = consent_request(entry, &call, &mut runtime, &mut fake).unwrap();
         assert_eq!(get(&card, "call_id"), Some(&s("call_1")), "{name}");
         if name.starts_with("ui.chain_analysis.") {
             // Other providers never see a recomputed acquisition or dataset.
@@ -1105,7 +1490,7 @@ fn consent_previews_never_write() {
                 get(&card, "arguments_preview"),
                 Some(&dict([
                     ("status", s("blocked")),
-                    ("code", s("local_provider_required"))
+                    ("code", s("agent_access_restricted"))
                 ])),
                 "{name}"
             );

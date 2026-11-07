@@ -31,9 +31,10 @@ pub const TOOL_CAPABILITY_NAMES: [&str; 12] = [
 
 /// `CORE_TOOL_NAMES` (after its union with `REVIEW_TOOL_NAMES`): the default
 /// `kassiber chat` profile.
-pub const CORE_TOOL_NAMES: [&str; 60] = [
+pub const CORE_TOOL_NAMES: [&str; 75] = [
     "read_skill_reference",
     "status",
+    "ui.attachments.add_from_chat",
     "ui.attachments.list",
     "ui.audit.changes_since_last_answer",
     "ui.audit.evidence.summary",
@@ -46,8 +47,12 @@ pub const CORE_TOOL_NAMES: [&str; 60] = [
     "ui.custody.review.apply",
     "ui.custody.review.plan",
     "ui.documents.list",
+    "ui.imports.list",
+    "ui.imports.rollback",
+    "ui.imports.rollback.plan",
     "ui.journals.process",
     "ui.journals.quarantine",
+    "ui.journals.quarantine.groups",
     "ui.journals.quarantine.resolve",
     "ui.journals.snapshot",
     "ui.journals.transfers.list",
@@ -75,27 +80,37 @@ pub const CORE_TOOL_NAMES: [&str; 60] = [
     "ui.transactions.extremes",
     "ui.transactions.graph",
     "ui.transactions.history",
+    "ui.transactions.history.revert",
     "ui.transactions.list",
     "ui.transactions.resolve",
     "ui.transactions.review_context",
     "ui.transactions.search",
+    "ui.transactions.verify",
     "ui.transfers.components.apply",
     "ui.transfers.components.list",
     "ui.transfers.components.plan",
+    "ui.transfers.dismiss",
+    "ui.transfers.dismissals.delete",
+    "ui.transfers.dismissals.list",
     "ui.transfers.list",
     "ui.transfers.pair",
     "ui.transfers.review_context",
     "ui.transfers.rules.list",
     "ui.transfers.suggest",
+    "ui.transfers.unpair",
+    "ui.visuals.render",
     "ui.wallets.analyze_file",
     "ui.wallets.identify",
+    "ui.wallets.import_attachment.apply",
+    "ui.wallets.import_attachment.plan",
     "ui.wallets.list",
+    "ui.wallets.request_input",
     "ui.wallets.sync",
     "ui.workspace.health",
 ];
 
 /// `REVIEW_TOOL_NAMES`: a quarantine investigation's bounded pack.
-pub const REVIEW_TOOL_NAMES: [&str; 35] = [
+pub const REVIEW_TOOL_NAMES: [&str; 37] = [
     "ui.attachments.list",
     "ui.audit.evidence.summary",
     "ui.custody.coverage.snapshot",
@@ -108,6 +123,7 @@ pub const REVIEW_TOOL_NAMES: [&str; 35] = [
     "ui.documents.list",
     "ui.journals.process",
     "ui.journals.quarantine",
+    "ui.journals.quarantine.groups",
     "ui.journals.quarantine.resolve",
     "ui.journals.snapshot",
     "ui.rates.coverage",
@@ -123,6 +139,7 @@ pub const REVIEW_TOOL_NAMES: [&str; 35] = [
     "ui.transactions.list",
     "ui.transactions.resolve",
     "ui.transactions.review_context",
+    "ui.transactions.verify",
     "ui.transfers.components.apply",
     "ui.transfers.components.list",
     "ui.transfers.components.plan",
@@ -143,13 +160,27 @@ pub const CORE_CAPABILITY_TOOL_NAMES: [&str; 6] = [
     "ui.workspace.health",
 ];
 
-/// Phrases that ask for the full catalog.
-const DISCOVERY_PHRASES: [&str; 4] = [
-    "what can you do",
-    "all tools",
-    "capabilities",
-    "tool catalog",
+/// `WALLET_IMPORT_TOOL_NAMES`: importing an attached file, its rollback and
+/// the connect handoff, wallet work rather than operations.
+pub const WALLET_IMPORT_TOOL_NAMES: [&str; 6] = [
+    "ui.imports.list",
+    "ui.imports.rollback",
+    "ui.imports.rollback.plan",
+    "ui.wallets.import_attachment.apply",
+    "ui.wallets.import_attachment.plan",
+    "ui.wallets.request_input",
 ];
+
+/// `CHAT_DOCUMENT_TOOL_NAMES`: reading an attached photo or PDF on device
+/// and importing its rows, offered only with an attached document.
+pub const CHAT_DOCUMENT_TOOL_NAMES: [&str; 3] = [
+    "ui.wallets.import_document.apply",
+    "ui.wallets.import_document.plan",
+    "ui.wallets.read_document",
+];
+
+/// `CHAT_DOCUMENT_CAPABILITY`: the pack only the chat loop adds.
+pub const CHAT_DOCUMENT_CAPABILITY: &str = "chat_documents";
 
 /// Phrases that make a turn a review request.
 const REVIEW_PHRASES: [&str; 6] = [
@@ -227,6 +258,39 @@ const KEYWORD_GROUPS: [(&str, &[&str]); 10] = [
             "routing",
             "profitable",
             "profitability",
+            "chart",
+            "plot",
+            "graph",
+            "diagram",
+            "visuali",
+            "grafik",
+            "schaubild",
+            // Gains, income and holdings questions that name neither "tax"
+            // nor "report".
+            "lot-by-lot",
+            "per lot",
+            "per-lot",
+            "tax lot",
+            "disposal",
+            "cost basis",
+            "loss",
+            "income",
+            "mining",
+            "staking",
+            "unrealized",
+            "unrealised",
+            "pnl",
+            "holdings",
+            "worth",
+            "gewinn",
+            "verlust",
+            "einkünfte",
+            "einkuenfte",
+            "einkommen",
+            "anschaffungskosten",
+            "kennzahl",
+            "spekulation",
+            "bestand",
         ],
     ),
     (
@@ -360,6 +424,9 @@ pub type Capabilities = Option<BTreeSet<&'static str>>;
 /// `tool_capabilities(tool)`: the packs that advertise a tool.
 pub fn tool_capabilities(tool: &ToolEntry) -> BTreeSet<&'static str> {
     let name = tool.name.as_str();
+    if CHAT_DOCUMENT_TOOL_NAMES.contains(&name) {
+        return BTreeSet::from([CHAT_DOCUMENT_CAPABILITY]);
+    }
     let mut capabilities = BTreeSet::new();
     if REVIEW_TOOL_NAMES.contains(&name) {
         capabilities.insert("review");
@@ -388,13 +455,20 @@ pub fn tool_capabilities(tool: &ToolEntry) -> BTreeSet<&'static str> {
     if name.starts_with("ui.loans.") {
         capabilities.insert("loans");
     }
+    if name == "ui.visuals.render" {
+        // Charts plot report and transaction reads.
+        capabilities.extend(["reports", "transactions"]);
+    }
     if name.starts_with("ui.reports.")
         || name.starts_with("ui.rates.")
         || ["ui.report.blockers", "ui.audit.changes_since_last_answer"].contains(&name)
     {
         capabilities.insert("reports");
     }
-    if name.starts_with("ui.wallets.")
+    if WALLET_IMPORT_TOOL_NAMES.contains(&name) {
+        // Kept out of `operations` so health questions stay small.
+        capabilities.insert("wallets");
+    } else if name.starts_with("ui.wallets.")
         || name.starts_with("ui.backends.")
         || [
             "ui.maintenance.settings",
@@ -517,12 +591,8 @@ pub fn select_tool_capabilities(
     let messages = messages?;
     let recent = recent_user_messages(messages);
     let latest = recent.last().cloned().unwrap_or_default();
-    if DISCOVERY_PHRASES
-        .iter()
-        .any(|phrase| latest.contains(phrase))
-    {
-        return None;
-    }
+    // "What can you do?" no longer advertises every schema: the system
+    // prompt's area index answers it, and `load_tools` reaches any area.
     let mut selected = BTreeSet::from(["core"]);
     let context_field = |key: &str| screen_context.and_then(|context| get(context, key));
     let route = match context_field("route") {
@@ -538,7 +608,8 @@ pub fn select_tool_capabilities(
         }
     }
     let haystack = format!("{route} {}", recent.join(" "));
-    if continues_review_checkpoint(messages, &latest)
+    if route == "/review"
+        || continues_review_checkpoint(messages, &latest)
         || REVIEW_PHRASES.iter().any(|word| haystack.contains(word))
     {
         // Evidence, wallet and report words within a repair request should
@@ -601,6 +672,18 @@ pub fn build_responses_tools(
     };
     let allowed = (profile == Some("core")).then_some(&CORE_TOOL_NAMES[..]);
     Ok(responses_tool_definitions(true, &capabilities, allowed))
+}
+
+/// `build_area_tools(areas, profile=...)`: the schemas of explicitly
+/// requested areas, under the same profile limits.
+pub fn build_area_tools(areas: &[&str], profile: Option<&str>) -> Vec<&'static ToolEntry> {
+    let selected: BTreeSet<&'static str> = TOOL_CAPABILITY_NAMES
+        .iter()
+        .copied()
+        .filter(|name| areas.contains(name))
+        .collect();
+    let allowed = (profile == Some("core")).then_some(&CORE_TOOL_NAMES[..]);
+    responses_tool_definitions(true, &Some(selected), allowed)
 }
 
 /// The tools only an on-device provider is offered: the chat loop strips

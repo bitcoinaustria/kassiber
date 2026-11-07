@@ -118,12 +118,12 @@
   {
     "id": "A-gate-local-provider",
     "file": "crates/ai/src/executor.rs",
-    "find": "        && !runtime.is(\"provider_kind\", \"local\")",
-    "replace": "        && false",
+    "find": "        && !full_access(runtime.state)\n    {\n        return tool_result_denied_with(",
+    "replace": "        && false\n    {\n        return tool_result_denied_with(",
     "expect_failing": [
-      "custody_reads_stay_with_local_providers"
+      "custody_reads_need_full_agent_access"
     ],
-    "rule": "Custody lineage reads need a local provider."
+    "rule": "Custody lineage reads need full agent access (#678)."
   },
   {
     "id": "A-gate-advertised",
@@ -248,12 +248,12 @@
   {
     "id": "B-mutate-local-custody",
     "file": "crates/ai/src/mutate.rs",
-    "find": "        && !matches!(get(runtime.state, \"provider_kind\"), Some(Value::Str(kind)) if kind.is(\"local\"))",
+    "find": "        && !crate::executor::full_access(runtime.state)",
     "replace": "        && false",
     "expect_failing": [
-      "custody_writes_need_a_local_provider_and_are_audited"
+      "custody_writes_need_full_agent_access_and_are_audited"
     ],
-    "rule": "Custody-gap writes need a local provider."
+    "rule": "Custody-gap writes need full agent access (#678)."
   },
   {
     "id": "B-mutate-stale-context",
@@ -311,7 +311,7 @@
     "find": "workspace, profile, audit, \"executed\", None,",
     "replace": "workspace, profile, audit, \"failed\", None,",
     "expect_failing": [
-      "custody_writes_need_a_local_provider_and_are_audited"
+      "custody_writes_need_full_agent_access_and_are_audited"
     ],
     "rule": "A consented custody write is audited as executed."
   },
@@ -338,7 +338,7 @@
   {
     "id": "B-preview-on-device",
     "file": "crates/ai/src/previews.rs",
-    "find": "        if !on_device(state) {\n            return Ok(blocked(\"local_provider_required\"));\n        }\n        book.active_profile()?;",
+    "find": "        if !on_device(state) {\n            return Ok(blocked(\"agent_access_restricted\"));\n        }\n        book.active_profile()?;",
     "replace": "        book.active_profile()?;",
     "expect_failing": [
       "consent_previews_never_write"
@@ -348,12 +348,12 @@
   {
     "id": "B-review-kind-override",
     "file": "crates/ai/src/review.rs",
-    "find": "        if kind == Some(&s(\"kind_override\")) {",
-    "replace": "        if kind == Some(&s(\"kind_override_x\")) {",
+    "find": "    [\"custody_component\", \"exclude\", \"price_override\", \"unpair\"];",
+    "replace": "    [\"custody_component\", \"exclude\", \"price_override\", \"pair\"];",
     "expect_failing": [
       "ai_review_operation_rules_match_python"
     ],
-    "rule": "AI review batches may not override acquisition effects."
+    "rule": "A restricted provider plans only the four restricted review operation types (#678)."
   },
   {
     "id": "B-review-conversion-activate",
@@ -609,8 +609,8 @@
   {
     "id": "R67-on-device-strip",
     "file": "crates/ai/src/chat/turn.rs",
-    "find": "let entries = strip_on_device_only(entries, on_device);",
-    "replace": "let entries = strip_on_device_only(entries, true);",
+    "find": "            strip_on_device_only(entries, crate::executor::full_access(&self.turn.state));",
+    "replace": "            strip_on_device_only(entries, true);",
     "expect_failing": [
       "on_device_tools_are_never_offered_to_other_providers"
     ],
@@ -1013,10 +1013,540 @@
     "rule": "A CLI connection test reports binary_presence when the broker's rows say so."
   },
   {
+    "id": "S12-review-full-access",
+    "file": "crates/ai/src/review.rs",
+    "find": "        if !full_access {",
+    "replace": "        if false {",
+    "expect_failing": [
+      "ai_review_operation_rules_match_python"
+    ],
+    "rule": "Only full agent access lifts the restricted review operation types."
+  },
+  {
+    "id": "S12-conversion-revision",
+    "file": "crates/ai/src/review.rs",
+    "find": "    if mode != \"conversion\" {",
+    "replace": "    if mode == \"conversion\" {",
+    "expect_failing": [
+      "ai_review_operation_rules_match_python"
+    ],
+    "rule": "An AI revision or activation never makes a conversion component effective."
+  },
+  {
+    "id": "S12-chat-document-pack",
+    "file": "crates/ai/src/select.rs",
+    "find": "        return BTreeSet::from([CHAT_DOCUMENT_CAPABILITY]);",
+    "replace": "        return BTreeSet::from([\"core\"]);",
+    "expect_failing": [
+      "tool_capabilities_match_python"
+    ],
+    "rule": "Chat-document tools belong to no capability pack the question selects."
+  },
+  {
+    "id": "S12-review-route",
+    "file": "crates/ai/src/select.rs",
+    "find": "    if route == \"/review\"",
+    "replace": "    if route == \"/reviewx\"",
+    "expect_failing": [
+      "selection_matches_python"
+    ],
+    "rule": "The Review screen selects the bounded review pack."
+  },
+  {
+    "id": "S12-load-tools-restricted",
+    "file": "crates/ai/src/executor.rs",
+    "find": "        crate::select::build_area_tools(&names, profile),\n        full_access(state),",
+    "replace": "        crate::select::build_area_tools(&names, profile),\n        true,",
+    "expect_failing": [
+      "load_tools_adds_requested_areas_only_when_offered"
+    ],
+    "rule": "load_tools never offers on-device-only tools to a restricted provider."
+  },
+  {
+    "id": "S12-load-tools-enabled",
+    "file": "crates/ai/src/executor.rs",
+    "find": "    if !enabled || !matches!(get(state, \"advertised_tools\"), Some(Value::List(_))) {",
+    "replace": "    if !matches!(get(state, \"advertised_tools\"), Some(Value::List(_))) {",
+    "expect_failing": [
+      "load_tools_adds_requested_areas_only_when_offered"
+    ],
+    "rule": "load_tools works only on turns that offered it."
+  },
+  {
+    "id": "S12-once-only-rollback",
+    "file": "crates/ai/src/consent.rs",
+    "find": "    \"ui.imports.rollback\",\n",
+    "replace": "    \"ui.imports.rollback.plan\",\n",
+    "expect_failing": [
+      "constants_match_python"
+    ],
+    "rule": "Each import rollback is its own plan-bound decision."
+  },
+  {
+    "id": "S12-planner-visuals",
+    "file": "crates/ai/src/planner.rs",
+    "find": "        plan.add(\"ui.visuals.render\", arguments);",
+    "replace": "        let _ = arguments;",
+    "expect_failing": [
+      "planner_matches_python"
+    ],
+    "rule": "A chart request plans the chart's local read."
+  },
+  {
+    "id": "S12-summary-group",
+    "file": "crates/ai/src/summary.rs",
+    "find": ".map(|group| Text::default().push(\"the root of \").py(&group).done())",
+    "replace": ".map(|group| Text::default().push(\"the group \").py(&group).done())",
+    "expect_failing": [
+      "summaries_match_python"
+    ],
+    "rule": "A group resolution names the group's root in its consent text."
+  },
+  {
+    "id": "S12-summary-nonstring-action",
+    "file": "crates/ai/src/summary.rs",
+    "find": "                    \"validation\",\n                    \"Custody component review action is unsupported\",",
+    "replace": "                    \"internal_error\",\n                    \"Custody component review action is unsupported\",",
+    "expect_failing": [
+      "summaries_match_python"
+    ],
+    "rule": "A non-string component action is a validation result, not a failed turn (b2c0d9447)."
+  },
+  {
+    "id": "S12-prompt-area-index",
+    "file": "crates/ai/src/prompt.rs",
+    "find": "        Some(PromptKind::Kassiber) if tools_enabled => s(kassiber_system_prompt()),",
+    "replace": "        Some(PromptKind::Kassiber) if tools_enabled => s(default_system_prompt()),",
+    "expect_failing": [
+      "messages_gain_one_system_message"
+    ],
+    "rule": "A tool-enabled turn's prompt carries the tool-area index."
+  },
+  {
+    "id": "S12-provider-access-output",
+    "file": "crates/ai/src/providers/mod.rs",
+    "find": "    \"omit_store_field\",\n    \"agent_access\",\n    \"created_at\",",
+    "replace": "    \"omit_store_field\",\n    \"created_at\",",
+    "expect_failing": [
+      "list_with_default_payload_shape"
+    ],
+    "rule": "Provider rows report their agent access (#678)."
+  },
+  {
+    "id": "S12-provider-access-unknown",
+    "file": "crates/ai/src/providers/mod.rs",
+    "find": "    s(normalize_agent_access(value).unwrap_or(AGENT_ACCESS_RESTRICTED))",
+    "replace": "    s(normalize_agent_access(value).unwrap_or(AGENT_ACCESS_FULL))",
+    "expect_failing": [
+      "agent_access_is_full_or_restricted_and_unknown_values_restrict"
+    ],
+    "rule": "An unknown stored agent access restricts rather than widening access."
+  },
+  {
+    "id": "S12-check-models-cap",
+    "file": "crates/ai/src/providers/checks.rs",
+    "find": "            Value::List(models.iter().take(MAX_SAVED_MODELS).cloned().collect())\n",
+    "replace": "            Value::List(models.to_vec())\n",
+    "expect_failing": [
+      "checks_are_bound_to_the_endpoint_and_capped"
+    ],
+    "rule": "A saved model list is capped at 1000 entries."
+  },
+  {
+    "id": "S12-check-endpoint",
+    "file": "crates/ai/src/providers/checks.rs",
+    "find": "    if stored_url != kassiber_envelope::s(base_url) {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "checks_are_bound_to_the_endpoint_and_capped"
+    ],
+    "rule": "A saved check is read back only at the base URL it was made at."
+  },
+  {
+    "id": "S12-check-clear-on-address",
+    "file": "crates/ai/src/providers/mod.rs",
+    "find": "        if base_changed || clear.contains(\"api_key\") || present(&updates.api_key) {",
+    "replace": "        if clear.contains(\"api_key\") || present(&updates.api_key) {",
+    "expect_failing": [
+      "a_check_marks_a_built_in_provider_set_up_until_its_address_changes"
+    ],
+    "rule": "A new address forgets what the old one's check found."
+  },
+  {
+    "id": "S12-set-up-checked",
+    "file": "crates/ai/src/providers/mod.rs",
+    "find": "    if !is_untouched_seed(provider) || is_default || truthy(last_checked_at) {",
+    "replace": "    if !is_untouched_seed(provider) || is_default {",
+    "expect_failing": [
+      "a_check_marks_a_built_in_provider_set_up_until_its_address_changes"
+    ],
+    "rule": "A built-in provider counts as set up once it was checked at its address."
+  },
+  {
+    "id": "S12-discovery-seed-expired",
+    "file": "crates/ai/src/discovery/mod.rs",
+    "find": "                    snapshot,\n                    expires: Instant::now(),",
+    "replace": "                    snapshot,\n                    expires: Instant::now() + self.ttl,",
+    "expect_failing": [
+      "a_seeded_snapshot_is_reported_but_never_spares_a_probe"
+    ],
+    "rule": "A saved check never spares the next explicit probe."
+  },
+  {
+    "id": "S12-review-nonstring-type",
+    "file": "crates/ai/src/review.rs",
+    "find": "        if !matches!(kind, Some(Value::Str(_))) {",
+    "replace": "        if false {",
+    "expect_failing": [
+      "ai_review_operation_rules_match_python"
+    ],
+    "rule": "A non-string review operation type is refused as validation (5d8b2658a)."
+  },
+  {
+    "id": "S12-chat-whole-answer",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "            content.push_str(&leg.content);",
+    "replace": "            content = leg.content;",
+    "expect_failing": [
+      "a_tool_turn_saves_every_leg_of_its_answer"
+    ],
+    "rule": "A tool turn's saved answer is every leg the user saw (a26567dfa)."
+  },
+  {
+    "id": "S12-chat-summary-refusal",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "                        && summary_refusal.is_none()\n",
+    "replace": "\n",
+    "expect_failing": [
+      "a_call_the_consent_card_cannot_describe_is_refused_before_any_card"
+    ],
+    "rule": "A call the consent card cannot describe gets no card (b2c0d9447)."
+  },
+  {
+    "id": "S12-chat-resume-fingerprint",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "        .then(|| history_fingerprint(before))",
+    "replace": "        .then(|| history_fingerprint(messages))",
+    "expect_failing": [
+      "resume_looks_up_the_transcript_before_the_new_prompt"
+    ],
+    "rule": "A cursor is looked up against the transcript before the new prompt (7e3e9e286)."
+  },
+  {
+    "id": "S12-chat-full-profile",
+    "file": "crates/ai/src/chat/args.rs",
+    "find": "        None => \"full\",",
+    "replace": "        None => \"scoped\",",
+    "expect_failing": [
+      "every_tool_is_offered_unless_the_caller_narrows_it"
+    ],
+    "rule": "Every tool is offered unless the caller narrows it (#684)."
+  },
+  {
+    "id": "S12-full-access-flag",
+    "file": "crates/ai/src/executor.rs",
+    "find": "    get(state, \"provider_full_access\") == Some(&Value::Bool(true))\n",
+    "replace": "    false\n",
+    "expect_failing": [
+      "custody_reads_need_full_agent_access"
+    ],
+    "rule": "A provider the user did not restrict has full agent access off the device (#678)."
+  },
+  {
+    "id": "S12-error-remediation",
+    "file": "crates/ai/src/executor.rs",
+    "find": "        \"agent_access_restricted\" => Some(agent_access_remediation()),",
+    "replace": "        \"agent_access_restricted\" => None,",
+    "expect_failing": [
+      "on_device_only_tools_are_never_offered_to_other_providers"
+    ],
+    "rule": "An agent-access refusal tells the model only the user can lift it."
+  },
+  {
+    "id": "S12-error-hint",
+    "file": "crates/ai/src/executor.rs",
+    "find": "        kassiber_envelope::set(&mut result, \"hint\", redact_ai_tool_result(&s(hint)));",
+    "replace": "        let _ = hint;",
+    "expect_failing": [
+      "on_device_only_tools_are_never_offered_to_other_providers"
+    ],
+    "rule": "A failed tool's hint reaches the model."
+  },
+  {
+    "id": "S12-undo-attached",
+    "file": "crates/ai/src/mutate.rs",
+    "find": "        Ok(result) => with_undo(entry, call, result),",
+    "replace": "        Ok(result) => result,",
+    "expect_failing": [
+      "reversible_writes_name_the_call_that_takes_them_back"
+    ],
+    "rule": "A reversible write's result names the call that takes it back (#684)."
+  },
+  {
+    "id": "S12-undo-btc-precision",
+    "file": "crates/ai/src/undo.rs",
+    "find": "    const PRECISION: usize = 32;",
+    "replace": "    const PRECISION: usize = 28;",
+    "expect_failing": [
+      "undo_hints_match_python"
+    ],
+    "rule": "Undo amounts keep Kassiber's 32-digit decimal precision."
+  },
+  {
+    "id": "S12-mode-auto-local-only",
+    "file": "crates/ai/src/consent.rs",
+    "find": "        \"auto\" if reversible && !egresses => Some(\"mode_auto\"),",
+    "replace": "        \"auto\" if reversible => Some(\"mode_auto\"),",
+    "expect_failing": [
+      "permission_modes_approve_without_asking_or_release_waiting_calls"
+    ],
+    "rule": "Auto never approves a tool that leaves the machine (#684)."
+  },
+  {
+    "id": "S12-mode-release-filter",
+    "file": "crates/ai/src/consent.rs",
+    "find": "                    && mode_decision(mode, *reversible, *egresses).is_some()\n",
+    "replace": "\n",
+    "expect_failing": [
+      "permission_modes_approve_without_asking_or_release_waiting_calls"
+    ],
+    "rule": "A mode switch releases only the calls the new mode approves."
+  },
+  {
+    "id": "S12-mode-wait-recheck",
+    "file": "crates/ai/src/consent.rs",
+    "find": "            if let Some(decision) = mode_decision(&state.permission_mode, reversible, egresses) {\n                break decision.to_owned();\n            }\n",
+    "replace": "",
+    "expect_failing": [
+      "switching_modes_releases_a_waiting_call"
+    ],
+    "rule": "A waiting call sees a mode switch that approves it."
+  },
+  {
+    "id": "S12-approval-label",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "        Some(\"mode_auto\") => \"auto\",",
+    "replace": "        Some(\"mode_auto\") => \"required\",",
+    "expect_failing": [
+      "a_permission_mode_approves_without_asking"
+    ],
+    "rule": "A call approved by the mode says so in its approval label."
+  },
+  {
+    "id": "S12-session-allows-shared",
+    "file": "crates/ai/src/chat/registry.rs",
+    "find": "            Some(session_id) => session_allows(&mut self.lock(), session_id),",
+    "replace": "            Some(_) => SessionAllows::default(),",
+    "expect_failing": [
+      "an_allow_for_this_chat_carries_to_the_next_turn"
+    ],
+    "rule": "Allow for this chat lasts the whole chat session (#685)."
+  },
+  {
+    "id": "S12-permission-mode-default",
+    "file": "crates/ai/src/chat/args.rs",
+    "find": "        None => \"approval\",",
+    "replace": "        None => \"auto\",",
+    "expect_failing": [
+      "every_tool_is_offered_unless_the_caller_narrows_it"
+    ],
+    "rule": "An absent permission mode asks for every change."
+  },
+  {
+    "id": "S12-stale-overview-cost-basis",
+    "file": "crates/ai/src/projections.rs",
+    "find": "let mut fiat = nulled(fiat, &[\"eurCostBasis\", \"eurUnrealized\", \"eurRealizedYTD\"]);",
+    "replace": "let mut fiat = nulled(fiat, &[\"eurUnrealized\", \"eurRealizedYTD\"]);",
+    "expect_failing": [
+      "stale_journal_figures_are_withheld_as_python_withholds_them"
+    ],
+    "rule": "A stale overview withholds the cost basis as well as the unrealized and realized figures (#681)."
+  },
+  {
+    "id": "S12-stale-capital-gains-always-stale",
+    "file": "crates/ai/src/projections.rs",
+    "find": "|| kind == \"ui.reports.capital_gains\"",
+    "replace": "|| kind == \"ui.journals.snapshot\"",
+    "expect_failing": [
+      "stale_journal_figures_are_withheld_as_python_withholds_them"
+    ],
+    "rule": "Withheld capital gains are always `journals_stale`; the journal reads say `journals_never_processed` before any processing."
+  },
+  {
+    "id": "S12-stale-transfers-only-when-stale",
+    "file": "crates/ai/src/projections.rs",
+    "find": "if get(&summary, \"projection_status\") != Some(&s(\"stale\")) {",
+    "replace": "if get(&summary, \"projection_status\") == Some(&s(\"current\")) {",
+    "expect_failing": [
+      "stale_journal_figures_are_withheld_as_python_withholds_them"
+    ],
+    "rule": "Journal transfer pairs are withheld only when their projection is stale."
+  },
+  {
+    "id": "S12-stale-projection-applied",
+    "file": "crates/ai/src/executor.rs",
+    "find": "        let mut payload = projections::stale_journal_figures_for_ai(\n            kind,\n",
+    "replace": "        let mut payload = (|_: &str, payload: Value| payload)(\n            kind,\n",
+    "expect_failing": [
+      "stale_journal_figures_never_reach_the_model"
+    ],
+    "rule": "Every AI read passes the stale-journal projection before it leaves the executor."
+  },
+  {
+    "id": "S12-refresh-by-catalog-entry",
+    "file": "crates/ai/src/executor.rs",
+    "find": "    let wants = AUTO_JOURNAL_REFRESH_TOOLS.contains(&entry.name.as_str())",
+    "replace": "    let wants = AUTO_JOURNAL_REFRESH_TOOLS.iter().any(|name| call.name.is(name))",
+    "expect_failing": [
+      "refresh_reads_report_journal_processing_unless_disabled"
+    ],
+    "rule": "A model's wire-name read refreshes stale journals like the planner's dotted one (09912e4c0)."
+  },
+  {
+    "id": "S12-files-name-only-with-full-access",
+    "file": "crates/ai/src/chat/files.rs",
+    "find": "        let described = if full_access && !filename.is_empty() {",
+    "replace": "        let described = if !filename.is_empty() {",
+    "expect_failing": [
+      "a_restricted_provider_is_told_extensions_only"
+    ],
+    "rule": "A restricted provider is told a file's extension, never its name (#693)."
+  },
+  {
+    "id": "S12-files-shown-only-with-full-access",
+    "file": "crates/ai/src/chat/files.rs",
+    "find": "    if crate::executor::full_access(state) {",
+    "replace": "    if true {",
+    "expect_failing": [
+      "only_a_full_access_provider_sees_an_image"
+    ],
+    "rule": "Only a full-access provider is shown an attached image or PDF."
+  },
+  {
+    "id": "S12-files-earlier-in-own-message",
+    "file": "crates/ai/src/chat/files.rs",
+    "find": "                let target = if resumed && !is_new(entry) {",
+    "replace": "                let target = if false && resumed && !is_new(entry) {",
+    "expect_failing": [
+      "only_a_full_access_provider_sees_an_image"
+    ],
+    "rule": "A resumed session gets earlier files in a message of their own, which it skips."
+  },
+  {
+    "id": "S12-files-tool-reads-its-kinds",
+    "file": "crates/ai/src/chat/files.rs",
+    "find": "        if !reads(found) {",
+    "replace": "        if false && !reads(found) {",
+    "expect_failing": [
+      "files_are_chosen_by_id_and_kind"
+    ],
+    "rule": "A tool reads only the kinds of file it takes, by id."
+  },
+  {
+    "id": "S12-history-keeps-file-cards",
+    "file": "crates/ai/src/chat/history.rs",
+    "find": "    let user_provenance = if exchange.user_attachments.is_empty() {",
+    "replace": "    let user_provenance = if true {",
+    "expect_failing": [
+      "persist_follows_the_stored_policy_and_the_frozen_book"
+    ],
+    "rule": "The user row keeps the cards of the files its message first sent (#697)."
+  },
+  {
+    "id": "S12-broker-images-inline-only",
+    "file": "crates/ai/src/broker/mod.rs",
+    "find": "        if encoding == \"base64\" && media_type.starts_with(\"image/\") && !data.is_empty() {",
+    "replace": "        if !data.is_empty() {",
+    "expect_failing": [
+      "only_inline_image_data_reaches_the_broker"
+    ],
+    "rule": "The broker gets only base64 image data URLs, never a remote URL or other content."
+  },
+  {
+    "id": "S12-evidence-from-chat-withholds-name",
+    "file": "crates/ai/src/mutate.rs",
+    "find": "    if !crate::executor::full_access(state) {\n        // The note gave a restricted provider the extension only.",
+    "replace": "    if false {\n        // The note gave a restricted provider the extension only.",
+    "expect_failing": [
+      "a_chat_file_kept_as_evidence_never_names_the_file_to_a_restricted_provider"
+    ],
+    "rule": "Keeping a chat file as evidence never returns its name to a restricted provider."
+  },
+  {
+    "id": "S12-rollback-bound-to-plan",
+    "file": "crates/ai/src/import_runs.rs",
+    "find": "    if !py_eq(&field(\"input_version\"), expected_input_version)",
+    "replace": "    if false && !py_eq(&field(\"input_version\"), expected_input_version)",
+    "expect_failing": [
+      "a_rollback_runs_only_on_the_plan_the_user_saw"
+    ],
+    "rule": "A rollback runs only on the plan and book version the user consented to (#682)."
+  },
+  {
+    "id": "S12-rollback-blocked-by-reviewed-work",
+    "file": "crates/ai/src/import_runs.rs",
+    "find": "    if matches!(get(&current, \"blockers\"), Some(Value::List(blockers)) if !blockers.is_empty()) {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "reviewed_work_blocks_a_rollback_from_chat"
+    ],
+    "rule": "A rollback that would delete reviewed work is the desktop's decision."
+  },
+  {
+    "id": "S12-rollback-withholds-filename",
+    "file": "crates/ai/src/import_runs.rs",
+    "find": "    if !full_access {\n        payload = without_filename(&payload);",
+    "replace": "    if false {\n        payload = without_filename(&payload);",
+    "expect_failing": [
+      "a_rollback_runs_only_on_the_plan_the_user_saw"
+    ],
+    "rule": "A restricted provider never gets an import run's recorded filename."
+  },
+  {
+    "id": "S12-visual-refresh-report-sources",
+    "file": "crates/ai/src/executor.rs",
+    "find": "        && (entry.name != \"ui.visuals.render\"",
+    "replace": "        && (true",
+    "expect_failing": [
+      "visuals_refresh_journals_only_for_report_sources"
+    ],
+    "rule": "A visual refreshes journals only for the report sources whose read tools do (#676)."
+  },
+  {
+    "id": "S12-visual-rows-only-while-few",
+    "file": "crates/ai/src/visuals.rs",
+    "find": "    if rows.len() <= MODEL_ROW_LIMIT {",
+    "replace": "    if true {",
+    "expect_failing": [
+      "chat_visuals_match_python"
+    ],
+    "rule": "The model reads a visual's rows only while they are few; the digest otherwise."
+  },
+  {
+    "id": "S12-visual-zero-value-is-missing-price",
+    "file": "crates/ai/src/visuals.rs",
+    "find": "            if quantity.is_some_and(|q| q != 0.0) && market_value.is_none_or(|v| v == 0.0) {\n                market_value = None;\n                missing_prices += 1;\n            }\n            rows.push(dict([\n                (\"period\"",
+    "replace": "            if false {\n                market_value = None;\n                missing_prices += 1;\n            }\n            rows.push(dict([\n                (\"period\"",
+    "expect_failing": [
+      "chat_visuals_match_python"
+    ],
+    "rule": "A held balance valued at zero is a missing price, never plotted as zero."
+  },
+  {
+    "id": "S12-visual-names-own-wallets-only",
+    "file": "crates/ai/src/visuals.rs",
+    "find": "                if [\"owned\", \"ambiguous\"].contains(&ownership.as_str())",
+    "replace": "                if true",
+    "expect_failing": [
+      "chat_visuals_match_python"
+    ],
+    "rule": "A flow visual names only the user's own wallets; other parties stay generic."
+  },
+  {
     "id": "A-chat-resume-before-prompt",
     "file": "crates/ai/src/chat/turn.rs",
-    "find": "    Some(history_fingerprint(prior))\n}",
-    "replace": "    let _ = prior;\n    Some(history_fingerprint(messages))\n}",
+    "find": "        .then(|| history_fingerprint(before))",
+    "replace": "        .then(|| history_fingerprint(messages))",
     "expect_failing": [
       "the_next_prompt_resumes_the_branch_before_it"
     ],
@@ -1025,8 +1555,8 @@
   {
     "id": "A-chat-resume-needs-a-prompt",
     "file": "crates/ai/src/chat/turn.rs",
-    "find": "    if !matches!(last, Value::Dict(_)) || get(last, \"role\") != Some(&s(\"user\")) {",
-    "replace": "    if !matches!(last, Value::Dict(_)) {",
+    "find": "    (matches!(last, Value::Dict(_)) && get(last, \"role\") == Some(&s(\"user\")))",
+    "replace": "    (matches!(last, Value::Dict(_)))",
     "expect_failing": [
       "the_next_prompt_resumes_the_branch_before_it"
     ],
@@ -1035,8 +1565,8 @@
   {
     "id": "wire-chat-cursor-binds-every-leg",
     "file": "crates/ai/src/chat/turn.rs",
-    "find": "            self.remember_provider_session(&shown);",
-    "replace": "            self.remember_provider_session(&content);",
+    "find": "            content.push_str(&leg.content);",
+    "replace": "            content = leg.content;",
     "expect_failing": [
       "tests/test_rust_ai_chat.py::RustAiChatParityTest::test_broker_chat_tool_round_and_resumed_cursor"
     ],
@@ -1055,8 +1585,8 @@
   {
     "id": "A-refresh-wire-name",
     "file": "crates/ai/src/executor.rs",
-    "find": "    let refresh = AUTO_JOURNAL_REFRESH_TOOLS.contains(&entry.name.as_str())",
-    "replace": "    let refresh = AUTO_JOURNAL_REFRESH_TOOLS.iter().any(|name| call.name.is(name))",
+    "find": "    let wants = AUTO_JOURNAL_REFRESH_TOOLS.contains(&entry.name.as_str())",
+    "replace": "    let wants = AUTO_JOURNAL_REFRESH_TOOLS.iter().any(|name| call.name.is(name))",
     "expect_failing": [
       "wire_name_reads_refresh_like_catalog_names"
     ],
@@ -1074,9 +1604,9 @@
   },
   {
     "id": "wire-ai-write-refusal-hint",
-    "file": "crates/ai/src/mutate.rs",
-    "find": "                set(&mut result, \"hint\", redact_ai_tool_result(&s(hint)));",
-    "replace": "                let _ = hint;",
+    "file": "crates/ai/src/executor.rs",
+    "find": "        kassiber_envelope::set(&mut result, \"hint\", redact_ai_tool_result(&s(hint)));",
+    "replace": "        let _ = hint;",
     "expect_failing": [
       "tests/test_rust_ai_tools.py::AiToolExecutorParityTest::test_unreadable_wallet_config_refuses_wallet_sync_typed"
     ],

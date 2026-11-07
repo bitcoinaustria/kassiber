@@ -2,7 +2,7 @@
 //! registry of running chats, their cancel handles and consent queues, early
 //! cancels, and provider session cursors.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 use kassiber_envelope::py_str;
 use kassiber_pyjson::Value;
 
-use crate::consent::ConsentState;
+use crate::consent::{ConsentState, SessionAllows, SESSION_ALLOWS_MAX};
 
 /// `PENDING_AI_CANCEL_TTL_SECONDS`: how long a cancel that arrived before
 /// its chat is held.
@@ -31,10 +31,10 @@ pub struct ActiveChat {
 }
 
 impl ActiveChat {
-    fn new() -> Self {
+    fn new(allow_session: SessionAllows) -> Self {
         ActiveChat {
             cancelled: AtomicBool::new(false),
-            consent: ConsentState::default(),
+            consent: ConsentState::new(allow_session),
             handler: Mutex::new(None),
         }
     }
@@ -50,6 +50,29 @@ struct State {
     pending: HashMap<String, Instant>,
     /// `(chat session id, provider name)` → `(cursor, history fingerprint)`.
     provider_sessions: HashMap<(String, String), (String, String)>,
+    /// Tools the user allowed for a whole chat session, in memory only,
+    /// least recently used first.
+    session_allows: Vec<(String, SessionAllows)>,
+}
+
+/// `_session_allows_locked(session_id)`: the session's set, most recently
+/// used, keeping at most `SESSION_ALLOWS_MAX` sessions.
+fn session_allows(state: &mut State, session_id: &str) -> SessionAllows {
+    let allowed = match state
+        .session_allows
+        .iter()
+        .position(|(id, _)| id == session_id)
+    {
+        Some(at) => state.session_allows.remove(at).1,
+        None => SessionAllows::default(),
+    };
+    state
+        .session_allows
+        .push((session_id.to_owned(), Arc::clone(&allowed)));
+    while state.session_allows.len() > SESSION_ALLOWS_MAX {
+        state.session_allows.remove(0);
+    }
+    allowed
 }
 
 /// The registry. One per daemon; clones share it.
@@ -75,10 +98,29 @@ impl ActiveChats {
             .unwrap_or_else(|poison| poison.into_inner())
     }
 
-    /// `register(request_id)`: a held cancel for this key starts the chat
-    /// cancelled.
-    pub fn register(&self, key: Option<&str>) -> Arc<ActiveChat> {
-        let chat = Arc::new(ActiveChat::new());
+    /// `remember_session_allows(session_id, allowed)`: keep a finished
+    /// answer's chat-wide allows for the chat's next turn.
+    pub fn remember_session_allows(&self, session_id: Option<&str>, allowed: &HashSet<String>) {
+        let Some(session_id) = session_id.filter(|id| !id.is_empty()) else {
+            return;
+        };
+        if allowed.is_empty() {
+            return;
+        }
+        let set = session_allows(&mut self.lock(), session_id);
+        set.lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+            .extend(allowed.iter().cloned());
+    }
+
+    /// `register(request_id, session_id=...)`: a held cancel for this key
+    /// starts the chat cancelled; a known chat session lends its allows.
+    pub fn register(&self, key: Option<&str>, session_id: Option<&str>) -> Arc<ActiveChat> {
+        let allowed = match session_id.filter(|id| !id.is_empty()) {
+            Some(session_id) => session_allows(&mut self.lock(), session_id),
+            None => SessionAllows::default(),
+        };
+        let chat = Arc::new(ActiveChat::new(allowed));
         let Some(key) = key else {
             return chat;
         };
@@ -206,6 +248,13 @@ impl ActiveChats {
         chat.is_some_and(|chat| chat.consent.record(call_id, decision))
     }
 
+    /// `set_permission_mode(target_request_id, mode)`: the calls the new mode
+    /// releases, or `None` when no such chat runs.
+    pub fn set_permission_mode(&self, target: &str, mode: &str) -> Option<Vec<String>> {
+        let chat = self.lock().chats.get(target).cloned()?;
+        Some(chat.consent.set_permission_mode(mode))
+    }
+
     /// Whether any chat is registered (the daemon polls its task queue
     /// while one is).
     pub fn is_empty(&self) -> bool {
@@ -241,13 +290,13 @@ mod tests {
     fn an_early_cancel_is_held_and_starts_the_chat_cancelled() {
         let chats = ActiveChats::default();
         assert_eq!(chats.cancel("chat-early"), (false, true));
-        let chat = chats.register(Some("chat-early"));
+        let chat = chats.register(Some("chat-early"), None);
         assert!(chat.is_cancelled());
         // Held once: a second chat under the key starts normally.
-        let again = chats.register(Some("chat-early"));
+        let again = chats.register(Some("chat-early"), None);
         assert!(!again.is_cancelled());
         // A chat without a key is never registered.
-        let anonymous = chats.register(None);
+        let anonymous = chats.register(None, None);
         assert!(!anonymous.is_cancelled());
         assert_eq!(chats.cancel("other"), (false, true));
     }
@@ -260,15 +309,15 @@ mod tests {
         }
         assert_eq!(chats.lock().pending.len(), MAX_PENDING_CANCELS);
         // The earliest went first.
-        assert!(!chats.register(Some("chat-0")).is_cancelled());
-        assert!(chats.register(Some("chat-199")).is_cancelled());
+        assert!(!chats.register(Some("chat-0"), None).is_cancelled());
+        assert!(chats.register(Some("chat-199"), None).is_cancelled());
     }
 
     #[test]
     fn cancel_runs_the_handler_and_late_handlers_run_at_once() {
         let chats = ActiveChats::default();
         let calls = Arc::new(AtomicUsize::new(0));
-        let chat = chats.register(Some("chat-1"));
+        let chat = chats.register(Some("chat-1"), None);
         let counter = Arc::clone(&calls);
         chats.set_cancel_handler(
             &chat,
@@ -309,6 +358,7 @@ mod tests {
             None
         );
         assert_eq!(chats.provider_session(None, "codex", Some("fp-a")), None);
+        // A request of another shape resumes nothing.
         assert_eq!(chats.provider_session(Some("s1"), "codex", None), None);
         chats.remember_provider_session(None, "codex", Some("cursor-2"), "fp-a");
         chats.remember_provider_session(Some("s1"), "codex", None, "fp-c");

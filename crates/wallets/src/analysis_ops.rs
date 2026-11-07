@@ -118,6 +118,8 @@ pub fn execute_with_sources(
         | "watches.evaluate" => {
             watches::dispatch(conn, scope.profile_id, &operation[8..], &args, sources)
         }
+        // `projection.index_revision`: publishes a stale index first.
+        "index.revision" => watches::revision_for(conn, scope.profile_id, sources),
         "acquire.plan" => acquisition::plan(conn, scope.profile_id, &args, sources),
         "acquire.apply" => acquisition::apply(conn, scope.profile_id, &args, sources, runtime),
         "sources.plan" | "sources.authorize" | "sources.list" | "sources.revoke"

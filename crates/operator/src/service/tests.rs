@@ -335,6 +335,22 @@ fn fake_classify(argv: &[String]) -> Result<Classified> {
     let mut index = path.len();
     while index < rest.len() {
         match rest[index].as_str() {
+            // `mcp call` takes the class of its tool and of any grant it
+            // claims (#686); the real table is `kassiber_mcp::tools`.
+            "--tool" | "--grant" if parsed.command_path == "mcp.call" => {
+                let value = rest.get(index + 1).ok_or_else(invalid)?;
+                let class = match value.as_str() {
+                    "journals_process" | "operator" => Capability::Operator,
+                    "transactions_metadata_update" | "accounting_decisions" => {
+                        Capability::AccountingDecisions
+                    }
+                    _ => Capability::Read,
+                };
+                if !Capability::allows(parsed.capability, class) {
+                    parsed.capability = class;
+                }
+                index += 2;
+            }
             "--workspace" | "--profile" if *scoped => {
                 let value = rest.get(index + 1).ok_or_else(invalid)?;
                 let slot = if rest[index] == "--workspace" {
@@ -3618,13 +3634,13 @@ fn sessions(service: &OperatorService, data_root: &str) -> Vec<Value> {
 }
 
 #[test]
-fn test_an_agent_lease_is_read_only_and_needs_a_control_secret_and_idle_timeout() {
+fn test_an_agent_lease_is_never_admin_and_needs_a_control_secret_and_idle_timeout() {
     let tmp = tempfile::tempdir().unwrap();
     let fake = Fake::new();
     let service = Closing(service_with(&fake, ok_runner()));
     let short = b"short".to_vec();
     for (capability, idle, control) in [
-        (Capability::Operator, 900, CONTROL.to_vec()),
+        (Capability::Admin, 900, CONTROL.to_vec()),
         (Capability::Read, 900, short),
         (Capability::Read, 30, CONTROL.to_vec()),
     ] {
@@ -3763,6 +3779,88 @@ fn test_an_allowed_process_reads_and_its_activity_is_counted() {
             ),
             "{pid:?} {token:?}"
         );
+    }
+}
+
+#[test]
+fn test_an_agent_lease_admits_tool_calls_its_grant_covers() {
+    // The desktop leases the user's External agents grant; each `mcp call`
+    // is classified by its tool and any grant it claims.
+    let tmp = tempfile::tempdir().unwrap();
+    let fake = Fake::new();
+    let service = Closing(service_with(&fake, ok_runner()));
+    let call = |tool: &str, extra: &[&str]| {
+        let mut argv = mcp_call(&root(&tmp));
+        let at = argv.iter().position(|item| item == "--tool").unwrap() + 1;
+        argv[at] = tool.to_owned();
+        let tail = argv.split_off(argv.len() - 4);
+        argv.extend(extra.iter().map(|item| (*item).to_owned()));
+        argv.extend(tail);
+        argv
+    };
+    for (capability, admitted, refused) in [
+        (
+            Capability::Read,
+            &["status"][..],
+            &["journals_process", "transactions_metadata_update"][..],
+        ),
+        (
+            Capability::Operator,
+            &["status", "journals_process"],
+            &["transactions_metadata_update"],
+        ),
+    ] {
+        service.lock(&root(&tmp), None, false).unwrap();
+        service
+            .unlock(
+                &root(&tmp),
+                b"passphrase",
+                UnlockRequest {
+                    duration_seconds: Some(3600),
+                    capability,
+                    only_if_locked: true,
+                    agent_scope: true,
+                    idle_timeout_seconds: Some(900),
+                    agent_control: Some(&CONTROL),
+                    ..UnlockRequest::default()
+                },
+            )
+            .unwrap();
+        let session = service
+            .open_agent_session(&root(&tmp), Some(AGENT_PID), Some("claude".into()))
+            .unwrap();
+        decide(&service, &root(&tmp), &session.id, true).unwrap();
+        let submit = |argv: Vec<String>| {
+            service.submit(
+                &root(&tmp),
+                &argv,
+                SubmitRequest {
+                    peer_pid: Some(AGENT_PID),
+                    agent_session_token: Some(session.token.clone()),
+                    ..SubmitRequest::default()
+                },
+            )
+        };
+        for tool in admitted {
+            let accepted = submit(call(tool, &[])).unwrap();
+            // The next round's unlock needs the project idle.
+            wait(&service, &id(&accepted));
+        }
+        for tool in refused {
+            assert_eq!(
+                code(submit(call(tool, &[]))),
+                "operator_capability_denied",
+                "{capability:?} {tool}"
+            );
+        }
+        if capability == Capability::Read {
+            // A read may not claim the grant that refreshes journals.
+            assert_eq!(
+                code(submit(call("status", &["--grant", "operator"]))),
+                "operator_capability_denied"
+            );
+        }
+        service.close_agent_session(&session.id);
     }
 }
 

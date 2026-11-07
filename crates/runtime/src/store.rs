@@ -748,6 +748,12 @@ pub trait Book: Send {
     fn pin_read_only_scope(&mut self, _scope: Option<(&str, &str)>) -> Result<(), AppError> {
         Err(not_implemented("mcp", "read-only book scope pins"))
     }
+    /// One MCP write (#686): `Some((workspace, profile))` resolves the
+    /// active workspace and profile as those ids without writing the stored
+    /// context, leaving the book writable; `None` lifts it.
+    fn pin_write_scope(&mut self, _scope: Option<(&str, &str)>) -> Result<(), AppError> {
+        Err(not_implemented("mcp", "book scope pins for writes"))
+    }
     /// Local file-import run services. Unsupported seam stores fail closed.
     fn import_runs(&mut self, _operation: kassiber_imports::Operation) -> Result<Value, AppError> {
         Err(not_implemented("imports", "file import runs"))

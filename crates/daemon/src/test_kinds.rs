@@ -431,7 +431,7 @@ fn ai_consent_preview(
             let mut host = crate::ai_tools::Host {
                 daemon: &mut *daemon,
             };
-            kassiber_ai::previews::consent_request(entry, &call, &mut runtime, &mut host)
+            kassiber_ai::previews::consent_request(entry, &call, &mut runtime, &mut host)?
         }
         None => Value::Null,
     };

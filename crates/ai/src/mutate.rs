@@ -63,14 +63,49 @@ pub const REFUSED_EXPORTS: [&str; 7] = [
 ];
 
 /// Mutating tools whose service is not native yet, with the work that owns it.
-pub const REFUSED_MUTATIONS: [(&str, &str); 1] =
-    [("ui.btcpay.provenance.review", "commercial evidence review")];
+pub const REFUSED_MUTATIONS: [(&str, &str); 4] = [
+    ("ui.btcpay.provenance.review", "commercial evidence review"),
+    (
+        "ui.transfers.dismissals.delete",
+        "main-sync S6 (transfer dismissals)",
+    ),
+    (
+        "ui.wallets.import_attachment.apply",
+        crate::executor::ATTACHMENT_IMPORT_OWNER,
+    ),
+    (
+        "ui.wallets.import_document.apply",
+        crate::executor::DOCUMENT_IMPORT_OWNER,
+    ),
+];
 
 fn refuse_export(kind: &str) -> Result<(), ToolError> {
     if REFUSED_EXPORTS.contains(&kind) {
         return Err(crate::executor::not_native(kind, "the PDF and audit-package stage").into());
     }
     Ok(())
+}
+
+/// `_execute_mutating_ai_tool`'s hint: a reversible tool's successful
+/// result names the call that takes the change back, so the model (or the
+/// user via the model) can undo it without reconstructing ids.
+fn with_undo(entry: &ToolEntry, call: &crate::executor::ParsedCall, mut result: Value) -> Value {
+    if !entry.reversible || get(&result, "ok") != Some(&Value::Bool(true)) {
+        return result;
+    }
+    let Some(mut envelope @ Value::Dict(_)) = get(&result, "envelope").cloned() else {
+        return result;
+    };
+    let Some(mut data @ Value::Dict(_)) = get(&envelope, "data").cloned() else {
+        return result;
+    };
+    let now = crate::clock::now_utc_us();
+    if let Some(hint) = crate::undo::undo_hint(&entry.name, &call.arguments, &data, now) {
+        set(&mut data, "undo", hint);
+        set(&mut envelope, "data", data);
+        set(&mut result, "envelope", envelope);
+    }
+    result
 }
 
 /// `CustodyAiConsentAudit`: the consent facts a custody write is audited with.
@@ -102,14 +137,9 @@ pub fn execute_mutating(
         .daemon_kind
         .as_deref()
         .is_some_and(|kind| CUSTODY_GAP_MUTATING_KINDS.contains(&kind))
-        && !matches!(get(runtime.state, "provider_kind"), Some(Value::Str(kind)) if kind.is("local"))
+        && !crate::executor::full_access(runtime.state)
     {
-        return tool_result_denied(
-            "local_provider_required",
-            Some(&PyStr::from(
-                "Custody-gap linkage is available to local AI providers only.",
-            )),
-        );
+        return crate::executor::custody_gap_restricted();
     }
     if !is_advertised(entry, runtime.state) {
         return tool_result_denied("tool_not_advertised", None);
@@ -120,25 +150,9 @@ pub fn execute_mutating(
         return tool_result_denied("consent_required", None);
     }
     match mutate(entry, call, runtime, host, custody_audit) {
-        Ok(result) => result,
+        Ok(result) => with_undo(entry, call, result),
         Err(ToolError::App(error)) => {
-            let code = if error.code.is_empty() {
-                "tool_error"
-            } else {
-                error.code.as_str()
-            };
-            let message = match &error.message_codepoints {
-                Some(message) => (**message).clone(),
-                None => PyStr::from(error.message.as_str()),
-            };
-            let mut result = tool_result_denied(code, Some(&message));
-            // `_tool_result_from_app_error`: a refusal's hint reaches the
-            // model redacted. Remediation and allowlisted details are main
-            // #679's and not ported yet (docs/reference/rust-main-sync.md).
-            if let Some(hint) = error.hint.as_deref().filter(|hint| !hint.is_empty()) {
-                set(&mut result, "hint", redact_ai_tool_result(&s(hint)));
-            }
-            result
+            crate::executor::tool_result_from_app_error(&error, Some(&entry.name))
         }
         // The mutating executor has no lock-contention branch: Python's
         // `except Exception` answers every other failure the same way.
@@ -171,6 +185,80 @@ fn scoped(
         write(book, state)
     };
     Ok(redact_ai_tool_result(&host.on_request_loop(&mut work)?))
+}
+
+/// `_optional_str_arg(args, key)`: a stripped string, `None` when absent or
+/// blank.
+fn optional_str_arg(arguments: &Value, key: &str) -> Result<Option<PyStr>, AppError> {
+    match get(arguments, key) {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::Str(text)) => {
+            let stripped = kassiber_pytext::strip_py(text);
+            Ok(stripped.code_points().next().is_some().then_some(stripped))
+        }
+        Some(other) => Err(
+            AppError::new("validation", format!("{key} must be a string"))
+                .with_details(dict([("type", s(kassiber_envelope::type_name(other)))])),
+        ),
+    }
+}
+
+/// `_required_str_arg(args, key, label)`.
+pub(crate) fn required_str_arg(
+    arguments: &Value,
+    key: &str,
+    label: &str,
+) -> Result<PyStr, AppError> {
+    optional_str_arg(arguments, key)?.ok_or_else(|| {
+        AppError::new("validation", format!("{label} is required."))
+            .with_hint(format!("Enter {}.", label.to_lowercase()))
+    })
+}
+
+/// `_attach_chat_file_ai_payload(conn, runtime, arguments)`: keep one of the
+/// chat's files as evidence on a transaction (#693), the same managed copy
+/// `ui.attachments.add` makes from the picker. The file comes from the
+/// chat's grant by id, never from a path argument; it documents the
+/// transaction and changes no accounting by itself.
+fn attach_chat_file(
+    book: &mut dyn Book,
+    state: &Value,
+    arguments: &Value,
+) -> Result<Value, ToolError> {
+    let unknown = unknown_keys(arguments, &["transaction", "file", "label"]);
+    if !unknown.is_empty() {
+        return Err(AppError::new(
+            "validation",
+            "ui.attachments.add_from_chat received unsupported fields",
+        )
+        .with_details(dict([("unknown", Value::List(unknown))]))
+        .into());
+    }
+    let chat_file = crate::chat::files::ai_chat_file(state, arguments, None)?;
+    let transaction = required_str_arg(arguments, "transaction", "Transaction")?;
+    let label = optional_str_arg(arguments, "label")?;
+    let field = |key: &str| get(&chat_file, key).cloned().unwrap_or(Value::Null);
+    let request = dict([
+        ("transaction", Value::Str(transaction)),
+        ("file", field("source_file")),
+        (
+            "label",
+            label.clone().map_or_else(|| field("filename"), Value::Str),
+        ),
+    ]);
+    let mut payload = book.mutate("ui.attachments.add", &request, "ai_tool")?;
+    if !crate::executor::full_access(state) {
+        // The note gave a restricted provider the extension only. A label it
+        // chose itself may come back; the file's own name never does.
+        let mut withheld = vec!["original_filename", "filename"];
+        if label.is_none() {
+            withheld.extend(["label", "display_label"]);
+        }
+        if let Value::Dict(pairs) = &mut payload {
+            pairs.retain(|(key, _)| !withheld.iter().any(|name| *key == Key::from(*name)));
+        }
+    }
+    Ok(payload)
 }
 
 fn unknown_keys(arguments: &Value, allowed: &[&str]) -> Vec<Value> {
@@ -476,11 +564,13 @@ fn mutate(
                 ))
             })
         }
-        "ui.review.apply" | "ui.journals.quarantine.resolve" => {
-            scoped(runtime, host, &mut |book, _| {
-                Ok(envelope(kind, book.mutate(kind, arguments, "ai_tool")?))
-            })
-        }
+        "ui.review.apply" => scoped(runtime, host, &mut |book, state| {
+            let full_access = crate::executor::full_access(state);
+            Ok(envelope(kind, book.review(kind, arguments, full_access)?))
+        }),
+        "ui.journals.quarantine.resolve" => scoped(runtime, host, &mut |book, _| {
+            Ok(envelope(kind, book.mutate(kind, arguments, "ai_tool")?))
+        }),
         "ui.rates.rebuild" | "ui.rates.latest" | "ui.maintenance.configure" => {
             scoped(runtime, host, &mut |book, _| {
                 Ok(envelope(kind, book.mutate(kind, arguments, "gui")?))
@@ -506,6 +596,19 @@ fn mutate(
                 Ok(envelope(kind, book.mutate(kind, arguments, "gui")?))
             })
         }
+        "ui.attachments.add_from_chat" => scoped(runtime, host, &mut |book, state| {
+            Ok(envelope(
+                kind,
+                redact_evidence_for_ai(&attach_chat_file(book, state, arguments)?),
+            ))
+        }),
+        "ui.imports.rollback" => scoped(runtime, host, &mut |book, state| {
+            let full_access = crate::executor::full_access(state);
+            Ok(envelope(
+                kind,
+                crate::import_runs::rollback_for_ai(book, arguments, full_access, true)?,
+            ))
+        }),
         "ui.attachments.copy" => scoped(runtime, host, &mut |book, _| {
             Ok(envelope(
                 kind,

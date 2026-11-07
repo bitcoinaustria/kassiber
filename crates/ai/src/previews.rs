@@ -17,21 +17,33 @@ use crate::summary::summarize_tool_call;
 use crate::ToolError;
 
 /// The consent card for `call`: `call_id`, `name`, `summary`,
-/// `arguments_preview` and, for `ui.review.apply`, `review_preview`.
+/// `arguments_preview` and, for `ui.review.apply`, `review_preview`. An
+/// error where Python's summary raises.
 pub fn consent_request(
     entry: &ToolEntry,
     call: &ParsedCall,
     runtime: &mut Runtime<'_>,
     host: &mut dyn ReadHost,
-) -> Value {
-    let arguments_preview = preview_arguments(entry, &call.arguments, runtime, host);
+) -> Result<Value, kassiber_envelope::AppError> {
+    let (arguments_preview, summary) = if PLAN_BOUND_CONSENT_TOOLS.contains(&entry.name.as_str())
+        && call.argument_error.is_none()
+    {
+        // The card shows the daemon's own plan, not the model's figures.
+        plan_consent_preview(entry, &call.arguments, runtime, host)
+    } else {
+        (
+            preview_arguments(entry, &call.arguments, runtime, host),
+            None,
+        )
+    };
+    let summary = match summary {
+        Some(summary) => s(summary),
+        None => Value::Str(summarize_tool_call(entry, &call.arguments)?),
+    };
     let mut card = vec![
         (Key::from("call_id"), Value::Str(call.call_id.clone())),
         (Key::from("name"), s(entry.name.as_str())),
-        (
-            Key::from("summary"),
-            Value::Str(summarize_tool_call(entry, &call.arguments)),
-        ),
+        (Key::from("summary"), summary),
         (Key::from("arguments_preview"), arguments_preview),
     ];
     if entry.name == "ui.review.apply" {
@@ -40,7 +52,139 @@ pub fn consent_request(
             review_preview(&call.arguments, runtime, host),
         ));
     }
-    Value::Dict(card)
+    Ok(Value::Dict(card))
+}
+
+/// `_AI_PLAN_BOUND_CONSENT_TOOLS`: applies bound to a plan the daemon
+/// recomputes for the card.
+pub const PLAN_BOUND_CONSENT_TOOLS: [&str; 3] = [
+    "ui.wallets.import_attachment.apply",
+    "ui.wallets.import_document.apply",
+    "ui.imports.rollback",
+];
+
+/// `_ai_plan_consent_preview(runtime, entry, arguments)`: recompute an import
+/// or rollback plan for the consent card, and a summary built from it. An
+/// unavailable or stale plan is shown as such; the apply re-checks
+/// everything when it runs.
+pub fn plan_consent_preview(
+    entry: &ToolEntry,
+    arguments: &Value,
+    runtime: &mut Runtime<'_>,
+    host: &mut dyn ReadHost,
+) -> (Value, Option<String>) {
+    let name = entry.name.as_str();
+    let plan = scoped(runtime, host, &mut |book, state| {
+        let full_access = crate::executor::full_access(state);
+        match name {
+            "ui.imports.rollback" => {
+                crate::import_runs::rollback_for_ai(book, arguments, full_access, false)
+            }
+            // The import plans are not native yet: shown as unavailable, after
+            // the checks Python makes first (the chat's export; a chat at all).
+            "ui.wallets.import_attachment.apply" => {
+                crate::chat::files::ai_chat_file(
+                    state,
+                    arguments,
+                    Some(&crate::chat::files::CHAT_TABLE_KINDS),
+                )?;
+                Err(
+                    crate::executor::not_native(name, crate::executor::ATTACHMENT_IMPORT_OWNER)
+                        .into(),
+                )
+            }
+            _ => {
+                if get(state, "chat_files").is_none() {
+                    return Err(AppError::new(
+                        "ai_attachment_missing",
+                        "Documents can only be read in a desktop or CLI chat",
+                    )
+                    .into());
+                }
+                Err(
+                    crate::executor::not_native(name, crate::executor::DOCUMENT_IMPORT_OWNER)
+                        .into(),
+                )
+            }
+        }
+    });
+    let plan = match plan {
+        Ok(plan) => plan,
+        Err(ToolError::App(error)) => {
+            let code = if error.code.is_empty() {
+                "tool_error".to_owned()
+            } else {
+                error.code
+            };
+            return (
+                dict([
+                    ("status", s("unavailable")),
+                    ("kind", s(name)),
+                    ("code", s(code)),
+                ]),
+                None,
+            );
+        }
+        Err(_) => {
+            return (
+                dict([
+                    ("status", s("unavailable")),
+                    ("kind", s(name)),
+                    ("code", s("tool_error")),
+                ]),
+                None,
+            )
+        }
+    };
+    let status = if !crate::validate::py_eq(
+        get(&plan, "plan_digest").unwrap_or(&Value::Null),
+        get(arguments, "plan_digest").unwrap_or(&Value::Null),
+    ) {
+        "stale"
+    } else if get(&plan, "ready").is_some_and(kassiber_envelope::truthy) {
+        "ready"
+    } else {
+        "blocked"
+    };
+    let count = |value: Option<&Value>| match value {
+        Some(Value::Null) | None => "0".to_owned(),
+        Some(value) => kassiber_envelope::py_str(value),
+    };
+    let summary = if name == "ui.imports.rollback" {
+        format!(
+            "Delete {} row(s) created by an import run",
+            count(get(&plan, "transactions_to_delete"))
+        )
+    } else {
+        let empty = Value::Dict(Vec::new());
+        let target = get(&plan, "target")
+            .filter(|t| kassiber_envelope::truthy(t))
+            .unwrap_or(&empty);
+        let rows = get(&plan, "rows")
+            .filter(|r| kassiber_envelope::truthy(r))
+            .unwrap_or(&empty);
+        let noun = if get(target, "action") == Some(&s("create")) {
+            "new wallet"
+        } else {
+            "wallet"
+        };
+        let what = if name == "ui.wallets.import_document.apply" {
+            "document"
+        } else {
+            "file"
+        };
+        let label = get(target, "label")
+            .filter(|label| kassiber_envelope::truthy(label))
+            .map_or_else(|| "?".to_owned(), kassiber_envelope::py_str);
+        format!(
+            "Import {} row(s) from the attached {what} into {noun} {label}",
+            count(get(rows, "to_import"))
+        )
+    };
+    (
+        dict([("status", s(status)), ("kind", s(name)), ("plan", plan)]),
+        Some(summary),
+    )
 }
 
 /// `preview_arguments`: the redacted arguments, or for acquisition and
@@ -101,7 +245,7 @@ fn canonical(value: &Value) -> Result<String, ToolError> {
 }
 
 fn on_device(state: &Value) -> bool {
-    get(state, "provider_on_device") == Some(&Value::Bool(true))
+    crate::executor::full_access(state)
 }
 
 /// `_chain_analysis_acquisition_consent_preview(runtime, args, recurring=...)`:
@@ -114,7 +258,7 @@ fn acquisition_preview(
 ) -> Value {
     let result = scoped(runtime, host, &mut |book, state| {
         if !on_device(state) {
-            return Ok(blocked("local_provider_required"));
+            return Ok(blocked("agent_access_restricted"));
         }
         book.active_profile()?;
         let field = if recurring { "spec" } else { "args" };
@@ -150,7 +294,7 @@ fn acquisition_preview(
 fn dataset_preview(arguments: &Value, runtime: &mut Runtime<'_>, host: &mut dyn ReadHost) -> Value {
     let result = scoped(runtime, host, &mut |book, state| {
         if !on_device(state) {
-            return Ok(blocked("local_provider_required"));
+            return Ok(blocked("agent_access_restricted"));
         }
         let preview = match book.dataset_preview(arguments) {
             Ok(preview) => preview,
@@ -173,8 +317,8 @@ fn dataset_preview(arguments: &Value, runtime: &mut Runtime<'_>, host: &mut dyn 
 /// `_ai_review_consent_preview(runtime, arguments)`: the accounting effects
 /// are recomputed, never taken from the model.
 fn review_preview(arguments: &Value, runtime: &mut Runtime<'_>, host: &mut dyn ReadHost) -> Value {
-    let result = scoped(runtime, host, &mut |book, _| {
-        book.review_consent_preview(arguments)
+    let result = scoped(runtime, host, &mut |book, state| {
+        book.review_consent_preview(arguments, crate::executor::full_access(state))
     });
     match result {
         Ok(preview) => preview,

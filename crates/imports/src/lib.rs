@@ -70,6 +70,17 @@ pub enum Operation {
         profile_id: String,
         batch: String,
     },
+    /// The plan with the book's `journal_input_version` appended, the facts
+    /// `review_rollback` binds a consented rollback to (#682).
+    Review {
+        profile_id: String,
+        batch: String,
+    },
+    /// `input_version(conn, profile_id)`: the profile's journal input
+    /// version, which assistant plans and handoffs are bound to.
+    InputVersion {
+        profile_id: String,
+    },
     Rollback {
         profile_id: String,
         batch: String,
@@ -96,8 +107,33 @@ pub fn execute(conn: &Connection, operation: Operation) -> Result<Value, AppErro
             )
         }
         Operation::Plan { profile_id, batch } => plan(conn, &profile_id, &batch),
+        Operation::Review { profile_id, batch } => {
+            let mut reviewed = plan(conn, &profile_id, &batch)?;
+            kassiber_envelope::set(
+                &mut reviewed,
+                "input_version",
+                Value::from(input_version(conn, &profile_id)?),
+            );
+            Ok(reviewed)
+        }
+        Operation::InputVersion { profile_id } => {
+            Ok(Value::from(input_version(conn, &profile_id)?))
+        }
         Operation::Rollback { profile_id, batch } => rollback(conn, &profile_id, &batch),
     }
+}
+
+/// `_input_version(conn, profile_id)`.
+fn input_version(conn: &Connection, profile_id: &str) -> Result<i64, AppError> {
+    let version: Option<Option<i64>> = conn
+        .query_row(
+            "SELECT journal_input_version FROM profiles WHERE id = ?",
+            [profile_id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(database_error)?;
+    Ok(version.flatten().unwrap_or(0))
 }
 
 struct Batch {

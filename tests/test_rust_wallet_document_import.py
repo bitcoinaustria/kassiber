@@ -8,6 +8,7 @@ provider fixture; the product no-egress switch stays armed throughout.
 """
 import json
 import os
+import re
 import subprocess
 import threading
 import unittest
@@ -22,6 +23,7 @@ from tests.test_rust_wallet_identify_onchain import Session
 from tests.test_rust_wallet_import_desktop import mask_line, mask_tables
 
 STAGE = "internal.document_import.stage"
+UPLOAD = "ui.chat.attachments.upload"
 PREVIEW = "ui.wallets.document_import.preview"
 IMPORT = "ui.wallets.document_import.import"
 
@@ -110,11 +112,14 @@ class RustDocumentImportTest(DesktopParity, unittest.TestCase):
                     process.kill()
             self.assertEqual(stderr, b"")
             tokens = sorted({value for reply in replies.values() if isinstance(reply.get("data"), dict)
-                             for key, value in reply["data"].items() if key == "document_token"}, key=len)
+                             for key, value in reply["data"].items()
+                             if key in ("document_token", "upload_id")}, key=len, reverse=True)
             masked = []
             for line in seen:
                 for token in tokens:
                     line = line.replace(token.encode(), b"<token>")
+                # A pasted file's private directories have random names.
+                line = re.sub(rb"kassiber-chat-uploads-[A-Za-z0-9_-]+/tmp[A-Za-z0-9_-]+/", b"<upload>/", line)
                 masked.append(mask_line(line))
             outputs.append((masked, [(method, path, body) for method, path, body in self.ocr.hits]))
             kinds = session.kinds
@@ -177,6 +182,65 @@ class RustDocumentImportTest(DesktopParity, unittest.TestCase):
         kinds = [r["kind"] for r in records]
         self.assertIn(PREVIEW, kinds)
         self.assertIn(STAGE, kinds)
+
+    def test_chat_attachments_stage_and_upload_like_python(self):
+        """#689: a chat pick stages exports too and names their kind; a paste
+        arrives in chunks into a file the daemon owns. (A chat image would
+        carry Python's Pillow thumbnail, which the Rust daemon does not make,
+        so the picks here are an export and a PDF.)"""
+        export = self.base / "Kraken export.csv"
+        export.write_text("time,amount\n2025-01-01,1\n")
+        statement = self.base / "statement.pdf"
+        statement.write_bytes(b"%PDF-1.4\n%%EOF\n")
+        notes = self.base / "notes.txt"
+        notes.write_text("x")
+
+        def script(session, step):
+            for index, args in enumerate([
+                {"source_file": str(export), "purpose": "chat_attachment"},
+                {"source_file": str(statement), "purpose": "chat_attachment"},
+                {"source_file": str(self.source), "purpose": "document_import"},
+                {"source_file": str(export)},
+                {"source_file": str(export), "purpose": "x"},
+                {"source_file": str(notes), "purpose": "chat_attachment"},
+                {"source_file": str(self.base / "missing.csv"), "purpose": "chat_attachment"},
+                {"source_file": "~/no-such-kassiber-file.csv", "purpose": "chat_attachment"},
+            ]):
+                step(f"s{index}", STAGE, args)
+            for index, args in enumerate([
+                None, {}, {"bogus": 1, "offset": 0},
+                {"offset": 0}, {"offset": 0, "chunk_base64": "YWJj="},
+                {"offset": 1, "chunk_base64": "YWJj", "filename": "a.csv", "total_bytes": 6},
+                {"offset": 0, "chunk_base64": "YWJj", "filename": "a.txt", "total_bytes": 6},
+                {"offset": 0, "chunk_base64": "YWJj", "filename": "a.csv", "total_bytes": 0},
+                {"offset": 0, "chunk_base64": "YWJj", "filename": "a.csv", "total_bytes": 26 * 1024 * 1024},
+                {"offset": 0, "chunk_base64": "YWJj", "upload_id": "gone"},
+                {"offset": True, "chunk_base64": "YWJj", "filename": "a.csv", "total_bytes": 6},
+            ]):
+                step(f"u{index}", UPLOAD, args)
+            first = step("first", UPLOAD, {"offset": 0, "chunk_base64": "YSxi",
+                                            "filename": "C:\\Downloads\\paste.csv", "total_bytes": 9})
+            assert "data" in first, first
+            upload_id = first["data"]["upload_id"]
+            step("renamed", UPLOAD, {"offset": 3, "chunk_base64": "CjEs", "upload_id": upload_id,
+                                     "filename": "b.csv"})
+            # A refused continuation ends nothing but itself; the upload goes on.
+            second = step("second", UPLOAD, {"offset": 3, "chunk_base64": "CjEs", "upload_id": upload_id})
+            assert second["data"]["complete"] is False, second
+            done = step("done", UPLOAD, {"offset": 6, "chunk_base64": "Mgoz", "upload_id": upload_id})
+            step("late", UPLOAD, {"offset": 9, "chunk_base64": "Mgoz", "upload_id": upload_id})
+            step("analyze", "ui.wallets.analyze_file", {"token": done["data"]["document_token"]})
+            out = step("order", UPLOAD, {"offset": 0, "chunk_base64": "YWJj", "filename": "o.csv",
+                                         "total_bytes": 9})
+            step("skip", UPLOAD, {"offset": 6, "chunk_base64": "YWJj", "upload_id": out["data"]["upload_id"]})
+            step("after-skip", UPLOAD, {"offset": 3, "chunk_base64": "YWJj", "upload_id": out["data"]["upload_id"]})
+            step("lock", "daemon.lock", None)
+            step("after-lock", "ui.wallets.analyze_file", {"token": done["data"]["document_token"]})
+            return False
+
+        records = self.run_both(script)
+        kinds = [r["kind"] for r in records]
+        self.assertIn(UPLOAD, kinds)
 
     def test_reviewed_rows_import_and_end_the_session(self):
         self.import_reviewed_rows()

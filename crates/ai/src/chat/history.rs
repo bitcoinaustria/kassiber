@@ -223,6 +223,10 @@ pub struct Exchange<'a> {
     pub finish_reason: Option<&'a str>,
     pub provider: Option<&'a str>,
     pub model: Option<&'a PyStr>,
+    /// What the user's message shows about the files it first sent (name,
+    /// type, size), kept in that row's provenance (#697); never a path or a
+    /// staging token.
+    pub user_attachments: &'a [Value],
 }
 
 /// `append_exchange(...)` without committing.
@@ -236,9 +240,24 @@ pub fn append_exchange(
     let session_id = text_param(session_id);
     let timestamp = now_iso();
     let seq = next_seq(conn, &session_id)?;
+    let user_provenance = if exchange.user_attachments.is_empty() {
+        None
+    } else {
+        Some(stored_json(&dict([(
+            "attachments",
+            Value::List(exchange.user_attachments.to_vec()),
+        )]))?)
+    };
     conn.execute(
-        "INSERT INTO ai_chat_messages(id, session_id, seq, role, content, tool_calls_json, provenance_json, finish_reason, created_at) VALUES(?, ?, ?, 'user', ?, NULL, NULL, NULL, ?)",
-        params![uuid4(conn)?, session_id, seq, text_param(exchange.user_content), timestamp],
+        "INSERT INTO ai_chat_messages(id, session_id, seq, role, content, tool_calls_json, provenance_json, finish_reason, created_at) VALUES(?, ?, ?, 'user', ?, NULL, ?, NULL, ?)",
+        params![
+            uuid4(conn)?,
+            session_id,
+            seq,
+            text_param(exchange.user_content),
+            user_provenance,
+            timestamp
+        ],
     )
     .map_err(database_error)?;
     let provenance = exchange
@@ -465,6 +484,8 @@ pub struct Persist {
     /// `_ai_chat_seed_prefix(messages)` when `seed_history`, else empty.
     pub seed_prefix: Vec<Value>,
     pub seed_notices: Vec<(usize, Vec<&'static str>)>,
+    /// `_chat_message_attachments(runtime)`.
+    pub user_attachments: Vec<Value>,
 }
 
 /// `_persist`: the session the exchange went to, or `None` when the policy
@@ -537,6 +558,7 @@ pub fn persist(
                 finish_reason: request.finish_reason.as_deref(),
                 provider: Some(&request.provider),
                 model: Some(&request.model),
+                user_attachments: &request.user_attachments,
             },
         )?;
         Ok(Some(session_id))
@@ -649,6 +671,7 @@ mod tests {
                 finish_reason: None,
                 provider: None,
                 model: None,
+                user_attachments: &[],
             },
         )
         .unwrap();
@@ -716,6 +739,11 @@ mod tests {
             model: text("m"),
             seed_prefix: Vec::new(),
             seed_notices: Vec::new(),
+            user_attachments: vec![dict([
+                ("filename", s("Kraken.csv")),
+                ("kind", s("delimited")),
+                ("size_bytes", Value::from(9)),
+            ])],
         };
         let mut unused = || -> Result<(String, String), AppError> { unreachable!() };
         assert_eq!(
@@ -744,6 +772,18 @@ mod tests {
             )
             .unwrap();
         assert_eq!(stored, "{\"notices\": []}");
+        // The user row keeps the files' cards (#697), sorted as Python dumps.
+        let user: String = conn
+            .query_row(
+                "SELECT provenance_json FROM ai_chat_messages WHERE role = 'user' LIMIT 1",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            user,
+            "{\"attachments\": [{\"filename\": \"Kraken.csv\", \"kind\": \"delimited\", \"size_bytes\": 9}]}"
+        );
         set_history_mode(&conn, "off").unwrap();
         assert_eq!(
             persist(

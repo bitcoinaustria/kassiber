@@ -7,8 +7,8 @@ transcript, which already ends with the new prompt. The lookup used to
 fingerprint that, so the two never matched and every turn started a fresh
 native thread; it now uses ``_provider_session_resume_fingerprint``, the
 transcript before the new prompt. The tool loop also used to record only the
-last leg's text, not what the user saw. The Rust port still keeps the old
-behaviour (crates/ai/src/chat/turn.rs, tests/test_rust_ai_chat.py).
+last leg's text, not what the user saw. The Rust port follows since S12
+(`resume_fingerprint` in crates/ai/src/chat/turn.rs, tests/test_rust_ai_chat.py).
 
     uv run --locked python tests/rust_port/repro_chat_cursor_never_resumes.py
 """

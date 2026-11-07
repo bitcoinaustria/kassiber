@@ -24,6 +24,7 @@ pub mod consent;
 pub mod discovery;
 pub mod executor;
 pub mod file_analysis;
+pub mod import_runs;
 pub mod mutate;
 pub mod planner;
 pub mod previews;
@@ -40,7 +41,9 @@ pub mod service;
 pub mod skills;
 pub mod summary;
 pub mod transport;
+pub mod undo;
 pub mod validate;
+pub mod visuals;
 
 use kassiber_envelope::AppError;
 

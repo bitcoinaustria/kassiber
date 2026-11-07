@@ -30,6 +30,7 @@ const LEGACY_STRUCTURED_VERSIONS: [&str; 2] = ["2025-11-25", "2025-06-18"];
 pub const META_PROTOCOL_VERSION: &str = "io.modelcontextprotocol/protocolVersion";
 pub const META_CLIENT_CAPABILITIES: &str = "io.modelcontextprotocol/clientCapabilities";
 pub const META_SERVER_INFO: &str = "io.modelcontextprotocol/serverInfo";
+pub const META_CLIENT_INFO: &str = "io.modelcontextprotocol/clientInfo";
 pub const META_SUBSCRIPTION_ID: &str = "io.modelcontextprotocol/subscriptionId";
 
 pub const PARSE_ERROR: i64 = -32700;
@@ -44,7 +45,7 @@ pub const SERVER_OVERLOADED: i64 = -32000;
 pub const MAX_MESSAGE_BYTES: usize = 16 * 1024 * 1024;
 /// Tool definitions and instructions are static per server version and
 /// carry no book data, so any client or cache may keep them.
-pub const STATIC_LIST_TTL_MS: i64 = 3_600_000;
+pub const STATIC_LIST_TTL_MS: i64 = 60_000;
 /// Calls run one at a time; a client pipelining more than this many is
 /// refused rather than queued without bound.
 pub const MAX_INFLIGHT_CALLS: usize = 32;
@@ -105,15 +106,19 @@ pub struct ToolOutcome {
 
 /// What the server serves. It knows nothing about Kassiber.
 pub trait ToolProvider: Send + Sync {
-    fn instructions(&self) -> &str;
+    /// Read when served: it follows the provider's current configuration.
+    fn instructions(&self) -> String;
     /// Era-neutral definitions; the server drops fields per era.
     fn tool_definitions(&self) -> Vec<Value>;
     fn has_tool(&self, name: &PyStr) -> bool;
+    /// `client_name` is the host's self-reported name, if it sent one
+    /// (display only, never authority).
     fn call_tool(
         &self,
         name: &PyStr,
         arguments: &Value,
         cancelled: &Cancelled,
+        client_name: Option<&Value>,
     ) -> Result<ToolOutcome, Internal>;
 }
 
@@ -201,6 +206,8 @@ pub struct McpServer {
     provider: Arc<dyn ToolProvider>,
     server_info: Value,
     legacy_version: Mutex<Option<&'static str>>,
+    /// The legacy handshake's `clientInfo.name`: display-only attribution.
+    legacy_client_name: Mutex<Option<Value>>,
 }
 
 impl McpServer {
@@ -209,6 +216,7 @@ impl McpServer {
             provider,
             server_info: dict([("name", s(name)), ("version", s(version))]),
             legacy_version: Mutex::new(None),
+            legacy_client_name: Mutex::new(None),
         }
     }
 
@@ -426,8 +434,9 @@ impl McpServer {
                     (Key::from("ttlMs"), Value::from(STATIC_LIST_TTL_MS)),
                     (Key::from("cacheScope"), s("public")),
                 ];
-                if !self.provider.instructions().is_empty() {
-                    result.push((Key::from("instructions"), s(self.provider.instructions())));
+                let instructions = self.provider.instructions();
+                if !instructions.is_empty() {
+                    result.push((Key::from("instructions"), s(instructions)));
                 }
                 return Ok(self.modern(result));
             }
@@ -486,17 +495,28 @@ impl McpServer {
             _ => None,
         }
         .unwrap_or(LEGACY_PROTOCOL_VERSIONS[0]);
+        let client_name = match get(params, "clientInfo") {
+            Some(info @ Value::Dict(_)) => {
+                get(info, "name").filter(|name| matches!(name, Value::Str(_)))
+            }
+            _ => None,
+        };
         *self
             .legacy_version
             .lock()
             .unwrap_or_else(|e| e.into_inner()) = Some(version);
+        *self
+            .legacy_client_name
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = client_name.cloned();
         let mut result = vec![
             (Key::from("protocolVersion"), s(version)),
             (Key::from("capabilities"), self.capabilities()),
             (Key::from("serverInfo"), self.server_info.clone()),
         ];
-        if !self.provider.instructions().is_empty() {
-            result.push((Key::from("instructions"), s(self.provider.instructions())));
+        let instructions = self.provider.instructions();
+        if !instructions.is_empty() {
+            result.push((Key::from("instructions"), s(instructions)));
         }
         Value::Dict(result)
     }
@@ -548,9 +568,15 @@ impl McpServer {
             }
         };
         let fresh = Cancelled::default();
+        let client_name = self.client_name(params, era);
         let outcome = self
             .provider
-            .call_tool(&name, &arguments, cancelled.unwrap_or(&fresh))
+            .call_tool(
+                &name,
+                &arguments,
+                cancelled.unwrap_or(&fresh),
+                client_name.as_ref(),
+            )
             .map_err(|Internal| Failure::Internal)?;
         let mut result = vec![(
             Key::from("content"),
@@ -566,6 +592,27 @@ impl McpServer {
             result.push((Key::from("isError"), Value::Bool(true)));
         }
         Ok(Value::Dict(result))
+    }
+
+    /// `_client_name(params, era)`: the host's self-reported name, if it
+    /// sent one (never authority).
+    fn client_name(&self, params: &Value, era: Era) -> Option<Value> {
+        if era.modern {
+            let info = match get(params, "_meta") {
+                Some(meta @ Value::Dict(_)) => get(meta, META_CLIENT_INFO),
+                _ => None,
+            };
+            return match info {
+                Some(info @ Value::Dict(_)) => get(info, "name")
+                    .filter(|name| matches!(name, Value::Str(_)))
+                    .cloned(),
+                _ => None,
+            };
+        }
+        self.legacy_client_name
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 }
 

@@ -211,7 +211,7 @@ fn turn(provider: &ScriptedProvider, registry: &ActiveChats, args: &str) -> Turn
             ("scope_profile_id", s("p1")),
         ]),
         data_root: "/unused".into(),
-        chat: registry.register(Some(KEY)),
+        chat: registry.register(Some(KEY), None),
         registry: registry.clone(),
         gate: online(),
         locate: kassiber_ai::broker::default_locate(),
@@ -658,4 +658,229 @@ fn on_device_tools_are_never_offered_to_other_providers() {
     let remote = offered(false);
     assert!(!remote.contains("ui_chain_analysis_sources_"));
     assert!(!remote.contains("ui_chain_analysis_acquire_apply"));
+}
+
+fn function_call_with(call_id: &str, name: &str, arguments: &str) -> String {
+    format!(
+        r#"{{"type": "function_call", "id": "fc_{call_id}", "call_id": "{call_id}", "name": "{name}", "arguments": {}}}"#,
+        dumps(&s(arguments))
+    )
+}
+
+#[test]
+fn a_tool_turn_saves_every_leg_of_its_answer() {
+    let provider = ScriptedProvider::new().unwrap();
+    provider.queue(
+        "POST",
+        "responses",
+        vec![
+            responses(
+                &[message_item("Checking. "), function_call("c1", "status")],
+                Some("Checking. "),
+            ),
+            answer("All good."),
+        ],
+    );
+    let registry = ActiveChats::default();
+    let mut host = Host::new();
+    history::set_history_mode(&host.conn, "on").unwrap();
+    let args = r#"{"model": "test-model", "tools_enabled": true, "tool_profile": "full", "persist": true, "system_prompt_kind": "raw", "system_prompt": "Use tools.", "messages": [{"role": "user", "content": "hello"}]}"#;
+    Worker::new(turn(&provider, &registry, args)).run(&mut host);
+    assert_eq!(get(host.terminal(), "finish_reason"), Some(&s("stop")));
+    // The answer the user saw, every leg of it (a26567dfa).
+    let saved: String = host
+        .conn
+        .query_row(
+            "SELECT content FROM ai_chat_messages WHERE role = 'assistant'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(saved, "Checking. All good.");
+}
+
+#[test]
+fn a_call_the_consent_card_cannot_describe_is_refused_before_any_card() {
+    let provider = ScriptedProvider::new().unwrap();
+    provider.queue(
+        "POST",
+        "responses",
+        vec![
+            responses(
+                &[function_call_with(
+                    "bad",
+                    "ui_transfers_components_apply",
+                    r#"{"action": ["a"]}"#,
+                )],
+                None,
+            ),
+            answer("Sorry."),
+        ],
+    );
+    let registry = ActiveChats::default();
+    let mut host = Host::new();
+    Worker::new(turn(&provider, &registry, TOOLS)).run(&mut host);
+    // No consent card; the model gets the validation result and the turn
+    // goes on (b2c0d9447).
+    assert!(!host
+        .kinds()
+        .contains(&"ai.chat.tool_consent_required".to_owned()));
+    let call = host
+        .records
+        .iter()
+        .find(|record| get(record, "kind") == Some(&s("ai.chat.tool_call")))
+        .unwrap();
+    assert_eq!(
+        get(get(call, "data").unwrap(), "needs_consent"),
+        Some(&Value::Bool(false))
+    );
+    let result = host.result("bad");
+    assert_eq!(get(&result, "reason"), Some(&s("validation")));
+    assert_eq!(
+        get(&result, "message"),
+        Some(&s("Custody component review action is unsupported"))
+    );
+    assert_eq!(get(host.terminal(), "finish_reason"), Some(&s("stop")));
+}
+
+#[test]
+fn every_tool_is_offered_unless_the_caller_narrows_it() {
+    // #684: the default profile is `full`.
+    assert_eq!(validate(&load(PLAIN)).unwrap().tool_profile, "full");
+    let scoped = r#"{"model": "m", "tool_profile": "scoped", "messages": [{"role": "user", "content": "hi"}]}"#;
+    assert_eq!(validate(&load(scoped)).unwrap().tool_profile, "scoped");
+    // An absent permission mode asks for every change.
+    assert_eq!(validate(&load(PLAIN)).unwrap().permission_mode, "approval");
+    let auto = r#"{"model": "m", "permission_mode": "auto", "messages": [{"role": "user", "content": "hi"}]}"#;
+    assert_eq!(validate(&load(auto)).unwrap().permission_mode, "auto");
+    let bad = r#"{"model": "m", "permission_mode": "yolo", "messages": [{"role": "user", "content": "hi"}]}"#;
+    let Err(error) = validate(&load(bad)) else {
+        panic!("an unknown mode is refused")
+    };
+    assert_eq!(
+        error.message,
+        "ai.chat permission_mode must be approval, auto, or full_access"
+    );
+}
+
+fn approvals(host: &Host, call_id: &str) -> Vec<Value> {
+    host.records
+        .iter()
+        .filter(|record| get(record, "kind") == Some(&s("ai.chat.tool_call")))
+        .map(|record| get(record, "data").unwrap())
+        .filter(|data| get(data, "call_id") == Some(&s(call_id)))
+        .map(|data| get(data, "approval").cloned().unwrap_or(Value::Null))
+        .collect()
+}
+
+#[test]
+fn a_permission_mode_approves_without_asking() {
+    // `auto` approves a reversible tool that stays on this machine;
+    // `full_access` approves a network tool too (#684).
+    for (mode, call, tool, approval) in [
+        ("auto", "call_mut", "ui_journals_process", "auto"),
+        ("full_access", "call_sync", "ui_wallets_sync", "full_access"),
+    ] {
+        let provider = ScriptedProvider::new().unwrap();
+        provider.queue(
+            "POST",
+            "responses",
+            vec![responses(&[function_call(call, tool)], None), answer("ok")],
+        );
+        let registry = ActiveChats::default();
+        let mut host = Host::new();
+        let args = TOOLS.replace(
+            r#""tool_profile": "full","#,
+            &format!(r#""tool_profile": "full", "permission_mode": "{mode}","#),
+        );
+        let turn = turn(&provider, &registry, &args);
+        turn.chat.consent.set_permission_mode(mode);
+        Worker::new(turn).run(&mut host);
+        assert!(!host
+            .kinds()
+            .contains(&"ai.chat.tool_consent_required".to_owned()));
+        assert_eq!(approvals(&host, call), [s(approval), s(approval)], "{mode}");
+    }
+    // `auto` still asks for a tool that leaves the machine.
+    let provider = ScriptedProvider::new().unwrap();
+    provider.queue(
+        "POST",
+        "responses",
+        vec![
+            responses(&[function_call("call_sync", "ui_wallets_sync")], None),
+            answer("ok"),
+        ],
+    );
+    let registry = ActiveChats::default();
+    let mut host = Host::new();
+    let turn = turn(&provider, &registry, TOOLS);
+    turn.chat.consent.set_permission_mode("auto");
+    Worker::new(turn).run(&mut host);
+    let card = host
+        .records
+        .iter()
+        .find(|record| get(record, "kind") == Some(&s("ai.chat.tool_consent_required")))
+        .map(|record| get(record, "data").unwrap().clone())
+        .unwrap();
+    assert_eq!(get(&card, "egresses"), Some(&Value::Bool(true)));
+    assert_eq!(get(&card, "reversible"), Some(&Value::Bool(false)));
+    assert_eq!(get(&card, "can_allow_session"), Some(&Value::Bool(true)));
+    assert_eq!(approvals(&host, "call_sync"), [s("required")]);
+}
+
+#[test]
+fn switching_modes_releases_a_waiting_call() {
+    let provider = ScriptedProvider::new().unwrap();
+    provider.queue(
+        "POST",
+        "responses",
+        vec![
+            responses(&[function_call("call_mut", "ui_journals_process")], None),
+            answer("ok"),
+        ],
+    );
+    let registry = ActiveChats::default();
+    let mut host = Host::new();
+    let turn = turn(&provider, &registry, TOOLS);
+    let chat = std::sync::Arc::clone(&turn.chat);
+    let switching = registry.clone();
+    let switcher = std::thread::spawn(move || {
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while chat.consent.waiting() == 0 {
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        switching.set_permission_mode(KEY, "auto")
+    });
+    Worker::new(turn).run(&mut host);
+    assert_eq!(switcher.join().unwrap(), Some(vec!["call_mut".to_owned()]));
+    // Asked first; the switch approved it, and says so.
+    assert_eq!(approvals(&host, "call_mut"), [s("required"), s("auto")]);
+    // An unknown chat is not found.
+    assert_eq!(registry.set_permission_mode("nobody", "auto"), None);
+}
+
+#[test]
+fn an_allow_for_this_chat_carries_to_the_next_turn() {
+    let registry = ActiveChats::default();
+    let allowed: std::collections::HashSet<String> =
+        ["ui.journals.process".to_owned()].into_iter().collect();
+    registry.remember_session_allows(Some("session-1"), &allowed);
+    let provider = ScriptedProvider::new().unwrap();
+    provider.queue(
+        "POST",
+        "responses",
+        vec![
+            responses(&[function_call("call_mut", "ui_journals_process")], None),
+            answer("ok"),
+        ],
+    );
+    let mut host = Host::new();
+    let mut turn = turn(&provider, &registry, TOOLS);
+    turn.chat = registry.register(Some(KEY), Some("session-1"));
+    Worker::new(turn).run(&mut host);
+    assert!(!host
+        .kinds()
+        .contains(&"ai.chat.tool_consent_required".to_owned()));
+    assert_eq!(approvals(&host, "call_mut"), [s("session"), s("session")]);
 }

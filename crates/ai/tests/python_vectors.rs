@@ -173,8 +173,15 @@ fn redaction_matches_python() {
 fn summaries_match_python() {
     for case in section("summaries") {
         let tool = get_tool(text(field(case, "tool"))).unwrap();
-        let have = Value::Str(summarize_tool_call(tool, field(case, "arguments")));
-        assert_eq!(&have, field(case, "summary"), "{case:?}");
+        match summarize_tool_call(tool, field(case, "arguments")) {
+            Ok(summary) => assert_eq!(&Value::Str(summary), field(case, "summary"), "{case:?}"),
+            // A call the consent card cannot describe is refused.
+            Err(error) => assert_eq!(
+                &outcome(Err(ToolError::App(error))),
+                field(case, "outcome"),
+                "{case:?}"
+            ),
+        }
     }
 }
 
@@ -289,6 +296,19 @@ fn chain_analysis_projection_matches_python() {
     }
 }
 
+#[test]
+fn stale_journal_figures_are_withheld_as_python_withholds_them() {
+    let cases = section("stale_journals");
+    assert!(cases.len() > 40);
+    for case in cases {
+        let projected = kassiber_ai::projections::stale_journal_figures_for_ai(
+            text(field(case, "kind")),
+            field(case, "payload").clone(),
+        );
+        assert_eq!(&projected, field(case, "projected"), "{case:?}");
+    }
+}
+
 /// The Python `outcome()` record for a Rust result with a value; a Python
 /// exception other than `AppError` compares by its presence only.
 fn value_outcome(result: Result<Value, ToolError>, expected: &Value) -> Value {
@@ -300,17 +320,27 @@ fn value_outcome(result: Result<Value, ToolError>, expected: &Value) -> Value {
     }
 }
 
-fn app(result: Result<(), AppError>) -> Result<(), ToolError> {
-    result.map_err(ToolError::App)
-}
-
 #[test]
 fn ai_review_operation_rules_match_python() {
     use kassiber_ai::review::validate_operations;
     for case in section("review_operations") {
         let operations = field(case, "operations");
         let operations = (!matches!(operations, Value::Null)).then_some(operations);
-        let have = outcome(app(validate_operations(operations)));
+        let full_access = field(case, "full_access") == &Value::Bool(true);
+        // The generator's book: two components and nothing else.
+        let mut lookup = |id: &str| match id {
+            "conv" => Ok(dict([("conservation_mode", s("conversion"))])),
+            "qty" => Ok(dict([("conservation_mode", s("quantity"))])),
+            _ => Err(AppError::new(
+                "not_found",
+                "custody component was not found",
+            )),
+        };
+        let have = outcome(validate_operations(
+            operations,
+            full_access,
+            Some(&mut lookup),
+        ));
         assert_eq!(&have, field(case, "outcome"), "{case:?}");
     }
 }
@@ -413,5 +443,69 @@ fn planned_review_artifact_checks_match_python() {
             expected,
         );
         assert_eq!(&have, expected, "{case:?}");
+    }
+}
+
+#[test]
+fn undo_hints_match_python() {
+    use kassiber_ai::undo::undo_hint;
+    let now = kassiber_pytext::iso_datetime(text(field(vectors(), "undo_now")))
+        .unwrap()
+        .utc_us();
+    let cases = section("undo");
+    assert!(cases.len() > 50);
+    for case in cases {
+        let have = undo_hint(
+            text(field(case, "tool")),
+            field(case, "arguments"),
+            field(case, "data"),
+            now,
+        )
+        .unwrap_or(Value::Null);
+        assert_eq!(&have, field(case, "hint"), "{case:?}");
+    }
+}
+
+#[test]
+fn chat_visuals_match_python() {
+    use kassiber_ai::visuals::{
+        build_chat_visual, model_digest, normalize_visual_args, readiness_from_blockers,
+    };
+    let visuals = field(vectors(), "visuals");
+    let list = |key: &str| match field(visuals, key) {
+        Value::List(items) => items.as_slice(),
+        other => panic!("{key}: {other:?}"),
+    };
+    for case in list("normalize") {
+        let have = match normalize_visual_args(field(case, "args")) {
+            Ok(spec) => dict([("ok", spec)]),
+            Err(error) => outcome(Err(ToolError::App(error))),
+        };
+        assert_eq!(&have, field(case, "outcome"), "{case:?}");
+    }
+    for case in list("readiness") {
+        assert_eq!(
+            &readiness_from_blockers(field(case, "payload")),
+            field(case, "readiness"),
+            "{case:?}"
+        );
+    }
+    let now = kassiber_pytext::iso_datetime(text(field(vectors(), "visuals_now")))
+        .unwrap()
+        .utc_us();
+    let optional = |value: &'static Value| (*value != Value::Null).then_some(value);
+    assert!(list("build").len() > 40);
+    for case in list("build") {
+        let built = build_chat_visual(
+            field(case, "spec"),
+            field(case, "payload"),
+            text(field(case, "fiat_currency")),
+            optional(field(case, "readiness")),
+            optional(field(case, "local_reference")),
+            field(case, "context"),
+            now,
+        );
+        assert_eq!(&built, field(case, "visual"), "{:?}", field(case, "spec"));
+        assert_eq!(&model_digest(&built), field(case, "model_digest"));
     }
 }

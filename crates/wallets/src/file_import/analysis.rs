@@ -128,7 +128,8 @@ fn delimiter_name(path: &std::path::Path) -> Option<String> {
     super::platform_csv::sniffed_delimiter(&sample).map(String::from)
 }
 
-fn file_kind(path: &str) -> &'static str {
+/// `file_kind(path)`: what an attached or staged file is.
+pub fn file_kind(path: &str) -> &'static str {
     let extension = splitext(path).to_lowercase();
     if [".xlsx", ".xlsm"].contains(&extension.as_str()) {
         "spreadsheet"

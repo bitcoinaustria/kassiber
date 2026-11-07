@@ -54,6 +54,11 @@ RUST_BIN = os.environ.get("KASSIBER_RUST_BIN")
 TIME = "2026-11-05T12:00:00Z"
 CHECKED_AT = "2026-11-05T12:00:00.123456Z"
 UUID = re.compile(rb"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")
+# Staging grants: each daemon mints its own `secrets.token_urlsafe(32)`.
+TOKEN = re.compile(rb'(?<="document_token":")[A-Za-z0-9_-]{43}(?=")')
+# Python adds a Pillow thumbnail to a staged chat image; the Rust daemon has
+# no image codec and sends none, like Python without Pillow.
+THUMBNAIL = re.compile(rb',"thumbnail":"data:image/png;base64,[A-Za-z0-9+/=]*"')
 TABLES = ("ai_chat_sessions", "ai_chat_messages", "ai_providers", "settings")
 WAIT = 60.0
 
@@ -244,6 +249,8 @@ class RustAiChatParityTest(unittest.TestCase):
                     record = json.loads(line)
                     record_id = record.get("request_id")
                     kind = record.get("kind")
+                    if record_id == rid and kind == "internal.document_import.stage" and "data" in record:
+                        seen.setdefault("tokens", []).append(record["data"]["document_token"])
                     if record_id == rid and streaming:
                         if kind in {"ai.chat", "error", "auth_required"}:
                             waiting.discard(rid)
@@ -286,12 +293,8 @@ class RustAiChatParityTest(unittest.TestCase):
         self.assertEqual((code, stderr), (0, b""), f"{runtime} exited badly")
         return lines
 
-    def session(self, steps, *, setup=None, prepare=None, mask=None):
-        """One session per side; returns the Rust records.
-
-        ``mask`` normalizes response lines, table text and broker request
-        lines on both sides alike."""
-        mask = mask or (lambda text: text)
+    def session(self, steps, *, setup=None, prepare=None):
+        """One session per side; returns the Rust records."""
         outcomes = []
         for runtime in ("python", "rust"):
             # One path for both sides: status payloads name it.
@@ -307,16 +310,17 @@ class RustAiChatParityTest(unittest.TestCase):
                 grouped.setdefault(json.loads(line).get("request_id"), []).append(line)
             labels: dict[bytes, bytes] = {}
             ordered = sorted(grouped.items(), key=lambda item: _rid_order(item[0]))
-            mapped = {rid: [mask(_label(line, labels)) for line in group] for rid, group in ordered}
+            mapped = {
+                rid: [_label(THUMBNAIL.sub(b"", line), labels) for line in group]
+                for rid, group in ordered
+            }
             requests = [
                 (request["method"], request["path"], request["body"], request["authorization"])
                 for request in self.provider.requests
             ]
             log = Path(str(self.broker) + ".log")
-            broker = mask(log.read_bytes()) if log.exists() else b""
-            tables = {name: [tuple(mask(value.encode()).decode() if isinstance(value, str) else value for value in row)
-                             for row in rows] for name, rows in self.tables(root, labels).items()}
-            outcomes.append((mapped, tables, requests, broker))
+            broker = log.read_bytes() if log.exists() else b""
+            outcomes.append((mapped, self.tables(root, labels), requests, broker))
         (python, python_tables, python_requests, python_broker), (rust, rust_tables, rust_requests, rust_broker) = outcomes
         self.assertEqual(sorted(rust), sorted(python))
         mismatches = [
@@ -421,11 +425,14 @@ class RustAiChatParityTest(unittest.TestCase):
             {"model": "m", "messages": [user], "screen_context": {"metrics": {"incoming_count": 1}}},
             {"model": "m", "messages": [user], "screen_context": {"metrics": {"other": 1}, "metrics_scope": {}}},
             {"model": "m", "messages": [user], "screen_context": {"metrics_scope": {"workspace_id": "w", "profile_id": "p", "input_version": -1}}},
-            {"model": "m", "messages": [user], "attachment": "file.csv"},
-            {"model": "m", "messages": [user], "attachment": {"path": "/x"}},
-            {"model": "m", "messages": [user], "attachment": {"token": " "}},
-            {"model": "m", "messages": [user], "attachment": {"token": "t", "label": "x" * 501}},
-            {"model": "m", "messages": [user], "attachment": {"token": "stale"}},
+            {"model": "m", "messages": [user], "attachments": "file.csv"},
+            {"model": "m", "messages": [user], "attachments": ["file.csv"]},
+            {"model": "m", "messages": [user], "attachments": [{"path": "/x"}]},
+            {"model": "m", "messages": [user], "attachments": [{"token": " "}]},
+            {"model": "m", "messages": [user], "attachments": [{"token": "t", "label": "x" * 501}]},
+            {"model": "m", "messages": [user], "attachments": [{"token": "t", "new": "yes"}]},
+            {"model": "m", "messages": [user], "attachments": [{"token": "t"}, {"token": " t "}]},
+            {"model": "m", "messages": [user], "attachments": [{"token": f"t{i}"} for i in range(9)]},
             {"model": "m", "messages": [user], "provider": "nobody"},
             {"model": "m", "messages": [user], "provider": ""},
         ]
@@ -441,6 +448,62 @@ class RustAiChatParityTest(unittest.TestCase):
             ]
         )
         self.assertEqual(self.requests, [])
+
+    def test_chat_files_reach_the_model(self):
+        """#693/#697: a CSV, a PDF with a text layer, a small image and an
+        expired grant. The on-device provider sees the note, the PDF's text
+        and the image on the user's message, reads the CSV by id, and a
+        later turn without tools still carries the files; the user row keeps
+        the first message's file cards and the terminal names the expired
+        token."""
+        from reportlab.pdfgen import canvas
+
+        export = self.base / "Kraken export.csv"
+        export.write_text("time,amount,asset\n2025-01-01,1,BTC\n2025-01-02,2,BTC\n")
+        statement = self.base / "statement.pdf"
+        pdf = canvas.Canvas(str(statement), invariant=1)
+        pdf.drawString(72, 720, "Monthly statement for the cold wallet, closing balance 0.5 BTC")
+        pdf.save()
+        image = self.base / "receipt.png"
+        image.write_bytes(_png())
+        stage = lambda path: {"request": {"kind": "internal.document_import.stage", "args": {"source_file": str(path), "purpose": "chat_attachment"}}}  # noqa: E731
+
+        def attachments(seen, new):
+            tokens = seen["tokens"]
+            return [
+                {"token": tokens[0], "label": " Kraken export, custodial ", "new": new},
+                {"token": tokens[1], "new": new},
+                {"token": tokens[2], "new": new},
+                {"token": "gone", "new": new},
+            ]
+
+        def setup(provider):
+            provider.queue(
+                "POST",
+                "responses",
+                responses_stream([_function_call("call_1", "ui_wallets_analyze_file", '{"file":"file-1"}')]),
+                _answer("The export has two rows."),
+                _answer("Still here."),
+            )
+
+        user = lambda text: {"role": "user", "content": text}  # noqa: E731
+        records = self.session(
+            self.provider_steps(
+                {"request": {"kind": "ui.chat.history.configure", "args": {"history": "on"}}},
+                stage(export),
+                stage(statement),
+                stage(image),
+                {"request": lambda seen: {"kind": "ai.chat", "args": {"model": "test-model", "persist": True, "tool_profile": "full", "messages": [user("What did I attach?")], "attachments": attachments(seen, True)}}},
+                {"request": lambda seen: {"kind": "ai.chat", "args": {"model": "test-model", "tools_enabled": False, "messages": [user("What did I attach?"), {"role": "assistant", "content": "The export has two rows."}, user("And now?")], "attachments": attachments(seen, False)}}},
+            ),
+            setup=setup,
+        )
+        terminals = [group[-1] for group in records.values() if group[-1]["kind"] == "ai.chat"]
+        self.assertEqual([t["data"].get("expired_attachments") for t in terminals], [["gone"], ["gone"]])
+        first = json.dumps(self.requests[0][2])
+        self.assertIn("file-4: no longer available", first)
+        self.assertIn("closing balance 0.5 BTC", first)
+        self.assertIn("data:image/png;base64,", first)
 
     def test_tool_loop_records_consent_and_denials(self):
         def setup(provider):
@@ -663,6 +726,34 @@ class RustAiChatParityTest(unittest.TestCase):
         )
         self.assertTrue(options[5].get("stateless_session"))
 
+    def test_broker_agents_receive_attached_images(self):
+        """#693: a CLI agent gets each user message's inline images apart from
+        its text, on a tool turn and on a plain one; a resumed session gets
+        this turn's note on the user's message and the earlier files in a
+        message of their own."""
+        image = self.base / "receipt.png"
+        image.write_bytes(_png())
+        stage = {"request": {"kind": "internal.document_import.stage", "args": {"source_file": str(image), "purpose": "chat_attachment"}}}
+        files = lambda seen, new: [{"token": seen["tokens"][0], "new": new}]  # noqa: E731
+        hello = [{"role": "user", "content": "what is this?"}]
+        later = [*hello, {"role": "assistant", "content": "Checking all good"}, {"role": "user", "content": "and?"}]
+        last = [*later, {"role": "assistant", "content": "plain answer"}, {"role": "user", "content": "more"}]
+        self.session(
+            [
+                {"request": {"kind": "ai.providers.acknowledge", "args": {"name": "codex"}}},
+                {"request": {"kind": "ai.providers.update", "args": {"name": "codex", "enabled": True}}},
+                {"request": {"kind": "ui.chat.history.configure", "args": {"history": "on"}}},
+                stage,
+                {"request": lambda seen: {"kind": "ai.chat", "args": {"provider": "codex", "model": "default", "tools_enabled": True, "persist": True, "messages": hello, "attachments": files(seen, True)}}},
+                {"request": lambda seen: {"kind": "ai.chat", "args": {"provider": "codex", "model": "default", "session_id": seen["session_id"], "messages": later, "attachments": files(seen, False)}}},
+                {"request": lambda seen: {"kind": "ai.chat", "args": {"provider": "codex", "model": "default", "session_id": seen["session_id"], "messages": last, "attachments": files(seen, False)}}},
+            ]
+        )
+        chats = [json.loads(line) for line in self.broker_log.splitlines() if b'"command": "chat"' in line]
+        self.assertEqual(len(chats), 3)
+        self.assertTrue(all(any(message.get("images") for message in chat["messages"]) for chat in chats))
+        self.assertEqual(chats[2]["options"].get("provider_session_id"), "native-cursor-2")
+
     def test_offline_mode_refuses_a_remote_provider_before_contact(self):
         offline = self.base / "preferences" / "offline.json"
         offline.parent.mkdir(parents=True, exist_ok=True)
@@ -684,29 +775,21 @@ class RustAiChatParityTest(unittest.TestCase):
         self.assertEqual(self.broker_log, b"")
 
 
-_MAIN_SYNC_FIELDS = (
-    (re.compile(rb',"agent_access":"[a-z]+"'), b""),
-    (re.compile(rb'"approval":"[a-z_]+",|,"approval":"[a-z_]+"'), b""),
-    (re.compile(rb'"advertised_tool_count": ?\d+'), b'"advertised_tool_count":-1'),
-)
+def _png() -> bytes:
+    """A 2x2 RGB PNG, written by hand."""
+    import struct
+    import zlib
 
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
 
-def _without_main_sync_gaps(text):
-    """Mask the fields main #672 to #714 changed that the Rust AI slices have
-    not ported yet (docs/reference/rust-main-sync.md): provider
-    ``agent_access``, a tool call's ``approval``, the advertised tool count,
-    and the broker's tool list and instructions."""
-    for pattern, replacement in _MAIN_SYNC_FIELDS:
-        text = pattern.sub(replacement, text)
-    if text.startswith(b'{"command"'):
-        lines = []
-        for line in text.splitlines():
-            request = json.loads(line)
-            request.pop("instructions", None)
-            request.pop("tools", None)
-            lines.append(json.dumps(request, sort_keys=True).encode())
-        text = b"\n".join(lines)
-    return text
+    rows = b"".join(b"\x00" + b"\xff\x00\x00" * 2 for _ in range(2))
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", struct.pack(">IIBBBBB", 2, 2, 8, 2, 0, 0, 0))
+        + chunk(b"IDAT", zlib.compress(rows))
+        + chunk(b"IEND", b"")
+    )
 
 
 def _rid_order(rid):
@@ -725,7 +808,7 @@ def _label(line: bytes, labels: dict[bytes, bytes], *, grow: bool = True) -> byt
             labels[value] = f"<uuid-{len(labels)}>".encode()
         return labels[value]
 
-    return UUID.sub(replace, line)
+    return TOKEN.sub(replace, UUID.sub(replace, line))
 
 
 if __name__ == "__main__":

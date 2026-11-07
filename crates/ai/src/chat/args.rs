@@ -5,6 +5,7 @@
 use kassiber_envelope::{dict, get, json_ready, set, AppError};
 use kassiber_pyjson::{dumps, BigInt, Key, Options, PyStr, Value};
 
+use crate::consent::PERMISSION_MODES;
 use crate::projections::contains_path_or_url;
 use crate::prompt::{normalize_system_prompt_kind, PromptKind};
 use crate::provenance::PROVIDER_STATUS_NOTICES;
@@ -13,7 +14,7 @@ use crate::redact::redact_tool_arguments;
 use crate::select::{select_tool_capabilities, TOOL_CAPABILITY_NAMES, TOOL_PROFILE_NAMES};
 
 /// `_AI_SCREEN_ROUTES`, sorted.
-pub const SCREEN_ROUTES: [&str; 25] = [
+pub const SCREEN_ROUTES: [&str; 26] = [
     "/",
     "/activity",
     "/assistant",
@@ -33,6 +34,7 @@ pub const SCREEN_ROUTES: [&str; 25] = [
     "/quarantine",
     "/reconcile",
     "/reports",
+    "/review",
     "/settings",
     "/source-of-funds",
     "/swaps",
@@ -319,16 +321,54 @@ fn metrics_scope(raw: Option<&Value>) -> Result<Option<Value>, AppError> {
     Ok(Some(Value::Dict(scope)))
 }
 
-/// `_ai_chat_attachment(raw)`: an opaque staging grant, never a path.
-pub fn attachment(raw: Option<&Value>) -> Result<Option<Value>, AppError> {
-    let raw = match raw {
-        None | Some(Value::Null) => return Ok(None),
-        Some(raw @ Value::Dict(_)) => raw,
-        Some(_) => return Err(validation("ai.chat attachment must be an object")),
+/// `MAX_CHAT_ATTACHMENTS`: files one chat can hold; ids run `file-1` ..
+/// `file-8` in the order attached.
+pub const MAX_CHAT_ATTACHMENTS: usize = 8;
+
+/// `_ai_chat_attachments(raw)`: the chat's files, in the order attached
+/// (#693).
+pub fn attachments(raw: Option<&Value>) -> Result<Vec<Value>, AppError> {
+    let items = match raw {
+        None | Some(Value::Null) => return Ok(Vec::new()),
+        Some(Value::List(items)) => items,
+        Some(_) => return Err(validation("ai.chat attachments must be a list")),
     };
+    if items.len() > MAX_CHAT_ATTACHMENTS {
+        return Err(validation("ai.chat has too many attachments")
+            .with_hint(format!(
+                "A chat holds up to {MAX_CHAT_ATTACHMENTS} files; start a new chat for more."
+            ))
+            .with_details(dict([(
+                "max_attachments",
+                Value::from(MAX_CHAT_ATTACHMENTS),
+            )])));
+    }
+    let attachments = items
+        .iter()
+        .map(attachment)
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut tokens: Vec<&Value> = attachments
+        .iter()
+        .filter_map(|item| get(item, "token"))
+        .collect();
+    tokens.sort_by_key(|token| kassiber_envelope::py_str(token));
+    tokens.dedup();
+    if tokens.len() != attachments.len() {
+        return Err(validation("ai.chat attachments repeat a file"));
+    }
+    Ok(attachments)
+}
+
+/// `_ai_chat_attachment(raw)`: an opaque staging grant, never a path.
+/// `new` marks the message that first sends the file: a provider that
+/// resumes its own session already saw the files of earlier turns.
+fn attachment(raw: &Value) -> Result<Value, AppError> {
+    if !matches!(raw, Value::Dict(_)) {
+        return Err(validation("ai.chat attachments must be objects"));
+    }
     let unknown: Vec<Value> = sorted_keys(raw)
         .into_iter()
-        .filter(|key| !key.is("token") && !key.is("label"))
+        .filter(|key| !key.is("token") && !key.is("label") && !key.is("new"))
         .map(Value::Str)
         .collect();
     if !unknown.is_empty() {
@@ -351,13 +391,19 @@ pub fn attachment(raw: Option<&Value>) -> Result<Option<Value>, AppError> {
         return Err(validation("ai.chat attachment label is too long")
             .with_details(dict([("max_length", Value::Int(500.into()))])));
     }
+    let new = match get(raw, "new") {
+        None => false,
+        Some(Value::Bool(new)) => *new,
+        Some(_) => return Err(validation("ai.chat attachment new must be a boolean")),
+    };
     let label = label
         .map(kassiber_pytext::strip_py)
         .filter(|text| text.code_points().next().is_some());
-    Ok(Some(dict([
+    Ok(dict([
         ("token", Value::Str(kassiber_pytext::strip_py(token))),
         ("label", label.map_or(Value::Null, Value::Str)),
-    ])))
+        ("new", Value::Bool(new)),
+    ]))
 }
 
 /// Recognised notices of seeded assistant answers, by message index.
@@ -425,6 +471,8 @@ pub struct Validated {
     pub options: Value,
     pub tools_enabled: bool,
     pub tool_profile: &'static str,
+    /// `approval`, `auto` or `full_access` (#684).
+    pub permission_mode: &'static str,
     pub timeout: f64,
     pub tool_loop_max_iterations: i64,
     pub system_prompt_kind: Option<PromptKind>,
@@ -435,7 +483,8 @@ pub struct Validated {
     pub seed_history: bool,
     pub seed_notices: SeedNotices,
     pub screen_context: Option<Value>,
-    pub attachment: Option<Value>,
+    /// `attachments`: the chat's staging grants, in the order attached.
+    pub attachments: Vec<Value>,
     pub desktop_secret_store_bridge: Value,
 }
 
@@ -584,14 +633,16 @@ pub fn validate(args: &Value) -> Result<Validated, AppError> {
         Some(Value::Bool(flag)) => *flag,
         Some(_) => return Err(validation("ai.chat tools_enabled must be a boolean")),
     };
+    // Every tool is available unless the caller narrows it (#684): the user
+    // chooses `scoped` or `core` for a small local model.
     let tool_profile = match get(args, "tool_profile") {
-        None => "scoped",
+        None => "full",
         Some(Value::Str(text)) if TOOL_PROFILE_NAMES.iter().any(|name| text.is(name)) => {
             TOOL_PROFILE_NAMES
                 .iter()
                 .copied()
                 .find(|name| text.is(name))
-                .unwrap_or("scoped")
+                .unwrap_or("full")
         }
         Some(other) => {
             return Err(
@@ -603,6 +654,21 @@ pub fn validate(args: &Value) -> Result<Validated, AppError> {
                 ),
             )
         }
+    };
+    let permission_mode = match get(args, "permission_mode") {
+        None => "approval",
+        Some(value) => match PERMISSION_MODES.iter().find(|mode| *value == s(**mode)) {
+            Some(mode) => mode,
+            None => {
+                return Err(validation(
+                    "ai.chat permission_mode must be approval, auto, or full_access",
+                )
+                .with_details(dict([
+                    ("permission_mode", value.clone()),
+                    ("supported", names(&PERMISSION_MODES)),
+                ])))
+            }
+        },
     };
     let default_timeout = Value::Int(BigInt::from(120));
     let raw_timeout = get(args, "timeout_seconds").unwrap_or(&default_timeout);
@@ -671,7 +737,7 @@ pub fn validate(args: &Value) -> Result<Validated, AppError> {
     };
     let seed_notices = seed_notices(get(args, "seed_notices"), &messages)?;
     let screen_context = screen_context(get(args, "screen_context"))?;
-    let attachment = attachment(get(args, "attachment"))?;
+    let attachments = attachments(get(args, "attachments"))?;
     if get(args, "tool_loop_max_iterations").is_none() && tools_enabled {
         let selected = select_tool_capabilities(Some(&messages), screen_context.as_ref());
         if selected.is_some_and(|set| set.contains("review") || set.contains("source_funds")) {
@@ -685,6 +751,7 @@ pub fn validate(args: &Value) -> Result<Validated, AppError> {
         options,
         tools_enabled,
         tool_profile,
+        permission_mode,
         timeout,
         tool_loop_max_iterations,
         system_prompt_kind,
@@ -694,7 +761,7 @@ pub fn validate(args: &Value) -> Result<Validated, AppError> {
         seed_history,
         seed_notices,
         screen_context,
-        attachment,
+        attachments,
         desktop_secret_store_bridge: get(args, "_desktop_secret_store_bridge")
             .cloned()
             .unwrap_or(Value::Null),

@@ -31,6 +31,7 @@ pub const KINDS: &[&str] = &[
     "ai.chat",
     "ai.chat.cancel",
     "ai.tool_call.consent",
+    "ai.chat.permission_mode",
     "ui.chat.sessions.list",
     "ui.chat.sessions.get",
     "ui.chat.sessions.delete",
@@ -39,7 +40,11 @@ pub const KINDS: &[&str] = &[
 ];
 
 /// The kinds Python answers before its book gate.
-pub const CONTROL_KINDS: &[&str] = &["ai.chat.cancel", "ai.tool_call.consent"];
+pub const CONTROL_KINDS: &[&str] = &[
+    "ai.chat.cancel",
+    "ai.tool_call.consent",
+    "ai.chat.permission_mode",
+];
 
 /// Work a chat worker hands to the request loop.
 pub(crate) type Task = Box<dyn FnOnce(&mut Daemon) + Send>;
@@ -444,8 +449,9 @@ fn text_arg<'a>(args: &'a Value, key: &str) -> Option<&'a PyStr> {
     }
 }
 
-/// `_handle_ai_chat_cancel` and `_handle_ai_tool_call_consent`: answered
-/// before the book gate; they only touch the RAM registry.
+/// `_handle_ai_chat_cancel`, `_handle_ai_tool_call_consent` and
+/// `_handle_ai_chat_permission_mode`: answered before the book gate; they
+/// only touch the RAM registry.
 pub(crate) fn control(
     daemon: &mut Daemon,
     kind: &str,
@@ -466,6 +472,44 @@ pub(crate) fn control(
         let mut payload = dict([("cancelled", Value::Bool(cancelled || queued))]);
         if queued {
             kassiber_envelope::set(&mut payload, "queued", Value::Bool(true));
+        }
+        payload
+    } else if kind == "ai.chat.permission_mode" {
+        let Some(target) = text_arg(&args, "target_request_id") else {
+            return Err(
+                validation("ai.chat.permission_mode requires target_request_id")
+                    .with_hint("Pass {target_request_id: '<active ai.chat request_id>'}.")
+                    .into(),
+            );
+        };
+        let mode = get(&args, "permission_mode")
+            .cloned()
+            .unwrap_or(Value::Null);
+        let Some(mode_text) = kassiber_ai::consent::PERMISSION_MODES
+            .iter()
+            .find(|known| mode == s(**known))
+        else {
+            return Err(validation(
+                "ai.chat.permission_mode permission_mode must be approval, auto, or full_access",
+            )
+            .with_details(dict([("permission_mode", mode)]))
+            .into());
+        };
+        // Releases every waiting call the new mode approves.
+        let released = daemon
+            .chats
+            .registry
+            .set_permission_mode(&py_str(&Value::Str(target.clone())), mode_text);
+        let mut payload = dict([
+            ("permission_mode", s(*mode_text)),
+            (
+                "released_call_ids",
+                Value::List(released.iter().flatten().map(|id| s(id.as_str())).collect()),
+            ),
+            ("updated", Value::Bool(released.is_some())),
+        ]);
+        if released.is_none() {
+            kassiber_envelope::set(&mut payload, "reason", s("not_found"));
         }
         payload
     } else {
@@ -655,32 +699,36 @@ fn start_chat(
         })?;
         validated.screen_context = Some(bound);
     }
-    if validated.attachment.is_some() {
-        // The staging grant resolves against the scope that staged it; the
-        // document-import staging sessions are not native yet, so every
-        // grant is unknown here, as an expired one is in Python.
-        daemon.book_mut()?.resolve_scope(None, None)?;
-        return Err(AppError::new(
-            "document_import_session_expired",
-            "Document import session is unavailable",
-        )
-        .with_hint("Choose the document and preview it again.")
-        .into());
-    }
-    let state = dict([
+    // Resolved here, on the request loop: the tool worker only ever sees
+    // the resolved paths.
+    let attachment_state = resolve_chat_attachments(daemon, &validated.attachments)?;
+    let mut state = dict([
         (
             "provider_kind",
             provider.kind.as_deref().map_or(Value::Null, s),
         ),
         ("provider_on_device", Value::Bool(provider.on_device)),
+        // Whether this turn may use every tool and unprojected result.
+        ("provider_full_access", Value::Bool(provider.full_access)),
         ("scope_workspace_id", s(scope.workspace_id.as_str())),
         ("scope_profile_id", s(scope.profile_id.as_str())),
     ]);
+    for (key, value) in attachment_state {
+        kassiber_envelope::set(&mut state, key, value);
+    }
     let key = chat::registry_key(match request_id {
         RequestId::Missing => None,
         RequestId::Value(value) => Some(value),
     });
-    let chat = daemon.chats.registry.register(key.as_deref());
+    let session_id = validated
+        .session_id
+        .as_ref()
+        .map(|id| py_str(&Value::Str(id.clone())));
+    let chat = daemon
+        .chats
+        .registry
+        .register(key.as_deref(), session_id.as_deref());
+    chat.consent.set_permission_mode(validated.permission_mode);
     let turn = Turn {
         key,
         provider,
@@ -734,6 +782,71 @@ fn start_chat(
         return Err(AppError::new("internal_error", "can't start new thread").into());
     }
     Ok((None, false))
+}
+
+/// `_resolve_chat_attachments(ctx, attachments)`: the chat's grants as
+/// runtime state for its tools. Each file gets the id the model names it by
+/// (`file-1`, ...) in the order attached. A grant that expired (or belongs to
+/// another book) is left out rather than failing the turn: the note tells the
+/// model that id is gone and the terminal returns its token (#697).
+fn resolve_chat_attachments(
+    daemon: &mut Daemon,
+    attachments: &[Value],
+) -> Result<Vec<(&'static str, Value)>, AppError> {
+    if attachments.is_empty() {
+        return Ok(Vec::new());
+    }
+    daemon.book_mut()?.resolve_scope(None, None)?;
+    let mut files = Vec::new();
+    let mut expired_ids = Vec::new();
+    let mut expired_tokens = Vec::new();
+    for (index, attachment) in attachments.iter().enumerate() {
+        let id = format!("file-{}", index + 1);
+        let token = get(attachment, "token")
+            .map(kassiber_envelope::py_str)
+            .unwrap_or_default();
+        let source_file = match daemon.document_source(&token) {
+            Ok(source_file) => source_file,
+            Err(error) if error.code == "document_import_session_expired" => {
+                expired_ids.push(s(id));
+                expired_tokens.push(s(token));
+                continue;
+            }
+            Err(error) => return Err(error),
+        };
+        let filename = std::path::Path::new(&source_file)
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        files.push(dict([
+            ("id", s(id)),
+            ("source_file", s(source_file.as_str())),
+            ("filename", s(filename)),
+            (
+                "label",
+                get(attachment, "label").cloned().unwrap_or(Value::Null),
+            ),
+            (
+                "kind",
+                s(kassiber_wallets::file_import::analysis::file_kind(
+                    &source_file,
+                )),
+            ),
+            (
+                "new",
+                Value::Bool(get(attachment, "new") == Some(&Value::Bool(true))),
+            ),
+            // Internal: a document draft is staged against it. Never in the
+            // note, a tool result or history.
+            ("token", s(token)),
+        ]));
+    }
+    let mut state = vec![("chat_files", Value::List(files))];
+    if !expired_ids.is_empty() {
+        state.push(("expired_chat_files", Value::List(expired_ids)));
+        state.push(("expired_attachment_tokens", Value::List(expired_tokens)));
+    }
+    Ok(state)
 }
 
 #[cfg(test)]

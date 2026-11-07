@@ -29,6 +29,10 @@ pub struct DocumentConsent {
 }
 impl DocumentConsent {
     pub fn explicit(conn: &Connection, request: &DocumentPreview) -> Result<Self, AppError> {
+        // `preview_document_import` (#698): the provider is resolved and
+        // contactable before `read_document` checks its arguments.
+        let provider = resolve_provider(conn, request.provider_name.as_deref())?;
+        kassiber_ai::providers::require_contactable(&provider)?;
         files::source_path(&request.source_file)?;
         threshold(&request.confidence_threshold)?;
         preview::max_pages(&request.max_pages)?;
@@ -36,7 +40,7 @@ impl DocumentConsent {
         Ok(Self {
             request: request.clone(),
             book_id,
-            provider: resolve_provider(conn, request.provider_name.as_deref())?,
+            provider,
             context: (
                 setting(conn, "context_workspace")?,
                 setting(conn, "context_profile")?,

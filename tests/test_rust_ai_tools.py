@@ -29,7 +29,7 @@ import sys
 import tempfile
 import unittest
 
-from tests.rust_desktop_parity import BOOK_TABLES
+from tests.rust_port.book_schema import TABLES as BOOK_TABLES
 
 ROOT = Path(__file__).resolve().parent.parent
 RUST_BIN = os.environ.get("KASSIBER_RUST_BIN")
@@ -100,6 +100,12 @@ _GENERATED_AT = re.compile(rb'(\\?"generated_at\\?":\\?")\d{4}-\d\d-\d\dT\d\d:\d
 _REFERENCE = re.compile(rb"ca-ref:[0-9a-f]{64}")
 
 
+_VISUAL_CLOCK = re.compile(
+    rb'((?:\\?"as_of\\?":\\?"(?=\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ\\?"(?:\},\\?"rows|,\\?"chart)))|\\?"until\\?":\\?")'
+    rb"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ"
+)
+
+
 def _mask(line: bytes, references: dict[bytes, bytes] | None = None) -> bytes:
     """Declared mappings, not field masks.
 
@@ -110,6 +116,8 @@ def _mask(line: bytes, references: dict[bytes, bytes] | None = None) -> bytes:
     distinct names.
     """
     line = _GENERATED_AT.sub(rb"\1<generated_at>", line)
+    # A visual's own clock: when it was drawn, and a cash-flow window's end.
+    line = _VISUAL_CLOCK.sub(rb"\1<now>", line)
     if references is not None:
         line = _REFERENCE.sub(
             lambda match: references.setdefault(match.group(0), b"ca-ref:#%d" % len(references)), line
@@ -133,6 +141,13 @@ def _extra_arguments() -> dict[str, list[dict]]:
         "ui.activity.history": [{"transaction": "a"}, {"wallet": "cold"}],
         "ui.transactions.commercial_context": [{"transaction": "a"}],
         "ui.attachments.list": [{"transaction": "a"}, {"limit": 1}],
+        "ui.imports.list": [{"wallet": "nope"}, {"limit": 1}],
+        "ui.imports.rollback.plan": [{"batch": "missing"}, {"batch": " "}],
+        "ui.wallets.request_input": [
+            {"source": "descriptor"}, {"source": "kraken", "explanation": "  Your Kraken API key, please  "},
+            {"source": "ftp"}, {"source": ["descriptor"]}, {"source": "lnd", "explanation": "a\x01b"},
+            {"source": "lnd", "explanation": "x" * 501},
+        ],
         "ui.wallets.utxos": [{"wallet": "cold"}, {"wallet": "missing"}],
         "ui.reports.tax_summary": [{"year": 2025}],
         "ui.reports.balance_history": [{"interval": "month", "limit": 120}, {"interval": "day", "limit": 5}],
@@ -176,7 +191,7 @@ def _extra_arguments() -> dict[str, list[dict]]:
             {"addresses": ["bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq", "not-an-address"]},
             {"txids": ["0" * 64], "text": "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"},
         ],
-        "ui.wallets.analyze_file": [{"sample_rows": 1}, {"column_map": {"date": "Date", "amount": "Amount"}}, {"column_map": {"amount_header_asset": "BTC"}}],
+        "ui.wallets.analyze_file": [{"sample_rows": 1}, {"column_map": {"date": "Date", "amount": "Amount"}}, {"column_map": {"amount_header_asset": "BTC"}}, {"file": "file-1"}, {"file": "file-2"}],
         "ui.egress.snapshot": [{"after_id": 0, "limit": 5}, {"after_id": 3}],
         "ui.reports.lightning_profitability": [{"connection": "missing"}, {"connection": "cold", "window_days": 7}],
         "ui.connections.node.snapshot": [{"connection": "missing"}],
@@ -203,12 +218,17 @@ def tool_requests(attachment=None):
     records it, so their native routes run on both sides.
     """
     from kassiber.ai.tools import TOOL_CATALOG
-    from kassiber.mcp.tools import MCP_SOURCE_TOOL_NAMES
+    from kassiber.mcp.tools import available_tools
 
     extra = _extra_arguments()
+    # An external agent at the `read` grant with restricted access (#686).
+    mcp_reads = {tool.entry.name for tool in available_tools(grant="read", agent_access="restricted")}
     mcp_state = {
         **REMOTE,
-        "advertised_tools": [entry.provider_name for entry in TOOL_CATALOG if entry.name in MCP_SOURCE_TOOL_NAMES],
+        "advertised_tools": [
+            tool.entry.provider_name
+            for tool in available_tools(grant="read", agent_access="restricted")
+        ],
         "cross_book_read_allowed": False,
         "read_maintenance": "disabled",
         "auto_sync_attempted": True,
@@ -230,7 +250,11 @@ def tool_requests(attachment=None):
         if tool.egresses:
             states = [{**state, "consented_call_ids": ["call_x"]} for state in [REMOTE, LOCAL]]
         if tool.name == "ui.wallets.analyze_file" and attachment is not None:
-            staged = {"attachment_source_file": str(attachment), "attachment_label": "Exchange export"}
+            # The chat's files as the daemon resolves them (#693).
+            staged = {"chat_files": [{
+                "id": "file-1", "source_file": str(attachment), "filename": attachment.name,
+                "label": "Exchange export", "kind": "delimited", "new": True, "token": "t",
+            }]}
             states = [REMOTE, {**REMOTE, **staged}, {**LOCAL, **staged}]
         if tool.name == "ui.workspace.overview.snapshot":
             states = [
@@ -241,7 +265,7 @@ def tool_requests(attachment=None):
             ]
         if tool.name == "ui.profiles.snapshot":
             states.append({**REMOTE, "cross_book_read_allowed": True, "scope_workspace_id": "w", "scope_profile_id": "p"})
-        if tool.name in MCP_SOURCE_TOOL_NAMES:
+        if tool.name in mcp_reads:
             states.append(mcp_state)
         for arguments in cases:
             for state in states:
@@ -476,13 +500,13 @@ class AiToolExecutorParityTest(unittest.TestCase):
         try:
             tables = sorted(row[0] for row in conn.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"))
-            self.assertEqual(tables, BOOK_TABLES)
+            self.assertEqual(tuple(tables), BOOK_TABLES)
             return {table: sorted(conn.execute(f'SELECT * FROM "{table}"').fetchall(), key=repr) for table in tables}
         finally:
             conn.close()
 
     def compare_writes(self, fixture, requests, seed, unchanged=False):
-        """Envelope and model bytes per call, then every book table, on copies."""
+        """Envelope and model bytes per call, then every table, on copies."""
         if not requests:
             return []
         base = Path(tempfile.mkdtemp(prefix="writes-", dir=self.base))
@@ -529,7 +553,7 @@ class AiToolExecutorParityTest(unittest.TestCase):
         return [json.loads(line) for line in actual[1:-1]]
 
     def test_mutating_tools_match_python_on_every_fixture(self):
-        """Every mutating tool: whole envelope and every book table after the calls."""
+        """Every mutating tool: whole envelope and every table after the calls."""
         from concurrent.futures import ThreadPoolExecutor
         from kassiber.ai.tools import TOOL_CATALOG
 
@@ -565,59 +589,6 @@ class AiToolExecutorParityTest(unittest.TestCase):
                 with self.subTest(fixture=fixture, tool=name):
                     self.compare_writes(fixture, compared, seed)
                     self.assertEqual(refused, [])
-
-    def test_wire_name_reads_refresh_stale_journals(self):
-        """tests/rust_port/repro_ai_refresh_wire_name.py: a model calls tools by
-        wire name; the stale-journal refresh decides on the catalog entry, so
-        ``ui_reports_summary`` rebuilds journals as ``ui.reports.summary`` does."""
-        from kassiber.ai.tools import get_tool
-
-        ids = FIXTURE_IDS["reports"]
-        state = {**REMOTE, "scope_workspace_id": ids["ws"], "scope_profile_id": ids["profile"]}
-        # ui.review.worklist also refreshes, but its badges still lack main
-        # #707's fields in Rust (slice S4), so it is not compared here.
-        for name in ("ui.reports.summary", "ui.overview.snapshot", "ui.reports.balance_sheet"):
-            tool = get_tool(name)
-            for called in (tool.provider_name, tool.name):
-                with self.subTest(called=called):
-                    seed = self.base / "stale" / called / "seed"
-                    shutil.copytree(self.seed("reports"), seed)
-                    with closing(sqlite3.connect(seed / "kassiber.sqlite3")) as conn, conn:
-                        conn.execute("UPDATE profiles SET journal_input_version=journal_input_version+1 WHERE id=?",
-                                     (ids["profile"],))
-                    requests = [{"kind": "test.ai_tool", "args": {
-                        "name": called, "arguments": {},
-                        "state": copy.deepcopy(state), "call_id": "call_x"}}]
-                    records = self.compare_writes("reports", requests, seed)
-                    self.assertIn("auto_journal_process", json.dumps(records[0]), called)
-
-    def test_unreadable_wallet_config_refuses_wallet_sync_typed(self):
-        """tests/rust_port/repro_ai_wallets_sync_bad_config.py: one wallet whose
-        stored configuration is not a JSON object makes the consented sync a
-        typed ``invalid_wallet_config`` refusal naming it, before any source."""
-        from kassiber.ai.tools import get_tool
-
-        tool = get_tool("ui.wallets.sync")
-        ids = FIXTURE_IDS["desktop"]
-        scope = {"scope_workspace_id": ids["ws"], "scope_profile_id": ids["profile"]}
-        requests = []
-        for arguments in ({}, {"wallet": "Bad"}, {"all": True}):
-            call_id = f"call_{len(requests) + 1}"
-            requests.append({"kind": "test.ai_tool", "args": {
-                "name": tool.provider_name, "arguments": arguments, "call_id": call_id,
-                "state": {**REMOTE, **scope, "consented_call_ids": [call_id]}}})
-        for stored in ("bad", "[]", "null", '"text"'):
-            with self.subTest(stored=stored):
-                seed = self.base / "bad-config" / str(len(list(self.base.glob("bad-config/*")))) / "seed"
-                shutil.copytree(self.seed("desktop"), seed)
-                with closing(sqlite3.connect(seed / "kassiber.sqlite3")) as conn, conn:
-                    conn.execute(
-                        "INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) "
-                        "VALUES('bad',?,?,'Bad','custom',?,'2025-01-01T00:00:00Z')",
-                        (ids["ws"], ids["profile"], stored))
-                records = self.compare_writes("desktop", requests, seed, unchanged=True)
-                self.assertEqual(len(records), 3)
-                self.assertTrue(all("invalid_wallet_config" in json.dumps(record) for record in records), records)
 
     def test_custody_writes_are_audited_or_rolled_back(self):
         """Consented custody writes commit with their audit row; refused ones
@@ -895,6 +866,59 @@ class AiToolExecutorParityTest(unittest.TestCase):
         for have, want in zip(isolated[1:], normal[1:]):
             self.assertEqual(_mask(have, inside_references), _mask(want, outside_references))
 
+    def test_unreadable_wallet_config_refuses_wallet_sync_typed(self):
+        """tests/rust_port/repro_ai_wallets_sync_bad_config.py: one wallet whose
+        stored configuration is not a JSON object makes the consented sync a
+        typed ``invalid_wallet_config`` refusal naming it, before any source."""
+        from kassiber.ai.tools import get_tool
+
+        tool = get_tool("ui.wallets.sync")
+        ids = FIXTURE_IDS["desktop"]
+        scope = {"scope_workspace_id": ids["ws"], "scope_profile_id": ids["profile"]}
+        requests = []
+        for arguments in ({}, {"wallet": "Bad"}, {"all": True}):
+            call_id = f"call_{len(requests) + 1}"
+            requests.append({"kind": "test.ai_tool", "args": {
+                "name": tool.provider_name, "arguments": arguments, "call_id": call_id,
+                "state": {**REMOTE, **scope, "consented_call_ids": [call_id]}}})
+        for stored in ("bad", "[]", "null", '"text"'):
+            with self.subTest(stored=stored):
+                seed = self.base / "bad-config" / str(len(list(self.base.glob("bad-config/*")))) / "seed"
+                shutil.copytree(self.seed("desktop"), seed)
+                with closing(sqlite3.connect(seed / "kassiber.sqlite3")) as conn, conn:
+                    conn.execute(
+                        "INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) "
+                        "VALUES('bad',?,?,'Bad','custom',?,'2025-01-01T00:00:00Z')",
+                        (ids["ws"], ids["profile"], stored))
+                records = self.compare_writes("desktop", requests, seed, unchanged=True)
+                self.assertEqual(len(records), 3)
+                self.assertTrue(all("invalid_wallet_config" in json.dumps(record) for record in records), records)
+
+    def test_wire_name_reads_refresh_stale_journals(self):
+        """tests/rust_port/repro_ai_refresh_wire_name.py: a model calls tools by
+        wire name; the stale-journal refresh decides on the catalog entry, so
+        ``ui_reports_summary`` rebuilds journals as ``ui.reports.summary`` does."""
+        from kassiber.ai.tools import get_tool
+
+        ids = FIXTURE_IDS["reports"]
+        state = {**REMOTE, "scope_workspace_id": ids["ws"], "scope_profile_id": ids["profile"]}
+        # ui.review.worklist also refreshes, but its badges still lack main
+        # #707's fields in Rust (slice S4), so it is not compared here.
+        for name in ("ui.reports.summary", "ui.overview.snapshot", "ui.reports.balance_sheet"):
+            tool = get_tool(name)
+            for called in (tool.provider_name, tool.name):
+                with self.subTest(called=called):
+                    seed = self.base / "stale" / called / "seed"
+                    shutil.copytree(self.seed("reports"), seed)
+                    with closing(sqlite3.connect(seed / "kassiber.sqlite3")) as conn, conn:
+                        conn.execute("UPDATE profiles SET journal_input_version=journal_input_version+1 WHERE id=?",
+                                     (ids["profile"],))
+                    requests = [{"kind": "test.ai_tool", "args": {
+                        "name": called, "arguments": {},
+                        "state": copy.deepcopy(state), "call_id": "call_x"}}]
+                    records = self.compare_writes("reports", requests, seed)
+                    self.assertIn("auto_journal_process", json.dumps(records[0]), called)
+
 
 _UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[45][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")
 _STAMP = re.compile(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,6})?(?:Z|\+00:00)")
@@ -1017,6 +1041,9 @@ REFUSED_MUTATIONS = {
     ("ui.source_funds.export", None),
     ("ui.btcpay.provenance.review", None),
     ("ui.wallets.sync", None),
+    ("ui.transfers.dismissals.delete", None),
+    ("ui.wallets.import_attachment.apply", None),
+    ("ui.wallets.import_document.apply", None),
 }
 
 
@@ -1028,6 +1055,12 @@ def _mutating_extra() -> dict[str, list[dict]]:
         {"id": "{in}", "role": "destination", "amount_msat": 1000},
     ]}
     return {
+        "ui.attachments.add_from_chat": [
+            {"transaction": "{in}", "file": "file-1"},
+            {"transaction": "{in}", "label": "Kraken receipt"},
+            {"transaction": "{in}", "file": "file-9"},
+            {"transaction": "{in}", "path": "/etc/passwd"},
+        ],
         "ui.journals.quarantine.resolve": [
             {"transaction": "{q}", "action": "exclude", "reason": "Dust from an old faucet"},
             {"transaction": "{q}", "action": "price_override", "fiat_rate": "50000", "reason": "Exchange statement", "reprocess": False},
@@ -1116,6 +1149,14 @@ def mutating_requests(fixture, tool):
         states = [{**REMOTE, **scope}, {**LOCAL, **scope}]
     elif tool.name == "ui.maintenance.run":
         states = [{**REMOTE, **scope}, {**REMOTE, **scope, "auto_sync_attempted": True}]
+    elif tool.name == "ui.attachments.add_from_chat":
+        # The chat's files as the daemon resolves them (#693); the evidence
+        # copy is the book's own, the source stays where it is.
+        chat_files = {"chat_files": [
+            {"id": "file-1", "source_file": str(ROOT / "tests/fixtures/XBTEUR_1.csv"),
+             "filename": "XBTEUR_1.csv", "label": None, "kind": "delimited", "new": True, "token": "t"},
+        ]}
+        states = [{**REMOTE, **scope}, {**REMOTE, **scope, **chat_files}, {**LOCAL, **scope, **chat_files}]
     compared, refused = [], []
     for arguments in cases:
         for state in states:
@@ -1137,7 +1178,17 @@ def mutating_requests(fixture, tool):
 
 
 # Read tools still answering `not_implemented` (crates/ai REFUSED_READS).
-REFUSED_READS = {"ui.connections.node.snapshot"}
+# Mirrors crates/ai REFUSED_READS: services other slices or later S12 steps
+# own.
+REFUSED_READS = {
+    "ui.connections.node.snapshot",
+    "ui.journals.quarantine.groups",
+    "ui.transactions.verify",
+    "ui.transfers.dismissals.list",
+    "ui.wallets.import_attachment.plan",
+    "ui.wallets.import_document.plan",
+    "ui.wallets.read_document",
+}
 
 
 if __name__ == "__main__":

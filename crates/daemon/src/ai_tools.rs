@@ -160,6 +160,48 @@ impl AiBook for HostBook<'_> {
         .map_err(tool_error)
     }
 
+    fn profile_fiat_currency(&mut self) -> Result<String, ToolError> {
+        let book = self.daemon.book_mut().map_err(tool_error)?;
+        let (_, profile_id) = book.resolve_scope(None, None).map_err(tool_error)?;
+        Ok(book
+            .document_target(&profile_id, None)
+            .map_err(tool_error)?
+            .fiat_currency)
+    }
+
+    fn import_runs(
+        &mut self,
+        request: kassiber_ai::import_runs::ImportRuns<'_>,
+    ) -> Result<Value, ToolError> {
+        use kassiber_ai::import_runs::ImportRuns;
+        let book = self.daemon.book_mut().map_err(tool_error)?;
+        let run = |book: &mut Box<dyn kassiber_runtime::store::Book>,
+                   operation: fn(String, String) -> kassiber_imports::Operation,
+                   batch: &str| {
+            let (_, profile_id) = book.resolve_scope(None, None)?;
+            book.import_runs(operation(profile_id, batch.to_owned()))
+        };
+        match request {
+            ImportRuns::List(arguments) => crate::imports::list(book.as_mut(), arguments),
+            ImportRuns::Review(batch) => run(
+                book,
+                |profile_id, batch| kassiber_imports::Operation::Review { profile_id, batch },
+                batch,
+            ),
+            ImportRuns::Rollback(batch) => run(
+                book,
+                |profile_id, batch| kassiber_imports::Operation::Rollback { profile_id, batch },
+                batch,
+            ),
+            ImportRuns::InputVersion => {
+                book.resolve_scope(None, None).and_then(|(_, profile_id)| {
+                    book.import_runs(kassiber_imports::Operation::InputVersion { profile_id })
+                })
+            }
+        }
+        .map_err(tool_error)
+    }
+
     fn dataset_preview(&mut self, arguments: &Value) -> Result<Value, ToolError> {
         let runtime = std::sync::Arc::clone(&self.daemon.analysis);
         let book = self.daemon.book_mut().map_err(tool_error)?;
@@ -167,9 +209,24 @@ impl AiBook for HostBook<'_> {
             .map_err(tool_error)
     }
 
-    fn review_consent_preview(&mut self, arguments: &Value) -> Result<Value, ToolError> {
+    fn review(
+        &mut self,
+        kind: &str,
+        arguments: &Value,
+        full_access: bool,
+    ) -> Result<Value, ToolError> {
         let book = self.daemon.book_mut().map_err(tool_error)?;
-        crate::review::consent_preview(book.as_mut(), arguments).map_err(tool_error)
+        crate::review::execute_as(book.as_mut(), kind, Some(arguments), "ai_tool", full_access)
+            .map_err(tool_error)
+    }
+
+    fn review_consent_preview(
+        &mut self,
+        arguments: &Value,
+        full_access: bool,
+    ) -> Result<Value, ToolError> {
+        let book = self.daemon.book_mut().map_err(tool_error)?;
+        crate::review::consent_preview(book.as_mut(), arguments, full_access).map_err(tool_error)
     }
 
     fn append_custody_audit(&mut self, audit: &Value) -> Result<Value, ToolError> {
@@ -237,7 +294,14 @@ fn native_mutate(
         _ => {}
     }
     if crate::review::KINDS.contains(&kind) {
-        return crate::review::execute_as(daemon.book_mut()?.as_mut(), kind, Some(args), source);
+        // AI review calls reach `HostBook::review`; restricted otherwise.
+        return crate::review::execute_as(
+            daemon.book_mut()?.as_mut(),
+            kind,
+            Some(args),
+            source,
+            false,
+        );
     }
     if crate::transfers::KINDS.contains(&kind) {
         return crate::transfers::execute_as(daemon.book_mut()?.as_mut(), kind, Some(args), source);
@@ -388,7 +452,7 @@ fn native_read(
         return crate::metadata::execute(daemon.book_mut()?.as_mut(), kind, args);
     }
     if crate::review::KINDS.contains(&kind) {
-        return crate::review::execute_as(daemon.book_mut()?.as_mut(), kind, args, source);
+        return crate::review::execute_as(daemon.book_mut()?.as_mut(), kind, args, source, false);
     }
     if crate::transfers::KINDS.contains(&kind) {
         return crate::transfers::execute_as(daemon.book_mut()?.as_mut(), kind, args, source);

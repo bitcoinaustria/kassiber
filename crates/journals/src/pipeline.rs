@@ -59,7 +59,12 @@ fn stage_error(error: kassiber_custody::Refusal) -> Refusal {
     };
     let mut refusal = Refusal::new(family, error.message);
     if family == "AppError" {
+        // The custody AppError reaches the caller whole: its hint (the
+        // network review's "Review the active book's network in Settings")
+        // and details too.
         refusal.code = Some(error.code);
+        refusal.hint = error.hint;
+        refusal.details = error.details;
     }
     refusal
 }

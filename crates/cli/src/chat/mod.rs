@@ -185,6 +185,8 @@ pub struct Args {
     pub timeout_seconds: Value,
     pub tool_loop_max_iterations: Value,
     pub tool_profile: String,
+    /// `--permission-mode`: who approves the assistant's changes (#684).
+    pub permission_mode: String,
     pub no_tools: bool,
     pub yes: bool,
     pub allow_tool: Vec<String>,
@@ -195,16 +197,26 @@ pub struct Args {
     pub incognito: bool,
     pub continue_session: bool,
     pub session: Option<String>,
-    pub file: Option<String>,
-    pub file_context: Option<String>,
+    /// Each `--file`, in order (#693: up to eight).
+    pub file: Vec<String>,
+    /// The nth `--file-context` describes the nth `--file`.
+    pub file_context: Vec<String>,
     pub transcript: Option<String>,
-    pub attachment: Option<Value>,
+    /// The chat's staging grants, once staged.
+    pub attachments: Vec<Value>,
+    /// `chat_attachments_sent`: a turn already sent the files, so later
+    /// ones mark them as not new for a provider that resumes.
+    pub attachments_sent: std::cell::Cell<bool>,
 }
 
 impl Args {
     pub fn from_namespace(namespace: &Namespace) -> Self {
         let text = |key: &str| namespace.text(key).map(str::to_owned);
         let value = |key: &str| namespace.get(key).cloned().unwrap_or(Value::Null);
+        let texts = |key: &str| match namespace.get(key) {
+            Some(Value::List(items)) => items.iter().map(py_str).collect(),
+            _ => Vec::new(),
+        };
         Args {
             provider: text("provider"),
             model: text("model"),
@@ -216,7 +228,8 @@ impl Args {
             fast: namespace.flag("fast"),
             timeout_seconds: value("timeout_seconds"),
             tool_loop_max_iterations: value("tool_loop_max_iterations"),
-            tool_profile: text("tool_profile").unwrap_or_else(|| "core".into()),
+            tool_profile: text("tool_profile").unwrap_or_else(|| "full".into()),
+            permission_mode: text("permission_mode").unwrap_or_else(|| "approval".into()),
             no_tools: namespace.flag("no_tools"),
             yes: namespace.flag("yes"),
             allow_tool: match namespace.get("allow_tool") {
@@ -230,10 +243,11 @@ impl Args {
             incognito: namespace.flag("incognito"),
             continue_session: namespace.flag("continue_session"),
             session: text("session"),
-            file: text("file"),
-            file_context: text("file_context"),
+            file: texts("file"),
+            file_context: texts("file_context"),
             transcript: text("transcript"),
-            attachment: None,
+            attachments: Vec::new(),
+            attachments_sent: std::cell::Cell::new(false),
         }
     }
 }
@@ -330,6 +344,7 @@ fn chat_args(args: &Args, messages: &[Value], session_id: Option<&str>) -> Resul
         ("messages", Value::List(messages.to_vec())),
         ("tools_enabled", Value::Bool(tools_enabled)),
         ("tool_profile", s(&args.tool_profile)),
+        ("permission_mode", s(&args.permission_mode)),
         (
             "timeout_seconds",
             Value::Float(timeout_seconds(&args.timeout_seconds)?),
@@ -350,8 +365,23 @@ fn chat_args(args: &Args, messages: &[Value], session_id: Option<&str>) -> Resul
             args.tool_loop_max_iterations.clone(),
         ));
     }
-    if let Some(attachment) = &args.attachment {
-        payload.push(("attachment", attachment.clone()));
+    if !args.attachments.is_empty() {
+        // The first turn sends the files; a provider that resumes its own
+        // session already holds them after that.
+        let first = !args.attachments_sent.replace(true);
+        payload.push((
+            "attachments",
+            Value::List(
+                args.attachments
+                    .iter()
+                    .map(|attachment| {
+                        let mut attachment = attachment.clone();
+                        kassiber_envelope::set(&mut attachment, "new", Value::Bool(first));
+                        attachment
+                    })
+                    .collect(),
+            ),
+        ));
     }
     if let Some(system) = args.system.as_deref().filter(|system| !system.is_empty()) {
         payload.push(("system_prompt_kind", s("raw")));
@@ -566,44 +596,64 @@ fn resolve_default_model(client: &mut DaemonClient, args: &mut Args) -> Result<(
     Ok(())
 }
 
-/// `_stage_chat_attachment(client, args)`.
-fn stage_attachment(client: &mut DaemonClient, args: &Args) -> Result<Option<Value>, AppError> {
-    let Some(file) = args.file.as_deref() else {
-        return Ok(None);
-    };
-    let path = expand_user(file);
-    let path = std::fs::canonicalize(&path).unwrap_or(path);
-    if !path.is_file() {
+/// `_stage_chat_attachments(client, args)`: stage each `--file` and return
+/// the chat's grants. Staged rather than passed as a path, so the CLI and the
+/// desktop reach the assistant's file tools the same way and the model only
+/// ever holds an opaque token.
+fn stage_attachments(client: &mut DaemonClient, args: &Args) -> Result<Vec<Value>, AppError> {
+    if args.file_context.len() > args.file.len() {
         return Err(AppError::new(
-            "not_found",
-            format!("Attachment not found: {}", path.display()),
+            "validation",
+            "More --file-context values than --file values",
         )
-        .with_hint("Pass an existing export file with --file."));
+        .with_hint("Each --file-context describes the --file in the same position."));
     }
-    let response = request(
-        client,
-        "chat-attach",
-        "internal.document_import.stage",
-        dict([("source_file", s(path.to_string_lossy()))]),
-    )?;
-    let token = match get(&response, "data").and_then(|data| get(data, "token")) {
-        Some(Value::Str(token)) if token.code_points().next().is_some() => token.clone(),
-        _ => {
+    if args.file.len() > 8 {
+        return Err(AppError::new("validation", "A chat holds up to 8 files"));
+    }
+    let mut grants = Vec::new();
+    for (index, file) in args.file.iter().enumerate() {
+        let path = expand_user(file);
+        let path = std::fs::canonicalize(&path).unwrap_or(path);
+        if !path.is_file() {
             return Err(AppError::new(
-                "ai_attachment_failed",
-                "could not attach the file to this chat",
-            ))
+                "not_found",
+                format!("Attachment not found: {}", path.display()),
+            )
+            .with_hint("Pass an existing file with --file."));
         }
-    };
-    let label = args
-        .file_context
-        .as_deref()
-        .map(kassiber_pytext::strip)
-        .filter(|label| !label.is_empty());
-    Ok(Some(dict([
-        ("token", Value::Str(token)),
-        ("label", label.map_or(Value::Null, s)),
-    ])))
+        let response = request(
+            client,
+            "chat-attach",
+            "internal.document_import.stage",
+            dict([
+                ("source_file", s(path.to_string_lossy())),
+                ("purpose", s("chat_attachment")),
+            ]),
+        )?;
+        // The daemon names the grant `document_token`; Python's CLI reads
+        // `token` and so never attaches anything
+        // (tests/rust_port/repro_chat_file_token_key.py).
+        let token = match get(&response, "data").and_then(|data| get(data, "document_token")) {
+            Some(Value::Str(token)) if token.code_points().next().is_some() => token.clone(),
+            _ => {
+                return Err(AppError::new(
+                    "ai_attachment_failed",
+                    "could not attach the file to this chat",
+                ))
+            }
+        };
+        let label = args
+            .file_context
+            .get(index)
+            .map(|label| kassiber_pytext::strip(label))
+            .filter(|label| !label.is_empty());
+        grants.push(dict([
+            ("token", Value::Str(token)),
+            ("label", label.map_or(Value::Null, s)),
+        ]));
+    }
+    Ok(grants)
 }
 
 /// `Path(file).expanduser()` for the current user.
@@ -1429,8 +1479,8 @@ fn session(
     if let Some(notice) = incognito_notice(client, args)? {
         io.write(Target::Err, &format!("{notice}\n"));
     }
-    // Staged once per session, so a REPL can keep discussing the file.
-    args.attachment = stage_attachment(client, args)?;
+    // Staged once per session, so a REPL can keep discussing the files.
+    args.attachments = stage_attachments(client, args)?;
     let render = !args.machine && !args.stream_json;
     let (mut chat_session_id, mut messages, stored) = resolve_continuation(client, args)?;
     if render {

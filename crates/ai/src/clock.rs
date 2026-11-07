@@ -18,6 +18,14 @@ pub fn now_iso() -> String {
     format_utc(seconds, None)
 }
 
+/// `datetime.now(timezone.utc)` in microseconds since 0001-01-01, the
+/// scale `kassiber_pytext::iso_datetime` reads moments in.
+pub fn now_utc_us() -> i64 {
+    kassiber_pytext::iso_datetime(&checked_at().replace('Z', "+00:00"))
+        .map(|moment| moment.utc_us())
+        .unwrap_or(0)
+}
+
 /// `datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")`.
 pub fn checked_at() -> String {
     #[cfg(feature = "test-harness")]

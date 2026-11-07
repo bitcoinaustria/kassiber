@@ -18,14 +18,16 @@ use sha2::{Digest, Sha256};
 
 use super::args::Validated;
 use super::client::{ChatClient, ProviderSnapshot};
+use super::files;
 use super::history::Persist;
 use super::registry::{ActiveChat, ActiveChats};
-use super::screen::{attachment_context_for_model, screen_context_for_model};
+use super::screen::screen_context_for_model;
 use crate::broker::Locate;
+use crate::catalog::load_tools_entry;
 use crate::catalog::{get_tool_py, KindClass};
 use crate::consent::CONSENT_TIMEOUT;
 use crate::executor::{
-    execute_mutating, execute_read_only, is_advertised, model_output, parse_tool_call,
+    denial_for, execute_mutating, execute_read_only, is_advertised, model_output, parse_tool_call,
     run_auto_reads, tool_result_denied, tool_result_record, ReadHost, Runtime,
 };
 use crate::planner::{
@@ -38,6 +40,7 @@ use crate::redact::{redact_ai_tool_result, redact_tool_arguments};
 use crate::select::{build_responses_tools, strip_on_device_only};
 use crate::summary::summarize_tool_call;
 use crate::transport::{ChatDelta, Receipt, RequestContext, PROVIDER_STATUS_NOTICES};
+use crate::ToolError;
 
 /// `_AI_CUT_OFF_FINISH_REASONS`: an answer cut off by its token limit or a
 /// content filter runs none of its tool calls.
@@ -117,6 +120,28 @@ fn stopped(error: AppError) -> Stop {
     }
 }
 
+/// `_ai_tool_approval_label(decision)`: the `approval` a tool_call record
+/// shows for how the call was approved.
+fn approval_label(decision: Option<&str>) -> &'static str {
+    match decision {
+        Some("mode_auto") => "auto",
+        Some("mode_full_access") => "full_access",
+        Some("allow_session") => "session",
+        _ => "required",
+    }
+}
+
+/// `_provider_session_resume_fingerprint(messages)`: the branch a resumable
+/// cursor was recorded against. A cursor is remembered under the transcript
+/// plus its answer; the next request carries that transcript and one new
+/// user prompt, so everything before the prompt is looked up. Any other
+/// shape resumes nothing.
+pub fn resume_fingerprint(messages: &[Value]) -> Option<String> {
+    let (last, before) = messages.split_last()?;
+    (matches!(last, Value::Dict(_)) && get(last, "role") == Some(&s("user")))
+        .then(|| history_fingerprint(before))
+}
+
 /// `_provider_session_history_fingerprint(messages)`: binds a provider
 /// cursor to the exact visible chat branch.
 pub fn history_fingerprint(messages: &[Value]) -> String {
@@ -144,19 +169,6 @@ pub fn history_fingerprint(messages: &[Value]) -> String {
     .unwrap_or_default();
     let digest = Sha256::digest(encoded.as_bytes());
     digest.iter().map(|byte| format!("{byte:02x}")).collect()
-}
-
-/// `_provider_session_resume_fingerprint(messages)`: the branch a resumable
-/// cursor was recorded against. A cursor is remembered after a turn under
-/// the transcript plus its answer; the next request carries that transcript
-/// followed by one new user prompt, so look up everything before the prompt.
-/// Any other shape resumes nothing.
-pub fn resume_fingerprint(messages: &[Value]) -> Option<String> {
-    let (last, prior) = messages.split_last()?;
-    if !matches!(last, Value::Dict(_)) || get(last, "role") != Some(&s("user")) {
-        return None;
-    }
-    Some(history_fingerprint(prior))
 }
 
 /// `_ai_chat_seed_prefix(messages)`: the turns before the current prompt.
@@ -539,6 +551,7 @@ impl Worker {
                 &self.turn.validated.messages,
                 kind,
                 self.turn.validated.system_prompt.as_ref(),
+                false,
             )?;
             if !host.emit(status("waiting_for_model", "Loading model")) {
                 return Err(Stop::Closed);
@@ -558,9 +571,12 @@ impl Worker {
             } else {
                 None
             };
+            let resumed = cursor.is_some();
             if let Some(cursor) = cursor {
                 set(&mut options, "provider_session_id", s(cursor));
             }
+            let mut messages = messages;
+            files::attach_chat_files_to_turn(&mut messages, &self.turn.state, resumed);
             let chat = Arc::clone(&self.turn.chat);
             let model = lossy(&self.turn.validated.model);
             let state = &mut self.turn.state;
@@ -652,6 +668,7 @@ impl Worker {
         } else {
             None
         };
+        let resumed = cursor.is_some();
         if let Some(cursor) = cursor {
             set(
                 &mut self.turn.validated.options,
@@ -665,15 +682,28 @@ impl Worker {
             &validated.messages,
             validated.system_prompt_kind,
             validated.system_prompt.as_ref(),
+            true,
         )?;
         let mut screen_context = validated.screen_context.clone();
         if let Some(context @ Value::Dict(_)) = &screen_context {
             insert_auto_tool_context_message(&mut messages, &screen_context_for_model(context));
         }
-        // An attached file is the signal that the analysis tool matters.
-        if validated.attachment.is_some()
-            && get(&self.turn.state, "attachment_source_file")
-                .is_some_and(kassiber_envelope::truthy)
+        // An attached export is the signal that the analysis tool matters,
+        // more reliably than a keyword in the question.
+        let chat_kinds: Vec<String> = match get(&self.turn.state, "chat_files") {
+            Some(Value::List(files)) => files
+                .iter()
+                .map(|entry| {
+                    get(entry, "kind")
+                        .map(kassiber_envelope::py_str)
+                        .unwrap_or_default()
+                })
+                .collect(),
+            _ => Vec::new(),
+        };
+        if chat_kinds
+            .iter()
+            .any(|kind| files::CHAT_TABLE_KINDS.contains(&kind.as_str()))
         {
             let mut capabilities: Vec<String> = match screen_context
                 .as_ref()
@@ -694,11 +724,9 @@ impl Worker {
                 Value::List(capabilities.into_iter().map(s).collect()),
             );
             screen_context = Some(context);
-            insert_auto_tool_context_message(
-                &mut messages,
-                &attachment_context_for_model(&self.turn.state),
-            );
         }
+        // The files' note, and the images and PDFs the provider may see.
+        files::attach_chat_files_to_turn(&mut messages, &self.turn.state, resumed);
         let mut entries = build_responses_tools(
             Some(&validated.messages),
             screen_context
@@ -721,10 +749,53 @@ impl Worker {
                 }
             }
         }
-        let on_device =
-            get(&self.turn.state, "provider_on_device").is_some_and(kassiber_envelope::truthy);
-        let entries = strip_on_device_only(entries, on_device);
-        let tools: Vec<Value> = entries
+        // The note names the evidence tool for any attached file, and an
+        // image or PDF offers the document reader (no pack offers it).
+        let mut offered_for_files: Vec<&str> = Vec::new();
+        if !chat_kinds.is_empty() {
+            offered_for_files.push("ui.attachments.add_from_chat");
+        }
+        if chat_kinds
+            .iter()
+            .any(|kind| files::CHAT_DOCUMENT_KINDS.contains(&kind.as_str()))
+        {
+            let mut names = crate::select::CHAT_DOCUMENT_TOOL_NAMES.to_vec();
+            names.sort_unstable();
+            offered_for_files.extend(names);
+        }
+        for name in offered_for_files {
+            if let Some(entry) = crate::catalog::get_tool(name) {
+                if !entries
+                    .iter()
+                    .any(|offered| offered.provider_name() == entry.provider_name())
+                {
+                    entries.push(entry);
+                }
+            }
+        }
+        // `_turn_tool_filter`: schemas this turn's provider may not use.
+        let mut entries =
+            strip_on_device_only(entries, crate::executor::full_access(&self.turn.state));
+        set(
+            &mut self.turn.state,
+            "tool_profile",
+            s(validated.tool_profile),
+        );
+        crate::pyval::pop(&mut self.turn.state, "pending_tool_definitions");
+        // `_ai_turn_can_load_tools`: an HTTP provider receives the tool list
+        // with every request, so an added area is offered on the next round;
+        // a broker agent fixes its catalog when the turn starts.
+        let loading =
+            !matches!(self.client, Some(ChatClient::Broker(_))) && validated.tool_profile != "full";
+        set(
+            &mut self.turn.state,
+            "load_tools_enabled",
+            Value::Bool(loading),
+        );
+        if loading {
+            entries.push(load_tools_entry());
+        }
+        let mut tools: Vec<Value> = entries
             .iter()
             .map(|entry| entry.to_responses_tool())
             .collect();
@@ -779,9 +850,6 @@ impl Worker {
         let mut response_context = RequestContext::from_messages(&messages);
         let mut finish_reason: Option<String> = None;
         let mut content = String::new();
-        // Every leg streams its text to the user, who sends all of it back as
-        // the assistant message; the provider cursor is bound to that answer.
-        let mut shown = String::new();
         let mut checkpoint = Value::Dict(Vec::new());
         let mut exhausted = true;
         let consent_timeout = self.turn.consent_timeout.unwrap_or(CONSENT_TIMEOUT);
@@ -790,6 +858,13 @@ impl Worker {
                 finish_reason = Some("cancelled".into());
                 exhausted = false;
                 break;
+            }
+            // Schemas a `load_tools` call added last round; already
+            // authorized in `advertised_tools`, now offered to the model.
+            if let Value::List(pending) =
+                crate::pyval::pop(&mut self.turn.state, "pending_tool_definitions")
+            {
+                tools.extend(pending);
             }
             let client = self.client.as_mut().expect("client built");
             let leg = stream_leg(
@@ -808,8 +883,10 @@ impl Worker {
                     }
                 }
             }
-            shown.push_str(&leg.content);
-            content = leg.content;
+            // Every leg streams its text to the user, who sends all of it
+            // back as the assistant message: the provider cursor and the
+            // saved answer are bound to that visible answer.
+            content.push_str(&leg.content);
             finish_reason = leg.finish_reason;
             if chat.is_cancelled() {
                 finish_reason = Some("cancelled".into());
@@ -838,20 +915,41 @@ impl Worker {
                     .unwrap_or_else(|| call.name.clone());
                 let preview = redact_tool_arguments(&call.arguments);
                 let proposal_seen_at = host.now();
+                // A call the consent card cannot describe is malformed: the
+                // model gets a validation result instead of a consent prompt.
+                let mut summary = None;
+                let mut summary_refusal = None;
+                if let Some(entry) = entry.filter(|entry| {
+                    advertised && entry.requires_consent() && call.argument_error.is_none()
+                }) {
+                    match summarize_tool_call(entry, &call.arguments) {
+                        Ok(text) => summary = Some(text),
+                        Err(error) => summary_refusal = Some(error),
+                    }
+                }
                 let consent_gated = entry.is_some_and(|entry| {
                     advertised
                         && !duplicate
                         && entry.requires_consent()
                         && call.argument_error.is_none()
+                        && summary_refusal.is_none()
                 });
-                let needs_consent =
-                    consent_gated && !chat.consent.has_session_allow(&lossy(&display_name));
+                // The chat's permission mode (or an earlier "allow for this
+                // chat") may approve the call without asking.
+                let preapproval = entry.filter(|_| consent_gated).and_then(|entry| {
+                    chat.consent.preapproval(
+                        &lossy(&display_name),
+                        entry.reversible,
+                        entry.egresses,
+                    )
+                });
+                let needs_consent = consent_gated && preapproval.is_none();
                 if needs_consent {
                     // Registered before the record is written, so a decision
                     // that arrives at once is not lost.
                     chat.consent.expect(&lossy(&call.call_id));
                 }
-                let call_record = |needs_consent: bool| {
+                let call_record = |needs_consent: bool, approval: &str| {
                     success(
                         "ai.chat.tool_call",
                         dict([
@@ -860,10 +958,16 @@ impl Worker {
                             ("arguments", preview.clone()),
                             ("kind_class", s(kind_class)),
                             ("needs_consent", Value::Bool(needs_consent)),
+                            ("approval", s(approval)),
                         ]),
                     )
                 };
-                if !host.emit(call_record(needs_consent)) {
+                let approval = if consent_gated {
+                    approval_label(preapproval)
+                } else {
+                    "not_needed"
+                };
+                if !host.emit(call_record(needs_consent, approval)) {
                     return Err(Stop::Closed);
                 }
                 if chat.is_cancelled() {
@@ -877,6 +981,11 @@ impl Worker {
                     tool_result_denied("duplicate_tool_call_id", None)
                 } else if entry.is_some() && !advertised {
                     tool_result_denied("tool_not_advertised", None)
+                } else if let Some(error) = summary_refusal {
+                    denial_for(
+                        ToolError::App(error),
+                        entry.map(|entry| entry.name.as_str()),
+                    )
                 } else if let Some(entry) =
                     entry.filter(|entry| entry.requires_consent() && call.argument_error.is_none())
                 {
@@ -888,21 +997,32 @@ impl Worker {
                                 ("name", Value::Str(display_name.clone())),
                                 (
                                     "summary",
-                                    Value::Str(summarize_tool_call(entry, &call.arguments)),
+                                    Value::Str(summary.clone().expect("summarised above")),
                                 ),
                                 ("arguments_preview", preview.clone()),
+                                ("reversible", Value::Bool(entry.reversible)),
+                                ("egresses", Value::Bool(entry.egresses)),
+                                (
+                                    "can_allow_session",
+                                    Value::Bool(!crate::consent::once_only(&entry.name)),
+                                ),
                             ]),
                         );
                         if !host.emit(record) {
                             return Err(Stop::Closed);
                         }
                     }
-                    let decision = chat.consent.wait(
-                        &lossy(&call.call_id),
-                        &lossy(&display_name),
-                        &chat.cancelled,
-                        consent_timeout,
-                    );
+                    let decision = match preapproval {
+                        Some(decision) => decision.to_owned(),
+                        None => chat.consent.wait(
+                            &lossy(&call.call_id),
+                            &lossy(&display_name),
+                            &chat.cancelled,
+                            consent_timeout,
+                            entry.reversible,
+                            entry.egresses,
+                        ),
+                    };
                     if decision == "cancelled" || chat.is_cancelled() {
                         finish_reason = Some("cancelled".into());
                         break;
@@ -911,7 +1031,16 @@ impl Worker {
                         "deny" => tool_result_denied("user_denied", None),
                         "consent_timeout" => tool_result_denied("consent_timeout", None),
                         _ => {
-                            if !host.emit(call_record(false)) {
+                            // A click on this call reads "required"; a mode
+                            // switch or an earlier session allow names itself.
+                            let approval = if preapproval.is_some()
+                                || matches!(decision.as_str(), "mode_auto" | "mode_full_access")
+                            {
+                                approval_label(Some(&decision))
+                            } else {
+                                "required"
+                            };
+                            if !host.emit(call_record(false, approval)) {
                                 return Err(Stop::Closed);
                             }
                             // Consent follows `requires_consent`; execution
@@ -938,7 +1067,14 @@ impl Worker {
                 response_context.input_items.push(dict([
                     ("type", s("function_call_output")),
                     ("call_id", Value::Str(call.call_id.clone())),
-                    ("output", s(model_output(&result))),
+                    // A visual's rows are for the screen; the model reads
+                    // its digest.
+                    (
+                        "output",
+                        s(model_output(&crate::visuals::tool_result_for_model(
+                            &redact_ai_tool_result(&result),
+                        ))),
+                    ),
                 ]));
                 if chat.is_cancelled() {
                     finish_reason = Some("cancelled".into());
@@ -962,7 +1098,6 @@ impl Worker {
                     "\n\nReview paused at the tool budget. Continue with the current cases; unapplied proposals must be planned again. Applied receipts remain available.\n```json\n{json}\n```"
                 );
                 content.push_str(&continuation);
-                shown.push_str(&continuation);
                 if !host.emit(delta_record(dict([("content", s(&continuation))]))) {
                     return Err(Stop::Closed);
                 }
@@ -974,7 +1109,7 @@ impl Worker {
         if finish_reason.as_deref() != Some("cancelled")
             && self.turn.validated.keeps_provider_session()
         {
-            self.remember_provider_session(&shown);
+            self.remember_provider_session(&content);
         }
         self.remember_detected_format(host);
         self.terminal(host, finish_reason, &content);
@@ -1031,16 +1166,28 @@ impl Worker {
             &host.now(),
         );
         let session_id = self.persist(host, finish_reason.as_deref(), content, &provenance);
-        host.emit(success(
-            "ai.chat",
-            dict([
-                ("provider", s(&self.turn.provider.name)),
-                ("model", Value::Str(self.turn.validated.model.clone())),
-                ("finish_reason", finish_reason.map_or(Value::Null, s)),
-                ("provenance", provenance),
-                ("session_id", session_id.map_or(Value::Null, Value::Str)),
-            ]),
-        ));
+        // A new chat gets its id only now; its allows carry to the next turn.
+        self.turn.registry.remember_session_allows(
+            session_id.as_ref().map(lossy).as_deref(),
+            &self.turn.chat.consent.session_allows(),
+        );
+        let mut payload = dict([
+            ("provider", s(&self.turn.provider.name)),
+            ("model", Value::Str(self.turn.validated.model.clone())),
+            ("finish_reason", finish_reason.map_or(Value::Null, s)),
+            ("provenance", provenance),
+            ("session_id", session_id.map_or(Value::Null, Value::Str)),
+        ]);
+        // The renderer's own tokens for files this turn could no longer
+        // read, so the chat drops them.
+        if let Some(expired @ Value::List(tokens)) =
+            get(&self.turn.state, "expired_attachment_tokens")
+        {
+            if !tokens.is_empty() {
+                set(&mut payload, "expired_attachments", expired.clone());
+            }
+        }
+        host.emit(success("ai.chat", payload));
     }
 
     /// `_persist_ai_chat_exchange(...)`: only with a persistence intent;
@@ -1093,6 +1240,7 @@ impl Worker {
                 Vec::new()
             },
             seed_notices: validated.seed_notices.clone(),
+            user_attachments: files::chat_message_attachments(&self.turn.state),
         };
         host.persist(request).ok().flatten()
     }
@@ -1118,6 +1266,28 @@ mod tests {
         let mut output = Some(vec![item.clone()]);
         drop_cut_off_calls(Some("tool_calls"), &mut calls, &mut output);
         assert_eq!((calls.len(), output.map(|o| o.len())), (1, Some(1)));
+    }
+
+    #[test]
+    fn resume_looks_up_the_transcript_before_the_new_prompt() {
+        let message =
+            |role: &str, content: &str| dict([("role", s(role)), ("content", s(content))]);
+        let earlier = [message("user", "hi"), message("assistant", "Hello")];
+        let next = [
+            message("user", "hi"),
+            message("assistant", "Hello"),
+            message("user", "more"),
+        ];
+        assert_eq!(
+            resume_fingerprint(&next),
+            Some(history_fingerprint(&earlier))
+        );
+        assert_eq!(resume_fingerprint(&earlier), None);
+        assert_eq!(resume_fingerprint(&[]), None);
+        assert_eq!(
+            resume_fingerprint(&[message("user", "only")]),
+            Some(history_fingerprint(&[]))
+        );
     }
 
     #[test]

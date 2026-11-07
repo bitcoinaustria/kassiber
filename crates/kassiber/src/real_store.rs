@@ -2506,6 +2506,11 @@ impl Book for RealBook {
             .map_err(map_sqlite_error)
             .map_err(error)
     }
+    fn pin_write_scope(&mut self, scope: Option<(&str, &str)>) -> Result<(), AppError> {
+        kassiber_store::pinned::pin_write_scope(self.conn()?, scope)
+            .map_err(map_sqlite_error)
+            .map_err(error)
+    }
     fn preview_document(
         &mut self,
         request: kassiber_wallets::file_import::document::DocumentPreview,

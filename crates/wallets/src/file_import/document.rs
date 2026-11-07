@@ -21,6 +21,12 @@ pub fn staged_source(raw: &str) -> Result<(std::path::PathBuf, u64, &'static str
     Ok((path.clone(), size, files::mime(&path)))
 }
 
+/// `core_document_import._mime_type(path)`: `mimetypes.guess_type` over
+/// the chat's and the importer's file types.
+pub fn media_type(path: &std::path::Path) -> &'static str {
+    files::mime(path)
+}
+
 fn s(v: impl AsRef<str>) -> Py {
     kassiber_envelope::s(v.as_ref())
 }

@@ -4,8 +4,8 @@
 ``call.name in _AI_AUTO_JOURNAL_REFRESH_TOOL_NAMES``. That set holds dotted
 catalog names, but providers call tools by their wire names
 (``ui_reports_summary``), so only the planner's auto-reads, which use dotted
-names, ever refreshed. The check now resolves the catalog entry first. The
-Rust port still keeps the old behaviour (crates/ai/src/executor.rs).
+names, ever refreshed. The check now resolves the catalog entry first, and
+the Rust port follows since S12 (crates/ai/src/executor.rs).
 
     uv run --locked python tests/rust_port/repro_ai_refresh_wire_name.py
 """

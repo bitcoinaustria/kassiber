@@ -23,7 +23,7 @@ pub fn http_error(status: u16, body: &str) -> AppError {
         401 | 403 => (
             "ai_auth_failed",
             "AI provider rejected the request as unauthorized".to_owned(),
-            "Check the provider's API key in Settings → AI providers.",
+            "Check the provider's API key in Settings → Assistant.",
             false,
         ),
         429 => (
@@ -342,7 +342,7 @@ pub fn store_refused(error: AppError) -> AppError {
         "This endpoint refused Kassiber's no-retention request (store: false)",
     )
     .with_details(details)
-    .with_hint("Run Test connection in Settings → AI providers to see your options, or `kassiber ai providers test <name>`.")
+    .with_hint("Run Test connection in Settings → Assistant to see your options, or `kassiber ai providers test <name>`.")
 }
 
 const NOT_A_MISSING_ROUTE_WORDS: &[&str] = &["model", "tool", "endpoints found"];

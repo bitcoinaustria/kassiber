@@ -94,6 +94,8 @@ class RustDocumentCliTest(unittest.TestCase):
             'KASSIBER_RUST_TEST_DOCUMENT_TIME': TIME,
             'KASSIBER_RUST_TEST_DOCUMENT_ATTACHMENT_IDS': ','.join(ATTACHMENT_IDS),
             'KASSIBER_RUST_TEST_IMPORT_TIME': TIME,
+            # Resolving the OCR provider seeds the built-in rows (#698) at this time.
+            'KASSIBER_RUST_TEST_AI_TIME': TIME,
             'KASSIBER_RUST_TEST_IMPORT_IDS': ','.join(IDS),
             'KASSIBER_NO_EGRESS': '1',
             'HTTP_PROXY': 'http://192.0.2.2:9',

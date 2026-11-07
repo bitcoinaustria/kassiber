@@ -388,7 +388,14 @@ def summary_cases():
             arguments_list += [{"link": "l", "state": "reviewed"}, {"link": "l"}]
         seen: dict[str, int] = {}
         for arguments in arguments_list:
-            summary = tools.summarize_tool_call(tool, arguments)
+            try:
+                summary = tools.summarize_tool_call(tool, arguments)
+            except AppError:
+                # A call the consent card cannot describe (a non-string
+                # component action): the chat loop answers it as validation.
+                cases.append({"tool": tool.name, "arguments": arguments,
+                              "outcome": outcome(tools.summarize_tool_call, tool, arguments)})
+                continue
             # Three witnesses per distinct summary are enough.
             seen[summary] = seen.get(summary, 0) + 1
             if seen[summary] <= 3:
@@ -600,6 +607,229 @@ def projection_cases():
     return cases
 
 
+def stale_journal_cases():
+    """`_project_stale_journal_figures_for_ai` (#681) over each kind's
+    stale, never-processed and current shapes."""
+    from kassiber import daemon
+
+    stamp = "2026-01-02T03:04:05Z"
+    status = {"workspace": "W", "profile": "P", "needsJournals": True, "lastProcessedAt": None, "quarantines": 2}
+    payloads = {
+        "ui.journals.transfers.list": [
+            {"summary": {"workspace": "W", "profile": "P", "limit": 5, "projection_status": "stale", "manual_pairs": 1, "extra": 2}, "pairs": [1]},
+            {"summary": {"profile": "P", "projection_status": "stale"}, "pairs": []},
+            {"summary": {"projection_status": "current", "manual_pairs": 1}, "pairs": [1]},
+            {"summary": None, "pairs": [1]},
+            {"pairs": [1]},
+        ],
+        "ui.reports.capital_gains": [
+            {"jurisdictionCode": "AT", "year": 2025, "availableYears": [2025], "status": status, "totals": {"x": 1}, "rows": [1]},
+            {"year": 2024, "status": {**status, "lastProcessedAt": stamp}, "kennzahlRows": []},
+            {"year": 2025, "status": {**status, "needsJournals": False}, "rows": [1]},
+            {"year": 2025, "status": None},
+            {"year": 2025},
+        ],
+        "ui.journals.events.list": [
+            {"summary": {**status, "count": 3, "reportableCount": 2}, "events": [1]},
+            {"summary": {**status, "lastProcessedAt": stamp, "entryTypes": ["a"]}, "events": []},
+            {"summary": {**status, "needsJournals": 0}, "events": [1]},
+            {"status": status, "events": [1]},
+        ],
+        "ui.journals.snapshot": [
+            {"status": status, "entryTypes": {"a": 1}, "recent": [1], "recentByType": {}, "other": 1},
+            {"status": {**status, "lastProcessedAt": stamp}, "recent": []},
+            {"status": {**status, "needsJournals": False}, "recent": [1]},
+            {"summary": status, "recent": [1]},
+        ],
+        "ui.overview.snapshot": [
+            {"priceEur": 3.0, "fiat": {"fiatCurrency": "EUR", "eurBalance": 1.5, "eurCostBasis": 0.0, "eurUnrealized": 1.5, "eurRealizedYTD": 0.0, "completeness": {"state": "stale"}}, "after": 1},
+            {"fiat": {"eurRealizedYTD": 1, "completeness": {"state": "stale"}, "availability": "old"}},
+            {"fiat": {"eurCostBasis": 1.0, "completeness": {"state": "complete"}}},
+            {"fiat": {"completeness": "stale"}},
+            {"fiat": None},
+            {"fiat": [1]},
+            {},
+        ],
+        "ui.journals.quarantine": [
+            {"summary": {"workspace": "W", "count": 1, "by_reason": [1], "groups": [], "freshness": {"needs_processing": True, "last_processed_at": None}, "limit": 20}, "items": [1]},
+            {"summary": {"count": 1, "freshness": {"needs_processing": True, "last_processed_at": stamp}}, "items": [1], "projection": "old"},
+            {"summary": {"count": 1, "freshness": {"needs_processing": False}}, "items": [1]},
+            {"summary": {"count": 1}, "items": [1]},
+            {"items": [1]},
+        ],
+        "ui.journals.quarantine.groups": [
+            {"needs_processing": True, "last_processed_at": None, "groups": [1], "definitions": {"a": "b"}},
+            {"needs_processing": True, "last_processed_at": stamp, "groups": [1]},
+            {"needs_processing": True, "groups": [1]},
+            {"needs_processing": False, "groups": [1]},
+        ],
+        "ui.wallets.list": [{"summary": {"needsJournals": True}}],
+    }
+    cases = []
+    for kind, variants in payloads.items():
+        for payload in [*variants, [1], None, "x"]:
+            projected = daemon._project_stale_journal_figures_for_ai(kind, copy.deepcopy(payload))
+            cases.append({"kind": kind, "payload": payload, "projected": projected})
+    return cases
+
+
+VISUALS_NOW = "2025-06-15T12:00:00+00:00"
+
+
+def visual_cases():
+    """#676's `core/chat_visuals.py`: the request normalizer, every source's
+    projection over synthetic payloads (gaps, truncation, missing prices,
+    offsets), and the model's digest, at a pinned `now`."""
+    from datetime import datetime
+
+    from kassiber.core import chat_visuals as visuals
+
+    now = datetime.fromisoformat(VISUALS_NOW)
+    normalize = [
+        None, {}, {"source": "nope"}, {"source": ["overview"]}, {"source": "overview"},
+        {"source": "overview", "measure": "quantity"}, {"source": "overview", "interval": "day"},
+        {"source": "overview", "title": "  Net\u202e worth\n\tby  month \x00 "},
+        {"source": "overview", "title": "x" * 81}, {"source": "overview", "title": 5},
+        {"source": "balance_history"}, {"source": "balance_history", "measure": None},
+        {"source": "balance_history", "interval": "week", "limit": 12, "start": " 2024-01-01 ", "end": "", "wallet": "Cold", "asset": "BTC"},
+        {"source": "balance_history", "interval": "year"}, {"source": "balance_history", "interval": None},
+        {"source": "balance_history", "limit": 0}, {"source": "balance_history", "limit": 241},
+        {"source": "balance_history", "limit": True}, {"source": "balance_history", "limit": 2.0},
+        {"source": "balance_history", "limit": 10**30}, {"source": "balance_history", "start": "s" * 201},
+        {"source": "portfolio", "group_by": "asset", "asset": "lbtc"}, {"source": "portfolio", "group_by": ["wallet"]},
+        {"source": "tax_summary", "measure": "proceeds"}, {"source": "cash_flow"},
+        {"source": "cash_flow", "period": "30days", "wallet": "Hot"}, {"source": "cash_flow", "period": "decade"},
+        {"source": "transactions", "query": "coffee", "direction": "inbound", "status": "review", "period": "all", "sort": "largest", "limit": 25},
+        {"source": "transactions", "period": "ytd", "direction": "sideways"}, {"source": "transactions", "limit": 26},
+        {"source": "transaction_flow"}, {"source": "transaction_flow", "transaction": "  abc:in  "},
+        {"source": "readiness", "limit": 1}, {"source": "readiness", "b": 1, "a": 2},
+    ]
+    series = [
+        {"date": f"2024-{(i // 28) % 12 + 1:02d}-{i % 28 + 1:02d}", "balanceBtc": i / 100, "valueEur": i * 10.5, "costBasisEur": i * 7}
+        for i in range(200)
+    ]
+    overview = [
+        {
+            "fiat": {"eurBalance": 90000.5, "eurCostBasis": 30000, "eurUnrealized": 60000.5, "eurRealizedYTD": -12.25,
+                     "completeness": {"state": "complete", "costBasisComplete": True, "reasons": []}},
+            "balanceSummary": {"totalBtc": 1.5}, "marketRate": {"rate": 60000.5, "timestamp": "2025-06-01T00:00:00Z"},
+            "status": {"transactionCount": "12"}, "portfolioSeries": series + [{"date": None}, "x"],
+            "connections": [{"label": f"W{i}", "balance": b} for i, b in enumerate([0.5, -0.1, 0.5, 2, 0, None, "0.25", 1, 3])] + ["x"],
+        },
+        {
+            "fiat": {"eurBalance": 5, "completeness": {"state": "stale", "reasons": ["journals_stale", "custody_unresolved"],
+                                                       "quarantineCount": 2.0, "missingPriceCount": 3, "marketRateMissing": True}},
+            "connections": [{"label": "Only", "balance": 0}],
+        },
+        {"fiat": {"completeness": {"costBasisComplete": False}}},
+        {},
+    ]
+    history_rows = [
+        {"period_start": "2024-11-01T00:00:00Z", "asset": "BTC", "quantity": 1, "market_value": 50000, "cumulative_cost_basis": 30000},
+        {"period_start": "2024-11-01T00:00:00Z", "asset": "LBTC", "quantity": 0.5, "market_value": 0, "cumulative_cost_basis": 100},
+        {"period_start": "2025-01-01T00:00:00+01:00", "asset": "BTC", "quantity": "2", "market_value": None, "cumulative_cost_basis": "60000"},
+        {"period_start": "2025-02-03T10:15:00", "asset": "BTC", "quantity": 0, "market_value": 0},
+        {"period_start": "garbage", "asset": "BTC", "quantity": 9},
+        {"period_start": None, "asset": "BTC"},
+        {"period_start": "2025-01-01T00:00:00Z", "asset": "BTC", "quantity": 3, "market_value": 1e400},
+    ]
+    history = [
+        ({"source": "balance_history"}, {"rows": history_rows, "filters": {}, "summary": {}}),
+        ({"source": "balance_history", "limit": 3}, {"rows": history_rows, "filters": {"end": "2025-03-01"}, "summary": {}}),
+        ({"source": "balance_history", "interval": "week", "limit": 240}, {"rows": history_rows[:4], "filters": {"start": "2024-10-15T00:00:00Z", "end": "2025-01-10T00:00:00-05:00", "wallet": "Cold", "asset": ""}, "summary": {"truncated": False}}),
+        ({"source": "balance_history", "interval": "day", "limit": 5}, {"rows": history_rows, "filters": {"end": "2024-11-03T00:00:00Z"}, "summary": {"truncated": True}}),
+        ({"source": "balance_history", "interval": "hour", "limit": 4}, {"rows": history_rows[:2], "filters": {"end": "2024-11-01T02:30:00Z"}, "summary": {"truncated": True}}),
+        ({"source": "balance_history"}, {"rows": [], "filters": {}, "summary": {}}),
+        ({"source": "balance_history"}, {}),
+    ]
+    portfolio_rows = [
+        {"wallet": "Cold", "asset": "BTC", "quantity": 1, "market_value": 60000, "cost_basis": 30000, "unrealized_pnl": 30000},
+        {"wallet": "Hot", "asset": "lbtc", "quantity": 0.5, "market_value": 0, "cost_basis": 10, "unrealized_pnl": -10},
+        {"wallet": "Hot", "asset": "BTC", "quantity": 0, "market_value": -5, "cost_basis": None},
+        {"wallet": None, "asset": None, "quantity": None},
+    ]
+    portfolio = [
+        ({"source": "portfolio"}, {"rows": portfolio_rows}),
+        ({"source": "portfolio", "asset": "LBTC", "group_by": "asset"}, {"rows": portfolio_rows}),
+        ({"source": "portfolio"}, {"rows": [{"wallet": f"W{i % 7}", "asset": "BTC", "quantity": 1, "market_value": i % 9} for i in range(65)]}),
+    ]
+    tax_rows = [
+        {"row_type": "year_total", "year": 2024, "proceeds": 10, "cost_basis": 4, "gain_loss": 6},
+        {"row_type": "year_total", "year": "2025", "proceeds": "1.5", "cost_basis": None, "gain_loss": "x"},
+        {"row_type": "year_total", "year": "next"},
+        {"row_type": "detail", "year": 2024, "asset": "BTC", "transaction_type": "sell", "capital_gains_type": "short", "quantity": 0.1, "proceeds": 10, "cost_basis": 4, "gain_loss": 6},
+        {"row_type": "detail", "year": 2025.9, "asset": None},
+    ]
+    tax = [
+        ({"source": "tax_summary"}, {"rows": tax_rows}),
+        ({"source": "tax_summary", "measure": "proceeds"}, {"rows": [{"row_type": "detail", "year": 2020 + i % 5} for i in range(205)]}),
+    ]
+    stats = lambda n, btc, eur, missing=0, largest=None: {"count": n, "btc": btc, "eur": eur, "missingPrice": missing, **({"largest": largest} if largest else {})}  # noqa: E731
+    cash = [
+        ({"source": "cash_flow", "period": "3months", "wallet": "Hot"}, {
+            "buckets": [
+                {"bucketStart": "2025-04-01", "bucketKey": "2025-W14", "stats": {"incoming": stats(2, 0.5, 100, 1), "outgoing": stats(1, -0.1, None, 2), "transfers": {"count": 3}, "swaps": {}}},
+                {"bucketStart": "2025-04-08", "bucketKey": "2025-W15", "stats": {}},
+            ],
+            "summary": {"incoming": stats(2, 0.5, 100, 1, {"label": "Big", "btc": "0.4", "eur": 80}), "outgoing": stats(1, -0.1, 0), "transfers": None, "review": 2, "pending": "1"},
+            "window": {"since": "2025-03-15", "until": "2025-06-15"},
+        }),
+        ({"source": "cash_flow", "period": "all"}, {}),
+    ]
+    txs = [
+        {"id": "a", "occurredAt": "2025-06-01T00:00:00Z", "amountSat": 1500.5, "feeSat": 2, "eur": "12.5", "type": "Deposit", "asset": "BTC", "account": "Cold", "counter": "Alice", "note": "n" * 100, "queueStatus": "review", "tags": ["x", 2, None, "y", "z"]},
+        {"id": "b", "date": "2025-05-01", "amountSat": -300, "asset": "lbtc"},
+        {"id": None, "amountSat": 0},
+        "skip",
+    ]
+    transactions = [
+        ({"source": "transactions", "sort": "largest", "limit": 3, "query": "q"}, {"txs": txs, "total": 40}),
+        ({"source": "transactions"}, {"txs": txs[:1] + [{"id": "c", "amountSat": 5, "asset": "USDT"}], "total": None}),
+        ({"source": "transactions"}, {"txs": [], "total": "0"}),
+    ]
+    node = lambda **fields: {"valueSats": 1000, "ownership": "foreign", **fields}  # noqa: E731
+    flow = [
+        ({"source": "transaction_flow", "transaction": "abc"}, {
+            "inputs": [node(ownership="owned", wallet=" Cold "), node(ownership="ambiguous", wallet=""), node(valueSats=None, valueState="hidden")],
+            "outputs": [node(wallet="Theirs"), node(overflow=True, label="+12 more", overflowCount=12), node(valueSats=True), "x"],
+            "fee": {"valueSats": 210}, "supportLevel": "full", "accounting": {"quarantine": True},
+        }, {"transaction": {"id": "abc", "amountSat": -1000, "asset": "BTC"}}, {"route": "/transactions", "transaction": "abc"}),
+        ({"source": "transaction_flow", "transaction": "abc"}, {"supportLevel": "graphless"}, {}, None),
+    ]
+    readiness_payload = {
+        "ready": False,
+        "health": {"journals": {"needs_processing": True, "last_processed_at": "2025-01-01T00:00:00Z", "quarantine_count": 0},
+                   "review_queue": {"review": 4}, "counts": {"active_transactions": 0, "transactions": 3, "quarantines": 2}},
+        "rates_coverage": {"summary": {"missing_price_transactions": 5, "cache_coverable_missing": 2}},
+        "custody_quantity": {"issue_count": 1},
+        "blockers": [{"id": "journals_stale"}, {"id": "sync_failed", "severity": "blocking", "title": "Sync failed", "detail": "Electrum down"},
+                     {"id": "other", "severity": "warning", "detail": ""}, "x"],
+    }
+    readiness_flags = visuals.readiness_from_blockers(readiness_payload)
+    build = []
+    sources = [(spec, payload, {}, None) for spec, payload in [*[(s, p) for s, p in [({"source": "overview"}, o) for o in overview]], *history, *portfolio, *tax, *cash, *transactions]]
+    sources += flow
+    sources += [({"source": "readiness"}, readiness_payload, {}, None), ({"source": "readiness"}, {}, {}, None)]
+    for raw, payload, context, reference in sources:
+        spec = visuals.normalize_visual_args(raw)
+        for readiness in ([None, readiness_flags] if spec["source"] in visuals.JOURNAL_SOURCES else [None]):
+            for currency in (["eur", ""] if spec["source"] == "overview" else ["CHF"]):
+                built = visuals.build_chat_visual(
+                    spec, payload, fiat_currency=currency, readiness=readiness,
+                    local_reference=reference, context=context, now=now,
+                )
+                build.append({
+                    "spec": spec, "payload": payload, "fiat_currency": currency, "readiness": readiness,
+                    "local_reference": reference, "context": context, "visual": built,
+                    "model_digest": visuals.model_digest(built),
+                })
+    return {
+        "normalize": [{"args": args, "outcome": outcome(visuals.normalize_visual_args, args)} for args in normalize],
+        "readiness": [{"payload": payload, "readiness": visuals.readiness_from_blockers(payload)} for payload in (readiness_payload, {}, None)],
+        "build": build,
+    }
+
+
 def review_operation_cases():
     conversion = {"conservation_mode": "conversion", "legs": []}
     values = [
@@ -622,8 +852,135 @@ def review_operation_cases():
         [{"type": "custody_component", "request": {"components": [{**conversion, "conversion_reviewed": True}], "activate": False}}],
         [{"type": "custody_component", "request": {"action": "create", "components": [{}, conversion, {"conservation_mode": ""}], "activate": 0}}],
         [{"type": "custody_component", "request": {"components": [{"conservation_mode": "conversion", "conversion_reviewed": 1}], "activate": False}}],
+        # Agent access (#678) and component revisions (#679).
+        [{"type": None}],
+        [{"type": ["exclude"]}],
+        [{"type": {"kind": "exclude"}}],
+        [{"type": "pair"}],
+        [{"type": "unpair"}, {"type": "price_override"}, {"type": "accept_coarse_prices"}],
+        [{"type": "custody_component", "request": "x"}],
+        [{"type": "custody_component", "request": {"action": "supersede", "component_id": "conv"}}],
+        [{"type": "custody_component", "request": {"action": 5}}],
+        [{"type": "custody_component", "request": {"action": "revise", "component_id": "qty", "spec": {}}}],
+        [{"type": "custody_component", "request": {"action": "revise", "component_id": " conv ", "spec": {}}}],
+        [{"type": "custody_component", "request": {"action": "revise", "component_id": "conv", "spec": {"conversion_reviewed": False}}}],
+        [{"type": "custody_component", "request": {"action": "revise", "component_id": "conv", "spec": {"conversion_reviewed": False}, "activate": True}}],
+        [{"type": "custody_component", "request": {"action": "revise", "component_id": "conv", "spec": {"conversion_reviewed": True}}}],
+        [{"type": "custody_component", "request": {"action": "revise", "component_id": "missing", "spec": {}}}],
+        [{"type": "custody_component", "request": {"action": "revise", "component_id": 7, "spec": {}}}],
+        [{"type": "custody_component", "request": {"action": "revise", "spec": {"conservation_mode": "conversion", "conversion_reviewed": 0}}}],
+        [{"type": "custody_component", "request": {"action": "revise", "spec": {"conservation_mode": "", "conversion_reviewed": True}}}],
+        [{"type": "custody_component", "request": {"action": "revise", "spec": "x"}}],
+        [{"type": "custody_component", "request": {"action": "activate", "component_id": "conv"}}],
+        [{"type": "custody_component", "request": {"action": "activate", "component_id": "qty"}}],
     ]
-    return [{"operations": value, "outcome": outcome(daemon._validate_ai_review_operations, copy.deepcopy(value))} for value in values]
+    components = {"conv": {"conservation_mode": "conversion"}, "qty": {"conservation_mode": "quantity"}}
+
+    def get_component(conn, component_id, **kwargs):
+        if component_id not in components:
+            raise AppError("custody component was not found", code="not_found")
+        return dict(components[component_id])
+
+    cases = []
+    with mock.patch.object(daemon, "resolve_scope", lambda *args: (None, {"id": "p"})), \
+            mock.patch.object(daemon.core_custody_components, "get_component", get_component):
+        for value in values:
+            for full_access in (False, True):
+                cases.append({
+                    "operations": value,
+                    "full_access": full_access,
+                    "outcome": outcome(daemon._validate_ai_review_operations, copy.deepcopy(value),
+                                       full_access=full_access, conn=object()),
+                })
+    return cases
+
+
+UNDO_NOW = "2026-03-04T05:06:07+00:00"
+
+
+def undo_cases():
+    """`undo_hint` for every reversible tool, with the clock pinned."""
+    from datetime import datetime as real_datetime
+
+    from kassiber.ai import undo
+
+    class Pinned(real_datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return real_datetime.fromisoformat(UNDO_NOW)
+
+    pair = {"out_transaction_id": " tx-out ", "in_transaction_id": "tx-in", "kind": "swap",
+            "policy": "carrying_value", "notes": " n ", "out_amount": 150_000_000_000}
+    rule = {"name": "r", "predicate": {"wallet": "a"}, "kind": "swap", "policy": "p", "enabled": 1}
+    dismissal = {"out_transaction_id": "o", "in_transaction_id": "i", "reason": " why "}
+    cases = [
+        ("ui.transfers.pair", {}, {"id": " pair-1 "}),
+        ("ui.transfers.pair", {}, {"id": "  "}),
+        ("ui.transfers.unpair", {}, {"pair": pair}),
+        ("ui.transfers.unpair", {}, {"pair": {**pair, "out_amount": 0, "notes": None}}),
+        ("ui.transfers.unpair", {}, {"pair": {**pair, "out_amount": 10 ** 40 + 5 * 10 ** 11 + 1}}),
+        ("ui.transfers.unpair", {}, {"pair": {**pair, "out_amount": 10 ** 45 + 5 * 10 ** 13}}),
+        ("ui.transfers.unpair", {}, {"pair": {**pair, "out_amount": 10 ** 45 + 15 * 10 ** 13}}),
+        ("ui.transfers.unpair", {}, {"pair": {**pair, "out_amount": 10 ** 45 - 1}}),
+        ("ui.transfers.unpair", {}, {"pair": {**pair, "out_amount": 1, "kind": 5}}),
+        ("ui.transfers.unpair", {}, {"pair": {**pair, "out_amount": True}}),
+        ("ui.transfers.unpair", {}, {"pair": {**pair, "in_transaction_id": ""}}),
+        ("ui.transfers.unpair", {}, {"pair": "x"}),
+        ("ui.transfers.dismiss", {}, {"id": "d-1"}),
+        ("ui.transfers.dismissals.delete", {}, {"dismissal": {**dismissal, "expires_at": None}}),
+        ("ui.transfers.dismissals.delete", {}, {"dismissal": {**dismissal, "expires_at": "2026-03-05T05:06:07Z"}}),
+        ("ui.transfers.dismissals.delete", {}, {"dismissal": {**dismissal, "expires_at": "2026-03-05T05:06:08Z"}}),
+        ("ui.transfers.dismissals.delete", {}, {"dismissal": {**dismissal, "expires_at": "2026-03-04T05:06:07Z"}}),
+        ("ui.transfers.dismissals.delete", {}, {"dismissal": {**dismissal, "expires_at": "2026-03-04T05:06:07"}}),
+        ("ui.transfers.dismissals.delete", {}, {"dismissal": {**dismissal, "expires_at": "soon"}}),
+        ("ui.transfers.dismissals.delete", {}, {"dismissal": {**dismissal, "expires_at": 3}}),
+        ("ui.transfers.dismissals.delete", {}, {"dismissal": {**dismissal, "expires_at": "2027-01-01T00:00:00+01:00"}}),
+        ("ui.transfers.rules.create", {}, {"id": "rule-1"}),
+        ("ui.transfers.rules.delete", {}, {"rule": rule}),
+        ("ui.transfers.rules.delete", {}, {"rule": {**rule, "invalid_reason": "x"}}),
+        ("ui.transfers.rules.delete", {}, {"rule": {**rule, "predicate": [1], "enabled": 0, "name": None}}),
+        ("ui.transfers.rules.delete", {}, {"rule": {**rule, "policy": ""}}),
+        ("ui.transfers.rules.set_enabled", {}, {"id": "rule-1", "enabled": True}),
+        ("ui.transfers.rules.set_enabled", {}, {"id": "rule-1", "enabled": 1}),
+        ("ui.transfers.payouts.create", {}, {"id": "p-1"}),
+        ("ui.transfers.components.apply", {"action": "revise", "component_id": " c-1 "}, {}),
+        ("ui.transfers.components.apply", {"action": "supersede", "component_id": "c-1"}, {}),
+        ("ui.transfers.components.apply", {"action": "activate", "component_id": "c-1"}, {}),
+        ("ui.transfers.components.apply", {"action": "undo", "component_id": "c-1"}, {}),
+        ("ui.transfers.components.apply", {"action": "revise"}, {"components": [{"id": "n", "state": "active"}]}),
+        ("ui.transfers.components.apply", {}, {"components": [{"id": "a", "state": "active"}, {"id": "b", "state": "draft"}]}),
+        ("ui.transfers.components.apply", {}, {"components": [{"id": "a", "state": "active"}, {"id": "b", "state": "active"}]}),
+        ("ui.transfers.components.apply", {}, {"component": {"id": " c ", "state": "active"}}),
+        ("ui.transfers.components.apply", {}, {"components": "x", "component": {"id": "c", "state": "active"}}),
+        ("ui.transfers.components.apply", {"action": ["a"], "component_id": "c"}, {"component": {"id": "c", "state": "active"}}),
+        ("ui.custody.review.apply", {"gap_id": " g ", "action": "link"}, {}),
+        ("ui.custody.review.apply", {"gap_id": "g", "action": "reopen"}, {}),
+        ("ui.custody.review.apply", {"action": "link"}, {}),
+        ("ui.saved_views.create", {}, {"id": "v"}),
+        ("ui.loans.mark", {"txid": " t "}, {}),
+        ("ui.loans.mark", {"txid": 5}, {}),
+        ("ui.transactions.metadata.update", {}, {"transaction_id": "t", "history_event_id": "e"}),
+        ("ui.transactions.metadata.update", {}, {"updated": False, "transaction_id": "t", "history_event_id": "e"}),
+        ("ui.transactions.metadata.update", {}, {"transaction_id": "t"}),
+        ("ui.transactions.history.revert", {}, {"transaction": {"transaction_id": "t"}, "history_event_id": "e"}),
+        ("ui.transactions.history.revert", {}, {"transaction": "t", "history_event_id": "e"}),
+        ("ui.journals.quarantine.resolve", {}, {"transaction_id": "t", "resolution": {"history_event_id": "e"}}),
+        ("ui.journals.quarantine.resolve", {}, {"transaction_id": "t", "resolution": None}),
+        ("ui.wallets.import_attachment.apply", {}, {"import_batch_id": "b"}),
+        ("ui.chain_analysis.cases.save", {}, {"id": "case"}),
+        ("ui.chain_analysis.watches.create", {}, {"id": "w", "revision": 3}),
+        ("ui.chain_analysis.watches.create", {}, {"id": "w", "revision": True}),
+        ("ui.journals.process", {}, {"processed": 1}),
+        ("ui.transfers.pair", "x", {"id": "p"}),
+        ("ui.transfers.pair", {}, "x"),
+        ("status", {}, {"id": "x"}),
+    ]
+    with mock.patch.object(undo, "datetime", Pinned):
+        return [
+            {"tool": tool, "arguments": arguments, "data": data,
+             "hint": undo.undo_hint(tool, arguments, data)}
+            for tool, arguments, data in cases
+        ]
 
 
 def planned_artifact_cases():
@@ -793,9 +1150,14 @@ def document():
         "context": context_cases(),
         "provenance": provenance_cases(),
         "projection": projection_cases(),
+        "stale_journals": stale_journal_cases(),
         "review_operations": review_operation_cases(),
         "export_target": export_target_cases(),
         "planned_artifact": planned_artifact_cases(),
+        "visuals_now": VISUALS_NOW,
+        "visuals": visual_cases(),
+        "undo_now": UNDO_NOW,
+        "undo": undo_cases(),
         "wallets_sync": wallets_sync_cases(),
         "sync_errors": sync_error_cases(),
         "egress_view": egress_view_cases(),

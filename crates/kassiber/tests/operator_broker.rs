@@ -1362,3 +1362,85 @@ fn mcp_serve_reads_a_brokered_book_once_the_desktop_allows_it() {
     assert!(finished.status.success(), "{finished:?}");
     assert!(finished.stderr.is_empty(), "{finished:?}");
 }
+
+#[test]
+fn an_agent_lease_carries_the_users_grant_and_writes_the_pinned_book() {
+    let broker = Broker::start();
+    let (data_root, workspace, profile) = book(&broker);
+    let data_root = root(&data_root);
+    let access_file = broker.agent_access_file();
+    let mut daemon = DesktopDaemon::start(&broker, &data_root, &access_file);
+    daemon.data(
+        "daemon.unlock",
+        &format!("{{\"auth_response\": {{\"passphrase_secret\": \"{PASSPHRASE}\"}}}}"),
+    );
+    // The user's External agents choice (#686), recorded with the switch.
+    let configured = daemon.data(
+        "ui.agent_access.configure",
+        "{\"mcp_enabled\": true, \"grant\": \"operator\", \"agent_access\": \"full\"}",
+    );
+    assert_eq!(text(&configured, "grant"), "operator");
+    assert_eq!(get(&configured, "access_recorded"), &Value::Bool(true));
+    let granted = daemon.data("ui.agent_access.unlock", "{}");
+    assert_eq!(get(get(&granted, "session"), "active"), &Value::Bool(true));
+    let client = broker.client();
+    assert_eq!(
+        text(&client.status(Some(&data_root)).unwrap(), "capability"),
+        "operator"
+    );
+
+    let mut server = McpServer::start(
+        &broker,
+        &data_root,
+        &access_file,
+        &["--workspace", &workspace, "--profile", &profile],
+    );
+    assert_eq!(reason(&server.call("status")), "agent_pairing_required");
+    let shown = daemon.data("ui.agent_access.status", "{\"refresh\": true}");
+    let Value::List(agents) = get(get(&shown, "session"), "agents") else {
+        panic!("{shown:?}")
+    };
+    daemon.data(
+        "ui.agent_access.pairing",
+        &format!(
+            "{{\"session_id\": \"{}\", \"allow\": true}}",
+            text(&agents[0], "id")
+        ),
+    );
+    // An operator write runs in a broker child on the pinned book; an
+    // accounting decision is above the grant and never reaches the broker.
+    let processed = server.call("journals_process");
+    assert_eq!(
+        text(&processed, "kind"),
+        "ui.journals.process",
+        "{processed:?}"
+    );
+    assert_eq!(text(get(&processed, "book"), "profile"), "Book A");
+    let refused = server.call("transactions_metadata_update");
+    assert_eq!(
+        text(get(&refused, "error"), "code"),
+        "mcp_grant_insufficient",
+        "{refused:?}"
+    );
+    let counted = daemon.data("ui.agent_access.status", "{\"refresh\": true}");
+    assert_eq!(get(get(&counted, "session"), "calls"), &Value::from(1));
+
+    // A new grant ends the lease: the next unlock leases exactly that grant.
+    daemon.data(
+        "ui.agent_access.configure",
+        "{\"grant\": \"accounting_decisions\"}",
+    );
+    assert_eq!(
+        text(&client.status(Some(&data_root)).unwrap(), "lease"),
+        "locked"
+    );
+    daemon.data("ui.agent_access.unlock", "{}");
+    assert_eq!(
+        text(&client.status(Some(&data_root)).unwrap(), "capability"),
+        "accounting_decisions"
+    );
+    daemon.data("daemon.lock", "{}");
+    let finished = server.finish();
+    assert!(finished.status.success(), "{finished:?}");
+    assert!(finished.stderr.is_empty(), "{finished:?}");
+}

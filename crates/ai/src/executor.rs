@@ -23,10 +23,11 @@ use crate::ToolError;
 
 /// `_AI_AUTO_JOURNAL_REFRESH_TOOL_NAMES`: reads that rebuild stale journals
 /// first, unless the caller disabled read maintenance (MCP).
-pub const AUTO_JOURNAL_REFRESH_TOOLS: [&str; 20] = [
+pub const AUTO_JOURNAL_REFRESH_TOOLS: [&str; 22] = [
     "ui.audit.changes_since_last_answer",
     "ui.audit.evidence.summary",
     "ui.journals.quarantine",
+    "ui.journals.quarantine.groups",
     "ui.journals.snapshot",
     "ui.journals.transfers.list",
     "ui.next_actions",
@@ -43,6 +44,8 @@ pub const AUTO_JOURNAL_REFRESH_TOOLS: [&str; 20] = [
     "ui.review.worklist",
     "ui.transactions.review_context",
     "ui.transfers.review_context",
+    // Only for the report sources (`_ai_read_wants_maintenance`).
+    "ui.visuals.render",
     "ui.workspace.health",
 ];
 
@@ -59,10 +62,30 @@ pub const LOCAL_CUSTODY_READ_KINDS: [&str; 6] = [
 
 /// Read tools refused until the service behind them is native, with the
 /// work that owns it (design doc §2).
-pub const REFUSED_READS: [(&str, &str); 1] = [(
-    "ui.connections.node.snapshot",
-    "the Lightning node snapshot route",
-)];
+pub const REFUSED_READS: [(&str, &str); 7] = [
+    (
+        "ui.connections.node.snapshot",
+        "the Lightning node snapshot route",
+    ),
+    (
+        "ui.journals.quarantine.groups",
+        "main-sync S5 (quarantine root causes)",
+    ),
+    ("ui.transactions.verify", "main-sync S8 (row verification)"),
+    (
+        "ui.transfers.dismissals.list",
+        "main-sync S6 (transfer dismissals)",
+    ),
+    ("ui.wallets.import_attachment.plan", ATTACHMENT_IMPORT_OWNER),
+    ("ui.wallets.import_document.plan", DOCUMENT_IMPORT_OWNER),
+    ("ui.wallets.read_document", DOCUMENT_IMPORT_OWNER),
+];
+
+/// Who owns importing an attached file and its rollback.
+pub const ATTACHMENT_IMPORT_OWNER: &str = "the chat attachment import (main-sync S12)";
+
+/// Who owns reading an attached photo or PDF and importing its rows.
+pub const DOCUMENT_IMPORT_OWNER: &str = "the chat document import (main-sync S12)";
 
 /// Reads whose payload carries a `safety` block that reports whether the
 /// read prelude contacted the network.
@@ -125,6 +148,15 @@ pub fn parse_tool_call(raw: &Value, index: usize) -> ParsedCall {
 
 /// `_tool_result_denied(reason, message=...)`.
 pub fn tool_result_denied(reason: &str, message: Option<&PyStr>) -> Value {
+    tool_result_denied_with(reason, message, None)
+}
+
+/// `_tool_result_denied(reason, message=..., remediation=...)`.
+pub fn tool_result_denied_with(
+    reason: &str,
+    message: Option<&PyStr>,
+    remediation: Option<&Value>,
+) -> Value {
     let mut result = vec![
         (Key::from("ok"), Value::Bool(false)),
         (Key::from("reason"), s(reason)),
@@ -135,7 +167,160 @@ pub fn tool_result_denied(reason: &str, message: Option<&PyStr>) -> Value {
             redact_ai_tool_result(&Value::Str(message.clone())),
         ));
     }
+    if let Some(remediation) = remediation.filter(|value| kassiber_envelope::truthy(value)) {
+        result.push((Key::from("remediation"), redact_ai_tool_result(remediation)));
+    }
     Value::Dict(result)
+}
+
+/// `build_remediation(action, desktop_only=..., message=..., tool=...)`.
+fn remediation(action: &str, tool: Option<&str>, desktop_only: bool, message: &str) -> Value {
+    dict([
+        ("action", s(action)),
+        ("target", Value::Dict(Vec::new())),
+        ("tool", tool.map_or(Value::Null, s)),
+        ("arguments_hint", Value::Dict(Vec::new())),
+        ("desktop_only", Value::Bool(desktop_only)),
+        ("message", s(message)),
+    ])
+}
+
+/// The custody-gap write denial for a restricted provider.
+pub(crate) fn custody_gap_restricted() -> Value {
+    tool_result_denied_with(
+        "agent_access_restricted",
+        Some(&PyStr::from(
+            "Custody-gap linkage is unavailable while this provider's agent access is restricted. Set it to full in Settings → Assistant.",
+        )),
+        Some(&agent_access_remediation()),
+    )
+}
+
+/// `_ai_agent_access_remediation()`.
+pub fn agent_access_remediation() -> Value {
+    remediation(
+        "enable_full_agent_access",
+        None,
+        true,
+        "Only the user can change this: Settings → Assistant → this provider's agent access → full. Or use the desktop workflow.",
+    )
+}
+
+/// `_AI_TOOL_ERROR_DETAIL_CODES`: codes whose bounded, id-level details the
+/// model needs to act on.
+pub const ERROR_DETAIL_CODES: [&str; 12] = [
+    "ambiguous_reference",
+    "reference_qualifier_unmatched",
+    "custody_component_not_activatable",
+    "custody_component_incomplete",
+    "custody_component_membership_conflict",
+    "custody_component_draft_exists",
+    "custody_component_not_superseded",
+    "custody_component_superseded",
+    "custody_component_state_conflict",
+    "custody_component_economic_term_leg_changed",
+    "custody_review_plan_stale",
+    "interaction_required",
+];
+
+/// `_AI_TOOL_ERROR_DETAILS_MAX_CHARS`.
+const ERROR_DETAILS_MAX_CHARS: usize = 12_000;
+
+/// `_ai_default_remediation(code, entry)`: code-level remediation for errors
+/// raised without a specific target.
+fn default_remediation(code: &str, entry: Option<&str>) -> Option<Value> {
+    let replan = match entry {
+        Some("ui.transfers.components.apply") => Some("ui_transfers_components_plan"),
+        Some("ui.custody.review.apply") => Some("ui_custody_review_plan"),
+        Some("ui.review.apply") => Some("ui_review_plan"),
+        _ => None,
+    };
+    if let (true, Some(tool)) = (
+        [
+            "custody_review_plan_stale",
+            "custody_gap_stale",
+            "review_plan_stale",
+            "review_artifact_invalid",
+        ]
+        .contains(&code),
+        replan,
+    ) {
+        return Some(remediation(
+            "replan",
+            Some(tool),
+            false,
+            "The book's inputs changed after the plan. Plan again with the same arguments, show the user the fresh effects, and apply with the new input_version only after renewed consent.",
+        ));
+    }
+    if [
+        "review_case_changed",
+        "review_case_stale",
+        "review_cursor_stale",
+    ]
+    .contains(&code)
+    {
+        return Some(remediation(
+            "reread_case",
+            Some("ui_review_cases"),
+            false,
+            "The case changed since the user confirmed it. Read it again, plan again, and ask the user again.",
+        ));
+    }
+    match code {
+        "agent_access_restricted" => Some(agent_access_remediation()),
+        "stale_context" => Some(remediation(
+            "ask_again_in_open_book",
+            None,
+            true,
+            "The open book changed during this turn; nothing was written.",
+        )),
+        _ => None,
+    }
+}
+
+/// `_tool_result_from_app_error(exc, entry)`: the provider's view of a
+/// failed tool: code, message, remediation and, for allowlisted codes,
+/// bounded details.
+pub fn tool_result_from_app_error(error: &AppError, entry: Option<&str>) -> Value {
+    let code = if error.code.is_empty() {
+        "tool_error"
+    } else {
+        error.code.as_str()
+    };
+    let carried = error
+        .details
+        .as_ref()
+        .and_then(|details| get(details, "remediation"))
+        .filter(|value| matches!(value, Value::Dict(_)))
+        .cloned();
+    let remediation = carried.or_else(|| default_remediation(code, entry));
+    let mut result = tool_result_denied_with(code, Some(&message_of(error)), remediation.as_ref());
+    if let Some(hint) = error.hint.as_deref().filter(|hint| !hint.is_empty()) {
+        kassiber_envelope::set(&mut result, "hint", redact_ai_tool_result(&s(hint)));
+    }
+    if let (true, Some(Value::Dict(details))) =
+        (ERROR_DETAIL_CODES.contains(&code), error.details.as_ref())
+    {
+        let details: Vec<(Key, Value)> = details
+            .iter()
+            .filter(|(key, _)| *key != Key::from("remediation"))
+            .cloned()
+            .collect();
+        if !details.is_empty() {
+            let safe = redact_ai_tool_result(&kassiber_envelope::json_ready(Value::Dict(details)));
+            let encoded = kassiber_pyjson::dumps(
+                &safe,
+                &kassiber_pyjson::Options::new().sort_keys(true).compact(),
+            )
+            .unwrap_or_default();
+            if encoded.chars().count() <= ERROR_DETAILS_MAX_CHARS {
+                kassiber_envelope::set(&mut result, "details", safe);
+            } else {
+                kassiber_envelope::set(&mut result, "details_truncated", Value::Bool(true));
+            }
+        }
+    }
+    result
 }
 
 fn message_of(error: &AppError) -> PyStr {
@@ -145,17 +330,10 @@ fn message_of(error: &AppError) -> PyStr {
     }
 }
 
-/// The denial Python's executor returns for a failure.
-pub fn denial_for(error: ToolError) -> Value {
+/// The denial Python's executor returns for a failure of `entry`.
+pub fn denial_for(error: ToolError, entry: Option<&str>) -> Value {
     match error {
-        ToolError::App(error) => {
-            let code = if error.code.is_empty() {
-                "tool_error"
-            } else {
-                &error.code
-            };
-            tool_result_denied(code, Some(&message_of(&error)))
-        }
+        ToolError::App(error) => tool_result_from_app_error(&error, entry),
         ToolError::Busy => tool_result_denied(
             "database_busy",
             Some(&PyStr::from(
@@ -203,6 +381,18 @@ pub trait Book {
     /// failure applied (`_apply_sync_failure_blocker`).
     fn report_blockers(&mut self, _auto_sync: Option<&Value>) -> Result<Value, ToolError> {
         Err(not_native("ui.report.blockers", "this book").into())
+    }
+    /// The active profile's fiat currency (a visual's unit).
+    fn profile_fiat_currency(&mut self) -> Result<String, ToolError> {
+        Err(not_native("ui.visuals.render", "this book").into())
+    }
+    /// The book's import runs (#682): their list, a run's rollback plan with
+    /// the book's input version, or its rollback.
+    fn import_runs(
+        &mut self,
+        _request: crate::import_runs::ImportRuns<'_>,
+    ) -> Result<Value, ToolError> {
+        Err(not_native("ui.imports.list", "this book").into())
     }
     /// `core_file_analysis.analyze_file(source_file, column_map=...,
     /// sample_rows=...)` over the chat's staged attachment.
@@ -252,8 +442,22 @@ pub trait Book {
     fn dataset_preview(&mut self, _arguments: &Value) -> Result<Value, ToolError> {
         Err(not_native("ui.chain_analysis.datasets.import", "this book").into())
     }
+    /// `_review_workflow_payload(..., authored_source="ai_tool",
+    /// full_access=...)`: the review kinds with the AI rules applied.
+    fn review(
+        &mut self,
+        kind: &str,
+        _arguments: &Value,
+        _full_access: bool,
+    ) -> Result<Value, ToolError> {
+        Err(not_native(kind, "this book").into())
+    }
     /// `_ai_review_consent_preview`'s scoped body.
-    fn review_consent_preview(&mut self, _arguments: &Value) -> Result<Value, ToolError> {
+    fn review_consent_preview(
+        &mut self,
+        _arguments: &Value,
+        _full_access: bool,
+    ) -> Result<Value, ToolError> {
         Err(not_native("ui.review.apply", "this book").into())
     }
     /// `append_assistance_record(...)` then `commit()`.
@@ -352,13 +556,14 @@ pub fn execute_read_only(
         .daemon_kind
         .as_deref()
         .is_some_and(|kind| LOCAL_CUSTODY_READ_KINDS.contains(&kind))
-        && !runtime.is("provider_kind", "local")
+        && !full_access(runtime.state)
     {
-        return tool_result_denied(
-            "local_provider_required",
+        return tool_result_denied_with(
+            "agent_access_restricted",
             Some(&PyStr::from(
-                "Custody lineage is available in the local desktop workflow and to local AI providers only.",
+                "Custody lineage is unavailable while this provider's agent access is restricted. Set it to full in Settings → AI providers, or use the desktop workflow.",
             )),
+            Some(&agent_access_remediation()),
         );
     }
     if !planned_auto_read && !is_advertised(entry, runtime.state) {
@@ -366,7 +571,7 @@ pub fn execute_read_only(
     }
     match read(entry, call, runtime, host) {
         Ok(result) => result,
-        Err(error) => denial_for(error),
+        Err(error) => denial_for(error, Some(&entry.name)),
     }
 }
 
@@ -389,6 +594,9 @@ fn read(
             ("envelope", success("read_skill_reference", reference)),
         ])));
     }
+    if call.name.is(LOAD_TOOLS_NAME) {
+        return Ok(load_tool_areas(call, runtime.state));
+    }
     let Some(kind) = entry.daemon_kind.as_deref() else {
         return Ok(tool_result_denied("tool_not_allowed", None));
     };
@@ -401,11 +609,16 @@ fn read(
         return Err(not_native(&entry.name, owner).into());
     }
     let data_root = runtime.data_root.to_owned();
-    // Models call tools by wire name (`ui_reports_summary`); decide on the
-    // catalog name the refresh set uses
-    // (tests/rust_port/repro_ai_refresh_wire_name.py).
-    let refresh = AUTO_JOURNAL_REFRESH_TOOLS.contains(&entry.name.as_str())
-        && !runtime.is("read_maintenance", "disabled");
+    // `_ai_read_wants_maintenance`: decided on the catalog entry, so a
+    // model's wire-name call refreshes like the planner's dotted auto-read
+    // (fix round 7, 09912e4c0). A visual refreshes only for the report
+    // sources whose read tools already do.
+    let wants = AUTO_JOURNAL_REFRESH_TOOLS.contains(&entry.name.as_str())
+        && (entry.name != "ui.visuals.render"
+            || crate::visuals::JOURNAL_SOURCES
+                .iter()
+                .any(|source| get(&call.arguments, "source") == Some(&s(*source))));
+    let refresh = wants && !runtime.is("read_maintenance", "disabled");
     let state = &mut *runtime.state;
     let mut work = |book: &mut dyn Book| -> Result<Value, ToolError> {
         assert_scope(book, &data_root, state)?;
@@ -438,14 +651,17 @@ fn read(
                 ));
             }
         }
-        let mut payload = projections::read_for_ai(
-            entry,
+        let mut payload = projections::stale_journal_figures_for_ai(
             kind,
-            &call.arguments,
-            state,
-            auto_sync_data.as_ref(),
-            book,
-        )?;
+            projections::read_for_ai(
+                entry,
+                kind,
+                &call.arguments,
+                state,
+                auto_sync_data.as_ref(),
+                book,
+            )?,
+        );
         if SAFETY_COMPOSITES.contains(&kind) {
             if let Some(mut safety @ Value::Dict(_)) = get(&payload, "safety").cloned() {
                 let contacted = auto_sync_data.is_some();
@@ -478,6 +694,88 @@ fn read(
     };
     let result = host.on_request_loop(&mut work)?;
     Ok(redact_ai_tool_result(&result))
+}
+
+/// `LOAD_TOOLS_NAME`.
+pub const LOAD_TOOLS_NAME: &str = "load_tools";
+
+/// `_ai_full_access(runtime)`: this turn's access mode; absent (a direct or
+/// MCP caller) is restricted.
+pub fn full_access(state: &Value) -> bool {
+    get(state, "provider_full_access") == Some(&Value::Bool(true))
+        || get(state, "provider_on_device") == Some(&Value::Bool(true))
+}
+
+/// `_load_tool_areas_for_ai(call, runtime)`: the requested areas' schemas
+/// are authorized now and offered from the next round. Python returns this
+/// result unredacted; it names tools only.
+fn load_tool_areas(call: &ParsedCall, state: &mut Value) -> Value {
+    let enabled = get(state, "load_tools_enabled").is_some_and(kassiber_envelope::truthy);
+    if !enabled || !matches!(get(state, "advertised_tools"), Some(Value::List(_))) {
+        return tool_result_denied("tool_not_advertised", None);
+    }
+    let mut areas: Vec<Value> = Vec::new();
+    if let Some(Value::List(requested)) = get(&call.arguments, "areas") {
+        for area in requested {
+            if !areas.contains(area) {
+                areas.push(area.clone());
+            }
+        }
+    }
+    let names: Vec<&str> = areas
+        .iter()
+        .filter_map(|area| match area {
+            Value::Str(area) => area.as_str(),
+            _ => None,
+        })
+        .collect();
+    let profile = match get(state, "tool_profile") {
+        Some(Value::Str(profile)) => profile.as_str(),
+        _ => None,
+    };
+    let definitions = crate::select::strip_on_device_only(
+        crate::select::build_area_tools(&names, profile),
+        full_access(state),
+    );
+    let Some(Value::List(advertised)) = get(state, "advertised_tools") else {
+        unreachable!("checked above");
+    };
+    let added: Vec<&ToolEntry> = definitions
+        .iter()
+        .copied()
+        .filter(|tool| {
+            !advertised
+                .iter()
+                .any(|name| matches!(name, Value::Str(name) if name.is(tool.provider_name())))
+        })
+        .collect();
+    let added_names: Vec<Value> = added.iter().map(|tool| s(tool.provider_name())).collect();
+    let mut advertised = advertised.clone();
+    advertised.extend(added_names.iter().cloned());
+    kassiber_envelope::set(state, "advertised_tools", Value::List(advertised));
+    let mut pending = match crate::pyval::pop(state, "pending_tool_definitions") {
+        Value::List(pending) => pending,
+        _ => Vec::new(),
+    };
+    pending.extend(added.iter().map(|tool| tool.to_responses_tool()));
+    kassiber_envelope::set(state, "pending_tool_definitions", Value::List(pending));
+    dict([
+        ("ok", Value::Bool(true)),
+        (
+            "envelope",
+            success(
+                LOAD_TOOLS_NAME,
+                dict([
+                    ("areas", Value::List(areas)),
+                    ("added_tools", Value::List(added_names)),
+                    (
+                        "already_offered",
+                        Value::Int((definitions.len() - added.len()).into()),
+                    ),
+                ]),
+            ),
+        ),
+    ])
 }
 
 /// `_sync_payload_has_errors(payload)`: the refresh failed, or a source did.
@@ -559,27 +857,24 @@ pub fn execute_mutating(call: &ParsedCall, state: &Value) -> Value {
     else {
         return tool_result_denied("tool_not_allowed", None);
     };
-    let local = matches!(get(state, "provider_kind"), Some(Value::Str(kind)) if kind.is("local"));
     if entry
         .daemon_kind
         .as_deref()
         .is_some_and(|kind| CUSTODY_GAP_MUTATING_KINDS.contains(&kind))
-        && !local
+        && !full_access(state)
     {
-        return tool_result_denied(
-            "local_provider_required",
-            Some(&PyStr::from(
-                "Custody-gap linkage is available to local AI providers only.",
-            )),
-        );
+        return custody_gap_restricted();
     }
     if !is_advertised(entry, state) {
         return tool_result_denied("tool_not_advertised", None);
     }
     if let Err(error) = validate_arguments(entry, &call.arguments) {
-        return denial_for(error);
+        return denial_for(error, Some(&entry.name));
     }
-    denial_for(not_native(&entry.name, MUTATING_EXECUTOR_OWNER).into())
+    denial_for(
+        not_native(&entry.name, MUTATING_EXECUTOR_OWNER).into(),
+        Some(&entry.name),
+    )
 }
 
 /// The refusal for a tool whose service is not native yet.

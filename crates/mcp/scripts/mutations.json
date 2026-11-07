@@ -195,8 +195,8 @@
   {
     "id": "mcp-access-gate-before-resolution",
     "file": "crates/cli/src/mcp.rs",
-    "find": "        require_mcp_access(self.store.as_ref())?;\n",
-    "replace": "",
+    "find": "        let status = require_mcp_access(self.store.as_ref())?;\n        let (grant, agent_access) = (status.grant, status.agent_access);\n",
+    "replace": "        let (grant, agent_access) = (\"read\", \"restricted\");\n",
     "expect_failing": [
       "access_gates_refuse_before_any_project_is_resolved"
     ],
@@ -384,5 +384,156 @@
       "sigint_sets_the_interrupt_and_cuts_a_sleep_short"
     ],
     "rule": "Each Ctrl-C is handled once."
+  },
+  {
+    "id": "mcp-grant-refused-before-resolution",
+    "file": "crates/cli/src/mcp.rs",
+    "find": "        if let Some(refusal) = refusal_for(tool, grant, agent_access) {\n            return Err(refusal);\n        }\n        if self.selection",
+    "replace": "        if self.selection",
+    "expect_failing": [
+      "calls_above_the_users_grant_are_refused_before_anything_is_resolved"
+    ],
+    "rule": "A call above the user's grant or access mode is refused before any project is resolved (#686)."
+  },
+  {
+    "id": "mcp-listing-follows-grant",
+    "file": "crates/mcp/src/tools.rs",
+    "find": "    grant_allows(grant, tool.required.as_str())\n        && (agent_access",
+    "replace": "    (agent_access",
+    "expect_failing": [
+      "listings_and_definitions_follow_the_grant"
+    ],
+    "rule": "The listing holds only the tools the grant covers."
+  },
+  {
+    "id": "mcp-restricted-hides-full-access-tools",
+    "file": "crates/mcp/src/tools.rs",
+    "find": "        && (agent_access == \"full\" || !tool.full_access_only)",
+    "replace": "        && (agent_access == \"full\" || !tool.full_access_only || true)",
+    "expect_failing": [
+      "listings_and_definitions_follow_the_grant"
+    ],
+    "rule": "Restricted access hides the full-access tools at every grant."
+  },
+  {
+    "id": "mcp-call-capability-claims-grant",
+    "file": "crates/mcp/src/tools.rs",
+    "find": "        if order(claimed) > order(required) {",
+    "replace": "        if false && order(claimed) > order(required) {",
+    "expect_failing": [
+      "instructions_capabilities_and_client_names_match_python",
+      "an_mcp_call_takes_its_tools_class_and_any_claimed_grant"
+    ],
+    "rule": "An `mcp call` needs a lease covering the grant it claims, not only its tool's class."
+  },
+  {
+    "id": "mcp-brokered-call-claims-grant",
+    "file": "crates/cli/src/mcp.rs",
+    "find": "            \"--grant\".to_owned(),\n            effective.to_owned(),\n",
+    "replace": "",
+    "expect_failing": [
+      "a_lease_runs_one_scoped_mcp_call_operation"
+    ],
+    "rule": "A brokered call names its effective grant, so the broker checks the lease covers it."
+  },
+  {
+    "id": "mcp-lease-carries-grant",
+    "file": "crates/daemon/src/agent_access.rs",
+    "find": "        let grant = kassiber_setup::agent_access::require_mcp_access(&(self.preference)()?)?.grant;",
+    "replace": "        let grant = { kassiber_setup::agent_access::require_mcp_access(&(self.preference)()?)?; \"read\" };",
+    "expect_failing": [
+      "test_unlock_leases_the_users_external_agents_grant"
+    ],
+    "rule": "The desktop's agent lease carries the user's External agents grant."
+  },
+  {
+    "id": "mcp-new-grant-ends-lease",
+    "file": "crates/daemon/src/agent_access.rs",
+    "find": "                || get(&result, \"grant\") != Some(&s(previous_grant))\n",
+    "replace": "",
+    "expect_failing": [
+      "test_a_new_grant_ends_the_agent_lease"
+    ],
+    "rule": "A new grant ends the lease, so the next unlock leases exactly that grant."
+  },
+  {
+    "id": "mcp-desktop-lock-ends-lease",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "        let _ = self.agent_access.end_lease(false);\n        self.unlocked_passphrase = None;\n        self.backup_sessions.clear();",
+    "replace": "        self.unlocked_passphrase = None;\n        self.backup_sessions.clear();",
+    "expect_failing": [
+      "test_ending_the_desktop_session_ends_the_agent_lease"
+    ],
+    "rule": "`daemon.lock` ends the agents' lease with the desktop's session."
+  },
+  {
+    "id": "mcp-write-pin-copies-back",
+    "file": "crates/store/src/pinned.rs",
+    "find": "                 WHERE base.key IS NULL OR base.value IS NOT pinned.value",
+    "replace": "                 WHERE 0",
+    "expect_failing": [
+      "a_write_pin_answers_the_context_and_keeps_every_other_write"
+    ],
+    "rule": "A write under the pin reaches the stored settings once the pin lifts."
+  },
+  {
+    "id": "mcp-custody-audit-admits-mcp-host",
+    "file": "crates/transfers/src/custody_ai_audit.rs",
+    "find": "\"mode_full_access\",\n    \"mcp_host\",\n    \"deny\",",
+    "replace": "\"mode_full_access\",\n    \"mcp_hosted\",\n    \"deny\",",
+    "expect_failing": [
+      "the_audit_admits_pythons_consent_decisions"
+    ],
+    "rule": "The custody AI audit records an MCP host's approval (`mcp_host`)."
+  },
+  {
+    "id": "chat-upload-file-goes-with-last-grant",
+    "file": "crates/daemon/src/documents_import.rs",
+    "find": "        if !self.owned_files.contains(&session.source_file)\n            || self\n                .sessions\n                .values()\n                .any(|other| other.source_file == session.source_file)\n        {",
+    "replace": "        if !self.owned_files.contains(&session.source_file) {",
+    "expect_failing": [
+      "an_uploaded_file_goes_with_the_last_grant_that_names_it"
+    ],
+    "rule": "A pasted file stays while any grant (a preview's too) still names it (#689)."
+  },
+  {
+    "id": "chat-upload-picked-file-kept",
+    "file": "crates/daemon/src/documents_import.rs",
+    "find": "        if !self.owned_files.contains(&session.source_file)\n            || self",
+    "replace": "        if false\n            || self",
+    "expect_failing": [
+      "an_uploaded_file_goes_with_the_last_grant_that_names_it"
+    ],
+    "rule": "Only files the daemon wrote are deleted; a picked file is the user's."
+  },
+  {
+    "id": "chat-upload-chunks-in-order",
+    "file": "crates/daemon/src/chat_uploads.rs",
+    "find": "        if offset != upload.received_bytes {",
+    "replace": "        if false && offset != upload.received_bytes {",
+    "expect_failing": [
+      "out_of_order_or_oversized_chunks_end_the_upload"
+    ],
+    "rule": "A chunk out of order ends the upload."
+  },
+  {
+    "id": "chat-upload-chat-types-only",
+    "file": "crates/daemon/src/chat_uploads.rs",
+    "find": "    if !CHAT_ATTACHMENT_EXTENSIONS.contains(&extension_lower.as_str()) {",
+    "replace": "    if extension_lower.is_empty() {",
+    "expect_failing": [
+      "filenames_keep_the_name_and_the_chat_types_only"
+    ],
+    "rule": "The chat takes exports, statements and photos only."
+  },
+  {
+    "id": "chat-upload-strict-base64",
+    "file": "crates/daemon/src/chat_uploads.rs",
+    "find": "        2 => padding == 2,",
+    "replace": "        2 => padding >= 1,",
+    "expect_failing": [
+      "strict_base64_follows_python"
+    ],
+    "rule": "Chunks decode as Python's b64decode(validate=True) does."
   }
 ]

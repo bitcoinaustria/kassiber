@@ -163,7 +163,7 @@ move onto this base.
   `reversible` (true for 19 tools, among them `ui.journals.process`,
   `ui.transfers.pair`, `ui.transfers.unpair`, `ui.transfers.dismiss`,
   `ui.transactions.metadata.update`, `ui.custody.review.apply`); `ai/undo.py`
-  takes changes back. `gen_catalog.py` does not record `reversible` yet.
+  takes changes back. `gen_catalog.py` records `reversible` since S12.
 - **Tool areas** (#677): `load_tools`, `LOADABLE_TOOL_AREAS` (11 areas) and
   the tool-area index for small models.
 - `_AI_AUTO_JOURNAL_REFRESH_TOOL_NAMES` gains `ui.journals.quarantine.groups`
@@ -240,7 +240,7 @@ XL above.
     inventories), the tool executor (R6-5b: new tools, consent, refresh sets,
     tool areas, undo), MCP grants (R6-8) and chat (R6-7: attachments, uploads,
     permission modes, visuals, document import). The Settings and chat
-    screens need these kinds.
+    screens need these kinds. **Mostly done**; see [after S12](#after-s12).
 
 ## After S1
 
@@ -763,6 +763,35 @@ plan on the book's transfer legs (`ui.review.plan`, `ui.review.cases`,
 `ui.review.badges`), a coinjoin pair plan and a pair with an acceptance
 (refused alike: no coarse case) differed in all 5 requests before and in
 none after.
+
+## After S12
+
+S12 is on `t3code/rust-sync-s12`; [the S12 record](rust-sync-s12.md) has
+the per-PR state, the measurements and the deviations. Ported: the catalog
+with `reversible`, tool areas and selection; providers (`agent_access`,
+saved checks, inventories); full agent access, permission modes and undo;
+#686's MCP grants with writes on a pinned book; staging with the chat
+purpose and pasted uploads; several chat files shown to a full-access
+provider, with expired grants dropped and the broker carrying images;
+`ui.attachments.add_from_chat`; the import runs, their consented rollback
+and the wallet handoff; chat visuals; #681's stale-journal projection; and
+fix round 7's assistant changes.
+
+Left, each with its reason:
+
+- `ui.wallets.import_attachment.plan/apply` and
+  `ui.wallets.import_document.plan/apply` need S8's wallet completeness
+  (`completeness_class`, `describe_wallets`), which the plans report and
+  check; they stay refused.
+- `ui.wallets.read_document` needs the document reader split so its model
+  call runs off the request loop, as Python's does; its drafts only feed
+  the import above.
+- Fix round 7's `invalid_wallet_config` (7bca137d4) belongs to the wallet
+  sync.
+
+The four R6 harnesses on this branch: chat 11 of 11, providers 9 of 9, MCP
+11 of 11; the tools harness fails only on the other slices' differences
+listed in the S12 record.
 
 ## Verification of the merge
 

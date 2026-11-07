@@ -6,7 +6,11 @@ in-flight and subscription limits, request-id typing, cancellation and the
 bounded drain; the result size measured on the escaped text; the access
 gate's place and reason precedence; the brokered path's broker choice,
 build and caller-context checks, re-redaction, stale-session replacement,
-polling and cancel; the read-only book pin; and `kassiber chat`'s
+polling and cancel; the read-only book pin; #686's grants (the refusal
+before resolution, the listing by grant and access mode, the capability a
+call claims, the lease carrying and ending with the grant, the desktop lock
+ending it, the writable pin's copy-back and the custody audit's `mcp_host`);
+and `kassiber chat`'s
 cooperative Ctrl-C: cancelling the turn, the second Ctrl-C, the prompt,
 waiting for input or the daemon, the daemon's own process group and the
 interrupt being handled once. Each must make its named Rust tests fail.
@@ -27,7 +31,8 @@ sys.modules[spec.name] = checker
 spec.loader.exec_module(checker)
 checker.ENGINE_PACKAGES = (
     "-p", "kassiber-mcp", "-p", "kassiber-cli", "-p", "kassiber-setup",
-    "-p", "kassiber-store", "-p", "kassiber-ipc",
+    "-p", "kassiber-store", "-p", "kassiber-ipc", "-p", "kassiber-daemon",
+    "-p", "kassiber-transfers",
     "--features", "kassiber-cli/native-mcp,kassiber-cli/native-chat",
 )
 # The first build of a scratch tree compiles these packages from nothing.
