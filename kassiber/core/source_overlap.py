@@ -566,6 +566,15 @@ def _overlap_payload(
                 "_source_priority": 99,
             },
         )
+        # Sync targets carry no transaction count, and the indexed prefetch
+        # and the fresh publish re-check see a wallet's sources in different
+        # orders. Aggregate across every source so both name the same owner;
+        # otherwise a shared script is fetched by neither wallet.
+        row["deprecated"] = bool(row["deprecated"] or source.deprecated)
+        row["active_transaction_count"] = max(
+            int(row["active_transaction_count"]),
+            int(source.active_transaction_count),
+        )
         if source.source not in row["sources"]:
             row["sources"].append(source.source)
         row["_source_priority"] = min(

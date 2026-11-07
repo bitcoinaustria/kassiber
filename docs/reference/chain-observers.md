@@ -523,6 +523,24 @@ must provide one complete output projection inside the atomic refresh result.
 - Durable wallet-policy epochs retain new rollover material and its observed
   scan coverage. Legacy inline `ownership_history` remains read-only compatible.
 
+When two wallets watch the same finite script, one canonical wallet owns it:
+non-deprecated first, then descriptor/xpub/silent-payment kinds, then the
+strongest evidence (output inventory or stored descriptor horizon, address
+list, sync target), then a wallet with active transactions, then label and id.
+`_overlap_payload` aggregates each wallet's flags across all its sources, so
+the indexed prefetch, Esplora's online re-filter and the publish re-check name
+the same owner whatever order they read the sources in. With a duplicated
+descriptor the owner syncs the shared scripts and imports each payment once;
+the other wallet reports `skipped` ("all sync targets are already covered by
+canonical wallet sources") or syncs only its own scripts. Ownership that
+changes between prefetch and publication within one operation (an earlier
+wallet's import gives it activity) refuses `source_overlap_retry`, and the
+retry converges. Books synced before this rule, where Esplora imported a
+shared payment into neither wallet or Electrum refused on every retry, are
+repaired by the next ordinary sync: the owner's never-fetched shared scripts
+have no stored history, so they are fetched in full
+(`tests/test_source_overlap_owner_order.py`).
+
 Kassiber keeps ownership policy. BDK/LWK replace manual supported-route
 derivation and supply coverage/output facts; they do not decide beneficial
 ownership or source precedence.
