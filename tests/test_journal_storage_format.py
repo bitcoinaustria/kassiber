@@ -826,7 +826,10 @@ def test_review_cache_preserves_caller_transaction_and_commit_false(tmp_path, mo
         else:
             assert apply()['status'] == 'verified'
             assert conn.execute('SELECT count(*) FROM review_workflow_receipts').fetchone()[0] == 1
-        assert calls == [(-131072, *expected[1:])]
+        # The before and after tax previews each store inside a rolled-back
+        # savepoint, then the verified state is stored; a failure stops at the
+        # first preview. Every store runs with the scoped cache.
+        assert calls == [(-131072, *expected[1:])] * (1 if fail else 3)
         assert _cache_settings(conn) == expected
         assert conn.in_transaction
         assert conn.execute("SELECT note FROM transactions WHERE id='a'").fetchone()[0] == 'caller-owned'
