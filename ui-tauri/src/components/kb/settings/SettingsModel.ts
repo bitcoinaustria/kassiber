@@ -539,9 +539,6 @@ export function backendPayload(backend: Backend): Record<string, unknown> {
   if (silentPaymentReplacementsEnabled && backend.silentPaymentScanPath?.trim()) {
     config.silent_payment_scan_path = backend.silentPaymentScanPath.trim();
   }
-  if (backend.commandoPeerId) {
-    config.commando_peer_id = backend.commandoPeerId;
-  }
   if (backend.lightningCli) {
     config.lightning_cli = backend.lightningCli;
   }
@@ -553,6 +550,12 @@ export function backendPayload(backend: Backend): Record<string, unknown> {
   }
   const clear = new Set<string>();
   const kind = String(payload.kind).toLowerCase();
+  if (kind === "coreln") {
+    // Commando is refused by the core (lightning-cli takes a rune only in
+    // argv), so saving a Core Lightning backend removes a stored commando
+    // peer; auth "none" removes the rune.
+    clear.add("commando_peer_id");
+  }
   const httpTlsBackend = ["esplora", "liquid-esplora", "bitcoinrpc"].includes(
     kind,
   );

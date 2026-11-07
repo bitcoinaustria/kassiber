@@ -20,10 +20,11 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import {
-  CLN_PRESENCE_SENTINEL_COMMANDO_PEER,
   CLN_PRESENCE_SENTINEL_LIGHTNING_DIR,
   CLN_PRESENCE_SENTINEL_RPC_FILE,
   coreLightningBackendModeValid,
+  coreLightningUrl,
+  isCoreLightningCommandoBackend,
 } from "@/lib/lightning";
 import {
   backendTrustFromEndpoint,
@@ -202,9 +203,9 @@ export const SYNC_BACKEND_NETWORKS: SyncBackendNetwork[] = [
       {
         id: "core-lightning",
         name: "Core Lightning read-only",
-        url: "cln://commando",
+        url: "cln://local",
         protocol: "coreln",
-        label: "Commando rune",
+        label: "Local RPC",
       },
     ],
   },
@@ -457,7 +458,6 @@ export function SyncBackendSettingsModal({
   const [useProxy, setUseProxy] = React.useState(false);
   const [proxyHost, setProxyHost] = React.useState("");
   const [proxyPort, setProxyPort] = React.useState("");
-  const [commandoPeerId, setCommandoPeerId] = React.useState("");
   const [lightningCli, setLightningCli] = React.useState("");
   const [lightningDir, setLightningDir] = React.useState("");
   const [rpcFile, setRpcFile] = React.useState("");
@@ -516,7 +516,7 @@ export function SyncBackendSettingsModal({
         useSsl: electrumUseSsl,
       })
     : isCoreLightning
-      ? url.trim() || "cln://commando"
+      ? coreLightningUrl(url)
       : url.trim();
   const selectedBackendKind =
     preset?.protocol ??
@@ -640,11 +640,6 @@ export function SyncBackendSettingsModal({
       setAuth(initial.auth);
       setAuthVal("");
       setAuthVal2("");
-      setCommandoPeerId(
-        initial.commandoPeerId === CLN_PRESENCE_SENTINEL_COMMANDO_PEER
-          ? ""
-          : initial.commandoPeerId ?? "",
-      );
       setLightningCli(initial.lightningCli ?? "");
       setLightningDir(
         initial.lightningDir === CLN_PRESENCE_SENTINEL_LIGHTNING_DIR
@@ -754,7 +749,6 @@ export function SyncBackendSettingsModal({
     }
     setAuthVal("");
     setAuthVal2("");
-    setCommandoPeerId("");
     setLightningCli("");
     setLightningDir("");
     setRpcFile("");
@@ -876,14 +870,10 @@ export function SyncBackendSettingsModal({
   };
 
   // Editing an existing Core Lightning backend keeps redacted-but-set fields
-  // from being treated as missing. The daemon never returns the rune itself;
-  // it only signals presence via `auth === "apikey"` and the "Configured *"
-  // sentinel strings used elsewhere in this file.
-  const initialCoreLnHasRune =
-    isCoreLightning && initial?.auth === "apikey";
-  const initialCoreLnHasCommandoPeer =
-    isCoreLightning &&
-    initial?.commandoPeerId === CLN_PRESENCE_SENTINEL_COMMANDO_PEER;
+  // from being treated as missing. The daemon only signals presence via the
+  // "Configured *" sentinel strings used elsewhere in this file.
+  const initialCoreLnCommando =
+    isCoreLightning && initial != null && isCoreLightningCommandoBackend(initial);
   const initialCoreLnHasLightningDir =
     isCoreLightning &&
     initial?.lightningDir === CLN_PRESENCE_SENTINEL_LIGHTNING_DIR;
@@ -891,12 +881,9 @@ export function SyncBackendSettingsModal({
     isCoreLightning && initial?.rpcFile === CLN_PRESENCE_SENTINEL_RPC_FILE;
 
   const coreLightningModeValid = coreLightningBackendModeValid({
-    commandoPeerId: commandoPeerId.trim(),
-    rune: authVal.trim(),
+    lightningCli: lightningCli.trim(),
     lightningDir: lightningDir.trim(),
     rpcFile: rpcFile.trim(),
-    hadRune: initialCoreLnHasRune,
-    hadCommandoPeerId: initialCoreLnHasCommandoPeer,
     hadLightningDir: initialCoreLnHasLightningDir,
     hadRpcFile: initialCoreLnHasRpcFile,
   });
@@ -937,25 +924,19 @@ export function SyncBackendSettingsModal({
           ? t("backendModal.healthJustChecked")
           : t("backendModal.healthJustAdded"),
         on: connected,
-        auth: isCoreLightning ? "apikey" : showAuth ? auth : "none",
+        // Core Lightning stores no secret: saving clears any old rune.
+        auth: showAuth ? auth : "none",
         authHeader:
           showAuth && auth === "bearer" && authSecret
             ? `Bearer ${authSecret}`
             : undefined,
         token:
-          (showAuth && auth === "apikey" && authSecret) ||
-          (isCoreLightning && authSecret)
-            ? authSecret
-            : undefined,
+          showAuth && auth === "apikey" && authSecret ? authSecret : undefined,
         username:
           showAuth && auth === "basic" && authSecret ? authSecret : undefined,
         password:
           showAuth && auth === "basic" && authPassword
             ? authPassword
-            : undefined,
-        commandoPeerId:
-          isCoreLightning && commandoPeerId.trim()
-            ? commandoPeerId.trim()
             : undefined,
         lightningCli:
           isCoreLightning && lightningCli.trim() ? lightningCli.trim() : undefined,
@@ -1321,33 +1302,19 @@ export function SyncBackendSettingsModal({
                     {t("backendModal.corelnAccessHint")}
                   </p>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="backend-commando-peer">
-                      {t("backendModal.commandoPeerLabel")}
-                    </Label>
-                    <Input
-                      id="backend-commando-peer"
-                      value={commandoPeerId}
-                      onChange={(event) => {
-                        setCommandoPeerId(event.target.value);
-                        setTestState("idle");
-                        setTestLog("");
-                      }}
-                      placeholder="02..."
-                    />
+                {initialCoreLnCommando ? (
+                  <div
+                    role="alert"
+                    className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+                  >
+                    <p className="font-medium">
+                      {t("backendModal.corelnCommandoUnsupported")}
+                    </p>
+                    <p>{t("backendModal.corelnCommandoHint")}</p>
+                    <p>{t("backendModal.corelnCommandoConvert")}</p>
                   </div>
-                  <SecretField
-                    id="backend-commando-rune"
-                    label={t("backendModal.runeLabel")}
-                    value={authVal}
-                    onChange={(value) => {
-                      setAuthVal(value);
-                      setTestState("idle");
-                      setTestLog("");
-                    }}
-                    placeholder={t("backendModal.runePlaceholder")}
-                  />
+                ) : null}
+                <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="backend-lightning-cli">
                       {t("backendModal.lightningCliLabel")}

@@ -293,6 +293,29 @@ describe("backend settings model", () => {
     expect(payload.clear).not.toContain("tor_proxy");
   });
 
+  it("never writes a commando peer and clears a stored one with the rune", () => {
+    // The core refuses Core Lightning commando, so a saved row cannot keep
+    // either secret-bearing field, even when the edited row still carries
+    // the daemon's presence sentinel.
+    const backend = backendRowToSettingsBackend({
+      name: "cln",
+      kind: "coreln",
+      chain: "bitcoin",
+      network: "main",
+      url: "cln://commando",
+      has_url: true,
+      has_token: true,
+      has_commando_peer_id: true,
+    });
+    expect(backend.commandoPeerId).toBe("Configured peer");
+    const payload = backendPayload({ ...backend, url: "cln://local", auth: "none", rpcFile: "/srv/cln/lightning-rpc" });
+    expect(payload).not.toHaveProperty("token");
+    expect(payload.config).not.toHaveProperty("commando_peer_id");
+    expect(payload.config).toMatchObject({ rpc_file: "/srv/cln/lightning-rpc" });
+    expect(payload.clear).toEqual(expect.arrayContaining(["token", "commando_peer_id"]));
+    expect(backendPayload({ ...backend, kind: "lnd", auth: "apikey" }).clear).not.toContain("commando_peer_id");
+  });
+
   it("lets the built-in liquid backend recover from an accidental bitcoin chain", () => {
     const backend = backendRowToSettingsBackend({
       name: "liquid",

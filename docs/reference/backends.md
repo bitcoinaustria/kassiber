@@ -348,8 +348,12 @@ to switch to the local path. Remote nodes would need a native commando client
 (tracked in [`TODO.md`](../../TODO.md)).
 
 In the desktop app, add Core Lightning from Settings -> Sync backends.
-The Core Lightning form stores the backend and creates the matching
-read-only node connection so normal wallet sync can refresh it.
+The Core Lightning form asks only for local access (lightning-dir,
+rpc-file, or a `lightning-cli` path or wrapper), stores the backend, and
+creates the matching read-only node connection so normal wallet sync can
+refresh it. An existing commando backend is marked unsupported in the
+backend list with the same hint; saving it in the form switches it to local
+RPC and removes the stored rune and commando peer.
 
 Persisted CLN records follow the discard policy in
 [lightning-opsec.md](lightning-opsec.md): forwards are aggregated to

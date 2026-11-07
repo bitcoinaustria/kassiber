@@ -1,7 +1,7 @@
 import { isValidElement, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SyncBackendSettingsModal } from "./SyncBackendSettingsModal";
-import type { Backend } from "./SettingsModel";
+import { backendPayload, type Backend } from "./SettingsModel";
 
 const hooks = vi.hoisted(() => ({
   states: [] as unknown[], cursor: 0,
@@ -39,9 +39,20 @@ function button(node: ReactNode, label: string): { onClick: () => void; disabled
   return button(children, label);
 }
 
-function mount(initial?: Backend) {
+/** Every string child and element id in the rendered tree. */
+function texts(node: ReactNode, out: string[] = []): string[] {
+  if (typeof node === "string") out.push(node);
+  else if (Array.isArray(node)) node.forEach(child => texts(child, out));
+  else if (isValidElement<{ children?: ReactNode; id?: string }>(node)) {
+    if (node.props.id) out.push(`#${node.props.id}`);
+    texts(node.props.children, out);
+  }
+  return out;
+}
+
+function mount(initial?: Backend, initialTypeId?: "coreln") {
   const save = vi.fn().mockResolvedValue(undefined);
-  const props = { open: true, initial: initial ?? null, onClose: vi.fn(), onSave: save };
+  const props = { open: true, initial: initial ?? null, initialTypeId, onClose: vi.fn(), onSave: save };
   const render = () => { hooks.cursor = 0; return SyncBackendSettingsModal(props); };
   render();
   hooks.effects.splice(0).forEach(effect => effect());
@@ -127,4 +138,67 @@ it("blocks public mainnet presets when adding a backend to a regtest book", () =
   expect(button(tree,"backendModal.testConnection")?.disabled).toBe(true);
   expect(button(tree,"backendModal.connectAndSave")?.disabled).toBe(true);
   expect(hooks.invoke).not.toHaveBeenCalled();
+});
+
+describe("Core Lightning commando", () => {
+  // lightning-cli takes a commando rune only on its command line, so the core
+  // refuses commando; the form offers local RPC only.
+  const commando: Backend = {
+    id: "cln", name: "Remote node", health: "", on: true, auth: "apikey",
+    chain: "bitcoin", network: "main", net: "LN", kind: "coreln",
+    url: "cln://commando", commandoPeerId: "Configured peer",
+  };
+
+  it("offers no rune or commando peer field for a new backend", () => {
+    const { tree } = mount(undefined, "coreln");
+    const rendered = texts(tree);
+    expect(rendered).toContain("#backend-lightning-cli");
+    expect(rendered).toContain("#backend-rpc-file");
+    expect(rendered).not.toContain("#backend-commando-peer");
+    expect(rendered).not.toContain("#backend-commando-rune");
+    expect(rendered).not.toContain("backendModal.corelnCommandoUnsupported");
+  });
+
+  it("saves a new backend as local RPC with no secret", async () => {
+    const { tree, save } = mount({
+      id: "cln", name: "Node", health: "", on: true, auth: "none",
+      chain: "bitcoin", network: "main", net: "LN", kind: "coreln",
+      url: "", lightningCli: "/usr/local/bin/cln-wrapper",
+    });
+    const connect = button(tree, "backendModal.saveBackend")!;
+    expect(connect.disabled).toBe(false);
+    connect.onClick();
+    await vi.waitFor(() => expect(save).toHaveBeenCalledOnce());
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({
+      url: "cln://local", auth: "none", token: undefined,
+      lightningCli: "/usr/local/bin/cln-wrapper",
+    }));
+    expect(hooks.invoke).not.toHaveBeenCalled();
+  });
+
+  it("shows an existing commando backend as unsupported and cannot save it unchanged", () => {
+    const { tree, save } = mount(commando);
+    const rendered = texts(tree);
+    expect(rendered).toContain("backendModal.corelnCommandoUnsupported");
+    expect(rendered).toContain("backendModal.corelnCommandoHint");
+    expect(rendered).not.toContain("#backend-commando-rune");
+    expect(button(tree, "backendModal.saveBackend")?.disabled).toBe(true);
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it("converts an existing commando backend to local RPC and clears the rune and peer", async () => {
+    const { tree, save } = mount({ ...commando, rpcFile: "Configured RPC file" });
+    const connect = button(tree, "backendModal.saveBackend")!;
+    expect(connect.disabled).toBe(false);
+    connect.onClick();
+    await vi.waitFor(() => expect(save).toHaveBeenCalledOnce());
+    const saved = save.mock.calls[0][0] as Backend;
+    expect(saved).toMatchObject({ url: "cln://local", auth: "none" });
+    expect(saved.token).toBeUndefined();
+    expect(saved.commandoPeerId).toBeUndefined();
+    const payload = backendPayload(saved);
+    expect(payload).not.toHaveProperty("token");
+    expect(payload.config).not.toHaveProperty("commando_peer_id");
+    expect(payload.clear).toEqual(expect.arrayContaining(["token", "commando_peer_id"]));
+  });
 });
