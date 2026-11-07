@@ -810,12 +810,9 @@ impl OperatorService {
         request: UnlockRequest<'_>,
     ) -> Result<Value> {
         if request.agent_scope {
-            if request.capability != Capability::Read {
-                return Err(Error::App(app(
-                    "operator_invalid_lease_capability",
-                    "an agent session is read-only",
-                )));
-            }
+            // An agent session carries the user's External agents grant
+            // (#686); like any lease it is never admin (checked below), and it
+            // admits only `mcp call`, each classified by its tool.
             if request
                 .agent_control
                 .is_none_or(|control| control.len() < MIN_AGENT_CONTROL_BYTES)

@@ -29,6 +29,8 @@ struct BrokerState {
     connection_lost: bool,
     /// Status reads fail as an unreachable broker's do.
     status_fails: bool,
+    /// The capability each grant request asked for.
+    capabilities: Vec<String>,
 }
 
 #[derive(Clone)]
@@ -75,11 +77,13 @@ impl AgentBroker for FakeBroker {
         data_root: &str,
         passphrase: &[u8],
         _control: &[u8],
+        capability: &str,
     ) -> kassiber_operator::Result<Value> {
         let mut state = self.state();
         state
             .calls
             .push(Call::Unlock(data_root.to_owned(), passphrase.to_vec()));
+        state.capabilities.push(capability.to_owned());
         if state.lease_id.is_some() {
             return Err(app("operator_lease_exists"));
         }
@@ -243,7 +247,7 @@ impl Fixture {
     fn new() -> Fixture {
         let dir = tempfile::tempdir().unwrap();
         let preference = dir.path().join("agent-access.json");
-        kassiber_setup::agent_access::set(&preference, Some(true), None).unwrap();
+        kassiber_setup::agent_access::set_switches(&preference, Some(true), None).unwrap();
         let broker = FakeBroker::new();
         let refuse: Arc<Mutex<Option<&'static str>>> = Arc::new(Mutex::new(None));
         let clock = Clock::new();
@@ -373,6 +377,47 @@ fn test_the_grant_requests_eight_hours_read_password_agent_scope() {
     assert_eq!(CHECK_INTERVAL, Duration::from_secs(30));
     assert_eq!(RETRY_INTERVAL, Duration::from_secs(5));
     assert_eq!(GIVE_UP_AFTER_EXPIRY, Duration::from_secs(60));
+}
+
+#[test]
+fn test_unlock_leases_the_users_external_agents_grant() {
+    let mut fixture = Fixture::new();
+    kassiber_setup::agent_access::set(
+        &fixture.preference,
+        kassiber_setup::agent_access::Changes {
+            grant: Some(s("accounting_decisions")),
+            agent_access: Some(s("full")),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    fixture.unlock().unwrap();
+    assert_eq!(
+        fixture.broker.state().capabilities,
+        ["accounting_decisions"]
+    );
+}
+
+#[test]
+fn test_a_new_grant_ends_the_agent_lease() {
+    let mut fixture = Fixture::new();
+    fixture.unlock().unwrap();
+    // The same grant again keeps the lease.
+    fixture
+        .payload("ui.agent_access.configure", json(r#"{"grant": "read"}"#))
+        .unwrap();
+    assert_eq!(fixture.broker.names().last(), Some(&"unlock"));
+    // A new one ends it: the next unlock leases exactly that grant.
+    let payload = fixture
+        .payload(
+            "ui.agent_access.configure",
+            json(r#"{"grant": "operator"}"#),
+        )
+        .unwrap();
+    assert_eq!(field(&payload, "grant"), &s("operator"));
+    assert_eq!(fixture.broker.names().last(), Some(&"lock"));
+    fixture.unlock().unwrap();
+    assert_eq!(fixture.broker.state().capabilities, ["read", "operator"]);
 }
 
 #[test]
@@ -524,9 +569,10 @@ fn test_expire_leaves_a_live_lease_alone() {
 fn test_unlock_requires_agents_on() {
     let mut fixture = Fixture::new();
     fixture.refuse_broker("no broker contact while agents are off");
-    kassiber_setup::agent_access::set(&fixture.preference, Some(false), None).unwrap();
+    kassiber_setup::agent_access::set_switches(&fixture.preference, Some(false), None).unwrap();
     assert_eq!(fixture.unlock().unwrap_err().code, "mcp_disabled");
-    kassiber_setup::agent_access::set(&fixture.preference, Some(true), Some(false)).unwrap();
+    kassiber_setup::agent_access::set_switches(&fixture.preference, Some(true), Some(false))
+        .unwrap();
     assert_eq!(fixture.unlock().unwrap_err().code, "ai_features_disabled");
 }
 
@@ -580,7 +626,7 @@ fn test_turning_agents_off_ends_the_agent_lease() {
     );
     assert_eq!(
         kassiber_envelope::daemon_line(&payload).unwrap(),
-        "{\"mcp_enabled\":false,\"ai_features_enabled\":null,\"mcp_available\":false,\"reason\":\"mcp_disabled\",\"session\":{\"needed\":true,\"active\":false,\"expires_at\":null}}\n"
+        "{\"mcp_enabled\":false,\"ai_features_enabled\":null,\"mcp_available\":false,\"reason\":\"mcp_disabled\",\"grant\":\"read\",\"agent_access\":\"restricted\",\"access_recorded\":false,\"session\":{\"needed\":true,\"active\":false,\"expires_at\":null}}\n"
     );
 }
 
@@ -775,13 +821,16 @@ fn test_configure_takes_boolean_fields_only() {
         r#"{}"#,
         r#"{"mcp_enabled": 1}"#,
         r#"{"mcp_enabled": true, "extra": 1}"#,
+        r#"{"grant": 1}"#,
+        r#"{"agent_access": true}"#,
     ] {
         let error = fixture
             .payload("ui.agent_access.configure", json(args))
             .unwrap_err();
         assert_eq!(
             error.message,
-            "ui.agent_access.configure takes boolean mcp_enabled and/or ai_features_enabled",
+            "ui.agent_access.configure takes boolean mcp_enabled/ai_features_enabled \
+             and string grant/agent_access",
             "{args}"
         );
     }
@@ -923,7 +972,7 @@ fn test_the_desktop_grant_asks_for_an_agent_only_read_lease() {
         )]]),
         sent: Arc::clone(&sent),
     });
-    let refused = AgentBroker::unlock(&client, "/book", b"pw", &CONTROL);
+    let refused = AgentBroker::unlock(&client, "/book", b"pw", &CONTROL, "read");
     assert!(refused.unwrap_err().is_connection());
     let sent = sent.lock().unwrap();
     assert_eq!(field(&sent[0], "action"), &s("ping"));

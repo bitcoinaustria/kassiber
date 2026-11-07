@@ -10,9 +10,12 @@ the reply order is deterministic. A tool the Rust executor still refuses
 list. The one-shot leaves (``mcp call``, ``tools``, ``status``, ``enable``,
 ``disable``) are compared on stdout bytes and exit codes.
 
-The privacy fences run against Rust alone: launch and listing touch no
-file, open no socket and reach no operator endpoint; the server never
-starts a broker; only the 44 read tools are reachable.
+Since #686 the user's External agents grant decides the listing and what a
+call may do, so the transcripts run at every grant and access mode; writes
+land on both copies in the same order. The privacy fences run against Rust
+alone: launch and listing touch no file, open no socket and reach no
+operator endpoint; the server never starts a broker; only the granted tools
+are reachable.
 
 Every child gets a disposable home and app-data root (``XDG_DATA_HOME``
 included) and the operator runtime directory override, so nothing reaches
@@ -21,6 +24,7 @@ the account's real state or broker.
 from __future__ import annotations
 
 from contextlib import closing
+from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
@@ -45,23 +49,73 @@ MODERN_META = {
     "io.modelcontextprotocol/protocolVersion": "2026-07-28",
     "io.modelcontextprotocol/clientCapabilities": {},
 }
-# Read tools R6-5a still refuses with not_implemented (crates/ai/src/executor.rs).
-REFUSED = {
-    "ui.overview.snapshot",
-    "ui.workspace.health",
-    "ui.next_actions",
-    "ui.report.blockers",
-    "ui.transactions.graph",
-    "ui.transactions.review_context",
-    "ui.journals.snapshot",
-    "ui.journals.quarantine",
-    "ui.journals.transfers.list",
-    "ui.journals.events.list",
-    "ui.review.cases",
-    "ui.review.plan",
-    "ui.review.worklist",
+# Tools whose replies differ for a main-sync slice other than S12 (see
+# docs/reference/rust-main-sync.md); not compared until that slice lands,
+# which deletes its line.
+PENDING = {
+    "wallets_list": "S8 completeness_class and scan_bounds",
+    "reports_capital_gains": "S7 the Reports payload (fiatCurrency, longTermDays, asset)",
+    "transactions_resolve": "S2 sharedExternalIdCount and matches",
+    "review_cases": "S4 fiat_currency",
+    "review_badges": "S4 review and definitions",
+    "review_worklist": "S4 badges review and definitions",
+    "journals_quarantine": "S5 summary fiat_currency and definitions",
+    "journals_quarantine_resolve": "S5 group_id",
+    "transfers_suggest": "S6 suggestion exclusions",
+    "transfers_review_context": "S6 suggestion exclusions",
+    "workspace_health": "S10 definitions",
+    "next_actions": "S10 health definitions",
+    "report_blockers": "S10 health definitions",
 }
+GRANTS = ("read", "operator", "accounting_decisions")
+ACCESS = ("full", "restricted")
+
+
+def _refused() -> set[str]:
+    """Tools the Rust executor still refuses with not_implemented
+    (crates/ai/src/executor.rs, mutate.rs)."""
+    from tests.test_rust_ai_tools import REFUSED_MUTATIONS, REFUSED_READS
+
+    return REFUSED_READS | {name for name, _ in REFUSED_MUTATIONS}
 _GENERATED_AT = re.compile(rb'(\\?"generated_at\\?":\\?")\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ')
+_UUID = re.compile(rb"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")
+_SNAPSHOT_ID = re.compile(rb'(snapshot_id\\?":\\?")([0-9a-f]{64})')
+# Chain-analysis references are keyed per process (`current_process_and_book`).
+_REFERENCE = re.compile(rb"ca-ref:[0-9a-f]{64}")
+_STAMP = re.compile(rb"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,6})?(?:Z|\+00:00)")
+
+
+class _Masker:
+    """Per side: generated ids (uuid4, analysis snapshot digests over them,
+    per-process analysis references) in order of first use, and clocks
+    sampled since the session began."""
+
+    def __init__(self):
+        self.since = datetime.now(timezone.utc).replace(microsecond=0)
+        self.ids = {}
+        self.snapshots = {}
+        self.references = {}
+
+    def _clock(self, match):
+        text = match.group(0).decode()
+        try:
+            stamp = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            return match.group(0)
+        return b"<now>" if stamp >= self.since else match.group(0)
+
+    def __call__(self, line):
+        line = _GENERATED_AT.sub(rb"\1<t>", line)
+        line = _UUID.sub(lambda m: self.ids.setdefault(m.group(0), b"<uuid:%d>" % len(self.ids)), line)
+        line = _SNAPSHOT_ID.sub(
+            lambda m: m.group(1) + self.snapshots.setdefault(m.group(2), b"<snapshot:%d>" % len(self.snapshots)),
+            line,
+        )
+        line = _REFERENCE.sub(
+            lambda m: self.references.setdefault(m.group(0), b"ca-ref:<%d>" % len(self.references)),
+            line,
+        )
+        return _STAMP.sub(self._clock, line)
 
 
 def _request(request_id, method, params=None):
@@ -82,15 +136,15 @@ def _lines(messages) -> bytes:
     return "".join(json.dumps(message) + "\n" for message in messages).encode()
 
 
-def _mcp_calls():
-    """Every MCP tool with the AI driver's argument cases, plus refusals."""
+def _mcp_calls(tools=None):
+    """Every MCP tool (or ``tools``) with the AI driver's argument cases."""
     from kassiber.mcp import tools as mcp_tools
     from tests.test_rust_ai_tools import _extra_arguments, _fill
 
     extra = _extra_arguments()
     calls = []
-    for entry in mcp_tools.mcp_entries():
-        name = mcp_tools.mcp_tool_name(entry)
+    for tool in tools if tools is not None else mcp_tools.mcp_tools():
+        entry, name = tool.entry, tool.name
         cases = [{}]
         filled = _fill(entry.parameters)
         if filled and filled not in cases:
@@ -111,7 +165,10 @@ class McpMutationCatalogTest(unittest.TestCase):
         self.assertEqual(result.stdout, f"{len(entries)} entries apply\n".encode())
         sources = "".join(
             path.read_text(encoding="utf-8")
-            for crate in ("crates/mcp", "crates/cli", "crates/setup", "crates/store", "crates/ipc")
+            for crate in (
+                "crates/mcp", "crates/cli", "crates/setup", "crates/store", "crates/ipc",
+                "crates/daemon", "crates/transfers",
+            )
             for path in (ROOT / crate).rglob("*.rs")
         )
         for entry in entries:
@@ -147,10 +204,16 @@ class _Sandbox(unittest.TestCase):
         self.access = Path(self.env["KASSIBER_AGENT_ACCESS_FILE"])
         self.allow(True)
 
-    def allow(self, mcp: bool, ai: bool | None = None):
+    def allow(self, mcp: bool, ai: bool | None = None, grant=None, agent_access=None):
         from kassiber.agent_access import set_agent_access
 
-        set_agent_access(mcp_enabled=mcp, ai_features_enabled=ai, path=self.access)
+        set_agent_access(
+            mcp_enabled=mcp,
+            ai_features_enabled=ai,
+            grant=grant,
+            agent_access=agent_access,
+            path=self.access,
+        )
 
     def seed(self, fixture: str) -> Path:
         from kassiber.db import open_db
@@ -194,7 +257,9 @@ class McpTranscriptParityTest(_Sandbox):
 
     def serve(self, prefix, root, messages, *extra):
         """One session; input ends only once every request was answered, so
-        the 30 s drain at end of input never decides how many replies come."""
+        the 30 s drain at end of input never decides how many replies come.
+        Requests go in windows answered before the next is sent: the server
+        refuses calls beyond 32 in flight, and every call must run."""
         process = subprocess.Popen(
             [*prefix, "--data-root", str(root), "mcp", "serve", *extra],
             stdin=subprocess.PIPE,
@@ -203,25 +268,22 @@ class McpTranscriptParityTest(_Sandbox):
             env=self.env,
             cwd=ROOT,
         )
-        expected = sum(1 for message in messages if "method" in message and "id" in message)
         lines = []
         stderr = []
         drain = threading.Thread(target=lambda: stderr.append(process.stderr.read()), daemon=True)
         drain.start()
         try:
-            def feed():
-                process.stdin.write(_lines(messages))
+            expected = 0
+            for start in range(0, len(messages), 16):
+                window = messages[start:start + 16]
+                expected += sum(1 for message in window if "method" in message and "id" in message)
+                process.stdin.write(_lines(window))
                 process.stdin.flush()
-
-            # Replies can fill the pipe before every request is written.
-            writer = threading.Thread(target=feed, daemon=True)
-            writer.start()
-            while len(lines) < expected:
-                line = process.stdout.readline()
-                if not line:
-                    break
-                lines.append(line)
-            writer.join(60)
+                while len(lines) < expected:
+                    line = process.stdout.readline()
+                    if not line:
+                        break
+                    lines.append(line)
             process.stdin.close()
             lines += process.stdout.readlines()
             self.assertEqual(process.wait(timeout=900), 0, lines[-3:])
@@ -236,6 +298,7 @@ class McpTranscriptParityTest(_Sandbox):
         return lines
 
     def compare(self, python_root, rust_root, messages, *extra, refused=None):
+        python_mask, rust_mask = _Masker(), _Masker()
         expected = self.serve(self.python, python_root, messages, *extra)
         actual = self.serve(self.rust, rust_root, messages, *extra)
         self.assertEqual(len(actual), len(expected), (actual[-3:], expected[-3:]))
@@ -249,8 +312,11 @@ class McpTranscriptParityTest(_Sandbox):
             if code == "not_implemented" and refused is not None:
                 refused.add(request["params"]["name"])
                 continue
+            params = (request or {}).get("params")
+            if isinstance(params, dict) and params.get("name") in PENDING:
+                continue
             compared += 1
-            have, want = _GENERATED_AT.sub(rb"\1<t>", have), _GENERATED_AT.sub(rb"\1<t>", want)
+            have, want = rust_mask(have), python_mask(want)
             if have != want:
                 mismatches.append((request, have.decode()[:2000], want.decode()[:2000]))
         self.assertEqual(mismatches[:3], [], f"{len(mismatches)} of {compared} replies differ")
@@ -275,10 +341,10 @@ class McpTranscriptParityTest(_Sandbox):
             _request(10, "subscriptions/listen", {"_meta": MODERN_META, "notifications": {}}),
         ]
 
-    def calls(self):
+    def calls(self, tools=None):
         """Every MCP tool and its argument cases, then protocol refusals."""
         messages = []
-        for index, (_source, name, arguments) in enumerate(_mcp_calls()):
+        for index, (_source, name, arguments) in enumerate(_mcp_calls(tools)):
             messages.append(_call(f"c{index}", name, arguments))
         messages += [
             # The legacy era carries structured content too.
@@ -298,10 +364,13 @@ class McpTranscriptParityTest(_Sandbox):
         return messages
 
     def test_transcripts_match_python_on_every_fixture(self):
+        """The default grant (read, restricted): every tool is called, so
+        the refusals of the ones it does not cover are compared too."""
         from kassiber.ai.tools import get_tool
         from kassiber.mcp import tools as mcp_tools
 
-        expected_refused = {mcp_tools.mcp_tool_name(get_tool(name)) for name in REFUSED}
+        expected_refused = {mcp_tools.mcp_tool_name(get_tool(name)) for name in _refused()}
+        listing = mcp_tools.available_tools(grant="read", agent_access="restricted")
         for fixture in FIXTURES:
             with self.subTest(fixture=fixture):
                 python_root, rust_root = self.copies(self.seed(fixture), fixture)
@@ -313,9 +382,39 @@ class McpTranscriptParityTest(_Sandbox):
                 self.assertLessEqual(refused, expected_refused)
                 if fixture != "empty":
                     self.assertTrue(refused, "the refused reads are reached")
-                # The Rust server answered: its tool list is the MCP list.
+                # The Rust server answered: its tool list is the grant's.
                 listed = next(json.loads(line) for line in actual if b'"id":2,' in line)
-                self.assertEqual(len(listed["result"]["tools"]), 44)
+                self.assertEqual(len(listed["result"]["tools"]), len(listing))
+
+    def test_every_grant_lists_and_runs_what_it_covers(self):
+        """Each grant and access mode on its own copy of the desktop book:
+        the head (listing, instructions) and every covered tool, writes
+        included, so the books change the same way on both sides."""
+        from kassiber.ai.tools import get_tool
+        from kassiber.mcp import tools as mcp_tools
+
+        expected_refused = {mcp_tools.mcp_tool_name(get_tool(name)) for name in _refused()}
+        seed = self.seed("desktop")
+        for grant in GRANTS:
+            for access in ACCESS:
+                with self.subTest(grant=grant, access=access):
+                    self.allow(True, grant=grant, agent_access=access)
+                    tools = mcp_tools.available_tools(grant=grant, agent_access=access)
+                    python_root, rust_root = self.copies(seed, f"{grant}-{access}")
+                    refused = set()
+                    # Pinned: an unpinned server refuses every write.
+                    compared, actual = self.compare(
+                        python_root,
+                        rust_root,
+                        self.head() + self.calls(tools),
+                        "--workspace",
+                        "w",
+                        "--profile",
+                        "p",
+                        refused=refused,
+                    )
+                    self.assertLessEqual(refused, expected_refused)
+                    self.assertNotIn(b"book_pin_required", b"".join(actual))
 
     def test_pinned_books_never_touch_the_shared_context(self):
         from kassiber.db import get_setting, open_db
@@ -405,6 +504,8 @@ class McpTranscriptParityTest(_Sandbox):
             ["mcp", "call", "--tool", "read_skill_reference", "--arguments", '{"name": "nope"}'],
         ]
         for argv in calls:
+            if argv[3] in PENDING:
+                continue
             for machine in (["--machine"], []):
                 with self.subTest(argv=argv, machine=machine):
                     python = self.run_side(self.python, [*machine, "--data-root", str(python_root), *argv])
@@ -600,12 +701,15 @@ class McpPrivacyFenceTest(_Sandbox):
         self.assertEqual(result.stdout, python.stdout)
         self.assertEqual(sorted(self.runtime.iterdir()), [])
 
-    def test_only_the_44_read_tools_are_reachable(self):
+    def test_only_the_granted_tools_are_reachable(self):
         from kassiber.ai.tools import TOOL_CATALOG
         from kassiber.mcp import tools as mcp_tools
 
         seed = self.seed("desktop")
-        exposed = {mcp_tools.mcp_tool_name(entry) for entry in mcp_tools.mcp_entries()}
+        exposed = {tool.name for tool in mcp_tools.mcp_tools()}
+        listed = {
+            tool.name for tool in mcp_tools.available_tools(grant="read", agent_access="restricted")
+        }
         others = []
         for entry in TOOL_CATALOG:
             for name in (entry.name, entry.provider_name, entry.provider_name.replace(".", "_").removeprefix("ui_")):
@@ -615,10 +719,21 @@ class McpPrivacyFenceTest(_Sandbox):
         messages += [_call(index + 1, name, {}) for index, name in enumerate(sorted(set(others)))]
         result = self.run_side(self.rust, ["--data-root", str(seed), "mcp", "serve"], data=_lines(messages))
         replies = [json.loads(line) for line in result.stdout.splitlines()]
-        self.assertEqual({tool["name"] for tool in replies[0]["result"]["tools"]}, exposed)
-        self.assertEqual(len(exposed), 44)
+        self.assertEqual({tool["name"] for tool in replies[0]["result"]["tools"]}, listed)
         for reply in replies[1:]:
             self.assertEqual(reply["error"]["code"], -32602, reply)
+        # A tool the grant does not cover is refused before any book opens,
+        # in sessions below the server's 32 calls in flight.
+        names = sorted(exposed - listed)
+        self.assertTrue(names)
+        for start in range(0, len(names), 16):
+            messages = [_call(index, name, {}) for index, name in enumerate(names[start:start + 16])]
+            result = self.run_side(self.rust, ["--data-root", str(seed), "mcp", "serve"], data=_lines(messages))
+            lines = result.stdout.splitlines()
+            self.assertEqual(len(lines), len(messages))
+            for line in lines:
+                error = json.loads(line)["result"]["structuredContent"]["error"]
+                self.assertIn(error["code"], {"mcp_grant_insufficient", "agent_access_restricted"}, error)
 
 
 if __name__ == "__main__":

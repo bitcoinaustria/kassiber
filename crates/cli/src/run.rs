@@ -393,6 +393,8 @@ pub fn run(
             stdin_is_tty,
             &mut input,
             &mut stderr,
+            namespace.text("grant"),
+            namespace.text("agent_access"),
         )
         .and_then(|payload| {
             let mut sink = Sink {
@@ -735,6 +737,19 @@ pub fn run(
             },
             namespace.text("workspace"),
             namespace.text("profile"),
+            &|| {
+                let (grant, agent_access) = crate::mcp::call_access(
+                    store.as_ref(),
+                    namespace.text("tool"),
+                    namespace.text("grant"),
+                    env.operator_child(),
+                )?;
+                Ok(crate::mcp::Grant {
+                    grant,
+                    agent_access,
+                    client_name: namespace.text("client").map(str::to_owned),
+                })
+            },
         )
         .and_then(|payload| emit(&mut sink, format, &kind, payload)),
         _ if dotted.starts_with("imports.") => with_book(

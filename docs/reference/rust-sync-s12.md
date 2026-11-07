@@ -35,11 +35,11 @@ inspection. "Now" is the state on this branch.
 | #677 | `ai/tools.py`, `ai/prompt.py`: the tool-area index in the system prompt, `load_tools`, `TOOL_AREA_SUMMARIES`; "what can you do" no longer offers every schema; `/review` selects the review pack; report keywords for gains, income and charts. `tax_estimate.py` core tax figures (S7) | `ai.chat` system prompt and advertised tools; tool `load_tools` | `crates/ai/src/select.rs`, `prompt.rs`, `executor.rs`, `chat/turn.rs` | Differs: selection and prompt are pre-#677 | Ported; see [catalog](#catalog-selection-and-summaries) |
 | #678 | `providers.agent_access` (`full` default, `restricted`), `_provider_has_full_agent_access`, `_ai_full_access`: a restricted off-device provider is kept to projected results and away from custody-gap, lineage, chain-analysis source and attachment-value tools; an on-device provider always has full access | provider rows and `create/update --agent-access`; `agent_access_restricted` denials replace `local_provider_required` | `crates/ai/src/providers`, `executor.rs`, `mutate.rs`, `projections.rs`, `previews.rs`, `file_analysis.rs`, `chat/screen.rs`, `select.rs` | Differs: Rust gates on `provider_kind == local` and has no `agent_access` | see [state](#state-on-this-branch) |
 | #679 | `custody_components` revise/supersede/undo/activate actions; `ui.transfers.dismissals.list`; qualified txids (S2) | tools `ui.transfers.components.plan/apply` (`action`, `component_id`, `activate`), `ui.transfers.dismissals.list` | `crates/ai/src/summary.rs`, `executor.rs`, `crates/transfers` | Differs: summaries, schemas | Summaries ported; dismissals list refused (owned by S6); component actions follow S11 |
-| #681 | quarantine root-cause groups (S5), `transaction_verify.py` (S8), wallet completeness | tools `ui.journals.quarantine.groups`, `ui.transactions.verify`; refresh set gains the groups tool | `executor.rs` | Missing | Catalog entries, refresh set; refused until S5 and S8 |
+| #681 | quarantine root-cause groups (S5), `transaction_verify.py` (S8), wallet completeness | tools `ui.journals.quarantine.groups`, `ui.transactions.verify`; refresh set gains the groups tool | `executor.rs`, `projections.rs` | Missing; AI reads also lacked the stale-journal projection | Catalog entries, refresh set; the projection is ported (see [MCP grants](#mcp-grants-686)); the tools refused until S5 and S8 |
 | #682 | `core/attachment_import.py`, `import_batches.py`: an attached file imported as a consented, plan-bound import with rollback | tools `ui.wallets.import_attachment.plan/apply`, `ui.imports.list`, `ui.imports.rollback(.plan)`, `ui.wallets.request_input`, `ui.attachments.add_from_chat` | none | Missing | Catalog entries, consent and summaries; refused until ported |
 | #683 | system prompt evidence rules; journals stale on dismiss (S6) | `ai.chat` system prompt | `prompt.rs` (embedded) | Differs | Prompt regenerated |
 | #684 | `ai/undo.py`, `REVERSIBLE_TOOLS`, `AI_PERMISSION_MODES`, `AiToolConsentState.preapproval/set_permission_mode`; custody AI audit decisions `mode_auto`, `mode_full_access` | `ai.chat` `permission_mode`, kind `ai.chat.permission_mode`, `ai.chat.tool_call` `approval`, consent card `reversible`, `egresses`, `can_allow_session`, result `undo` | `crates/ai/src/consent.rs`, `chat/turn.rs`, `mutate.rs`, `crates/daemon/src/ai_chat.rs` | Missing: kind refused, no `reversible` | see [state](#state-on-this-branch) |
-| #686 | `agent_access.py` grants (`read`, `operator`, `accounting_decisions`) and access mode; `mcp/tools.py` registry over the broker's exact-path classification; writes through the assistant executor, audited `mcp_host` | `mcp serve` tool list and calls, `mcp enable --grant --agent-access`, `mcp call --grant --client`, `ui.agent_access.configure` | `crates/mcp`, `crates/daemon/src/agent_access.rs`, `crates/setup/src/agent_access.rs` | Differs: Rust lists the 44 read tools and refuses writes | see [state](#state-on-this-branch) |
+| #686 | `agent_access.py` grants (`read`, `operator`, `accounting_decisions`) and access mode; `mcp/tools.py` registry over the broker's exact-path classification; writes through the assistant executor, audited `mcp_host` | `mcp serve` tool list and calls, `mcp enable --grant --agent-access`, `mcp call --grant --client`, `ui.agent_access.configure` | `crates/mcp`, `crates/daemon/src/agent_access.rs`, `crates/setup/src/agent_access.rs` | Differs: Rust lists the 44 read tools and refuses writes | Ported; see [MCP grants](#mcp-grants-686) |
 | #689 | `daemon_chat_uploads.py`: pasted files in chunks to an owner-only temporary file, staged like a picked file | kind `ui.chat.attachments.upload` | none | Refused (`not_implemented`) | Refused |
 | #690 | hints say "Settings → Assistant" instead of "Settings → AI providers" | provider and transport errors | `crates/ai/src/transport/errors.rs`, `providers` | Differs (hint text) | see [state](#state-on-this-branch) |
 | #693, #697 | `core/chat_files.py`: several files per turn; images and PDFs shown to a full-access provider; expired files dropped | `ai.chat` `files`, chat history | `chat/args.rs`, `chat/screen.rs`, `broker` | Differs: one attachment only | Not ported |
@@ -75,7 +75,9 @@ Two `kassiber-daemon` tests fail on the merge and equally on c48358377, so
 they predate S12: `malformed_requests_match_python` (it still expects
 `ui.agent_access.status` to be `not_implemented`, which the daemon serves
 since R6-8) and `agent_access::tests::test_ending_the_desktop_session_ends_the_agent_lease`
-(the fake broker's last call is `unlock`, not `lock`).
+(the fake broker's last call is `unlock`, not `lock`). Both pass since the
+MCP grants step: the first now uses a kind the daemon still lacks, and the
+second found a real gap (`daemon.lock` did not end the agents' lease).
 
 ## Catalog, selection and summaries
 
@@ -186,14 +188,67 @@ encrypted-book scenario; all 9 tests pass (all 8 failed on the merge).
 chat-files `attachments` argument. It gains a turn that resumes a provider
 cursor inside a saved session.
 
+### MCP grants (#686)
+
+- `crates/setup/src/agent_access.rs`: the preference records `grant`
+  (`read`, `operator`, `accounting_decisions`; never admin) and
+  `agent_access` (`restricted` by default) together once either is chosen,
+  fails closed on unknown values, and reports `access_recorded`.
+  `ui.agent_access.configure` takes them as strings; a new grant ends the
+  desktop's agent lease, and `ui.agent_access.unlock` leases exactly the
+  grant.
+- `crates/mcp/src/tools.rs`: Python's registry, each tool classified through
+  the broker's capability table (an egressing tool needs `operator`), the
+  listing and definitions per grant and access mode, refusals
+  (`mcp_grant_insufficient`, `agent_access_restricted`), the instructions
+  per grant, `call_capability` and the cleaned client name.
+  `crates/mcp/tests/registry.rs` replays `scripts/gen_registry.py`'s
+  vectors.
+- Calls (`crates/daemon/src/mcp.rs`, `crates/cli/src/mcp.rs`): refused above
+  the grant before anything is resolved; a write needs a pinned server
+  (`book_pin_required`) and runs through the assistant executor under a
+  writable pin (`pin_write_scope`: a temp `settings` copy whose changes,
+  except the pinned context, are copied back), audited as `mcp_host` and
+  logged in RAM; from `operator` up a read refreshes stale journals and the
+  analysis index first, at `read` a stale index is `derived_state_stale`.
+  The host's approval of the call is its consent, for writes and for reads
+  that leave the machine. The `book` labels are the resolved rows'.
+  Brokered calls pass `--grant` and `--client=`, and the broker admits an
+  agent lease's `mcp call` by its tool's class and claimed grant.
+- `daemon.lock` now ends the agents' lease, as Python's
+  `_clear_unlocked_passphrase` does; the Rust lock skipped it before (the
+  daemon test `test_ending_the_desktop_session_ends_the_agent_lease` failed
+  on c48358377).
+- The custody AI audit admits `mode_auto`, `mode_full_access` and
+  `mcp_host`; until now an MCP or permission-mode custody write failed with
+  `tool_error`.
+- #681's `_project_stale_journal_figures_for_ai` is in
+  `projections::stale_journal_figures_for_ai`: AI reads of stale or
+  never-processed journals (capital gains, journal events and snapshot,
+  journal transfers, the overview's fiat figures, quarantine and its groups)
+  get `null` figures with `status: unavailable` and the `process_journals`
+  remediation instead of numbers the model could quote. Vectors over every
+  branch are in `vectors.json` (`stale_journals`).
+
+`tests/test_rust_mcp.py` follows the registry: the transcripts run at the
+default grant on every fixture and at every grant and access mode on a
+pinned desktop book, writes included (masking generated ids, analysis
+references and clocks per side). Requests now go in windows of 16: the old
+single burst exceeded the server's 32 calls in flight, so most calls on
+both sides were the same overload refusal. All 11 tests pass. Tools whose
+replies differ for another slice are listed in its `PENDING` map with their
+slice (S2, S4, S5, S6, S7, S8, S10) and are not compared until it lands.
+
 ### Tools harness after these steps
 
 `tests/test_rust_ai_tools.py` now checks whole books against the store
 manifest (113 tables) instead of a fixed 112 and builds its MCP state from
 #686's grant registry (`available_tools(grant="read",
-agent_access="restricted")`). It fails 15 of 27 test functions, 198 subtests
-pass (211 failed before these steps). Every remaining record difference
-belongs to another main-sync slice:
+agent_access="restricted")`). One stale use of the removed
+`MCP_SOURCE_TOOL_NAMES` stopped two of its tests with a `NameError` until
+the MCP grants step; with that fixed, one test function and 14 subtests
+fail, 232 subtests pass. Every remaining record difference belongs to
+another main-sync slice or to the chat files still to come:
 
 | Difference | Tools | Slice |
 | --- | --- | --- |
@@ -204,7 +259,9 @@ belongs to another main-sync slice:
 | `definitions`, badges `review` | auto-read health and badges, `ui.maintenance.run` | S10, S4 |
 | `fiat_currency` on cases | review flow, acquisition receipts | S4 |
 | export sections and sheets | `ui.reports.export` | S7 |
-| `book_network_review_required` hint | review flow | not yet traced |
+| `book_network_review_required` hint | review flow | fixed: the journals stage now keeps a custody refusal's hint and details |
+| `swap_candidate_count` and one more index tick after processing | AI-authored `ui.journals.process` (automatic pairing before journals, #707) | S4 |
+| the missing-attachment hint ("attach the file") | `ui.wallets.analyze_file` | S12, with the chat files (#693, #697) |
 
 ### Python fix round 7 (eabbe6606)
 
@@ -224,14 +281,16 @@ Its assistant changes are ported:
   the AI review rules.
 - #684's default `tool_profile` is `full`.
 
-The fix round's other assistant fixes are not ported here: the refresh by
-wire name (09912e4c0), the wallet sync with an unreadable config
+The refresh by wire name (09912e4c0) is ported with the MCP grants step:
+the executor decides on the catalog entry, so a model's `ui_reports_summary`
+refreshes stale journals as the planner's dotted read does (on the desktop
+fixture this is what makes those reads refuse `book_network_review_required`
+as Python does). Not ported here: the wallet sync with an unreadable config
 (7bca137d4), the maintenance sync mode (a125129ed) and the CLI chat's
 Ctrl-C (c40e8fb32).
 
-`tests/test_rust_ai_chat.py` passes 4 of 9 (all 9 failed on the merge); the
-other five differ only by the permission-mode `approval` field and the
-chat-files `attachment` arguments, the next steps.
+At this point `tests/test_rust_ai_chat.py` passed 4 of 9; the permission
+modes above brought it to 8.
 
 ## Python reference notes
 

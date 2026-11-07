@@ -30,7 +30,7 @@ impl Store {
     fn new(mode: UnlockMode) -> Self {
         let dir = tempfile::tempdir().unwrap();
         let access = dir.path().join("agent-access.json");
-        kassiber_setup::agent_access::set(&access, Some(true), None).unwrap();
+        kassiber_setup::agent_access::set_switches(&access, Some(true), None).unwrap();
         let database = dir.path().join("kassiber.sqlite3");
         std::fs::write(&database, b"not empty").unwrap();
         Store {
@@ -260,7 +260,12 @@ fn endpoint(connections: Vec<Option<Vec<Value>>>) -> Arc<Endpoint> {
 
 fn call(tools: &BookTools<Shared>, name: &str, arguments: &str) -> ToolOutcome {
     tools
-        .call_tool(&PyStr::from(name), &parse(arguments), &Cancelled::default())
+        .call_tool(
+            &PyStr::from(name),
+            &parse(arguments),
+            &Cancelled::default(),
+            None,
+        )
         .unwrap()
 }
 
@@ -357,6 +362,8 @@ fn a_lease_runs_one_scoped_mcp_call_operation() {
             "transactions_list",
             "--arguments",
             "{\"limit\":3}",
+            "--grant",
+            "read",
             "--workspace",
             "ws-id",
             "--profile",
@@ -628,7 +635,7 @@ fn cancelling_a_queued_call_cancels_its_operation() {
     let cancelled = Cancelled::default();
     cancelled.set();
     let outcome = tools
-        .call_tool(&PyStr::from("status"), &parse("{}"), &cancelled)
+        .call_tool(&PyStr::from("status"), &parse("{}"), &cancelled, None)
         .unwrap();
     assert_eq!(error(&outcome, "code"), Some(&s("cancelled")));
     assert_eq!(
@@ -759,22 +766,63 @@ fn invalid_arguments_are_refused_before_anything_is_queued() {
 #[test]
 fn access_gates_refuse_before_any_project_is_resolved() {
     let store = Store::new(UnlockMode::Brokered);
-    kassiber_setup::agent_access::set(&store.access, Some(false), None).unwrap();
+    kassiber_setup::agent_access::set_switches(&store.access, Some(false), None).unwrap();
     let access = store.access.clone();
     let broker = endpoint(vec![]);
     let tools = tools(store, &broker, None, None);
     let refused = call(&tools, "status", "{}");
     assert_eq!(error(&refused, "code"), Some(&s("mcp_disabled")));
     // MCP off outranks the AI master switch.
-    kassiber_setup::agent_access::set(&access, Some(false), Some(false)).unwrap();
+    kassiber_setup::agent_access::set_switches(&access, Some(false), Some(false)).unwrap();
     assert_eq!(
         error(&call(&tools, "status", "{}"), "code"),
         Some(&s("mcp_disabled"))
     );
-    kassiber_setup::agent_access::set(&access, Some(true), Some(false)).unwrap();
+    kassiber_setup::agent_access::set_switches(&access, Some(true), Some(false)).unwrap();
     assert_eq!(
         error(&call(&tools, "status", "{}"), "code"),
         Some(&s("ai_features_disabled"))
+    );
+    assert!(broker.sent.lock().unwrap().is_empty());
+}
+
+#[test]
+fn calls_above_the_users_grant_are_refused_before_anything_is_resolved() {
+    use kassiber_setup::agent_access::{set, Changes};
+    let store = Store::new(UnlockMode::Brokered);
+    let access = store.access.clone();
+    let broker = endpoint(vec![]);
+    let tools = tools(store, &broker, Some("w"), Some("p"));
+    // No grant recorded: agents read.
+    let refused = call(&tools, "transactions_metadata_update", "{}");
+    assert_eq!(error(&refused, "code"), Some(&s("mcp_grant_insufficient")));
+    assert_eq!(
+        error(&refused, "details"),
+        Some(&parse(
+            r#"{"required": "accounting_decisions", "granted": "read"}"#
+        ))
+    );
+    let choose = |grant: &str, agent_access: &str| {
+        set(
+            &access,
+            Changes {
+                grant: Some(s(grant)),
+                agent_access: Some(s(agent_access)),
+                ..Changes::default()
+            },
+        )
+        .unwrap();
+    };
+    choose("operator", "full");
+    assert_eq!(
+        error(&call(&tools, "transactions_metadata_update", "{}"), "code"),
+        Some(&s("mcp_grant_insufficient"))
+    );
+    // Restricted access keeps the full-access tools away at any grant.
+    choose("accounting_decisions", "restricted");
+    assert_eq!(
+        error(&call(&tools, "chain_analysis_acquire_apply", "{}"), "code"),
+        Some(&s("agent_access_restricted"))
     );
     assert!(broker.sent.lock().unwrap().is_empty());
 }
@@ -788,7 +836,7 @@ fn a_one_shot_call_checks_access_before_resolving_the_book() {
     };
     require_existing_book(&store, &selection).unwrap();
     assert_eq!(store.resolved.load(Ordering::SeqCst), 1);
-    kassiber_setup::agent_access::set(&store.access, Some(false), None).unwrap();
+    kassiber_setup::agent_access::set_switches(&store.access, Some(false), None).unwrap();
     let error = require_existing_book(&store, &selection).unwrap_err();
     assert_eq!(error.code, "mcp_disabled");
     assert_eq!(
@@ -796,7 +844,7 @@ fn a_one_shot_call_checks_access_before_resolving_the_book() {
         1,
         "refused before resolving"
     );
-    kassiber_setup::agent_access::set(&store.access, Some(true), None).unwrap();
+    kassiber_setup::agent_access::set_switches(&store.access, Some(true), None).unwrap();
     std::fs::write(&store.database, b"").unwrap();
     assert_eq!(
         require_existing_book(&store, &selection)
@@ -896,7 +944,7 @@ fn half_pins_and_arguments_are_checked_like_python() {
 #[test]
 fn enabling_needs_the_users_terminal_and_disabling_never_does() {
     let store = Store::new(UnlockMode::Manual);
-    kassiber_setup::agent_access::set(&store.access, Some(false), None).unwrap();
+    kassiber_setup::agent_access::set_switches(&store.access, Some(false), None).unwrap();
     let mut stderr = Vec::new();
     for (non_interactive, tty) in [(true, true), (false, false)] {
         let error = configure(
@@ -906,6 +954,8 @@ fn enabling_needs_the_users_terminal_and_disabling_never_does() {
             tty,
             &mut std::io::Cursor::new(b"y\n".to_vec()),
             &mut stderr,
+            None,
+            None,
         )
         .unwrap_err();
         assert_eq!(error.code, "interaction_required");
@@ -920,6 +970,8 @@ fn enabling_needs_the_users_terminal_and_disabling_never_does() {
         true,
         &mut std::io::Cursor::new(b"no\n".to_vec()),
         &mut stderr,
+        None,
+        None,
     )
     .unwrap();
     assert_eq!(get(&declined, "mcp_enabled"), Some(&Value::Bool(false)));
@@ -930,12 +982,14 @@ fn enabling_needs_the_users_terminal_and_disabling_never_does() {
         true,
         &mut std::io::Cursor::new(b"  YES \n".to_vec()),
         &mut stderr,
+        None,
+        None,
     )
     .unwrap();
     assert_eq!(get(&enabled, "mcp_available"), Some(&Value::Bool(true)));
     assert_eq!(
         String::from_utf8(stderr).unwrap(),
-        "External agents you connect will read this machine's Kassiber books (read-only), and their model provider receives what they read.\nAllow? [y/N] ".repeat(2)
+        "External agents you connect will read this machine's Kassiber books (read-only, no network), with restricted access: projected results only. Their model provider receives what they read, and your agent host's own tool approval is the only prompt before a change. Admin work (secrets, backups, deletes, passphrases) is never available to agents.\nAllow? [y/N] ".repeat(2)
     );
     let disabled = configure(
         &store,
@@ -944,12 +998,14 @@ fn enabling_needs_the_users_terminal_and_disabling_never_does() {
         false,
         &mut std::io::empty(),
         &mut Vec::new(),
+        None,
+        None,
     )
     .unwrap();
     assert_eq!(
         disabled,
         parse(
-            r#"{"mcp_enabled": false, "ai_features_enabled": null, "mcp_available": false, "reason": "mcp_disabled"}"#
+            r#"{"mcp_enabled": false, "ai_features_enabled": null, "mcp_available": false, "reason": "mcp_disabled", "grant": "read", "agent_access": "restricted", "access_recorded": true}"#
         )
     );
     let status = configure(
@@ -959,6 +1015,8 @@ fn enabling_needs_the_users_terminal_and_disabling_never_does() {
         false,
         &mut std::io::empty(),
         &mut Vec::new(),
+        None,
+        None,
     )
     .unwrap();
     assert_eq!(status, disabled);
@@ -969,9 +1027,48 @@ fn enabling_needs_the_users_terminal_and_disabling_never_does() {
         false,
         &mut std::io::empty(),
         &mut Vec::new(),
+        None,
+        None,
     )
     .unwrap();
     assert_eq!(get(&tools, "transport"), Some(&s("stdio")));
+    assert_eq!(get(&tools, "grant"), Some(&s("read")));
+    // Widening the grant asks again, naming what agents may then do.
+    let mut stderr = Vec::new();
+    let widened = configure(
+        &store,
+        "mcp.enable",
+        false,
+        true,
+        &mut std::io::Cursor::new(b"y\n".to_vec()),
+        &mut stderr,
+        Some("operator"),
+        Some("full"),
+    )
+    .unwrap();
+    assert_eq!(get(&widened, "grant"), Some(&s("operator")));
+    assert_eq!(get(&widened, "agent_access"), Some(&s("full")));
+    assert!(String::from_utf8(stderr).unwrap().starts_with(
+        "External agents you connect will read and operate this machine's Kassiber books"
+    ));
+    let tools = configure(
+        &store,
+        "mcp.tools",
+        true,
+        false,
+        &mut std::io::empty(),
+        &mut Vec::new(),
+        None,
+        None,
+    )
+    .unwrap();
+    assert_eq!(get(&tools, "grant"), Some(&s("operator")));
+    let Some(Value::List(listed)) = get(&tools, "tools") else {
+        panic!()
+    };
+    assert!(listed
+        .iter()
+        .any(|tool| get(tool, "name") == Some(&s("journals_process"))));
 }
 
 #[test]

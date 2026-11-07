@@ -11,6 +11,7 @@ use std::time::Instant;
 #[derive(Default)]
 struct Fake {
     calls: Mutex<Vec<Value>>,
+    clients: Mutex<Vec<Option<Value>>>,
     gate: Gate,
 }
 
@@ -46,6 +47,7 @@ impl Fake {
     fn held() -> Self {
         Fake {
             calls: Mutex::default(),
+            clients: Mutex::default(),
             gate: Gate::new(false),
         }
     }
@@ -53,14 +55,15 @@ impl Fake {
     fn open() -> Self {
         Fake {
             calls: Mutex::default(),
+            clients: Mutex::default(),
             gate: Gate::new(true),
         }
     }
 }
 
 impl ToolProvider for Fake {
-    fn instructions(&self) -> &str {
-        "fake instructions"
+    fn instructions(&self) -> String {
+        "fake instructions".into()
     }
 
     fn tool_definitions(&self) -> Vec<Value> {
@@ -78,8 +81,10 @@ impl ToolProvider for Fake {
         _name: &PyStr,
         arguments: &Value,
         _cancelled: &Cancelled,
+        client_name: Option<&Value>,
     ) -> Result<ToolOutcome, Internal> {
         self.gate.wait(Duration::from_secs(5));
+        self.clients.lock().unwrap().push(client_name.cloned());
         self.calls.lock().unwrap().push(arguments.clone());
         if get(arguments, "panic").is_some() {
             panic!("a provider bug");
@@ -189,7 +194,7 @@ fn modern_discover_is_complete_cacheable_and_identified() {
     let response = handle(&server(Fake::open()), &modern("1", "server/discover", "")).unwrap();
     assert_eq!(
         response,
-        "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"supportedVersions\":[\"2026-07-28\"],\"capabilities\":{\"tools\":{}},\"ttlMs\":3600000,\"cacheScope\":\"public\",\"instructions\":\"fake instructions\",\"resultType\":\"complete\",\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kassiber\",\"version\":\"test\"}}}}\n"
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"supportedVersions\":[\"2026-07-28\"],\"capabilities\":{\"tools\":{}},\"ttlMs\":60000,\"cacheScope\":\"public\",\"instructions\":\"fake instructions\",\"resultType\":\"complete\",\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"kassiber\",\"version\":\"test\"}}}}\n"
     );
 }
 
@@ -851,4 +856,45 @@ fn notifications_are_ignored() {
         ],
     );
     assert!(responses.is_empty(), "{responses:?}");
+}
+
+#[test]
+fn calls_carry_the_hosts_self_reported_name() {
+    let fake = Arc::new(Fake::open());
+    let server = McpServer::new(fake.clone(), "kassiber", "test");
+    // Modern requests name the host in `_meta`; anything but a string is
+    // no name.
+    let named = format!(
+        r#"{MODERN},"name":"echo","arguments":{{}}"#
+    )
+    .replace(
+        r#""io.modelcontextprotocol/clientCapabilities":{}}"#,
+        r#""io.modelcontextprotocol/clientCapabilities":{},"io.modelcontextprotocol/clientInfo":{"name":"Claude Code"}}"#,
+    );
+    handle(&server, &request("1", "tools/call", &named)).unwrap();
+    handle(
+        &server,
+        &modern("2", "tools/call", r#""name":"echo","arguments":{}"#),
+    )
+    .unwrap();
+    // A legacy client names itself once, at initialize.
+    let legacy = McpServer::new(fake.clone(), "kassiber", "test");
+    handle(
+        &legacy,
+        &request(
+            "3",
+            "initialize",
+            r#""protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"codex"}"#,
+        ),
+    )
+    .unwrap();
+    handle(
+        &legacy,
+        &request("4", "tools/call", r#""name":"echo","arguments":{}"#),
+    )
+    .unwrap();
+    assert_eq!(
+        *fake.clients.lock().unwrap(),
+        [Some(s("Claude Code")), None, Some(s("codex"))]
+    );
 }

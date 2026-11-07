@@ -13,7 +13,10 @@
 //!
 //! Launch does nothing: no path resolution, database open, lock or socket
 //! until the first `tools/call`. External agents are off unless the user
-//! turned them on, and only the user's own terminal can turn them on.
+//! turned them on, and only the user's own terminal can turn them on or
+//! widen their grant (#686). The listing, instructions and every call follow
+//! the recorded choice when they run, so a changed grant applies to the next
+//! call.
 
 use std::io::{BufRead, Write};
 use std::sync::{Arc, Mutex};
@@ -24,7 +27,10 @@ use kassiber_envelope::{dict, get, s, truthy, AppError};
 use kassiber_mcp::protocol::{
     Cancelled, Internal, McpServer, StdioLoop, ToolOutcome, ToolProvider,
 };
-use kassiber_mcp::tools::{entry_for, error_outcome, finish, INSTRUCTIONS};
+use kassiber_mcp::tools::{
+    call_capability, client_label, entry_for, error_outcome, finish, instructions_for, refusal_for,
+    McpTool,
+};
 use kassiber_operator::client::{
     AgentSessionHandle, BrokerClient, Host, SubmitOptions, TERMINAL_OPERATION_STATES,
 };
@@ -32,6 +38,7 @@ use kassiber_operator::values::{as_str, py_str_value};
 use kassiber_pyjson::{dumps, Options, PyStr, Value};
 use kassiber_runtime::store::{BookStore, Selection, Unlock, UnlockMode};
 use kassiber_runtime::BuildInfo;
+use kassiber_setup::agent_access::{grant_allows, narrower_grant, Access, GRANTS};
 
 use crate::argparse::Namespace;
 use crate::run::Environment;
@@ -77,9 +84,44 @@ fn not_initialized(message: &str) -> AppError {
 }
 
 /// `require_mcp_access()`: off unless the user turned external agents on
-/// and the desktop's AI master switch is not off.
-fn require_mcp_access(store: &dyn BookStore) -> Result<(), AppError> {
+/// and the desktop's AI master switch is not off; the recorded choice.
+fn require_mcp_access(store: &dyn BookStore) -> Result<Access, AppError> {
     kassiber_setup::agent_access::require_mcp_access(&store.agent_access_path()?)
+}
+
+/// `agent_access_status()`: never refuses; anything unreadable is the
+/// defaults.
+fn recorded(store: &dyn BookStore) -> Access {
+    store
+        .agent_access_path()
+        .map(|path| kassiber_setup::agent_access::read(&path))
+        .unwrap_or_default()
+}
+
+/// `_call_access(args)`: the grant one `mcp call` runs with, the user's
+/// only ever narrowed. Inside an operator broker worker the call may use no
+/// more than the broker admitted for it (`call_capability`, which the lease
+/// had to cover); an explicit `--grant` is a ceiling everywhere.
+pub(crate) fn call_access(
+    store: &dyn BookStore,
+    tool: Option<&str>,
+    claimed: Option<&str>,
+    operator_child: bool,
+) -> Result<(&'static str, &'static str), AppError> {
+    let status = require_mcp_access(store)?;
+    let mut grant = status.grant;
+    let known = |grant: &str| GRANTS.iter().copied().find(|name| *name == grant);
+    if operator_child {
+        let admitted = call_capability(tool, claimed).as_str();
+        // Admin is above every grant: the narrower one stays the user's.
+        if let Some(admitted) = known(admitted) {
+            grant = known(narrower_grant(grant, admitted)).expect("a grant");
+        }
+    }
+    if let Some(claimed) = claimed.and_then(known) {
+        grant = known(narrower_grant(grant, claimed)).expect("a grant");
+    }
+    Ok((grant, status.agent_access))
 }
 
 /// `_require_existing_book_for_agent_read(args)`: `mcp call` reads; unlike
@@ -110,7 +152,26 @@ fn database_exists(database: &str) -> bool {
     std::fs::metadata(database).is_ok_and(|metadata| metadata.len() > 0)
 }
 
+/// `_GRANT_CONSENT_TEXT`.
+fn grant_consent_text(grant: &str) -> &'static str {
+    match grant {
+        "operator" => "read and operate this machine's Kassiber books: process journals, export, record source-of-funds evidence, documents and analysis cases, and sync wallets and rates, which contacts your configured backends and rate sources",
+        "accounting_decisions" => "read, operate and make accounting decisions in this machine's Kassiber books: everything operator allows (including wallet and rate syncs that contact your backends) plus resolving quarantine, pairing and dismissing transfers, custody, loan and source-of-funds reviews, and editing transaction notes, tags, exclusions and classification",
+        _ => "read this machine's Kassiber books (read-only, no network)",
+    }
+}
+
+/// `_ACCESS_CONSENT_TEXT`.
+fn access_consent_text(access: &str) -> &'static str {
+    match access {
+        "full" => "with full access: unprojected results (txids, outpoints, labels) and the custody-gap, lineage and chain-analysis source tools",
+        _ => "with restricted access: projected results only",
+    }
+}
+
 /// `mcp tools`, `status`, `enable` and `disable`: the payload to emit.
+/// `grant` and `agent_access` are `mcp enable`'s options.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn configure(
     store: &dyn BookStore,
     command: &str,
@@ -118,35 +179,58 @@ pub(crate) fn configure(
     stdin_is_tty: bool,
     stdin: &mut dyn BufRead,
     stderr: &mut dyn Write,
+    grant: Option<&str>,
+    agent_access: Option<&str>,
 ) -> Result<Value, AppError> {
     use kassiber_setup::agent_access;
     match command {
-        "mcp.tools" => Ok(kassiber_mcp::tools::describe_tools()),
+        "mcp.tools" => {
+            let status = recorded(store);
+            Ok(kassiber_mcp::tools::describe_tools(
+                status.grant,
+                status.agent_access,
+            ))
+        }
         "mcp.status" => Ok(agent_access::status(&store.agent_access_path()?)),
-        "mcp.disable" => agent_access::set(&store.agent_access_path()?, Some(false), None),
+        "mcp.disable" => agent_access::set_switches(&store.agent_access_path()?, Some(false), None),
         _ => {
-            // Turning disclosure on is the user's decision, never an agent's:
-            // it needs their own terminal (or the desktop switch).
+            // Turning disclosure on, or widening what agents may do, is the
+            // user's decision, never an agent's: it needs their own terminal
+            // (or the desktop switch).
             if non_interactive || !stdin_is_tty {
                 return Err(AppError::new(
                     "interaction_required",
-                    "enabling external agents needs the user's own confirmation",
+                    "enabling external agents or changing their grant needs the user's own confirmation",
                 )
                 .with_hint(
                     "Ask the user to turn on External agents in Kassiber Settings > AI, or to run `kassiber mcp enable` in their own terminal.",
                 )
                 .with_details(dict([("reason", s("user_consent"))])));
             }
-            let _ = stderr.write_all(
-                b"External agents you connect will read this machine's Kassiber books (read-only), and their model provider receives what they read.\nAllow? [y/N] ",
+            let path = store.agent_access_path()?;
+            let current = agent_access::read(&path);
+            let grant = grant.unwrap_or(current.grant);
+            let access = agent_access.unwrap_or(current.agent_access);
+            let prompt = format!(
+                "External agents you connect will {}, {}. Their model provider receives what they read, and your agent host's own tool approval is the only prompt before a change. Admin work (secrets, backups, deletes, passphrases) is never available to agents.\nAllow? [y/N] ",
+                grant_consent_text(grant),
+                access_consent_text(access),
             );
+            let _ = stderr.write_all(prompt.as_bytes());
             let _ = stderr.flush();
             let mut line = String::new();
             let _ = stdin.read_line(&mut line);
             let answer = kassiber_pytext::lower(kassiber_pytext::strip(&line));
-            let path = store.agent_access_path()?;
             if matches!(answer.as_str(), "y" | "yes") {
-                agent_access::set(&path, Some(true), None)
+                agent_access::set(
+                    &path,
+                    agent_access::Changes {
+                        mcp_enabled: Some(true),
+                        grant: Some(s(grant)),
+                        agent_access: Some(s(access)),
+                        ..agent_access::Changes::default()
+                    },
+                )
             } else {
                 Ok(agent_access::status(&path))
             }
@@ -178,10 +262,20 @@ pub(crate) struct Open<'a> {
     pub env: &'a Environment,
 }
 
+/// The user's choice one call runs with.
+pub(crate) struct Grant {
+    pub grant: &'static str,
+    pub agent_access: &'static str,
+    /// The host's cleaned self-reported name (display only).
+    pub client_name: Option<String>,
+}
+
 /// Bootstrap, open, account the project, run one tool and close: the
 /// direct path of the server and the body of `mcp call`. `arguments` runs
 /// once the book is open (`mcp call` checks its pin and parses its
-/// arguments there, as Python's dispatch does).
+/// arguments there, as Python's dispatch does); `grant` reads the user's
+/// choice then too.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn read_book(
     store: &Arc<dyn BookStore>,
     build: BuildInfo,
@@ -190,6 +284,7 @@ pub(crate) fn read_book(
     arguments: &dyn Fn() -> Result<Value, AppError>,
     workspace: Option<&str>,
     profile: Option<&str>,
+    grant: &dyn Fn() -> Result<Grant, AppError>,
 ) -> Result<Value, AppError> {
     let bootstrap = store.bootstrap(&open.selection)?;
     let mut runtime_config = bootstrap.runtime_config.clone();
@@ -212,9 +307,9 @@ pub(crate) fn read_book(
         ),
         None => Ok(()),
     }
-    .and_then(|()| arguments());
-    let arguments = match opened {
-        Ok(arguments) => arguments,
+    .and_then(|()| Ok((arguments()?, grant()?)));
+    let (arguments, grant) = match opened {
+        Ok(opened) => opened,
         Err(error) => {
             let _ = book.close();
             return Err(error);
@@ -233,6 +328,9 @@ pub(crate) fn read_book(
             workspace,
             profile,
             project_name: project_name.as_deref(),
+            grant: grant.grant,
+            agent_access: grant.agent_access,
+            client_name: grant.client_name.as_deref(),
         },
     );
     let closed = book.close();
@@ -302,10 +400,20 @@ impl<H: Host + 'static> BookTools<H> {
         name: &PyStr,
         arguments: &Value,
         cancelled: &Cancelled,
+        client_name: Option<String>,
     ) -> Result<Value, AppError> {
         // First, before any project resolution: off unless the user turned
-        // external agents on and the AI master switch is not off.
-        require_mcp_access(self.store.as_ref())?;
+        // external agents on and the AI master switch is not off, and
+        // refused when the tool is above the user's grant.
+        let status = require_mcp_access(self.store.as_ref())?;
+        let (grant, agent_access) = (status.grant, status.agent_access);
+        let Some(tool) = entry_for(name) else {
+            return Err(AppError::new("unknown_tool", "unknown Kassiber MCP tool")
+                .with_python_message(join("unknown Kassiber MCP tool: ", name)));
+        };
+        if let Some(refusal) = refusal_for(tool, grant, agent_access) {
+            return Err(refusal);
+        }
         if self.selection.data_root.is_none() && !self.store.catalog_has_projects()? {
             // Resolving the default project would create one; an agent's read
             // must not set up Kassiber on a machine where nothing exists yet.
@@ -325,7 +433,14 @@ impl<H: Host + 'static> BookTools<H> {
             ..Selection::default()
         };
         if self.store.effective_unlock_mode(&root)? == UnlockMode::Brokered {
-            return self.call_brokered(&paths.data_root, name, arguments, cancelled);
+            return self.call_brokered(
+                &paths.data_root,
+                tool,
+                arguments,
+                cancelled,
+                grant,
+                client_name.as_deref(),
+            );
         }
         read_book(
             &self.store,
@@ -344,6 +459,13 @@ impl<H: Host + 'static> BookTools<H> {
             &|| Ok(arguments.clone()),
             self.workspace.as_deref(),
             self.profile.as_deref(),
+            &|| {
+                Ok(Grant {
+                    grant,
+                    agent_access,
+                    client_name: client_name.clone(),
+                })
+            },
         )
     }
 
@@ -382,36 +504,66 @@ impl<H: Host + 'static> BookTools<H> {
     fn call_brokered(
         &self,
         data_root: &str,
-        name: &PyStr,
+        tool: &McpTool,
         arguments: &Value,
         cancelled: &Cancelled,
+        grant: &str,
+        client_name: Option<&str>,
     ) -> Result<Value, AppError> {
         // Validate here, in this build, before anything is queued: the
         // broker child runs the broker's build, which must not be the only
         // check.
-        let Some(entry) = entry_for(name) else {
-            return Err(AppError::new("unknown_tool", "unknown Kassiber MCP tool")
-                .with_python_message(join("unknown Kassiber MCP tool: ", name)));
-        };
-        kassiber_ai::validate::validate_arguments(entry, arguments).map_err(tool_error)?;
+        let name = &PyStr::from(tool.name.as_str());
+        kassiber_ai::validate::validate_arguments(tool.entry, arguments).map_err(tool_error)?;
         let client = (self.client)();
         // Status never starts a broker; without a lease there is nothing to
         // submit to, so do not spawn one just to be refused.
         let status = client
             .status(Some(data_root))
             .map_err(crate::operator_cli::app_error)?;
+        let unlock_command = format!("kassiber operator unlock --capability {grant}");
         if !matches!(get(&status, "lease"), Some(Value::Str(lease)) if lease.is("unlocked")) {
             return Err(AppError::new(
                 "interaction_required",
                 "this project has no active operator lease",
             )
-            .with_hint(
-                "Ask the user to unlock this book for agents in Kassiber (Settings, AI, External agents), or to run `kassiber operator unlock --capability read` in their own terminal, then retry. Never ask for the passphrase.",
-            )
+            .with_hint(format!(
+                "Ask the user to unlock this book for agents in Kassiber (Settings, AI, External agents), or to run `{unlock_command}` in their own terminal, then retry. Never ask for the passphrase."
+            ))
             .with_details(dict([
                 ("reason", s("operator_lease_required")),
                 ("unlock_mode", s("brokered")),
-                ("user_command", s("kassiber operator unlock --capability read")),
+                ("user_command", s(unlock_command.as_str())),
+            ]))
+            .retryable(true));
+        }
+        // The lease bounds what this call may do as much as the grant does:
+        // a read under a `read` lease runs without the journal refresh, and a
+        // write needs a lease that covers it.
+        let leased = get(&status, "capability").cloned().unwrap_or(Value::Null);
+        let effective = match &leased {
+            Value::Str(leased) => GRANTS
+                .iter()
+                .copied()
+                .find(|name| leased.is(name))
+                .map_or("read", |leased| narrower_grant(grant, leased)),
+            _ => "read",
+        };
+        let required = tool.required.as_str();
+        if !grant_allows(effective, required) {
+            let required_command = format!("kassiber operator unlock --capability {required}");
+            return Err(AppError::new(
+                "interaction_required",
+                format!("the operator lease does not cover {}", tool.name),
+            )
+            .with_hint(format!(
+                "Ask the user to lock and unlock this book for agents in Kassiber (Settings, AI, External agents), or to lock the lease and run `{required_command}` in their own terminal, then retry. Never ask for the passphrase."
+            ))
+            .with_details(dict([
+                ("reason", s("operator_capability_insufficient")),
+                ("required", s(required)),
+                ("leased", leased.clone()),
+                ("user_command", s(required_command.as_str())),
             ]))
             .retryable(true));
         }
@@ -459,11 +611,18 @@ impl<H: Host + 'static> BookTools<H> {
             "--arguments".to_owned(),
             dumps(arguments, &Options::new().compact())
                 .map_err(|error| AppError::new("validation", error.to_string()))?,
+            // The broker requires its lease to cover this grant as well.
+            "--grant".to_owned(),
+            effective.to_owned(),
             "--workspace".to_owned(),
             text(&workspace),
             "--profile".to_owned(),
             text(&profile),
         ]);
+        if let Some(client_name) = client_name.filter(|name| !name.is_empty()) {
+            // One token, so a name can never read as another option.
+            argv.push(format!("--client={client_name}"));
+        }
         let agent_scope = matches!(get(&status, "agent_scope"), Some(Value::Bool(true)));
         // The desktop's "Unlock for agents" session admits only processes
         // the user allowed; register this one so it can be allowed.
@@ -522,7 +681,8 @@ impl<H: Host + 'static> BookTools<H> {
         let mut polled = false;
         while !terminal(&completed) {
             if cancelled.is_set() {
-                // Queued work is cancelled; a running read simply finishes.
+                // Queued work is cancelled; a running call (a write too)
+                // simply finishes.
                 client
                     .cancel(&operation_id)
                     .map_err(crate::operator_cli::app_error)?;
@@ -697,15 +857,19 @@ fn brokered_result(operation_id: &PyStr, completed: &Value) -> Result<Value, App
 }
 
 impl<H: Host + 'static> ToolProvider for BookTools<H> {
-    fn instructions(&self) -> &str {
-        INSTRUCTIONS
+    fn instructions(&self) -> String {
+        instructions_for(recorded(self.store.as_ref()).grant)
     }
 
     fn tool_definitions(&self) -> Vec<Value> {
-        kassiber_mcp::tools::tool_definitions()
+        let status = recorded(self.store.as_ref());
+        kassiber_mcp::tools::tool_definitions(status.grant, status.agent_access)
     }
 
     fn has_tool(&self, name: &PyStr) -> bool {
+        // Known at some grant: a call above the user's grant gets a tool
+        // error naming the grant it needs. Admin-class and chat-only tools
+        // stay unknown.
         entry_for(name).is_some()
     }
 
@@ -714,9 +878,10 @@ impl<H: Host + 'static> ToolProvider for BookTools<H> {
         name: &PyStr,
         arguments: &Value,
         cancelled: &Cancelled,
+        client_name: Option<&Value>,
     ) -> Result<ToolOutcome, Internal> {
         let called = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            self.call(name, arguments, cancelled)
+            self.call(name, arguments, cancelled, client_label(client_name))
         }));
         match called {
             Ok(Ok(structured)) => finish(structured),

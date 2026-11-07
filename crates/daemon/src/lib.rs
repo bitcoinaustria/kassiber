@@ -1700,6 +1700,9 @@ impl Daemon {
             }
         }
         self.release_owner()?;
+        // `_clear_unlocked_passphrase`: the agents' lease ends with the
+        // desktop's session.
+        let _ = self.agent_access.end_lease(false);
         self.unlocked_passphrase = None;
         self.backup_sessions.clear();
         self.document_sessions.clear();

@@ -85,13 +85,15 @@ impl std::fmt::Debug for DesktopAgentLease {
 /// What the agent session asks the operator broker; [`BrokerClient`] in the
 /// product, a fake in tests.
 pub(crate) trait AgentBroker {
-    /// `unlock(data_root, passphrase, duration 8 h, read, password,
-    /// only_if_locked, agent_control, idle 15 min)`.
+    /// `unlock(data_root, passphrase, duration 8 h, capability, password,
+    /// only_if_locked, agent_control, idle 15 min)`: the capability is the
+    /// user's External agents grant, never admin.
     fn unlock(
         &self,
         data_root: &str,
         passphrase: &[u8],
         control: &[u8],
+        capability: &str,
     ) -> kassiber_operator::Result<Value>;
     fn status(&self, data_root: &str) -> kassiber_operator::Result<Value>;
     fn decide(
@@ -116,13 +118,14 @@ impl<H: Host> AgentBroker for BrokerClient<H> {
         data_root: &str,
         passphrase: &[u8],
         control: &[u8],
+        capability: &str,
     ) -> kassiber_operator::Result<Value> {
         BrokerClient::unlock(
             self,
             data_root,
             passphrase,
             Some(DESKTOP_AGENT_LEASE_SECONDS.into()),
-            "read",
+            capability,
             "password",
             // A lease that already exists (say, from a terminal) is someone
             // else's session: never replace it, which could narrow it.
@@ -396,10 +399,12 @@ impl AgentAccess {
         )
     }
 
-    /// `unlock(ctx)`: grant agents a read lease from this book's
-    /// passphrase, only if no lease exists.
+    /// `unlock(ctx)`: grant agents a lease from this book's passphrase,
+    /// only if no lease exists. The lease carries the user's External agents
+    /// grant (never admin), so brokered agents can do exactly what the user
+    /// chose for them.
     pub(crate) fn unlock(&mut self, desktop: &Desktop<'_>) -> Result<Value, AppError> {
-        kassiber_setup::agent_access::require_mcp_access(&(self.preference)()?)?;
+        let grant = kassiber_setup::agent_access::require_mcp_access(&(self.preference)()?)?.grant;
         let passphrase = match desktop.passphrase.filter(|text| !text.is_empty()) {
             Some(passphrase) if desktop.book_open => passphrase,
             _ => {
@@ -427,7 +432,8 @@ impl AgentAccess {
         let passphrase = Zeroizing::new(passphrase.as_bytes().to_vec());
         let control = (self.entropy)()?;
         let started = self.now();
-        let granted = match (self.broker)().unlock(desktop.data_root, &passphrase, &control) {
+        let granted = match (self.broker)().unlock(desktop.data_root, &passphrase, &control, grant)
+        {
             Ok(granted) => granted,
             Err(kassiber_operator::Error::App(error)) if error.code == "operator_lease_exists" => {
                 let mut state = self.session_state(desktop, false)?;
@@ -609,19 +615,29 @@ impl AgentAccess {
             )])
         };
         let session = if kind == "ui.agent_access.configure" {
-            let unknown = unknown(&["mcp_enabled", "ai_features_enabled"]);
+            let unknown = unknown(&[
+                "mcp_enabled",
+                "ai_features_enabled",
+                "grant",
+                "agent_access",
+            ]);
             let value = |key: &str| get(args, key);
-            let values = [value("mcp_enabled"), value("ai_features_enabled")];
+            let switches = [value("mcp_enabled"), value("ai_features_enabled")];
+            let choices = [value("grant"), value("agent_access")];
             if !unknown.is_empty()
-                || values.iter().all(Option::is_none)
-                || values
+                || switches.iter().chain(choices.iter()).all(Option::is_none)
+                || switches
                     .iter()
                     .flatten()
                     .any(|value| !matches!(value, Value::Bool(_)))
+                || choices
+                    .iter()
+                    .flatten()
+                    .any(|value| !matches!(value, Value::Str(_)))
             {
                 return Err(AppError::new(
                     "validation",
-                    "ui.agent_access.configure takes boolean mcp_enabled and/or ai_features_enabled",
+                    "ui.agent_access.configure takes boolean mcp_enabled/ai_features_enabled and string grant/agent_access",
                 )
                 .with_details(listed(unknown)));
             }
@@ -629,14 +645,23 @@ impl AgentAccess {
                 Some(Value::Bool(flag)) => Some(*flag),
                 _ => None,
             };
+            let path = (self.preference)()?;
+            let previous_grant = kassiber_setup::agent_access::read(&path).grant;
             let result = kassiber_setup::agent_access::set(
-                &(self.preference)()?,
-                flag(values[0]),
-                flag(values[1]),
+                &path,
+                kassiber_setup::agent_access::Changes {
+                    mcp_enabled: flag(switches[0]),
+                    ai_features_enabled: flag(switches[1]),
+                    grant: choices[0].cloned(),
+                    agent_access: choices[1].cloned(),
+                },
             )?;
-            if get(&result, "mcp_available") != Some(&Value::Bool(true)) {
+            if get(&result, "mcp_available") != Some(&Value::Bool(true))
+                || get(&result, "grant") != Some(&s(previous_grant))
+            {
                 // Turning agents (or AI) off ends the lease the desktop
-                // granted them.
+                // granted them, and so does a new grant: the next unlock
+                // leases exactly that grant.
                 self.end_lease(false)?;
             }
             let mut result = result;

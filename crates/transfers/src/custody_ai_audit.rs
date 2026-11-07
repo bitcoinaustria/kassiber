@@ -21,10 +21,15 @@ const PROPOSAL_KEYS: [&str; 7] = [
     "reason",
     "residual_action",
 ];
-/// `_CONSENT_DECISIONS`.
-const CONSENT_DECISIONS: [&str; 5] = [
+/// `_CONSENT_DECISIONS`. `mode_auto` / `mode_full_access`: the chat's
+/// permission mode approved the call without asking; `mcp_host`: an external
+/// agent's MCP host approved it (#684, #686).
+const CONSENT_DECISIONS: [&str; 8] = [
     "allow_once",
     "allow_session",
+    "mode_auto",
+    "mode_full_access",
+    "mcp_host",
     "deny",
     "consent_timeout",
     "cancelled",
@@ -308,5 +313,25 @@ mod tests {
             "{\"id\":\"review-1\",\"review_id\":\"review-1\",\"review_revision\":2,\"status\":\"applied\"}"
         );
         assert_eq!(canonical(&bounded_result(Some(&s("x")))).unwrap(), "{}");
+    }
+
+    #[test]
+    fn the_audit_admits_pythons_consent_decisions() {
+        // kassiber/core/custody_ai_audit.py `_CONSENT_DECISIONS`.
+        let python = [
+            "allow_once",
+            "allow_session",
+            "mode_auto",
+            "mode_full_access",
+            "mcp_host",
+            "deny",
+            "consent_timeout",
+            "cancelled",
+        ];
+        let mut have = CONSENT_DECISIONS.to_vec();
+        let mut want = python.to_vec();
+        have.sort_unstable();
+        want.sort_unstable();
+        assert_eq!(have, want);
     }
 }

@@ -2654,6 +2654,8 @@ dependencies = [
  "kassiber-envelope",
  "kassiber-pyjson",
  "kassiber-pytext",
+ "kassiber-runtime",
+ "kassiber-setup",
 ]
 
 [[package]]

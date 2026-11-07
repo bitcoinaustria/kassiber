@@ -53,7 +53,7 @@ pub fn classify(argv: &[String]) -> Result<Classification, AppError> {
         )
     })?;
     let path = command_path(|name| namespace.text(name));
-    let Some(capability) = cli_capability(&path) else {
+    let Some(mut capability) = cli_capability(&path) else {
         return Err(AppError::new(
             "operator_unclassified_command",
             "the broker received an unclassified command",
@@ -64,6 +64,13 @@ pub fn classify(argv: &[String]) -> Result<Classification, AppError> {
             kassiber_envelope::s(path.as_str()),
         )])));
     };
+    if path == "mcp.call" {
+        // One command line runs any agent tool (#686): the lease must cover
+        // the tool's own class and any grant the call claims (which lets a
+        // read refresh journals), not just the `mcp call` entry's baseline.
+        capability =
+            kassiber_mcp::tools::call_capability(namespace.text("tool"), namespace.text("grant"));
+    }
     let scope = |name: &str| {
         namespace
             .has(name)
@@ -126,5 +133,24 @@ mod tests {
         let install = classify(&argv(&["backup", "import", "a.kassiber", "--install"])).unwrap();
         assert!(install.install);
         assert_eq!(install.capability, Capability::Admin);
+    }
+
+    #[test]
+    fn an_mcp_call_takes_its_tools_class_and_any_claimed_grant() {
+        let call = |tool: &str, extra: &[&str]| {
+            let mut items = vec!["--machine", "mcp", "call", "--tool", tool];
+            items.extend_from_slice(extra);
+            classify(&argv(&items)).unwrap().capability
+        };
+        assert_eq!(call("status", &[]), Capability::Read);
+        assert_eq!(call("journals_process", &[]), Capability::Operator);
+        assert_eq!(
+            call("transactions_metadata_update", &[]),
+            Capability::AccountingDecisions
+        );
+        assert_eq!(
+            call("status", &["--grant", "operator"]),
+            Capability::Operator
+        );
     }
 }
