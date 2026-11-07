@@ -40,6 +40,7 @@ pub mod service;
 pub mod skills;
 pub mod summary;
 pub mod transport;
+pub mod undo;
 pub mod validate;
 
 use kassiber_envelope::AppError;

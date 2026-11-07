@@ -672,6 +672,94 @@ def review_operation_cases():
     return cases
 
 
+UNDO_NOW = "2026-03-04T05:06:07+00:00"
+
+
+def undo_cases():
+    """`undo_hint` for every reversible tool, with the clock pinned."""
+    from datetime import datetime as real_datetime
+
+    from kassiber.ai import undo
+
+    class Pinned(real_datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return real_datetime.fromisoformat(UNDO_NOW)
+
+    pair = {"out_transaction_id": " tx-out ", "in_transaction_id": "tx-in", "kind": "swap",
+            "policy": "carrying_value", "notes": " n ", "out_amount": 150_000_000_000}
+    rule = {"name": "r", "predicate": {"wallet": "a"}, "kind": "swap", "policy": "p", "enabled": 1}
+    dismissal = {"out_transaction_id": "o", "in_transaction_id": "i", "reason": " why "}
+    cases = [
+        ("ui.transfers.pair", {}, {"id": " pair-1 "}),
+        ("ui.transfers.pair", {}, {"id": "  "}),
+        ("ui.transfers.unpair", {}, {"pair": pair}),
+        ("ui.transfers.unpair", {}, {"pair": {**pair, "out_amount": 0, "notes": None}}),
+        ("ui.transfers.unpair", {}, {"pair": {**pair, "out_amount": 10 ** 40 + 5 * 10 ** 11 + 1}}),
+        ("ui.transfers.unpair", {}, {"pair": {**pair, "out_amount": 10 ** 45 + 5 * 10 ** 13}}),
+        ("ui.transfers.unpair", {}, {"pair": {**pair, "out_amount": 10 ** 45 + 15 * 10 ** 13}}),
+        ("ui.transfers.unpair", {}, {"pair": {**pair, "out_amount": 10 ** 45 - 1}}),
+        ("ui.transfers.unpair", {}, {"pair": {**pair, "out_amount": 1, "kind": 5}}),
+        ("ui.transfers.unpair", {}, {"pair": {**pair, "out_amount": True}}),
+        ("ui.transfers.unpair", {}, {"pair": {**pair, "in_transaction_id": ""}}),
+        ("ui.transfers.unpair", {}, {"pair": "x"}),
+        ("ui.transfers.dismiss", {}, {"id": "d-1"}),
+        ("ui.transfers.dismissals.delete", {}, {"dismissal": {**dismissal, "expires_at": None}}),
+        ("ui.transfers.dismissals.delete", {}, {"dismissal": {**dismissal, "expires_at": "2026-03-05T05:06:07Z"}}),
+        ("ui.transfers.dismissals.delete", {}, {"dismissal": {**dismissal, "expires_at": "2026-03-05T05:06:08Z"}}),
+        ("ui.transfers.dismissals.delete", {}, {"dismissal": {**dismissal, "expires_at": "2026-03-04T05:06:07Z"}}),
+        ("ui.transfers.dismissals.delete", {}, {"dismissal": {**dismissal, "expires_at": "2026-03-04T05:06:07"}}),
+        ("ui.transfers.dismissals.delete", {}, {"dismissal": {**dismissal, "expires_at": "soon"}}),
+        ("ui.transfers.dismissals.delete", {}, {"dismissal": {**dismissal, "expires_at": 3}}),
+        ("ui.transfers.dismissals.delete", {}, {"dismissal": {**dismissal, "expires_at": "2027-01-01T00:00:00+01:00"}}),
+        ("ui.transfers.rules.create", {}, {"id": "rule-1"}),
+        ("ui.transfers.rules.delete", {}, {"rule": rule}),
+        ("ui.transfers.rules.delete", {}, {"rule": {**rule, "invalid_reason": "x"}}),
+        ("ui.transfers.rules.delete", {}, {"rule": {**rule, "predicate": [1], "enabled": 0, "name": None}}),
+        ("ui.transfers.rules.delete", {}, {"rule": {**rule, "policy": ""}}),
+        ("ui.transfers.rules.set_enabled", {}, {"id": "rule-1", "enabled": True}),
+        ("ui.transfers.rules.set_enabled", {}, {"id": "rule-1", "enabled": 1}),
+        ("ui.transfers.payouts.create", {}, {"id": "p-1"}),
+        ("ui.transfers.components.apply", {"action": "revise", "component_id": " c-1 "}, {}),
+        ("ui.transfers.components.apply", {"action": "supersede", "component_id": "c-1"}, {}),
+        ("ui.transfers.components.apply", {"action": "activate", "component_id": "c-1"}, {}),
+        ("ui.transfers.components.apply", {"action": "undo", "component_id": "c-1"}, {}),
+        ("ui.transfers.components.apply", {"action": "revise"}, {"components": [{"id": "n", "state": "active"}]}),
+        ("ui.transfers.components.apply", {}, {"components": [{"id": "a", "state": "active"}, {"id": "b", "state": "draft"}]}),
+        ("ui.transfers.components.apply", {}, {"components": [{"id": "a", "state": "active"}, {"id": "b", "state": "active"}]}),
+        ("ui.transfers.components.apply", {}, {"component": {"id": " c ", "state": "active"}}),
+        ("ui.transfers.components.apply", {}, {"components": "x", "component": {"id": "c", "state": "active"}}),
+        ("ui.transfers.components.apply", {"action": ["a"], "component_id": "c"}, {"component": {"id": "c", "state": "active"}}),
+        ("ui.custody.review.apply", {"gap_id": " g ", "action": "link"}, {}),
+        ("ui.custody.review.apply", {"gap_id": "g", "action": "reopen"}, {}),
+        ("ui.custody.review.apply", {"action": "link"}, {}),
+        ("ui.saved_views.create", {}, {"id": "v"}),
+        ("ui.loans.mark", {"txid": " t "}, {}),
+        ("ui.loans.mark", {"txid": 5}, {}),
+        ("ui.transactions.metadata.update", {}, {"transaction_id": "t", "history_event_id": "e"}),
+        ("ui.transactions.metadata.update", {}, {"updated": False, "transaction_id": "t", "history_event_id": "e"}),
+        ("ui.transactions.metadata.update", {}, {"transaction_id": "t"}),
+        ("ui.transactions.history.revert", {}, {"transaction": {"transaction_id": "t"}, "history_event_id": "e"}),
+        ("ui.transactions.history.revert", {}, {"transaction": "t", "history_event_id": "e"}),
+        ("ui.journals.quarantine.resolve", {}, {"transaction_id": "t", "resolution": {"history_event_id": "e"}}),
+        ("ui.journals.quarantine.resolve", {}, {"transaction_id": "t", "resolution": None}),
+        ("ui.wallets.import_attachment.apply", {}, {"import_batch_id": "b"}),
+        ("ui.chain_analysis.cases.save", {}, {"id": "case"}),
+        ("ui.chain_analysis.watches.create", {}, {"id": "w", "revision": 3}),
+        ("ui.chain_analysis.watches.create", {}, {"id": "w", "revision": True}),
+        ("ui.journals.process", {}, {"processed": 1}),
+        ("ui.transfers.pair", "x", {"id": "p"}),
+        ("ui.transfers.pair", {}, "x"),
+        ("status", {}, {"id": "x"}),
+    ]
+    with mock.patch.object(undo, "datetime", Pinned):
+        return [
+            {"tool": tool, "arguments": arguments, "data": data,
+             "hint": undo.undo_hint(tool, arguments, data)}
+            for tool, arguments, data in cases
+        ]
+
+
 def planned_artifact_cases():
     """The AI checks on a planned review artifact, around the core planner."""
     base = {"schema_version": 1, "operations": [], "digest": "d" * 64}
@@ -842,6 +930,8 @@ def document():
         "review_operations": review_operation_cases(),
         "export_target": export_target_cases(),
         "planned_artifact": planned_artifact_cases(),
+        "undo_now": UNDO_NOW,
+        "undo": undo_cases(),
         "wallets_sync": wallets_sync_cases(),
         "sync_errors": sync_error_cases(),
         "egress_view": egress_view_cases(),

@@ -152,6 +152,40 @@ the other provider tables, covers `agent_access` on create and update
 (daemon and CLI) and the cached and saved model listings, and adds an
 encrypted-book scenario; all 9 tests pass (all 8 failed on the merge).
 
+### Agent access, permission modes and undo (#678, #684, #685)
+
+- Full agent access: the chat turn carries `provider_full_access` (on this
+  device, or a provider whose `agent_access` is `full`), and every gate that
+  checked a local provider now checks `executor::full_access`: custody
+  lineage reads and custody-gap writes, chain-analysis source and dataset
+  tools and their consent previews, attachment cell values, and the turn's
+  tool filter. A restricted provider is refused with
+  `agent_access_restricted`, Python's messages and the
+  `enable_full_agent_access` remediation.
+- Failed tools answer as `_tool_result_from_app_error` does: the reason,
+  message, the error's or the code's remediation (replan, reread a case,
+  full agent access, ask again in the open book), the hint, and bounded
+  details for the allowlisted codes.
+- Permission modes: `ai.chat` takes `permission_mode` (`approval` by
+  default, `auto`, `full_access`), and `ai.chat.permission_mode` switches
+  a running chat, releasing the waiting calls the new mode approves
+  (`released_call_ids`; `updated: false`, `reason: not_found` for an
+  unknown chat). `auto` approves a reversible tool that stays on the
+  machine; `full_access` approves everything. Tool-call records carry
+  `approval` (`not_needed`, `required`, `auto`, `full_access`, `session`),
+  and consent cards `reversible`, `egresses` and `can_allow_session`.
+  "Allow for this chat" is kept per chat session in RAM (256 sessions) and
+  seeds the session's next turn. `kassiber chat --permission-mode` sends it.
+- Undo: a reversible tool's successful result carries
+  `undo: {tool, arguments}` (`undo.rs`, `kassiber/ai/undo.py`); amounts keep
+  Kassiber's 32-digit Decimal context. The chat loop still refuses mutating
+  tools until the mutating executor is wired into chat, so the hint is
+  reached through the executor and `test.ai_mutate` for now.
+
+`tests/test_rust_ai_chat.py` passes 8 of 9: the remaining difference is the
+chat-files `attachments` argument. It gains a turn that resumes a provider
+cursor inside a saved session.
+
 ### Python fix round 7 (eabbe6606)
 
 `t3code/python-reference-fixes-r7-7` is merged as a pure merge (2b523c060).

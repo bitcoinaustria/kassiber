@@ -31,6 +31,7 @@ pub const KINDS: &[&str] = &[
     "ai.chat",
     "ai.chat.cancel",
     "ai.tool_call.consent",
+    "ai.chat.permission_mode",
     "ui.chat.sessions.list",
     "ui.chat.sessions.get",
     "ui.chat.sessions.delete",
@@ -39,7 +40,11 @@ pub const KINDS: &[&str] = &[
 ];
 
 /// The kinds Python answers before its book gate.
-pub const CONTROL_KINDS: &[&str] = &["ai.chat.cancel", "ai.tool_call.consent"];
+pub const CONTROL_KINDS: &[&str] = &[
+    "ai.chat.cancel",
+    "ai.tool_call.consent",
+    "ai.chat.permission_mode",
+];
 
 /// Work a chat worker hands to the request loop.
 pub(crate) type Task = Box<dyn FnOnce(&mut Daemon) + Send>;
@@ -444,8 +449,9 @@ fn text_arg<'a>(args: &'a Value, key: &str) -> Option<&'a PyStr> {
     }
 }
 
-/// `_handle_ai_chat_cancel` and `_handle_ai_tool_call_consent`: answered
-/// before the book gate; they only touch the RAM registry.
+/// `_handle_ai_chat_cancel`, `_handle_ai_tool_call_consent` and
+/// `_handle_ai_chat_permission_mode`: answered before the book gate; they
+/// only touch the RAM registry.
 pub(crate) fn control(
     daemon: &mut Daemon,
     kind: &str,
@@ -466,6 +472,44 @@ pub(crate) fn control(
         let mut payload = dict([("cancelled", Value::Bool(cancelled || queued))]);
         if queued {
             kassiber_envelope::set(&mut payload, "queued", Value::Bool(true));
+        }
+        payload
+    } else if kind == "ai.chat.permission_mode" {
+        let Some(target) = text_arg(&args, "target_request_id") else {
+            return Err(
+                validation("ai.chat.permission_mode requires target_request_id")
+                    .with_hint("Pass {target_request_id: '<active ai.chat request_id>'}.")
+                    .into(),
+            );
+        };
+        let mode = get(&args, "permission_mode")
+            .cloned()
+            .unwrap_or(Value::Null);
+        let Some(mode_text) = kassiber_ai::consent::PERMISSION_MODES
+            .iter()
+            .find(|known| mode == s(**known))
+        else {
+            return Err(validation(
+                "ai.chat.permission_mode permission_mode must be approval, auto, or full_access",
+            )
+            .with_details(dict([("permission_mode", mode)]))
+            .into());
+        };
+        // Releases every waiting call the new mode approves.
+        let released = daemon
+            .chats
+            .registry
+            .set_permission_mode(&py_str(&Value::Str(target.clone())), mode_text);
+        let mut payload = dict([
+            ("permission_mode", s(*mode_text)),
+            (
+                "released_call_ids",
+                Value::List(released.iter().flatten().map(|id| s(id.as_str())).collect()),
+            ),
+            ("updated", Value::Bool(released.is_some())),
+        ]);
+        if released.is_none() {
+            kassiber_envelope::set(&mut payload, "reason", s("not_found"));
         }
         payload
     } else {
@@ -673,6 +717,8 @@ fn start_chat(
             provider.kind.as_deref().map_or(Value::Null, s),
         ),
         ("provider_on_device", Value::Bool(provider.on_device)),
+        // Whether this turn may use every tool and unprojected result.
+        ("provider_full_access", Value::Bool(provider.full_access)),
         ("scope_workspace_id", s(scope.workspace_id.as_str())),
         ("scope_profile_id", s(scope.profile_id.as_str())),
     ]);
@@ -680,7 +726,15 @@ fn start_chat(
         RequestId::Missing => None,
         RequestId::Value(value) => Some(value),
     });
-    let chat = daemon.chats.registry.register(key.as_deref());
+    let session_id = validated
+        .session_id
+        .as_ref()
+        .map(|id| py_str(&Value::Str(id.clone())));
+    let chat = daemon
+        .chats
+        .registry
+        .register(key.as_deref(), session_id.as_deref());
+    chat.consent.set_permission_mode(validated.permission_mode);
     let turn = Turn {
         key,
         provider,

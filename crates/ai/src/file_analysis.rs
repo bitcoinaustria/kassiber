@@ -288,7 +288,7 @@ pub fn analyze_attached_file(
     {
         kassiber_envelope::set(&mut analysis, "user_description", label.clone());
     }
-    if !get(state, "provider_on_device").is_some_and(kassiber_envelope::truthy) {
+    if !crate::executor::full_access(state) {
         return Ok(redact_for_egress(&analysis));
     }
     // The local path is never useful to the model and is an exfiltration hint.

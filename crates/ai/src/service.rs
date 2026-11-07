@@ -756,6 +756,13 @@ fn chat_provider(conn: &Connection, host: &mut dyn Host, args: &Value) -> Result
             "on_device",
             Value::Bool(local && store::is_loopback_http_url(&base_url)),
         ),
+        (
+            "full_access",
+            Value::Bool(
+                (local && store::is_loopback_http_url(&base_url))
+                    || *field(&provider, "agent_access") == s(store::AGENT_ACCESS_FULL),
+            ),
+        ),
     ]))
 }
 

@@ -28,6 +28,9 @@ pub struct ProviderSnapshot {
     pub omit_store_field: bool,
     /// `_provider_is_on_device(provider)`: local kind and a loopback URL.
     pub on_device: bool,
+    /// `_provider_has_full_agent_access(provider)`: on this device, or an
+    /// off-device provider the user did not restrict (#678).
+    pub full_access: bool,
 }
 
 impl ProviderSnapshot {
@@ -43,6 +46,7 @@ impl ProviderSnapshot {
             detected_api_format: text("detected_api_format"),
             omit_store_field: kassiber_envelope::truthy(field(value, "omit_store_field")),
             on_device: kassiber_envelope::truthy(field(value, "on_device")),
+            full_access: kassiber_envelope::truthy(field(value, "full_access")),
         }
     }
 

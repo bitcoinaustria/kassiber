@@ -5,6 +5,7 @@
 use kassiber_envelope::{dict, get, json_ready, set, AppError};
 use kassiber_pyjson::{dumps, BigInt, Key, Options, PyStr, Value};
 
+use crate::consent::PERMISSION_MODES;
 use crate::projections::contains_path_or_url;
 use crate::prompt::{normalize_system_prompt_kind, PromptKind};
 use crate::provenance::PROVIDER_STATUS_NOTICES;
@@ -426,6 +427,8 @@ pub struct Validated {
     pub options: Value,
     pub tools_enabled: bool,
     pub tool_profile: &'static str,
+    /// `approval`, `auto` or `full_access` (#684).
+    pub permission_mode: &'static str,
     pub timeout: f64,
     pub tool_loop_max_iterations: i64,
     pub system_prompt_kind: Option<PromptKind>,
@@ -607,6 +610,21 @@ pub fn validate(args: &Value) -> Result<Validated, AppError> {
             )
         }
     };
+    let permission_mode = match get(args, "permission_mode") {
+        None => "approval",
+        Some(value) => match PERMISSION_MODES.iter().find(|mode| *value == s(**mode)) {
+            Some(mode) => mode,
+            None => {
+                return Err(validation(
+                    "ai.chat permission_mode must be approval, auto, or full_access",
+                )
+                .with_details(dict([
+                    ("permission_mode", value.clone()),
+                    ("supported", names(&PERMISSION_MODES)),
+                ])))
+            }
+        },
+    };
     let default_timeout = Value::Int(BigInt::from(120));
     let raw_timeout = get(args, "timeout_seconds").unwrap_or(&default_timeout);
     let timeout_details = || dict([("timeout_seconds", raw_timeout.clone())]);
@@ -688,6 +706,7 @@ pub fn validate(args: &Value) -> Result<Validated, AppError> {
         options,
         tools_enabled,
         tool_profile,
+        permission_mode,
         timeout,
         tool_loop_max_iterations,
         system_prompt_kind,

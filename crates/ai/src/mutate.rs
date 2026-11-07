@@ -94,6 +94,28 @@ fn refuse_export(kind: &str) -> Result<(), ToolError> {
     Ok(())
 }
 
+/// `_execute_mutating_ai_tool`'s hint: a reversible tool's successful
+/// result names the call that takes the change back, so the model (or the
+/// user via the model) can undo it without reconstructing ids.
+fn with_undo(entry: &ToolEntry, call: &crate::executor::ParsedCall, mut result: Value) -> Value {
+    if !entry.reversible || get(&result, "ok") != Some(&Value::Bool(true)) {
+        return result;
+    }
+    let Some(mut envelope @ Value::Dict(_)) = get(&result, "envelope").cloned() else {
+        return result;
+    };
+    let Some(mut data @ Value::Dict(_)) = get(&envelope, "data").cloned() else {
+        return result;
+    };
+    let now = crate::clock::now_utc_us();
+    if let Some(hint) = crate::undo::undo_hint(&entry.name, &call.arguments, &data, now) {
+        set(&mut data, "undo", hint);
+        set(&mut envelope, "data", data);
+        set(&mut result, "envelope", envelope);
+    }
+    result
+}
+
 /// `CustodyAiConsentAudit`: the consent facts a custody write is audited with.
 #[derive(Clone, Debug, PartialEq)]
 pub struct CustodyAudit {
@@ -123,14 +145,9 @@ pub fn execute_mutating(
         .daemon_kind
         .as_deref()
         .is_some_and(|kind| CUSTODY_GAP_MUTATING_KINDS.contains(&kind))
-        && !matches!(get(runtime.state, "provider_kind"), Some(Value::Str(kind)) if kind.is("local"))
+        && !crate::executor::full_access(runtime.state)
     {
-        return tool_result_denied(
-            "local_provider_required",
-            Some(&PyStr::from(
-                "Custody-gap linkage is available to local AI providers only.",
-            )),
-        );
+        return crate::executor::custody_gap_restricted();
     }
     if !is_advertised(entry, runtime.state) {
         return tool_result_denied("tool_not_advertised", None);
@@ -141,18 +158,9 @@ pub fn execute_mutating(
         return tool_result_denied("consent_required", None);
     }
     match mutate(entry, call, runtime, host, custody_audit) {
-        Ok(result) => result,
+        Ok(result) => with_undo(entry, call, result),
         Err(ToolError::App(error)) => {
-            let code = if error.code.is_empty() {
-                "tool_error"
-            } else {
-                error.code.as_str()
-            };
-            let message = match &error.message_codepoints {
-                Some(message) => (**message).clone(),
-                None => PyStr::from(error.message.as_str()),
-            };
-            tool_result_denied(code, Some(&message))
+            crate::executor::tool_result_from_app_error(&error, Some(&entry.name))
         }
         // The mutating executor has no lock-contention branch: Python's
         // `except Exception` answers every other failure the same way.

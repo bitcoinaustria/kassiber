@@ -185,6 +185,8 @@ pub struct Args {
     pub timeout_seconds: Value,
     pub tool_loop_max_iterations: Value,
     pub tool_profile: String,
+    /// `--permission-mode`: who approves the assistant's changes (#684).
+    pub permission_mode: String,
     pub no_tools: bool,
     pub yes: bool,
     pub allow_tool: Vec<String>,
@@ -216,7 +218,8 @@ impl Args {
             fast: namespace.flag("fast"),
             timeout_seconds: value("timeout_seconds"),
             tool_loop_max_iterations: value("tool_loop_max_iterations"),
-            tool_profile: text("tool_profile").unwrap_or_else(|| "core".into()),
+            tool_profile: text("tool_profile").unwrap_or_else(|| "full".into()),
+            permission_mode: text("permission_mode").unwrap_or_else(|| "approval".into()),
             no_tools: namespace.flag("no_tools"),
             yes: namespace.flag("yes"),
             allow_tool: match namespace.get("allow_tool") {
@@ -330,6 +333,7 @@ fn chat_args(args: &Args, messages: &[Value], session_id: Option<&str>) -> Resul
         ("messages", Value::List(messages.to_vec())),
         ("tools_enabled", Value::Bool(tools_enabled)),
         ("tool_profile", s(&args.tool_profile)),
+        ("permission_mode", s(&args.permission_mode)),
         (
             "timeout_seconds",
             Value::Float(timeout_seconds(&args.timeout_seconds)?),

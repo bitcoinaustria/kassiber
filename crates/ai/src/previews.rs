@@ -102,7 +102,7 @@ fn canonical(value: &Value) -> Result<String, ToolError> {
 }
 
 fn on_device(state: &Value) -> bool {
-    get(state, "provider_on_device") == Some(&Value::Bool(true))
+    crate::executor::full_access(state)
 }
 
 /// `_chain_analysis_acquisition_consent_preview(runtime, args, recurring=...)`:
@@ -115,7 +115,7 @@ fn acquisition_preview(
 ) -> Value {
     let result = scoped(runtime, host, &mut |book, state| {
         if !on_device(state) {
-            return Ok(blocked("local_provider_required"));
+            return Ok(blocked("agent_access_restricted"));
         }
         book.active_profile()?;
         let field = if recurring { "spec" } else { "args" };
@@ -151,7 +151,7 @@ fn acquisition_preview(
 fn dataset_preview(arguments: &Value, runtime: &mut Runtime<'_>, host: &mut dyn ReadHost) -> Value {
     let result = scoped(runtime, host, &mut |book, state| {
         if !on_device(state) {
-            return Ok(blocked("local_provider_required"));
+            return Ok(blocked("agent_access_restricted"));
         }
         let preview = match book.dataset_preview(arguments) {
             Ok(preview) => preview,

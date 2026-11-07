@@ -119,6 +119,17 @@ fn stopped(error: AppError) -> Stop {
     }
 }
 
+/// `_ai_tool_approval_label(decision)`: the `approval` a tool_call record
+/// shows for how the call was approved.
+fn approval_label(decision: Option<&str>) -> &'static str {
+    match decision {
+        Some("mode_auto") => "auto",
+        Some("mode_full_access") => "full_access",
+        Some("allow_session") => "session",
+        _ => "required",
+    }
+}
+
 /// `_provider_session_resume_fingerprint(messages)`: the branch a resumable
 /// cursor was recorded against. A cursor is remembered under the transcript
 /// plus its answer; the next request carries that transcript and one new
@@ -723,9 +734,9 @@ impl Worker {
                 }
             }
         }
-        let on_device =
-            get(&self.turn.state, "provider_on_device").is_some_and(kassiber_envelope::truthy);
-        let mut entries = strip_on_device_only(entries, on_device);
+        // `_turn_tool_filter`: schemas this turn's provider may not use.
+        let mut entries =
+            strip_on_device_only(entries, crate::executor::full_access(&self.turn.state));
         set(
             &mut self.turn.state,
             "tool_profile",
@@ -884,14 +895,22 @@ impl Worker {
                         && call.argument_error.is_none()
                         && summary_refusal.is_none()
                 });
-                let needs_consent =
-                    consent_gated && !chat.consent.has_session_allow(&lossy(&display_name));
+                // The chat's permission mode (or an earlier "allow for this
+                // chat") may approve the call without asking.
+                let preapproval = entry.filter(|_| consent_gated).and_then(|entry| {
+                    chat.consent.preapproval(
+                        &lossy(&display_name),
+                        entry.reversible,
+                        entry.egresses,
+                    )
+                });
+                let needs_consent = consent_gated && preapproval.is_none();
                 if needs_consent {
                     // Registered before the record is written, so a decision
                     // that arrives at once is not lost.
                     chat.consent.expect(&lossy(&call.call_id));
                 }
-                let call_record = |needs_consent: bool| {
+                let call_record = |needs_consent: bool, approval: &str| {
                     success(
                         "ai.chat.tool_call",
                         dict([
@@ -900,10 +919,16 @@ impl Worker {
                             ("arguments", preview.clone()),
                             ("kind_class", s(kind_class)),
                             ("needs_consent", Value::Bool(needs_consent)),
+                            ("approval", s(approval)),
                         ]),
                     )
                 };
-                if !host.emit(call_record(needs_consent)) {
+                let approval = if consent_gated {
+                    approval_label(preapproval)
+                } else {
+                    "not_needed"
+                };
+                if !host.emit(call_record(needs_consent, approval)) {
                     return Err(Stop::Closed);
                 }
                 if chat.is_cancelled() {
@@ -918,7 +943,10 @@ impl Worker {
                 } else if entry.is_some() && !advertised {
                     tool_result_denied("tool_not_advertised", None)
                 } else if let Some(error) = summary_refusal {
-                    denial_for(ToolError::App(error))
+                    denial_for(
+                        ToolError::App(error),
+                        entry.map(|entry| entry.name.as_str()),
+                    )
                 } else if let Some(entry) =
                     entry.filter(|entry| entry.requires_consent() && call.argument_error.is_none())
                 {
@@ -933,18 +961,29 @@ impl Worker {
                                     Value::Str(summary.clone().expect("summarised above")),
                                 ),
                                 ("arguments_preview", preview.clone()),
+                                ("reversible", Value::Bool(entry.reversible)),
+                                ("egresses", Value::Bool(entry.egresses)),
+                                (
+                                    "can_allow_session",
+                                    Value::Bool(!crate::consent::once_only(&entry.name)),
+                                ),
                             ]),
                         );
                         if !host.emit(record) {
                             return Err(Stop::Closed);
                         }
                     }
-                    let decision = chat.consent.wait(
-                        &lossy(&call.call_id),
-                        &lossy(&display_name),
-                        &chat.cancelled,
-                        consent_timeout,
-                    );
+                    let decision = match preapproval {
+                        Some(decision) => decision.to_owned(),
+                        None => chat.consent.wait(
+                            &lossy(&call.call_id),
+                            &lossy(&display_name),
+                            &chat.cancelled,
+                            consent_timeout,
+                            entry.reversible,
+                            entry.egresses,
+                        ),
+                    };
                     if decision == "cancelled" || chat.is_cancelled() {
                         finish_reason = Some("cancelled".into());
                         break;
@@ -953,7 +992,16 @@ impl Worker {
                         "deny" => tool_result_denied("user_denied", None),
                         "consent_timeout" => tool_result_denied("consent_timeout", None),
                         _ => {
-                            if !host.emit(call_record(false)) {
+                            // A click on this call reads "required"; a mode
+                            // switch or an earlier session allow names itself.
+                            let approval = if preapproval.is_some()
+                                || matches!(decision.as_str(), "mode_auto" | "mode_full_access")
+                            {
+                                approval_label(Some(&decision))
+                            } else {
+                                "required"
+                            };
+                            if !host.emit(call_record(false, approval)) {
                                 return Err(Stop::Closed);
                             }
                             // Consent follows `requires_consent`; execution
@@ -1072,6 +1120,11 @@ impl Worker {
             &host.now(),
         );
         let session_id = self.persist(host, finish_reason.as_deref(), content, &provenance);
+        // A new chat gets its id only now; its allows carry to the next turn.
+        self.turn.registry.remember_session_allows(
+            session_id.as_ref().map(lossy).as_deref(),
+            &self.turn.chat.consent.session_allows(),
+        );
         host.emit(success(
             "ai.chat",
             dict([

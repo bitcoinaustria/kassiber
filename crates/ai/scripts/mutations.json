@@ -118,12 +118,12 @@
   {
     "id": "A-gate-local-provider",
     "file": "crates/ai/src/executor.rs",
-    "find": "        && !runtime.is(\"provider_kind\", \"local\")",
-    "replace": "        && false",
+    "find": "        && !full_access(runtime.state)\n    {\n        return tool_result_denied_with(",
+    "replace": "        && false\n    {\n        return tool_result_denied_with(",
     "expect_failing": [
-      "custody_reads_stay_with_local_providers"
+      "custody_reads_need_full_agent_access"
     ],
-    "rule": "Custody lineage reads need a local provider."
+    "rule": "Custody lineage reads need full agent access (#678)."
   },
   {
     "id": "A-gate-advertised",
@@ -248,12 +248,12 @@
   {
     "id": "B-mutate-local-custody",
     "file": "crates/ai/src/mutate.rs",
-    "find": "        && !matches!(get(runtime.state, \"provider_kind\"), Some(Value::Str(kind)) if kind.is(\"local\"))",
+    "find": "        && !crate::executor::full_access(runtime.state)",
     "replace": "        && false",
     "expect_failing": [
-      "custody_writes_need_a_local_provider_and_are_audited"
+      "custody_writes_need_full_agent_access_and_are_audited"
     ],
-    "rule": "Custody-gap writes need a local provider."
+    "rule": "Custody-gap writes need full agent access (#678)."
   },
   {
     "id": "B-mutate-stale-context",
@@ -338,7 +338,7 @@
   {
     "id": "B-preview-on-device",
     "file": "crates/ai/src/previews.rs",
-    "find": "        if !on_device(state) {\n            return Ok(blocked(\"local_provider_required\"));\n        }\n        book.active_profile()?;",
+    "find": "        if !on_device(state) {\n            return Ok(blocked(\"agent_access_restricted\"));\n        }\n        book.active_profile()?;",
     "replace": "        book.active_profile()?;",
     "expect_failing": [
       "consent_previews_never_write"
@@ -609,8 +609,8 @@
   {
     "id": "R67-on-device-strip",
     "file": "crates/ai/src/chat/turn.rs",
-    "find": "let mut entries = strip_on_device_only(entries, on_device);",
-    "replace": "let mut entries = strip_on_device_only(entries, true);",
+    "find": "            strip_on_device_only(entries, crate::executor::full_access(&self.turn.state));",
+    "replace": "            strip_on_device_only(entries, true);",
     "expect_failing": [
       "on_device_tools_are_never_offered_to_other_providers"
     ],
@@ -1241,5 +1241,115 @@
       "every_tool_is_offered_unless_the_caller_narrows_it"
     ],
     "rule": "Every tool is offered unless the caller narrows it (#684)."
+  },
+  {
+    "id": "S12-full-access-flag",
+    "file": "crates/ai/src/executor.rs",
+    "find": "    get(state, \"provider_full_access\") == Some(&Value::Bool(true))\n",
+    "replace": "    false\n",
+    "expect_failing": [
+      "custody_reads_need_full_agent_access"
+    ],
+    "rule": "A provider the user did not restrict has full agent access off the device (#678)."
+  },
+  {
+    "id": "S12-error-remediation",
+    "file": "crates/ai/src/executor.rs",
+    "find": "        \"agent_access_restricted\" => Some(agent_access_remediation()),",
+    "replace": "        \"agent_access_restricted\" => None,",
+    "expect_failing": [
+      "on_device_only_tools_are_never_offered_to_other_providers"
+    ],
+    "rule": "An agent-access refusal tells the model only the user can lift it."
+  },
+  {
+    "id": "S12-error-hint",
+    "file": "crates/ai/src/executor.rs",
+    "find": "        kassiber_envelope::set(&mut result, \"hint\", redact_ai_tool_result(&s(hint)));",
+    "replace": "        let _ = hint;",
+    "expect_failing": [
+      "on_device_only_tools_are_never_offered_to_other_providers"
+    ],
+    "rule": "A failed tool's hint reaches the model."
+  },
+  {
+    "id": "S12-undo-attached",
+    "file": "crates/ai/src/mutate.rs",
+    "find": "        Ok(result) => with_undo(entry, call, result),",
+    "replace": "        Ok(result) => result,",
+    "expect_failing": [
+      "reversible_writes_name_the_call_that_takes_them_back"
+    ],
+    "rule": "A reversible write's result names the call that takes it back (#684)."
+  },
+  {
+    "id": "S12-undo-btc-precision",
+    "file": "crates/ai/src/undo.rs",
+    "find": "    const PRECISION: usize = 32;",
+    "replace": "    const PRECISION: usize = 28;",
+    "expect_failing": [
+      "undo_hints_match_python"
+    ],
+    "rule": "Undo amounts keep Kassiber's 32-digit decimal precision."
+  },
+  {
+    "id": "S12-mode-auto-local-only",
+    "file": "crates/ai/src/consent.rs",
+    "find": "        \"auto\" if reversible && !egresses => Some(\"mode_auto\"),",
+    "replace": "        \"auto\" if reversible => Some(\"mode_auto\"),",
+    "expect_failing": [
+      "permission_modes_approve_without_asking_or_release_waiting_calls"
+    ],
+    "rule": "Auto never approves a tool that leaves the machine (#684)."
+  },
+  {
+    "id": "S12-mode-release-filter",
+    "file": "crates/ai/src/consent.rs",
+    "find": "                    && mode_decision(mode, *reversible, *egresses).is_some()\n",
+    "replace": "\n",
+    "expect_failing": [
+      "permission_modes_approve_without_asking_or_release_waiting_calls"
+    ],
+    "rule": "A mode switch releases only the calls the new mode approves."
+  },
+  {
+    "id": "S12-mode-wait-recheck",
+    "file": "crates/ai/src/consent.rs",
+    "find": "            if let Some(decision) = mode_decision(&state.permission_mode, reversible, egresses) {\n                break decision.to_owned();\n            }\n",
+    "replace": "",
+    "expect_failing": [
+      "switching_modes_releases_a_waiting_call"
+    ],
+    "rule": "A waiting call sees a mode switch that approves it."
+  },
+  {
+    "id": "S12-approval-label",
+    "file": "crates/ai/src/chat/turn.rs",
+    "find": "        Some(\"mode_auto\") => \"auto\",",
+    "replace": "        Some(\"mode_auto\") => \"required\",",
+    "expect_failing": [
+      "a_permission_mode_approves_without_asking"
+    ],
+    "rule": "A call approved by the mode says so in its approval label."
+  },
+  {
+    "id": "S12-session-allows-shared",
+    "file": "crates/ai/src/chat/registry.rs",
+    "find": "            Some(session_id) => session_allows(&mut self.lock(), session_id),",
+    "replace": "            Some(_) => SessionAllows::default(),",
+    "expect_failing": [
+      "an_allow_for_this_chat_carries_to_the_next_turn"
+    ],
+    "rule": "Allow for this chat lasts the whole chat session (#685)."
+  },
+  {
+    "id": "S12-permission-mode-default",
+    "file": "crates/ai/src/chat/args.rs",
+    "find": "        None => \"approval\",",
+    "replace": "        None => \"auto\",",
+    "expect_failing": [
+      "every_tool_is_offered_unless_the_caller_narrows_it"
+    ],
+    "rule": "An absent permission mode asks for every change."
   }
 ]

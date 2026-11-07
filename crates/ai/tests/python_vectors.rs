@@ -432,3 +432,23 @@ fn planned_review_artifact_checks_match_python() {
         assert_eq!(&have, expected, "{case:?}");
     }
 }
+
+#[test]
+fn undo_hints_match_python() {
+    use kassiber_ai::undo::undo_hint;
+    let now = kassiber_pytext::iso_datetime(text(field(vectors(), "undo_now")))
+        .unwrap()
+        .utc_us();
+    let cases = section("undo");
+    assert!(cases.len() > 50);
+    for case in cases {
+        let have = undo_hint(
+            text(field(case, "tool")),
+            field(case, "arguments"),
+            field(case, "data"),
+            now,
+        )
+        .unwrap_or(Value::Null);
+        assert_eq!(&have, field(case, "hint"), "{case:?}");
+    }
+}

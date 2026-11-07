@@ -389,10 +389,15 @@ fn egressing_reads_need_a_consent_bound_to_the_call() {
 }
 
 #[test]
-fn custody_reads_stay_with_local_providers() {
+fn custody_reads_need_full_agent_access() {
     let mut fake = book();
-    for (kind, allowed) in [("remote", false), ("local", true)] {
-        let mut state = dict([("provider_kind", s(kind))]);
+    // A restricted off-device provider, then full access, then on device.
+    for (field, allowed) in [
+        ("provider_full_access_absent", false),
+        ("provider_full_access", true),
+        ("provider_on_device", true),
+    ] {
+        let mut state = dict([("provider_kind", s("remote")), (field, Value::Bool(true))]);
         let result = run(
             &mut fake,
             &mut state,
@@ -401,12 +406,26 @@ fn custody_reads_stay_with_local_providers() {
             false,
         );
         assert_eq!(
-            reason(&result).as_deref() == Some("local_provider_required"),
+            reason(&result).as_deref() == Some("agent_access_restricted"),
             !allowed,
-            "{kind}"
+            "{field}"
         );
+        if !allowed {
+            let remediation = get(&result, "remediation").unwrap();
+            assert_eq!(
+                get(remediation, "action"),
+                Some(&s("enable_full_agent_access"))
+            );
+            assert_eq!(get(remediation, "desktop_only"), Some(&Value::Bool(true)));
+        }
     }
-    assert_eq!(fake.reads, ["ui.custody.gaps.list:ai_tool"]);
+    assert_eq!(
+        fake.reads,
+        [
+            "ui.custody.gaps.list:ai_tool",
+            "ui.custody.gaps.list:ai_tool"
+        ]
+    );
 }
 
 #[test]
@@ -444,8 +463,16 @@ fn on_device_only_tools_are_never_offered_to_other_providers() {
         let result = run(&mut fake, &mut state, name, arguments, true);
         assert_eq!(
             reason(&result).as_deref(),
-            Some("local_provider_required"),
+            Some("agent_access_restricted"),
             "{name}: {result:?}"
+        );
+        assert_eq!(
+            get(&result, "hint"),
+            Some(&s("Set the provider's agent access to full in Settings → Assistant, or use the desktop workflow.")),
+        );
+        assert_eq!(
+            get(get(&result, "remediation").unwrap(), "action"),
+            Some(&s("enable_full_agent_access"))
         );
     }
     assert!(fake.reads.is_empty());
@@ -614,7 +641,14 @@ fn once_only_grants_are_never_remembered() {
             let state = Arc::clone(&state);
             let tool = tool.to_owned();
             std::thread::spawn(move || {
-                state.wait("c1", &tool, &AtomicBool::new(false), Duration::from_secs(5))
+                state.wait(
+                    "c1",
+                    &tool,
+                    &AtomicBool::new(false),
+                    Duration::from_secs(5),
+                    false,
+                    false,
+                )
             })
         };
         while !state.record("c1", "allow_session") {
@@ -630,7 +664,14 @@ fn once_only_grants_are_never_remembered() {
             }
         );
         assert_eq!(state.has_session_allow(tool), remembered, "{tool}");
-        let again = state.wait("c2", tool, &cancelled, Duration::from_millis(30));
+        let again = state.wait(
+            "c2",
+            tool,
+            &cancelled,
+            Duration::from_millis(30),
+            false,
+            false,
+        );
         assert_eq!(
             again,
             if remembered {
@@ -641,6 +682,73 @@ fn once_only_grants_are_never_remembered() {
             "{tool}"
         );
     }
+}
+
+#[test]
+fn permission_modes_approve_without_asking_or_release_waiting_calls() {
+    use kassiber_ai::consent::SessionAllows;
+    let allows = SessionAllows::default();
+    let state = Arc::new(ConsentState::new(Arc::clone(&allows)));
+    assert_eq!(state.permission_mode(), "approval");
+    // `approval` asks for everything.
+    assert_eq!(state.preapproval("ui.transfers.pair", true, false), None);
+    // `auto` approves a reversible tool that stays on this machine only.
+    state.set_permission_mode("auto");
+    assert_eq!(
+        state.preapproval("ui.transfers.pair", true, false),
+        Some("mode_auto")
+    );
+    assert_eq!(state.preapproval("ui.wallets.sync", true, true), None);
+    assert_eq!(
+        state.preapproval("ui.transfers.rules.apply", false, false),
+        None
+    );
+    // `full_access` approves everything, once-only and network tools too.
+    state.set_permission_mode("full_access");
+    assert_eq!(
+        state.preapproval("ui.review.apply", false, true),
+        Some("mode_full_access")
+    );
+    // A mode switch releases the waiting calls it approves, in order.
+    state.set_permission_mode("approval");
+    let spawn = |call: &'static str, reversible: bool, egresses: bool| {
+        let state = Arc::clone(&state);
+        std::thread::spawn(move || {
+            state.wait(
+                call,
+                "ui.transfers.pair",
+                &AtomicBool::new(false),
+                Duration::from_secs(5),
+                reversible,
+                egresses,
+            )
+        })
+    };
+    let reversible = spawn("c-rev", true, false);
+    let network = spawn("c-net", true, true);
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    while state.waiting() < 2 {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "waiters never registered"
+        );
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    let released = state.set_permission_mode("auto");
+    assert_eq!(released, ["c-rev"]);
+    assert_eq!(reversible.join().unwrap(), "mode_auto");
+    let released = state.set_permission_mode("full_access");
+    assert_eq!(released, ["c-net"]);
+    assert_eq!(network.join().unwrap(), "mode_full_access");
+    // "Allow for this chat" lives in the shared session set.
+    state.set_permission_mode("approval");
+    allows.lock().unwrap().insert("ui.transfers.pair".into());
+    assert_eq!(
+        state.preapproval("ui.transfers.pair", false, false),
+        Some("allow_session")
+    );
+    allows.lock().unwrap().insert("ui.review.apply".into());
+    assert_eq!(state.preapproval("ui.review.apply", false, false), None);
 }
 
 #[test]
@@ -657,7 +765,9 @@ fn consent_waits_end_on_decision_cancel_or_timeout() {
             "early",
             "ui.wallets.sync",
             &AtomicBool::new(false),
-            Duration::from_secs(1)
+            Duration::from_secs(1),
+            false,
+            false
         ),
         "deny"
     );
@@ -666,7 +776,9 @@ fn consent_waits_end_on_decision_cancel_or_timeout() {
             "x",
             "ui.wallets.sync",
             &AtomicBool::new(true),
-            Duration::from_secs(1)
+            Duration::from_secs(1),
+            false,
+            false
         ),
         "cancelled"
     );
@@ -676,7 +788,9 @@ fn consent_waits_end_on_decision_cancel_or_timeout() {
             "y",
             "ui.wallets.sync",
             &AtomicBool::new(false),
-            Duration::from_millis(40)
+            Duration::from_millis(40),
+            false,
+            false
         ),
         "consent_timeout"
     );
@@ -785,7 +899,7 @@ fn mutating_tools_run_only_with_a_consent_bound_to_the_call() {
             dict([("consented_call_ids", s("call_1"))]),
         ] {
             if name == "ui.custody.review.apply" {
-                kassiber_envelope::set(&mut state, "provider_kind", s("local"));
+                kassiber_envelope::set(&mut state, "provider_full_access", Value::Bool(true));
             }
             let result = write(&mut fake, &mut state, name, empty(), Some(&audit()));
             assert_eq!(
@@ -1036,7 +1150,7 @@ fn the_executors_never_cross_kind_classes() {
 }
 
 #[test]
-fn custody_writes_need_a_local_provider_and_are_audited() {
+fn custody_writes_need_full_agent_access_and_are_audited() {
     let arguments = || {
         dict([
             ("action", s("reopen")),
@@ -1054,12 +1168,13 @@ fn custody_writes_need_a_local_provider_and_are_audited() {
         arguments(),
         Some(&audit()),
     );
-    assert_eq!(reason(&denied).as_deref(), Some("local_provider_required"));
+    assert_eq!(reason(&denied).as_deref(), Some("agent_access_restricted"));
     assert_eq!(fake.visits, 0);
-    // A local provider without the consent audit context, or without the
-    // frozen book scope, is refused before any write.
+    // A provider with full access, without the consent audit context or
+    // the frozen book scope, is refused before any write.
     let mut local = consented();
-    kassiber_envelope::set(&mut local, "provider_kind", s("local"));
+    kassiber_envelope::set(&mut local, "provider_kind", s("remote"));
+    kassiber_envelope::set(&mut local, "provider_full_access", Value::Bool(true));
     let missing = write(
         &mut fake,
         &mut local,
@@ -1186,6 +1301,34 @@ fn mutating_results_are_redacted_before_they_leave_the_executor() {
 }
 
 #[test]
+fn reversible_writes_name_the_call_that_takes_them_back() {
+    let mut fake = book();
+    fake.payload = Some(dict([("id", s(" pair-9 "))]));
+    let mut state = consented();
+    let pair = dict([("tx_out", s("a")), ("tx_in", s("b"))]);
+    let result = write(&mut fake, &mut state, "ui.transfers.pair", pair, None);
+    let data = get(get(&result, "envelope").unwrap(), "data").unwrap();
+    assert_eq!(
+        get(data, "undo"),
+        Some(&dict([
+            ("tool", s("ui_transfers_unpair")),
+            ("arguments", dict([("pair_id", s("pair-9"))])),
+        ]))
+    );
+    // A tool that is not reversible gets no hint, whatever its result.
+    let mut state = consented();
+    let saved = write(
+        &mut fake,
+        &mut state,
+        "ui.saved_views.delete",
+        dict([("view_id", s("v"))]),
+        None,
+    );
+    let data = get(get(&saved, "envelope").unwrap(), "data").unwrap();
+    assert_eq!(get(data, "undo"), None);
+}
+
+#[test]
 fn consent_previews_never_write() {
     let mut fake = book();
     let mut state = dict([("provider_on_device", Value::Bool(false))]);
@@ -1218,7 +1361,7 @@ fn consent_previews_never_write() {
                 get(&card, "arguments_preview"),
                 Some(&dict([
                     ("status", s("blocked")),
-                    ("code", s("local_provider_required"))
+                    ("code", s("agent_access_restricted"))
                 ])),
                 "{name}"
             );

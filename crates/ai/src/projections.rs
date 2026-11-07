@@ -765,12 +765,14 @@ pub(crate) fn chain_analysis_for_ai(
     book: &mut dyn Book,
 ) -> Result<Value, ToolError> {
     let profile = book.active_profile()?;
-    let on_device = get(state, "provider_on_device") == Some(&Value::Bool(true));
+    // Every tool and unprojected result with full agent access (#678).
+    let on_device = crate::executor::full_access(state);
     if crate::analysis::on_device_kind(kind) && !on_device {
         return Err(AppError::new(
-            "local_provider_required",
-            "Source acquisition and dataset imports are available to on-device AI providers and the desktop workflow",
+            "agent_access_restricted",
+            "Source acquisition and dataset imports are unavailable while this provider's agent access is restricted",
         )
+        .with_hint("Set the provider's agent access to full in Settings → Assistant, or use the desktop workflow.")
         .into());
     }
     let result = (|| {

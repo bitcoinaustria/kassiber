@@ -618,18 +618,23 @@ class RustAiChatParityTest(unittest.TestCase):
                 {"request": {"kind": "ui.chat.history.configure", "args": {"history": "on"}}},
                 {"request": {"kind": "ai.chat", "args": {"provider": "codex", "model": "default", "tools_enabled": True, "persist": True, "options": {"fast_mode": True}, "messages": [{"role": "user", "content": "hello"}]}}},
                 {"request": lambda seen: {"kind": "ai.chat", "args": {"provider": "codex", "model": "default", "session_id": seen["session_id"], "messages": [{"role": "user", "content": "hello"}, {"role": "assistant", "content": "Checking all good"}, {"role": "user", "content": "thanks"}]}}},
+                # Within a saved session the next turn resumes the cursor.
+                {"request": lambda seen: {"kind": "ai.chat", "args": {"provider": "codex", "model": "default", "session_id": seen["session_id"], "messages": [{"role": "user", "content": "hello"}, {"role": "assistant", "content": "Checking all good"}, {"role": "user", "content": "thanks"}, {"role": "assistant", "content": "plain answer"}, {"role": "user", "content": "more"}]}}},
                 {"request": {"kind": "ai.chat", "args": {"provider": "codex", "model": "default", "persist": False, "messages": [{"role": "user", "content": "private"}]}}},
             ]
         )
         sent = [json.loads(line) for line in self.broker_log.splitlines()]
         chats = [line for line in sent if line.get("command") == "chat"]
-        self.assertEqual(len(chats), 3)
-        # The cursor is recorded against the turn's transcript plus every
-        # leg's answer and looked up against the next request's transcript
-        # before its new prompt (7e3e9e286), so the follow-up resumes it
-        # (tests/rust_port/repro_chat_cursor_never_resumes.py).
-        self.assertEqual(chats[1]["options"].get("provider_session_id"), "native-cursor-1")
-        self.assertTrue(chats[2]["options"].get("stateless_session"))
+        self.assertEqual(len(chats), 4)
+        # A cursor is recorded under the request's chat session id, which a
+        # chat's first turn does not have yet, so this follow-up starts a
+        # fresh native thread on both sides. The lookup itself (the
+        # transcript before the new prompt, 7e3e9e286) is pinned by
+        # tests/rust_port/repro_chat_cursor_never_resumes.py and the Rust
+        # unit test resume_looks_up_the_transcript_before_the_new_prompt.
+        self.assertNotIn("provider_session_id", chats[1].get("options") or {})
+        self.assertEqual(chats[2]["options"].get("provider_session_id"), "native-cursor-2")
+        self.assertTrue(chats[3]["options"].get("stateless_session"))
 
     def test_offline_mode_refuses_a_remote_provider_before_contact(self):
         offline = self.base / "preferences" / "offline.json"
