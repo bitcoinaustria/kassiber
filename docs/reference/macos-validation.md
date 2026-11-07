@@ -37,7 +37,7 @@ Pinned crates, wheels and npm packages were downloaded once for the builds
 | A7 Restore under `/var` | PASS | Raw `TMPDIR=/var/folders/…/T/` (→ `/private/var`): `backup export` + `import --install` for Py→Py, Py→Rust, Rust→Py, Rust→Rust. All install, tables identical, nothing left in TMPDIR. `test_rust_backup_install.py` + `test_backup_recovery.py`: 1391 passed, 4 failed (they also fail with a resolved TMPDIR; see A2). | `crates/backup/src/lib.rs:351`, `crates/store/src/restore.rs:70` | — |
 | A8 Durability | REPORTED (gap) | Rust file writes (`durable::atomic_write`, restore staging and journal, encryption migration, credentials) call `File::sync_all`. On Apple targets std implements it as `fcntl(F_FULLFSYNC)`, including for directory syncs. SQLite in both runtimes: no `PRAGMA fullfsync`/`checkpoint_fullfsync` (no match in the repo), so commits use plain `fsync`. Python: every `os.fsync` is plain `fsync(2)`. | Rust: `crates/store/src/durable.rs:105-147`, `lib.rs:909-937`. Python: `kassiber/db.py:3465-3519`, `private_files.py:17-37` | Set `PRAGMA fullfsync=ON` (and `checkpoint_fullfsync=ON` for WAL books) on macOS in the Rust store. Use `fcntl(F_FULLFSYNC)` in Python's helpers while it still writes books. Fix the Rust and Python write paths that skip a file or directory sync (A8 notes). |
 | A9 `/bin/ps` labels | PASS | `peers::tests` pass on macOS. For all 1356 live processes, Rust `process_label` and Python `peers.process_label` return identical labels (951 `None`, then `launchd_sim`, `codex`, `ChatGPT`, `Claude`, …). | `crates/operator/src/peers.rs:143-190` | — |
-| B Touch ID (R6-4) | PASS (port, signed identity checks); BLOCKED (Touch ID prompt) | Native `operator touch-id status/enroll/forget` and `unlock --auth touch-id`. 19 native-auth unit tests, server and service tests, 7 byte-identical differential steps, 18/18 mutations killed. Signed run: status `available: true`; enroll reached the helper's data-protection store and failed there, inferred to be the missing provisioning profile; unlock under a pty → `operator_native_auth_not_configured`; a shell-parented CLI refused. Rust and Python derive the same account for the test book. | `crates/operator/src/native_auth.rs`, `server.rs`, `service/mod.rs`, `crates/secrets/src/modes.rs`, `crates/cli/src/operator_cli.rs` | Rerun with the Developer ID provisioning profile to see the Touch ID prompt (steps in B notes). |
+| B Touch ID (R6-4) | PASS (port, signed identity checks); BLOCKED (Touch ID prompt) | Native `operator touch-id status/enroll/forget` and `unlock --auth touch-id`. 19 native-auth unit tests, server and service tests, 7 byte-identical differential steps, 18/18 mutations killed. Signed run: status `available: true`; enroll reached the helper's data-protection store and failed there for lack of the provisioning profile (`errSecMissingEntitlement`, confirmed in the follow-up recheck); unlock under a pty → `operator_native_auth_not_configured`; a shell-parented CLI refused. Rust and Python derive the same account for the test book. | `crates/operator/src/native_auth.rs`, `server.rs`, `service/mod.rs`, `crates/secrets/src/modes.rs`, `crates/cli/src/operator_cli.rs` | Rerun with the Developer ID provisioning profile to see the Touch ID prompt (steps in B notes). |
 
 ## A2 notes: failing tests
 
@@ -157,7 +157,8 @@ Each step (`$APP/Contents/MacOS/kassiber-ui --cli --machine --data-root <book> �
    the broker-launched helper fails. The error is `native_auth_failed`,
    message `kassiber native auth: [redacted]`. The redaction hides the
    helper's text. Touch ID is enrolled on this Mac, so the cause is inferred
-   to be the missing Keychain entitlement (`errSecMissingEntitlement`).
+   to be the missing Keychain entitlement (`errSecMissingEntitlement`). The
+   follow-up recheck below confirmed it.
 3. `operator touch-id status`, bound: `{"available": true, "configured":
    false}`. The helper ran with the Rust sidecar as its parent and exited 4.
 4. The same `status` through `bin/kassiber`: identical. The helper's parent
@@ -231,6 +232,49 @@ Done on Linux; the macOS checks below are for the next Mac run.
 The other drift failures (source-funds vectors, journals refresh precedence,
 the ninth migration audit, the component-review `null` action and the
 `agent-access-keeps-other-field` mutation entry) are left to the cleanup slice.
+
+### Mac recheck (same day, `883ae8f6d`)
+
+Same Mac and toolchain as above, disposable roots under `target/macval/`.
+
+- **Rust workspace:** 3029 passed / 15 failed, was 2972 / 38. All macOS
+  harness failures listed in the A2 notes pass except the LND loopback
+  connect stall (still this Mac's firewall, unchanged). Chokepoint passes.
+  13 failures are the drift left to the cleanup slice: 10 `source_funds_*`,
+  2 journals `process_refresh`, the daemon component review. One more is new:
+  `ipc::unix::tests::connect_without_a_listener_is_refused_or_missing` fails
+  about one run in three under the parallel `kassiber-ipc` lib run. The
+  stale-socket `connect` unexpectedly succeeds. It passes every time alone
+  (`unix::` filter) or with `--test-threads=1`, and still fails with
+  `detached_children_lead_a_new_session` skipped, so this branch did not
+  introduce it. Likely cause (not proven): on macOS `stream_socket` sets
+  `FD_CLOEXEC` after `socket(2)`, and a `process::tests` child forked in that
+  window inherits the listener and keeps it accepting. The product broker
+  binds before it launches children, so this looks test-only. Fix the test,
+  for example a `/bin/sh` child kept off this socket or a serial lock with
+  the spawning tests.
+- **Durability:** `tests/test_durable_sync.py`,
+  `test_keyring_isolation_guard.py` and `test_native_auth_error_redaction.py`
+  pass (72). `test_the_host_platform_decides_without_the_seam` runs the real
+  `F_FULLFSYNC` and finds both pragmas on; the Rust
+  `the_host_platform_decides_the_pragmas` passes on macOS.
+- **Python suites with `KASSIBER_RUST_BIN`:** `test_rust_store_interop.py`
+  119 passed (was 3 failed). `test_rust_secrets_lifecycle.py` skips all 54
+  cases on macOS, so no Keychain item is written. `test_rust_backup_install.py`
+  plus `test_backup_recovery.py` 1395 passed (was 4 failed), including the
+  32 `test_ordinary_cli_restart_recovers_…` cases.
+- **Helper errors, signed:** rebuilt the B setup (release sidecar from this
+  branch, same Developer ID signing, no profile) with a new throwaway book.
+  `enroll` now returns `native_auth_failed` with `kassiber native auth: This
+  build cannot access the protected Keychain item; reopen a production-entitled
+  build to manage it.`, the helper's `ERR_SEC_MISSING_ENTITLEMENT` text
+  (`ui-tauri/src-tauri/src/secret_store.rs`). That confirms the missing
+  entitlement. Bound `status`: `available: true, configured: false`. No
+  `Kassiber Operator Biometric` item exists for the test account; the broker
+  was stopped. The signed app and its book stay in `target/macval/session/`
+  for the hardware run.
+- Not rerun here: the durability, chokepoint, redaction and restart mutation
+  scripts (they edit sources; Linux ran them).
 
 ## Branches and commits
 
