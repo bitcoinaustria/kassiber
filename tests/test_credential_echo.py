@@ -13,6 +13,7 @@ import argparse
 import base64
 import json
 import logging
+import re
 import tempfile
 import traceback
 import unittest
@@ -101,7 +102,8 @@ class CredentialEchoAssertions:
                     if window in skip:
                         continue
                     self.assertNotIn(window, text, f"{surface} shows {window!r}")
-                    self.assertNotIn(window.lower(), text.lower(), f"{surface} shows {window!r} in another case")
+                    if re.fullmatch(r"[0-9A-Fa-f]+", credential):
+                        self.assertNotIn(window.lower(), text.lower(), f"{surface} shows {window!r} in another case")
 
     def assertErrorWithheld(self, error, credentials, **kwargs):
         self.assertWithheld(error_surfaces(error), credentials, **kwargs)
@@ -265,3 +267,151 @@ class BtcpayCredentialEchoTest(CredentialEchoAssertions, unittest.TestCase):
         self.assertIn("btcpay_store_sync_states", stored)
         self.assertIn("BTCPay returned HTTP 500", stored)
         self.assertWithheld({"book": stored}, (BTCPAY_KEY,))
+
+
+# --- Loopback echo server ------------------------------------------------------
+
+
+def echoed(values):
+    """One text repeating each value raw, percent- and JSON-escaped, and hex upper-cased."""
+
+    parts = []
+    for value in values:
+        value = str(value)
+        parts.extend((value, quote(value, safe=""), quote_plus(value), json.dumps(value)[1:-1]))
+        if re.fullmatch(r"[0-9A-Fa-f]+", value):
+            # Hex is the same bytes in either case (an LND macaroon).
+            parts.append(value.upper())
+    return " | ".join(parts)
+
+
+def request_secrets(handler):
+    """What a server can echo: the request line and every header value, and a
+    ``Basic`` header's decoded ``user:password``."""
+
+    values = []
+    for name, value in handler.headers.items():
+        if name.lower() in {
+            "host", "content-length", "content-type", "accept", "accept-encoding", "user-agent", "connection",
+        }:
+            continue
+        values.append(value)
+        scheme, _, rest = value.partition(" ")
+        if scheme.lower() == "basic":
+            # The decoded user:password first, as a server would quote it.
+            values.insert(len(values) - 1, base64.b64decode(rest).decode())
+    # The request line last: the credentials come first, where a cut at 200
+    # characters would keep them.
+    return [*values, handler.path]
+
+
+class EchoServer:
+    """A loopback HTTP server whose every answer repeats what the request carried.
+
+    ``respond(handler, echo)`` returns ``(status, content_type, body)``; ``echo``
+    is the request's credentials in every spelling (see ``echoed``). Used as an
+    upstream server and, for proxy tests, as an HTTP proxy.
+    """
+
+    def __init__(self, respond):
+        import http.server
+        import threading
+
+        requests = self.requests = []
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def _answer(self):
+                length = int(self.headers.get("Content-Length") or 0)
+                body = self.rfile.read(length) if length else b""
+                requests.append({"path": self.path, "headers": dict(self.headers), "body": body})
+                status, content_type, payload = respond(self, echoed(request_secrets(self)))
+                data = payload if isinstance(payload, bytes) else payload.encode()
+                self.send_response(status)
+                self.send_header("Content-Type", content_type)
+                self.send_header("Content-Length", str(len(data)))
+                self.send_header("Connection", "close")
+                self.end_headers()
+                self.wfile.write(data)
+
+            do_GET = do_POST = _answer
+
+            def log_message(self, *_args):
+                pass
+
+        self.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.thread = threading.Thread(target=self.server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
+
+    @property
+    def url(self):
+        return f"http://127.0.0.1:{self.server.server_address[1]}"
+
+    def __enter__(self):
+        self.thread.start()
+        return self
+
+    def __exit__(self, exc_type, *_exc):
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join(5)
+        if exc_type is None and not self.requests:
+            # An error raised before the request (offline mode, a config
+            # check) would make a leak test pass for the wrong reason.
+            raise AssertionError("the loopback server got no request")
+        return False
+
+
+def json_echo(status, *, key="message"):
+    return lambda _handler, echo: (status, "application/json", json.dumps({key: echo, "error": {"message": echo, "code": echo}}))
+
+
+OFFSETS = (0, 190)
+
+
+def proxy_echo(status, *, as_json=False):
+    """An HTTP proxy's answer repeating only its own credentials."""
+
+    def respond(handler, _echo):
+        value = handler.headers.get("Proxy-Authorization") or ""
+        decoded = base64.b64decode(value.partition(" ")[2]).decode() if value else ""
+        text = echoed([decoded, value])
+        if as_json:
+            return status, "application/json", json.dumps({"message": text})
+        return status, "text/plain", text
+
+    return respond
+
+
+def text_echo(status, offset=0):
+    """A plain-text answer echoing the credentials after ``offset`` characters;
+    at 190 the first one straddles the 200-character cut errors apply."""
+
+    return lambda _handler, echo: (status, "text/plain", "x" * offset + echo)
+
+
+# --- LND REST --------------------------------------------------------------------
+
+MACAROON = "0201036c6e6402" + "ab" * 40 + "0f1e2d3c"
+
+
+class LndCredentialEchoTest(CredentialEchoAssertions, unittest.TestCase):
+    def _request(self, respond):
+        from kassiber.core.lightning import lnd
+
+        with EchoServer(respond) as server:
+            with self.assertRaises(AppError) as raised:
+                lnd.LndRestClient({"url": server.url, "token": MACAROON}).get("/v1/getinfo")
+        self.assertIn(MACAROON, server.requests[0]["headers"].values())
+        return raised.exception
+
+    def test_http_error_bodies_withhold_the_macaroon_in_either_case(self):
+        for status in (401, 403, 500, 503):
+            for offset in OFFSETS:
+                with self.subTest(status=status, offset=offset):
+                    error = self._request(text_echo(status, offset))
+                    self.assertIn(f"HTTP {status}", str(error))
+                    self.assertErrorWithheld(error, (MACAROON,))
+
+    def test_a_non_json_answer_withholds_the_macaroon_in_its_preview(self):
+        error = self._request(lambda _h, echo: (200, "text/plain", "<html>" + echo))
+        self.assertIn("response_preview", error.details)
+        self.assertErrorWithheld(error, (MACAROON,))
