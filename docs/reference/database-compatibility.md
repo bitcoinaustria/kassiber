@@ -145,9 +145,9 @@ import batches with their rows so a held group stays held.
 Opening a book adds the nullable `import_batch_transactions.source_position`
 column (after `journal_entries.calculation_compact`) and the base schema's
 `idx_import_batch_transactions_transaction` index on its `transaction_id`.
-Existing links keep a NULL position, so their rows order by content after any
-row with a recorded block height; rows created by later file imports record
-their place in the run. No transaction row changes.
+Existing links keep a NULL position, so their rows sort before positioned
+rows of the same time and among themselves by content; rows created by later
+file imports record their place in the run. No transaction row changes.
 
 The global calculation semantics version becomes 3 and the
 `same-time-source-order-v1` audit raises every processed book's required

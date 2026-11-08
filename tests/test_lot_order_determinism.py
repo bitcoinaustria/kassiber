@@ -254,6 +254,26 @@ class LotOrderDeterminismTest(unittest.TestCase):
             finally:
                 conn.close()
 
+    def test_each_run_numbers_the_rows_it_created_in_file_order(self):
+        # Rows a run only skips keep the position of the run that created
+        # them (crates/wallets file_import tests pin the same in Rust).
+        rows = [
+            ("b", "2025-01-02T00:00:00Z", "inbound", "1", "10000"),
+            ("a", "2025-01-02T00:00:00Z", "inbound", "1", "10000"),
+            ("c", "2025-01-02T00:00:00Z", "inbound", "1", "10000"),
+            ("d", "2025-01-02T00:00:00Z", "inbound", "1", "10000"),
+        ]
+
+        def positions(conn, _profile_id):
+            return conn.execute(
+                "SELECT t.external_id, b.source_format, l.source_position FROM import_batch_transactions l "
+                "JOIN import_batches b ON b.id = l.batch_id JOIN transactions t ON t.id = l.transaction_id "
+                "ORDER BY b.imported_at, b.rowid, l.source_position").fetchall()
+
+        with tempfile.TemporaryDirectory(prefix="kassiber-lot-order-") as tmp:
+            result = build_book(Path(tmp).resolve(), rows, files=[[0, 1], [2, 0, 1, 3]], inspect=positions)
+        self.assertEqual([(row[0], row[2]) for row in result], [("b", 1), ("a", 2), ("c", 1), ("d", 2)])
+
     def test_a_narrow_legacy_table_loads_in_the_legacy_order(self):
         # Loader fixtures keep tables without the source order's columns;
         # current books always have them.
