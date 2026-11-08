@@ -18,6 +18,9 @@ Reads only what the caller already fetched and stored (no network I/O):
   the Bark import's: a ``BTC-LN`` payment-ledger row of the same store that
   books the same payment hash in the same direction moves into the Bark
   wallet. Another wallet booking it refuses.
+- Network. No Bark field names it; the store's Bark payment destinations do
+  (Ark addresses ``ark1`` on mainnet, ``tark1`` on every test network). A
+  book bound to another network refuses the import.
 """
 
 from __future__ import annotations
@@ -72,19 +75,19 @@ def _lightning_method(payment_method_id: Any) -> bool:
     return ledger_group(payment_method_id) == "lightning"
 
 
-def _provenance_index(conn: sqlite3.Connection, profile_id: str, store_id: str) -> dict[tuple, list[str]]:
-    """Provenance keys of the store's Bark and Lightning payments and payouts."""
+def _provenance_index(conn: sqlite3.Connection, profile_id: str, store_id: str) -> dict[tuple, list[tuple[str, int | None]]]:
+    """Provenance keys (and amounts) of the store's Bark and Lightning payments and payouts."""
 
-    index: dict[tuple, list[str]] = {}
+    index: dict[tuple, list[tuple[str, int | None]]] = {}
 
-    def add(key: tuple, stable_key: str) -> None:
+    def add(key: tuple, row: sqlite3.Row) -> None:
         keys = index.setdefault(key, [])
-        if stable_key not in keys:
-            keys.append(stable_key)
+        if all(existing != row["stable_key"] for existing, _ in keys):
+            keys.append((row["stable_key"], row["amount"]))
 
     rows = conn.execute(
         """
-        SELECT record_type, stable_key, invoice_id, payment_id, payment_method_id, txid, payment_hash
+        SELECT record_type, stable_key, invoice_id, payment_id, payment_method_id, txid, payment_hash, amount
         FROM btcpay_provenance_records
         WHERE profile_id = ? AND store_id = ? AND record_type IN ('payment', 'payout')
         ORDER BY stable_key ASC
@@ -99,23 +102,23 @@ def _provenance_index(conn: sqlite3.Connection, profile_id: str, store_id: str) 
         payment_hash = str(row["payment_hash"] or "").lower() or None
         if row["record_type"] == "payout":
             if payment_hash:
-                add(("outbound", "payment_hash", payment_hash), row["stable_key"])
+                add(("outbound", "payment_hash", payment_hash), row)
             if bark and row["txid"]:
-                add(("outbound", "transaction_hash", str(row["txid"]).lower()), row["stable_key"])
+                add(("outbound", "transaction_hash", str(row["txid"]).lower()), row)
             continue
         keys = payment_keys(row["payment_id"]) if bark else {}
         if lightning and payment_hash:
             keys = {"payment_hash": payment_hash}
         if "outpoint" in keys:
-            add(("inbound", "outpoint", keys["outpoint"]), row["stable_key"])
+            add(("inbound", "outpoint", keys["outpoint"]), row)
         if "payment_hash" in keys:
-            add(("inbound", "payment_hash", keys["payment_hash"]), row["stable_key"])
+            add(("inbound", "payment_hash", keys["payment_hash"]), row)
         if "movement_id" in keys and keys["invoice_id"] == row["invoice_id"]:
-            add(("inbound", "movement", keys["invoice_id"], keys["movement_id"]), row["stable_key"])
+            add(("inbound", "movement", keys["invoice_id"], keys["movement_id"]), row)
     return index
 
 
-def _candidates(record: Mapping[str, Any], index: Mapping[tuple, list[str]]) -> list[str]:
+def _candidates(record: Mapping[str, Any], index: Mapping[tuple, list[tuple[str, int | None]]]) -> list[str]:
     keys = record.get("_bark_keys") or {}
     direction = record["direction"]
     raw = _raw(record.get("raw_json"))
@@ -135,7 +138,14 @@ def _candidates(record: Mapping[str, Any], index: Mapping[tuple, list[str]]) -> 
     for lookup in lookups:
         found = index.get(lookup)
         if found:
-            return found
+            # One movement can pay several payments (one per VTXO): the
+            # amount tells them apart, or none is taken.
+            if len(found) > 1:
+                amount = btc_to_msat(record["amount"])
+                same = [key for key, value in found if value is not None and abs(int(value)) == amount]
+                if len(same) == 1:
+                    return same
+            return [key for key, _ in found]
     return []
 
 
@@ -220,6 +230,53 @@ def _identity_taken(conn: sqlite3.Connection, wallet_id: str, external_id: str) 
         "SELECT 1 FROM transactions WHERE wallet_id = ? AND external_id = ?",
         (wallet_id, external_id),
     ).fetchone() is not None
+
+
+def bark_networks(conn: sqlite3.Connection, profile_id: str, store_id: str) -> list[str]:
+    """``main``/``test`` from the Ark addresses the store's Bark payments went to."""
+
+    found = set()
+    for row in conn.execute(
+        """
+        SELECT payment_method_id, destination FROM btcpay_provenance_records
+        WHERE profile_id = ? AND store_id = ? AND record_type = 'payment' AND destination IS NOT NULL
+        """,
+        (profile_id, store_id),
+    ).fetchall():
+        if not _bark_method(row["payment_method_id"]):
+            continue
+        destination = str(row["destination"]).strip().lower()
+        if destination.startswith("tark1"):
+            found.add("test")
+        elif destination.startswith("ark1"):
+            found.add("main")
+    return sorted(found)
+
+
+def require_book_network(conn: sqlite3.Connection, profile_id: str, store_id: str) -> None:
+    """Refuse a Bark wallet whose payments went to another network than the book's."""
+
+    from .book_network import resolve_book_environment
+
+    try:
+        binding = resolve_book_environment(conn, profile_id)
+    except sqlite3.OperationalError:
+        return
+    if binding.get("state") != "bound":
+        return
+    scope = "main" if binding.get("environment") == "main" else "test"
+    networks = bark_networks(conn, profile_id, store_id)
+    if networks and networks != [scope]:
+        raise AppError(
+            f"The Bark wallet of store {store_id} is on a different network than this book",
+            code="book_network_mismatch",
+            hint=(
+                "Its payments went to Ark addresses of another network (`ark1` is mainnet, `tark1` a test "
+                "network). Connect this store in a book bound to that network."
+            ),
+            details={"store_id": store_id, "bark_networks": networks, "book_environment": binding.get("environment")},
+            retryable=False,
+        )
 
 
 def binding_references(conn: sqlite3.Connection, transaction_id: str) -> list[str]:
@@ -450,6 +507,8 @@ def is_bark_ledger(config: Mapping[str, Any]) -> bool:
 
 __all__ = [
     "adopt_lightning_ledger_rows",
+    "bark_networks",
+    "require_book_network",
     "assign_identities",
     "bark_config",
     "binding_references",

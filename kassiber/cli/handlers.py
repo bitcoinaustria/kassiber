@@ -2882,6 +2882,7 @@ def _sync_bark_wallet(
     # Identities, the ledger switch, moved Lightning rows and the import land
     # together or not at all: a refusal leaves the book as it was. Freshness
     # progress commits on this connection, so the import stays quiet inside.
+    core_btcpay_bark.require_book_network(conn, profile["id"], store_id)
     savepoint = f"bark_import_{uuid.uuid4().hex}"
     conn.execute(f"SAVEPOINT {savepoint}")
     progress_token = core_sync.sync_progress_emitter.set(None)

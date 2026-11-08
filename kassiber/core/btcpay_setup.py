@@ -1173,10 +1173,15 @@ def routes_from_plan(
                 "action": action,
                 "wallet": wallet,
                 "wallet_fingerprint": method.get("wallet_fingerprint"),
-                # Lightning and plugin rails expose no addresses; ledgers take
-                # the server's on-chain network.
+                # Lightning and plugin rails expose no addresses; ledgers and
+                # the Bark wallet take the server's on-chain network.
                 "network": method.get("network")
-                or (plan.get("detected_network") if action == "payment_ledger" else None),
+                or (
+                    plan.get("detected_network")
+                    if action == "payment_ledger"
+                    or (action == "wallet_source" and method["payment_method_id"] == BARK_PAYMENT_METHOD_ID)
+                    else None
+                ),
             }
         )
     unknown = set(overrides) - {(m["store_id"], m["payment_method_id"]) for m in plan.get("payment_methods") or []}

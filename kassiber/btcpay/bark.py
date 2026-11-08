@@ -161,8 +161,9 @@ def payment_keys(payment_id: Any) -> dict[str, Any]:
     """What a BTCPay Bark invoice payment id names.
 
     ``txid-vout`` is an Ark payment (the received VTXO ``txid:vout``); a bare
-    64-hex id is a Lightning payment hash; ``{invoiceId}#ark-movement-N``
-    (plugin 0.7 and invoices from before 0.10) names Bark's movement ``N``.
+    64-hex id is a Lightning payment hash; ``{invoiceId}#ark-movement-N`` or
+    ``{invoiceId}#ark-movement-N-I`` (plugin 0.7 and invoices from before 0.10)
+    names Bark's movement ``N``.
     """
 
     raw = str(payment_id or "").strip()
@@ -173,8 +174,15 @@ def payment_keys(payment_id: Any) -> dict[str, Any]:
     if separator and _is_hex64(txid) and vout.isdigit() and vout.isascii():
         return {"outpoint": f"{txid}:{int(vout)}"}
     invoice_id, separator, movement = raw.partition("#ark-movement-")
-    if separator and invoice_id and movement.isdigit() and movement.isascii():
-        return {"invoice_id": invoice_id, "movement_id": int(movement)}
+    number, dash, index = movement.partition("-")
+    if (
+        separator
+        and invoice_id
+        and number.isdigit()
+        and number.isascii()
+        and (not dash or (index.isdigit() and index.isascii()))
+    ):
+        return {"invoice_id": invoice_id, "movement_id": int(number)}
     return {}
 
 

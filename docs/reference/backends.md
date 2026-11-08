@@ -531,8 +531,9 @@ fee included, to the msat:
 An `unknown` kind, an inflow on a send kind, a fee larger than the amount, or a
 fee without an amount stops the sync with `bark_row_unsupported` before
 anything is booked. A row that pays an invoice (by VTXO outpoint, Lightning
-payment hash, or a pre-0.10 `{invoice}#ark-movement-N` payment with the row's
-invoice label) or a payout (by payment hash or transaction) is booked under that
+payment hash, or a pre-0.10 `{invoice}#ark-movement-N-I` payment with the
+row's invoice label, the payment amount telling apart the VTXOs of one
+movement) or a payout (by payment hash or transaction) is booked under that
 payment's provenance key, so it links exactly; other rows are booked as
 `btcpay-bark:{store}:{row id}` and move to the provenance key once BTCPay
 reports the payment. Bark payment hashes (`payment_hash_source =
@@ -560,7 +561,16 @@ from the start. Another wallet booking the same payment in the same direction
 `bark_migration_conflict` (`booked_by_other_wallet`) until one copy is
 excluded.
 
+Network. No Bark field names the network; setup takes the server's on-chain
+network for the wallet, as for ledgers, and every sync checks the Ark
+addresses the store's Bark payments went to (`ark1…` mainnet, `tark1…` any
+test network). A book bound to another network refuses the import with
+`book_network_mismatch` before anything is booked.
+
 Bark's own exports and wallets outside BTCPay are not imported here (#353).
+The plugin's behaviour above was checked against a regtest Ark server
+(`./scripts/integration-harness.sh btcpay-bark`); its recorded answers are in
+`tests/fixtures/btcpay_bark/`.
 A `BTC-ARK` method cannot be mapped onto another tracked wallet.
 
 A store payment method that already imports wallet history or books a payment

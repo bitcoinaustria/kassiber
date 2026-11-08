@@ -1,7 +1,8 @@
 """Bark (BTC-ARK) wallets through BTCPay: booking rules, identities, ledger migration, Lightning overlap.
 
-Greenfield is a path-keyed fake; row shapes follow the Bark plugin's wallet
-API (``GreenfieldBarkWalletController`` in plugin 0.13).
+Greenfield is a path-keyed fake; row shapes follow the plugin's real answers,
+recorded from a regtest Ark server in ``tests/fixtures/btcpay_bark/``, which
+``RecordedStoreTest`` replays.
 """
 
 import json
@@ -178,7 +179,9 @@ class RowBookingTest(unittest.TestCase):
         self.assertEqual(bark.payment_keys(f"{T_ARK.upper()}-2"), {"outpoint": f"{T_ARK}:2"})
         self.assertEqual(bark.payment_keys(H_ARK_LN.upper()), {"payment_hash": H_ARK_LN})
         self.assertEqual(bark.payment_keys("inv-9#ark-movement-12"), {"invoice_id": "inv-9", "movement_id": 12})
-        for junk in ("", "abc-1", f"{T_ARK}-x", "inv#ark-movement-", "inv#ark-movement-١"):
+        # Recorded from plugin 0.9.6: `{invoiceId}#ark-movement-{movementId}-{index}`.
+        self.assertEqual(bark.payment_keys("6CV5#ark-movement-2-0"), {"invoice_id": "6CV5", "movement_id": 2})
+        for junk in ("", "abc-1", f"{T_ARK}-x", "inv#ark-movement-", "inv#ark-movement-١", "inv#ark-movement-1-", "inv#ark-movement-1-x"):
             self.assertEqual(bark.payment_keys(junk), {}, junk)
 
     def test_legacy_ids_map_to_btc_ark_and_bark_cannot_enrich_another_wallet(self):
@@ -563,3 +566,95 @@ class CommercialMatchTest(_BarkBook):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+FIXTURES = __import__("pathlib").Path(__file__).parent / "fixtures" / "btcpay_bark"
+
+
+def _recorded(directory, name):
+    return json.loads((FIXTURES / directory / f"{name}.json").read_text())
+
+
+def _recorded_routes(directory):
+    """The recorded store as a Greenfield fake (store id ``S1``)."""
+
+    def body(name):
+        recorded = _recorded(directory, name)
+        return recorded["body"] if recorded["status"] == 200 else (recorded["status"], recorded["body"])
+
+    rows = body("wallet.transactions")
+    routes = {
+        "/api/v1/stores/S1/invoices": lambda url: body("invoices") if parse_qs(urlsplit(url).query).get("skip") == ["0"] else [],
+        "/api/v1/stores/S1/payouts": body("payouts"),
+        BARK_WALLET: body("wallet.overview"),
+        BARK_TX: _paged(rows) if isinstance(rows, list) else rows,
+    }
+    return routes
+
+
+def _recorded_msat(value):
+    return int(Decimal(value) * 100_000_000) * MSAT
+
+
+class RecordedStoreTest(_BarkBook):
+    """Real responses of a regtest Bark plugin (``tests/fixtures/btcpay_bark/README.md``)."""
+
+    def _linked(self, wallet_id, methods):
+        payments = self.conn.execute(
+            f"SELECT stable_key FROM btcpay_provenance_records WHERE record_type IN ('payment', 'payout') "
+            f"AND payment_method_id IN ({','.join('?' for _ in methods)})",
+            methods,
+        ).fetchall()
+        booked = {row["external_id"] for row in self._rows(wallet_id)}
+        return [row["stable_key"] for row in payments if row["stable_key"] not in booked]
+
+    def test_a_plugin_0_13_store_books_to_the_plugins_own_balance(self):
+        self._wallet("bark", "Shop Bark", self.BARK_CONFIG)
+        outcome = self._sync("bark", _recorded_routes("0.13.0"))
+        overview = _recorded("0.13.0", "wallet.overview")["body"]
+        self.assertEqual(self._balance("bark"), _recorded_msat(overview["confirmedBalance"]))
+        # Every Ark and Lightning payment and payout that settled in Bark links by its provenance key.
+        self.assertEqual(self._linked("bark", ["BTC-ARK", "BTC-LN"]), [])
+        self.assertGreaterEqual(outcome["bark"]["linked_to_payments"], 5)
+        kinds = {json.loads(row["raw_json"])["kind"] for row in self._rows("bark")}
+        self.assertEqual(
+            kinds,
+            {"onchain-receive", "board", "ark-receive", "lightning-receive", "ark-send", "lightning-send", "refresh",
+             "send-onchain", "offboard", "onchain-send", "exit-fee", "exit-claim"},
+        )
+
+    def test_a_pre_0_10_store_switches_after_its_plugin_upgrade(self):
+        self._wallet("ark", "Shop Bark payments", self.ARK_LEDGER)
+        self._wallet("ln", "Shop Lightning", self.LN_LEDGER)
+        old = _recorded_routes("0.9.6")
+        self.assertEqual(self._sync("ark", old)["bark_wallet_history"], "not_served")
+        self._sync("ln", old)
+        booked = {row["external_id"]: row["id"] for row in self._rows("ark")}
+        lightning = {row["external_id"]: row["id"] for row in self._rows("ln")}
+        self.assertEqual(len(booked), 1)  # the BARK-era Ark payment
+        self.assertEqual(len(lightning), 2)
+
+        new = _recorded_routes("0.9.6-upgraded-to-0.13.0")
+        outcome = self._sync("ark", new)
+        self.assertEqual(outcome["bark"]["ledger_rows_kept"], 1)
+        self.assertEqual(outcome["bark"]["lightning_ledger_rows_moved"], 2)
+        after = {row["external_id"]: row["id"] for row in self._rows("ark")}
+        for external_id, transaction_id in {**booked, **lightning}.items():
+            self.assertEqual(after[external_id], transaction_id)
+        self.assertEqual(self._sync("ln", new)["ledger"]["held_tracked_elsewhere"], 3)
+        overview = _recorded("0.9.6-upgraded-to-0.13.0", "wallet.overview")["body"]
+        self.assertEqual(self._balance("ark") + self._balance("ln"), _recorded_msat(overview["confirmedBalance"]))
+
+    def test_a_book_on_another_network_refuses_the_wallet(self):
+        self._wallet("bark", "Shop Bark", self.BARK_CONFIG)
+        self.conn.execute(
+            "INSERT INTO book_network_bindings(profile_id,environment_id,environment,revision,chain_instance_id,"
+            "domains_json,acknowledgements_json,inventory_digest,created_at) VALUES('prof','env','main',1,NULL,'[]','[]','x',?)",
+            (now_iso(),),
+        )
+        self.conn.commit()
+        with self.assertRaises(AppError) as ctx:
+            self._sync("bark", _recorded_routes("0.13.0"))
+        self.assertEqual(ctx.exception.code, "book_network_mismatch")
+        self.assertEqual(ctx.exception.details["bark_networks"], ["test"])
+        self.assertEqual(self._rows("bark"), [])
