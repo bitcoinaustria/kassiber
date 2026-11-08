@@ -19,6 +19,7 @@ from ..db import get_setting
 from ..errors import AppError
 from ..msat import btc_to_msat, dec, msat_to_btc
 from ..tax_policy import build_tax_policy
+from .transaction_order import transaction_order_sql
 from .journal_markers import (
     MARKER_ALT_IN,
     MARKER_ALT_OUT,
@@ -337,7 +338,7 @@ def _latest_transaction_rate(
           AND asset = 'BTC'
           AND fiat_currency = ?
           AND fiat_rate IS NOT NULL
-        ORDER BY occurred_at DESC, created_at DESC, id DESC
+        ORDER BY """ + transaction_order_sql("transactions", descending=True) + """
         LIMIT 1
         """,
         (profile_id, fiat_currency),

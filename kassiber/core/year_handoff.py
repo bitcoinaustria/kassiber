@@ -38,6 +38,7 @@ from .asset_presentation import AssetPresentation, describe_asset
 from .austrian import AT_TAX_TZ, stated_kennzahl
 from .custody_evidence import normalize_boundary_amounts
 from .journal_markers import strip_markers
+from .transaction_order import transaction_order_sql
 from .transaction_classification import (
     classification_entry_type,
     classify,
@@ -515,7 +516,7 @@ def _year_end_rates(
               AND asset IN ({", ".join("?" for _ in spellings)})
               AND occurred_at < ?
               AND (fiat_rate IS NOT NULL OR fiat_value IS NOT NULL)
-            ORDER BY occurred_at DESC, created_at DESC, id DESC
+            ORDER BY {transaction_order_sql("transactions", descending=True)}
             LIMIT 1
             """,
             (profile["id"], *spellings, end_iso),

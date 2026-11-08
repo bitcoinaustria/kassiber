@@ -205,15 +205,17 @@ def transaction_rate_quotes_for_profile(
     from ..time_utils import timestamp_predicate
 
     bound = ""
-    order = transaction_order_sql("transactions", descending=True)
+    # The latest row of a same-time group is the last in source order. A
+    # table without the exact-price columns predates the source order's
+    # columns too, so its fallback keeps the legacy order.
+    time = "occurred_at DESC"
     params = [profile_id]
     if at_or_before is not None:
         bound = " AND " + timestamp_predicate(conn, "occurred_at", "<" if exclusive else "<=")
-        order = (
-            "kassiber_timestamp_us(occurred_at) DESC, "
-            + same_time_order_sql("transactions", descending=True)
-        )
+        time = "kassiber_timestamp_us(occurred_at) DESC"
         params.append(at_or_before)
+    order = time + ", " + same_time_order_sql("transactions", descending=True)
+    legacy_order = time + ", created_at DESC, id DESC"
 
     try:
         rows = conn.execute(
@@ -231,7 +233,7 @@ def transaction_rate_quotes_for_profile(
             SELECT asset, occurred_at, fiat_rate, fiat_value, amount
             FROM transactions
             WHERE profile_id = ? AND excluded = 0
-            """ + bound + " ORDER BY " + order,
+            """ + bound + " ORDER BY " + legacy_order,
             params,
         ).fetchall()
     rates: dict[str, Any] = {}
@@ -266,7 +268,8 @@ def latest_transaction_rates_for_profile(conn, profile_id: str) -> dict[str, Any
 
 
 def transaction_rate_rows(conn, profile_id):
-    # The latest row of a same-time group is the last in source order.
+    # The latest row of a same-time group is the last in source order; a
+    # legacy table without exact prices keeps the legacy order.
     order = transaction_order_sql("transactions", descending=True)
     try:
         return conn.execute(
@@ -275,7 +278,7 @@ def transaction_rate_rows(conn, profile_id):
         ).fetchall()
     except sqlite3.OperationalError:
         return conn.execute(
-            "SELECT asset,fiat_rate,fiat_value,amount FROM transactions WHERE profile_id=? AND excluded=0 ORDER BY " + order,
+            "SELECT asset,fiat_rate,fiat_value,amount FROM transactions WHERE profile_id=? AND excluded=0 ORDER BY occurred_at DESC,created_at DESC,id DESC",
             (profile_id,),
         ).fetchall()
 

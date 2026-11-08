@@ -16,6 +16,7 @@ from pathlib import Path
 import sqlite3
 import tempfile
 from typing import Any
+from zoneinfo import ZoneInfo
 import unittest
 from unittest import mock
 import uuid
@@ -23,7 +24,7 @@ import uuid
 from kassiber.cli import handlers
 from kassiber.cli.main import main
 from kassiber.core import accounts as core_accounts
-from kassiber.core import custody_journal
+from kassiber.core import custody_journal, ui_snapshot, year_handoff
 from kassiber.core.journal_calculation import stored_calculation
 from kassiber.db import JOURNAL_CALCULATION_SEMANTICS_VERSION, SAME_TIME_ORDER_SEMANTICS_MIGRATION, open_db
 
@@ -191,14 +192,19 @@ class LotOrderDeterminismTest(unittest.TestCase):
         ]
 
         def rates(conn: sqlite3.Connection, profile_id: str):
+            profile = conn.execute("SELECT * FROM profiles WHERE id = ?", (profile_id,)).fetchone()
+            year = year_handoff._Period(2024, ZoneInfo("UTC"))
             return (
                 str(custody_journal.latest_transaction_rates_for_profile(conn, profile_id)["BTC"]),
                 str(custody_journal.transaction_rate_quotes_for_profile(conn, profile_id)["BTC"]["rate"]),
                 str(custody_journal.transaction_rate_quotes_for_profile(
                     conn, profile_id, at_or_before="2024-06-01T00:00:00Z")["BTC"]["rate"]),
+                str(year_handoff._year_end_rates(conn, profile, year, {"BTC": {"BTC"}})["BTC"]["rate"]),
+                ui_snapshot._latest_transaction_rate(conn, profile_id, "EUR"),
             )
 
-        self.assertEqual(self.assert_one_answer(rows, inspect=rates), ("20000", "20000", "20000"))
+        self.assertEqual(self.assert_one_answer(rows, inspect=rates),
+                         ("20000", "20000", "20000", "20000", 20000.0))
 
     def test_processed_books_need_a_rebuild_once(self):
         # A book built before the source order: its journals may hold a

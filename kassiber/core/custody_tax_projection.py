@@ -337,6 +337,13 @@ def compile_finalized_tax_projection(
     """Compile selected custody slices into the irreversible tax input."""
 
     rows_by_id = {str(_field(row, "id") or ""): row for row in rows}
+    # Same-time projection rows follow their anchors' place in `rows`, the
+    # source order (`transaction_order`); the engine keeps that order for
+    # same-time lots. The row id only orders the rows of one anchor: its
+    # quantity hash commits to random wallet ids.
+    source_rank: dict[str, int] = {}
+    for transaction_id in rows_by_id:
+        source_rank.setdefault(transaction_id, len(source_rank))
     observations = {item.quantity_hash: item for item in state.projection.observations}
     non_events = {str(item) for item in non_event_transaction_ids if item}
     explicitly_blocked = {str(item) for item in blocked_transaction_ids if item}
@@ -1017,12 +1024,6 @@ def compile_finalized_tax_projection(
             }
         )
         existing_cross_pair_ids.add(pair_id)
-    # The engine keeps this order for same-time lots, so it follows the
-    # anchors' source order (`transaction_order`). The row id only orders the
-    # rows of one anchor; its quantity hash commits to random wallet ids.
-    source_rank: dict[str, int] = {}
-    for transaction_id in rows_by_id:
-        source_rank.setdefault(transaction_id, len(source_rank))
     return FinalizedTaxProjection(
         rows=tuple(sorted(projection_rows, key=lambda row: (
             str(row["occurred_at"]),
