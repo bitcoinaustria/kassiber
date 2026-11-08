@@ -141,6 +141,8 @@ class RowBookingTest(unittest.TestCase):
         self.assertEqual(receive[0]["payment_hash"], H_ARK_LN)
         self.assertEqual(receive[0]["payment_hash_source"], "btcpay_bark")
         self.assertIsNone(receive[1]["payment_hash"])
+        # Nothing in the fee record's raw evidence reads as its payment hash.
+        self.assertNotIn("payment_hash", json.loads(receive[1]["raw_json"]))
         send = self._book(_row("s", "lightning-send", "-0.00003020", fee="0.00000020", paymentHash=H_PAYOUT))
         self.assertEqual([(r["direction"], r["amount"], r["fee"]) for r in send], [("outbound", Decimal("0.00003"), Decimal("2E-7"))])
         refresh = self._book(ROWS[1])

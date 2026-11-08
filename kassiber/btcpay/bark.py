@@ -221,7 +221,9 @@ def bark_records(row: Mapping[str, Any], *, store_id: str) -> list[dict[str, Any
             "fee_msat": fee,
             "transaction_hash": _text(row.get("transactionHash")),
             "outpoint": keys["outpoint"],
-            "payment_hash": keys["payment_hash"],
+            # Not `payment_hash`: the book-open backfill would copy it onto
+            # the row's fee record.
+            "bark_payment_hash": keys["payment_hash"],
             "movement_id": keys["movement_id"],
             "invoice_id": keys["invoice_id"],
         }
