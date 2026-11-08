@@ -16,7 +16,7 @@ Its minimal release notifier delegates the GitHub request to the bundled CLI
 sidecar rather than carrying a second HTTP client. The desktop and CLI
 coordinate update-check consent revocation with an owner-only advisory lock;
 the native side uses `fs2` for the cross-platform file-lock primitive.
-Kassiber's own tax engine is a Rust crate (`tax-engine/`, AGPL-3.0-only) built
+Kassiber's own tax engine is a Rust crate (`tax-engine/`, MIT) built
 as a Python extension; the rows below list its direct Rust dependencies, and
 `tax-engine/Cargo.lock` is the transitive inventory. The Kassiber-maintained
 [RP2 fork](https://github.com/bitcoinaustria/rp2), which the engine replaced,

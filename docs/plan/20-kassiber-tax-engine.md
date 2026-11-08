@@ -131,7 +131,8 @@ owner's original work: each names the file it ports and says it was
 translated and changed, and
 [THIRD_PARTY_LICENSES.md](../../THIRD_PARTY_LICENSES.md#adapted-source-code)
 credits the fork and upstream RP2. Apache-2.0 code can be part of an
-AGPL-3.0 work, so this holds even if the files contain adapted upstream code.
+MIT-licensed work as long as those notices stay, so this holds even if the
+files contain adapted upstream code.
 
 ## Architecture
 
