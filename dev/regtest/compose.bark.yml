@@ -1,0 +1,307 @@
+# Bark (Ark) overlay for the BTCPay regtest stack.
+#
+# Use with compose.bitcoin.yml and compose.btcpay.yml, driven by
+# dev/regtest/btcpay_bark_stack.py. The stack runs on an internal network that
+# cannot reach the internet: BTCPay (rates, Branta lookups, plugin update
+# checks), barkd, captaind and both CLN nodes only see each other. A small
+# forwarder on a second network is the only way in, and it publishes the
+# bitcoind RPC, BTCPay and the Esplora API on 127.0.0.1.
+#
+# Images: captaind, cln-hold and bark come from Second's regtest compose
+# (bark repo, contrib/docker); electrs is an Esplora-API electrs that barkd
+# needs as its chain source (mempool/electrs).
+
+networks:
+  default:
+    internal: true
+  edge: {}
+
+configs:
+  captaind_toml:
+    # captaind.default.toml from bark server-0.8.1 without comments, adapted:
+    # container paths, one board confirmation, a bigger VTXO pool, CLN over TLS
+    # on ark-cln. The release image's own captaind.toml misses required fields.
+    content: |
+      data_dir = "/data/captaind"
+      network = "regtest"
+      vtxo_lifetime = 4320
+      min_board_amount = "20000 sat"
+      vtxo_exit_delta = 144
+      max_vtxo_exit_depth = 100
+      max_arkoor_fanout = 4
+      required_board_confirmations = 1
+      min_trusted_confs = 1
+      rpc_rich_errors = true
+      sync_manager_block_poll_interval = "100ms"
+      nursery_confirm_target_blocks = 6
+      otel_deployment_name = "kassiber_regtest"
+      max_read_mailbox_items = 100
+      recovery_xpub_nb_keys = 1000
+      max_concurrent_xpub_recoveries = 1
+      round_interval = "5s"
+      round_submit_time = "2s"
+      round_sign_time = "2s"
+      nb_round_nonces = 8
+      round_forfeit_nonces_timeout = "30s"
+      offboard_session_timeout = "30s"
+      offboard_max_locked_percent = 25
+      offboard_check_interval = "1s"
+      offboard_acceptable_fee_rate_duration = "15m"
+      cln_reconnect_interval = "5s"
+      invoice_check_interval = "3s"
+      cln_xpay_timeout = "60s"
+      cln_xpay_max_retry_for = "5m"
+      invoice_check_base_delay = "10s"
+      max_invoice_check_delay = "10m"
+      invoice_poll_interval = "30s"
+      htlc_settlement_poll_interval = "60s"
+      track_all_base_delay = "1s"
+      max_track_all_delay = "60s"
+      htlc_expiry_delta = 40
+      htlc_send_expiry_delta = 1008
+      max_user_invoice_cltv_delta = 250
+      invoice_expiry = "48h"
+      receive_htlc_forward_timeout = "3min"
+      ln_receive_anti_dos_required = false
+      round_status_attestation_required = false
+      forfeit_attestation_required = false
+      ln_max_fee_ppm = 900000
+
+      [fees.board]
+      min_fee_sat = 330
+      base_fee_sat = 100
+      ppm = 1000
+
+      [fees.offboard]
+      base_fee_sat = 200
+      fixed_additional_vb = 221
+      ppm_expiry_table = [
+          { expiry_blocks_threshold = 0, ppm = 0 },
+          { expiry_blocks_threshold = 97, ppm = 1000 },
+          { expiry_blocks_threshold = 199, ppm = 4000 },
+          { expiry_blocks_threshold = 2161, ppm = 8000 },
+      ]
+
+      [fees.refresh]
+      base_fee_sat = 150
+      ppm_expiry_table = [
+          { expiry_blocks_threshold = 0, ppm = 0 },
+          { expiry_blocks_threshold = 97, ppm = 1000 },
+          { expiry_blocks_threshold = 199, ppm = 4000 },
+          { expiry_blocks_threshold = 2161, ppm = 8000 },
+      ]
+
+      [fees.lightning_receive]
+      base_fee_sat = 100
+      ppm = 2000
+
+      [fees.lightning_send]
+      min_fee_sat = 10
+      base_fee_sat = 75
+      ppm_expiry_table = [
+          { expiry_blocks_threshold = 0, ppm = 0 },
+          { expiry_blocks_threshold = 97, ppm = 1000 },
+          { expiry_blocks_threshold = 199, ppm = 4000 },
+          { expiry_blocks_threshold = 2161, ppm = 8000 },
+      ]
+
+      [vtxopool]
+      # Lightning receives are paid out of this pool: big enough for the scenario.
+      vtxo_targets = [ "1000sat:10", "10000sat:20", "100000sat:20", "500000sat:4" ]
+      vtxo_target_issue_threshold = 80
+      vtxo_lifetime = 432
+      vtxo_pre_expiry = 144
+      max_vtxo_exit_depth = 50
+
+      [fee_estimator]
+      update_interval = "1m"
+      history_duration = "60m"
+      fallback_fee_rate_fast = "25sat/vb"
+      fallback_fee_rate_regular = "10sat/vb"
+      fallback_fee_rate_slow = "4sat/vb"
+
+      [rpc]
+      public_address = "0.0.0.0:3535"
+      admin_address = "127.0.0.1:3536"
+      integration_address = "127.0.0.1:3537"
+
+      [postgres]
+      host = "localhost"
+      port = 5432
+      name = "bark-server-db"
+      user = "postgres"
+      password = "postgres"
+      max_connections = 10
+
+      [bitcoind]
+      url = "http://bitcoind:18443"
+      rpc_user = "${KASSIBER_REGTEST_RPC_USER}"
+      rpc_pass = "${KASSIBER_REGTEST_RPC_PASSWORD}"
+
+      [[cln_array]]
+      uri = "https://ark-cln:9736"
+      priority = 1
+      server_cert_path = "/data/cln/regtest/ca.pem"
+      client_cert_path = "/data/cln/regtest/client.pem"
+      client_key_path = "/data/cln/regtest/client-key.pem"
+      hold_invoice.uri = "https://ark-cln:9988"
+      hold_invoice.server_cert_path = "/data/cln/regtest/hold/ca.pem"
+      hold_invoice.client_cert_path = "/data/cln/regtest/hold/client.pem"
+      hold_invoice.client_key_path = "/data/cln/regtest/hold/client-key.pem"
+
+  edge_forward_py:
+    # Plain TCP forwarding from the published ports to fixed services on the
+    # internal network. It never dials anything else.
+    content: |
+      import asyncio, os
+
+      async def pipe(reader, writer):
+          try:
+              while data := await reader.read(65536):
+                  writer.write(data)
+                  await writer.drain()
+              if writer.can_write_eof():
+                  writer.write_eof()
+          except (ConnectionError, OSError):
+              pass
+
+      async def serve(listen, host, port):
+          async def handle(client_reader, client_writer):
+              try:
+                  upstream_reader, upstream_writer = await asyncio.open_connection(host, port)
+              except OSError:
+                  client_writer.close()
+                  return
+              await asyncio.gather(pipe(client_reader, upstream_writer), pipe(upstream_reader, client_writer))
+              client_writer.close()
+              upstream_writer.close()
+          await asyncio.start_server(handle, "0.0.0.0", listen)
+
+      async def main():
+          for spec in os.environ["FORWARDS"].split(","):
+              listen, target = spec.split("=")
+              host, port = target.rsplit(":", 1)
+              await serve(int(listen), host, int(port))
+          await asyncio.Event().wait()
+
+      asyncio.run(main())
+
+services:
+  bitcoind:
+    ports: !reset []
+
+  btcpay-nbxplorer:
+    ports: !reset []
+
+  btcpayserver:
+    ports: !reset []
+    environment:
+      BTCPAY_PLUGINDIR: /plugins
+      BARK_NETWORK: regtest
+      BARK_ARK_SERVER: http://captaind:3535
+      BARK_ESPLORA_SERVER: http://electrs:3002
+    volumes:
+      - ${KASSIBER_REGTEST_BARK_PLUGIN_DIR:?set by btcpay_bark_stack.py}:/plugins:ro
+
+  electrs:
+    # mempool's electrs: barkd needs Esplora's POST /txs/package, which older
+    # Esplora builds (vulpemventures/electrs) lack.
+    image: ${KASSIBER_REGTEST_ELECTRS_IMAGE:-docker.io/mempool/electrs:v3.3.0}
+    depends_on:
+      - bitcoind
+    command:
+      - "-vv"
+      - "--network=regtest"
+      - "--jsonrpc-import"
+      - "--daemon-dir=/data"
+      - "--db-dir=/data/mempool-db"
+      - "--daemon-rpc-addr=bitcoind:18443"
+      - "--cookie=${KASSIBER_REGTEST_RPC_USER}:${KASSIBER_REGTEST_RPC_PASSWORD}"
+      - "--http-addr=0.0.0.0:3002"
+      - "--electrum-rpc-addr=0.0.0.0:60401"
+      - "--monitoring-addr=127.0.0.1:24224"
+    volumes:
+      - bark-electrs-regtest:/data
+
+  ark-cln:
+    image: ${KASSIBER_REGTEST_ARK_CLN_IMAGE:-docker.io/secondark/cln-hold:v26.06.10-efc7d5f}
+    hostname: ark-cln
+    depends_on:
+      - bitcoind
+    # The image's start script expects the network directory to exist.
+    entrypoint: ["/bin/sh", "-c", "mkdir -p /root/.lightning/regtest && exec /root/cln/start.sh"]
+    environment:
+      NETWORK: regtest
+      CLN_ALIAS: kassiber-ark-cln
+      CLN_LOG_LEVEL: info
+      BITCOIN_RPCCONNECT: bitcoind:18443
+      BITCOIN_RPCUSER: ${KASSIBER_REGTEST_RPC_USER}
+      BITCOIN_RPCPASSWORD: ${KASSIBER_REGTEST_RPC_PASSWORD}
+      CLN_PROMETHEUS_LISTEN: 127.0.0.1:9750
+    volumes:
+      - bark-ark-cln-regtest:/root/.lightning
+
+  captaind:
+    image: ${KASSIBER_REGTEST_CAPTAIND_IMAGE:-docker.io/secondark/captaind:0.8.1}
+    depends_on:
+      - bitcoind
+      - ark-cln
+    environment:
+      CAPTAIND_CONFIG: /etc/captaind/captaind.toml
+    configs:
+      - source: captaind_toml
+        target: /etc/captaind/captaind.toml
+    volumes:
+      - bark-captaind-regtest:/data/captaind
+      - bark-captaind-postgres-regtest:/var/lib/postgresql/data
+      - bark-ark-cln-regtest:/data/cln:ro
+
+  ext-cln:
+    image: ${KASSIBER_REGTEST_EXT_CLN_IMAGE:-docker.io/elementsproject/lightningd:v26.06.10}
+    depends_on:
+      - bitcoind
+    environment:
+      LIGHTNINGD_NETWORK: regtest
+    command:
+      - "--alias=kassiber-ext-cln"
+      - "--bind-addr=0.0.0.0:9735"
+      - "--bitcoin-rpcconnect=bitcoind"
+      - "--bitcoin-rpcport=18443"
+      - "--bitcoin-rpcuser=${KASSIBER_REGTEST_RPC_USER}"
+      - "--bitcoin-rpcpassword=${KASSIBER_REGTEST_RPC_PASSWORD}"
+      - "--log-level=info"
+    volumes:
+      - bark-ext-cln-regtest:/root/.lightning
+
+  bark-peer:
+    image: ${KASSIBER_REGTEST_BARK_IMAGE:-docker.io/secondark/bark:0.8.1}
+    depends_on:
+      - captaind
+      - electrs
+    entrypoint: ["sleep", "infinity"]
+    volumes:
+      - bark-peer-regtest:/root
+
+  edge-forward:
+    image: ${KASSIBER_REGTEST_BACKEND_STACK_IMAGE:-python:3.12-slim}
+    networks:
+      - default
+      - edge
+    environment:
+      FORWARDS: "18443=bitcoind:18443,49392=btcpayserver:49392,3002=electrs:3002"
+    configs:
+      - source: edge_forward_py
+        target: /forward.py
+    command: ["python", "-I", "/forward.py"]
+    ports:
+      - "127.0.0.1:${KASSIBER_REGTEST_RPC_PORT:?}:18443"
+      - "127.0.0.1:${KASSIBER_REGTEST_BTCPAY_PORT:?}:49392"
+      - "127.0.0.1:${KASSIBER_REGTEST_BARK_ESPLORA_PORT:?}:3002"
+
+volumes:
+  bark-electrs-regtest:
+  bark-ark-cln-regtest:
+  bark-captaind-regtest:
+  bark-captaind-postgres-regtest:
+  bark-ext-cln-regtest:
+  bark-peer-regtest:
