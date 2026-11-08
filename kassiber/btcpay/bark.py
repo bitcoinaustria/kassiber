@@ -89,7 +89,7 @@ def btc_msat(value: Any, *, field: str, row_id: str) -> int:
     if amount.adjusted() > 8:
         raise _malformed(f"Bark wallet row '{row_id}' has an invalid {field}", row_id)
     if amount.adjusted() < -11:
-        raise _malformed(f"Bark wallet row '{row_id}' has a {field} below one msat", row_id)
+        raise _malformed(f"The {field} of Bark wallet row '{row_id}' is not a whole msat", row_id)
     sign, digits, exponent = amount.as_tuple()
     coefficient = int("".join(map(str, digits)))
     shift = exponent + 11
@@ -98,7 +98,7 @@ def btc_msat(value: Any, *, field: str, row_id: str) -> int:
     else:
         msat, rest = divmod(coefficient, 10**-shift)
         if rest:
-            raise _malformed(f"Bark wallet row '{row_id}' has a {field} below one msat", row_id)
+            raise _malformed(f"The {field} of Bark wallet row '{row_id}' is not a whole msat", row_id)
     if msat > MAX_MSAT:
         raise _malformed(f"Bark wallet row '{row_id}' has an invalid {field}", row_id)
     return -msat if sign else msat
