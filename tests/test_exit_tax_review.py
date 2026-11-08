@@ -11,7 +11,7 @@ from kassiber.cli import handlers
 from kassiber.core import accounts, custody_review_terms, reports, ui_snapshot, wallets
 from kassiber.core.austrian import infer_regime_from_timestamp
 from kassiber.core.journal_markers import MARKER_REGIME, parse_marker
-from kassiber.db import open_db
+from kassiber.db import JOURNAL_CALCULATION_SEMANTICS_VERSION, open_db
 
 
 BTC = 100_000_000_000
@@ -218,7 +218,8 @@ def test_generic_book_requires_one_rebuild_after_semantics_version_upgrade(engin
     with open_db(tmp_path / "engine-0") as rebuilt:
         handlers.process_journals(rebuilt, "W", "P")
         profile = rebuilt.execute("SELECT * FROM profiles").fetchone()
-        assert profile["journal_semantics_version"] == 2
+        # A rebuild stamps the current calculation semantics.
+        assert profile["journal_semantics_version"] == JOURNAL_CALCULATION_SEMANTICS_VERSION
         assert projection_freshness(rebuilt, profile["id"])["is_current"]
     with open_db(tmp_path / "engine-0") as reopened:
         profile = reopened.execute("SELECT * FROM profiles").fetchone()
@@ -447,7 +448,7 @@ def test_at_outflow_semantics_upgrade_includes_disposals_without_fees(engine_boo
         reopened.close()
     with open_db(tmp_path / "engine-0") as rebuilt:
         handlers.process_journals(rebuilt, "W", "P")
-        assert rebuilt.execute("SELECT journal_semantics_version FROM profiles").fetchone()[0] == 2
+        assert rebuilt.execute("SELECT journal_semantics_version FROM profiles").fetchone()[0] == JOURNAL_CALCULATION_SEMANTICS_VERSION
         reports.report_exit_tax(rebuilt, "W", "P", handlers._report_hooks())
     rebuilt.close()
 
