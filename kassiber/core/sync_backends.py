@@ -72,7 +72,12 @@ from .onchain import (
     output_value_sats,
 )
 from .privacy_hops import privacy_boundary_from_import_record
-from .sync import WalletSyncState, emit_sync_progress, normalize_backend_kind
+from .sync import (
+    WalletSyncState,
+    emit_sync_progress,
+    normalize_backend_kind,
+    silent_payment_scan_authoritative,
+)
 from .sync_control import check_sync_transport, run_sync_network, sync_transport_check
 from .wallets import (
     load_wallet_descriptor_plan_from_config,
@@ -1564,12 +1569,8 @@ def prepare_dependency_observer_fetch(conn, profile, wallet, discovery):
             else "compatibility"
         )
         normalized_records = tuple(records)
-        authoritative = reason != "silent_payment" or (
-            (meta or {}).get("silent_payment_scan_complete") is True
-            and all(
-                record.get("confirmed_at") not in (None, "")
-                for record in normalized_records
-            )
+        authoritative = reason != "silent_payment" or silent_payment_scan_authoritative(
+            meta, normalized_records
         )
         return WalletBackendFetch(
             backend=discovery.backend,

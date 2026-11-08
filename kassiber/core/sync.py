@@ -21,6 +21,7 @@ from ..wallet_descriptors import DEFAULT_DESCRIPTOR_GAP_LIMIT, MAX_DESCRIPTOR_GA
 from . import source_overlap
 from .sync_control import checked_parallel_map, run_sync_network, sync_progress_emitter, sync_transport_check
 from .esplora_history import full_scan_checkpoint
+from .silent_payments import is_silent_payment_plan
 from .onchain import stored_tx_mapping
 from .chain_observer import (
     PreparedObserverUpdate,
@@ -617,6 +618,22 @@ def discover_wallet_backend(
     )
 
 
+def silent_payment_scan_authoritative(
+    adapter_meta: Mapping[str, Any] | None,
+    records: Sequence[Mapping[str, Any]],
+) -> bool:
+    """Whether a silent-payment scan may publish with observer authority.
+
+    Only a scan the scanner reports complete, with every record carrying its
+    confirmation time, is a full observation. Anything less must not retire,
+    supersede or mark spent what the book already holds, whatever backend
+    served it.
+    """
+    return (adapter_meta or {}).get("silent_payment_scan_complete") is True and all(
+        record.get("confirmed_at") not in (None, "") for record in records
+    )
+
+
 def fetch_wallet_backend_from_discovery(
     wallet: WalletRow,
     hooks: WalletSyncHooks,
@@ -659,6 +676,15 @@ def fetch_wallet_backend_from_discovery(
     finally:
         if token is not None:
             sync_progress_emitter.reset(token)
+    authoritative = (
+        sync_state.chain in {"bitcoin", "liquid"}
+        and discovery.kind in {"esplora", "electrum", "bitcoinrpc"}
+    )
+    if authoritative and is_silent_payment_plan(sync_state.descriptor_plan):
+        # Bitcoin Core RPC reaches the scanner through this ordinary path; an
+        # incomplete scan is no more authoritative here than on the
+        # compatibility route.
+        authoritative = silent_payment_scan_authoritative(adapter_meta, normalized_records)
     return WalletBackendFetch(
         backend=discovery.backend,
         sync_state=sync_state,
@@ -667,10 +693,7 @@ def fetch_wallet_backend_from_discovery(
         kind=discovery.kind,
         started=discovery.started,
         force_full=discovery.force_full,
-        authoritative_chain_observer=(
-            sync_state.chain in {"bitcoin", "liquid"}
-            and discovery.kind in {"esplora", "electrum", "bitcoinrpc"}
-        ),
+        authoritative_chain_observer=authoritative,
     )
 
 

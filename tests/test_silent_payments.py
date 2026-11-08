@@ -11,6 +11,7 @@ from kassiber.envelope import json_ready
 from kassiber.core import accounts as core_accounts
 from kassiber.core import output_inventory as core_output_inventory
 from kassiber.core import silent_payments
+from kassiber.core import sync as core_sync
 from kassiber.core import sync_backends
 from kassiber.core import wallets as core_wallets
 from kassiber.core.imports import ImportCoordinatorHooks, import_records_into_wallet
@@ -879,6 +880,48 @@ class SilentPaymentsTests(unittest.TestCase):
                         {"id": "wallet", "label": "SP"},
                         discovery,
                     )
+                self.assertEqual(fetched.authoritative_chain_observer, expected)
+
+    def test_core_rpc_scans_are_authoritative_only_when_complete(self):
+        # The ordinary adapter path (Bitcoin Core RPC) used to grant observer
+        # authority to every scan; an incomplete or untimestamped one must not
+        # be able to retire or supersede what the book already holds.
+        plan = silent_payments.build_plan(_sp_config())
+        state = WalletSyncState(
+            chain="bitcoin",
+            network="main",
+            descriptor_plan=plan,
+            policy_asset_id="",
+            targets=[silent_payments.sync_target(plan)],
+            tracked_scripts={},
+            history_cache={},
+        )
+        discovery = SimpleNamespace(
+            backend={"name": "core", "kind": "bitcoinrpc", "url": "http://127.0.0.1:1"},
+            sync_state=state,
+            kind="bitcoinrpc",
+            started="2026-07-14T12:00:00Z",
+            force_full=False,
+            skip_outcome=None,
+        )
+        cases = (
+            (False, "2026-06-01T12:00:00Z", False),
+            ("true", "2026-06-01T12:00:00Z", False),
+            (True, None, False),
+            (True, "", False),
+            (True, "2026-06-01T12:00:00Z", True),
+        )
+        for complete, confirmed_at, expected in cases:
+            with self.subTest(complete=complete, confirmed_at=confirmed_at):
+                adapter = lambda *_args: (
+                    [{"txid": "11" * 32, "confirmed_at": confirmed_at}],
+                    {"silent_payment_scan_complete": complete},
+                )
+                fetched = core_sync.fetch_wallet_backend_from_discovery(
+                    {"id": "wallet", "label": "SP"},
+                    SimpleNamespace(backend_adapters={"bitcoinrpc": adapter}),
+                    discovery,
+                )
                 self.assertEqual(fetched.authoritative_chain_observer, expected)
 
     def test_partial_scan_does_not_mark_missing_utxos_spent(self):

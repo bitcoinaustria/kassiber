@@ -704,6 +704,14 @@ protocol decoding, HTLC evidence,
 normalization, and Kassiber's ownership/tax domain logic remain intentionally
 separate.
 
+A Silent Payments scan publishes with observer authority only when the
+scanner reports it complete (`silent_payment_scan_complete`) and every record
+carries its confirmation time, whichever backend served it
+(`core.sync.silent_payment_scan_authoritative`). Bitcoin Core RPC reaches the
+scanner through the ordinary adapter path, which granted authority to every
+Core scan until round 14; an incomplete scan there now publishes without it,
+like the compatibility route's (`test_core_rpc_scans_are_authoritative_only_when_complete`).
+
 Descriptor configurations that BDK/LWK cannot faithfully express, including
 all Esplora HTTP routes, remote-DNS Tor, custom CA/auth and binding-specific
 custom timeouts, use
