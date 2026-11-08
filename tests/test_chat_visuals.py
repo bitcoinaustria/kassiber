@@ -580,15 +580,16 @@ class DaemonVisualToolTest(unittest.TestCase):
 
     def test_wire_names_run_the_same_read_maintenance(self):
         # Models call tools by wire name; the refresh must not depend on it.
+        # The executor passes the catalog name it resolved from the call.
         from kassiber import daemon
 
         arguments = {"source": "balance_history"}
         for name in daemon._AI_AUTO_JOURNAL_REFRESH_TOOL_NAMES:
-            entry = get_tool(name)
-            self.assertIsNotNone(entry, name)
-            for called in (entry.name, entry.provider_name):
+            for called in (name, get_tool(name).provider_name):
+                entry = get_tool(called)
+                self.assertIsNotNone(entry, called)
                 self.assertTrue(
-                    daemon._ai_read_wants_maintenance(ParsedAiToolCall("c", called, arguments)),
+                    daemon._ai_read_wants_maintenance(ParsedAiToolCall("c", called, arguments), entry.name),
                     called,
                 )
         self.assertFalse(daemon._ai_read_wants_maintenance(ParsedAiToolCall("c", "ui_transactions_list", {})))
