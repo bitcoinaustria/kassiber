@@ -12756,14 +12756,33 @@ class DaemonSmokeTest(unittest.TestCase):
                         },
                     },
                 )
-                self.assertEqual(_read_payload_timeout(proc)["kind"], "ai.tool_call.consent")
-                while True:
+                # The control's reply and the chat's records interleave either
+                # way: the request loop answers the decision while the chat
+                # worker, released by it, writes the denied call's result.
+                control = None
+                chat_records = []
+                while control is None or not (
+                    chat_records and chat_records[-1].get("kind") == "ai.chat"
+                ):
                     payload = _read_payload_timeout(proc)
-                    if (
-                        payload.get("request_id") == "chat-mutating-redact"
-                        and payload.get("kind") == "ai.chat"
-                    ):
-                        break
+                    if payload.get("request_id") == "consent-redact-1":
+                        self.assertIsNone(control, payload)
+                        control = payload
+                    elif payload.get("request_id") == "chat-mutating-redact":
+                        chat_records.append(payload)
+                self.assertEqual(control["kind"], "ai.tool_call.consent", control)
+                self.assertEqual(control["data"], {"recorded": True})
+                results = [
+                    record["data"]
+                    for record in chat_records
+                    if record.get("kind") == "ai.chat.tool_result"
+                ]
+                self.assertEqual(len(results), 1, chat_records)
+                self.assertEqual(results[0]["call_id"], "call_1")
+                self.assertIs(results[0]["ok"], False)
+                self.assertEqual(results[0]["reason"], "user_denied")
+                # Nothing the denied call carried leaks into its records.
+                self.assertNotIn("secret", json.dumps(chat_records))
 
                 _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
                 self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
