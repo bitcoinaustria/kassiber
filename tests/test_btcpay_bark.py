@@ -17,6 +17,7 @@ from kassiber.btcpay.payment_methods import (
     require_settlement_payment_method,
     require_wallet_history_payment_method,
 )
+from kassiber.cli import handlers
 from kassiber.core import btcpay_setup, commercial
 from kassiber.core.custody_evidence import row_boundary_amounts
 from kassiber.errors import AppError
@@ -314,6 +315,7 @@ class LedgerMigrationTest(_BarkBook):
         booked = self._ledger_first()
         self.conn.execute("UPDATE transactions SET note = 'reviewed' WHERE wallet_id = 'ark'")
         self.conn.commit()
+        stale = self.conn.execute("SELECT * FROM wallets WHERE id = 'ark'").fetchone()
         outcome = self._sync("ark", _routes())
         self.assertTrue(outcome["bark"]["migrated_from_payment_ledger"])
         self.assertEqual(outcome["bark"]["ledger_rows_kept"], 3)
@@ -326,6 +328,9 @@ class LedgerMigrationTest(_BarkBook):
             self.assertEqual((after[external_id]["id"], after[external_id]["note"]), (transaction_id, "reviewed"))
         self.assertEqual(self._balance("ark"), CONFIRMED_BALANCE_MSAT)
         self.assertEqual(json.loads(after[f"btcpay:S1:invoice:inv-ln:payment:{H_ARK_LN}"]["raw_json"])["source"], "btcpay_bark_wallet")
+        # The switch survives the sync's own bookkeeping (last_synced_at).
+        handlers._mark_wallet_synced(self.conn, stale)
+        self.assertNotIn("source_mode", json.loads(self.conn.execute("SELECT config_json FROM wallets WHERE id = 'ark'").fetchone()[0]))
         # Afterwards it syncs as a wallet import, without rows twice.
         self._sync("ark", _routes())
         self.assertEqual(self._balance("ark"), CONFIRMED_BALANCE_MSAT)

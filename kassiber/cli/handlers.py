@@ -1998,9 +1998,17 @@ def _wallet_sync_hooks(commit=True):
     )
 
 
+def _stored_wallet_config(conn, wallet):
+    """The wallet's config as stored now: a sync may have changed it (a Bark
+    payment ledger switches to the wallet import)."""
+
+    row = conn.execute("SELECT config_json FROM wallets WHERE id = ?", (wallet["id"],)).fetchone()
+    return json.loads((row[0] if row is not None else wallet["config_json"]) or "{}")
+
+
 def _mark_wallet_synced(conn, wallet, synced_at=None):
     timestamp = synced_at or now_iso()
-    config = json.loads(wallet["config_json"] or "{}")
+    config = _stored_wallet_config(conn, wallet)
     config["last_synced_at"] = timestamp
     conn.execute(
         "UPDATE wallets SET config_json = ? WHERE id = ?",
