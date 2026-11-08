@@ -6282,6 +6282,15 @@ _BREAKDOWN_ORDER = (
 )
 
 
+def _is_long_term_gain(row: sqlite3.Row) -> bool:
+    """Whether a journal row's holding period is long-term.
+
+    Both tax engines store ``long``; ``long_term`` is accepted too, so the
+    lot label and the breakdown bucket always agree on a row.
+    """
+    return str(row["capital_gains_type"] or "").lower() in {"long", "long_term"}
+
+
 def _capital_gains_breakdown(
     rows: list[sqlite3.Row],
     swaps: list[dict[str, Any]],
@@ -6308,7 +6317,7 @@ def _capital_gains_breakdown(
             return str(kennzahl) if kennzahl else "unassigned"
         if row["entry_type"] == "income":
             return "income"
-        if str(row["capital_gains_type"] or "").lower() == "long":
+        if _is_long_term_gain(row):
             return "long_term"
         return "short_term"
 
@@ -6541,7 +6550,7 @@ def build_capital_gains_snapshot(
             ),
             "type": (
                 "LT"
-                if str(row["capital_gains_type"] or "").lower() in {"long", "long_term"}
+                if _is_long_term_gain(row)
                 else "ST"
             ),
             "transactionId": row["transaction_id"],
