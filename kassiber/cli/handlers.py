@@ -155,6 +155,7 @@ from ..wallet_setup import BSMS_DESCRIPTOR_SOURCE, parse_bsms_descriptor_record
 from ..importers import load_import_records
 from ..btcpay.client import normalize_server_url as normalize_btcpay_server_url
 from ..btcpay.permissions import MODIFY_STORE_SETTINGS as BTCPAY_MODIFY_STORE_SETTINGS
+from ..btcpay.permissions import VIEW_WALLET as BTCPAY_VIEW_WALLET
 from ..btcpay.permissions import build_authorize_url as build_btcpay_authorize_url
 from ..btcpay.payment_methods import asset_for_payment_method
 from ..btcpay.permissions import key_setup_guide as btcpay_key_setup_guide
@@ -2614,6 +2615,8 @@ def sync_wallet(
 
 
 def _is_missing_wallet_history_permission(exc, store_id):
+    # BTCPay 2.4 names `canviewwallet` for the wallet endpoints; 2.3 named
+    # `canmodifystoresettings`.
     details = exc.details if isinstance(exc.details, dict) else {}
     missing = str(details.get("missing_permission") or "")
     # BTCPay may scope the missing permission to the store
@@ -2622,7 +2625,7 @@ def _is_missing_wallet_history_permission(exc, store_id):
     # permission.
     name, scoped, scope = missing.partition(":")
     return exc.code == "auth_error" and (
-        (name == BTCPAY_MODIFY_STORE_SETTINGS and (not scoped or scope == store_id))
+        (name in {BTCPAY_MODIFY_STORE_SETTINGS, BTCPAY_VIEW_WALLET} and (not scoped or scope == store_id))
         or (not missing and details.get("http_status") == 403)
     )
 

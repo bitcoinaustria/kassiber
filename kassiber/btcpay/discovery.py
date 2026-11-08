@@ -42,9 +42,11 @@ from .payment_methods import (
 from .permissions import (
     CAPABILITY_PERMISSIONS,
     KeyGrant,
+    capability_permissions,
     grant_summary,
     parse_key_grant,
     permission_label,
+    server_version,
 )
 
 PREVIEW_ADDRESS_COUNT = 5
@@ -191,9 +193,11 @@ def _inspect_store(
     grant: KeyGrant,
     major_version: int | None,
     preview_count: int,
+    version: tuple[int, int] | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]], dict[str, list[str]], list[dict[str, Any]]]:
     store_id = store["id"]
-    capabilities = grant.capabilities(store_id) if grant.known else {key: None for key in CAPABILITY_PERMISSIONS}
+    capabilities = grant.capabilities(store_id, version) if grant.known else {key: None for key in CAPABILITY_PERMISSIONS}
+    required = capability_permissions(version)[0]
     warnings: list[dict[str, Any]] = []
     methods: list[dict[str, Any]] = []
     previews: dict[str, list[str]] = {}
@@ -201,7 +205,7 @@ def _inspect_store(
     store["capabilities"] = capabilities
     store["missing_permissions"] = sorted(
         {
-            CAPABILITY_PERMISSIONS[capability]
+            required[capability]
             for capability, available in capabilities.items()
             if available is False and capability != "wallet_history"
         }
@@ -241,12 +245,12 @@ def _inspect_store(
         method["wallet_fingerprint"] = None
         method["network"] = None
         method["preview_error"] = None
-        if (
-            method["rail"] == RAIL_ONCHAIN
-            and method["bitcoin_asset"]
-            and method["enabled"]
-            and capabilities.get("wallet_preview") is not False
-        ):
+        previewable = method["rail"] == RAIL_ONCHAIN and method["bitcoin_asset"] and method["enabled"]
+        if previewable and capabilities.get("wallet_preview") is False:
+            # The key cannot read the preview on this server (BTCPay 2.4 needs
+            # `canviewwallet`); say so instead of asking.
+            method["preview_error"] = "missing_permission"
+        elif previewable:
             addresses, preview_error = _fetch_preview(client, store_id, method, major_version, preview_count)
             if addresses:
                 previews[method["payment_method_id"]] = addresses
@@ -321,7 +325,7 @@ def inspect_btcpay_connection(
     key_payload, key_error = client.get_optional_json("/api/v1/api-keys/current", tolerate=(403, 404, 405))
     key_info = scrub_api_key_payload(key_payload) if key_error is None else {}
     grant = parse_key_grant(key_info.get("permissions") if key_error is None else None)
-    api_key = {"label": key_info.get("label"), **grant_summary(grant)}
+    api_key = {"label": key_info.get("label"), **grant_summary(grant, server_version(server["version"]))}
     risk = api_key["risk"]
     if risk == "server_admin":
         warnings.append(
@@ -391,11 +395,17 @@ def inspect_btcpay_connection(
     if stores:
         workers = max(1, min(max_workers, len(stores)))
         if workers == 1:
-            results = [_inspect_store(client, store, grant, major_version, preview_count) for store in stores]
+            results = [
+                _inspect_store(client, store, grant, major_version, preview_count, server_version(server["version"]))
+                for store in stores
+            ]
         else:
             with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="btcpay-inspect") as pool:
                 futures = [
-                    pool.submit(_inspect_store, client, store, grant, major_version, preview_count)
+                    pool.submit(
+                        _inspect_store, client, store, grant, major_version, preview_count,
+                        server_version(server["version"]),
+                    )
                     for store in stores
                 ]
                 results = [future.result() for future in futures]

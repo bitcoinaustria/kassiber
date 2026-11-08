@@ -56,10 +56,11 @@ INCREMENTAL_UNCHANGED_PAGE_WINDOW = 5
 INCREMENTAL_DEEP_AUDIT_PAGES = 1
 
 WALLET_HISTORY_PERMISSION_HINT = (
-    "Greenfield wallet endpoints currently require the "
-    "`btcpay.store.canmodifystoresettings` permission. Keep this store as "
-    "invoice provenance with a read-only key, or map it to a watch-only wallet "
-    "you already track."
+    "Greenfield wallet endpoints require the read-only "
+    "`btcpay.store.canviewwallet` permission on BTCPay Server 2.4 and later, "
+    "or `btcpay.store.canmodifystoresettings` on 2.3 and earlier. Keep this "
+    "store as invoice provenance with a read-only key, or map it to a "
+    "watch-only wallet you already track."
 )
 INVOICE_PERMISSION_HINT = "Grant the API key the BTCPay 'View invoices' permission."
 STORE_PERMISSION_HINT = "Grant the API key 'View your stores' (btcpay.store.canviewstoresettings)."

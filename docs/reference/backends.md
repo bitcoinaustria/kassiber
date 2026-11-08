@@ -385,8 +385,17 @@ BTCPay). Each saved `btcpay` backend is one server URL plus one API key.
 
 | Preset | Permission | What Kassiber can do |
 | --- | --- | --- |
-| `read_only` | `btcpay.store.canviewstoresettings` | Stores, enabled payment methods, invoices and payments, payment requests, refunds and payouts, and the on-chain address preview used to recognise which wallet a store pays into. Enough for Lightning and plugin payment ledgers and for stores whose wallet you already track. The key cannot change the store. |
-| `wallet_history` | `btcpay.store.canmodifystoresettings` | Everything above plus each store's on-chain wallet as BTCPay records it, with labels, comments, and payout fees. BTCPay exposes wallet history only under this permission, which can also change the store, including where it receives payments. |
+| `read_only` | `btcpay.store.canviewstoresettings`, `btcpay.store.canviewwallet` | Stores, enabled payment methods, invoices and payments, payment requests, refunds and payouts, and the on-chain address preview used to recognise which wallet a store pays into. On BTCPay Server 2.4 and later also each store's on-chain wallet history. Enough for Lightning and plugin payment ledgers and for stores whose wallet you already track. The key cannot change the store. |
+| `wallet_history` | `btcpay.store.canmodifystoresettings` | For BTCPay Server 2.3 and earlier: everything above plus each store's on-chain wallet as BTCPay records it, with labels, comments, and payout fees. These versions expose wallet history only under this permission, which can also change the store, including where it receives payments. |
+
+BTCPay Server 2.4 moved the wallet address preview and wallet history from
+`canviewstoresettings` and `canmodifystoresettings` to the read-only
+`btcpay.store.canviewwallet` ("View wallets"). A key from the old read-only
+preset gets `preview_error: missing_permission` and no detected network on
+2.4; recreate it with the read-only preset. Earlier servers drop the unknown
+`canviewwallet` from the authorize page, so one read-only link works on both.
+`canmodifystoresettings` still includes `canviewwallet` on 2.4, so existing
+wallet-history keys keep working.
 
 `kassiber btcpay key-url --server-url https://btcpay.example.com [--preset
 read_only] [--scope all|single] [--store-id ID]` prints the permissions, manual

@@ -273,12 +273,14 @@ kassiber wallets sync --all
 kassiber btcpay provenance sync --all
 ```
 
-Key presets: `read_only` (`btcpay.store.canviewstoresettings`) reads invoices,
-payments, refunds/payouts, payment requests, and the address preview used to
-recognise which wallet a store pays into; it cannot change the store.
-`wallet_history` (`btcpay.store.canmodifystoresettings`) is the only way BTCPay
-exposes its own on-chain wallet history, labels, and payout fees, and it can
-also change the store's payout wallet. BTCPay's own records are an accurate
+Key presets: `read_only` (`btcpay.store.canviewstoresettings` plus
+`btcpay.store.canviewwallet`) reads invoices, payments, refunds/payouts,
+payment requests, and the address preview used to recognise which wallet a
+store pays into; on BTCPay Server 2.4 and later it also reads the store's
+on-chain wallet history, labels, and payout fees. It cannot change the store.
+On 2.3 and earlier, `wallet_history` (`btcpay.store.canmodifystoresettings`)
+is the only way BTCPay exposes that wallet history, and it can also change
+the store's payout wallet. BTCPay's own records are an accurate
 balance source; do not push users towards watch-only wallets. Explain the
 permission trade-off and let the user choose: a wallet-history key, or mapping
 the store to a wallet they already track.

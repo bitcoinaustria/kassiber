@@ -362,6 +362,8 @@ from .secrets.unlock_store import (
 )
 from .btcpay.client import normalize_server_url as normalize_btcpay_server_url
 from .btcpay.permissions import KEY_PRESETS as BTCPAY_KEY_PRESETS
+from .btcpay.permissions import server_version as btcpay_server_version
+from .btcpay.permissions import wallet_history_preset as btcpay_wallet_history_preset
 from .btcpay.permissions import key_setup_guide as btcpay_key_setup_guide
 from .core import btcpay_setup as core_btcpay_setup
 from .sync_btcpay import (
@@ -17145,7 +17147,10 @@ def _discover_btcpay_connection_payload(
     )
     _chain, network = core_btcpay_setup.detected_network(plan)
     plan["detected_network"] = network
-    plan["key_upgrade"] = btcpay_key_setup_guide(server_url, preset="wallet_history")
+    # BTCPay 2.4 serves wallet history to the read-only key; 2.3 needs the
+    # store-modifying one.
+    version = btcpay_server_version((plan.get("server") or {}).get("version"))
+    plan["key_upgrade"] = btcpay_key_setup_guide(server_url, preset=btcpay_wallet_history_preset(version))
     plan["key_read_only"] = btcpay_key_setup_guide(server_url, preset="read_only")
     return plan
 

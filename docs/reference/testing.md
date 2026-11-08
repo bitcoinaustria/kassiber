@@ -493,6 +493,12 @@ not publish a `latest` tag. Override images with `KASSIBER_REGTEST_BTCPAY_IMAGE`
 `KASSIBER_REGTEST_BTCPAY_NBXPLORER_IMAGE`, and
 `KASSIBER_REGTEST_BTCPAY_POSTGRES_IMAGE`.
 
+`dev/regtest/btcpay_permission_probe.py` checks Kassiber's key presets against
+one BTCPay version (`up --btcpay 2.4.7`, `probe`, `down`) in its own Compose
+project and ports: the server's permission tree, which wallet endpoints each
+permission set can read, and what the browser authorize page grants. BTCPay
+2.4 needs NBXplorer 2.6; the probe picks it.
+
 The seed helper (`python -m dev.regtest.btcpay_seed`) uses the Greenfield API to
 create a disposable admin user, store, BTC on-chain payment method, and scoped
 API key. In the standalone `btcpay` lane it creates and pays a realistic

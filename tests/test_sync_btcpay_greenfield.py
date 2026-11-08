@@ -30,12 +30,15 @@ from kassiber.btcpay.permissions import (
     key_risk,
     key_setup_guide,
     parse_key_grant,
+    server_version,
+    wallet_history_preset,
 )
 from kassiber.core import btcpay_setup
 from kassiber.core import commercial
 from kassiber.db import open_db
 from kassiber.errors import AppError
 from kassiber.sync_btcpay import (
+    WALLET_HISTORY_PERMISSION_HINT,
     fetch_btcpay_invoice_provenance,
     fetch_btcpay_payouts,
     fetch_btcpay_records,
@@ -197,7 +200,7 @@ class ClientAndPermissionTest(unittest.TestCase):
         parts = urlsplit(url)
         query = parse_qs(parts.query)
         self.assertEqual(f"{parts.scheme}://{parts.netloc}{parts.path}", "https://pay.example.com/api-keys/authorize")
-        self.assertEqual(query["permissions"], ["btcpay.store.canviewstoresettings"])
+        self.assertEqual(query["permissions"], ["btcpay.store.canviewstoresettings", "btcpay.store.canviewwallet"])
         self.assertEqual(query["strict"], ["true"])
         # A read-only key covers every store unless the user asks for one store.
         self.assertEqual(query["selectiveStores"], ["false"])
@@ -210,7 +213,12 @@ class ClientAndPermissionTest(unittest.TestCase):
         scoped = parse_qs(urlsplit(build_authorize_url("https://pay.example.com", store_ids=["S1", "S2"])).query)
         self.assertEqual(
             scoped["permissions"],
-            ["btcpay.store.canviewstoresettings:S1", "btcpay.store.canviewstoresettings:S2"],
+            [
+                "btcpay.store.canviewstoresettings:S1",
+                "btcpay.store.canviewstoresettings:S2",
+                "btcpay.store.canviewwallet:S1",
+                "btcpay.store.canviewwallet:S2",
+            ],
         )
         self.assertEqual(scoped["selectiveStores"], ["false"])
         guide = key_setup_guide(None, preset="wallet_history")
@@ -219,6 +227,60 @@ class ClientAndPermissionTest(unittest.TestCase):
         self.assertNotIn("authorize_url", guide)
         with self.assertRaises(AppError):
             key_setup_guide(None, preset="everything")
+
+
+class WalletPolicyVersionTest(unittest.TestCase):
+    """BTCPay 2.4 moved the wallet preview and history to `canviewwallet` (#692)."""
+
+    def test_capabilities_follow_the_server_version(self):
+        def caps(permissions, version):
+            capabilities = parse_key_grant([f"{name}:S1" for name in permissions]).capabilities("S1", version)
+            return capabilities["wallet_preview"], capabilities["wallet_history"]
+
+        view = ["btcpay.store.canviewstoresettings"]
+        read_only = ["btcpay.store.canviewstoresettings", "btcpay.store.canviewwallet"]
+        modify = ["btcpay.store.canmodifystoresettings"]
+        wallet = ["btcpay.store.canviewwallet"]
+        self.assertEqual(caps(view, (2, 3)), (True, False))
+        self.assertEqual(caps(view, (2, 4)), (False, False))
+        self.assertEqual(caps(read_only, (2, 3)), (True, False))
+        self.assertEqual(caps(read_only, (2, 4)), (True, True))
+        # `canmodifystoresettings` includes `canviewwallet` on 2.4.
+        self.assertEqual(caps(modify, (2, 3)), (True, True))
+        self.assertEqual(caps(modify, (2, 4)), (True, True))
+        self.assertEqual(caps(wallet, (2, 3)), (False, False))
+        self.assertEqual(caps(wallet, (3, 0)), (True, True))
+        # Without a version, either server's permission counts.
+        self.assertEqual(caps(view, None), (True, False))
+        self.assertEqual(caps(wallet, None), (True, True))
+        grant = parse_key_grant([f"{name}:S1" for name in read_only])
+        self.assertEqual(key_risk(grant), "read_only")
+        self.assertEqual(excess_permissions(grant), [])
+
+    def test_versions_and_presets(self):
+        self.assertEqual(server_version("2.4.7"), (2, 4))
+        self.assertEqual(server_version("v2.3.9+abc"), (2, 3))
+        self.assertIsNone(server_version(None))
+        self.assertIsNone(server_version("unknown"))
+        self.assertEqual(wallet_history_preset((2, 4)), "read_only")
+        self.assertEqual(wallet_history_preset((2, 3)), "wallet_history")
+        self.assertEqual(wallet_history_preset(None), "wallet_history")
+        guide = key_setup_guide(None, preset="read_only")
+        self.assertEqual(guide["permissions"], ["btcpay.store.canviewstoresettings", "btcpay.store.canviewwallet"])
+        self.assertIn("View wallets (btcpay.store.canviewwallet)", " ".join(guide["manual_steps"]))
+
+    def test_wallet_history_refusal_names_both_permissions(self):
+        from kassiber.cli.handlers import _is_missing_wallet_history_permission
+
+        for missing in ("btcpay.store.canviewwallet", "btcpay.store.canmodifystoresettings"):
+            error = AppError("HTTP 403", code="auth_error", details={"missing_permission": missing})
+            self.assertTrue(_is_missing_wallet_history_permission(error, "S1"), missing)
+        scoped = AppError("HTTP 403", code="auth_error", details={"missing_permission": "btcpay.store.canviewwallet:S1"})
+        self.assertTrue(_is_missing_wallet_history_permission(scoped, "S1"))
+        self.assertFalse(_is_missing_wallet_history_permission(scoped, "S2"))
+        other = AppError("HTTP 403", code="auth_error", details={"missing_permission": "btcpay.store.canviewinvoices"})
+        self.assertFalse(_is_missing_wallet_history_permission(other, "S1"))
+        self.assertIn("btcpay.store.canviewwallet", WALLET_HISTORY_PERMISSION_HINT)
 
 
 class CatalogOriginAndPayoutTest(unittest.TestCase):
@@ -358,10 +420,10 @@ class CatalogOriginAndPayoutTest(unittest.TestCase):
 
 
 class InspectionTest(unittest.TestCase):
-    def _server(self, *, key_permissions, stores_status=200, preview=None):
+    def _server(self, *, key_permissions, stores_status=200, preview=None, version="2.3.9"):
         addresses = preview if preview is not None else _store_addresses()
         routes = {
-            "/api/v1/server/info": {"version": "2.3.9", "fullySynched": True, "supportedPaymentMethods": ["BTC-CHAIN", "BTC-LN"]},
+            "/api/v1/server/info": {"version": version, "fullySynched": True, "supportedPaymentMethods": ["BTC-CHAIN", "BTC-LN"]},
             "/api/v1/api-keys/current": {"apiKey": "secret-key", "label": "Kassiber", "permissions": key_permissions},
             "/api/v1/stores": (
                 [
@@ -408,6 +470,32 @@ class InspectionTest(unittest.TestCase):
         self.assertNotIn("secret-key", serialized)
         self.assertNotIn(_store_addresses(1)[0], serialized)
         self.assertEqual(len(result.private["previews"]["S1"]["BTC-CHAIN"]), 5)
+
+    def test_btcpay_24_preview_needs_view_wallet(self):
+        # BTCPay 2.4 guards the address preview with `canviewwallet` (#692): a
+        # key from the old read-only preset learns which permission to add.
+        denied = (403, {"code": "missing-permission", "missingPermission": "btcpay.store.canviewwallet"})
+        opener = self._server(key_permissions=["btcpay.store.canviewstoresettings"], version="2.4.7")
+        opener.routes["/api/v1/stores/S1/payment-methods/BTC-CHAIN/wallet/preview"] = denied
+        public = inspect_btcpay_connection(_client(opener), max_workers=1).public
+        method = {(m["store_id"], m["payment_method_id"]): m for m in public["payment_methods"]}[("S1", "BTC-CHAIN")]
+        store = {s["id"]: s for s in public["stores"]}["S1"]
+        self.assertEqual(method["preview_error"], "missing_permission")
+        self.assertIsNone(method["network"])
+        self.assertFalse(store["capabilities"]["wallet_preview"])
+        self.assertEqual(store["missing_permissions"], ["btcpay.store.canviewwallet"])
+        self.assertFalse(public["api_key"]["global_capabilities"]["wallet_preview"])
+
+        read_only = ["btcpay.store.canviewstoresettings", "btcpay.store.canviewwallet"]
+        public = inspect_btcpay_connection(
+            _client(self._server(key_permissions=read_only, version="2.4.7")), max_workers=1
+        ).public
+        method = {(m["store_id"], m["payment_method_id"]): m for m in public["payment_methods"]}[("S1", "BTC-CHAIN")]
+        self.assertEqual(method["network"], "regtest")
+        self.assertTrue(method["wallet_history_available"])
+        self.assertEqual(public["api_key"]["risk"], "read_only")
+        self.assertEqual(public["api_key"]["excess_permissions"], [])
+        self.assertEqual({s["id"]: s for s in public["stores"]}["S1"]["missing_permissions"], [])
 
     def test_invoice_only_key_falls_back_to_scoped_store_ids(self):
         opener = self._server(

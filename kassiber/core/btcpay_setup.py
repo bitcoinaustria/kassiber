@@ -94,8 +94,9 @@ REASONS = {
     "shared_wallet": "Another store in this setup pays into the same wallet; it is imported once.",
     "import_btcpay_wallet_history": "Import BTCPay's wallet history for this store.",
     "read_only_key_upgrade": (
-        "This key cannot read BTCPay's wallet history. Create a wallet-history key to import the store "
-        "wallet from BTCPay, or map it to a wallet Kassiber already tracks."
+        "This key cannot read BTCPay's wallet history. Create a key that can (on BTCPay Server 2.4 the "
+        "read-only key with 'View wallets') to import the store wallet from BTCPay, or map it to a "
+        "wallet Kassiber already tracks."
     ),
     "wallet_history_permission_missing": "Needs a key with BTCPay wallet-history access.",
     "invoices_permission_missing": "The key cannot read invoices for this store.",
