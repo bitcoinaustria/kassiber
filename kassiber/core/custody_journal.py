@@ -588,7 +588,25 @@ class CustodyJournalBuilder:
         self.as_of = as_of
 
     def _transactions(self):
-        rows = self.conn.execute(
+        try:
+            rows = self._transaction_rows(transaction_order_sql("t"))
+        except sqlite3.OperationalError as exc:
+            # A narrow legacy table without the source order's columns keeps
+            # the legacy order; current books always have them.
+            if "no such column" not in str(exc) and "no such table" not in str(exc):
+                raise
+            rows = self._transaction_rows("t.occurred_at ASC, t.created_at ASC, t.id ASC")
+
+        return [
+            {
+                **dict(row),
+                "_closed_confirmation_observation": ownership_transfers.capture_confirmation_observation(row),
+            }
+            for row in rows
+        ]
+
+    def _transaction_rows(self, order: str):
+        return self.conn.execute(
             """
             SELECT
                 t.*,
@@ -611,18 +629,9 @@ class CustodyJournalBuilder:
             LEFT JOIN chain_observation_provenance observation
               ON observation.transaction_id = t.id
             WHERE t.profile_id = ? AND t.excluded = 0
-            ORDER BY """ + transaction_order_sql("t") + """
-            """,
+            ORDER BY """ + order,
             (self.profile_id,),
         ).fetchall()
-
-        return [
-            {
-                **dict(row),
-                "_closed_confirmation_observation": ownership_transfers.capture_confirmation_observation(row),
-            }
-            for row in rows
-        ]
 
     def _wallet_refs(self) -> dict[str, dict[str, Any]]:
         refs: dict[str, dict[str, Any]] = {}

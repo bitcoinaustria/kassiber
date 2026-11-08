@@ -254,6 +254,23 @@ class LotOrderDeterminismTest(unittest.TestCase):
             finally:
                 conn.close()
 
+    def test_a_narrow_legacy_table_loads_in_the_legacy_order(self):
+        # Loader fixtures keep tables without the source order's columns;
+        # current books always have them.
+        def load(conn, profile_id):
+            profile = conn.execute("SELECT * FROM profiles WHERE id = ?", (profile_id,)).fetchone()
+            current = [row["external_id"] for row in custody_journal.CustodyJournalBuilder(conn, profile)._transactions()]
+            conn.execute("DROP INDEX idx_import_batch_transactions_transaction")
+            conn.execute("ALTER TABLE import_batch_transactions DROP COLUMN source_position")
+            narrow = custody_journal.CustodyJournalBuilder(conn, profile)._transactions()
+            created = sorted(narrow[:3], key=lambda row: (row["created_at"], row["id"]))
+            return current, [row["external_id"] for row in narrow[:3]] == [row["external_id"] for row in created]
+
+        with tempfile.TemporaryDirectory(prefix="kassiber-lot-order-") as tmp:
+            current, legacy = build_book(Path(tmp).resolve(), ROWS[:4], inspect=load)
+        self.assertEqual(current, ["lot-c", "lot-a", "lot-b", "sale-1"])
+        self.assertTrue(legacy)
+
 
 if __name__ == "__main__":
     unittest.main()
