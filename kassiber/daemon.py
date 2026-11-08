@@ -373,6 +373,8 @@ from .sync_btcpay import (
 from .wallet_descriptors import (
     MAX_DESCRIPTOR_GAP_LIMIT,
     derive_descriptor_targets,
+    invalid_descriptor_error,
+    is_embit_error,
     load_descriptor_plan,
     normalize_network,
 )
@@ -16959,6 +16961,17 @@ def _preview_descriptor_payload(args: dict[str, Any]) -> dict[str, Any]:
     except ValueError as exc:
         raise AppError(
             f"Could not parse descriptor: {exc}",
+            code="validation",
+            retryable=False,
+        ) from exc
+    except Exception as exc:
+        # embit's own errors (e.g. a Liquid view key whose wildcard or
+        # branches do not mirror the descriptor) are not ValueErrors; refuse
+        # them without the parser's text instead of crashing the daemon.
+        if not is_embit_error(exc):
+            raise
+        raise AppError(
+            f"Could not parse descriptor: {invalid_descriptor_error()}",
             code="validation",
             retryable=False,
         ) from exc

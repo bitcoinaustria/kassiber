@@ -265,3 +265,40 @@ class PreviewDescriptorTests(unittest.TestCase):
 
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()
+
+
+def _mismatched_view_keys():
+    """Liquid `ct(<view key>, ...)` descriptors whose view key does not mirror
+    the spending descriptor's wildcard or branches: embit raises its own
+    `DescriptorError`, which is not a `ValueError`."""
+    from embit import ec
+
+    account = bip32.HDKey.from_seed(bytes([1]) * 32).derive("m/84h/0h/0h").to_public().to_base58()
+    pubkey = bip32.HDKey.from_seed(bytes([1]) * 32).derive("m/84h/0h/0h").key.get_public_key().sec().hex()
+    view = ec.PrivateKey(bytes([3]) * 32).wif()
+    view_xprv = bip32.HDKey.from_seed(bytes([3]) * 32).to_base58()
+    return {
+        "wildcards": (f"ct({view},elwpkh({account}/<0;1>/*))", (view,)),
+        "branches": (f"ct({view_xprv}/*,elwpkh({account}/<0;1>/*))", (view_xprv,)),
+        "three-branches": (f"ct({view_xprv}/<0;1;2>/*,elwpkh({account}/<0;1>/*))", (view_xprv,)),
+        "static-spend": (f"ct({view_xprv}/<0;1>/*,elwpkh({pubkey}))", (view_xprv,)),
+        "legacy-set": (f"ct({view_xprv}/{{0,1,2}}/*,elwpkh({account}/<0;1>/*))", (view_xprv,)),
+    }
+
+
+class PreviewEmbitErrorTests(unittest.TestCase):
+    def test_mismatched_liquid_view_keys_refuse_with_a_structured_error(self):
+        # These escaped the route as embit's `DescriptorError`, so the daemon
+        # answered internal_error with the parser's text. The refusal is the
+        # one the Rust daemon sends, and names no key material.
+        for name, (descriptor, secrets) in _mismatched_view_keys().items():
+            with self.subTest(name):
+                with self.assertRaises(AppError) as ctx:
+                    _preview_descriptor_payload({"descriptor": descriptor, "chain": "liquid", "count": 2})
+                error = ctx.exception
+                self.assertEqual(
+                    (error.code, str(error), error.hint, error.details, error.retryable),
+                    ("validation", "Could not parse descriptor: Invalid wallet descriptor", None, None, False),
+                )
+                for secret in secrets:
+                    self.assertNotIn(secret, str(error))

@@ -109,6 +109,22 @@ class DerivedTarget:
     key_origins: tuple[str, ...]
 
 
+def is_embit_error(exc: BaseException) -> bool:
+    """Whether ``exc`` is one of embit's own descriptor/miniscript errors,
+    which are not ``ValueError`` subclasses."""
+    try:
+        from embit.base import EmbitError
+    except ImportError:
+        return False
+    return isinstance(exc, EmbitError)
+
+
+def invalid_descriptor_error() -> AppError:
+    """The refusal for an embit error. Its parser text is withheld: a
+    malformed operator or blinding key can quote key material."""
+    return AppError("Invalid wallet descriptor", code="validation")
+
+
 def get_embit_modules():
     global _EMBIT_MODULES
     if _EMBIT_MODULES is not None:

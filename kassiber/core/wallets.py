@@ -16,6 +16,8 @@ from ..wallet_descriptors import (
     DEFAULT_DESCRIPTOR_GAP_LIMIT,
     MAX_DESCRIPTOR_GAP_LIMIT,
     default_policy_asset_id,
+    invalid_descriptor_error,
+    is_embit_error,
     load_descriptor_plan,
     liquid_plan_can_unblind,
     normalize_asset_code,
@@ -280,13 +282,9 @@ def load_wallet_descriptor_plan_from_config(config):
     except AppError:
         raise
     except Exception as exc:
-        # embit's descriptor/miniscript errors are not ValueError subclasses.
-        # Do not expose parser text: malformed operators can contain key material.
-        from embit.base import EmbitError
-
-        if not isinstance(exc, EmbitError):
+        if not is_embit_error(exc):
             raise
-        raise AppError("Invalid wallet descriptor", code="validation") from exc
+        raise invalid_descriptor_error() from exc
 
 
 def wallet_policy_asset_id(config, chain, network):
@@ -789,6 +787,12 @@ def _wallet_descriptor_state(config):
             if exc.code != "dependency_missing":
                 raise
             descriptor_state = "invalid"
+        except Exception as exc:
+            # embit's own errors (a Liquid view key that does not mirror the
+            # descriptor) refuse as the wallet's other paths do.
+            if not is_embit_error(exc):
+                raise
+            raise invalid_descriptor_error() from exc
     return descriptor_state, chain, network
 
 
