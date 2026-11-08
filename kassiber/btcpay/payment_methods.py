@@ -26,7 +26,8 @@ from ..errors import AppError
 
 WALLET_HISTORY_PAYMENT_METHOD_IDS = frozenset({"BTC-CHAIN", "LBTC-CHAIN", "BTC-ARK"})
 BARK_PAYMENT_METHOD_ID = "BTC-ARK"
-_LEGACY_BARK_IDS = frozenset({"BARK", "BARK-CHAIN"})
+# Plugins before 0.10 named it ``BARK``, which canonicalizes to this.
+_LEGACY_BARK_ID = "BARK-CHAIN"
 BITCOIN_ASSET_CHAINS = {"BTC": "bitcoin", "LBTC": "liquid"}
 
 RAIL_ONCHAIN = "onchain"
@@ -105,11 +106,14 @@ def split_payment_method_id(value: Any) -> tuple[str, str]:
 def canonical_payment_method_id(value: Any) -> str:
     """Map legacy and differently-cased ids to BTCPay 2.x names."""
 
+    canonical = _canonical_payment_method_id(value)
+    return BARK_PAYMENT_METHOD_ID if canonical == _LEGACY_BARK_ID else canonical
+
+
+def _canonical_payment_method_id(value: Any) -> str:
     raw = str(value or "").strip()
     if not raw:
         return ""
-    if raw.upper() in _LEGACY_BARK_IDS:
-        return BARK_PAYMENT_METHOD_ID
     currency, handler = split_payment_method_id(raw)
     if not handler:
         # A short bare crypto code (``BTC``) is a 1.x on-chain method; any

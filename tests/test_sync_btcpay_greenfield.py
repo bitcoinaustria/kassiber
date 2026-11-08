@@ -290,7 +290,7 @@ class CatalogOriginAndPayoutTest(unittest.TestCase):
         self.assertEqual(canonical_payment_method_id("BTC_LNURLPAY"), "BTC-LNURL")
         self.assertEqual(canonical_payment_method_id("ARKADE"), "ARKADE")
         # Bark before plugin 0.10, and Kassiber's earlier canonical form of it.
-        for legacy in ("BARK", "bark", " Bark ", "BARK-CHAIN", "bark-chain"):
+        for legacy in ("BARK", "bark", " Bark ", "BARK-CHAIN", "bark-chain", "bark_onchain"):
             self.assertEqual(canonical_payment_method_id(legacy), "BTC-ARK", legacy)
         expected = {
             "BTC-CHAIN": ("onchain", "bitcoin", True, "btc_onchain"),
