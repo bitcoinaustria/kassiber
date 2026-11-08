@@ -2880,9 +2880,11 @@ def _sync_bark_wallet(
             retryable=bool(provenance.get("retryable")),
         )
     # Identities, the ledger switch, moved Lightning rows and the import land
-    # together or not at all: a refusal leaves the book as it was.
+    # together or not at all: a refusal leaves the book as it was. Freshness
+    # progress commits on this connection, so the import stays quiet inside.
     savepoint = f"bark_import_{uuid.uuid4().hex}"
     conn.execute(f"SAVEPOINT {savepoint}")
+    progress_token = core_sync.sync_progress_emitter.set(None)
     try:
         identities = core_btcpay_bark.assign_identities(
             conn, profile["id"], wallet["id"], store_id=store_id, records=records
@@ -2918,6 +2920,8 @@ def _sync_bark_wallet(
         conn.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
         conn.execute(f"RELEASE SAVEPOINT {savepoint}")
         raise
+    finally:
+        core_sync.sync_progress_emitter.reset(progress_token)
     conn.execute(f"RELEASE SAVEPOINT {savepoint}")
     if provenance.get("status") == "synced":
         provenance["suggestions"] = _refresh_commercial_suggestions(conn, profile)

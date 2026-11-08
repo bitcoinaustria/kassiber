@@ -261,6 +261,17 @@ class BarkWalletImportTest(_BarkBook):
         self.assertEqual(again["imported"], 0)
         self.assertEqual(self._snapshot()["transactions"], before["transactions"])
 
+    def test_freshness_progress_cannot_end_the_import_savepoint(self):
+        # A freshness job persists progress and commits on this connection.
+        from kassiber.core import sync as core_sync
+
+        token = core_sync.sync_progress_emitter.set(lambda event: self.conn.commit())
+        try:
+            self._sync("bark", _routes())
+        finally:
+            core_sync.sync_progress_emitter.reset(token)
+        self.assertEqual(self._balance("bark"), CONFIRMED_BALANCE_MSAT)
+
     def test_a_row_booked_before_its_invoice_moves_to_the_payment_key(self):
         self._sync("bark", _routes(invoices=[]))
         early = self.conn.execute("SELECT id FROM transactions WHERE external_id = ?", (f"btcpay-bark:S1:5-1:{T_ARK}:0",)).fetchone()
