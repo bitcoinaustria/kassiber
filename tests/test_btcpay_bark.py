@@ -298,6 +298,27 @@ class BarkWalletImportTest(_BarkBook):
         self.assertEqual(outcome["bark"]["ambiguous_payments"], 2)
         self.assertEqual({row["external_id"] for row in self._rows("bark")}, {"btcpay-bark:S1:5-1:a", "btcpay-bark:S1:5-1:b"})
 
+    def test_a_movement_paying_two_payments_links_each_by_amount(self):
+        # Plugin 0.9.6 names each VTXO of one movement `#ark-movement-N-I`.
+        invoices = [
+            {
+                **_invoice("inv-split", "BARK", "inv-split#ark-movement-5-0", "0.0004"),
+            }
+        ]
+        invoices[0]["paymentMethods"][0]["payments"].append(
+            {"id": "inv-split#ark-movement-5-1", "value": "0.0016", "status": "Settled", "receivedDate": PAYOUT_DATE}
+        )
+        rows = [
+            _row("5-1:a", "ark-receive", "0.0004", movementId=5, invoice="inv-split", outpoint=f"{'f1' * 32}:0"),
+            _row("5-1:b", "ark-receive", "0.0016", movementId=5, invoice="inv-split", outpoint=f"{'f2' * 32}:0"),
+        ]
+        outcome = self._sync("bark", _routes(rows=rows, invoices=invoices))
+        self.assertEqual((outcome["bark"]["linked_to_payments"], outcome["bark"]["ambiguous_payments"]), (2, 0))
+        self.assertEqual(
+            {row["external_id"] for row in self._rows("bark")},
+            {"btcpay:S1:invoice:inv-split:payment:inv-split#ark-movement-5-0", "btcpay:S1:invoice:inv-split:payment:inv-split#ark-movement-5-1"},
+        )
+
     def test_an_unknown_kind_refuses_the_whole_sync(self):
         rows = [*ROWS, _row("11-1", "teleport", "0.0001")]
         with self.assertRaises(AppError) as ctx:
