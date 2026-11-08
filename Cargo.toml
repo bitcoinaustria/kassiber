@@ -53,7 +53,7 @@ edition = "2021"
 # The repository's pinned toolchain (rust-toolchain.toml), which also builds
 # ui-tauri/src-tauri.
 rust-version = "1.99"
-license = "AGPL-3.0-only"
+license = "MIT"
 authors = ["Bitcoin Austria"]
 publish = false
 

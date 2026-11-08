@@ -4,7 +4,7 @@ Name:           kassiber-cli
 Version:        %{kassiber_version}
 Release:        %{kassiber_release}
 Summary:        Local-first Bitcoin accounting CLI
-License:        AGPL-3.0-only
+License:        MIT
 URL:            https://github.com/bitcoinaustria/kassiber
 Source0:        kassiber
 Source1:        LICENSE

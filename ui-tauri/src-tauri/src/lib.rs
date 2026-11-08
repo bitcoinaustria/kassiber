@@ -4032,7 +4032,7 @@ fn about_metadata(app: &tauri::AppHandle<tauri::Wry>) -> AboutMetadata<'static> 
         authors: Some(vec!["Bitcoin Austria".to_string()]),
         comments: Some("Local-first Bitcoin accounting.".to_string()),
         copyright: config.bundle.copyright.clone(),
-        license: Some("AGPL-3.0-only".to_string()),
+        license: Some("MIT".to_string()),
         website: Some("https://github.com/bitcoinaustria/kassiber".to_string()),
         website_label: Some("Kassiber on GitHub".to_string()),
         ..Default::default()

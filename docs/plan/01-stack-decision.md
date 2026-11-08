@@ -123,8 +123,6 @@ layers without changing the frontend contract.
   WebKitGTK. Test on Ubuntu LTS; budget a CSS-fixup pass per release.
 - **Bundle size.** Larger than a pure-native build. Acceptable for desktop
   accounting; measure per release, do not promise final numbers.
-- **AGPL subprocess linkage.** Widely treated as arms-length aggregation;
-  obtain a written legal opinion before public release.
 - **Bundled dependencies are a CVE surface.** They don't update with the
   OS. Rebuild releases when a shipped crate (or, before plan 22, CPython or a
   shipped wheel) issues a security advisory above a defined severity
@@ -150,9 +148,6 @@ recorded in this file. Targets (not promises):
 - bundle ≤ 150 MB compressed
 - cold start (icon click → first screen rendered) ≤ 2 s on macOS/Windows,
   ≤ 3 s on Linux, on a 2020-era laptop
-
-A signed legal opinion on the AGPL subprocess-linkage question is on file
-before the first public release.
 
 ## References
 

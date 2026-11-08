@@ -147,10 +147,6 @@ Where no sandbox is available, installed extensions do not run; there is no
 unsandboxed fallback. WebAssembly is the portable alternative if per-platform
 sandboxes prove too costly, at the price of a new runtime dependency.
 
-The process boundary also gives third-party authors a clearer licensing
-position than importing AGPL modules; confirm with counsel before documenting
-that.
-
 ### Permissions
 
 Extensions may register importers, sources, assets, price sources, reports,
