@@ -38,6 +38,7 @@ from . import transfer_matching
 from .custody_evidence import build_canonical_quantity_input, enriched_quantity_rows
 from .engines import KassiberTaxEngine, TaxEngineLedgerInputs
 from .journal_calculation import encode_calculation
+from .transaction_order import same_time_order_sql, transaction_order_sql
 from .lightning import channel_lifecycle
 from .repo import resolve_scope
 
@@ -204,11 +205,14 @@ def transaction_rate_quotes_for_profile(
     from ..time_utils import timestamp_predicate
 
     bound = ""
-    order = "occurred_at DESC, created_at DESC"
+    order = transaction_order_sql("transactions", descending=True)
     params = [profile_id]
     if at_or_before is not None:
         bound = " AND " + timestamp_predicate(conn, "occurred_at", "<" if exclusive else "<=")
-        order = "kassiber_timestamp_us(occurred_at) DESC, created_at DESC, id DESC"
+        order = (
+            "kassiber_timestamp_us(occurred_at) DESC, "
+            + same_time_order_sql("transactions", descending=True)
+        )
         params.append(at_or_before)
 
     try:
@@ -262,14 +266,16 @@ def latest_transaction_rates_for_profile(conn, profile_id: str) -> dict[str, Any
 
 
 def transaction_rate_rows(conn, profile_id):
+    # The latest row of a same-time group is the last in source order.
+    order = transaction_order_sql("transactions", descending=True)
     try:
         return conn.execute(
-            "SELECT asset,fiat_rate,fiat_value,fiat_rate_exact,fiat_value_exact,amount FROM transactions WHERE profile_id=? AND excluded=0 ORDER BY occurred_at DESC,created_at DESC,id DESC",
+            "SELECT asset,fiat_rate,fiat_value,fiat_rate_exact,fiat_value_exact,amount FROM transactions WHERE profile_id=? AND excluded=0 ORDER BY " + order,
             (profile_id,),
         ).fetchall()
     except sqlite3.OperationalError:
         return conn.execute(
-            "SELECT asset,fiat_rate,fiat_value,amount FROM transactions WHERE profile_id=? AND excluded=0 ORDER BY occurred_at DESC,created_at DESC,id DESC",
+            "SELECT asset,fiat_rate,fiat_value,amount FROM transactions WHERE profile_id=? AND excluded=0 ORDER BY " + order,
             (profile_id,),
         ).fetchall()
 
@@ -602,7 +608,7 @@ class CustodyJournalBuilder:
             LEFT JOIN chain_observation_provenance observation
               ON observation.transaction_id = t.id
             WHERE t.profile_id = ? AND t.excluded = 0
-            ORDER BY t.occurred_at ASC, t.created_at ASC, t.id ASC
+            ORDER BY """ + transaction_order_sql("t") + """
             """,
             (self.profile_id,),
         ).fetchall()

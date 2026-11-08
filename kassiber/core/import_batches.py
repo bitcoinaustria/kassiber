@@ -90,9 +90,12 @@ def record_batch(
             int(outcome.get("skipped") or 0),
         ),
     )
+    # `inserted_records` follows the file, so each row's place in it is its
+    # source position among same-time rows (core/transaction_order.py).
     conn.executemany(
-        "INSERT OR IGNORE INTO import_batch_transactions(batch_id, transaction_id) VALUES(?, ?)",
-        [(batch_id, tx_id) for tx_id in inserted],
+        "INSERT OR IGNORE INTO import_batch_transactions(batch_id, transaction_id, source_position) "
+        "VALUES(?, ?, ?)",
+        [(batch_id, tx_id, position) for position, tx_id in enumerate(inserted, start=1)],
     )
     return batch_id
 
@@ -470,6 +473,7 @@ def demo() -> None:
         CREATE TABLE import_batch_transactions(
             batch_id TEXT NOT NULL REFERENCES import_batches(id) ON DELETE CASCADE,
             transaction_id TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+            source_position INTEGER,
             PRIMARY KEY (batch_id, transaction_id)
         );
         INSERT INTO workspaces VALUES('w');

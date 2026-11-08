@@ -857,6 +857,41 @@ def _migrate_at_outflow_regime_semantics(conn) -> int:
     return 1
 
 
+SAME_TIME_ORDER_SEMANTICS_MIGRATION = "same-time-source-order-v1"
+
+
+def _migrate_same_time_order_semantics(conn) -> int:
+    """Require stamped v8 journals of processed books, once.
+
+    Versions before 8 ordered same-time lots by random row ids, so any retained
+    journal may hold numbers another build would not reproduce. Input markers
+    stay; the semantics check reports the book stale until a v8 rebuild.
+    """
+    if conn.execute(
+        "SELECT 1 FROM schema_migration_audits WHERE migration_name = ?",
+        (SAME_TIME_ORDER_SEMANTICS_MIGRATION,),
+    ).fetchone():
+        return 0
+    affected = """last_processed_at IS NOT NULL OR EXISTS (
+        SELECT 1 FROM journal_entries WHERE profile_id = profiles.id)"""
+    count = int(conn.execute(f"SELECT COUNT(*) FROM profiles WHERE {affected}").fetchone()[0])
+    inserted = conn.execute(
+        """INSERT OR IGNORE INTO schema_migration_audits
+           (id, migration_name, schema_version, impact_json, created_at)
+           VALUES (?, ?, 1, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))""",
+        (SAME_TIME_ORDER_SEMANTICS_MIGRATION, SAME_TIME_ORDER_SEMANTICS_MIGRATION,
+         json.dumps({"schema_version": 1, "migration": SAME_TIME_ORDER_SEMANTICS_MIGRATION,
+                     "affected_profile_count": count,
+                     "required_journal_semantics_version": 8}, sort_keys=True)),
+    )
+    if int(inserted.rowcount or 0) == 0:
+        return 0
+    conn.execute(f"""UPDATE profiles
+        SET required_journal_semantics_version = MAX(required_journal_semantics_version, 8)
+        WHERE {affected}""")
+    return 1
+
+
 STORED_ERROR_CREDENTIALS_MIGRATION = "stored-error-credentials-v1"
 # Columns where a failed sync or provider check kept error text that a server
 # could have filled with a credential it echoed. ``*_json`` columns hold JSON.
@@ -976,7 +1011,8 @@ def _migrate_stored_error_credentials(conn) -> int:
 
 
 PARTIAL_PAYOUT_SEMANTICS_MIGRATION = "custody-partial-payout-pricing-v1"
-JOURNAL_CALCULATION_SEMANTICS_VERSION = 7
+# 8: same-time lots, legs and rates follow the source order instead of row ids.
+JOURNAL_CALCULATION_SEMANTICS_VERSION = 8
 JOURNAL_SEMANTICS_ADOPTION_MIGRATION = "journal-calculation-semantics-adoption-v1"
 
 
@@ -1490,8 +1526,15 @@ CREATE TABLE IF NOT EXISTS import_batches (
 CREATE TABLE IF NOT EXISTS import_batch_transactions (
     batch_id TEXT NOT NULL REFERENCES import_batches(id) ON DELETE CASCADE,
     transaction_id TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+    -- The row's 1-based position among the rows the run created, which keep
+    -- the file's order. Orders same-time rows (core/transaction_order.py);
+    -- NULL for rows imported before it was recorded.
+    source_position INTEGER,
     PRIMARY KEY (batch_id, transaction_id)
 );
+
+CREATE INDEX IF NOT EXISTS idx_import_batch_transactions_transaction
+    ON import_batch_transactions(transaction_id);
 
 CREATE INDEX IF NOT EXISTS idx_import_batches_profile_time
     ON import_batches(profile_id, imported_at DESC, id);
@@ -5628,6 +5671,8 @@ def ensure_schema_compat(conn):
         conn.commit()
     if _migrate_import_batch_sequence(conn):
         conn.commit()
+    if _migrate_same_time_order_semantics(conn):
+        conn.commit()
     ensure_column(conn, "backends", "batch_size", "INTEGER")
     ensure_column(conn, "backends", "config_json", "TEXT NOT NULL DEFAULT '{}'")
     ensure_column(conn, "journal_entries", "at_category", "TEXT")
@@ -5731,6 +5776,9 @@ def ensure_schema_compat(conn):
     # Compact retained calculations (see core/journal_calculation.py). Existing
     # rows keep calculation_json until the next journal build rewrites them.
     ensure_column(conn, "journal_entries", "calculation_compact", "TEXT")
+    # File position of an imported row; rows imported before stay NULL and
+    # sort by their content (core/transaction_order.py).
+    ensure_column(conn, "import_batch_transactions", "source_position", "INTEGER")
     from .core.acquisition_review import migrate_valuation_support
     if migrate_valuation_support(conn):
         conn.commit()

@@ -16,6 +16,7 @@ and asserts the resulting behavior, not merely that schema creation succeeds.
 | Journals built before the pre-arbitration custody holds | Not applicable | Not applicable | Tested in `test_wages_semantic_migration.py` | `custody-fail-closed-holds-v1` marks every processed book stale once, so the next (automatic) rebuild applies the unscoped, fan-out, pending and replaced-spend holds. Retained journals and evidence are unchanged until then. |
 | Journals built through RP2 | Not applicable | Not applicable | Tested in `test_wages_semantic_migration.py` | `kassiber-tax-engine-v1` marks every processed book stale once, so the next (automatic) rebuild uses Kassiber's own [tax engine](tax-engine.md) at one fixed decimal precision. Retained journals, evidence, and filed snapshots are unchanged until then. |
 | Pair components authored before observed-fee separation | Not applicable | Not applicable | Tested against an exact `c0a015de` book in `test_custody_pair_fee_compatibility.py`, including interrupted invalidation and repeat opens | `custody-legacy-pair-fee-review-v1` audits counts and marks affected journals stale once. A source below the complete observed debit with a `reviewed_residual:network_fee` allocation fails validation with `legacy_pair_fee_allocation_review_required`. The immutable component stays visible for revision; migration does not reinterpret its fee or suspense. Audit and invalidation roll back together. |
+| Journals built with a random same-time lot order | Not applicable | Not applicable | Tested in `test_lot_order_determinism.py` | `same-time-source-order-v1` requires calculation semantics version 3 of every processed book, once, so the next (automatic) rebuild orders same-time rows by the [source order](tax.md#same-time-order). Input markers, retained journals and filed snapshots are unchanged until then. |
 | Ancient REAL BTC to INTEGER msat rebuild | Tested with a focused legacy transaction/holdings fixture | Same migration path | Not applicable to a fresh current database | Amounts convert exactly and all later transaction metadata columns survive the rebuild. |
 | Credentials repeated in stored error text | Not applicable | Not applicable | Tested in `test_credential_echo.py` and `test_rust_store_migrations.py` | `stored-error-credentials-v1` withholds, once, every credential the book holds from the freshness, BTCPay store-sync, Lightning-sync and AI provider-check error columns; JSON columns are rewritten compactly. Python and the Rust store's migrating open produce the same bytes and audit. A credential no longer in the book cannot be recognized ([credential echoes](credential-echo.md)). |
 | Removed general-ledger storage (`gl_*`) | Not applicable | Not applicable | Tested in `test_legacy_ledger.py` | New databases get no `gl_*` objects. If every leftover table is empty, opening drops the ledger's `external_documents` triggers and then its tables; otherwise tables and triggers stay intact, the read-only probe writes nothing, and book deletion, reset, and partition fail with `legacy_ledger_present` until an explicit `kassiber maintenance purge-legacy-ledger --confirm`. |
@@ -139,6 +140,23 @@ second, the batch sequence migration and encryption, the confirmed-distinct revi
 and its binding to exclusion state, and a network partition that must carry
 import batches with their rows so a held group stays held.
 
+## Same-time source order
+
+Opening a book adds the nullable `import_batch_transactions.source_position`
+column (after `journal_entries.calculation_compact`) and the base schema's
+`idx_import_batch_transactions_transaction` index on its `transaction_id`.
+Existing links keep a NULL position, so their rows order by content after any
+row with a recorded block height; rows created by later file imports record
+their place in the run. No transaction row changes.
+
+The global calculation semantics version becomes 3 and the
+`same-time-source-order-v1` audit raises every processed book's required
+version to 3 without touching its input markers. Freshness then reports
+"journal calculation semantics changed; rebuild with current Kassiber" until a
+version-3 rebuild, which may book different gains, cost basis or fallback
+rates where same-time rows were ordered by row id before. An older build that
+rebuilds stamps an older version, which stays stale for current readers.
+
 ## Dependency-origin correction
 
 The custody dependency-origin fixed-point correction changes only the
@@ -247,7 +265,8 @@ the shared freshness check. Retained journals and filed snapshots stay intact.
 The existing `wages-acquisition-semantics-v1`, `rp2-pool-basis-semantics-v1`,
 `custody-fail-closed-holds-v1`, `at-acquisition-valuation-support-v1`, and
 `custody-partial-payout-pricing-v1` migrations require stamped semantics
-version 1; `at-outflow-consumed-regime-v2` requires version 2 for their affected books. Their
+version 1; `at-outflow-consumed-regime-v2` requires version 2 for their affected books,
+and `same-time-source-order-v1` version 3 for every processed book. Their
 one-shot audits still record the upgrade, but are no longer the only protection
 against accepting an older calculation. Future calculation changes must bump
 the build semantics version and set the required version for affected books;

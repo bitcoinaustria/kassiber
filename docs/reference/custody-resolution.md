@@ -65,6 +65,7 @@ establish an external origin.
 | Multiple own source and destination wallets in one fully owned transaction | Automatic N:M allocations, with one network fee, when all inputs/sinks and amounts reconcile. The FIFO cells are accounting allocations, not physical tracing of individual satoshis. |
 | Collaborative transaction with foreign participants and a complete, exactly conserving set of own wallet movements | Automatic own-wallet allocations when current native graphs prove every own contribution and receipt. Foreign participants' fees do not become the owner's fees. |
 | A same-block `A → B → A → C` sequence | Native input references establish order before wallet-based hints; a wallet round trip is not a blockchain cycle. |
+| Rows that share a timestamp (exchange fills in one second, one block) | Composition and the tax projection keep the data's [same-time order](tax.md#same-time-order): block height, file position, external id, then content. A random row id never decides which lot a disposal consumes. |
 | Zero-value inbound placeholder beside a real receipt | Does not compete with the positive receipt. |
 | Unrelated export receipt with a different canonical stored txid | Does not make an owned receipt ambiguous merely because its provider ID differs. |
 | Complete, conflict-free native HTLC claim or refund linking two own endpoints | Automatically interpreted during journal processing when its fee timing is representable. No authored review is created; the existing book policy determines the tax projection after matching. |

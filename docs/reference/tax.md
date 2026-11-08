@@ -70,6 +70,40 @@ advanced. Explanation references expire on every rebuild, while list cursors
 can survive one that leaves their rows unchanged. See the
 [storage contract](r4-journal-pipeline.md#2-deterministic-entry-ids-and-changed-row-writes).
 
+### Same-time order
+
+Rows that share `occurred_at` are common: an exchange export holds many fills
+in one second and a block holds many transactions. The lot engine keeps the
+projection's order for them (FIFO and LIFO consume lots in it; HIFO and LOFO
+fall back to it when unit costs tie), so the order must come from the data,
+never from a random row id or from when a row was inserted. Custody
+composition reads transactions in this source order
+(`kassiber/core/transaction_order.py`):
+
+1. `occurred_at`;
+2. a confirmed chain row's block height (`raw_json` `status.block_height`);
+   Kassiber stores no position within a block, so rows of one block continue
+   below;
+3. the row's position in the file that imported it
+   ([import runs](imports.md#import-runs-and-rolling-one-back));
+4. the external id, then the accounting content (direction, asset, amounts,
+   prices, kind and tax overrides) and the wallet label;
+5. the row id.
+
+A missing key sorts first. Rows still equal at step 5 are in one wallet with
+the same time, amounts, prices, kind and overrides, so whichever the engine
+takes first books the same amounts. The finalized tax projection keeps the
+order: its rows sort by `occurred_at`, then their anchor transaction's place in
+the source order, then the row id, which only orders the slices of one anchor.
+The latest transaction rate, the fallback price reports use when no market
+quote exists, is the last row of the latest time in the same order.
+
+Calculation semantics version 8 introduced this order. The one-shot
+`same-time-source-order-v1` migration requires version 8 of every processed
+book, so journals built before it read as stale ("journal calculation
+semantics changed") until the next rebuild; input markers, retained journals
+and filed snapshots are unchanged until then.
+
 ## Transfers
 
 Cross-wallet self-transfers are auto-detected when both legs share the same

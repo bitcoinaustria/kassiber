@@ -1017,8 +1017,18 @@ def compile_finalized_tax_projection(
             }
         )
         existing_cross_pair_ids.add(pair_id)
+    # The engine keeps this order for same-time lots, so it follows the
+    # anchors' source order (`transaction_order`). The row id only orders the
+    # rows of one anchor; its quantity hash commits to random wallet ids.
+    source_rank: dict[str, int] = {}
+    for transaction_id in rows_by_id:
+        source_rank.setdefault(transaction_id, len(source_rank))
     return FinalizedTaxProjection(
-        rows=tuple(sorted(projection_rows, key=lambda row: (str(row["occurred_at"]), str(row["id"])))),
+        rows=tuple(sorted(projection_rows, key=lambda row: (
+            str(row["occurred_at"]),
+            source_rank.get(str(_field(row, "journal_transaction_id") or ""), len(source_rank)),
+            str(row["id"]),
+        ))),
         intra_pairs=tuple(intra_pairs),
         cross_asset_pairs=tuple(cross_asset_pairs),
         quarantines=tuple(

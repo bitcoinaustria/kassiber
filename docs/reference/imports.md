@@ -770,6 +770,14 @@ What a rollback does and does not remove:
 The run also stores the confirmed `column_map`, so a recurring export from the
 same platform can be re-imported with the same plan.
 
+Each created row keeps its position among the run's created rows
+(`import_batch_transactions.source_position`, 1-based, in file order). Journal
+processing uses it to order rows that share a timestamp, such as exchange fills
+in one second ([same-time order](tax.md#same-time-order)). Rows a run only
+enriched keep the position of the run that created them; rows imported before
+positions were recorded, and rows from sync or records-based imports, have
+none and order by their content.
+
 Deleting the whole connection (`wallets delete --cascade`, or the desktop
 connection's delete action) remains the blunt option when the wallet itself was
 a mistake.

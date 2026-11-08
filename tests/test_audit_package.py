@@ -1416,10 +1416,12 @@ class AuditPackageCoreTest(unittest.TestCase):
                 "filed_report_impact_count": 1,
             },
         )
-        self.assertEqual(summary["summary"]["schema_migration_audit_count"], 8)
+        self.assertEqual(summary["summary"]["schema_migration_audit_count"], 12)
         migration_names = [audit["migration_name"] for audit in summary["schema_migration_audits"]]
-        self.assertIn("at-fee-consumed-regime-v1", migration_names)
+        self.assertIn("at-outflow-consumed-regime-v2", migration_names)
+        self.assertIn("custody-legacy-pair-fee-review-v1", migration_names)
         self.assertIn("stored-error-credentials-v1", migration_names)
+        self.assertIn("same-time-source-order-v1", migration_names)
         self.assertIn("custody-fail-closed-holds-v1", migration_names)
         self.assertIn("custody-partial-payout-pricing-v1", migration_names)
         self.assertIn("journal-calculation-semantics-adoption-v1", migration_names)

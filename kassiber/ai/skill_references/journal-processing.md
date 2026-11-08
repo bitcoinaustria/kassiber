@@ -29,6 +29,9 @@ Re-run `kassiber journals process` after:
 - exclusion changes
 - note or tag changes that affect review flow
 - rate overrides
+- an upgrade that reports "journal calculation semantics changed": for example
+  same-time lots now follow block height and file row order instead of row ids,
+  so the rebuild may change gains where several lots share one timestamp
 
 ## Process journals
 
