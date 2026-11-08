@@ -45,6 +45,11 @@ export interface Connection {
   last: string;
   lastSyncAt?: string | null;
   lastTransactionAt?: string | null;
+  /**
+   * Month-end bitcoin over the last twelve months from this wallet's own
+   * movements: a trend shape, not the display balance.
+   */
+  balanceTrend?: Array<{ month: string; balanceBtc: number }>;
   asset?: string | null;
   network?: string | null;
   policyAsset?: string | null;

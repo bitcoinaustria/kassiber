@@ -176,7 +176,7 @@ describe("overview market rate display", () => {
     };
 
     expect(activeMarketFiatRate(snapshot)).toBe(70_000);
-    expect(buildHoldingsBySource(snapshot).map(({ name, value }) => [name, value]))
+    expect(buildHoldingsBySource(snapshot).items.map(({ name, value }) => [name, value]))
       .toEqual([
         ["Cold Storage", 140_000],
         ["Home Node", 35_000],

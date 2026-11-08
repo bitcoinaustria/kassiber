@@ -15,6 +15,7 @@ import { useUiStore } from "@/store/ui";
 import { RecentTransactionsTable } from "./RecentTransactionsTable";
 import { BtcActivityChart } from "./BtcActivityChart";
 import { HoldingsBySourceChart } from "./HoldingsBySource";
+import { FlowsWidget, TaxYearWidget } from "./OverviewWidgets";
 import { StatsCards } from "./StatsCards";
 import {
   activeMarketFiatCurrency,
@@ -25,7 +26,7 @@ import { useOverviewTransactionDetail } from "./useOverviewTransactionDetail";
 import { WelcomeSection } from "./WelcomeSection";
 
 /** Transactions listed, fewer beside the chart if fewer fit; the rest are one click away. */
-const RECENT_ROWS = 12;
+const RECENT_ROWS = 30;
 
 export const OverviewDashboard = ({
   className,
@@ -168,7 +169,7 @@ export const OverviewDashboard = ({
   return (
     <>
       <div
-        className={cn(screenShellClassName, "relative", className)}
+        className={cn(screenShellClassName, "relative flex min-h-full flex-col", className)}
         aria-busy={overviewBusy}
       >
         <WelcomeSection
@@ -190,9 +191,11 @@ export const OverviewDashboard = ({
         />
         {/* The latest transactions sit beside the chart where the page is wide
             enough, so both are in view without scrolling; below that they
-            follow it. Either way the list never scrolls inside the page. */}
-        <div className="@container/overview-main">
-        <div className="grid grid-cols-1 gap-(--kb-page-gap) @min-[64rem]/overview-main:grid-cols-[minmax(0,1fr)_minmax(320px,30%)]">
+            follow it. Either way the list never scrolls inside the page.
+            The pair takes the height the page leaves, so a book with few
+            sources gets a taller chart and more rows, not a blank page. */}
+        <div className="@container/overview-main flex flex-1 flex-col">
+        <div className="grid flex-1 grid-cols-1 gap-(--kb-page-gap) @min-[64rem]/overview-main:grid-cols-[minmax(0,1fr)_minmax(320px,30%)]">
           <BtcActivityChart
             snapshot={snapshot}
             hideSensitive={hideSensitive}
@@ -200,6 +203,7 @@ export const OverviewDashboard = ({
             onOpenTransactionDetail={openTransactionDetail}
             onRefresh={refreshOverviewState}
             isRefreshing={isRefreshingOverview}
+            fillHeight
           />
           {/* Beside the chart the list takes the chart's height, not its own:
               rows that do not fit are left to Show all. */}
@@ -221,6 +225,12 @@ export const OverviewDashboard = ({
           hideSensitive={hideSensitive}
           currency={currency}
         />
+        <div className="@container/overview-widgets">
+          <div className="grid grid-cols-1 gap-(--kb-page-gap) @min-[56rem]/overview-widgets:grid-cols-2">
+            <TaxYearWidget snapshot={snapshot} hideSensitive={hideSensitive} />
+            <FlowsWidget snapshot={snapshot} hideSensitive={hideSensitive} currency={currency} />
+          </div>
+        </div>
       </div>
       {detailSheet}
     </>

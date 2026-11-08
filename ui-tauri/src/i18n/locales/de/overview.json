@@ -179,7 +179,62 @@
     "vsCostBasis": "vs. Anschaffungskosten",
     "viewConnections": "Wallets anzeigen",
     "otherSources": "Sonstige Quellen",
-    "empty": "Noch keine Wallet hält Bitcoin."
+    "empty": "Noch keine Wallet hält Bitcoin.",
+    "settingsAria": "Einstellungen für Bestände",
+    "sortLabel": "Sortieren nach",
+    "sort": {
+      "balance": "Guthaben",
+      "name": "Name",
+      "activity": "Letzte Aktivität"
+    },
+    "emptyLabel": "Leere Quellen",
+    "emptyMode": {
+      "fold": "In einer Zeile zusammenfassen",
+      "show": "Auflisten",
+      "hide": "Ausblenden"
+    },
+    "railsLabel": "Anzeigen",
+    "rail": {
+      "onchain": "On-chain",
+      "liquid": "Liquid",
+      "lightning": "Lightning",
+      "other": "Börsen und Dateien"
+    },
+    "limitLabel": "Angezeigte Quellen",
+    "limitAll": "Alle",
+    "emptySources_one": "{{count}} leere Quelle",
+    "emptySources_other": "{{count}} leere Quellen",
+    "hideEmpty": "Leere Quellen ausblenden",
+    "filteredOut_one": "{{count}} Quelle ausgefiltert",
+    "filteredOut_other": "{{count}} Quellen ausgefiltert",
+    "showAllRails": "Alle anzeigen",
+    "noneListed": "Keine Quelle passt zu diesem Filter.",
+    "openSource": "{{name}} öffnen",
+    "lastActivity": "Letzte Aktivität {{date}}",
+    "syncState": {
+      "syncing": "Sync läuft",
+      "error": "Sync fehlgeschlagen"
+    },
+    "shareBar": "Anteil an Bitcoin nach Quelle",
+    "layoutLabel": "Darstellung",
+    "layout": {
+      "list": "Liste",
+      "tiles": "Kacheln",
+      "table": "Tabelle",
+      "trend": "Verlauf, letzte 12 Monate"
+    },
+    "table": {
+      "source": "Quelle",
+      "network": "Netzwerk",
+      "bitcoin": "Bitcoin",
+      "value": "Wert",
+      "share": "Anteil",
+      "transactions": "Transaktionen",
+      "lastActivity": "Letzte Aktivität"
+    },
+    "transactions_one": "{{count}} Transaktion",
+    "transactions_other": "{{count}} Transaktionen",
+    "trendChange": "{{change}} in 12 Monaten"
   },
   "recentTx": {
     "title": "Letzte Transaktionen",
@@ -401,5 +456,24 @@
     "quarantines_one": "{{count}} Transaktion in Quarantäne ist ausgeschlossen. Kläre sie in der <queue>Quarantäneliste</queue>, bevor du dich auf den Betrag verlässt.",
     "quarantines_other": "{{count}} Transaktionen in Quarantäne sind ausgeschlossen. Kläre sie in der <queue>Quarantäneliste</queue>, bevor du dich auf den Betrag verlässt.",
     "exportDraft": "Unvollständiger Entwurf — Exporte bleiben zur Prüfung verfügbar."
+  },
+  "widgets": {
+    "tax": {
+      "title": "Steuerjahr {{year}}",
+      "openReports": "Berichte",
+      "realized": "Realisierte Gewinne heuer",
+      "unrealized": "Unrealisierte Gewinne",
+      "costBasis": "Anschaffungskosten",
+      "taxFree": "Steuerfrei (Altbestand)",
+      "taxable": "Steuerpflichtig (Neubestand)",
+      "basisIncomplete": "Die Anschaffungskosten sind unvollständig; Gewinne erscheinen erst, wenn das geklärt ist."
+    },
+    "flows": {
+      "title": "Ein- und Ausgänge, letzte 12 Monate",
+      "chartAria": "Bitcoin pro Monat erhalten und ausgegeben",
+      "received": "Erhalten",
+      "spent": "Ausgegeben",
+      "fees": "Gebühren"
+    }
   }
 }

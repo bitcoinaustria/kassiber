@@ -433,12 +433,31 @@ against cost basis, both shown whichever currency the app displays. The
 latest transactions sit beside the activity chart once the page is about
 64rem wide (measured on the page, so a docked assistant counts), as many whole
 rows as fit the chart's height, and under it otherwise; the list never
-scrolls inside the page, and Show all opens Transactions. A row names its
-status only when it asks for something. Holdings by Source runs across the
-page below as a ranked list, largest first: each source with its rail's logo,
-its value (whole currency units in fiat) and its share of the bitcoin held.
-Past eight, the smallest fold into one Other sources row. Its header leaves an
-incomplete cost basis to the tile and the chart.
+scrolls inside the page, and Show all opens Transactions. The chart and list
+grow into the window height the page leaves, never below their usual height,
+so a book with few sources gets a taller chart rather than a blank lower half.
+A row names its status only when it asks for something.
+
+Holdings by Source runs across the page below. Its settings menu, kept in the
+UI state and the same for every book, picks a layout (a list; tiles with each
+source's other unit, latest activity and transaction count; a table with exact
+bitcoin; or a list with each source's last twelve months), the order (balance,
+name, latest activity), which networks to show, what to do with emptied
+sources (fold into one expandable line, list, or hide) and how many sources
+precede Other sources. Every row opens its wallet and shows a dot while its
+sync runs or after it fails. Shares are of all the bitcoin held, so a filtered
+row keeps its share of the book; a source never funded is not an emptied one.
+The trend line is the wallet's own month-end movements from the snapshot's
+`balanceTrend`, a shape rather than its display balance. The header leaves an
+incomplete cost basis to the tile and the chart, and drops the book-wide
+percentage while a network filter is on.
+
+Two widgets follow. Tax year shows the daemon's realized result this year,
+unrealized result and cost basis, plus the Austrian tax-free and taxable split
+when the book has one; with an incomplete basis it shows no gains and says
+why. Money in and out shows the last twelve months of bitcoin received and
+spent per month, classified as the chart's activity dots are, so moves between
+your own wallets stay out, with totals and fees.
 
 Overview, Wallets, the book-set overview, and the Reports metric strip read the
 daemon's `fiat.completeness` block (see [the daemon reference](daemon.md)) instead of
