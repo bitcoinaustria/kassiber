@@ -661,7 +661,11 @@ def _scoped_lightning_conn(
         " wallet_id TEXT NOT NULL,"
         " asset TEXT,"
         " excluded INTEGER NOT NULL DEFAULT 0,"
-        " occurred_at TEXT)"
+        " occurred_at TEXT,"
+        " created_at TEXT,"
+        " direction TEXT,"
+        " amount INTEGER,"
+        " fee INTEGER)"
     )
     conn.execute(
         "CREATE TABLE import_batches ("

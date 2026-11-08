@@ -2246,6 +2246,75 @@ def _import_summary_by_wallet(
     return summary
 
 
+WALLET_BALANCE_TREND_MONTHS = 12
+
+
+def _wallet_balance_trends(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    *,
+    months: int = WALLET_BALANCE_TREND_MONTHS,
+    today: date | None = None,
+) -> dict[str, list[dict[str, Any]]]:
+    """Each wallet's bitcoin at the end of each of the last ``months`` months.
+
+    The shape of a wallet's own observed movements (receipts in, spends and
+    their fees out), for the Overview's per-source trend. It is not the
+    wallet's display balance: chain inventory can differ from imported rows,
+    and the snapshot carries that balance separately.
+    """
+    rows = conn.execute(
+        """
+        SELECT wallet_id, occurred_at, direction, amount, fee
+        FROM transactions
+        WHERE profile_id = ?
+          AND asset IN ('BTC', 'LBTC')
+          AND COALESCE(excluded, 0) = 0
+        ORDER BY occurred_at ASC, created_at ASC, id ASC
+        """,
+        (profile_id,),
+    ).fetchall()
+    if not rows:
+        return {}
+    current = today or datetime.now(timezone.utc).date()
+    month_keys: list[tuple[int, int]] = []
+    year, month = current.year, current.month
+    for _ in range(max(months, 1)):
+        month_keys.append((year, month))
+        year, month = (year - 1, 12) if month == 1 else (year, month - 1)
+    month_keys.reverse()
+    deltas: dict[str, dict[tuple[int, int], int]] = defaultdict(lambda: defaultdict(int))
+    opening: dict[str, int] = defaultdict(int)
+    first_key = month_keys[0]
+    for row in rows:
+        day = _parse_day(row["occurred_at"])
+        if day is None:
+            continue
+        amount = int(row["amount"] or 0)
+        fee = int(row["fee"] or 0)
+        delta = amount if row["direction"] == "inbound" else -amount - fee
+        key = (day.year, day.month)
+        wallet_id = str(row["wallet_id"])
+        if key < first_key:
+            opening[wallet_id] += delta
+        elif key <= month_keys[-1]:
+            deltas[wallet_id][key] += delta
+    output: dict[str, list[dict[str, Any]]] = {}
+    for wallet_id in set(opening) | set(deltas):
+        running_msat = opening.get(wallet_id, 0)
+        points = []
+        for year, month in month_keys:
+            running_msat += deltas.get(wallet_id, {}).get((year, month), 0)
+            points.append(
+                {
+                    "month": f"{year:04d}-{month:02d}",
+                    "balanceBtc": float(msat_to_btc(running_msat)),
+                }
+            )
+        output[wallet_id] = points
+    return output
+
+
 def _connections(
     conn: sqlite3.Connection,
     profile_id: str,
@@ -2274,6 +2343,7 @@ def _connections(
     # honest answer for the UI's asset badge.
     assets_by_wallet = core_import_batches.observed_assets(conn, profile_id)
     imports_by_wallet = _import_summary_by_wallet(conn, profile_id)
+    trends = _wallet_balance_trends(conn, profile_id)
     output = []
     for row in rows:
         tx_count = int(row["tx_count"] or 0)
@@ -2301,6 +2371,7 @@ def _connections(
             ),
             "lastSyncAt": last_synced_at or None,
             "lastTransactionAt": row["last_tx_at"],
+            "balanceTrend": trends.get(str(row["id"]), []),
             "balance": balances.get(row["id"], {}).get("balance", 0.0),
             "balanceSource": balances.get(row["id"], {}).get("balanceSource", "books"),
             "bookBalance": balances.get(row["id"], {}).get("bookBalance", 0.0),
