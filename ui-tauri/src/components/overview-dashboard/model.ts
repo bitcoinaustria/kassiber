@@ -17,6 +17,11 @@ import {
   type Currency,
 } from "@/lib/currency";
 import { type SwapRail } from "@/lib/bitcoinRail";
+import {
+  DEFAULT_HOLDINGS_VIEW,
+  type HoldingsRail,
+  type HoldingsView,
+} from "@/store/ui";
 import { formatShortDate } from "@/lib/date";
 import {
   basisIncompleteFromMs,
@@ -120,6 +125,30 @@ export type HoldingsItem = {
    * for the "Other sources" row and for sources that never synced (imports).
    */
   lastSyncAt?: string;
+  /** The wallet the row opens; none for the "Other sources" row. */
+  connectionId?: string;
+  /** A source that held bitcoin once and holds none now. */
+  empty?: boolean;
+  /** Its newest transaction, for the activity sort and the row's date. */
+  lastTransactionAt?: string | null;
+  /** A failed or running sync, so a figure is not read as current. */
+  syncState?: "syncing" | "error";
+  /** The network group the row sits in; exchanges and files are "other". */
+  group?: HoldingsRail;
+  transactionCount?: number;
+  /** Month-end bitcoin from the wallet's own movements, oldest first. */
+  trend?: number[];
+};
+
+export type HoldingsBySource = {
+  /** Holding sources first, then any listed empty ones. */
+  items: HoldingsItem[];
+  /** Empty sources not listed in `items`, for the "N empty" line. */
+  folded: HoldingsItem[];
+  /** Sources the rail filter leaves out. */
+  filteredOut: number;
+  /** The bitcoin the listed sources hold. */
+  totalBtc: number;
 };
 
 export type PortfolioChartPoint = {
@@ -2288,49 +2317,83 @@ function holdingRail(connection: OverviewSnapshot["connections"][number]): SwapR
 }
 
 /**
- * The sources holding bitcoin, largest first. Past `shown` sources the
- * smallest fold into one "Other sources" row, so the list stays `shown` long.
- * Ranks and shares come from the bitcoin held, so they hold without a rate.
+ * The book's sources as the Holdings card lists them: holding sources in the
+ * chosen order, past `view.limit` the rest folded into one "Other sources"
+ * row, then the emptied ones listed, folded or left out. Shares are of all the
+ * bitcoin held, so a filtered row keeps the share it has of the whole book.
  */
-export function buildHoldingsBySource(snapshot: OverviewSnapshot, shown = 4): HoldingsItem[] {
+export function buildHoldingsBySource(
+  snapshot: OverviewSnapshot,
+  view: HoldingsView = DEFAULT_HOLDINGS_VIEW,
+): HoldingsBySource {
   const fiatRate = activeMarketFiatRate(snapshot);
-  const rows = snapshot.connections
-    .filter((connection) => connection.balance > 0)
-    .map((connection) => ({
-      name: connection.label,
-      btc: connection.balance,
-      // An exchange, file or ecash source gets no rail logo, not a guessed one.
-      rail: holdingRail(connection),
-      lastSyncAt: connection.lastSyncAt ?? undefined,
-    }))
-    .sort((a, b) => b.btc - a.btc);
-  const total = rows.reduce((sum, item) => sum + item.btc, 0);
-  const visibleRows: Array<{
-    name: string;
-    nameKey?: string;
-    btc: number;
-    rail?: SwapRail;
-    lastSyncAt?: string;
-  }> =
-    rows.length > shown
-      ? [
-          ...rows.slice(0, shown - 1),
-          {
-            name: "",
-            nameKey: "holdings.otherSources",
-            btc: rows.slice(shown - 1).reduce((sum, item) => sum + item.btc, 0),
-          },
-        ]
-      : rows;
-  return visibleRows.map((item) => ({
-    name: item.name,
-    nameKey: item.nameKey,
-    btc: item.btc,
-    value: item.btc * fiatRate,
-    percent: percentOf(item.btc, total),
-    rail: item.rail,
-    ...(item.lastSyncAt ? { lastSyncAt: item.lastSyncAt } : {}),
-  }));
+  const bookTotal = snapshot.connections.reduce(
+    (sum, connection) => sum + Math.max(connection.balance, 0),
+    0,
+  );
+  const toItem = (connection: OverviewSnapshot["connections"][number]): HoldingsItem => ({
+    name: connection.label,
+    btc: Math.max(connection.balance, 0),
+    value: Math.max(connection.balance, 0) * fiatRate,
+    percent: percentOf(Math.max(connection.balance, 0), bookTotal),
+    // An exchange, file or ecash source gets no rail logo, not a guessed one.
+    rail: holdingRail(connection),
+    connectionId: connection.id,
+    ...(connection.lastSyncAt ? { lastSyncAt: connection.lastSyncAt } : {}),
+    empty: !(connection.balance > 0),
+    lastTransactionAt: connection.lastTransactionAt ?? null,
+    syncState:
+      connection.status === "error" || connection.status === "syncing"
+        ? connection.status
+        : undefined,
+    group: holdingRail(connection) ?? "other",
+    transactionCount: connection.transactionCount,
+    trend: connection.balanceTrend?.map((point) => point.balanceBtc),
+  });
+  const railOf = (connection: OverviewSnapshot["connections"][number]): HoldingsRail =>
+    holdingRail(connection) ?? "other";
+  const wallets = snapshot.connections.filter((connection) => !connection.deprecated || connection.balance > 0);
+  const listed = wallets.filter((connection) => view.rails.includes(railOf(connection)));
+  const sorted = listed.map(toItem).sort(holdingsOrder(view.sort));
+  const holding = sorted.filter((item) => !item.empty);
+  // A source never funded is configuration, not an emptied holding.
+  const emptied = sorted.filter(
+    (item) => item.empty && Boolean(item.lastTransactionAt),
+  );
+  const shown = view.limit > 0 && holding.length > view.limit
+    ? [
+        ...holding.slice(0, view.limit - 1),
+        foldedHoldings(holding.slice(view.limit - 1), bookTotal, fiatRate),
+      ]
+    : holding;
+  return {
+    items: view.empty === "show" ? [...shown, ...emptied] : shown,
+    folded: view.empty === "fold" ? emptied : [],
+    filteredOut: wallets.length - listed.length,
+    totalBtc: holding.reduce((sum, item) => sum + item.btc, 0),
+  };
+}
+
+function holdingsOrder(sort: HoldingsView["sort"]) {
+  return (a: HoldingsItem, b: HoldingsItem) => {
+    if (sort === "name") return a.name.localeCompare(b.name, currentUiLocale());
+    if (sort === "activity") {
+      const byDate = (b.lastTransactionAt ?? "").localeCompare(a.lastTransactionAt ?? "");
+      if (byDate) return byDate;
+    }
+    return b.btc - a.btc || a.name.localeCompare(b.name, currentUiLocale());
+  };
+}
+
+function foldedHoldings(rows: HoldingsItem[], bookTotal: number, fiatRate: number): HoldingsItem {
+  const btc = rows.reduce((sum, item) => sum + item.btc, 0);
+  return {
+    name: "",
+    nameKey: "holdings.otherSources",
+    btc,
+    value: btc * fiatRate,
+    percent: percentOf(btc, bookTotal),
+  };
 }
 
 export const readinessToneStyles: Record<OverviewHealthTone, string> = {

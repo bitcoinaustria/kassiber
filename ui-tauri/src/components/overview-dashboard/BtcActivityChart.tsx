@@ -133,6 +133,7 @@ export const BtcActivityChart = ({
   isRefreshing = false,
   onAddConnection,
   fiatSeriesEnabled = true,
+  fillHeight = false,
 }: {
   snapshot: OverviewSnapshot;
   hideSensitive: boolean;
@@ -142,6 +143,8 @@ export const BtcActivityChart = ({
   isRefreshing?: boolean;
   onAddConnection?: () => void;
   fiatSeriesEnabled?: boolean;
+  /** Grow the plot into the height around it, never below its usual height. */
+  fillHeight?: boolean;
 }) => {
   const { t } = useTranslation(["overview", "common"]);
   const hasChartData = React.useMemo(
@@ -1136,7 +1139,9 @@ export const BtcActivityChart = ({
                 "min-w-0",
                 expanded
                   ? "relative flex min-h-0 flex-1 flex-col gap-2"
-                  : "relative",
+                  : fillHeight
+                    ? "relative flex flex-1 flex-col"
+                    : "relative",
               )}
             >
           <div
@@ -1144,7 +1149,9 @@ export const BtcActivityChart = ({
               "relative flex w-full min-w-0 select-none flex-col",
               expanded
                 ? "min-h-0 flex-1"
-                : "h-[352px] sm:h-[420px]",
+                : fillHeight
+                  ? "min-h-[352px] flex-1 sm:min-h-[420px]"
+                  : "h-[352px] sm:h-[420px]",
             )}
           >
             <div
@@ -1594,7 +1601,11 @@ export const BtcActivityChart = ({
           <div
             className={cn(
               "flex w-full min-w-0 flex-col items-center justify-center gap-3 rounded-lg border border-dashed bg-background/40 px-6 text-center",
-              expanded ? "min-h-0 flex-1" : "h-[320px] sm:h-[388px]",
+              expanded
+                ? "min-h-0 flex-1"
+                : fillHeight
+                  ? "min-h-[320px] flex-1 sm:min-h-[388px]"
+                  : "h-[320px] sm:h-[388px]",
             )}
           >
             <LineChart
