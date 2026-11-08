@@ -511,6 +511,16 @@ def sqlite_error_is_busy(details: dict[str, object]) -> bool:
     }
 
 
+def sqlite_error_is_readonly(exc: Exception) -> bool:
+    """SQLite refused a write on a read-only or `query_only` connection."""
+
+    code = getattr(exc, "sqlite_errorcode", None)
+    if isinstance(code, int):
+        return (code & 0xFF) == sqlite3.SQLITE_READONLY
+    # sqlcipher3 exceptions carry no error code; SQLite's message is stable.
+    return "readonly database" in str(exc).lower()
+
+
 def begin_write_savepoint(conn, name: str) -> None:
     """Open SAVEPOINT `name` for a write, holding SQLite's writer lock from the start.
 
@@ -523,21 +533,32 @@ def begin_write_savepoint(conn, name: str) -> None:
     writer lock with the transaction's first statement waits like any write.
     RELEASE of an outermost savepoint still commits. Read-only snapshots keep
     a plain SAVEPOINT; they never upgrade.
+
+    A connection that cannot write (`query_only`, as MCP reads run, or opened
+    read-only) needs no reservation: no upgrade can follow, and SQLite would
+    refuse the reservation itself. Lazily derived reads such as the
+    chain-analysis index open this savepoint and write only when stale, so
+    there they read, and a stale write is refused as before. One that already
+    holds the writer reserves again at no cost; the stdlib driver cannot tell.
     """
     # Every Kassiber book has `settings`; partial test schemas may not. Look
-    # before the savepoint opens, so this read holds no lock afterwards.
+    # before the savepoint opens, so these reads hold no lock afterwards.
     reservable = bool(
         conn.execute(
             "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'settings'"
         ).fetchall()
-    )
+    ) and not conn.execute("PRAGMA query_only").fetchone()[0]
     conn.execute(f"SAVEPOINT {name}")
     if not reservable:
         return
     try:
         # Changes nothing; requesting the writer lock is its only effect.
         conn.execute("UPDATE settings SET value = value WHERE 0")
-    except BaseException:
+    except BaseException as exc:
+        if isinstance(exc, Exception) and sqlite_error_is_readonly(exc):
+            # A read-only connection: Python's drivers expose no
+            # sqlite3_db_readonly, so the refusal is how it shows.
+            return
         conn.execute(f"ROLLBACK TO SAVEPOINT {name}")
         conn.execute(f"RELEASE SAVEPOINT {name}")
         raise
