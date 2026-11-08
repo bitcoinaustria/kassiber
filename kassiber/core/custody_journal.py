@@ -205,37 +205,19 @@ def transaction_rate_quotes_for_profile(
     from ..time_utils import timestamp_predicate
 
     bound = ""
-    # The latest row of a same-time group is the last in source order. A
-    # table without the exact-price columns predates the source order's
-    # columns too, so its fallback keeps the legacy order.
     time = "occurred_at DESC"
     params = [profile_id]
     if at_or_before is not None:
         bound = " AND " + timestamp_predicate(conn, "occurred_at", "<" if exclusive else "<=")
         time = "kassiber_timestamp_us(occurred_at) DESC"
         params.append(at_or_before)
-    order = time + ", " + same_time_order_sql("transactions", descending=True)
-    legacy_order = time + ", created_at DESC, id DESC"
-
-    try:
-        rows = conn.execute(
-            """
-            SELECT asset, occurred_at, fiat_rate, fiat_value, fiat_rate_exact,
-                   fiat_value_exact, amount
-            FROM transactions
-            WHERE profile_id = ? AND excluded = 0
-            """ + bound + " ORDER BY " + order,
-            params,
-        ).fetchall()
-    except sqlite3.OperationalError:
-        rows = conn.execute(
-            """
-            SELECT asset, occurred_at, fiat_rate, fiat_value, amount
-            FROM transactions
-            WHERE profile_id = ? AND excluded = 0
-            """ + bound + " ORDER BY " + legacy_order,
-            params,
-        ).fetchall()
+    rows = _latest_first_rows(
+        conn,
+        "asset, occurred_at, fiat_rate, fiat_value",
+        "FROM transactions WHERE profile_id = ? AND excluded = 0" + bound,
+        params,
+        time,
+    )
     rates: dict[str, Any] = {}
     for row in rows:
         asset = row["asset"]
@@ -268,19 +250,37 @@ def latest_transaction_rates_for_profile(conn, profile_id: str) -> dict[str, Any
 
 
 def transaction_rate_rows(conn, profile_id):
-    # The latest row of a same-time group is the last in source order; a
-    # legacy table without exact prices keeps the legacy order.
-    order = transaction_order_sql("transactions", descending=True)
-    try:
-        return conn.execute(
-            "SELECT asset,fiat_rate,fiat_value,fiat_rate_exact,fiat_value_exact,amount FROM transactions WHERE profile_id=? AND excluded=0 ORDER BY " + order,
-            (profile_id,),
-        ).fetchall()
-    except sqlite3.OperationalError:
-        return conn.execute(
-            "SELECT asset,fiat_rate,fiat_value,amount FROM transactions WHERE profile_id=? AND excluded=0 ORDER BY occurred_at DESC,created_at DESC,id DESC",
-            (profile_id,),
-        ).fetchall()
+    return _latest_first_rows(
+        conn,
+        "asset,fiat_rate,fiat_value",
+        "FROM transactions WHERE profile_id=? AND excluded=0",
+        (profile_id,),
+        "occurred_at DESC",
+    )
+
+
+def _latest_first_rows(conn, columns, source, params, time):
+    """Rows latest first, a same-time group in reverse source order.
+
+    The latest row of a same-time group is the last in source order. Narrow
+    tables (old books, fixtures) may lack the source order's columns and then
+    keep the legacy order; without the exact-price columns they read the
+    float prices alone.
+    """
+    order = time + ", " + same_time_order_sql("transactions", descending=True)
+    legacy = time + ", created_at DESC, id DESC"
+    attempts = (
+        (columns + ",fiat_rate_exact,fiat_value_exact,amount", order),
+        (columns + ",fiat_rate_exact,fiat_value_exact,amount", legacy),
+        (columns + ",amount", legacy),
+    )
+    for selected, ordering in attempts[:-1]:
+        try:
+            return conn.execute(f"SELECT {selected} {source} ORDER BY {ordering}", params).fetchall()
+        except sqlite3.OperationalError:
+            pass
+    selected, ordering = attempts[-1]
+    return conn.execute(f"SELECT {selected} {source} ORDER BY {ordering}", params).fetchall()
 
 
 def rates_from_transaction_rows(rows) -> dict[str, Any]:
