@@ -568,6 +568,16 @@ possible.
 - `wallet_policy_asset_id`, `liquid_asset_code`, and the DB compatibility
   backfills map policy-asset identifiers to `LBTC`.
 
+`liquid_blinding_secret` derives the branch exactly as
+`derive_descriptor_target` does, so the unblinding key always belongs to the
+address the wallet hands out. Until round 14 a fixed (non-ranged) branch such
+as `elwpkh(xpub/0/7)` or a view key `xprv/0/7` skipped `derive(0)` and was
+tweaked with the account key's script, so every confidential output to it
+failed the compatibility sync (`Failed to decode Liquid output`), for SLIP-77
+and `ct(<key>, ...)` alike. That failure rolled the whole sync back, so an
+affected book holds no partial state: its next ordinary sync fetches and
+unblinds the history (`LiquidBlindingSecretTests`).
+
 LWK is the authoritative supported Electrum-route wollet state and unblinding
 engine. Private view/blinding material stays inside SQLCipher and must never
 enter logs, diagnostics, audit packages, AI tools or daemon/event payloads.

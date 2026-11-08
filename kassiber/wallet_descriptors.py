@@ -576,8 +576,10 @@ def liquid_blinding_secret(plan, branch_index, address_index):
     derived_target = derive_descriptor_target(plan, branch_index, address_index)
     branch = next(item for item in plan.branches if item.branch_index == branch_index)
     descriptor = branch_descriptor(branch)
-    if getattr(descriptor, "is_wildcard", False):
-        descriptor = descriptor.derive(address_index)
+    # Derive exactly as derive_descriptor_target does: a fixed suffix
+    # (xpub/0/7, a view key's xprv/0/7) only applies through derive(0), and
+    # the address's blinding key comes from that derived script and key.
+    descriptor = descriptor.derive(address_index if getattr(descriptor, "is_wildcard", False) else 0)
     script_pubkey = descriptor.script_pubkey()
     blinding_key = descriptor.blinding_key.get_blinding_key(script_pubkey)
     if not hasattr(blinding_key, "secret"):

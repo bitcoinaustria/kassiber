@@ -432,6 +432,36 @@ class ChangeBranchSynthesisTests(unittest.TestCase):
         self.assertEqual(len(secret), 32)
 
 
+class LiquidBlindingSecretTests(unittest.TestCase):
+    """The unblinding key must belong to the address the wallet hands out."""
+
+    def test_secret_matches_the_target_address_on_fixed_and_ranged_branches(self):
+        # A fixed branch (`xpub/0/7`) used to be tweaked with the account
+        # key's script and an underived view key, so its own confidential
+        # outputs could never be unblinded.
+        from embit import ec
+        from kassiber.liquid_descriptors import addr_decode
+
+        account = bip32.HDKey.from_seed(bytes([1]) * 32).derive("m/84h/0h/0h").to_public().to_base58()
+        view = ec.PrivateKey(bytes([3]) * 32).wif()
+        view_xprv = bip32.HDKey.from_seed(bytes([3]) * 32).to_base58()
+        cases = {
+            "slip77-fixed": f"ct(slip77({'03' * 32}),elwpkh({account}/0/7))",
+            "wif-fixed": f"ct({view},elwpkh({account}/0/7))",
+            "xprv-fixed": f"ct({view_xprv}/0/7,elwpkh({account}/0/7))",
+            "xprv-bare-fixed": f"ct({view_xprv},elwpkh({account}/0/7))",
+            "slip77-ranged": f"ct(slip77({'03' * 32}),elwpkh({account}/<0;1>/*))",
+            "xprv-ranged": f"ct({view_xprv}/<0;1>/*,elwpkh({account}/<0;1>/*))",
+        }
+        for name, descriptor in cases.items():
+            with self.subTest(name):
+                plan = load_descriptor_plan({"descriptor": descriptor, "chain": "liquid"})
+                for target in derive_descriptor_targets(plan, start=0, end=2):
+                    secret, _ = liquid_blinding_secret(plan, target.branch_index, target.address_index)
+                    _, address_key = addr_decode(target.address)
+                    self.assertEqual(ec.PrivateKey(secret).sec(), address_key.sec())
+
+
 class WatchOnlyDescriptorBoundaryTests(unittest.TestCase):
     def setUp(self):
         self.account = bip32.HDKey.from_seed(b"watch-only-boundary").derive(
