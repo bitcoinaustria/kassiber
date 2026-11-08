@@ -237,6 +237,45 @@ class _BarkBook(_BookTest):
         }
 
 
+    def _sync_under_held_writer(self, wallet_id, routes, hold_ms=400):
+        """Sync while another connection (a daemon worker, another Kassiber
+        process) holds the writer as the Bark import's savepoint opens: the
+        import must wait for it, not fail as database_busy."""
+
+        import threading
+        import time
+        from unittest.mock import patch
+
+        from kassiber.core import btcpay_bark as core_btcpay_bark
+
+        path = self.conn.execute("PRAGMA database_list").fetchone()[2]
+        held, released = threading.Event(), []
+
+        def hold_writer():
+            other = sqlite3.connect(path, timeout=30, isolation_level=None)
+            other.execute("BEGIN IMMEDIATE")
+            other.execute("UPDATE settings SET value = value WHERE 0")
+            held.set()
+            time.sleep(hold_ms / 1000)
+            released.append(True)
+            other.execute("COMMIT")
+            other.close()
+
+        original = core_btcpay_bark.require_book_network
+        blocker = threading.Thread(target=hold_writer)
+
+        def writer_held_first(*args, **kwargs):
+            blocker.start()
+            self.assertTrue(held.wait(10))
+            return original(*args, **kwargs)
+
+        with patch.object(core_btcpay_bark, "require_book_network", writer_held_first):
+            outcome = self._sync(wallet_id, routes)
+        blocker.join(10)
+        self.assertEqual(released, [True])
+        return outcome
+
+
 class BarkWalletImportTest(_BarkBook):
     def setUp(self):
         super().setUp()
@@ -275,6 +314,11 @@ class BarkWalletImportTest(_BarkBook):
             self._sync("bark", _routes())
         finally:
             core_sync.sync_progress_emitter.reset(token)
+        self.assertEqual(self._balance("bark"), CONFIRMED_BALANCE_MSAT)
+
+    def test_the_import_waits_for_another_writer(self):
+        outcome = self._sync_under_held_writer("bark", _routes())
+        self.assertEqual(outcome["bark"]["linked_to_payments"], 3)
         self.assertEqual(self._balance("bark"), CONFIRMED_BALANCE_MSAT)
 
     def test_a_row_booked_before_its_invoice_moves_to_the_payment_key(self):
@@ -370,6 +414,12 @@ class LedgerMigrationTest(_BarkBook):
         self.assertNotIn("source_mode", json.loads(self.conn.execute("SELECT config_json FROM wallets WHERE id = 'ark'").fetchone()[0]))
         # Afterwards it syncs as a wallet import, without rows twice.
         self._sync("ark", _routes())
+        self.assertEqual(self._balance("ark"), CONFIRMED_BALANCE_MSAT)
+
+    def test_the_switch_waits_for_another_writer(self):
+        self._ledger_first()
+        outcome = self._sync_under_held_writer("ark", _routes())
+        self.assertEqual(outcome["bark"]["ledger_rows_kept"], 3)
         self.assertEqual(self._balance("ark"), CONFIRMED_BALANCE_MSAT)
 
     def test_a_payment_without_a_bark_row_refuses_and_changes_nothing(self):

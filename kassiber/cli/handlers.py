@@ -2884,7 +2884,9 @@ def _sync_bark_wallet(
     # progress commits on this connection, so the import stays quiet inside.
     core_btcpay_bark.require_book_network(conn, profile["id"], store_id)
     savepoint = f"bark_import_{uuid.uuid4().hex}"
-    conn.execute(f"SAVEPOINT {savepoint}")
+    # Reserve the writer first: a deferred savepoint that reads before its
+    # first write fails at once with database_busy under another writer.
+    begin_write_savepoint(conn, savepoint)
     progress_token = core_sync.sync_progress_emitter.set(None)
     try:
         identities = core_btcpay_bark.assign_identities(
