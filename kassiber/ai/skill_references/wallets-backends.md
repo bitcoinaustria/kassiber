@@ -292,7 +292,12 @@ watch: BTCPay's settled payments and completed payouts become the balance),
 `provenance_only` (Lightning already booked by a connected node, stores sharing
 an already imported wallet), `skip`. A payment ledger only sees what passes
 through BTCPay; withdrawals made outside it need their own record, and it needs
-a key that can read payouts. A configured wallet source or ledger stays until
+a key that can read payouts. A Bark store (`BTC-ARK`) with plugin 0.10 or later
+is a `wallet_source` for the read-only key: the whole Bark wallet with its fees.
+A `BTC-ARK` ledger switches to it on the next sync and keeps the payments it
+booked; a payment it cannot match stops the sync (`bark_migration_conflict`)
+with the book unchanged. Lightning payments that settle into Bark belong to
+the Bark wallet, never also to a `BTC-LN` ledger. A configured wallet source or ledger stays until
 its wallet is archived. One wallet
 is imported once: stores that share a wallet, or the same store reached through
 a second API key, must not become two wallet sources or two ledgers; the core

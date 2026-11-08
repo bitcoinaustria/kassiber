@@ -370,6 +370,7 @@ from .sync_btcpay import (
     inspect_btcpay_backend,
     probe_btcpay_instance,
     probe_btcpay_wallet,
+    require_settlement_payment_method,
     require_wallet_history_payment_method,
 )
 from .wallet_descriptors import (
@@ -15237,7 +15238,7 @@ def _btcpay_existing_wallet_routes(
                 retryable=False,
             )
         return [
-            {"wallet": target_wallet, "payment_method_id": payment_method_id}
+            {"wallet": target_wallet, "payment_method_id": require_settlement_payment_method(payment_method_id)}
             for payment_method_id in _btcpay_payment_method_ids(args)
         ]
     if not isinstance(raw_routes, list) or not raw_routes:
@@ -15272,7 +15273,7 @@ def _btcpay_existing_wallet_routes(
         payment_method_id = core_wallets.normalize_btcpay_payment_method_id(
             payment_method_id
         )
-        require_wallet_history_payment_method(payment_method_id)
+        require_settlement_payment_method(payment_method_id)
         key = (wallet_ref, payment_method_id)
         if key not in seen:
             routes.append(

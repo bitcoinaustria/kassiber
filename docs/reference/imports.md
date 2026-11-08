@@ -1082,7 +1082,11 @@ syncs refresh the store's invoice and payout provenance first, so a send that
 completed payouts explain books its miner fee separately. A BTCPay payment
 ledger (`btcpay setup --route STORE:BTC-LN=payment_ledger`) books Lightning and
 bitcoin plugin payments from the same provenance instead of wallet history; see
-[payment ledgers](backends.md#payment-ledgers).
+[payment ledgers](backends.md#payment-ledgers). A Bark store (`BTC-ARK`,
+plugin 0.10 or later) imports its whole Bark wallet through the same path with
+Bark's own booking rules: receive fees and refresh/board fees become fee rows,
+send fees are split out, and a `BTC-ARK` ledger switches to it on the next sync
+without booking a payment twice; see [Bark wallets](backends.md#bark-wallets-btc-ark).
 
 Merchant provenance is a separate path so invoice/payment facts do not duplicate
 wallet balances:

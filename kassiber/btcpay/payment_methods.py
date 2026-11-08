@@ -11,6 +11,11 @@ change the connection behind it, which Kassiber deliberately never reads.
 BTCPay 1.x used different names (``BTC``, ``BTC-LightningNetwork``,
 ``BTC_LNURLPAY``). ``canonical_payment_method_id`` maps them onto the 2.x
 names so stored routes and invoice payments line up across versions.
+
+The Bark plugin's ``BTC-ARK`` (Ark, plus Lightning settled into the Bark
+wallet) was named ``BARK`` before plugin 0.10; Kassiber's earlier canonical
+form of that bare id was ``BARK-CHAIN``. Both map to ``BTC-ARK``. Since
+0.10 the plugin serves the whole Bark wallet as wallet history.
 """
 
 from __future__ import annotations
@@ -19,7 +24,9 @@ from typing import Any
 
 from ..errors import AppError
 
-WALLET_HISTORY_PAYMENT_METHOD_IDS = frozenset({"BTC-CHAIN", "LBTC-CHAIN"})
+WALLET_HISTORY_PAYMENT_METHOD_IDS = frozenset({"BTC-CHAIN", "LBTC-CHAIN", "BTC-ARK"})
+BARK_PAYMENT_METHOD_ID = "BTC-ARK"
+_LEGACY_BARK_IDS = frozenset({"BARK", "BARK-CHAIN"})
 BITCOIN_ASSET_CHAINS = {"BTC": "bitcoin", "LBTC": "liquid"}
 
 RAIL_ONCHAIN = "onchain"
@@ -65,6 +72,12 @@ SETTLEMENT_HINTS = {
         "connection as BOLT11 invoices. Kassiber keeps them as invoice records "
         "and links them to your Lightning node or wallet by payment hash."
     ),
+    "bark": (
+        "Payments settle into the store's Bark (Ark) wallet. With Bark plugin "
+        "0.10 or later and a key that can view the wallet, Kassiber imports the "
+        "whole wallet, fees included; older plugins book BTCPay's settled "
+        "payments and payouts instead."
+    ),
     "plugin": (
         "This payment method comes from a BTCPay plugin Kassiber cannot import "
         "directly. Invoices stay available as provenance; add the account that "
@@ -95,6 +108,8 @@ def canonical_payment_method_id(value: Any) -> str:
     raw = str(value or "").strip()
     if not raw:
         return ""
+    if raw.upper() in _LEGACY_BARK_IDS:
+        return BARK_PAYMENT_METHOD_ID
     currency, handler = split_payment_method_id(raw)
     if not handler:
         # A short bare crypto code (``BTC``) is a 1.x on-chain method; any
@@ -126,6 +141,8 @@ def classify_payment_method(value: Any) -> dict[str, Any]:
         hint_key = "lightning"
     elif rail == RAIL_LNURL:
         hint_key = "lnurl"
+    elif payment_method_id == BARK_PAYMENT_METHOD_ID:
+        hint_key = "bark"
     else:
         hint_key = "plugin"
     wallet_history_supported = payment_method_id in WALLET_HISTORY_PAYMENT_METHOD_IDS
@@ -172,6 +189,8 @@ def payment_method_label(payment_method_id: str, *, rail: str | None = None, cur
         ("BTC", RAIL_LNURL): "LNURL / Lightning Address",
         ("LBTC", RAIL_ONCHAIN): "Liquid Bitcoin",
     }
+    if payment_method_id == BARK_PAYMENT_METHOD_ID:
+        return "Bark (Ark)"
     if (currency, rail) in names:
         return names[(currency, rail)]
     if rail == RAIL_ONCHAIN:
@@ -209,12 +228,29 @@ def require_wallet_history_payment_method(payment_method_id: Any) -> str:
     )
 
 
+def require_settlement_payment_method(payment_method_id: Any) -> str:
+    """An on-chain method whose provenance may enrich a wallet Kassiber tracks."""
+
+    method = require_wallet_history_payment_method(payment_method_id)
+    if method == BARK_PAYMENT_METHOD_ID:
+        raise AppError(
+            f"BTCPay payment method '{payment_method_id}' cannot be mapped to another wallet",
+            code="validation",
+            hint=(
+                "Bark payments settle into the store's own Bark wallet. Import it as wallet history "
+                "(Bark plugin 0.10 or later) or book it as a payment ledger."
+            ),
+        )
+    return method
+
+
 def asset_for_payment_method(payment_method_id: Any) -> str | None:
     currency, _ = split_payment_method_id(canonical_payment_method_id(payment_method_id))
     return currency or None
 
 
 __all__ = [
+    "BARK_PAYMENT_METHOD_ID",
     "BITCOIN_ASSET_CHAINS",
     "RAIL_LIGHTNING",
     "RAIL_LNURL",
@@ -228,6 +264,7 @@ __all__ = [
     "is_wallet_history_payment_method",
     "ledger_group",
     "payment_method_label",
+    "require_settlement_payment_method",
     "require_wallet_history_payment_method",
     "split_payment_method_id",
 ]

@@ -5,7 +5,8 @@ that inspection with the local book and decides, per store payment method,
 what Kassiber should do with it:
 
 - ``wallet_source``: import BTCPay's own wallet history as a Kassiber wallet
-  (requires the wallet-history key).
+  (requires the wallet-history key): an on-chain wallet, or the store's whole
+  Bark wallet when its plugin serves wallet history (0.10 and later).
 - ``existing_wallet``: the store pays into a wallet Kassiber already tracks
   (recognised from the read-only address preview, or chosen by the user);
   BTCPay enriches it with labels and invoice provenance.
@@ -32,6 +33,7 @@ from typing import Any, Iterable, Mapping, Sequence
 from ..btcpay.client import server_url_identity
 from ..btcpay.discovery import InspectionResult, network_from_address
 from ..btcpay.payment_methods import (
+    BARK_PAYMENT_METHOD_ID,
     RAIL_LIGHTNING,
     RAIL_LNURL,
     RAIL_ONCHAIN,
@@ -75,6 +77,18 @@ REASONS = {
         "Plugin payment method: Kassiber books BTCPay's settled payments and completed payouts as the balance."
     ),
     "plugin_rail": "Plugin payment method in an unknown currency; invoices are kept as provenance.",
+    "import_bark_wallet_history": (
+        "Import the store's whole Bark wallet from BTCPay: payments, sends, refreshes and their fees."
+    ),
+    "bark_payment_ledger": (
+        "Kassiber books BTCPay's settled Bark payments and completed payouts as the balance. Once the Bark "
+        "plugin serves wallet history (0.10 or later) to a key that can view the wallet, the next sync "
+        "switches to the whole Bark wallet and keeps the payments already booked."
+    ),
+    "bark_wallet_history_unavailable": (
+        "This store's Bark plugin does not serve wallet history: it needs plugin 0.10 or later, and Bark set "
+        "up for the store."
+    ),
     "not_ledger_rail": "Only Lightning and Bitcoin plugin payment methods can be booked from BTCPay's payments.",
     "payouts_permission_missing": (
         "The key cannot read payouts, so BTCPay's payments alone would overstate the balance. Keep the invoices "
@@ -324,6 +338,7 @@ def _lightning_wallets(conn: sqlite3.Connection, profile_id: str) -> list[dict[s
 
 def _action_availability(method: Mapping[str, Any], capabilities: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
     onchain = method.get("rail") == RAIL_ONCHAIN and bool(method.get("sync_supported"))
+    bark = method.get("payment_method_id") == BARK_PAYMENT_METHOD_ID
     invoices = capabilities.get("invoices")
     history = capabilities.get("wallet_history")
     network_ok = method.get("network_compatible") is not False
@@ -332,10 +347,12 @@ def _action_availability(method: Mapping[str, Any], capabilities: Mapping[str, A
         return {"available": available, "reason": reason, "reason_text": REASONS.get(reason) if reason else None}
 
     wallet_source = entry(True)
-    if not onchain:
+    if not (onchain or bark):
         wallet_source = entry(False, "not_on_chain")
     elif history is False:
         wallet_source = entry(False, "wallet_history_permission_missing")
+    elif bark and method.get("wallet_history_available") is not True:
+        wallet_source = entry(False, "bark_wallet_history_unavailable")
     elif not network_ok:
         wallet_source = entry(False, "network_mismatch")
     existing_wallet = entry(onchain and network_ok, None if onchain and network_ok else ("network_mismatch" if onchain else "not_on_chain"))
@@ -476,6 +493,12 @@ def plan_btcpay_setup(
                 action, reason = "provenance_only", "lightning_settles_elsewhere"
             else:
                 action, reason = "payment_ledger", "lightning_payment_ledger"
+        elif method["payment_method_id"] == BARK_PAYMENT_METHOD_ID and compatible is False:
+            action, reason = "skip", "network_mismatch"
+        elif method["payment_method_id"] == BARK_PAYMENT_METHOD_ID and method.get("wallet_history_available") is True:
+            action, reason = "wallet_source", "import_bark_wallet_history"
+        elif method["payment_method_id"] == BARK_PAYMENT_METHOD_ID:
+            action, reason = "payment_ledger", "bark_payment_ledger"
         elif method.get("rail") != RAIL_ONCHAIN or not method.get("sync_supported"):
             if method.get("ledger_group"):
                 action, reason = "payment_ledger", "plugin_payment_ledger"
@@ -744,7 +767,7 @@ def _route_text(raw: Mapping[str, Any], *keys: str) -> str | None:
 def normalize_setup_routes(raw_routes: Any, *, allow_only_skips: bool = False) -> list[dict[str, Any]]:
     """Validate route objects from the desktop or CLI into canonical routes."""
 
-    from ..btcpay.payment_methods import require_wallet_history_payment_method
+    from ..btcpay.payment_methods import require_settlement_payment_method, require_wallet_history_payment_method
 
     if not isinstance(raw_routes, list) or not raw_routes:
         raise AppError(
@@ -769,8 +792,10 @@ def normalize_setup_routes(raw_routes: Any, *, allow_only_skips: bool = False) -
         payment_method_id = core_wallets.normalize_btcpay_payment_method_id(
             _route_text(raw, "payment_method_id") or core_wallets.BTCPAY_DEFAULT_PAYMENT_METHOD_ID
         )
-        if action in {"wallet_source", "existing_wallet"}:
+        if action == "wallet_source":
             require_wallet_history_payment_method(payment_method_id)
+        if action == "existing_wallet":
+            require_settlement_payment_method(payment_method_id)
         if action == "payment_ledger" and not ledger_group(payment_method_id):
             raise AppError(
                 f"BTCPay payment method '{payment_method_id}' cannot be booked as a payment ledger",

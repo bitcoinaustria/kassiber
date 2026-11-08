@@ -35,6 +35,7 @@ from .client import (
     scrub_api_key_payload,
 )
 from .payment_methods import (
+    BARK_PAYMENT_METHOD_ID,
     RAIL_ONCHAIN,
     canonical_payment_method_id,
     classify_payment_method,
@@ -245,6 +246,10 @@ def _inspect_store(
         method["wallet_fingerprint"] = None
         method["network"] = None
         method["preview_error"] = None
+        if method["payment_method_id"] == BARK_PAYMENT_METHOD_ID:
+            method["wallet_history_error"] = None
+            if method["wallet_history_available"] is not False and method["enabled"]:
+                method["wallet_history_available"], method["wallet_history_error"] = _bark_wallet_served(client, store_id)
         previewable = method["rail"] == RAIL_ONCHAIN and method["bitcoin_asset"] and method["enabled"]
         if previewable and capabilities.get("wallet_preview") is False:
             # The key cannot read the preview on this server (BTCPay 2.4 needs
@@ -264,6 +269,32 @@ def _inspect_store(
                 )
         methods.append(method)
     return store, methods, previews, warnings
+
+
+def _bark_wallet_served(client: GreenfieldClient, store_id: str) -> tuple[bool | None, str | None]:
+    """Whether the store's Bark plugin serves wallet history (plugin 0.10 and later).
+
+    Older plugins have no such route; a store without Bark answers 404 too.
+    """
+
+    store_q = urlparse.quote(store_id, safe="")
+    try:
+        _, error = client.get_optional_json(
+            f"/api/v1/stores/{store_q}/payment-methods/{BARK_PAYMENT_METHOD_ID}/wallet",
+            tolerate=(403, 404),
+        )
+    except AppError as exc:
+        # barkd unreachable (BTCPay answers 503 until it is back).
+        if exc.retryable:
+            return None, "unavailable"
+        raise
+    if error is None:
+        return True, None
+    if error.status == 403:
+        return False, "missing_permission"
+    if error.status == 404:
+        return False, "not_served"
+    return None, "unavailable"
 
 
 def inspect_btcpay_connection(

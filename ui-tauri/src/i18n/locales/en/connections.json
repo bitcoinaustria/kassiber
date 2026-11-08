@@ -1202,6 +1202,7 @@
         "liquid_onchain": "Customers pay into this store's Liquid wallet.",
         "lightning": "Lightning payments settle in the store's Lightning node or a plugin wallet (for example Boltz, Breez, Blink, Strike or Nostr Wallet Connect). When Kassiber cannot connect to it, BTCPay's payments become the balance.",
         "lnurl": "LNURL and Lightning Address payments settle through the store's Lightning connection.",
+        "bark": "Payments settle into the store's Bark (Ark) wallet. With Bark plugin 0.10 or later and a key that can view the wallet, Kassiber imports the whole wallet, fees included; older plugins book BTCPay's payments instead.",
         "plugin": "Provided by a BTCPay plugin. When it settles in bitcoin, Kassiber books its payments from BTCPay.",
         "non_bitcoin": "Kassiber tracks Bitcoin and Liquid Bitcoin only; these payments are skipped."
       },
@@ -1226,6 +1227,9 @@
         "lightning_payment_ledger": "Kassiber cannot watch this store's Lightning node or wallet, so it books BTCPay's settled payments and completed payouts as the balance.",
         "plugin_payment_ledger": "Plugin payment method: Kassiber books BTCPay's settled payments and completed payouts as the balance.",
         "plugin_rail": "Plugin payment method in a currency Kassiber cannot confirm is bitcoin; invoices are kept as records.",
+        "import_bark_wallet_history": "Imports the store's whole Bark wallet from BTCPay: payments, sends, refreshes and their fees.",
+        "bark_payment_ledger": "Kassiber books BTCPay's settled Bark payments and completed payouts as the balance. Once the Bark plugin serves wallet history (0.10 or later) to a key that can view the wallet, the next sync switches to the whole Bark wallet and keeps the payments already booked.",
+        "bark_wallet_history_unavailable": "This store's Bark plugin does not serve wallet history: it needs plugin 0.10 or later, and Bark set up for the store.",
         "not_ledger_rail": "Only Lightning and bitcoin plugin payment methods can be booked from BTCPay's payments.",
         "network_mismatch": "This store's wallet is on a different network than this book.",
         "wallet_recognised": "Kassiber already tracks the wallet this store pays into.",
