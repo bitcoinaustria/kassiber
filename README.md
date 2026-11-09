@@ -16,7 +16,8 @@ Do not use Kassiber as the sole basis for filings or financial decisions.
 ## What it covers
 
 - Watch-only Bitcoin, Lightning, and Liquid sources, plus exchange and wallet
-  file imports.
+  file imports. BTCPay Server stores sync with a read-only key, including
+  BTCPay 2.4 wallets and Bark (Ark) wallets run through BTCPay.
 - Transaction notes, attachments, transfer review, quarantine, and audit history.
 - Encrypted backup and restore of a book container, from the desktop or the CLI.
 - Local tax calculations in Kassiber's own tax engine, including Austrian
