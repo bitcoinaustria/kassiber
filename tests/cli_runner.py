@@ -28,6 +28,8 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from tests.egress_guard import require_guarded_child
+
 
 ROOT = Path(__file__).resolve().parent.parent
 CLI_ENV = "KASSIBER_TEST_CLI"
@@ -130,21 +132,40 @@ def _with_input_fds(args, kwargs) -> tuple[list[str], list[tuple[int, bytes]], l
     return resolved, inputs, read_ends
 
 
+def _require_guard(
+    head: Sequence[str], kwargs: dict, python_options: Sequence[str], own_egress_guard: str | None
+) -> None:
+    """A Python child (the reference, or a candidate that is an interpreter)
+    must carry the armed session's no-egress guard, unless the caller names
+    a stricter guard of its own (`own_egress_guard`, the reason)."""
+    if own_egress_guard is not None:
+        if not own_egress_guard.strip():
+            raise ValueError("own_egress_guard must name the child's own guard")
+        return
+    executable = head[0]
+    if executable == sys.executable or os.path.basename(executable).startswith("python"):
+        require_guarded_child(kwargs.get("env"), python_options)
+
+
 def run(
     args: Iterable[str | os.PathLike[str] | InputFd],
     *,
     reference: bool = False,
     python_options: Sequence[str] = (),
     secret_input: bool = False,
+    own_egress_guard: str | None = None,
     **kwargs,
 ) -> subprocess.CompletedProcess:
     """`subprocess.run` of the product with `args`.
 
     Keyword arguments pass through to `subprocess.run`; `cwd` defaults to the
     repository root. `secret_input=True` marks stdin as a credential, which
-    the session recorder refuses to keep.
+    the session recorder refuses to keep. A Python child must carry the
+    session's no-egress guard (`tests/egress_guard.py`) unless
+    `own_egress_guard` names a stricter one the child brings itself.
     """
     head = prefix(reference=reference, python_options=python_options)
+    _require_guard(head, kwargs, python_options, own_egress_guard)
     product_args, inputs, read_ends = _with_input_fds(list(args), kwargs)
     kwargs.setdefault("cwd", ROOT)
     try:
@@ -170,6 +191,7 @@ def popen(
     reference: bool = False,
     python_options: Sequence[str] = (),
     secret_input: bool = False,
+    own_egress_guard: str | None = None,
     **kwargs,
 ) -> subprocess.Popen:
     """`subprocess.Popen` of the product with `args`, such as a daemon session.
@@ -178,6 +200,7 @@ def popen(
     the repository root.
     """
     head = prefix(reference=reference, python_options=python_options)
+    _require_guard(head, kwargs, python_options, own_egress_guard)
     product_args, inputs, read_ends = _with_input_fds(list(args), kwargs)
     kwargs.setdefault("cwd", ROOT)
     try:

@@ -1106,7 +1106,17 @@ mode.
   sets it before collection for every non-integration run. It blocks Python
   DNS, TCP connects, and UDP sends to non-loopback hosts. A `sitecustomize` on
   `PYTHONPATH` carries it into spawned Python children and stops a child if the
-  guard cannot start. The separate product override `KASSIBER_NO_EGRESS=1`
+  guard cannot start. A child that would not load it fails instead of running
+  unguarded (`tests/egress_guard.py`): while the session is armed,
+  `cli_runner.run`/`popen` and `runtime_parity.child_env` refuse a Python
+  child whose environment drops the switch, whose `PYTHONPATH` does not
+  resolve `sitecustomize` to `tests/_child_hooks`, or whose interpreter
+  options skip site (`-I`, `-S`, `-E`), and every `python -m tests.<module>`
+  reference exits 78 at import when the guard is not live in it. Build child
+  environments by copying `os.environ` and use `guarded_pythonpath()` rather
+  than replacing `PYTHONPATH`; a child that brings a stricter guard of its own
+  names it with `own_egress_guard=` (`tests/rust_port/contracts.py`). The
+  separate product override `KASSIBER_NO_EGRESS=1`
   blocks BDK/LWK observer construction, shared backend HTTP/SOCKS and Python
   Electrum connections, and chain-analysis acquisition, including loopback.
   It is not used suite-wide and is not an OS-wide network firewall.

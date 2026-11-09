@@ -16,6 +16,7 @@ from kassiber.operator.client import BrokerClient, PreparedArguments
 from kassiber.operator.protocol import TEST_RUNTIME_OVERRIDE_ENV
 from kassiber.secrets.migration import create_empty_encrypted_database
 from kassiber.secrets.sqlcipher import sqlcipher_available
+from tests.egress_guard import guarded_pythonpath
 
 
 BROKER_START_TIMEOUT_SECONDS = 20.0
@@ -337,7 +338,7 @@ class OperatorIntegrationTest(unittest.TestCase):
                     ],
                     capture_output=True,
                     text=True,
-                    env={**os.environ, "PYTHONPATH": str(SOURCE_ROOT)},
+                    env={**os.environ, "PYTHONPATH": guarded_pythonpath()},
                     timeout=60,
                     check=True,
                 )
