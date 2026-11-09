@@ -30,7 +30,7 @@ A_ROWS = [
     ("2024-07-01T10:00:00Z", "a-gift", "inbound", "0.05000000", "0", ""),
 ]
 B_ROWS = [
-    ("2023-06-01T10:30:00Z", "b-in", "inbound", "0.49999000", "0", ""),
+    ("2023-06-01T10:30:00Z", "b-in", "inbound", "0.50000000", "0", ""),
     ("2025-02-01T10:00:00Z", "b-sell", "outbound", "0.30000000", "0", ""),
 ]
 RATES = (
@@ -112,7 +112,10 @@ class BookResetKeepsDecisionsTest(unittest.TestCase):
             ["--data-root", str(self.data_root), "--machine", *args],
             capture_output=True, text=True, check=False, env=self.env,
         )
-        payload = json.loads(result.stdout)
+        try:
+            payload = json.loads(result.stdout)
+        except ValueError:
+            raise AssertionError(f"{args} printed no JSON: {result.stdout[-2000:]} {result.stderr[-2000:]}")
         if result.returncode != 0 or payload.get("kind") == "error":
             raise AssertionError(f"{args} failed: {payload} {result.stderr[-2000:]}")
         return payload["data"]
