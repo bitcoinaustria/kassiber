@@ -2,15 +2,26 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from pathlib import Path
 from typing import Any
 
 from ..db import resolve_attachments_root
 from ..errors import AppError
+from . import freshness as core_freshness
 from . import legacy_ledger
 from .chain_observer import delete_profile_observer_state
 from .repo import current_context_snapshot
+
+# Wallet sources whose checkpoints gate re-importing a book's history.
+_WALLET_SOURCE_TYPES = frozenset(
+    {
+        core_freshness.SOURCE_ONCHAIN,
+        core_freshness.SOURCE_BTCPAY_WALLET,
+        core_freshness.SOURCE_BTCPAY_PROVENANCE,
+    }
+)
 
 
 def _count_where(
@@ -481,6 +492,37 @@ def reset_current_profile_data(
         )
         conn.execute("DELETE FROM tags WHERE profile_id = ?", (profile_id,))
         conn.execute("DELETE FROM transactions WHERE profile_id = ?", (profile_id,))
+        # Sync checkpoints and last-sync times describe history this book no
+        # longer holds. Clear them so the next sync re-imports every wallet in
+        # full, retired wallets included; each source keeps its user flags.
+        removed["sync_checkpoints"] = 0
+        for state in core_freshness.list_source_states(conn, profile_id):
+            if state["source_type"] not in _WALLET_SOURCE_TYPES:
+                continue
+            core_freshness.reset_source_checkpoint(
+                conn,
+                profile_id,
+                state["source_key"],
+                stale_reason="book_data_reset",
+            )
+            removed["sync_checkpoints"] += 1
+        removed["wallet_sync_times"] = 0
+        for wallet in conn.execute(
+            "SELECT id, config_json FROM wallets WHERE profile_id = ? ORDER BY id",
+            (profile_id,),
+        ).fetchall():
+            try:
+                config = json.loads(wallet["config_json"] or "{}")
+            except (TypeError, ValueError):
+                continue
+            if not isinstance(config, dict) or "last_synced_at" not in config:
+                continue
+            del config["last_synced_at"]
+            conn.execute(
+                "UPDATE wallets SET config_json = ? WHERE id = ?",
+                (json.dumps(config, sort_keys=True), wallet["id"]),
+            )
+            removed["wallet_sync_times"] += 1
         if clear_shared_rates:
             conn.execute("DELETE FROM rates_cache")
             conn.execute("DELETE FROM rates_checked_minutes")

@@ -245,6 +245,18 @@ def wallet_is_deprecated(config):
     return parse_bool(config.get(WALLET_DEPRECATED_CONFIG_KEY), default=False)
 
 
+def wallet_in_sync_all(config, *, force_full=False):
+    """Whether a sync of all wallets includes this wallet.
+
+    Retired wallets are skipped only for ongoing syncs. One whose history the
+    book has not imported (never synced, or cleared by a book reset) is
+    included, and so is every retired wallet in a forced full rescan.
+    """
+    if force_full or not wallet_is_deprecated(config):
+        return True
+    return not str(config.get("last_synced_at") or "").strip()
+
+
 def _reset_onchain_freshness_checkpoint(conn, profile_id: str, wallet_id: str) -> None:
     core_freshness.reset_source_checkpoint(
         conn,
@@ -1259,6 +1271,7 @@ __all__ = [
     "has_silent_payment_sync_material",
     "OWNERSHIP_SCAN_TO_INDEX_CONFIG_KEY",
     "normalize_addresses",
+    "wallet_in_sync_all",
     "wallet_is_deprecated",
     "normalize_btcpay_payment_method_id",
     "normalize_btcpay_store_id",

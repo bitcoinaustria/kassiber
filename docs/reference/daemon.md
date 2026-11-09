@@ -400,7 +400,13 @@ rows, wallet connection rows, and configured backends, then clears
 imported/synced transactions, journals, quarantines, swap pairs/dismissals/rules,
 saved views, BIP329 labels, transaction tags, attachment metadata/files, and
 source-of-funds review state so testing can redo sync, journal processing, and
-swap review from the preserved wallet connections. The global local fiat-rate
+swap review from the preserved wallet connections. It also empties every
+wallet source's sync checkpoint (keeping its pause and report-blocking flags,
+marked stale with `book_data_reset`) and each wallet's last sync time, so the
+next sync re-imports every wallet's history in full, retired wallets
+included (see [backends](backends.md)). Authored decisions such as pairs,
+custody components and loan marks are deleted with their transactions and
+are not re-created by the sync. The global local fiat-rate
 cache is shared across books in the data root and is only cleared when
 `clear_shared_rates` is the boolean value `true`; string values such as
 `"false"` are rejected. Like other sensitive local-data changes, encrypted

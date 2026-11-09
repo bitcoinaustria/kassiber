@@ -185,7 +185,9 @@ to be echoed.
 `wallets sync` takes either `--wallet <label-or-id>` or `--all`, never both;
 the wallet is not a positional argument.
 For "sync the project wallets" or "sync current wallets", use `--all` directly
-unless the user names a single wallet.
+unless the user names a single wallet. `--all` skips retired (`deprecated`)
+wallets once their history is imported; after "Reset book data" it includes
+them until they sync once, and `--all --force-full` always includes them.
 
 ## Ownership reconciliation (`wallets identify`)
 

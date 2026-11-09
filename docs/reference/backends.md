@@ -186,6 +186,13 @@ instead of retracting newer transactions. It is the repair path whenever local r
 may have diverged from an unchanged-chain checkpoint (the desktop app's
 forced-full refresh is the same path).
 
+Syncing all wallets (`wallets sync --all`, the desktop's Sync) skips retired
+(`deprecated`) wallets only for ongoing syncs. A retired wallet whose history
+the book has not imported, because it never synced or "Reset book data"
+cleared its last sync time, is included until it syncs once; `--all
+--force-full` always includes retired wallets. A single wallet named with
+`--wallet` always syncs.
+
 Common fields:
 
 - `KIND`

@@ -1039,7 +1039,9 @@ def _freshness_wallet_source_specs(
 
     for wallet in _load_wallets_for_freshness(conn, profile_id, wallet_ref):
         config = core_wallets.stored_wallet_config(wallet)
-        if wallet_ref is None and core_wallets.wallet_is_deprecated(config):
+        if wallet_ref is None and not core_wallets.wallet_in_sync_all(
+            config, force_full=force_full
+        ):
             continue
         if core_wallets.wallet_btcpay_sync_config(config):
             specs.append(

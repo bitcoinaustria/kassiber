@@ -2546,8 +2546,8 @@ def sync_wallet(
         wallets = [
             wallet
             for wallet in wallet_rows
-            if not core_wallets.wallet_is_deprecated(
-                core_wallets.stored_wallet_config(wallet)
+            if core_wallets.wallet_in_sync_all(
+                core_wallets.stored_wallet_config(wallet), force_full=force_full
             )
         ]
     else:

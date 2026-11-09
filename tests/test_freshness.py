@@ -111,7 +111,15 @@ class FreshnessTest(unittest.TestCase):
         profile_id = _seed_profile(conn)
         for wallet_id, label, config in [
             ("active", "Active", {"addresses": ["bc1qactive"]}),
-            ("old", "Old", {"addresses": ["bc1qold"], "deprecated": True}),
+            (
+                "old",
+                "Old",
+                {
+                    "addresses": ["bc1qold"],
+                    "deprecated": True,
+                    "last_synced_at": "2026-06-04T00:00:00Z",
+                },
+            ),
         ]:
             conn.execute(
                 """
