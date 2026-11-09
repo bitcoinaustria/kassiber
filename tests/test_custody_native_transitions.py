@@ -15,6 +15,7 @@ from tests.custody_tax_helpers import authoritative_chain_observation, finalized
 from tests.custody_tax_helpers import persist_authoritative_chain_observation
 from kassiber.core import custody_journal
 from kassiber.db import open_db
+from kassiber.tax_policy import build_tax_policy
 from tests import test_lwk_observer
 
 
@@ -178,8 +179,12 @@ class NativeTransitionEngineTest(unittest.TestCase):
         rows.extend((source, target))
         for country in ("generic", "at"):
             with self.subTest(country=country):
-                profile = {**PROFILE, "tax_country": country}
-                inputs = finalized_tax_inputs(profile, rows=rows, wallet_refs_by_id=refs)
+                # The product stores a book in its policy currency (EUR for
+                # Austria), and a real book's rows are priced in it.
+                currency = build_tax_policy({**PROFILE, "tax_country": country}).fiat_currency
+                profile = {**PROFILE, "tax_country": country, "fiat_currency": currency}
+                priced = [{**row, "fiat_currency": currency} for row in rows]
+                inputs = finalized_tax_inputs(profile, rows=priced, wallet_refs_by_id=refs)
                 pairs = inputs.finalized_tax_projection.cross_asset_pairs
                 self.assertEqual(len(pairs), 2)
                 self.assertEqual(len({p["pair_id"] for p in pairs}), 2)
