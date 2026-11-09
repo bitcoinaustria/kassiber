@@ -39,6 +39,11 @@ What the default reset does with each table of the active book.
 | Decision, kept in place | `custody_components` and their legs, allocations, terms and commitments; `custody_gap_reviews` (+ sets, transactions); `custody_authored_evidence_snapshots`; `custody_ai_assistance_audits`; `filed_report_snapshots` and their impacts, resolutions and chain captures; `review_workflow_receipts`; `external_documents`; book-level `attachments`; `source_funds_sources`, `source_funds_recipients`; `tags`; `saved_views`; `swap_matching_rules`; `bip329_labels`; `chain_analysis_cases`, `_labels`, `_label_history`, `_datasets`, `_dataset_claims`; `ai_chat_sessions` / `_messages` | Untouched. Custody legs lose their `transaction_id` through `ON DELETE SET NULL` but keep `anchor_transaction_id`; the returned row re-points them. |
 | Configuration | `workspaces`, `profiles` (tax settings), `accounts`, `wallets`, `backends`, `book_network_bindings`, `freshness_source_states` flags, `wallet_utxos`, `btcpay_provenance_records`, `lightning_node_records`, `import_batches`, `rates_cache` (unless `clear_shared_rates`) | Kept. |
 
+A reset re-prices returned rows from the current rate cache, so their
+`pricing_fetched_at` (and the fetch time journals copy into their
+calculations) reflects the resync, while rates and values stay the same when
+the cache does.
+
 `BookResetInventoryTest` walks the schema's foreign keys from
 `transactions` and fails when a table the delete reaches is neither parked
 nor declared derived, so a new table must be classified before it ships.
