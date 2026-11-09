@@ -13,9 +13,12 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+import uuid
 
 from kassiber.cli import handlers
 from kassiber.core import accounts, imports as core_imports, wallets as core_wallets
+from kassiber.core.book_network import apply_book_network, plan_book_network
+from kassiber.core.custody_components import activate_component, create_component
 from kassiber.core.custody_review_terms import delete_pair_dismissal, dismiss_pair_candidate
 from kassiber.core.exchange_imports import (
     normalize_binance_records,
@@ -23,6 +26,7 @@ from kassiber.core.exchange_imports import (
     normalize_kraken_records,
 )
 from kassiber.db import open_db
+from kassiber.errors import AppError
 from kassiber.importers import normalize_river_record, normalize_strike_record
 from tests.custody_tax_helpers import persist_authoritative_chain_observation
 
@@ -442,16 +446,79 @@ class OtherPlatformWithdrawalTest(unittest.TestCase):
             "applyTime": 1706781600000,
         }]}))
 
-    @unittest.expectedFailure
     def test_binance_withdrawal_with_its_coin_network_imports(self):
-        # Python reference bug, not fixed here: Binance's withdraw history
-        # names the coin network ("network": "BTC"), and the book-network
-        # guard refuses the whole import as a contradicting network.
-        self._check("binance", normalize_binance_records({"withdrawals": [{
-            "id": "w1", "coin": "BTC", "network": "BTC", "amount": "0.006",
-            "transactionFee": "0.0001", "status": 6, "txId": TXID,
-            "applyTime": 1706781600000,
-        }]}))
+        # Binance's withdraw history names the coin's transfer network;
+        # "BTC" is Bitcoin on chain, admitted as mainnet evidence.
+        self._check("binance", binance_records(network="BTC"))
+
+
+def binance_records(*, network, deposit=False):
+    row = {
+        "id": "w1", "coin": "BTC", "network": network, "amount": "0.006",
+        "transactionFee": "0.0001", "status": 6, "txId": TXID,
+        "applyTime": 1706781600000,
+    }
+    return normalize_binance_records({"deposits" if deposit else "withdrawals": [row]})
+
+
+class BinanceNetworkAdmissionTest(unittest.TestCase):
+    """Binance's ``network`` names a transfer rail, not a book environment."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.book = ExchangeTxidBook(self._tmp.name)
+        self.addCleanup(self._tmp.cleanup)
+        self.addCleanup(self.book.close)
+
+    def imported(self):
+        return self.book.conn.execute(
+            "SELECT COUNT(*) FROM transactions WHERE profile_id=?", (self.book.profile_id,)
+        ).fetchone()[0]
+
+    def refused(self, records, kind="binance", label=None):
+        with self.assertRaises(AppError) as caught:
+            self.book.platform(kind, f"{kind}:api", records, label=label)
+        self.assertEqual(self.imported(), 0)
+        return caught.exception
+
+    def bind(self, environment):
+        args = {
+            "environment": environment,
+            "chain_instance_id": str(uuid.uuid4()) if environment == "regtest" else None,
+            "declared_wallet_ids": [],
+        }
+        plan = plan_book_network(self.book.conn, self.book.profile_id, args)
+        apply_book_network(self.book.conn, self.book.profile_id, {**args, "plan_id": plan["plan_id"]})
+
+    def test_btc_network_deposits_and_withdrawals_import_into_a_mainnet_book(self):
+        self.bind("main")
+        self.book.platform("binance", "binance:api", [
+            *binance_records(network="BTC", deposit=True),
+            *binance_records(network="BTC"),
+        ])
+        self.assertEqual(self.imported(), 2)
+        [raw] = {
+            row[0] for row in self.book.conn.execute(
+                "SELECT json_extract(raw_json, '$.network') FROM transactions"
+            )
+        }
+        self.assertEqual(raw, "BTC")
+
+    def test_btc_network_is_mainnet_evidence_and_refused_in_a_regtest_book(self):
+        self.bind("regtest")
+        error = self.refused(binance_records(network="BTC"))
+        self.assertEqual(error.code, "book_network_mismatch")
+        self.assertEqual(str(error), "Observation belongs to a different book environment")
+
+    def test_other_binance_networks_are_still_refused(self):
+        for network in ("LIGHTNING", "BSC", "BEP20", "ETH", "btc", " BTC"):
+            with self.subTest(network=network):
+                error = self.refused(binance_records(network=network), label=repr(network))
+                self.assertEqual(error.code, "book_network_mismatch")
+
+    def test_the_btc_code_is_only_read_for_binance_wallets(self):
+        error = self.refused(binance_records(network="BTC"), kind="custom")
+        self.assertEqual(str(error), "Observation contradicts its configured network")
 
 
 if __name__ == "__main__":

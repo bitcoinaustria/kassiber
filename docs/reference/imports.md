@@ -1716,6 +1716,9 @@ exact execution evidence when Coinbase supplies a usable fiat native amount;
 the unit rate is that amount over the BTC amount, positive for buys and sells.
 BTC sends/exchange transfers import as wallet movement without exact execution
 pricing. Unsupported BTC row types raise validation errors rather than guessing.
+A send's `network` is an object (`hash`, `status`, and fee/link fields), not a
+network declaration, so the book-network check ignores it for Coinbase wallets
+and the row stays unscoped.
 
 ### Binance API and Supplemental CSV
 
@@ -1736,6 +1739,14 @@ withdrawals, and BTC income/dividend rows. Binance spot pair crawling,
 altcoin/BNB dust conversions, staking-lock principal bookkeeping, and mining
 subaccounts that require an extra username are intentionally deferred because
 they are either altcoin-heavy or need additional provider-specific controls.
+
+Binance deposit and withdraw history rows name the coin's transfer rail in
+`network`. In a Binance wallet, `"BTC"` (exact case) is Bitcoin on chain and
+counts as mainnet evidence, since Binance runs on mainnet only: it imports into
+a mainnet or unbound book and is refused in a test, signet or regtest book.
+Any other rail, such as `LIGHTNING` or a token network like `BSC`, is refused
+as a contradicting network rather than guessed, and refuses the whole batch.
+The stored raw row keeps Binance's own value.
 
 Supplemental Binance CSV import currently supports:
 

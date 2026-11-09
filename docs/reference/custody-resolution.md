@@ -125,7 +125,7 @@ the dismissal expires or is deleted.
 | Strike CSV | `Transaction Hash` | `Amount BTC` is what leaves on chain; `Fee BTC` is Strike's charge on top. |
 | River CSV | `Transaction ID` (Account Activity) | `Sent Amount` is what leaves on chain; `Fee Amount` is River's charge, and `Total Amount` is their sum. |
 | Coinbase API | `network.hash` | Not matched: the raw `network` object keeps the row unscoped, and the API's fee is not imported, so its convention is unverified. |
-| Binance API | `txId` | Not matched: whether `amount` excludes `transactionFee` is unverified. Rows that name the coin network are refused at import (a known reference bug). |
+| Binance API | `txId` | Not matched: whether `amount` excludes `transactionFee` is unverified, and the `network` rail code (`"BTC"`) is admission evidence only, not a matching scope. |
 | Kraken API, Bitpanda API | none | The ledger exports carry no txid. |
 | 21bitcoin, Pocket Bitcoin | none | Provider references only. |
 | Bull Bitcoin, Coinfinity orders | order payout txid | Order evidence that enriches the owned receipt; full-mode rows are excluded from accounting. |
