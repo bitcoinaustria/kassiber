@@ -227,8 +227,13 @@ def load_custody_snapshot(conn, profile, *, as_of: str):
         # like the gap worklist; compute treats them as migration holds.
         "import_duplicate_quarantines": list(duplicate_review_quarantines(conn, profile_id)),
         # Kept decisions a reset could not bind, shaped as quarantines;
-        # compute treats them as migration holds.
-        "reset_hold_quarantines": list(book_reset.held_quarantines(conn, profile_id)),
+        # compute treats them as migration holds. Present only while the
+        # book keeps reset records, so other books' snapshots are unchanged.
+        **(
+            {"reset_hold_quarantines": list(book_reset.held_quarantines(conn, profile_id))}
+            if book_reset.has_state(conn, profile_id)
+            else {}
+        ),
         "gap_reviews": custody_gap_reviews.latest_review_rows(conn, profile_id),
         "pair_dismissals": [dict(row) for row in conn.execute("SELECT * FROM transaction_pair_dismissals WHERE profile_id=?", (profile_id,))],
         "gap_worklist": {"large_book": large_book, "rows": [_safe_row(row) for row in worklist]},

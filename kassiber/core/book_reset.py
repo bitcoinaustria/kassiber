@@ -23,6 +23,8 @@ import json
 import sqlite3
 from typing import Any, Iterable, Mapping
 
+from ..db import begin_write_savepoint
+
 HOLD_REASON = "book_reset_decision_held"
 
 # The book's transactions, as a subquery taking the profile id.
@@ -295,7 +297,21 @@ def park_profile(
     return kept
 
 
+def _tables_present(conn: sqlite3.Connection) -> bool:
+    # Every book opened by this version has both tables; partial test and
+    # historical fixture schemas may not.
+    return (
+        conn.execute(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' "
+            "AND name IN ('book_reset_transactions', 'book_reset_parked_rows')"
+        ).fetchone()[0]
+        == 2
+    )
+
+
 def has_state(conn: sqlite3.Connection, profile_id: str) -> bool:
+    if not _tables_present(conn):
+        return False
     return (
         conn.execute(
             "SELECT EXISTS(SELECT 1 FROM book_reset_transactions WHERE profile_id = ?) "
@@ -451,7 +467,7 @@ def rebind_parked(conn: sqlite3.Connection, profile_id: str) -> int:
             if not columns or not _parents_present(conn, values, foreign_keys):
                 continue
             insert_columns = [column for column in columns if column in values]
-            conn.execute("SAVEPOINT book_reset_rebind")
+            begin_write_savepoint(conn, "book_reset_rebind")
             try:
                 conn.execute(
                     f"INSERT INTO {table}({', '.join(insert_columns)}) "
@@ -560,6 +576,8 @@ def _identity(conn: sqlite3.Connection, transaction_id: str) -> dict[str, Any]:
 
 def held_quarantines(conn: sqlite3.Connection, profile_id: str) -> tuple[dict[str, Any], ...]:
     """Hold every returned transaction a kept decision could not bind to."""
+    if not has_state(conn, profile_id):
+        return ()
     holds, _, _ = _held(conn, profile_id)
     quarantines = []
     for transaction_id in sorted(holds):
@@ -596,7 +614,9 @@ def held_quarantines(conn: sqlite3.Connection, profile_id: str) -> tuple[dict[st
 
 def parked_attachment_relpaths(conn: sqlite3.Connection) -> set[str]:
     """Managed files of parked attachments, which must survive file cleanup."""
-    paths = set()
+    paths: set[str] = set()
+    if not _tables_present(conn):
+        return paths
     for (row_json,) in conn.execute(
         "SELECT row_json FROM book_reset_parked_rows WHERE table_name = 'attachments'"
     ).fetchall():
