@@ -519,7 +519,7 @@
         "INSERT INTO settings(key,value) VALUES('context_workspace','ws')",
         "INSERT INTO settings(key,value) VALUES('context_profile','p')",
         "UPDATE profiles SET last_processed_at='2025-01-03',last_processed_tx_count=2,last_processed_input_version=journal_input_version",
-        "UPDATE profiles SET journal_semantics_version=8"
+        "UPDATE profiles SET journal_semantics_version=10"
       ],
       "runtime": {
         "default_backend": "local",
@@ -1016,7 +1016,7 @@
         "INSERT INTO settings(key,value) VALUES('context_workspace','ws')",
         "INSERT INTO settings(key,value) VALUES('context_profile','p')",
         "UPDATE profiles SET last_processed_at='2025-01-03',last_processed_tx_count=2,last_processed_input_version=journal_input_version",
-        "UPDATE profiles SET journal_semantics_version=8",
+        "UPDATE profiles SET journal_semantics_version=10",
         "UPDATE profiles SET journal_input_version=journal_input_version+1"
       ],
       "runtime": {

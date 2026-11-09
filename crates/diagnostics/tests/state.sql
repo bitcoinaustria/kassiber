@@ -1,6 +1,6 @@
 
 CREATE TABLE profiles(id TEXT, tax_country TEXT,fiat_currency TEXT,gains_algorithm TEXT,last_processed_at TEXT,last_processed_tx_count INTEGER,journal_input_version INTEGER,last_processed_input_version INTEGER,required_journal_semantics_version INTEGER,journal_semantics_version INTEGER);
-INSERT INTO profiles VALUES('private-profile-id','at','EUR','MOVING_AVERAGE_AT','private-date',1,3,3,1,8),('second-id','us','USD','FIFO',NULL,0,2,1,1,0);
+INSERT INTO profiles VALUES('private-profile-id','at','EUR','MOVING_AVERAGE_AT','private-date',1,3,3,1,10),('second-id','us','USD','FIFO',NULL,0,2,1,1,0);
 CREATE TABLE wallets(kind TEXT,config_json TEXT);
 CREATE TABLE transactions(id TEXT,profile_id TEXT,direction TEXT,asset TEXT,excluded INTEGER,fiat_rate TEXT,fiat_value TEXT,confirmed_at TEXT,note TEXT);
 INSERT INTO transactions VALUES('private-txid','private-profile-id','inbound','BTC',0,'123456','654321','private-time','private-note'),('second-txid','second-id','OUTBOUND','private-asset',1,NULL,NULL,NULL,NULL);
