@@ -62,6 +62,7 @@ export type CauseKey =
   | "carryUnresolved"
   | "missingPrice"
   | "pricingReview"
+  | "priceCurrency"
   | "swapPriceRequired"
   | "insufficientLots"
   | "missingCostBasis"
@@ -107,6 +108,7 @@ const REASON_CAUSES: Record<string, CauseKey> = {
   bitcoin_rail_carry_basis_unresolved: "carryUnresolved",
   missing_spot_price: "missingPrice",
   pricing_review_required: "pricingReview",
+  price_currency_mismatch: "priceCurrency",
   at_swap_price_required: "swapPriceRequired",
   insufficient_lots: "insufficientLots",
   missing_cost_basis: "missingCostBasis",
@@ -169,6 +171,7 @@ const CAUSE_CATEGORIES: Record<CauseKey, QuarantineCategory> = {
   pendingConfirmation: "missing_chain_evidence",
   missingPrice: "missing_price",
   pricingReview: "missing_price",
+  priceCurrency: "missing_price",
   swapPriceRequired: "missing_price",
   insufficientLots: "missing_acquisition_history",
   missingCostBasis: "missing_acquisition_history",
@@ -296,6 +299,8 @@ export function causeCopy(context: CauseContext, typedT: TFunction<"journals">):
     available: formatMsat(evidence.available_msat) || t("quarantine.cause.fallback.amount"),
     since: evidence.lot_state_uncertain_since?.slice(0, 10) || t("quarantine.cause.fallback.date"),
     root: context.rootLabel || t("quarantine.cause.fallback.root"),
+    priceCurrency: evidence.price_currency || t("quarantine.cause.fallback.currency"),
+    bookCurrency: evidence.book_currency || t("quarantine.cause.fallback.currency"),
   };
   const whyQuotesAmounts =
     evidence.required_msat != null || evidence.available_msat != null;

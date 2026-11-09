@@ -43,6 +43,7 @@ from . import import_batches as core_import_batches
 from . import output_inventory as core_output_inventory
 from . import ownership as core_ownership
 from . import freshness as core_freshness
+from . import pricing
 from . import custody_components as core_custody_components
 from . import custody_journal as core_custody_journal
 from . import custody_quantity_store as core_custody_quantity_store
@@ -3312,9 +3313,13 @@ def _portfolio_series(
     *,
     has_book_state: bool,
 ) -> list[dict[str, Any]]:
+    # A price in another currency than the book's reads as no price.
+    book_price = pricing.price_in_book_currency_sql()
     rows = conn.execute(
-        """
-        SELECT occurred_at, direction, amount, fee, fiat_rate, fiat_value
+        f"""
+        SELECT occurred_at, direction, amount, fee,
+               CASE WHEN {book_price} THEN fiat_rate END AS fiat_rate,
+               CASE WHEN {book_price} THEN fiat_value END AS fiat_value
         FROM transactions
         WHERE profile_id = ? AND excluded = 0 AND asset IN ('BTC', 'LBTC')
         ORDER BY occurred_at ASC, created_at ASC, id ASC

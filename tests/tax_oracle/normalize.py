@@ -8,7 +8,7 @@ from typing import Any, Literal, Mapping, Optional, Sequence
 from kassiber.msat import msat_to_btc
 from kassiber.transfers import detect_unscoped_transfer_review_ids, onchain_transfer_scope
 from kassiber.core import pricing, quarantine_catalog
-from kassiber.tax_policy import resolve_cost_basis_pool_id
+from kassiber.tax_policy import build_tax_policy, resolve_cost_basis_pool_id
 from tests.tax_oracle.austrian import infer_outbound_regimes, infer_regime_from_timestamp
 from kassiber.core.journal_markers import REGIME_BASIS_ELECTION
 from kassiber.core.loans import (
@@ -1774,6 +1774,18 @@ def normalize_tax_asset_inputs(
         conflict_row_ids = detect_conflicting_spend_ids(rows)
     if pending_onchain_row_ids is None:
         pending_onchain_row_ids = detect_pending_onchain_ids(rows)
+    # Production's request builder holds a price stored in another currency
+    # than the book's after the conflict and pending holds; the oracle books
+    # such a row exactly like a pending one.
+    book_currency = build_tax_policy(profile).fiat_currency
+    price_currency_row_ids = {
+        str(row["id"])
+        for row in rows
+        if str(row["id"]) not in conflict_row_ids
+        and str(row["id"]) not in pending_onchain_row_ids
+        and pricing.price_currency_mismatch(row, book_currency)
+    }
+    pending_onchain_row_ids = set(pending_onchain_row_ids) | price_currency_row_ids
     unscoped_transfer_review_ids = detect_unscoped_transfer_review_ids(rows)
     resolved_unscoped_pair_ids = {
         str(row["id"])
@@ -1961,6 +1973,24 @@ def normalize_tax_asset_inputs(
                         "asset": asset,
                         "direction": _row_get(row, "direction"),
                         "external_id": str(_row_get(row, "external_id") or ""),
+                    },
+                )
+            )
+            continue
+        if row["id"] in price_currency_row_ids:
+            quarantines.append(
+                build_tax_quarantine(
+                    profile,
+                    row,
+                    pricing.PRICE_CURRENCY_MISMATCH_REASON,
+                    {
+                        "wallet": wallet_refs_by_id[row["wallet_id"]]["label"],
+                        "asset": asset,
+                        "direction": _row_get(row, "direction"),
+                        "required_for": "book_currency_price",
+                        "external_id": str(_row_get(row, "external_id") or ""),
+                        "price_currency": pricing.currency_code(_row_get(row, "fiat_currency")),
+                        "book_currency": book_currency,
                     },
                 )
             )

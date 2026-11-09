@@ -1391,6 +1391,7 @@ def _historical_portfolio_summary(conn, profile, hooks: ReportHooks, as_of_dt, *
         WHERE profile_id = ? AND excluded = 0
           AND occurred_at <= ?
           AND (fiat_rate IS NOT NULL OR fiat_value IS NOT NULL)
+          AND """ + pricing.price_in_book_currency_sql() + """
         ORDER BY occurred_at ASC, created_at ASC, id ASC
         """,
         (profile["id"], hooks.iso_z(as_of_dt)),
@@ -1751,6 +1752,7 @@ def report_balance_history(
         FROM transactions
         WHERE profile_id = ? AND excluded = 0
           AND (fiat_rate IS NOT NULL OR fiat_value IS NOT NULL)
+          AND """ + pricing.price_in_book_currency_sql() + """
         ORDER BY occurred_at ASC, created_at ASC, id ASC
         """,
         (profile["id"],),
@@ -3155,9 +3157,13 @@ def _summary_pdf_data_integrity(conn, profile, wallets, hooks: ReportHooks, star
 
 def _summary_pdf_flow_periods(conn, profile_id, wallets, hooks: ReportHooks, start_dt, end_dt):
     wallet_filter, wallet_params = _wallet_scope_sql("t.wallet_id", wallets)
+    # A price in another currency than the book's reads as no price.
+    _book_price = pricing.price_in_book_currency_sql("t")
     rows = conn.execute(
         f"""
-        SELECT t.occurred_at, t.direction, t.amount, t.fee, t.fiat_rate, t.fiat_value
+        SELECT t.occurred_at, t.direction, t.amount, t.fee,
+               CASE WHEN {_book_price} THEN t.fiat_rate END AS fiat_rate,
+               CASE WHEN {_book_price} THEN t.fiat_value END AS fiat_value
         FROM transactions t
         WHERE t.profile_id = ?
           AND {wallet_filter}
@@ -3293,9 +3299,13 @@ def _summary_pdf_benchmark(conn, hooks: ReportHooks, start_dt, end_dt, fiat_curr
 
 def _summary_pdf_top_movements(conn, profile_id, wallets, hooks: ReportHooks, start_dt, end_dt, *, limit=5):
     wallet_filter, wallet_params = _wallet_scope_sql("t.wallet_id", wallets)
+    # A price in another currency than the book's reads as no price.
+    _book_price = pricing.price_in_book_currency_sql("t")
     rows = conn.execute(
         f"""
-        SELECT t.occurred_at, t.direction, t.asset, t.amount, t.fiat_value, t.fiat_rate,
+        SELECT t.occurred_at, t.direction, t.asset, t.amount,
+               CASE WHEN {_book_price} THEN t.fiat_value END AS fiat_value,
+               CASE WHEN {_book_price} THEN t.fiat_rate END AS fiat_rate,
                t.counterparty, t.description, w.label AS wallet
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id

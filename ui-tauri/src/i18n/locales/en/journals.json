@@ -359,6 +359,11 @@
         "why": "The price for this date comes from a coarse source (for example a daily average) and your settings require a review.",
         "provide": "Confirm the price or enter the exact price from your receipt."
       },
+      "priceCurrency": {
+        "title": "Price is in another currency",
+        "why": "This price is stored in {{priceCurrency}}, but your book currency is now {{bookCurrency}}. Kassiber does not convert it, so the transaction is held.",
+        "provide": "Enter the price in {{bookCurrency}} from your receipt."
+      },
       "swapPriceRequired": {
         "title": "Swap payout needs a value",
         "why": "The payout of this swap has no amount or value, which the Austrian swap rules need.",
@@ -456,7 +461,8 @@
         "sendingWallet": "the sending wallet",
         "amount": "an unknown amount",
         "date": "earlier date",
-        "root": "see the cause above"
+        "root": "see the cause above",
+        "currency": "a currency"
       },
       "reviewedSuspensePair": {
         "title": "A transfer pair doesn't add up",

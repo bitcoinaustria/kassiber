@@ -26,7 +26,12 @@ from kassiber.cli.main import main
 from kassiber.core import accounts as core_accounts
 from kassiber.core import custody_journal, ui_snapshot, year_handoff
 from kassiber.core.journal_calculation import stored_calculation
-from kassiber.db import JOURNAL_CALCULATION_SEMANTICS_VERSION, SAME_TIME_ORDER_SEMANTICS_MIGRATION, open_db
+from kassiber.db import (
+    JOURNAL_CALCULATION_SEMANTICS_VERSION,
+    SAME_TIME_ORDER_SEMANTICS_MIGRATION,
+    SAME_TIME_ORDER_SEMANTICS_VERSION,
+    open_db,
+)
 
 
 # Same-second acquisitions at three prices, then sales that consume part of
@@ -220,7 +225,7 @@ class LotOrderDeterminismTest(unittest.TestCase):
                          (SAME_TIME_ORDER_SEMANTICS_MIGRATION,))
             conn.execute("UPDATE profiles SET required_journal_semantics_version = 1, "
                          "journal_semantics_version = ? WHERE last_processed_at IS NOT NULL",
-                         (JOURNAL_CALCULATION_SEMANTICS_VERSION - 1,))
+                         (SAME_TIME_ORDER_SEMANTICS_VERSION - 1,))
             conn.commit()
             before = dict(conn.execute("SELECT * FROM profiles WHERE label = 'Book'").fetchone())
             entries = conn.execute("SELECT * FROM journal_entries ORDER BY id").fetchall()
@@ -229,7 +234,7 @@ class LotOrderDeterminismTest(unittest.TestCase):
                 conn = open_db(base / "data")
                 try:
                     after = dict(conn.execute("SELECT * FROM profiles WHERE label = 'Book'").fetchone())
-                    self.assertEqual(after, {**before, "required_journal_semantics_version": JOURNAL_CALCULATION_SEMANTICS_VERSION})
+                    self.assertEqual(after, {**before, "required_journal_semantics_version": SAME_TIME_ORDER_SEMANTICS_VERSION})
                     freshness = custody_journal.projection_freshness(conn, after["id"])
                     self.assertEqual((freshness["status"], freshness["reason"]), (
                         "stale", "journal calculation semantics changed; rebuild with current Kassiber"))
@@ -242,7 +247,7 @@ class LotOrderDeterminismTest(unittest.TestCase):
                         (SAME_TIME_ORDER_SEMANTICS_MIGRATION,)).fetchall()
                     self.assertEqual([json.loads(row[0]) for row in impacts], [{
                         "affected_profile_count": 1, "migration": SAME_TIME_ORDER_SEMANTICS_MIGRATION,
-                        "required_journal_semantics_version": JOURNAL_CALCULATION_SEMANTICS_VERSION, "schema_version": 1}])
+                        "required_journal_semantics_version": SAME_TIME_ORDER_SEMANTICS_VERSION, "schema_version": 1}])
                 finally:
                     conn.close()
             conn = open_db(base / "data")

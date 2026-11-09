@@ -80,6 +80,11 @@ Edits since the freeze:
   rule (#708): a coarse price the owner accepted at this exact price is no
   longer held for review. Production applies it in the request builder;
   the `generic-coarse-*-accepted-review` and stale-acceptance goldens show it.
+- `normalize.py` holds a row whose stored price is in another currency than
+  the book's (`price_currency_mismatch`) exactly like a pending row: no move,
+  no regime, and its own quarantine with both currencies. Production holds it
+  through the request builder's `hold`; `tests/test_price_currency_mismatch.py`
+  shows it, and its books run in the tax-shadow overlay.
 
 The product modules imported above are shared. A change in one of them moves
 the oracle and production together, so a shadow run cannot see it; the

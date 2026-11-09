@@ -193,6 +193,11 @@ def stored_move_transaction_ids(
     }
 
 
+# A price stored in another currency than the book's is no rate of the book's
+# currency (``pricing.price_currency_mismatch``).
+_PRICE_IN_BOOK_CURRENCY = pricing.price_in_book_currency_sql()
+
+
 def transaction_rate_quotes_for_profile(
     conn, profile_id: str, *, at_or_before: str | None = None, exclusive: bool = False
 ) -> dict[str, dict[str, Any]]:
@@ -265,21 +270,29 @@ def _latest_first_rows(conn, columns, source, params, time):
     The latest row of a same-time group is the last in source order. Narrow
     tables (old books, fixtures) may lack the source order's columns and then
     keep the legacy order; without the exact-price columns they read the
-    float prices alone.
+    float prices alone. A row priced in another currency than its book's is
+    no rate of the book's currency; tables without a profiles table or a
+    currency column keep every row, as before.
     """
     order = time + ", " + same_time_order_sql("transactions", descending=True)
     legacy = time + ", created_at DESC, id DESC"
-    attempts = (
+    shapes = (
         (columns + ",fiat_rate_exact,fiat_value_exact,amount", order),
         (columns + ",fiat_rate_exact,fiat_value_exact,amount", legacy),
         (columns + ",amount", legacy),
     )
-    for selected, ordering in attempts[:-1]:
+    attempts = [
+        (selected, ordering, filtered)
+        for filtered in (True, False)
+        for selected, ordering in shapes
+    ]
+    for selected, ordering, filtered in attempts[:-1]:
+        where = source + (" AND " + _PRICE_IN_BOOK_CURRENCY if filtered else "")
         try:
-            return conn.execute(f"SELECT {selected} {source} ORDER BY {ordering}", params).fetchall()
+            return conn.execute(f"SELECT {selected} {where} ORDER BY {ordering}", params).fetchall()
         except sqlite3.OperationalError:
             pass
-    selected, ordering = attempts[-1]
+    selected, ordering, _filtered = attempts[-1]
     return conn.execute(f"SELECT {selected} {source} ORDER BY {ordering}", params).fetchall()
 
 

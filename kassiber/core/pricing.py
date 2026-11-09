@@ -62,6 +62,54 @@ def decimal_from_exact(*values: Any) -> Decimal | None:
     return None
 
 
+PRICE_CURRENCY_MISMATCH_REASON = "price_currency_mismatch"
+_PRICE_FIELDS = ("fiat_rate_exact", "fiat_rate", "fiat_value_exact", "fiat_value")
+
+
+_ASCII_UPPER = str.maketrans("abcdefghijklmnopqrstuvwxyz", "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+
+def currency_code(value: Any) -> str:
+    """A stored currency as journals compare it.
+
+    SQLite's ``UPPER(TRIM(x))``: spaces stripped, ASCII letters upper-cased,
+    so the SQL readers (``price_in_book_currency_sql``) agree with it.
+    """
+    return str(value or "").strip(" ").translate(_ASCII_UPPER)
+
+
+def price_in_book_currency_sql(alias: str = "transactions") -> str:
+    """SQL: the transaction's price, if any, counts in its book's currency.
+
+    The reader-side twin of ``price_currency_mismatch`` for queries that
+    read stored prices as the book's (fallback valuations, flows): a row
+    priced in another currency reads as unpriced there.
+    """
+    column = f"{alias}.fiat_currency"
+    return (
+        f"(TRIM(COALESCE({column}, '')) = '' OR UPPER(TRIM({column})) = "
+        f"(SELECT UPPER(TRIM(COALESCE(book.fiat_currency, ''))) FROM profiles book "
+        f"WHERE book.id = {alias}.profile_id))"
+    )
+
+
+def price_currency_mismatch(row: Mapping[str, Any], book_currency: Any) -> str | None:
+    """The currency of a row's stored price when it is not the book's.
+
+    A book's currency can change after its rows were priced; their prices
+    keep the currency they were stored in. Such a price never counts in the
+    book's currency. A row without a price, or without a recorded currency,
+    has nothing to compare.
+    """
+    keys = row.keys() if hasattr(row, "keys") else ()
+    currency = currency_code(row["fiat_currency"]) if "fiat_currency" in keys else ""
+    if not currency or currency == currency_code(book_currency):
+        return None
+    if all(field not in keys or row[field] in (None, "") for field in _PRICE_FIELDS):
+        return None
+    return currency
+
+
 def reviewed_price(row: Mapping[str, Any]) -> str | None:
     """The price a coarse-price review accepts, the way journals read it.
 

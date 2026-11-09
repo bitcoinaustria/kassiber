@@ -11,7 +11,7 @@
     },
     "normalize.py": {
       "source": "kassiber/core/tax_events.py",
-      "sha256": "a53215f65eb13e66dd707f2957ca1f409db922c9d62d2a878f7cd16160832dd6"
+      "sha256": "ac35f5ae81404d909d7888cbb9811b4d7058e11a91bffce4ca78a32980410643"
     },
     "pair_allocation.py": {
       "source": "kassiber/core/pair_allocation.py",

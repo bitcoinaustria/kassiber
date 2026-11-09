@@ -36,6 +36,7 @@ from decimal import Decimal
 from typing import Any, Callable, Mapping, Optional, Sequence
 
 from ...errors import AppError
+from ...tax_policy import build_tax_policy
 from ...msat import btc_to_msat, dec
 from .. import pricing
 from ..journal_storage import journal_entry_id
@@ -101,6 +102,11 @@ def _hold_facts(row: Mapping[str, Any]) -> dict[str, Any]:
     return {"external_id": str(_get(row, "external_id") or "")}
 
 
+def _price_currency_facts(row: Mapping[str, Any]) -> dict[str, Any]:
+    # ``render_quarantine`` adds the book's currency.
+    return {**_hold_facts(row), "price_currency": pricing.currency_code(_get(row, "fiat_currency"))}
+
+
 # What the reader adds to a quarantine's detail, by the template that built
 # it (design §3.7). The pricing review's ``required_for`` and its wallet,
 # asset, and direction come from the engine.
@@ -108,9 +114,14 @@ DETAIL_ENRICHMENT: dict[str, Callable[[Mapping[str, Any]], dict[str, Any]]] = {
     "pricing_review": _pricing_review_facts,
     "privacy_hop": _privacy_hop_facts,
     "hold": _hold_facts,
+    "price_currency": _price_currency_facts,
     "partner_leg": lambda _row: {},
     "plain": lambda _row: {},
 }
+
+# Kinds the engine added after the phase-3 adapter, which the oracle's stored
+# quarantines therefore never show.
+ENGINE_ONLY_DETAIL_KINDS = frozenset({"price_currency"})
 
 
 def loads(text: str) -> dict[str, Any]:
@@ -150,6 +161,8 @@ def render_quarantine(
         raise EngineContractError("RequestError", f"unknown quarantine detail kind {quarantine['detail_kind']!r}")
     detail = {key: detail_value(value) for key, value in quarantine["detail"].items()}
     detail.update(enrich(row))
+    if quarantine["detail_kind"] == "price_currency":
+        detail["book_currency"] = build_tax_policy(profile).fiat_currency
     return build_tax_quarantine(profile, row, str(quarantine["reason"]), detail)
 
 
@@ -600,6 +613,7 @@ def read_ledger(
 __all__ = [
     "CALCULATION_ENGINE",
     "DETAIL_ENRICHMENT",
+    "ENGINE_ONLY_DETAIL_KINDS",
     "FRAGMENT_PRICING_FIELDS",
     "PRICING_REVIEW_FIELDS",
     "accumulate_holdings",

@@ -309,6 +309,21 @@ that only follow from another transaction, `evidence` and the next `actions`
 Quarantine causes typically include:
 
 - missing spot price
+- `price_currency_mismatch` — the row's stored price is in another currency
+  than the book's. A book's currency can change after its rows were priced
+  (`profiles set --fiat-currency`, or a country that requires its own
+  currency, such as `at`); stored prices keep the currency they were stored
+  in and are never read as the new one. The row is held like a conflicting
+  spend: a move with a held leg is not a move, and later disposals of the
+  asset wait behind it (`basis_provenance_incomplete`). Its detail names
+  `price_currency` and `book_currency`. A price override in the book's
+  currency releases it; Kassiber does not convert prices. Rows without a
+  price or without a recorded currency are unaffected. The transaction-price
+  fallbacks for holdings values, balance history, the year handoff's closing
+  rate and the summary PDF's flows read such a price as no price. The
+  `profiles set` (and desktop) update that changes the currency answers with
+  `price_currency_holds`: the reason, the new `book_currency`, how many
+  `transactions` the next run holds, and their count `by_currency`.
 - missing cost basis
 - insufficient lots
 - ambiguous or unsupported tax semantics

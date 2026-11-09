@@ -12,8 +12,9 @@
 //!
 //! The pass visits its rows in projection order:
 //!
-//! - a held row (a conflicting spend, an unconfirmed one) is quarantined, and
-//!   a move with a held leg is not a move: its other leg is an event
+//! - a held row (a conflicting spend, an unconfirmed one, a price in another
+//!   currency) is quarantined, and a move with a held leg is not a move: its
+//!   other leg is an event
 //!   (`:1775-1784`, `:1936-1966`);
 //! - a move is handled at the first of its legs the pass visits
 //!   (`:2061-2067`). It sends the out leg's amount and fee and receives the
@@ -366,7 +367,8 @@ impl<'b, 'a> Normalizer<'b, 'a> {
         }
     }
 
-    /// `:1936-1966`; the reader adds the row's external id.
+    /// `:1936-1966`; the reader adds the row's external id, and for a price
+    /// in another currency both currencies.
     fn hold(&mut self, index: usize, hold: Hold) {
         let mut fields = detail([
             ("wallet", label_value(self.label(index))),
@@ -376,17 +378,30 @@ impl<'b, 'a> Normalizer<'b, 'a> {
                 Value::from(direction_name(self.rows[index].direction)),
             ),
         ]);
-        let reason = match hold {
-            Hold::ConflictingSpend => QuarantineReason::ConflictingSpend,
+        let (reason, kind) = match hold {
+            Hold::ConflictingSpend => (QuarantineReason::ConflictingSpend, DetailKind::Hold),
             Hold::PendingOnchainConfirmation => {
                 fields.insert(
                     String::from("required_for"),
                     Value::from("confirmed_chain_history"),
                 );
-                QuarantineReason::PendingOnchainConfirmation
+                (
+                    QuarantineReason::PendingOnchainConfirmation,
+                    DetailKind::Hold,
+                )
+            }
+            Hold::PriceCurrencyMismatch => {
+                fields.insert(
+                    String::from("required_for"),
+                    Value::from("book_currency_price"),
+                );
+                (
+                    QuarantineReason::PriceCurrencyMismatch,
+                    DetailKind::PriceCurrency,
+                )
             }
         };
-        self.quarantine(index, reason, DetailKind::Hold, fields);
+        self.quarantine(index, reason, kind, fields);
     }
 
     /// `_quarantine_partner_leg` (`:182-222`): the leg the move's own
@@ -997,6 +1012,39 @@ mod tests {
         assert_eq!(
             normalized.earliest_lot_contamination_at.as_deref(),
             Some(FEB)
+        );
+    }
+
+    #[test]
+    fn a_price_in_another_currency_is_held_and_taints_the_lot_state() {
+        let request = request(
+            vec![
+                row(
+                    "buy",
+                    "A",
+                    "inbound",
+                    JAN,
+                    100_000_000_000,
+                    json!({"hold": "price_currency_mismatch"}),
+                ),
+                row("sell", "A", "outbound", FEB, 10_000_000_000, json!({})),
+            ],
+            vec![],
+            false,
+        );
+        let normalized = run_pass(&request).unwrap();
+        assert_eq!(
+            quarantines(&request, &normalized),
+            vec![json!(["buy", "price_currency_mismatch", "price_currency", {
+                "wallet": "Cold", "asset": "BTC", "direction": "inbound", "required_for": "book_currency_price",
+            }])]
+        );
+        // The sale is still an event; the walk holds it behind the tainted
+        // lot state instead of taking another lot's basis.
+        assert_eq!(items(&request, &normalized), ["event sell"]);
+        assert_eq!(
+            normalized.earliest_lot_contamination_at.as_deref(),
+            Some(JAN)
         );
     }
 

@@ -97,6 +97,7 @@ DIRECTIONS = ("inbound", "outbound")
 REGIME_OVERRIDES = ("alt", "neu")
 HOLD_CONFLICTING_SPEND = "conflicting_spend"
 HOLD_PENDING_ONCHAIN = "pending_onchain_confirmation"
+HOLD_PRICE_CURRENCY = pricing.PRICE_CURRENCY_MISMATCH_REASON
 
 # The shapes a finalized projection cannot have (design §3.5), in the order
 # the builder checks them. Each refusal names one.
@@ -519,8 +520,12 @@ def _text(value: Any) -> Optional[str]:
     return value if isinstance(value, str) else str(value)
 
 
-def _holds(rows: Sequence[Mapping[str, Any]]) -> dict[str, str]:
-    """Each held row's hold, detected over all projected rows of its asset."""
+def _holds(rows: Sequence[Mapping[str, Any]], book_currency: str) -> dict[str, str]:
+    """Each held row's hold, detected over all projected rows of its asset.
+
+    A conflict wins over pending, and both over a price stored in another
+    currency than the book's, which is never read as the book's.
+    """
     rows_by_asset: dict[str, list[Mapping[str, Any]]] = {}
     for row in rows:
         rows_by_asset.setdefault(str(_get(row, "asset")), []).append(row)
@@ -534,6 +539,8 @@ def _holds(rows: Sequence[Mapping[str, Any]]) -> dict[str, str]:
                 holds[row_id] = HOLD_CONFLICTING_SPEND
             elif row_id in pending:
                 holds[row_id] = HOLD_PENDING_ONCHAIN
+            elif pricing.price_currency_mismatch(row, book_currency):
+                holds[row_id] = HOLD_PRICE_CURRENCY
     return holds
 
 
@@ -646,7 +653,7 @@ def build_request(
             raise AssertionError("finalized same-asset move pair crossed assets")
     profile_cost_basis_pool_scope(profile)
     check_invariants(inputs)
-    holds = _holds(rows)
+    holds = _holds(rows, build_tax_policy(profile).fiat_currency)
     return {
         "schema_version": SCHEMA_VERSION,
         "operation": operation,

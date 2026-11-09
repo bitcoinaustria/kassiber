@@ -113,6 +113,9 @@ _REASONS: dict[str, ReasonInfo] = {
     "split_payout_requires_review": _info(CATEGORY_NEEDS_DECISION, ACTION_PAIR_TRANSFER),
     "pricing_review_required": _info(CATEGORY_MISSING_PRICE, ACTION_SET_PRICE),
     "at_swap_price_required": _info(CATEGORY_MISSING_PRICE, ACTION_SET_PRICE),
+    # A price stored in another currency than the book's (the book's currency
+    # changed); a price in the book's currency releases it.
+    "price_currency_mismatch": _info(CATEGORY_MISSING_PRICE, ACTION_SET_PRICE),
     # A disposal needs earlier acquisitions Kassiber has not seen or priced.
     "insufficient_lots": _info(
         CATEGORY_MISSING_ACQUISITION_HISTORY, ACTION_IMPORT_HISTORY, ACTION_CONNECT_WALLET

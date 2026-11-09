@@ -28,6 +28,7 @@ from ..time_utils import now_iso
 from ..transfers import profile_bitcoin_rail_carrying_value
 from ..wallet_descriptors import normalize_asset_code
 from . import output_inventory as core_output_inventory
+from . import pricing
 from . import commercial as core_commercial
 from .repo import invalidate_journals, resolve_profile, resolve_scope, resolve_workspace
 
@@ -372,7 +373,36 @@ def update_profile(conn, workspace_ref, profile_ref, updates):
     if policy_changed:
         invalidate_journals(conn, profile["id"])
     conn.commit()
-    return get_profile_details(conn, workspace["id"], profile["id"])
+    details = get_profile_details(conn, workspace["id"], profile["id"])
+    if pricing.currency_code(policy.fiat_currency) != pricing.currency_code(profile["fiat_currency"]):
+        details["price_currency_holds"] = price_currency_holds(conn, profile["id"], policy.fiat_currency)
+    return details
+
+
+def price_currency_holds(conn, profile_id, book_currency):
+    """The rows the next journal run holds for a price in another currency.
+
+    A currency change keeps every stored price in the currency it was stored
+    in; journals hold those rows (``price_currency_mismatch``) until they are
+    priced in the book's currency, so the update says how many there are.
+    """
+    by_currency: dict[str, int] = {}
+    for row in conn.execute(
+        """
+        SELECT fiat_currency, fiat_rate, fiat_rate_exact, fiat_value, fiat_value_exact
+        FROM transactions WHERE profile_id = ? AND excluded = 0
+        """,
+        (profile_id,),
+    ):
+        currency = pricing.price_currency_mismatch(row, book_currency)
+        if currency:
+            by_currency[currency] = by_currency.get(currency, 0) + 1
+    return {
+        "reason": pricing.PRICE_CURRENCY_MISMATCH_REASON,
+        "book_currency": pricing.currency_code(book_currency),
+        "transactions": sum(by_currency.values()),
+        "by_currency": dict(sorted(by_currency.items())),
+    }
 
 
 def create_account(conn, workspace_ref, profile_ref, code, label, account_type, asset=None):

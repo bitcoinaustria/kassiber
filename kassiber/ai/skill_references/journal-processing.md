@@ -98,7 +98,10 @@ array of typed operations, for example after verifying the stated invoice:
 
 A price operation requires exactly one of `fiat_rate` or `fiat_value`, as an exact
 decimal string in the book's fiat currency (the cases' `fiat_currency`), plus an
-audit reason. Convert a receipt in another currency first and say so in the reason. `exclude` requires `transaction_id` and a
+audit reason. Convert a receipt in another currency first and say so in the reason.
+A `price_currency_mismatch` case is a row priced in another currency than the
+book's (its detail names both); only a price override in the book's currency
+releases it, and Kassiber never converts the stored price. `exclude` requires `transaction_id` and a
 reason establishing why the row belongs outside accounting. Never use exclusion
 to hide missing evidence, a custody gap, or a transfer. `unpair` takes the
 case's `pair.pair_id`, its `pair.pair_fingerprint` as `expected_fingerprint`,

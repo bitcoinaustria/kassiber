@@ -219,7 +219,8 @@ impl Regime {
     }
 }
 
-/// Why a row is held out of the ledger. A conflict wins over pending.
+/// Why a row is held out of the ledger. A conflict wins over pending, and
+/// both over a price in another currency.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Hold {
@@ -227,6 +228,9 @@ pub enum Hold {
     ConflictingSpend,
     /// The chain reports the transaction unconfirmed.
     PendingOnchainConfirmation,
+    /// The row's stored price is in a currency other than the book's (the
+    /// book's currency changed after the row was priced).
+    PriceCurrencyMismatch,
 }
 
 /// One finalized projection row (design §3.3).

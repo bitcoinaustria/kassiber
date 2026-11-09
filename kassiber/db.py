@@ -859,6 +859,7 @@ def _migrate_at_outflow_regime_semantics(conn) -> int:
 
 
 SAME_TIME_ORDER_SEMANTICS_MIGRATION = "same-time-source-order-v1"
+SAME_TIME_ORDER_SEMANTICS_VERSION = 8
 
 
 def _migrate_same_time_order_semantics(conn) -> int:
@@ -883,12 +884,60 @@ def _migrate_same_time_order_semantics(conn) -> int:
         (SAME_TIME_ORDER_SEMANTICS_MIGRATION, SAME_TIME_ORDER_SEMANTICS_MIGRATION,
          json.dumps({"schema_version": 1, "migration": SAME_TIME_ORDER_SEMANTICS_MIGRATION,
                      "affected_profile_count": count,
-                     "required_journal_semantics_version": 8}, sort_keys=True)),
+                     "required_journal_semantics_version": SAME_TIME_ORDER_SEMANTICS_VERSION},
+                    sort_keys=True)),
     )
     if int(inserted.rowcount or 0) == 0:
         return 0
     conn.execute(f"""UPDATE profiles
-        SET required_journal_semantics_version = MAX(required_journal_semantics_version, 8)
+        SET required_journal_semantics_version = MAX(required_journal_semantics_version, {SAME_TIME_ORDER_SEMANTICS_VERSION})
+        WHERE {affected}""")
+    return 1
+
+
+PRICE_CURRENCY_SEMANTICS_MIGRATION = "price-currency-mismatch-hold-v1"
+PRICE_CURRENCY_SEMANTICS_VERSION = 10
+
+
+def _migrate_price_currency_semantics(conn) -> int:
+    """Rebuild, once, processed books holding a price in another currency.
+
+    Before semantics version 10 a book whose currency changed after its rows
+    were priced read those prices as its new currency. Its journals are
+    invalidated and must be rebuilt at version 10, which holds those rows.
+    """
+    if conn.execute(
+        "SELECT 1 FROM schema_migration_audits WHERE migration_name = ?",
+        (PRICE_CURRENCY_SEMANTICS_MIGRATION,),
+    ).fetchone():
+        return 0
+    from .core.pricing import price_in_book_currency_sql
+
+    priced = " OR ".join(
+        f"COALESCE(CAST(t.{column} AS TEXT), '') <> ''"
+        for column in ("fiat_rate_exact", "fiat_rate", "fiat_value_exact", "fiat_value")
+    )
+    affected = f"""(last_processed_at IS NOT NULL OR EXISTS (
+        SELECT 1 FROM journal_entries WHERE profile_id = profiles.id))
+        AND EXISTS (SELECT 1 FROM transactions t WHERE t.profile_id = profiles.id
+            AND t.excluded = 0 AND ({priced}) AND NOT {price_in_book_currency_sql("t")})"""
+    count = int(conn.execute(f"SELECT COUNT(*) FROM profiles WHERE {affected}").fetchone()[0])
+    inserted = conn.execute(
+        """INSERT OR IGNORE INTO schema_migration_audits
+           (id, migration_name, schema_version, impact_json, created_at)
+           VALUES (?, ?, 1, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))""",
+        (PRICE_CURRENCY_SEMANTICS_MIGRATION, PRICE_CURRENCY_SEMANTICS_MIGRATION,
+         json.dumps({"schema_version": 1, "migration": PRICE_CURRENCY_SEMANTICS_MIGRATION,
+                     "affected_profile_count": count,
+                     "required_journal_semantics_version": PRICE_CURRENCY_SEMANTICS_VERSION},
+                    sort_keys=True)),
+    )
+    if int(inserted.rowcount or 0) == 0:
+        return 0
+    conn.execute(f"""UPDATE profiles SET last_processed_at = NULL,
+        last_processed_tx_count = 0, journal_input_version = journal_input_version + 1,
+        ownership_review_counts_json = NULL,
+        required_journal_semantics_version = MAX(required_journal_semantics_version, {PRICE_CURRENCY_SEMANTICS_VERSION})
         WHERE {affected}""")
     return 1
 
@@ -1013,7 +1062,9 @@ def _migrate_stored_error_credentials(conn) -> int:
 
 PARTIAL_PAYOUT_SEMANTICS_MIGRATION = "custody-partial-payout-pricing-v1"
 # 8: same-time lots, legs and rates follow the source order instead of row ids.
-JOURNAL_CALCULATION_SEMANTICS_VERSION = 8
+# 10: a price stored in another currency than the book's is held
+# (``price_currency_mismatch``) instead of read as the book's currency.
+JOURNAL_CALCULATION_SEMANTICS_VERSION = 10
 JOURNAL_SEMANTICS_ADOPTION_MIGRATION = "journal-calculation-semantics-adoption-v1"
 
 
@@ -5966,6 +6017,8 @@ def ensure_schema_compat(conn):
     if _migrate_partial_payout_semantics(conn):
         conn.commit()
     if mark_legacy_pair_fee_reviews(conn):
+        conn.commit()
+    if _migrate_price_currency_semantics(conn):
         conn.commit()
     _ensure_commercial_reconciliation_schema(conn)
     _ensure_freshness_schema(conn)

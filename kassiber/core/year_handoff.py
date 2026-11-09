@@ -33,6 +33,7 @@ from ..errors import AppError
 from ..msat import dec
 from ..time_utils import UNKNOWN_OCCURRED_AT
 from . import freshness as core_freshness
+from . import pricing
 from . import rates as core_rates
 from .asset_presentation import AssetPresentation, describe_asset
 from .austrian import AT_TAX_TZ, stated_kennzahl
@@ -516,6 +517,7 @@ def _year_end_rates(
               AND asset IN ({", ".join("?" for _ in spellings)})
               AND occurred_at < ?
               AND (fiat_rate IS NOT NULL OR fiat_value IS NOT NULL)
+              AND {pricing.price_in_book_currency_sql()}
             ORDER BY {transaction_order_sql("transactions", descending=True)}
             LIMIT 1
             """,

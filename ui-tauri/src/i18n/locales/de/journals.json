@@ -359,6 +359,11 @@
         "why": "Der Preis für dieses Datum stammt aus einer groben Quelle (z. B. einem Tagesdurchschnitt), und deine Einstellungen verlangen eine Prüfung.",
         "provide": "Bestätige den Preis oder gib den genauen Preis von deinem Beleg ein."
       },
+      "priceCurrency": {
+        "title": "Preis in einer anderen Währung",
+        "why": "Dieser Preis ist in {{priceCurrency}} gespeichert, deine Buchwährung ist jetzt aber {{bookCurrency}}. Kassiber rechnet ihn nicht um, daher wird die Transaktion zurückgehalten.",
+        "provide": "Gib den Preis in {{bookCurrency}} von deinem Beleg ein."
+      },
       "swapPriceRequired": {
         "title": "Swap-Auszahlung braucht einen Wert",
         "why": "Die Auszahlung dieses Swaps hat keinen Betrag oder Wert, den die österreichischen Swap-Regeln brauchen.",
@@ -456,7 +461,8 @@
         "sendingWallet": "die sendende Wallet",
         "amount": "einen unbekannten Betrag",
         "date": "früheres Datum",
-        "root": "siehe Ursache oben"
+        "root": "siehe Ursache oben",
+        "currency": "eine Währung"
       },
       "reviewedSuspensePair": {
         "title": "Ein Transfer-Paar geht nicht auf",

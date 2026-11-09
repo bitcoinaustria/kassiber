@@ -102,6 +102,20 @@ describe("quarantine cause copy", () => {
     ).toBe("importDuplicateRefill");
   });
 
+  it("names both currencies of a price in another currency and asks for the book's", () => {
+    const t = i18n.getFixedT("en", "journals");
+    const copy = causeCopy(
+      { reason: "price_currency_mismatch", evidence: { price_currency: "EUR", book_currency: "USD" } },
+      t,
+    );
+    expect(copy.why).toBe(
+      "This price is stored in EUR, but your book currency is now USD. Kassiber does not convert it, so the transaction is held.",
+    );
+    expect(copy.provide).toBe("Enter the price in USD from your receipt.");
+    expect(categoryForReason("price_currency_mismatch")).toBe("missing_price");
+    expect(sheetTabForCause("price_currency_mismatch", "missing_price")).toBe("pricing");
+  });
+
   it("reads custody holds by their blocker, not as a pricing problem", () => {
     expect(causeKeyFor("custody_quantity_unresolved", { blocker_code: "custody_gap_review_required" })).toBe("gapHold");
     expect(categoryForReason("custody_quantity_unresolved", { blocker_code: "custody_gap_review_required" })).toBe(

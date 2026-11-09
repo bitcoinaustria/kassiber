@@ -363,6 +363,9 @@ def _evidence(
     for key in ("row_amount_msat", "owned_receipts_msat", "owned_outputs_msat"):
         if isinstance(detail.get(key), int):
             evidence[key] = int(detail[key])
+    for key in ("price_currency", "book_currency"):
+        if detail.get(key):
+            evidence[key] = str(detail[key])
     return evidence
 
 

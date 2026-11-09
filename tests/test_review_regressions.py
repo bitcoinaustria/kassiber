@@ -5217,6 +5217,16 @@ class ReviewRegressionTest(unittest.TestCase):
             "UPDATE profiles SET tax_country = ? WHERE label = ?",
             (tax_country, profile_label),
         )
+        if tax_country == "at":
+            # An Austrian book reads EUR. These rows were imported into a USD
+            # book; price them in the book's currency, or journals hold them
+            # (price_currency_mismatch).
+            conn.execute(
+                "UPDATE transactions SET fiat_currency = 'EUR' "
+                "WHERE profile_id = (SELECT id FROM profiles WHERE label = ?)",
+                (profile_label,),
+            )
+            conn.execute("UPDATE profiles SET fiat_currency = 'EUR' WHERE label = ?", (profile_label,))
         conn.commit()
         conn.close()
 
