@@ -1,0 +1,2027 @@
+{
+ "rows": [
+  {
+   "input": {
+    "id": "r1",
+    "kind": "ark-receive",
+    "amount": "0.0001",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1
+   },
+   "records": {
+    "ok": [
+     {
+      "_bark_row_id": "r1",
+      "_bark_part": "principal",
+      "_bark_keys": {
+       "outpoint": null,
+       "payment_hash": null,
+       "movement_id": null,
+       "invoice_id": null
+      },
+      "occurred_at": "2026-01-02T00:00:00Z",
+      "confirmed_at": "2026-01-02T00:00:00Z",
+      "direction": "inbound",
+      "asset": "BTC",
+      "amount": "0.0001",
+      "fee": "0",
+      "amount_includes_fee": false,
+      "kind": "deposit",
+      "description": "Bark ark-receive",
+      "counterparty": null,
+      "payment_hash": null,
+      "payment_hash_source": null,
+      "_btcpay_comment": null,
+      "_btcpay_labels": [],
+      "raw_json": "{\"amount_msat\": 10000000, \"bark_payment_hash\": null, \"bark_row_id\": \"r1\", \"fee_msat\": 0, \"invoice_id\": null, \"kind\": \"ark-receive\", \"movement_id\": null, \"outpoint\": null, \"part\": \"principal\", \"source\": \"btcpay_bark_wallet\", \"store_id\": \"S1\", \"transaction_hash\": null}"
+     }
+    ]
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "lightning-receive",
+    "amount": "0.0001",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1,
+    "fee": "0.00000010",
+    "paymentHash": "B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1",
+    "labels": {
+     "invoice": {
+      "type": "invoice",
+      "ref": "inv-1"
+     }
+    }
+   },
+   "records": {
+    "ok": [
+     {
+      "_bark_row_id": "r1",
+      "_bark_part": "principal",
+      "_bark_keys": {
+       "outpoint": null,
+       "payment_hash": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+       "movement_id": null,
+       "invoice_id": "inv-1"
+      },
+      "occurred_at": "2026-01-02T00:00:00Z",
+      "confirmed_at": "2026-01-02T00:00:00Z",
+      "direction": "inbound",
+      "asset": "BTC",
+      "amount": "0.0001001",
+      "fee": "0",
+      "amount_includes_fee": false,
+      "kind": "deposit",
+      "description": "Bark lightning-receive",
+      "counterparty": null,
+      "payment_hash": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+      "payment_hash_source": "btcpay_bark",
+      "_btcpay_comment": null,
+      "_btcpay_labels": [
+       "invoice"
+      ],
+      "raw_json": "{\"amount_msat\": 10000000, \"bark_payment_hash\": \"b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1\", \"bark_row_id\": \"r1\", \"fee_msat\": 10000, \"invoice_id\": \"inv-1\", \"kind\": \"lightning-receive\", \"movement_id\": null, \"outpoint\": null, \"part\": \"principal\", \"source\": \"btcpay_bark_wallet\", \"store_id\": \"S1\", \"transaction_hash\": null}"
+     },
+     {
+      "_bark_row_id": "r1",
+      "_bark_part": "fee",
+      "_bark_keys": {},
+      "occurred_at": "2026-01-02T00:00:00Z",
+      "confirmed_at": "2026-01-02T00:00:00Z",
+      "direction": "outbound",
+      "asset": "BTC",
+      "amount": "0",
+      "fee": "1E-7",
+      "amount_includes_fee": false,
+      "kind": "fee",
+      "description": "Bark lightning-receive fee",
+      "counterparty": null,
+      "payment_hash": null,
+      "payment_hash_source": null,
+      "_btcpay_comment": null,
+      "_btcpay_labels": [],
+      "raw_json": "{\"amount_msat\": 10000000, \"bark_payment_hash\": \"b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1\", \"bark_row_id\": \"r1\", \"fee_msat\": 10000, \"invoice_id\": \"inv-1\", \"kind\": \"lightning-receive\", \"movement_id\": null, \"outpoint\": null, \"part\": \"fee\", \"source\": \"btcpay_bark_wallet\", \"store_id\": \"S1\", \"transaction_hash\": null}"
+     }
+    ]
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "ark-receive",
+    "amount": "0.0001",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1,
+    "outpoint": "A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1:3",
+    "transactionHash": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+    "movementId": 7,
+    "comment": " sale ",
+    "labels": {
+     "invoice": {
+      "ref": "",
+      "id": "inv-2"
+     },
+     "raw": {
+      "type": "raw",
+      "text": "Shop"
+     }
+    }
+   },
+   "records": {
+    "ok": [
+     {
+      "_bark_row_id": "r1",
+      "_bark_part": "principal",
+      "_bark_keys": {
+       "outpoint": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1:3",
+       "payment_hash": null,
+       "movement_id": 7,
+       "invoice_id": "inv-2"
+      },
+      "occurred_at": "2026-01-02T00:00:00Z",
+      "confirmed_at": "2026-01-02T00:00:00Z",
+      "direction": "inbound",
+      "asset": "BTC",
+      "amount": "0.0001",
+      "fee": "0",
+      "amount_includes_fee": false,
+      "kind": "deposit",
+      "description": "sale",
+      "counterparty": null,
+      "payment_hash": null,
+      "payment_hash_source": null,
+      "_btcpay_comment": "sale",
+      "_btcpay_labels": [
+       "invoice",
+       "Shop"
+      ],
+      "raw_json": "{\"amount_msat\": 10000000, \"bark_payment_hash\": null, \"bark_row_id\": \"r1\", \"fee_msat\": 0, \"invoice_id\": \"inv-2\", \"kind\": \"ark-receive\", \"movement_id\": 7, \"outpoint\": \"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1:3\", \"part\": \"principal\", \"source\": \"btcpay_bark_wallet\", \"store_id\": \"S1\", \"transaction_hash\": \"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\"}"
+     }
+    ]
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "onchain-receive",
+    "amount": "0.001",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1,
+    "fee": null
+   },
+   "records": {
+    "ok": [
+     {
+      "_bark_row_id": "r1",
+      "_bark_part": "principal",
+      "_bark_keys": {
+       "outpoint": null,
+       "payment_hash": null,
+       "movement_id": null,
+       "invoice_id": null
+      },
+      "occurred_at": "2026-01-02T00:00:00Z",
+      "confirmed_at": "2026-01-02T00:00:00Z",
+      "direction": "inbound",
+      "asset": "BTC",
+      "amount": "0.001",
+      "fee": "0",
+      "amount_includes_fee": false,
+      "kind": "deposit",
+      "description": "Bark onchain-receive",
+      "counterparty": null,
+      "payment_hash": null,
+      "payment_hash_source": null,
+      "_btcpay_comment": null,
+      "_btcpay_labels": [],
+      "raw_json": "{\"amount_msat\": 100000000, \"bark_payment_hash\": null, \"bark_row_id\": \"r1\", \"fee_msat\": 0, \"invoice_id\": null, \"kind\": \"onchain-receive\", \"movement_id\": null, \"outpoint\": null, \"part\": \"principal\", \"source\": \"btcpay_bark_wallet\", \"store_id\": \"S1\", \"transaction_hash\": null}"
+     }
+    ]
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "ark-send",
+    "amount": "-0.00001000",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1,
+    "fee": "0"
+   },
+   "records": {
+    "ok": [
+     {
+      "_bark_row_id": "r1",
+      "_bark_part": "principal",
+      "_bark_keys": {
+       "outpoint": null,
+       "payment_hash": null,
+       "movement_id": null,
+       "invoice_id": null
+      },
+      "occurred_at": "2026-01-02T00:00:00Z",
+      "confirmed_at": "2026-01-02T00:00:00Z",
+      "direction": "outbound",
+      "asset": "BTC",
+      "amount": "0.00001",
+      "fee": "0",
+      "amount_includes_fee": false,
+      "kind": "withdrawal",
+      "description": "Bark ark-send",
+      "counterparty": null,
+      "payment_hash": null,
+      "payment_hash_source": null,
+      "_btcpay_comment": null,
+      "_btcpay_labels": [],
+      "raw_json": "{\"amount_msat\": -1000000, \"bark_payment_hash\": null, \"bark_row_id\": \"r1\", \"fee_msat\": 0, \"invoice_id\": null, \"kind\": \"ark-send\", \"movement_id\": null, \"outpoint\": null, \"part\": \"principal\", \"source\": \"btcpay_bark_wallet\", \"store_id\": \"S1\", \"transaction_hash\": null}"
+     }
+    ]
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "lightning-send",
+    "amount": "-0.00003020",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1,
+    "fee": "0.00000020",
+    "paymentHash": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1"
+   },
+   "records": {
+    "ok": [
+     {
+      "_bark_row_id": "r1",
+      "_bark_part": "principal",
+      "_bark_keys": {
+       "outpoint": null,
+       "payment_hash": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+       "movement_id": null,
+       "invoice_id": null
+      },
+      "occurred_at": "2026-01-02T00:00:00Z",
+      "confirmed_at": "2026-01-02T00:00:00Z",
+      "direction": "outbound",
+      "asset": "BTC",
+      "amount": "0.00003",
+      "fee": "2E-7",
+      "amount_includes_fee": false,
+      "kind": "withdrawal",
+      "description": "Bark lightning-send",
+      "counterparty": null,
+      "payment_hash": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+      "payment_hash_source": "btcpay_bark",
+      "_btcpay_comment": null,
+      "_btcpay_labels": [],
+      "raw_json": "{\"amount_msat\": -3020000, \"bark_payment_hash\": \"b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1\", \"bark_row_id\": \"r1\", \"fee_msat\": 20000, \"invoice_id\": null, \"kind\": \"lightning-send\", \"movement_id\": null, \"outpoint\": null, \"part\": \"principal\", \"source\": \"btcpay_bark_wallet\", \"store_id\": \"S1\", \"transaction_hash\": null}"
+     }
+    ]
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "offboard",
+    "amount": "-0.00000300",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1,
+    "fee": "0.00000300"
+   },
+   "records": {
+    "ok": [
+     {
+      "_bark_row_id": "r1",
+      "_bark_part": "principal",
+      "_bark_keys": {
+       "outpoint": null,
+       "payment_hash": null,
+       "movement_id": null,
+       "invoice_id": null
+      },
+      "occurred_at": "2026-01-02T00:00:00Z",
+      "confirmed_at": "2026-01-02T00:00:00Z",
+      "direction": "outbound",
+      "asset": "BTC",
+      "amount": "0",
+      "fee": "0.000003",
+      "amount_includes_fee": false,
+      "kind": "fee",
+      "description": "Bark offboard",
+      "counterparty": null,
+      "payment_hash": null,
+      "payment_hash_source": null,
+      "_btcpay_comment": null,
+      "_btcpay_labels": [],
+      "raw_json": "{\"amount_msat\": -300000, \"bark_payment_hash\": null, \"bark_row_id\": \"r1\", \"fee_msat\": 300000, \"invoice_id\": null, \"kind\": \"offboard\", \"movement_id\": null, \"outpoint\": null, \"part\": \"principal\", \"source\": \"btcpay_bark_wallet\", \"store_id\": \"S1\", \"transaction_hash\": null}"
+     }
+    ]
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "send-onchain",
+    "amount": "-0.0002",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1,
+    "fee": "0.00000150",
+    "transactionHash": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
+   },
+   "records": {
+    "ok": [
+     {
+      "_bark_row_id": "r1",
+      "_bark_part": "principal",
+      "_bark_keys": {
+       "outpoint": null,
+       "payment_hash": null,
+       "movement_id": null,
+       "invoice_id": null
+      },
+      "occurred_at": "2026-01-02T00:00:00Z",
+      "confirmed_at": "2026-01-02T00:00:00Z",
+      "direction": "outbound",
+      "asset": "BTC",
+      "amount": "0.0001985",
+      "fee": "0.0000015",
+      "amount_includes_fee": false,
+      "kind": "withdrawal",
+      "description": "Bark send-onchain",
+      "counterparty": null,
+      "payment_hash": null,
+      "payment_hash_source": null,
+      "_btcpay_comment": null,
+      "_btcpay_labels": [],
+      "raw_json": "{\"amount_msat\": -20000000, \"bark_payment_hash\": null, \"bark_row_id\": \"r1\", \"fee_msat\": 150000, \"invoice_id\": null, \"kind\": \"send-onchain\", \"movement_id\": null, \"outpoint\": null, \"part\": \"principal\", \"source\": \"btcpay_bark_wallet\", \"store_id\": \"S1\", \"transaction_hash\": \"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\"}"
+     }
+    ]
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "refresh",
+    "amount": "-0.0000005",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1,
+    "fee": "0.0000005"
+   },
+   "records": {
+    "ok": [
+     {
+      "_bark_row_id": "r1",
+      "_bark_part": "principal",
+      "_bark_keys": {
+       "outpoint": null,
+       "payment_hash": null,
+       "movement_id": null,
+       "invoice_id": null
+      },
+      "occurred_at": "2026-01-02T00:00:00Z",
+      "confirmed_at": "2026-01-02T00:00:00Z",
+      "direction": "outbound",
+      "asset": "BTC",
+      "amount": "0",
+      "fee": "5E-7",
+      "amount_includes_fee": false,
+      "kind": "fee",
+      "description": "Bark refresh",
+      "counterparty": null,
+      "payment_hash": null,
+      "payment_hash_source": null,
+      "_btcpay_comment": null,
+      "_btcpay_labels": [],
+      "raw_json": "{\"amount_msat\": -50000, \"bark_payment_hash\": null, \"bark_row_id\": \"r1\", \"fee_msat\": 50000, \"invoice_id\": null, \"kind\": \"refresh\", \"movement_id\": null, \"outpoint\": null, \"part\": \"principal\", \"source\": \"btcpay_bark_wallet\", \"store_id\": \"S1\", \"transaction_hash\": null}"
+     }
+    ]
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "board",
+    "amount": "-0.000005",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1,
+    "fee": "0.000005",
+    "transactionHash": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
+   },
+   "records": {
+    "ok": [
+     {
+      "_bark_row_id": "r1",
+      "_bark_part": "principal",
+      "_bark_keys": {
+       "outpoint": null,
+       "payment_hash": null,
+       "movement_id": null,
+       "invoice_id": null
+      },
+      "occurred_at": "2026-01-02T00:00:00Z",
+      "confirmed_at": "2026-01-02T00:00:00Z",
+      "direction": "outbound",
+      "asset": "BTC",
+      "amount": "0",
+      "fee": "0.000005",
+      "amount_includes_fee": false,
+      "kind": "fee",
+      "description": "Bark board",
+      "counterparty": null,
+      "payment_hash": null,
+      "payment_hash_source": null,
+      "_btcpay_comment": null,
+      "_btcpay_labels": [],
+      "raw_json": "{\"amount_msat\": -500000, \"bark_payment_hash\": null, \"bark_row_id\": \"r1\", \"fee_msat\": 500000, \"invoice_id\": null, \"kind\": \"board\", \"movement_id\": null, \"outpoint\": null, \"part\": \"principal\", \"source\": \"btcpay_bark_wallet\", \"store_id\": \"S1\", \"transaction_hash\": \"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\"}"
+     }
+    ]
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "exit",
+    "amount": "0",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1,
+    "fee": null
+   },
+   "records": {
+    "ok": []
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "exit",
+    "amount": "-0.001",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1,
+    "fee": "0.00000200"
+   },
+   "records": {
+    "ok": [
+     {
+      "_bark_row_id": "r1",
+      "_bark_part": "principal",
+      "_bark_keys": {
+       "outpoint": null,
+       "payment_hash": null,
+       "movement_id": null,
+       "invoice_id": null
+      },
+      "occurred_at": "2026-01-02T00:00:00Z",
+      "confirmed_at": "2026-01-02T00:00:00Z",
+      "direction": "outbound",
+      "asset": "BTC",
+      "amount": "0.000998",
+      "fee": "0.000002",
+      "amount_includes_fee": false,
+      "kind": "withdrawal",
+      "description": "Bark exit",
+      "counterparty": null,
+      "payment_hash": null,
+      "payment_hash_source": null,
+      "_btcpay_comment": null,
+      "_btcpay_labels": [],
+      "raw_json": "{\"amount_msat\": -100000000, \"bark_payment_hash\": null, \"bark_row_id\": \"r1\", \"fee_msat\": 200000, \"invoice_id\": null, \"kind\": \"exit\", \"movement_id\": null, \"outpoint\": null, \"part\": \"principal\", \"source\": \"btcpay_bark_wallet\", \"store_id\": \"S1\", \"transaction_hash\": null}"
+     }
+    ]
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "exit-fee",
+    "amount": "-0.00000400",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1,
+    "fee": "0.00000400"
+   },
+   "records": {
+    "ok": [
+     {
+      "_bark_row_id": "r1",
+      "_bark_part": "principal",
+      "_bark_keys": {
+       "outpoint": null,
+       "payment_hash": null,
+       "movement_id": null,
+       "invoice_id": null
+      },
+      "occurred_at": "2026-01-02T00:00:00Z",
+      "confirmed_at": "2026-01-02T00:00:00Z",
+      "direction": "outbound",
+      "asset": "BTC",
+      "amount": "0",
+      "fee": "0.000004",
+      "amount_includes_fee": false,
+      "kind": "fee",
+      "description": "Bark exit-fee",
+      "counterparty": null,
+      "payment_hash": null,
+      "payment_hash_source": null,
+      "_btcpay_comment": null,
+      "_btcpay_labels": [],
+      "raw_json": "{\"amount_msat\": -400000, \"bark_payment_hash\": null, \"bark_row_id\": \"r1\", \"fee_msat\": 400000, \"invoice_id\": null, \"kind\": \"exit-fee\", \"movement_id\": null, \"outpoint\": null, \"part\": \"principal\", \"source\": \"btcpay_bark_wallet\", \"store_id\": \"S1\", \"transaction_hash\": null}"
+     }
+    ]
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "exit-claim",
+    "amount": "-0.00000100",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1,
+    "fee": "0.00000100"
+   },
+   "records": {
+    "ok": [
+     {
+      "_bark_row_id": "r1",
+      "_bark_part": "principal",
+      "_bark_keys": {
+       "outpoint": null,
+       "payment_hash": null,
+       "movement_id": null,
+       "invoice_id": null
+      },
+      "occurred_at": "2026-01-02T00:00:00Z",
+      "confirmed_at": "2026-01-02T00:00:00Z",
+      "direction": "outbound",
+      "asset": "BTC",
+      "amount": "0",
+      "fee": "0.000001",
+      "amount_includes_fee": false,
+      "kind": "fee",
+      "description": "Bark exit-claim",
+      "counterparty": null,
+      "payment_hash": null,
+      "payment_hash_source": null,
+      "_btcpay_comment": null,
+      "_btcpay_labels": [],
+      "raw_json": "{\"amount_msat\": -100000, \"bark_payment_hash\": null, \"bark_row_id\": \"r1\", \"fee_msat\": 100000, \"invoice_id\": null, \"kind\": \"exit-claim\", \"movement_id\": null, \"outpoint\": null, \"part\": \"principal\", \"source\": \"btcpay_bark_wallet\", \"store_id\": \"S1\", \"transaction_hash\": null}"
+     }
+    ]
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "onchain-internal",
+    "amount": "-0.00000141",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1,
+    "fee": "0.00000141"
+   },
+   "records": {
+    "ok": [
+     {
+      "_bark_row_id": "r1",
+      "_bark_part": "principal",
+      "_bark_keys": {
+       "outpoint": null,
+       "payment_hash": null,
+       "movement_id": null,
+       "invoice_id": null
+      },
+      "occurred_at": "2026-01-02T00:00:00Z",
+      "confirmed_at": "2026-01-02T00:00:00Z",
+      "direction": "outbound",
+      "asset": "BTC",
+      "amount": "0",
+      "fee": "0.00000141",
+      "amount_includes_fee": false,
+      "kind": "fee",
+      "description": "Bark onchain-internal",
+      "counterparty": null,
+      "payment_hash": null,
+      "payment_hash_source": null,
+      "_btcpay_comment": null,
+      "_btcpay_labels": [],
+      "raw_json": "{\"amount_msat\": -141000, \"bark_payment_hash\": null, \"bark_row_id\": \"r1\", \"fee_msat\": 141000, \"invoice_id\": null, \"kind\": \"onchain-internal\", \"movement_id\": null, \"outpoint\": null, \"part\": \"principal\", \"source\": \"btcpay_bark_wallet\", \"store_id\": \"S1\", \"transaction_hash\": null}"
+     }
+    ]
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "onchain-send",
+    "amount": "-0.0005",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1,
+    "fee": "0.00000141"
+   },
+   "records": {
+    "ok": [
+     {
+      "_bark_row_id": "r1",
+      "_bark_part": "principal",
+      "_bark_keys": {
+       "outpoint": null,
+       "payment_hash": null,
+       "movement_id": null,
+       "invoice_id": null
+      },
+      "occurred_at": "2026-01-02T00:00:00Z",
+      "confirmed_at": "2026-01-02T00:00:00Z",
+      "direction": "outbound",
+      "asset": "BTC",
+      "amount": "0.00049859",
+      "fee": "0.00000141",
+      "amount_includes_fee": false,
+      "kind": "withdrawal",
+      "description": "Bark onchain-send",
+      "counterparty": null,
+      "payment_hash": null,
+      "payment_hash_source": null,
+      "_btcpay_comment": null,
+      "_btcpay_labels": [],
+      "raw_json": "{\"amount_msat\": -50000000, \"bark_payment_hash\": null, \"bark_row_id\": \"r1\", \"fee_msat\": 141000, \"invoice_id\": null, \"kind\": \"onchain-send\", \"movement_id\": null, \"outpoint\": null, \"part\": \"principal\", \"source\": \"btcpay_bark_wallet\", \"store_id\": \"S1\", \"transaction_hash\": null}"
+     }
+    ]
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "lightning-receive",
+    "amount": "0.0001",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1,
+    "movementId": true,
+    "paymentHash": "not-hex"
+   },
+   "records": {
+    "ok": [
+     {
+      "_bark_row_id": "r1",
+      "_bark_part": "principal",
+      "_bark_keys": {
+       "outpoint": null,
+       "payment_hash": null,
+       "movement_id": null,
+       "invoice_id": null
+      },
+      "occurred_at": "2026-01-02T00:00:00Z",
+      "confirmed_at": "2026-01-02T00:00:00Z",
+      "direction": "inbound",
+      "asset": "BTC",
+      "amount": "0.0001",
+      "fee": "0",
+      "amount_includes_fee": false,
+      "kind": "deposit",
+      "description": "Bark lightning-receive",
+      "counterparty": null,
+      "payment_hash": null,
+      "payment_hash_source": null,
+      "_btcpay_comment": null,
+      "_btcpay_labels": [],
+      "raw_json": "{\"amount_msat\": 10000000, \"bark_payment_hash\": null, \"bark_row_id\": \"r1\", \"fee_msat\": 0, \"invoice_id\": null, \"kind\": \"lightning-receive\", \"movement_id\": null, \"outpoint\": null, \"part\": \"principal\", \"source\": \"btcpay_bark_wallet\", \"store_id\": \"S1\", \"transaction_hash\": null}"
+     }
+    ]
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "ark-receive",
+    "amount": 0.00012345,
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1
+   },
+   "records": {
+    "ok": [
+     {
+      "_bark_row_id": "r1",
+      "_bark_part": "principal",
+      "_bark_keys": {
+       "outpoint": null,
+       "payment_hash": null,
+       "movement_id": null,
+       "invoice_id": null
+      },
+      "occurred_at": "2026-01-02T00:00:00Z",
+      "confirmed_at": "2026-01-02T00:00:00Z",
+      "direction": "inbound",
+      "asset": "BTC",
+      "amount": "0.00012345",
+      "fee": "0",
+      "amount_includes_fee": false,
+      "kind": "deposit",
+      "description": "Bark ark-receive",
+      "counterparty": null,
+      "payment_hash": null,
+      "payment_hash_source": null,
+      "_btcpay_comment": null,
+      "_btcpay_labels": [],
+      "raw_json": "{\"amount_msat\": 12345000, \"bark_payment_hash\": null, \"bark_row_id\": \"r1\", \"fee_msat\": 0, \"invoice_id\": null, \"kind\": \"ark-receive\", \"movement_id\": null, \"outpoint\": null, \"part\": \"principal\", \"source\": \"btcpay_bark_wallet\", \"store_id\": \"S1\", \"transaction_hash\": null}"
+     }
+    ]
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "ark-receive",
+    "amount": 12345,
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1
+   },
+   "records": {
+    "ok": [
+     {
+      "_bark_row_id": "r1",
+      "_bark_part": "principal",
+      "_bark_keys": {
+       "outpoint": null,
+       "payment_hash": null,
+       "movement_id": null,
+       "invoice_id": null
+      },
+      "occurred_at": "2026-01-02T00:00:00Z",
+      "confirmed_at": "2026-01-02T00:00:00Z",
+      "direction": "inbound",
+      "asset": "BTC",
+      "amount": "12345",
+      "fee": "0",
+      "amount_includes_fee": false,
+      "kind": "deposit",
+      "description": "Bark ark-receive",
+      "counterparty": null,
+      "payment_hash": null,
+      "payment_hash_source": null,
+      "_btcpay_comment": null,
+      "_btcpay_labels": [],
+      "raw_json": "{\"amount_msat\": 1234500000000000, \"bark_payment_hash\": null, \"bark_row_id\": \"r1\", \"fee_msat\": 0, \"invoice_id\": null, \"kind\": \"ark-receive\", \"movement_id\": null, \"outpoint\": null, \"part\": \"principal\", \"source\": \"btcpay_bark_wallet\", \"store_id\": \"S1\", \"transaction_hash\": null}"
+     }
+    ]
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "ark-receive",
+    "amount": "1_000E-11",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1
+   },
+   "records": {
+    "ok": [
+     {
+      "_bark_row_id": "r1",
+      "_bark_part": "principal",
+      "_bark_keys": {
+       "outpoint": null,
+       "payment_hash": null,
+       "movement_id": null,
+       "invoice_id": null
+      },
+      "occurred_at": "2026-01-02T00:00:00Z",
+      "confirmed_at": "2026-01-02T00:00:00Z",
+      "direction": "inbound",
+      "asset": "BTC",
+      "amount": "1E-8",
+      "fee": "0",
+      "amount_includes_fee": false,
+      "kind": "deposit",
+      "description": "Bark ark-receive",
+      "counterparty": null,
+      "payment_hash": null,
+      "payment_hash_source": null,
+      "_btcpay_comment": null,
+      "_btcpay_labels": [],
+      "raw_json": "{\"amount_msat\": 1000, \"bark_payment_hash\": null, \"bark_row_id\": \"r1\", \"fee_msat\": 0, \"invoice_id\": null, \"kind\": \"ark-receive\", \"movement_id\": null, \"outpoint\": null, \"part\": \"principal\", \"source\": \"btcpay_bark_wallet\", \"store_id\": \"S1\", \"transaction_hash\": null}"
+     }
+    ]
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "ark-receive",
+    "amount": " 0.0001 ",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1
+   },
+   "records": {
+    "ok": [
+     {
+      "_bark_row_id": "r1",
+      "_bark_part": "principal",
+      "_bark_keys": {
+       "outpoint": null,
+       "payment_hash": null,
+       "movement_id": null,
+       "invoice_id": null
+      },
+      "occurred_at": "2026-01-02T00:00:00Z",
+      "confirmed_at": "2026-01-02T00:00:00Z",
+      "direction": "inbound",
+      "asset": "BTC",
+      "amount": "0.0001",
+      "fee": "0",
+      "amount_includes_fee": false,
+      "kind": "deposit",
+      "description": "Bark ark-receive",
+      "counterparty": null,
+      "payment_hash": null,
+      "payment_hash_source": null,
+      "_btcpay_comment": null,
+      "_btcpay_labels": [],
+      "raw_json": "{\"amount_msat\": 10000000, \"bark_payment_hash\": null, \"bark_row_id\": \"r1\", \"fee_msat\": 0, \"invoice_id\": null, \"kind\": \"ark-receive\", \"movement_id\": null, \"outpoint\": null, \"part\": \"principal\", \"source\": \"btcpay_bark_wallet\", \"store_id\": \"S1\", \"transaction_hash\": null}"
+     }
+    ]
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "ark-receive",
+    "amount": "\uff11\uff12E-8",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1
+   },
+   "records": {
+    "ok": [
+     {
+      "_bark_row_id": "r1",
+      "_bark_part": "principal",
+      "_bark_keys": {
+       "outpoint": null,
+       "payment_hash": null,
+       "movement_id": null,
+       "invoice_id": null
+      },
+      "occurred_at": "2026-01-02T00:00:00Z",
+      "confirmed_at": "2026-01-02T00:00:00Z",
+      "direction": "inbound",
+      "asset": "BTC",
+      "amount": "1.2E-7",
+      "fee": "0",
+      "amount_includes_fee": false,
+      "kind": "deposit",
+      "description": "Bark ark-receive",
+      "counterparty": null,
+      "payment_hash": null,
+      "payment_hash_source": null,
+      "_btcpay_comment": null,
+      "_btcpay_labels": [],
+      "raw_json": "{\"amount_msat\": 12000, \"bark_payment_hash\": null, \"bark_row_id\": \"r1\", \"fee_msat\": 0, \"invoice_id\": null, \"kind\": \"ark-receive\", \"movement_id\": null, \"outpoint\": null, \"part\": \"principal\", \"source\": \"btcpay_bark_wallet\", \"store_id\": \"S1\", \"transaction_hash\": null}"
+     }
+    ]
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "ark-receive",
+    "amount": "0.0001000000000000000000000000000000000",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1
+   },
+   "records": {
+    "ok": [
+     {
+      "_bark_row_id": "r1",
+      "_bark_part": "principal",
+      "_bark_keys": {
+       "outpoint": null,
+       "payment_hash": null,
+       "movement_id": null,
+       "invoice_id": null
+      },
+      "occurred_at": "2026-01-02T00:00:00Z",
+      "confirmed_at": "2026-01-02T00:00:00Z",
+      "direction": "inbound",
+      "asset": "BTC",
+      "amount": "0.0001",
+      "fee": "0",
+      "amount_includes_fee": false,
+      "kind": "deposit",
+      "description": "Bark ark-receive",
+      "counterparty": null,
+      "payment_hash": null,
+      "payment_hash_source": null,
+      "_btcpay_comment": null,
+      "_btcpay_labels": [],
+      "raw_json": "{\"amount_msat\": 10000000, \"bark_payment_hash\": null, \"bark_row_id\": \"r1\", \"fee_msat\": 0, \"invoice_id\": null, \"kind\": \"ark-receive\", \"movement_id\": null, \"outpoint\": null, \"part\": \"principal\", \"source\": \"btcpay_bark_wallet\", \"store_id\": \"S1\", \"transaction_hash\": null}"
+     }
+    ]
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "unknown",
+    "amount": "0.0001",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1
+   },
+   "records": {
+    "error": {
+     "code": "bark_row_unsupported",
+     "message": "Bark wallet row 'r1' has an unknown kind 'unknown'",
+     "hint": "Kassiber books a Bark wallet only when every row's amount and fee agree. Update Kassiber, or keep this store's Bark payments as a payment ledger until it understands this row.",
+     "details": {
+      "row_id": "r1",
+      "kind": "unknown",
+      "reason": "unknown_kind"
+     }
+    }
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "teleport",
+    "amount": "0.0001",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1
+   },
+   "records": {
+    "error": {
+     "code": "bark_row_unsupported",
+     "message": "Bark wallet row 'r1' has an unknown kind 'teleport'",
+     "hint": "Kassiber books a Bark wallet only when every row's amount and fee agree. Update Kassiber, or keep this store's Bark payments as a payment ledger until it understands this row.",
+     "details": {
+      "row_id": "r1",
+      "kind": "teleport",
+      "reason": "unknown_kind"
+     }
+    }
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": null,
+    "amount": "0.0001",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1
+   },
+   "records": {
+    "error": {
+     "code": "bark_row_unsupported",
+     "message": "Bark wallet row 'r1' has an unknown kind 'unknown'",
+     "hint": "Kassiber books a Bark wallet only when every row's amount and fee agree. Update Kassiber, or keep this store's Bark payments as a payment ledger until it understands this row.",
+     "details": {
+      "row_id": "r1",
+      "kind": "unknown",
+      "reason": "unknown_kind"
+     }
+    }
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": " ",
+    "amount": "0.0001",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1
+   },
+   "records": {
+    "error": {
+     "code": "bark_row_unsupported",
+     "message": "Bark wallet row 'r1' has an unknown kind 'unknown'",
+     "hint": "Kassiber books a Bark wallet only when every row's amount and fee agree. Update Kassiber, or keep this store's Bark payments as a payment ledger until it understands this row.",
+     "details": {
+      "row_id": "r1",
+      "kind": "unknown",
+      "reason": "unknown_kind"
+     }
+    }
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "refresh",
+    "amount": "0.0001",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1
+   },
+   "records": {
+    "error": {
+     "code": "bark_row_unsupported",
+     "message": "Bark wallet row 'r1' (refresh) adds funds",
+     "hint": "Kassiber books a Bark wallet only when every row's amount and fee agree. Update Kassiber, or keep this store's Bark payments as a payment ledger until it understands this row.",
+     "details": {
+      "row_id": "r1",
+      "kind": "refresh",
+      "reason": "unexpected_inflow"
+     }
+    }
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "ark-receive",
+    "amount": "-0.0001",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1
+   },
+   "records": {
+    "error": {
+     "code": "bark_row_unsupported",
+     "message": "Bark wallet row 'r1' (ark-receive) removes funds",
+     "hint": "Kassiber books a Bark wallet only when every row's amount and fee agree. Update Kassiber, or keep this store's Bark payments as a payment ledger until it understands this row.",
+     "details": {
+      "row_id": "r1",
+      "kind": "ark-receive",
+      "reason": "unexpected_outflow"
+     }
+    }
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "board",
+    "amount": "-0.0001",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1,
+    "fee": "0.0000001"
+   },
+   "records": {
+    "error": {
+     "code": "bark_row_unsupported",
+     "message": "Bark wallet row 'r1' (board) sends funds",
+     "hint": "Kassiber books a Bark wallet only when every row's amount and fee agree. Update Kassiber, or keep this store's Bark payments as a payment ledger until it understands this row.",
+     "details": {
+      "row_id": "r1",
+      "kind": "board",
+      "reason": "unexpected_outflow"
+     }
+    }
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "ark-send",
+    "amount": "-0.0001",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1,
+    "fee": "0.0002"
+   },
+   "records": {
+    "error": {
+     "code": "bark_row_unsupported",
+     "message": "Bark wallet row 'r1' has a fee larger than its amount",
+     "hint": "Kassiber books a Bark wallet only when every row's amount and fee agree. Update Kassiber, or keep this store's Bark payments as a payment ledger until it understands this row.",
+     "details": {
+      "row_id": "r1",
+      "kind": "ark-send",
+      "reason": "fee_exceeds_amount"
+     }
+    }
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "exit",
+    "amount": "0",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1,
+    "fee": "0.00000010"
+   },
+   "records": {
+    "error": {
+     "code": "bark_row_unsupported",
+     "message": "Bark wallet row 'r1' has a fee but no amount",
+     "hint": "Kassiber books a Bark wallet only when every row's amount and fee agree. Update Kassiber, or keep this store's Bark payments as a payment ledger until it understands this row.",
+     "details": {
+      "row_id": "r1",
+      "kind": "exit",
+      "reason": "fee_without_amount"
+     }
+    }
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "ark-send",
+    "amount": "-0.0001",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1,
+    "fee": "-0.00000001"
+   },
+   "records": {
+    "error": {
+     "code": "bark_row_unsupported",
+     "message": "Bark wallet row 'r1' has a negative fee",
+     "hint": "Kassiber books a Bark wallet only when every row's amount and fee agree. Update Kassiber, or keep this store's Bark payments as a payment ledger until it understands this row.",
+     "details": {
+      "row_id": "r1",
+      "kind": "ark-send",
+      "reason": "negative_fee"
+     }
+    }
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "ark-send",
+    "amount": "-0.000000000001",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1
+   },
+   "records": {
+    "error": {
+     "code": "protocol_error",
+     "message": "The amount of Bark wallet row 'r1' is not a whole msat",
+     "hint": null,
+     "details": {
+      "row_id": "r1"
+     }
+    }
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "ark-receive",
+    "amount": "0.000000000015",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1
+   },
+   "records": {
+    "error": {
+     "code": "protocol_error",
+     "message": "The amount of Bark wallet row 'r1' is not a whole msat",
+     "hint": null,
+     "details": {
+      "row_id": "r1"
+     }
+    }
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "ark-receive",
+    "amount": "1.0000000000001",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1
+   },
+   "records": {
+    "error": {
+     "code": "protocol_error",
+     "message": "The amount of Bark wallet row 'r1' is not a whole msat",
+     "hint": null,
+     "details": {
+      "row_id": "r1"
+     }
+    }
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "ark-send",
+    "amount": "-0.0001",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1,
+    "paymentHash": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1"
+   },
+   "records": {
+    "ok": [
+     {
+      "_bark_row_id": "r1",
+      "_bark_part": "principal",
+      "_bark_keys": {
+       "outpoint": null,
+       "payment_hash": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+       "movement_id": null,
+       "invoice_id": null
+      },
+      "occurred_at": "2026-01-02T00:00:00Z",
+      "confirmed_at": "2026-01-02T00:00:00Z",
+      "direction": "outbound",
+      "asset": "BTC",
+      "amount": "0.0001",
+      "fee": "0",
+      "amount_includes_fee": false,
+      "kind": "withdrawal",
+      "description": "Bark ark-send",
+      "counterparty": null,
+      "payment_hash": null,
+      "payment_hash_source": null,
+      "_btcpay_comment": null,
+      "_btcpay_labels": [],
+      "raw_json": "{\"amount_msat\": -10000000, \"bark_payment_hash\": \"b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1\", \"bark_row_id\": \"r1\", \"fee_msat\": 0, \"invoice_id\": null, \"kind\": \"ark-send\", \"movement_id\": null, \"outpoint\": null, \"part\": \"principal\", \"source\": \"btcpay_bark_wallet\", \"store_id\": \"S1\", \"transaction_hash\": null}"
+     }
+    ]
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "ark-send",
+    "amount": "1e-12",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1
+   },
+   "records": {
+    "error": {
+     "code": "protocol_error",
+     "message": "The amount of Bark wallet row 'r1' is not a whole msat",
+     "hint": null,
+     "details": {
+      "row_id": "r1"
+     }
+    }
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "ark-send",
+    "amount": "abc",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1
+   },
+   "records": {
+    "error": {
+     "code": "protocol_error",
+     "message": "Bark wallet row 'r1' has an invalid amount",
+     "hint": null,
+     "details": {
+      "row_id": "r1"
+     }
+    }
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "ark-send",
+    "amount": true,
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1
+   },
+   "records": {
+    "error": {
+     "code": "protocol_error",
+     "message": "Bark wallet row 'r1' has an invalid amount",
+     "hint": null,
+     "details": {
+      "row_id": "r1"
+     }
+    }
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "ark-send",
+    "amount": null,
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1
+   },
+   "records": {
+    "error": {
+     "code": "protocol_error",
+     "message": "Bark wallet row 'r1' is missing 'amount'",
+     "hint": null,
+     "details": {
+      "row_id": "r1"
+     }
+    }
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "ark-send",
+    "amount": [],
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1
+   },
+   "records": {
+    "error": {
+     "code": "protocol_error",
+     "message": "Bark wallet row 'r1' has an invalid amount",
+     "hint": null,
+     "details": {
+      "row_id": "r1"
+     }
+    }
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "ark-receive",
+    "amount": "NaN",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1
+   },
+   "records": {
+    "error": {
+     "code": "protocol_error",
+     "message": "Bark wallet row 'r1' has an invalid amount",
+     "hint": null,
+     "details": {
+      "row_id": "r1"
+     }
+    }
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "ark-receive",
+    "amount": "Infinity",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1
+   },
+   "records": {
+    "error": {
+     "code": "protocol_error",
+     "message": "Bark wallet row 'r1' has an invalid amount",
+     "hint": null,
+     "details": {
+      "row_id": "r1"
+     }
+    }
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "ark-receive",
+    "amount": "21000001",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1
+   },
+   "records": {
+    "error": {
+     "code": "protocol_error",
+     "message": "Bark wallet row 'r1' has an invalid amount",
+     "hint": null,
+     "details": {
+      "row_id": "r1"
+     }
+    }
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "ark-receive",
+    "amount": "1E+9",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1
+   },
+   "records": {
+    "error": {
+     "code": "protocol_error",
+     "message": "Bark wallet row 'r1' has an invalid amount",
+     "hint": null,
+     "details": {
+      "row_id": "r1"
+     }
+    }
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "ark-receive",
+    "amount": "21000000",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1
+   },
+   "records": {
+    "ok": [
+     {
+      "_bark_row_id": "r1",
+      "_bark_part": "principal",
+      "_bark_keys": {
+       "outpoint": null,
+       "payment_hash": null,
+       "movement_id": null,
+       "invoice_id": null
+      },
+      "occurred_at": "2026-01-02T00:00:00Z",
+      "confirmed_at": "2026-01-02T00:00:00Z",
+      "direction": "inbound",
+      "asset": "BTC",
+      "amount": "21000000",
+      "fee": "0",
+      "amount_includes_fee": false,
+      "kind": "deposit",
+      "description": "Bark ark-receive",
+      "counterparty": null,
+      "payment_hash": null,
+      "payment_hash_source": null,
+      "_btcpay_comment": null,
+      "_btcpay_labels": [],
+      "raw_json": "{\"amount_msat\": 2100000000000000000, \"bark_payment_hash\": null, \"bark_row_id\": \"r1\", \"fee_msat\": 0, \"invoice_id\": null, \"kind\": \"ark-receive\", \"movement_id\": null, \"outpoint\": null, \"part\": \"principal\", \"source\": \"btcpay_bark_wallet\", \"store_id\": \"S1\", \"transaction_hash\": null}"
+     }
+    ]
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "ark-receive",
+    "amount": "-21000000.00000000001",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1
+   },
+   "records": {
+    "error": {
+     "code": "protocol_error",
+     "message": "Bark wallet row 'r1' has an invalid amount",
+     "hint": null,
+     "details": {
+      "row_id": "r1"
+     }
+    }
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "ark-receive",
+    "amount": "1e-999999",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1
+   },
+   "records": {
+    "error": {
+     "code": "protocol_error",
+     "message": "The amount of Bark wallet row 'r1' is not a whole msat",
+     "hint": null,
+     "details": {
+      "row_id": "r1"
+     }
+    }
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "ark-receive",
+    "amount": "0.0001",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1,
+    "fee": "x"
+   },
+   "records": {
+    "error": {
+     "code": "protocol_error",
+     "message": "Bark wallet row 'r1' has an invalid fee",
+     "hint": null,
+     "details": {
+      "row_id": "r1"
+     }
+    }
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "ark-receive",
+    "amount": "0.0001",
+    "timestamp": null,
+    "status": "Confirmed",
+    "confirmations": 1
+   },
+   "records": {
+    "error": {
+     "code": "protocol_error",
+     "message": "Bark wallet row 'r1' is missing 'timestamp'",
+     "hint": null,
+     "details": {
+      "row_id": "r1"
+     }
+    }
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "ark-receive",
+    "amount": "0.0001",
+    "timestamp": "1767312000.9",
+    "status": "Confirmed",
+    "confirmations": 1
+   },
+   "records": {
+    "ok": [
+     {
+      "_bark_row_id": "r1",
+      "_bark_part": "principal",
+      "_bark_keys": {
+       "outpoint": null,
+       "payment_hash": null,
+       "movement_id": null,
+       "invoice_id": null
+      },
+      "occurred_at": "2026-01-02T00:00:00Z",
+      "confirmed_at": "2026-01-02T00:00:00Z",
+      "direction": "inbound",
+      "asset": "BTC",
+      "amount": "0.0001",
+      "fee": "0",
+      "amount_includes_fee": false,
+      "kind": "deposit",
+      "description": "Bark ark-receive",
+      "counterparty": null,
+      "payment_hash": null,
+      "payment_hash_source": null,
+      "_btcpay_comment": null,
+      "_btcpay_labels": [],
+      "raw_json": "{\"amount_msat\": 10000000, \"bark_payment_hash\": null, \"bark_row_id\": \"r1\", \"fee_msat\": 0, \"invoice_id\": null, \"kind\": \"ark-receive\", \"movement_id\": null, \"outpoint\": null, \"part\": \"principal\", \"source\": \"btcpay_bark_wallet\", \"store_id\": \"S1\", \"transaction_hash\": null}"
+     }
+    ]
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "ark-receive",
+    "amount": "0.0001",
+    "timestamp": "later",
+    "status": "Confirmed",
+    "confirmations": 1
+   },
+   "records": {
+    "error": {
+     "code": "protocol_error",
+     "message": "Invalid BTCPay timestamp 'later'",
+     "hint": null,
+     "details": null
+    }
+   }
+  },
+  {
+   "input": {
+    "id": "r1",
+    "kind": "ark-receive",
+    "amount": "0.0001",
+    "timestamp": true,
+    "status": "Confirmed",
+    "confirmations": 1
+   },
+   "records": {
+    "ok": [
+     {
+      "_bark_row_id": "r1",
+      "_bark_part": "principal",
+      "_bark_keys": {
+       "outpoint": null,
+       "payment_hash": null,
+       "movement_id": null,
+       "invoice_id": null
+      },
+      "occurred_at": "1970-01-01T00:00:01Z",
+      "confirmed_at": "1970-01-01T00:00:01Z",
+      "direction": "inbound",
+      "asset": "BTC",
+      "amount": "0.0001",
+      "fee": "0",
+      "amount_includes_fee": false,
+      "kind": "deposit",
+      "description": "Bark ark-receive",
+      "counterparty": null,
+      "payment_hash": null,
+      "payment_hash_source": null,
+      "_btcpay_comment": null,
+      "_btcpay_labels": [],
+      "raw_json": "{\"amount_msat\": 10000000, \"bark_payment_hash\": null, \"bark_row_id\": \"r1\", \"fee_msat\": 0, \"invoice_id\": null, \"kind\": \"ark-receive\", \"movement_id\": null, \"outpoint\": null, \"part\": \"principal\", \"source\": \"btcpay_bark_wallet\", \"store_id\": \"S1\", \"transaction_hash\": null}"
+     }
+    ]
+   }
+  },
+  {
+   "input": {
+    "id": null,
+    "kind": "ark-receive",
+    "amount": "0.0001",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1
+   },
+   "records": {
+    "error": {
+     "code": "protocol_error",
+     "message": "Bark wallet transaction record is missing 'id'",
+     "hint": null,
+     "details": null
+    }
+   }
+  },
+  {
+   "input": {
+    "id": " ",
+    "kind": "ark-receive",
+    "amount": "0.0001",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1
+   },
+   "records": {
+    "error": {
+     "code": "protocol_error",
+     "message": "Bark wallet transaction record is missing 'id'",
+     "hint": null,
+     "details": null
+    }
+   }
+  },
+  {
+   "input": {
+    "id": 7,
+    "kind": "ark-receive",
+    "amount": "0.0001",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1
+   },
+   "records": {
+    "ok": [
+     {
+      "_bark_row_id": "7",
+      "_bark_part": "principal",
+      "_bark_keys": {
+       "outpoint": null,
+       "payment_hash": null,
+       "movement_id": null,
+       "invoice_id": null
+      },
+      "occurred_at": "2026-01-02T00:00:00Z",
+      "confirmed_at": "2026-01-02T00:00:00Z",
+      "direction": "inbound",
+      "asset": "BTC",
+      "amount": "0.0001",
+      "fee": "0",
+      "amount_includes_fee": false,
+      "kind": "deposit",
+      "description": "Bark ark-receive",
+      "counterparty": null,
+      "payment_hash": null,
+      "payment_hash_source": null,
+      "_btcpay_comment": null,
+      "_btcpay_labels": [],
+      "raw_json": "{\"amount_msat\": 10000000, \"bark_payment_hash\": null, \"bark_row_id\": \"7\", \"fee_msat\": 0, \"invoice_id\": null, \"kind\": \"ark-receive\", \"movement_id\": null, \"outpoint\": null, \"part\": \"principal\", \"source\": \"btcpay_bark_wallet\", \"store_id\": \"S1\", \"transaction_hash\": null}"
+     }
+    ]
+   }
+  },
+  {
+   "input": {
+    "id": "r\ud800",
+    "kind": "ark-receive",
+    "amount": "0.0001",
+    "timestamp": 1767312000,
+    "status": "Confirmed",
+    "confirmations": 1
+   },
+   "records": {
+    "error": {
+     "code": "protocol_error",
+     "message": "Bark wallet transaction record has an invalid 'id'",
+     "hint": null,
+     "details": null
+    }
+   }
+  },
+  {
+   "input": "not a row",
+   "records": {
+    "error": {
+     "code": "protocol_error",
+     "message": "Bark wallet transaction record was not a JSON object",
+     "hint": null,
+     "details": null
+    }
+   }
+  },
+  {
+   "input": [],
+   "records": {
+    "error": {
+     "code": "protocol_error",
+     "message": "Bark wallet transaction record was not a JSON object",
+     "hint": null,
+     "details": null
+    }
+   }
+  }
+ ],
+ "payment_keys": [
+  {
+   "input": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1-0",
+   "keys": {
+    "outpoint": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1:0"
+   }
+  },
+  {
+   "input": "A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1-007",
+   "keys": {
+    "outpoint": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1:7"
+   }
+  },
+  {
+   "input": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1-",
+   "keys": {}
+  },
+  {
+   "input": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1-x",
+   "keys": {}
+  },
+  {
+   "input": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1-\u00b2",
+   "keys": {}
+  },
+  {
+   "input": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+   "keys": {
+    "payment_hash": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1"
+   }
+  },
+  {
+   "input": "B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1",
+   "keys": {
+    "payment_hash": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1"
+   }
+  },
+  {
+   "input": " b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1 ",
+   "keys": {
+    "payment_hash": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1"
+   }
+  },
+  {
+   "input": "inv-1#ark-movement-3",
+   "keys": {
+    "invoice_id": "inv-1",
+    "movement_id": 3
+   }
+  },
+  {
+   "input": "inv-1#ark-movement-0003",
+   "keys": {
+    "invoice_id": "inv-1",
+    "movement_id": 3
+   }
+  },
+  {
+   "input": "6CV5#ark-movement-2-0",
+   "keys": {
+    "invoice_id": "6CV5",
+    "movement_id": 2
+   }
+  },
+  {
+   "input": "inv#ark-movement-2-01",
+   "keys": {
+    "invoice_id": "inv",
+    "movement_id": 2
+   }
+  },
+  {
+   "input": "inv#ark-movement-2-",
+   "keys": {}
+  },
+  {
+   "input": "inv#ark-movement-2-x",
+   "keys": {}
+  },
+  {
+   "input": "inv#ark-movement--1",
+   "keys": {}
+  },
+  {
+   "input": "#ark-movement-3",
+   "keys": {}
+  },
+  {
+   "input": "inv#ark-movement-",
+   "keys": {}
+  },
+  {
+   "input": "inv#ark-movement-\u0663",
+   "keys": {}
+  },
+  {
+   "input": "a#b#ark-movement-4#ark-movement-5",
+   "keys": {}
+  },
+  {
+   "input": "",
+   "keys": {}
+  },
+  {
+   "input": null,
+   "keys": {}
+  },
+  {
+   "input": 7,
+   "keys": {}
+  },
+  {
+   "input": "abc",
+   "keys": {}
+  },
+  {
+   "input": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a-0",
+   "keys": {}
+  }
+ ],
+ "amounts": [
+  {
+   "input": "0.000000000015",
+   "msat": {
+    "error": {
+     "code": "protocol_error",
+     "message": "The amount of Bark wallet row 'r' is not a whole msat",
+     "hint": null,
+     "details": {
+      "row_id": "r"
+     }
+    }
+   }
+  },
+  {
+   "input": "0.00000000002",
+   "msat": {
+    "ok": 2
+   }
+  },
+  {
+   "input": "0.0001",
+   "msat": {
+    "ok": 10000000
+   }
+  },
+  {
+   "input": "1e-11",
+   "msat": {
+    "ok": 1
+   }
+  },
+  {
+   "input": "-0.00000000001",
+   "msat": {
+    "ok": -1
+   }
+  },
+  {
+   "input": "21000000",
+   "msat": {
+    "ok": 2100000000000000000
+   }
+  },
+  {
+   "input": "1E+3",
+   "msat": {
+    "ok": 100000000000000
+   }
+  },
+  {
+   "input": "1_000",
+   "msat": {
+    "ok": 100000000000000
+   }
+  },
+  {
+   "input": "-0",
+   "msat": {
+    "ok": 0
+   }
+  },
+  {
+   "input": "0E-50",
+   "msat": {
+    "ok": 0
+   }
+  },
+  {
+   "input": "\uff11\uff12.\uff13\uff14",
+   "msat": {
+    "ok": 1234000000000
+   }
+  },
+  {
+   "input": 0.1,
+   "msat": {
+    "ok": 10000000000
+   }
+  },
+  {
+   "input": 1,
+   "msat": {
+    "ok": 100000000000
+   }
+  },
+  {
+   "input": true,
+   "msat": {
+    "error": {
+     "code": "protocol_error",
+     "message": "Bark wallet row 'r' has an invalid amount",
+     "hint": null,
+     "details": {
+      "row_id": "r"
+     }
+    }
+   }
+  },
+  {
+   "input": null,
+   "msat": {
+    "error": {
+     "code": "protocol_error",
+     "message": "Bark wallet row 'r' has an invalid amount",
+     "hint": null,
+     "details": {
+      "row_id": "r"
+     }
+    }
+   }
+  },
+  {
+   "input": "NaN",
+   "msat": {
+    "error": {
+     "code": "protocol_error",
+     "message": "Bark wallet row 'r' has an invalid amount",
+     "hint": null,
+     "details": {
+      "row_id": "r"
+     }
+    }
+   }
+  },
+  {
+   "input": " 1 ",
+   "msat": {
+    "ok": 100000000000
+   }
+  }
+ ]
+}

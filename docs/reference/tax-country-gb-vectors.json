@@ -1,0 +1,2791 @@
+{
+  "schema": "kassiber.tax-country-vectors/1",
+  "country": "gb",
+  "registry_value": "gb",
+  "spec": "docs/reference/tax-country-gb.md",
+  "status": "preview: not reviewed by a tax professional for this country",
+  "retrieved": "2026-11-07",
+  "currency": "GBP",
+  "timezone": "Europe/London",
+  "tax_year": "6 April to 5 April, Europe/London",
+  "conventions": {
+    "amounts": "decimal strings; fiat in the country currency, rounded half-even to cents after exact computation; quantities exact",
+    "times": "ISO 8601 with offset; every date rule uses the local date in `timezone`",
+    "expected": "computed by the spec's reference model; `refusal` means the implementation must fail closed with that code"
+  },
+  "vectors": [
+    {
+      "id": "gb-01-hmrc-s104-basic",
+      "title": "HMRC CRYPTO22251 (Victoria): basic section 104 pool disposal",
+      "source": "https://www.gov.uk/hmrc-internal-manuals/cryptoassets-manual/crypto22251",
+      "rules": [
+        "GB-POOL-S104"
+      ],
+      "policy": {
+        "method": "uk_share_matching",
+        "pool_scope": "global",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "b0",
+          "time": "2024-05-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "TOKA",
+          "quantity": "100",
+          "fiat": "1000.00"
+        },
+        {
+          "id": "b1",
+          "time": "2024-09-18T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "TOKA",
+          "quantity": "50",
+          "fiat": "125000.00"
+        },
+        {
+          "id": "s1",
+          "time": "2024-12-01T10:00:00+00:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "TOKA",
+          "quantity": "50",
+          "fiat": "300000.00"
+        }
+      ],
+      "expected": {
+        "computations": [
+          {
+            "asset": "TOKA",
+            "date": "2024-12-01",
+            "tax_year": "2024-25",
+            "events": [
+              "s1"
+            ],
+            "quantity": "50",
+            "proceeds": "300000.00",
+            "allowable_costs": "42000.00",
+            "incidental": "0.00",
+            "matches": [
+              {
+                "rule": "s104",
+                "acquired": null,
+                "quantity": "50",
+                "cost": "42000.00",
+                "pool_before": [
+                  "150",
+                  "126000.00"
+                ]
+              }
+            ],
+            "gain": "258000.00"
+          }
+        ],
+        "income": [],
+        "years": {
+          "2024-25": {
+            "sa108_section": "cryptoassets boxes 13.1-13.5",
+            "disposals": 1,
+            "proceeds": "300000.00",
+            "allowable_costs": "42000.00",
+            "gains": "258000.00",
+            "losses": "0.00",
+            "net_gains": "258000.00",
+            "annual_exempt_amount": "3000.00",
+            "gains_above_aea": "255000.00",
+            "loss_available": "0.00",
+            "boxes": {
+              "count": 1,
+              "proceeds": "300000",
+              "costs": "42000",
+              "gains": "258000",
+              "losses": "0"
+            },
+            "report_required": {
+              "proceeds_over_threshold": true,
+              "gains_over_aea": true,
+              "loss_to_claim": false
+            },
+            "misc_income_box17": "0.00",
+            "rate_split_2024_25": {
+              "gains_before_30_oct": "0.00",
+              "losses_before_30_oct": "0.00",
+              "gains_from_30_oct": "258000.00",
+              "losses_from_30_oct": "0.00"
+            }
+          }
+        },
+        "pools": {
+          "TOKA": {
+            "quantity": "100",
+            "cost": "84000.00"
+          }
+        }
+      }
+    },
+    {
+      "id": "gb-02-hmrc-same-day",
+      "title": "HMRC CRYPTO22252 (Martyn): same-day rule, excess acquisition to the pool",
+      "source": "https://www.gov.uk/hmrc-internal-manuals/cryptoassets-manual/crypto22252",
+      "rules": [
+        "GB-SAME-DAY",
+        "GB-POOL-S104"
+      ],
+      "policy": {
+        "method": "uk_share_matching",
+        "pool_scope": "global",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "b0",
+          "time": "2024-01-15T10:00:00+00:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "TOKB",
+          "quantity": "5000",
+          "fiat": "500.00"
+        },
+        {
+          "id": "s1",
+          "time": "2024-06-23T09:00:00+01:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "TOKB",
+          "quantity": "1000",
+          "fiat": "800.00"
+        },
+        {
+          "id": "b1",
+          "time": "2024-06-23T14:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "TOKB",
+          "quantity": "1600",
+          "fiat": "1000.00"
+        },
+        {
+          "id": "s2",
+          "time": "2024-06-23T20:00:00+01:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "TOKB",
+          "quantity": "500",
+          "fiat": "600.00"
+        }
+      ],
+      "expected": {
+        "computations": [
+          {
+            "asset": "TOKB",
+            "date": "2024-06-23",
+            "tax_year": "2024-25",
+            "events": [
+              "s1",
+              "s2"
+            ],
+            "quantity": "1500",
+            "proceeds": "1400.00",
+            "allowable_costs": "937.50",
+            "incidental": "0.00",
+            "matches": [
+              {
+                "rule": "same_day",
+                "acquired": "2024-06-23",
+                "quantity": "1500",
+                "cost": "937.50"
+              }
+            ],
+            "gain": "462.50"
+          }
+        ],
+        "income": [],
+        "years": {
+          "2024-25": {
+            "sa108_section": "cryptoassets boxes 13.1-13.5",
+            "disposals": 1,
+            "proceeds": "1400.00",
+            "allowable_costs": "937.50",
+            "gains": "462.50",
+            "losses": "0.00",
+            "net_gains": "462.50",
+            "annual_exempt_amount": "3000.00",
+            "gains_above_aea": "0.00",
+            "loss_available": "0.00",
+            "boxes": {
+              "count": 1,
+              "proceeds": "1400",
+              "costs": "937",
+              "gains": "462",
+              "losses": "0"
+            },
+            "report_required": {
+              "proceeds_over_threshold": false,
+              "gains_over_aea": false,
+              "loss_to_claim": false
+            },
+            "misc_income_box17": "0.00",
+            "rate_split_2024_25": {
+              "gains_before_30_oct": "462.50",
+              "losses_before_30_oct": "0.00",
+              "gains_from_30_oct": "0.00",
+              "losses_from_30_oct": "0.00"
+            }
+          }
+        },
+        "pools": {
+          "TOKB": {
+            "quantity": "5100",
+            "cost": "562.50"
+          }
+        }
+      }
+    },
+    {
+      "id": "gb-03-hmrc-thirty-day",
+      "title": "HMRC CRYPTO22253 (Rachel): 30-day rule across two disposals (and across the 5 April year end)",
+      "source": "https://www.gov.uk/hmrc-internal-manuals/cryptoassets-manual/crypto22253",
+      "rules": [
+        "GB-30-DAY",
+        "GB-30-DAY-ORDER",
+        "GB-TAX-YEAR"
+      ],
+      "policy": {
+        "method": "uk_share_matching",
+        "pool_scope": "global",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "b0",
+          "time": "2024-01-10T10:00:00+00:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "TOKC",
+          "quantity": "2000",
+          "fiat": "1000.00"
+        },
+        {
+          "id": "s1",
+          "time": "2024-03-31T10:00:00+01:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "TOKC",
+          "quantity": "1000",
+          "fiat": "400.00"
+        },
+        {
+          "id": "s2",
+          "time": "2024-04-20T10:00:00+01:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "TOKC",
+          "quantity": "500",
+          "fiat": "150.00"
+        },
+        {
+          "id": "b1",
+          "time": "2024-04-21T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "TOKC",
+          "quantity": "700",
+          "fiat": "175.00"
+        },
+        {
+          "id": "b2",
+          "time": "2024-04-28T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "TOKC",
+          "quantity": "500",
+          "fiat": "100.00"
+        },
+        {
+          "id": "b3",
+          "time": "2024-05-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "TOKC",
+          "quantity": "500",
+          "fiat": "150.00"
+        }
+      ],
+      "expected": {
+        "computations": [
+          {
+            "asset": "TOKC",
+            "date": "2024-03-31",
+            "tax_year": "2023-24",
+            "events": [
+              "s1"
+            ],
+            "quantity": "1000",
+            "proceeds": "400.00",
+            "allowable_costs": "235.00",
+            "incidental": "0.00",
+            "matches": [
+              {
+                "rule": "thirty_day",
+                "acquired": "2024-04-21",
+                "quantity": "700",
+                "cost": "175.00"
+              },
+              {
+                "rule": "thirty_day",
+                "acquired": "2024-04-28",
+                "quantity": "300",
+                "cost": "60.00"
+              }
+            ],
+            "gain": "165.00"
+          },
+          {
+            "asset": "TOKC",
+            "date": "2024-04-20",
+            "tax_year": "2024-25",
+            "events": [
+              "s2"
+            ],
+            "quantity": "500",
+            "proceeds": "150.00",
+            "allowable_costs": "130.00",
+            "incidental": "0.00",
+            "matches": [
+              {
+                "rule": "thirty_day",
+                "acquired": "2024-04-28",
+                "quantity": "200",
+                "cost": "40.00"
+              },
+              {
+                "rule": "thirty_day",
+                "acquired": "2024-05-01",
+                "quantity": "300",
+                "cost": "90.00"
+              }
+            ],
+            "gain": "20.00"
+          }
+        ],
+        "income": [],
+        "years": {
+          "2023-24": {
+            "sa108_section": "other property, assets and gains boxes 14-17, 19",
+            "disposals": 1,
+            "proceeds": "400.00",
+            "allowable_costs": "235.00",
+            "gains": "165.00",
+            "losses": "0.00",
+            "net_gains": "165.00",
+            "annual_exempt_amount": "6000.00",
+            "gains_above_aea": "0.00",
+            "loss_available": "0.00",
+            "boxes": {
+              "count": 1,
+              "proceeds": "400",
+              "costs": "235",
+              "gains": "165",
+              "losses": "0"
+            },
+            "report_required": {
+              "proceeds_over_threshold": false,
+              "gains_over_aea": false,
+              "loss_to_claim": false
+            },
+            "misc_income_box17": "0.00"
+          },
+          "2024-25": {
+            "sa108_section": "cryptoassets boxes 13.1-13.5",
+            "disposals": 1,
+            "proceeds": "150.00",
+            "allowable_costs": "130.00",
+            "gains": "20.00",
+            "losses": "0.00",
+            "net_gains": "20.00",
+            "annual_exempt_amount": "3000.00",
+            "gains_above_aea": "0.00",
+            "loss_available": "0.00",
+            "boxes": {
+              "count": 1,
+              "proceeds": "150",
+              "costs": "130",
+              "gains": "20",
+              "losses": "0"
+            },
+            "report_required": {
+              "proceeds_over_threshold": false,
+              "gains_over_aea": false,
+              "loss_to_claim": false
+            },
+            "misc_income_box17": "0.00",
+            "rate_split_2024_25": {
+              "gains_before_30_oct": "20.00",
+              "losses_before_30_oct": "0.00",
+              "gains_from_30_oct": "0.00",
+              "losses_from_30_oct": "0.00"
+            }
+          }
+        },
+        "pools": {
+          "TOKC": {
+            "quantity": "2200",
+            "cost": "1060.00"
+          }
+        }
+      }
+    },
+    {
+      "id": "gb-04-hmrc-same-day-and-pool",
+      "title": "HMRC CRYPTO22254 (Daniel): same-day rule then part disposal from the pool",
+      "source": "https://www.gov.uk/hmrc-internal-manuals/cryptoassets-manual/crypto22254",
+      "rules": [
+        "GB-SAME-DAY",
+        "GB-POOL-S104"
+      ],
+      "policy": {
+        "method": "uk_share_matching",
+        "pool_scope": "global",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "b0",
+          "time": "2024-06-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "TOKD",
+          "quantity": "8000",
+          "fiat": "1000.00"
+        },
+        {
+          "id": "s1",
+          "time": "2025-01-31T09:00:00+00:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "TOKD",
+          "quantity": "5000",
+          "fiat": "500.00"
+        },
+        {
+          "id": "b1",
+          "time": "2025-01-31T10:00:00+00:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "TOKD",
+          "quantity": "4000",
+          "fiat": "320.00"
+        },
+        {
+          "id": "b2",
+          "time": "2025-01-31T11:00:00+00:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "TOKD",
+          "quantity": "1000",
+          "fiat": "75.00"
+        },
+        {
+          "id": "b3",
+          "time": "2025-01-31T12:00:00+00:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "TOKD",
+          "quantity": "1000",
+          "fiat": "70.00"
+        },
+        {
+          "id": "s2",
+          "time": "2025-01-31T13:00:00+00:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "TOKD",
+          "quantity": "2000",
+          "fiat": "142.00"
+        },
+        {
+          "id": "b4",
+          "time": "2025-01-31T14:00:00+00:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "TOKD",
+          "quantity": "500",
+          "fiat": "35.00"
+        }
+      ],
+      "expected": {
+        "computations": [
+          {
+            "asset": "TOKD",
+            "date": "2025-01-31",
+            "tax_year": "2024-25",
+            "events": [
+              "s1",
+              "s2"
+            ],
+            "quantity": "7000",
+            "proceeds": "642.00",
+            "allowable_costs": "562.50",
+            "incidental": "0.00",
+            "matches": [
+              {
+                "rule": "same_day",
+                "acquired": "2025-01-31",
+                "quantity": "6500",
+                "cost": "500.00"
+              },
+              {
+                "rule": "s104",
+                "acquired": null,
+                "quantity": "500",
+                "cost": "62.50",
+                "pool_before": [
+                  "8000",
+                  "1000.00"
+                ]
+              }
+            ],
+            "gain": "79.50"
+          }
+        ],
+        "income": [],
+        "years": {
+          "2024-25": {
+            "sa108_section": "cryptoassets boxes 13.1-13.5",
+            "disposals": 1,
+            "proceeds": "642.00",
+            "allowable_costs": "562.50",
+            "gains": "79.50",
+            "losses": "0.00",
+            "net_gains": "79.50",
+            "annual_exempt_amount": "3000.00",
+            "gains_above_aea": "0.00",
+            "loss_available": "0.00",
+            "boxes": {
+              "count": 1,
+              "proceeds": "642",
+              "costs": "562",
+              "gains": "79",
+              "losses": "0"
+            },
+            "report_required": {
+              "proceeds_over_threshold": false,
+              "gains_over_aea": false,
+              "loss_to_claim": false
+            },
+            "misc_income_box17": "0.00",
+            "rate_split_2024_25": {
+              "gains_before_30_oct": "0.00",
+              "losses_before_30_oct": "0.00",
+              "gains_from_30_oct": "79.50",
+              "losses_from_30_oct": "0.00"
+            }
+          }
+        },
+        "pools": {
+          "TOKD": {
+            "quantity": "7500",
+            "cost": "937.50"
+          }
+        }
+      }
+    },
+    {
+      "id": "gb-05-hmrc-thirty-day-and-pool",
+      "title": "HMRC CRYPTO22255 (Melanie): 30-day rule then the pool",
+      "source": "https://www.gov.uk/hmrc-internal-manuals/cryptoassets-manual/crypto22255",
+      "rules": [
+        "GB-30-DAY",
+        "GB-POOL-S104"
+      ],
+      "policy": {
+        "method": "uk_share_matching",
+        "pool_scope": "global",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "b0",
+          "time": "2024-01-10T10:00:00+00:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "TOKE",
+          "quantity": "14000",
+          "fiat": "200000.00"
+        },
+        {
+          "id": "s1",
+          "time": "2024-08-30T10:00:00+01:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "TOKE",
+          "quantity": "4000",
+          "fiat": "160000.00"
+        },
+        {
+          "id": "b1",
+          "time": "2024-09-11T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "TOKE",
+          "quantity": "500",
+          "fiat": "17500.00"
+        }
+      ],
+      "expected": {
+        "computations": [
+          {
+            "asset": "TOKE",
+            "date": "2024-08-30",
+            "tax_year": "2024-25",
+            "events": [
+              "s1"
+            ],
+            "quantity": "4000",
+            "proceeds": "160000.00",
+            "allowable_costs": "67500.00",
+            "incidental": "0.00",
+            "matches": [
+              {
+                "rule": "thirty_day",
+                "acquired": "2024-09-11",
+                "quantity": "500",
+                "cost": "17500.00"
+              },
+              {
+                "rule": "s104",
+                "acquired": null,
+                "quantity": "3500",
+                "cost": "50000.00",
+                "pool_before": [
+                  "14000",
+                  "200000.00"
+                ]
+              }
+            ],
+            "gain": "92500.00"
+          }
+        ],
+        "income": [],
+        "years": {
+          "2024-25": {
+            "sa108_section": "cryptoassets boxes 13.1-13.5",
+            "disposals": 1,
+            "proceeds": "160000.00",
+            "allowable_costs": "67500.00",
+            "gains": "92500.00",
+            "losses": "0.00",
+            "net_gains": "92500.00",
+            "annual_exempt_amount": "3000.00",
+            "gains_above_aea": "89500.00",
+            "loss_available": "0.00",
+            "boxes": {
+              "count": 1,
+              "proceeds": "160000",
+              "costs": "67500",
+              "gains": "92500",
+              "losses": "0"
+            },
+            "report_required": {
+              "proceeds_over_threshold": true,
+              "gains_over_aea": true,
+              "loss_to_claim": false
+            },
+            "misc_income_box17": "0.00",
+            "rate_split_2024_25": {
+              "gains_before_30_oct": "92500.00",
+              "losses_before_30_oct": "0.00",
+              "gains_from_30_oct": "0.00",
+              "losses_from_30_oct": "0.00"
+            }
+          }
+        },
+        "pools": {
+          "TOKE": {
+            "quantity": "10500",
+            "cost": "150000.00"
+          }
+        }
+      }
+    },
+    {
+      "id": "gb-06-hmrc-all-three-rules",
+      "title": "HMRC CRYPTO22256 (Gulferaz): same-day, 30-day and pool interacting",
+      "source": "https://www.gov.uk/hmrc-internal-manuals/cryptoassets-manual/crypto22256",
+      "rules": [
+        "GB-SAME-DAY",
+        "GB-30-DAY",
+        "GB-30-DAY-ORDER",
+        "GB-POOL-S104"
+      ],
+      "policy": {
+        "method": "uk_share_matching",
+        "pool_scope": "global",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "b0",
+          "time": "2024-01-10T10:00:00+00:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "TOKF",
+          "quantity": "100000",
+          "fiat": "300000.00"
+        },
+        {
+          "id": "b1",
+          "time": "2024-07-31T09:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "TOKF",
+          "quantity": "10000",
+          "fiat": "45000.00"
+        },
+        {
+          "id": "s1",
+          "time": "2024-07-31T10:00:00+01:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "TOKF",
+          "quantity": "30000",
+          "fiat": "150000.00"
+        },
+        {
+          "id": "s2",
+          "time": "2024-08-05T10:00:00+01:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "TOKF",
+          "quantity": "20000",
+          "fiat": "100000.00"
+        },
+        {
+          "id": "b2",
+          "time": "2024-08-06T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "TOKF",
+          "quantity": "50000",
+          "fiat": "225000.00"
+        },
+        {
+          "id": "s3",
+          "time": "2024-08-07T10:00:00+01:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "TOKF",
+          "quantity": "100000",
+          "fiat": "150000.00"
+        }
+      ],
+      "expected": {
+        "computations": [
+          {
+            "asset": "TOKF",
+            "date": "2024-07-31",
+            "tax_year": "2024-25",
+            "events": [
+              "s1"
+            ],
+            "quantity": "30000",
+            "proceeds": "150000.00",
+            "allowable_costs": "135000.00",
+            "incidental": "0.00",
+            "matches": [
+              {
+                "rule": "same_day",
+                "acquired": "2024-07-31",
+                "quantity": "10000",
+                "cost": "45000.00"
+              },
+              {
+                "rule": "thirty_day",
+                "acquired": "2024-08-06",
+                "quantity": "20000",
+                "cost": "90000.00"
+              }
+            ],
+            "gain": "15000.00"
+          },
+          {
+            "asset": "TOKF",
+            "date": "2024-08-05",
+            "tax_year": "2024-25",
+            "events": [
+              "s2"
+            ],
+            "quantity": "20000",
+            "proceeds": "100000.00",
+            "allowable_costs": "90000.00",
+            "incidental": "0.00",
+            "matches": [
+              {
+                "rule": "thirty_day",
+                "acquired": "2024-08-06",
+                "quantity": "20000",
+                "cost": "90000.00"
+              }
+            ],
+            "gain": "10000.00"
+          },
+          {
+            "asset": "TOKF",
+            "date": "2024-08-07",
+            "tax_year": "2024-25",
+            "events": [
+              "s3"
+            ],
+            "quantity": "100000",
+            "proceeds": "150000.00",
+            "allowable_costs": "313636.36",
+            "incidental": "0.00",
+            "matches": [
+              {
+                "rule": "s104",
+                "acquired": null,
+                "quantity": "100000",
+                "cost": "313636.36",
+                "pool_before": [
+                  "110000",
+                  "345000.00"
+                ]
+              }
+            ],
+            "gain": "-163636.36"
+          }
+        ],
+        "income": [],
+        "years": {
+          "2024-25": {
+            "sa108_section": "cryptoassets boxes 13.1-13.5",
+            "disposals": 3,
+            "proceeds": "400000.00",
+            "allowable_costs": "538636.36",
+            "gains": "25000.00",
+            "losses": "163636.36",
+            "net_gains": "-138636.36",
+            "annual_exempt_amount": "3000.00",
+            "gains_above_aea": "0.00",
+            "loss_available": "138636.36",
+            "boxes": {
+              "count": 3,
+              "proceeds": "400000",
+              "costs": "538636",
+              "gains": "25000",
+              "losses": "163636"
+            },
+            "report_required": {
+              "proceeds_over_threshold": true,
+              "gains_over_aea": true,
+              "loss_to_claim": true
+            },
+            "misc_income_box17": "0.00",
+            "rate_split_2024_25": {
+              "gains_before_30_oct": "25000.00",
+              "losses_before_30_oct": "163636.36",
+              "gains_from_30_oct": "0.00",
+              "losses_from_30_oct": "0.00"
+            }
+          }
+        },
+        "pools": {
+          "TOKF": {
+            "quantity": "10000",
+            "cost": "31363.64"
+          }
+        }
+      }
+    },
+    {
+      "id": "gb-07-hmrc-crypto-to-crypto",
+      "title": "HMRC CRYPTO22257 (Elina): token-to-token swaps touching two pools",
+      "source": "https://www.gov.uk/hmrc-internal-manuals/cryptoassets-manual/crypto22257",
+      "rules": [
+        "GB-SWAP",
+        "GB-SWAP-VALUES",
+        "GB-SAME-DAY",
+        "GB-30-DAY",
+        "GB-POOL-S104"
+      ],
+      "policy": {
+        "method": "uk_share_matching",
+        "pool_scope": "global",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "b0",
+          "time": "2024-01-10T10:00:00+00:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "TOKG",
+          "quantity": "100000",
+          "fiat": "300000.00"
+        },
+        {
+          "id": "x1",
+          "time": "2024-08-31T09:00:00+01:00",
+          "wallet": "A",
+          "type": "swap",
+          "asset": "TOKG",
+          "quantity": "1000",
+          "fiat": "3200.00",
+          "in_asset": "TOKH",
+          "in_quantity": "10000",
+          "in_fiat": "3200.00"
+        },
+        {
+          "id": "x2",
+          "time": "2024-08-31T10:00:00+01:00",
+          "wallet": "A",
+          "type": "swap",
+          "asset": "TOKH",
+          "quantity": "5000",
+          "fiat": "1700.00",
+          "in_asset": "TOKG",
+          "in_quantity": "600",
+          "in_fiat": "1920.00"
+        },
+        {
+          "id": "x3",
+          "time": "2024-08-31T11:00:00+01:00",
+          "wallet": "A",
+          "type": "swap",
+          "asset": "TOKG",
+          "quantity": "550",
+          "fiat": "1760.00",
+          "in_asset": "TOKH",
+          "in_quantity": "5000",
+          "in_fiat": "1650.00"
+        },
+        {
+          "id": "x4",
+          "time": "2024-09-04T10:00:00+01:00",
+          "wallet": "A",
+          "type": "swap",
+          "asset": "TOKH",
+          "quantity": "2000",
+          "fiat": "560.00",
+          "in_asset": "TOKG",
+          "in_quantity": "180",
+          "in_fiat": "558.00"
+        },
+        {
+          "id": "x5",
+          "time": "2024-09-16T10:00:00+01:00",
+          "wallet": "A",
+          "type": "swap",
+          "asset": "TOKG",
+          "quantity": "400",
+          "fiat": "1080.00",
+          "in_asset": "TOKH",
+          "in_quantity": "4000",
+          "in_fiat": "1080.00"
+        },
+        {
+          "id": "x6",
+          "time": "2024-10-27T10:00:00+00:00",
+          "wallet": "A",
+          "type": "swap",
+          "asset": "TOKH",
+          "quantity": "12000",
+          "fiat": "2400.00",
+          "in_asset": "TOKG",
+          "in_quantity": "900",
+          "in_fiat": "2430.00"
+        }
+      ],
+      "expected": {
+        "computations": [
+          {
+            "asset": "TOKG",
+            "date": "2024-08-31",
+            "tax_year": "2024-25",
+            "events": [
+              "x1",
+              "x3"
+            ],
+            "quantity": "1550",
+            "proceeds": "4850.00",
+            "allowable_costs": "4570.00",
+            "incidental": "0.00",
+            "matches": [
+              {
+                "rule": "same_day",
+                "acquired": "2024-08-31",
+                "quantity": "600",
+                "cost": "1700.00"
+              },
+              {
+                "rule": "thirty_day",
+                "acquired": "2024-09-04",
+                "quantity": "180",
+                "cost": "560.00"
+              },
+              {
+                "rule": "s104",
+                "acquired": null,
+                "quantity": "770",
+                "cost": "2310.00",
+                "pool_before": [
+                  "100000",
+                  "300000.00"
+                ]
+              }
+            ],
+            "gain": "280.00"
+          },
+          {
+            "asset": "TOKG",
+            "date": "2024-09-16",
+            "tax_year": "2024-25",
+            "events": [
+              "x5"
+            ],
+            "quantity": "400",
+            "proceeds": "1080.00",
+            "allowable_costs": "1200.00",
+            "incidental": "0.00",
+            "matches": [
+              {
+                "rule": "s104",
+                "acquired": null,
+                "quantity": "400",
+                "cost": "1200.00",
+                "pool_before": [
+                  "99230",
+                  "297690.00"
+                ]
+              }
+            ],
+            "gain": "-120.00"
+          },
+          {
+            "asset": "TOKH",
+            "date": "2024-08-31",
+            "tax_year": "2024-25",
+            "events": [
+              "x2"
+            ],
+            "quantity": "5000",
+            "proceeds": "1920.00",
+            "allowable_costs": "1653.33",
+            "incidental": "0.00",
+            "matches": [
+              {
+                "rule": "same_day",
+                "acquired": "2024-08-31",
+                "quantity": "5000",
+                "cost": "1653.33"
+              }
+            ],
+            "gain": "266.67"
+          },
+          {
+            "asset": "TOKH",
+            "date": "2024-09-04",
+            "tax_year": "2024-25",
+            "events": [
+              "x4"
+            ],
+            "quantity": "2000",
+            "proceeds": "558.00",
+            "allowable_costs": "540.00",
+            "incidental": "0.00",
+            "matches": [
+              {
+                "rule": "thirty_day",
+                "acquired": "2024-09-16",
+                "quantity": "2000",
+                "cost": "540.00"
+              }
+            ],
+            "gain": "18.00"
+          },
+          {
+            "asset": "TOKH",
+            "date": "2024-10-27",
+            "tax_year": "2024-25",
+            "events": [
+              "x6"
+            ],
+            "quantity": "12000",
+            "proceeds": "2430.00",
+            "allowable_costs": "3846.67",
+            "incidental": "0.00",
+            "matches": [
+              {
+                "rule": "s104",
+                "acquired": null,
+                "quantity": "12000",
+                "cost": "3846.67",
+                "pool_before": [
+                  "12000",
+                  "3846.67"
+                ]
+              }
+            ],
+            "gain": "-1416.67"
+          }
+        ],
+        "income": [],
+        "years": {
+          "2024-25": {
+            "sa108_section": "cryptoassets boxes 13.1-13.5",
+            "disposals": 5,
+            "proceeds": "10838.00",
+            "allowable_costs": "11810.00",
+            "gains": "564.67",
+            "losses": "1536.67",
+            "net_gains": "-972.00",
+            "annual_exempt_amount": "3000.00",
+            "gains_above_aea": "0.00",
+            "loss_available": "972.00",
+            "boxes": {
+              "count": 5,
+              "proceeds": "10838",
+              "costs": "11810",
+              "gains": "564",
+              "losses": "1536"
+            },
+            "report_required": {
+              "proceeds_over_threshold": false,
+              "gains_over_aea": false,
+              "loss_to_claim": true
+            },
+            "misc_income_box17": "0.00",
+            "rate_split_2024_25": {
+              "gains_before_30_oct": "564.67",
+              "losses_before_30_oct": "1536.67",
+              "gains_from_30_oct": "0.00",
+              "losses_from_30_oct": "0.00"
+            }
+          }
+        },
+        "pools": {
+          "TOKG": {
+            "quantity": "99730",
+            "cost": "298890.00"
+          },
+          "TOKH": {
+            "quantity": "0",
+            "cost": "0.00"
+          }
+        }
+      }
+    },
+    {
+      "id": "gb-08-hmrc-fee-in-tokens",
+      "title": "HMRC CRYPTO22280 (Terri): a fee paid in the same token is a same-day disposal at market value",
+      "source": "https://www.gov.uk/hmrc-internal-manuals/cryptoassets-manual/crypto22280",
+      "rules": [
+        "GB-FEE-TOKENS",
+        "GB-SAME-DAY"
+      ],
+      "policy": {
+        "method": "uk_share_matching",
+        "pool_scope": "global",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "b0",
+          "time": "2024-01-10T10:00:00+00:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "TOKT",
+          "quantity": "10000",
+          "fiat": "20000.00"
+        },
+        {
+          "id": "s1",
+          "time": "2024-07-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "TOKT",
+          "quantity": "1000",
+          "fiat": "5000.00",
+          "fee_quantity": "1",
+          "fee_fiat_value": "5.00"
+        }
+      ],
+      "expected": {
+        "computations": [
+          {
+            "asset": "TOKT",
+            "date": "2024-07-01",
+            "tax_year": "2024-25",
+            "events": [
+              "s1"
+            ],
+            "quantity": "1001",
+            "proceeds": "5005.00",
+            "allowable_costs": "2007.00",
+            "incidental": "5.00",
+            "matches": [
+              {
+                "rule": "s104",
+                "acquired": null,
+                "quantity": "1001",
+                "cost": "2002.00",
+                "pool_before": [
+                  "10000",
+                  "20000.00"
+                ]
+              }
+            ],
+            "gain": "2998.00"
+          }
+        ],
+        "income": [],
+        "years": {
+          "2024-25": {
+            "sa108_section": "cryptoassets boxes 13.1-13.5",
+            "disposals": 1,
+            "proceeds": "5005.00",
+            "allowable_costs": "2007.00",
+            "gains": "2998.00",
+            "losses": "0.00",
+            "net_gains": "2998.00",
+            "annual_exempt_amount": "3000.00",
+            "gains_above_aea": "0.00",
+            "loss_available": "0.00",
+            "boxes": {
+              "count": 1,
+              "proceeds": "5005",
+              "costs": "2007",
+              "gains": "2998",
+              "losses": "0"
+            },
+            "report_required": {
+              "proceeds_over_threshold": false,
+              "gains_over_aea": false,
+              "loss_to_claim": false
+            },
+            "misc_income_box17": "0.00",
+            "rate_split_2024_25": {
+              "gains_before_30_oct": "2998.00",
+              "losses_before_30_oct": "0.00",
+              "gains_from_30_oct": "0.00",
+              "losses_from_30_oct": "0.00"
+            }
+          }
+        },
+        "pools": {
+          "TOKT": {
+            "quantity": "8999",
+            "cost": "17998.00"
+          }
+        }
+      }
+    },
+    {
+      "id": "gb-09-tax-year-boundary-bst",
+      "title": "23:30Z on 5 April 2025 is 00:30 BST on 6 April: the disposal falls in 2025-26",
+      "rules": [
+        "GB-TAX-YEAR",
+        "GB-TZ"
+      ],
+      "policy": {
+        "method": "uk_share_matching",
+        "pool_scope": "global",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2024-01-10T10:00:00+00:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "30000.00"
+        },
+        {
+          "id": "s1",
+          "time": "2025-04-05T23:30:00Z",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "BTC",
+          "quantity": "0.1",
+          "fiat": "7000.00"
+        }
+      ],
+      "expected": {
+        "computations": [
+          {
+            "asset": "BTC",
+            "date": "2025-04-06",
+            "tax_year": "2025-26",
+            "events": [
+              "s1"
+            ],
+            "quantity": "0.1",
+            "proceeds": "7000.00",
+            "allowable_costs": "3000.00",
+            "incidental": "0.00",
+            "matches": [
+              {
+                "rule": "s104",
+                "acquired": null,
+                "quantity": "0.1",
+                "cost": "3000.00",
+                "pool_before": [
+                  "1",
+                  "30000.00"
+                ]
+              }
+            ],
+            "gain": "4000.00"
+          }
+        ],
+        "income": [],
+        "years": {
+          "2025-26": {
+            "sa108_section": "cryptoassets boxes 13.1-13.5",
+            "disposals": 1,
+            "proceeds": "7000.00",
+            "allowable_costs": "3000.00",
+            "gains": "4000.00",
+            "losses": "0.00",
+            "net_gains": "4000.00",
+            "annual_exempt_amount": "3000.00",
+            "gains_above_aea": "1000.00",
+            "loss_available": "0.00",
+            "boxes": {
+              "count": 1,
+              "proceeds": "7000",
+              "costs": "3000",
+              "gains": "4000",
+              "losses": "0"
+            },
+            "report_required": {
+              "proceeds_over_threshold": false,
+              "gains_over_aea": true,
+              "loss_to_claim": false
+            },
+            "misc_income_box17": "0.00"
+          }
+        },
+        "pools": {
+          "BTC": {
+            "quantity": "0.9",
+            "cost": "27000.00"
+          }
+        }
+      }
+    },
+    {
+      "id": "gb-10-thirty-day-window-edge",
+      "title": "An acquisition on day 30 after the disposal is matched; day 31 goes to the pool",
+      "rules": [
+        "GB-30-DAY",
+        "GB-30-DAY-WINDOW"
+      ],
+      "policy": {
+        "method": "uk_share_matching",
+        "pool_scope": "global",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2024-01-10T10:00:00+00:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "30000.00"
+        },
+        {
+          "id": "s1",
+          "time": "2024-06-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "BTC",
+          "quantity": "0.5",
+          "fiat": "35000.00"
+        },
+        {
+          "id": "b2",
+          "time": "2024-07-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "0.2",
+          "fiat": "12000.00"
+        },
+        {
+          "id": "b3",
+          "time": "2024-07-02T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "0.2",
+          "fiat": "12500.00"
+        }
+      ],
+      "expected": {
+        "computations": [
+          {
+            "asset": "BTC",
+            "date": "2024-06-01",
+            "tax_year": "2024-25",
+            "events": [
+              "s1"
+            ],
+            "quantity": "0.5",
+            "proceeds": "35000.00",
+            "allowable_costs": "21000.00",
+            "incidental": "0.00",
+            "matches": [
+              {
+                "rule": "thirty_day",
+                "acquired": "2024-07-01",
+                "quantity": "0.2",
+                "cost": "12000.00"
+              },
+              {
+                "rule": "s104",
+                "acquired": null,
+                "quantity": "0.3",
+                "cost": "9000.00",
+                "pool_before": [
+                  "1",
+                  "30000.00"
+                ]
+              }
+            ],
+            "gain": "14000.00"
+          }
+        ],
+        "income": [],
+        "years": {
+          "2024-25": {
+            "sa108_section": "cryptoassets boxes 13.1-13.5",
+            "disposals": 1,
+            "proceeds": "35000.00",
+            "allowable_costs": "21000.00",
+            "gains": "14000.00",
+            "losses": "0.00",
+            "net_gains": "14000.00",
+            "annual_exempt_amount": "3000.00",
+            "gains_above_aea": "11000.00",
+            "loss_available": "0.00",
+            "boxes": {
+              "count": 1,
+              "proceeds": "35000",
+              "costs": "21000",
+              "gains": "14000",
+              "losses": "0"
+            },
+            "report_required": {
+              "proceeds_over_threshold": false,
+              "gains_over_aea": true,
+              "loss_to_claim": false
+            },
+            "misc_income_box17": "0.00",
+            "rate_split_2024_25": {
+              "gains_before_30_oct": "14000.00",
+              "losses_before_30_oct": "0.00",
+              "gains_from_30_oct": "0.00",
+              "losses_from_30_oct": "0.00"
+            }
+          }
+        },
+        "pools": {
+          "BTC": {
+            "quantity": "0.9",
+            "cost": "33500.00"
+          }
+        }
+      }
+    },
+    {
+      "id": "gb-11-bed-and-breakfast-loss",
+      "title": "Selling at a loss and rebuying within 30 days: the loss is measured against the rebuy, not the pool",
+      "rules": [
+        "GB-30-DAY"
+      ],
+      "policy": {
+        "method": "uk_share_matching",
+        "pool_scope": "global",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2024-01-10T10:00:00+00:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "50000.00"
+        },
+        {
+          "id": "s1",
+          "time": "2024-08-05T10:00:00+01:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "40000.00"
+        },
+        {
+          "id": "b2",
+          "time": "2024-08-20T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "41000.00"
+        }
+      ],
+      "expected": {
+        "computations": [
+          {
+            "asset": "BTC",
+            "date": "2024-08-05",
+            "tax_year": "2024-25",
+            "events": [
+              "s1"
+            ],
+            "quantity": "1",
+            "proceeds": "40000.00",
+            "allowable_costs": "41000.00",
+            "incidental": "0.00",
+            "matches": [
+              {
+                "rule": "thirty_day",
+                "acquired": "2024-08-20",
+                "quantity": "1",
+                "cost": "41000.00"
+              }
+            ],
+            "gain": "-1000.00"
+          }
+        ],
+        "income": [],
+        "years": {
+          "2024-25": {
+            "sa108_section": "cryptoassets boxes 13.1-13.5",
+            "disposals": 1,
+            "proceeds": "40000.00",
+            "allowable_costs": "41000.00",
+            "gains": "0.00",
+            "losses": "1000.00",
+            "net_gains": "-1000.00",
+            "annual_exempt_amount": "3000.00",
+            "gains_above_aea": "0.00",
+            "loss_available": "1000.00",
+            "boxes": {
+              "count": 1,
+              "proceeds": "40000",
+              "costs": "41000",
+              "gains": "0",
+              "losses": "1000"
+            },
+            "report_required": {
+              "proceeds_over_threshold": false,
+              "gains_over_aea": false,
+              "loss_to_claim": true
+            },
+            "misc_income_box17": "0.00",
+            "rate_split_2024_25": {
+              "gains_before_30_oct": "0.00",
+              "losses_before_30_oct": "1000.00",
+              "gains_from_30_oct": "0.00",
+              "losses_from_30_oct": "0.00"
+            }
+          }
+        },
+        "pools": {
+          "BTC": {
+            "quantity": "1",
+            "cost": "50000.00"
+          }
+        }
+      }
+    },
+    {
+      "id": "gb-12-one-pool-across-wallets",
+      "title": "One section 104 pool per token for the person, across wallets",
+      "rules": [
+        "GB-POOL-GLOBAL",
+        "GB-POOL-S104"
+      ],
+      "policy": {
+        "method": "uk_share_matching",
+        "pool_scope": "global",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2024-02-01T10:00:00+00:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "0.5",
+          "fiat": "10000.00"
+        },
+        {
+          "id": "b2",
+          "time": "2024-03-01T10:00:00+00:00",
+          "wallet": "B",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "0.5",
+          "fiat": "20000.00"
+        },
+        {
+          "id": "s1",
+          "time": "2024-09-01T10:00:00+01:00",
+          "wallet": "B",
+          "type": "sell",
+          "asset": "BTC",
+          "quantity": "0.4",
+          "fiat": "24000.00"
+        }
+      ],
+      "expected": {
+        "computations": [
+          {
+            "asset": "BTC",
+            "date": "2024-09-01",
+            "tax_year": "2024-25",
+            "events": [
+              "s1"
+            ],
+            "quantity": "0.4",
+            "proceeds": "24000.00",
+            "allowable_costs": "12000.00",
+            "incidental": "0.00",
+            "matches": [
+              {
+                "rule": "s104",
+                "acquired": null,
+                "quantity": "0.4",
+                "cost": "12000.00",
+                "pool_before": [
+                  "1",
+                  "30000.00"
+                ]
+              }
+            ],
+            "gain": "12000.00"
+          }
+        ],
+        "income": [],
+        "years": {
+          "2024-25": {
+            "sa108_section": "cryptoassets boxes 13.1-13.5",
+            "disposals": 1,
+            "proceeds": "24000.00",
+            "allowable_costs": "12000.00",
+            "gains": "12000.00",
+            "losses": "0.00",
+            "net_gains": "12000.00",
+            "annual_exempt_amount": "3000.00",
+            "gains_above_aea": "9000.00",
+            "loss_available": "0.00",
+            "boxes": {
+              "count": 1,
+              "proceeds": "24000",
+              "costs": "12000",
+              "gains": "12000",
+              "losses": "0"
+            },
+            "report_required": {
+              "proceeds_over_threshold": false,
+              "gains_over_aea": true,
+              "loss_to_claim": false
+            },
+            "misc_income_box17": "0.00",
+            "rate_split_2024_25": {
+              "gains_before_30_oct": "12000.00",
+              "losses_before_30_oct": "0.00",
+              "gains_from_30_oct": "0.00",
+              "losses_from_30_oct": "0.00"
+            }
+          }
+        },
+        "pools": {
+          "BTC": {
+            "quantity": "0.6",
+            "cost": "18000.00"
+          }
+        }
+      }
+    },
+    {
+      "id": "gb-13-swap-fee-split",
+      "title": "A token swap fee is split 50/50 between the disposal and the acquisition (CRYPTO22150)",
+      "rules": [
+        "GB-SWAP",
+        "GB-FEE-SWAP"
+      ],
+      "policy": {
+        "method": "uk_share_matching",
+        "pool_scope": "global",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2024-01-10T10:00:00+00:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "30000.00"
+        },
+        {
+          "id": "x1",
+          "time": "2024-05-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "swap",
+          "asset": "BTC",
+          "quantity": "0.5",
+          "fiat": "24850.00",
+          "in_asset": "USDT",
+          "in_quantity": "31000",
+          "in_fiat": "24800.00",
+          "fee_fiat": "50.00"
+        },
+        {
+          "id": "s1",
+          "time": "2024-07-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "USDT",
+          "quantity": "31000",
+          "fiat": "24900.00"
+        }
+      ],
+      "expected": {
+        "computations": [
+          {
+            "asset": "BTC",
+            "date": "2024-05-01",
+            "tax_year": "2024-25",
+            "events": [
+              "x1"
+            ],
+            "quantity": "0.5",
+            "proceeds": "24800.00",
+            "allowable_costs": "15025.00",
+            "incidental": "25.00",
+            "matches": [
+              {
+                "rule": "s104",
+                "acquired": null,
+                "quantity": "0.5",
+                "cost": "15000.00",
+                "pool_before": [
+                  "1",
+                  "30000.00"
+                ]
+              }
+            ],
+            "gain": "9775.00"
+          },
+          {
+            "asset": "USDT",
+            "date": "2024-07-01",
+            "tax_year": "2024-25",
+            "events": [
+              "s1"
+            ],
+            "quantity": "31000",
+            "proceeds": "24900.00",
+            "allowable_costs": "24875.00",
+            "incidental": "0.00",
+            "matches": [
+              {
+                "rule": "s104",
+                "acquired": null,
+                "quantity": "31000",
+                "cost": "24875.00",
+                "pool_before": [
+                  "31000",
+                  "24875.00"
+                ]
+              }
+            ],
+            "gain": "25.00"
+          }
+        ],
+        "income": [],
+        "years": {
+          "2024-25": {
+            "sa108_section": "cryptoassets boxes 13.1-13.5",
+            "disposals": 2,
+            "proceeds": "49700.00",
+            "allowable_costs": "39900.00",
+            "gains": "9800.00",
+            "losses": "0.00",
+            "net_gains": "9800.00",
+            "annual_exempt_amount": "3000.00",
+            "gains_above_aea": "6800.00",
+            "loss_available": "0.00",
+            "boxes": {
+              "count": 2,
+              "proceeds": "49700",
+              "costs": "39900",
+              "gains": "9800",
+              "losses": "0"
+            },
+            "report_required": {
+              "proceeds_over_threshold": false,
+              "gains_over_aea": true,
+              "loss_to_claim": false
+            },
+            "misc_income_box17": "0.00",
+            "rate_split_2024_25": {
+              "gains_before_30_oct": "9800.00",
+              "losses_before_30_oct": "0.00",
+              "gains_from_30_oct": "0.00",
+              "losses_from_30_oct": "0.00"
+            }
+          }
+        },
+        "pools": {
+          "BTC": {
+            "quantity": "0.5",
+            "cost": "15000.00"
+          },
+          "USDT": {
+            "quantity": "0",
+            "cost": "0.00"
+          }
+        }
+      }
+    },
+    {
+      "id": "gb-14-own-transfer-fee-disposal",
+      "title": "Moving coins between own wallets is no disposal; the network fee tokens are",
+      "rules": [
+        "GB-TRANSFER",
+        "GB-FEE-TRANSFER"
+      ],
+      "policy": {
+        "method": "uk_share_matching",
+        "pool_scope": "global",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2024-01-10T10:00:00+00:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "30000.00"
+        },
+        {
+          "id": "t1",
+          "time": "2024-03-01T10:00:00+00:00",
+          "wallet": "A",
+          "type": "transfer",
+          "asset": "BTC",
+          "quantity": "0.5",
+          "to_wallet": "B",
+          "fee_quantity": "0.0001",
+          "fee_fiat_value": "4.50"
+        }
+      ],
+      "expected": {
+        "computations": [
+          {
+            "asset": "BTC",
+            "date": "2024-03-01",
+            "tax_year": "2023-24",
+            "events": [
+              "t1:fee"
+            ],
+            "quantity": "0.0001",
+            "proceeds": "4.50",
+            "allowable_costs": "3.00",
+            "incidental": "0.00",
+            "matches": [
+              {
+                "rule": "s104",
+                "acquired": null,
+                "quantity": "0.0001",
+                "cost": "3.00",
+                "pool_before": [
+                  "1",
+                  "30000.00"
+                ]
+              }
+            ],
+            "gain": "1.50"
+          }
+        ],
+        "income": [],
+        "years": {
+          "2023-24": {
+            "sa108_section": "other property, assets and gains boxes 14-17, 19",
+            "disposals": 1,
+            "proceeds": "4.50",
+            "allowable_costs": "3.00",
+            "gains": "1.50",
+            "losses": "0.00",
+            "net_gains": "1.50",
+            "annual_exempt_amount": "6000.00",
+            "gains_above_aea": "0.00",
+            "loss_available": "0.00",
+            "boxes": {
+              "count": 1,
+              "proceeds": "4",
+              "costs": "3",
+              "gains": "1",
+              "losses": "0"
+            },
+            "report_required": {
+              "proceeds_over_threshold": false,
+              "gains_over_aea": false,
+              "loss_to_claim": false
+            },
+            "misc_income_box17": "0.00"
+          }
+        },
+        "pools": {
+          "BTC": {
+            "quantity": "0.9999",
+            "cost": "29997.00"
+          }
+        }
+      }
+    },
+    {
+      "id": "gb-15-misc-income-into-pool",
+      "title": "Non-trade mining and routing income are miscellaneous income; the coins join the pool at that value",
+      "rules": [
+        "GB-INC-MISC",
+        "GB-INC-ACQ"
+      ],
+      "policy": {
+        "method": "uk_share_matching",
+        "pool_scope": "global",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "i1",
+          "time": "2024-05-10T10:00:00+01:00",
+          "wallet": "A",
+          "type": "income",
+          "subkind": "mining",
+          "asset": "BTC",
+          "quantity": "0.01",
+          "fiat": "400.00"
+        },
+        {
+          "id": "i2",
+          "time": "2024-06-10T10:00:00+01:00",
+          "wallet": "A",
+          "type": "income",
+          "subkind": "routing_income",
+          "asset": "BTC",
+          "quantity": "0.002",
+          "fiat": "90.00"
+        },
+        {
+          "id": "s1",
+          "time": "2024-09-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "BTC",
+          "quantity": "0.012",
+          "fiat": "600.00"
+        }
+      ],
+      "expected": {
+        "computations": [
+          {
+            "asset": "BTC",
+            "date": "2024-09-01",
+            "tax_year": "2024-25",
+            "events": [
+              "s1"
+            ],
+            "quantity": "0.012",
+            "proceeds": "600.00",
+            "allowable_costs": "490.00",
+            "incidental": "0.00",
+            "matches": [
+              {
+                "rule": "s104",
+                "acquired": null,
+                "quantity": "0.012",
+                "cost": "490.00",
+                "pool_before": [
+                  "0.012",
+                  "490.00"
+                ]
+              }
+            ],
+            "gain": "110.00"
+          }
+        ],
+        "income": [
+          {
+            "event": "i1",
+            "date": "2024-05-10",
+            "tax_year": "2024-25",
+            "subkind": "mining",
+            "quantity": "0.01",
+            "value": "400.00"
+          },
+          {
+            "event": "i2",
+            "date": "2024-06-10",
+            "tax_year": "2024-25",
+            "subkind": "routing_income",
+            "quantity": "0.002",
+            "value": "90.00"
+          }
+        ],
+        "years": {
+          "2024-25": {
+            "sa108_section": "cryptoassets boxes 13.1-13.5",
+            "disposals": 1,
+            "proceeds": "600.00",
+            "allowable_costs": "490.00",
+            "gains": "110.00",
+            "losses": "0.00",
+            "net_gains": "110.00",
+            "annual_exempt_amount": "3000.00",
+            "gains_above_aea": "0.00",
+            "loss_available": "0.00",
+            "boxes": {
+              "count": 1,
+              "proceeds": "600",
+              "costs": "490",
+              "gains": "110",
+              "losses": "0"
+            },
+            "report_required": {
+              "proceeds_over_threshold": false,
+              "gains_over_aea": false,
+              "loss_to_claim": false
+            },
+            "misc_income_box17": "490.00",
+            "rate_split_2024_25": {
+              "gains_before_30_oct": "110.00",
+              "losses_before_30_oct": "0.00",
+              "gains_from_30_oct": "0.00",
+              "losses_from_30_oct": "0.00"
+            }
+          }
+        },
+        "pools": {
+          "BTC": {
+            "quantity": "0",
+            "cost": "0.00"
+          }
+        }
+      }
+    },
+    {
+      "id": "gb-16-aea-2024-25-exactly",
+      "title": "Net gains of exactly £3,000 in 2024-25: nothing above the annual exempt amount",
+      "rules": [
+        "GB-AEA"
+      ],
+      "policy": {
+        "method": "uk_share_matching",
+        "pool_scope": "global",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2024-05-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "0.1",
+          "fiat": "5000.00"
+        },
+        {
+          "id": "s1",
+          "time": "2024-12-01T10:00:00+00:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "BTC",
+          "quantity": "0.1",
+          "fiat": "8000.00"
+        }
+      ],
+      "expected": {
+        "computations": [
+          {
+            "asset": "BTC",
+            "date": "2024-12-01",
+            "tax_year": "2024-25",
+            "events": [
+              "s1"
+            ],
+            "quantity": "0.1",
+            "proceeds": "8000.00",
+            "allowable_costs": "5000.00",
+            "incidental": "0.00",
+            "matches": [
+              {
+                "rule": "s104",
+                "acquired": null,
+                "quantity": "0.1",
+                "cost": "5000.00",
+                "pool_before": [
+                  "0.1",
+                  "5000.00"
+                ]
+              }
+            ],
+            "gain": "3000.00"
+          }
+        ],
+        "income": [],
+        "years": {
+          "2024-25": {
+            "sa108_section": "cryptoassets boxes 13.1-13.5",
+            "disposals": 1,
+            "proceeds": "8000.00",
+            "allowable_costs": "5000.00",
+            "gains": "3000.00",
+            "losses": "0.00",
+            "net_gains": "3000.00",
+            "annual_exempt_amount": "3000.00",
+            "gains_above_aea": "0.00",
+            "loss_available": "0.00",
+            "boxes": {
+              "count": 1,
+              "proceeds": "8000",
+              "costs": "5000",
+              "gains": "3000",
+              "losses": "0"
+            },
+            "report_required": {
+              "proceeds_over_threshold": false,
+              "gains_over_aea": false,
+              "loss_to_claim": false
+            },
+            "misc_income_box17": "0.00",
+            "rate_split_2024_25": {
+              "gains_before_30_oct": "0.00",
+              "losses_before_30_oct": "0.00",
+              "gains_from_30_oct": "3000.00",
+              "losses_from_30_oct": "0.00"
+            }
+          }
+        },
+        "pools": {
+          "BTC": {
+            "quantity": "0",
+            "cost": "0.00"
+          }
+        }
+      }
+    },
+    {
+      "id": "gb-17-aea-2023-24-crossed",
+      "title": "2023-24 net gains of £6,000.01 exceed that year's £6,000 by one penny",
+      "rules": [
+        "GB-AEA",
+        "GB-REPORT-THRESHOLD"
+      ],
+      "policy": {
+        "method": "uk_share_matching",
+        "pool_scope": "global",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2023-05-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "0.2",
+          "fiat": "4000.00"
+        },
+        {
+          "id": "s1",
+          "time": "2023-12-01T10:00:00+00:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "BTC",
+          "quantity": "0.2",
+          "fiat": "10000.01"
+        }
+      ],
+      "expected": {
+        "computations": [
+          {
+            "asset": "BTC",
+            "date": "2023-12-01",
+            "tax_year": "2023-24",
+            "events": [
+              "s1"
+            ],
+            "quantity": "0.2",
+            "proceeds": "10000.01",
+            "allowable_costs": "4000.00",
+            "incidental": "0.00",
+            "matches": [
+              {
+                "rule": "s104",
+                "acquired": null,
+                "quantity": "0.2",
+                "cost": "4000.00",
+                "pool_before": [
+                  "0.2",
+                  "4000.00"
+                ]
+              }
+            ],
+            "gain": "6000.01"
+          }
+        ],
+        "income": [],
+        "years": {
+          "2023-24": {
+            "sa108_section": "other property, assets and gains boxes 14-17, 19",
+            "disposals": 1,
+            "proceeds": "10000.01",
+            "allowable_costs": "4000.00",
+            "gains": "6000.01",
+            "losses": "0.00",
+            "net_gains": "6000.01",
+            "annual_exempt_amount": "6000.00",
+            "gains_above_aea": "0.01",
+            "loss_available": "0.00",
+            "boxes": {
+              "count": 1,
+              "proceeds": "10000",
+              "costs": "4000",
+              "gains": "6000",
+              "losses": "0"
+            },
+            "report_required": {
+              "proceeds_over_threshold": false,
+              "gains_over_aea": true,
+              "loss_to_claim": false
+            },
+            "misc_income_box17": "0.00"
+          }
+        },
+        "pools": {
+          "BTC": {
+            "quantity": "0",
+            "cost": "0.00"
+          }
+        }
+      }
+    },
+    {
+      "id": "gb-18-losses-offset-before-aea",
+      "title": "Same-year losses reduce gains before the annual exempt amount; the loss still has to be reported",
+      "rules": [
+        "GB-LOSS",
+        "GB-AEA"
+      ],
+      "policy": {
+        "method": "uk_share_matching",
+        "pool_scope": "global",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2024-05-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "0.1",
+          "fiat": "5000.00"
+        },
+        {
+          "id": "b2",
+          "time": "2024-05-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "TOKX",
+          "quantity": "1000",
+          "fiat": "9000.00"
+        },
+        {
+          "id": "s1",
+          "time": "2024-08-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "BTC",
+          "quantity": "0.1",
+          "fiat": "10000.00"
+        },
+        {
+          "id": "s2",
+          "time": "2024-09-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "TOKX",
+          "quantity": "1000",
+          "fiat": "5000.00"
+        }
+      ],
+      "expected": {
+        "computations": [
+          {
+            "asset": "BTC",
+            "date": "2024-08-01",
+            "tax_year": "2024-25",
+            "events": [
+              "s1"
+            ],
+            "quantity": "0.1",
+            "proceeds": "10000.00",
+            "allowable_costs": "5000.00",
+            "incidental": "0.00",
+            "matches": [
+              {
+                "rule": "s104",
+                "acquired": null,
+                "quantity": "0.1",
+                "cost": "5000.00",
+                "pool_before": [
+                  "0.1",
+                  "5000.00"
+                ]
+              }
+            ],
+            "gain": "5000.00"
+          },
+          {
+            "asset": "TOKX",
+            "date": "2024-09-01",
+            "tax_year": "2024-25",
+            "events": [
+              "s2"
+            ],
+            "quantity": "1000",
+            "proceeds": "5000.00",
+            "allowable_costs": "9000.00",
+            "incidental": "0.00",
+            "matches": [
+              {
+                "rule": "s104",
+                "acquired": null,
+                "quantity": "1000",
+                "cost": "9000.00",
+                "pool_before": [
+                  "1000",
+                  "9000.00"
+                ]
+              }
+            ],
+            "gain": "-4000.00"
+          }
+        ],
+        "income": [],
+        "years": {
+          "2024-25": {
+            "sa108_section": "cryptoassets boxes 13.1-13.5",
+            "disposals": 2,
+            "proceeds": "15000.00",
+            "allowable_costs": "14000.00",
+            "gains": "5000.00",
+            "losses": "4000.00",
+            "net_gains": "1000.00",
+            "annual_exempt_amount": "3000.00",
+            "gains_above_aea": "0.00",
+            "loss_available": "0.00",
+            "boxes": {
+              "count": 2,
+              "proceeds": "15000",
+              "costs": "14000",
+              "gains": "5000",
+              "losses": "4000"
+            },
+            "report_required": {
+              "proceeds_over_threshold": false,
+              "gains_over_aea": true,
+              "loss_to_claim": true
+            },
+            "misc_income_box17": "0.00",
+            "rate_split_2024_25": {
+              "gains_before_30_oct": "5000.00",
+              "losses_before_30_oct": "4000.00",
+              "gains_from_30_oct": "0.00",
+              "losses_from_30_oct": "0.00"
+            }
+          }
+        },
+        "pools": {
+          "BTC": {
+            "quantity": "0",
+            "cost": "0.00"
+          },
+          "TOKX": {
+            "quantity": "0",
+            "cost": "0.00"
+          }
+        }
+      }
+    },
+    {
+      "id": "gb-19-rate-change-split-2024-25",
+      "title": "2024-25 gains are split at 30 October 2024 for the box 51 rate adjustment",
+      "rules": [
+        "GB-RATE-SPLIT",
+        "GB-TZ"
+      ],
+      "policy": {
+        "method": "uk_share_matching",
+        "pool_scope": "global",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2024-05-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "40000.00"
+        },
+        {
+          "id": "s1",
+          "time": "2024-10-29T23:30:00Z",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "BTC",
+          "quantity": "0.1",
+          "fiat": "6000.00"
+        },
+        {
+          "id": "s2",
+          "time": "2024-10-30T00:30:00Z",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "BTC",
+          "quantity": "0.1",
+          "fiat": "5500.00"
+        }
+      ],
+      "expected": {
+        "computations": [
+          {
+            "asset": "BTC",
+            "date": "2024-10-29",
+            "tax_year": "2024-25",
+            "events": [
+              "s1"
+            ],
+            "quantity": "0.1",
+            "proceeds": "6000.00",
+            "allowable_costs": "4000.00",
+            "incidental": "0.00",
+            "matches": [
+              {
+                "rule": "s104",
+                "acquired": null,
+                "quantity": "0.1",
+                "cost": "4000.00",
+                "pool_before": [
+                  "1",
+                  "40000.00"
+                ]
+              }
+            ],
+            "gain": "2000.00"
+          },
+          {
+            "asset": "BTC",
+            "date": "2024-10-30",
+            "tax_year": "2024-25",
+            "events": [
+              "s2"
+            ],
+            "quantity": "0.1",
+            "proceeds": "5500.00",
+            "allowable_costs": "4000.00",
+            "incidental": "0.00",
+            "matches": [
+              {
+                "rule": "s104",
+                "acquired": null,
+                "quantity": "0.1",
+                "cost": "4000.00",
+                "pool_before": [
+                  "0.9",
+                  "36000.00"
+                ]
+              }
+            ],
+            "gain": "1500.00"
+          }
+        ],
+        "income": [],
+        "years": {
+          "2024-25": {
+            "sa108_section": "cryptoassets boxes 13.1-13.5",
+            "disposals": 2,
+            "proceeds": "11500.00",
+            "allowable_costs": "8000.00",
+            "gains": "3500.00",
+            "losses": "0.00",
+            "net_gains": "3500.00",
+            "annual_exempt_amount": "3000.00",
+            "gains_above_aea": "500.00",
+            "loss_available": "0.00",
+            "boxes": {
+              "count": 2,
+              "proceeds": "11500",
+              "costs": "8000",
+              "gains": "3500",
+              "losses": "0"
+            },
+            "report_required": {
+              "proceeds_over_threshold": false,
+              "gains_over_aea": true,
+              "loss_to_claim": false
+            },
+            "misc_income_box17": "0.00",
+            "rate_split_2024_25": {
+              "gains_before_30_oct": "2000.00",
+              "losses_before_30_oct": "0.00",
+              "gains_from_30_oct": "1500.00",
+              "losses_from_30_oct": "0.00"
+            }
+          }
+        },
+        "pools": {
+          "BTC": {
+            "quantity": "0.8",
+            "cost": "32000.00"
+          }
+        }
+      }
+    },
+    {
+      "id": "gb-20-proceeds-threshold",
+      "title": "Proceeds over £50,000 require the SA108 pages even when the gain is small",
+      "rules": [
+        "GB-REPORT-THRESHOLD"
+      ],
+      "policy": {
+        "method": "uk_share_matching",
+        "pool_scope": "global",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2024-05-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "49900.00"
+        },
+        {
+          "id": "s1",
+          "time": "2024-11-01T10:00:00+00:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "50000.01"
+        }
+      ],
+      "expected": {
+        "computations": [
+          {
+            "asset": "BTC",
+            "date": "2024-11-01",
+            "tax_year": "2024-25",
+            "events": [
+              "s1"
+            ],
+            "quantity": "1",
+            "proceeds": "50000.01",
+            "allowable_costs": "49900.00",
+            "incidental": "0.00",
+            "matches": [
+              {
+                "rule": "s104",
+                "acquired": null,
+                "quantity": "1",
+                "cost": "49900.00",
+                "pool_before": [
+                  "1",
+                  "49900.00"
+                ]
+              }
+            ],
+            "gain": "100.01"
+          }
+        ],
+        "income": [],
+        "years": {
+          "2024-25": {
+            "sa108_section": "cryptoassets boxes 13.1-13.5",
+            "disposals": 1,
+            "proceeds": "50000.01",
+            "allowable_costs": "49900.00",
+            "gains": "100.01",
+            "losses": "0.00",
+            "net_gains": "100.01",
+            "annual_exempt_amount": "3000.00",
+            "gains_above_aea": "0.00",
+            "loss_available": "0.00",
+            "boxes": {
+              "count": 1,
+              "proceeds": "50000",
+              "costs": "49900",
+              "gains": "100",
+              "losses": "0"
+            },
+            "report_required": {
+              "proceeds_over_threshold": true,
+              "gains_over_aea": false,
+              "loss_to_claim": false
+            },
+            "misc_income_box17": "0.00",
+            "rate_split_2024_25": {
+              "gains_before_30_oct": "0.00",
+              "losses_before_30_oct": "0.00",
+              "gains_from_30_oct": "100.01",
+              "losses_from_30_oct": "0.00"
+            }
+          }
+        },
+        "pools": {
+          "BTC": {
+            "quantity": "0",
+            "cost": "0.00"
+          }
+        }
+      }
+    },
+    {
+      "id": "gb-21-insufficient-holdings-refused",
+      "title": "A disposal larger than every matching source fails closed",
+      "rules": [
+        "GB-FAILCLOSED"
+      ],
+      "policy": {
+        "method": "uk_share_matching",
+        "pool_scope": "global",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2024-05-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "0.1",
+          "fiat": "5000.00"
+        },
+        {
+          "id": "s1",
+          "time": "2024-06-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "BTC",
+          "quantity": "0.2",
+          "fiat": "11000.00"
+        }
+      ],
+      "expected": {
+        "refusal": {
+          "code": "insufficient_holdings",
+          "event": "s1",
+          "reason": "BTC disposal of 0.2 exceeds pool 0.1"
+        }
+      }
+    },
+    {
+      "id": "gb-22-airdrop-unclassified-refused",
+      "title": "An airdrop needs a reviewed classification (service or not) before it can be booked",
+      "rules": [
+        "GB-INC-AIRDROP",
+        "GB-FAILCLOSED"
+      ],
+      "policy": {
+        "method": "uk_share_matching",
+        "pool_scope": "global",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "a1",
+          "time": "2024-06-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "airdrop",
+          "subkind": "airdrop_unclassified",
+          "asset": "TOKZ",
+          "quantity": "100",
+          "fiat": "40.00"
+        }
+      ],
+      "expected": {
+        "refusal": {
+          "code": "airdrop_classification_required",
+          "event": "a1",
+          "reason": "CRYPTO21250: income only if received for a service; cost basis of a free airdrop is not settled"
+        }
+      }
+    },
+    {
+      "id": "gb-23-gift-unclassified-refused",
+      "title": "An outgoing gift needs the recipient class (spouse, charity, other) before it can be booked",
+      "rules": [
+        "GB-GIFT",
+        "GB-FAILCLOSED"
+      ],
+      "policy": {
+        "method": "uk_share_matching",
+        "pool_scope": "global",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2024-05-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "0.1",
+          "fiat": "5000.00"
+        },
+        {
+          "id": "g1",
+          "time": "2024-07-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "gift_out",
+          "asset": "BTC",
+          "quantity": "0.05",
+          "fiat": "2800.00"
+        }
+      ],
+      "expected": {
+        "refusal": {
+          "code": "gift_recipient_classification_required",
+          "event": "g1",
+          "reason": "spouse/civil partner (no gain/no loss) or charity relief must be reviewed"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,1253 @@
+{
+  "text": [
+    {
+      "name": "bearer",
+      "input": "Bearer planted-secret-123",
+      "expected": "Bearer <redacted>"
+    },
+    {
+      "name": "sk_secret",
+      "input": "sk-planted-secret",
+      "expected": "<redacted-secret>"
+    },
+    {
+      "name": "recovery_assignment",
+      "input": "recovery_phrase=legal winner thank yellow another planted seed",
+      "expected": "recovery_phrase=<redacted>"
+    },
+    {
+      "name": "assigned_secret",
+      "input": "password=planted-secret",
+      "expected": "password=<redacted>"
+    },
+    {
+      "name": "url",
+      "input": "https://user:planted-password@private.example/secret?token=planted",
+      "expected": "<url><redacted>"
+    },
+    {
+      "name": "timestamp",
+      "input": "2026-10-29T11:22:33Z",
+      "expected": "<timestamp>"
+    },
+    {
+      "name": "hex64",
+      "input": "abababababababababababababababababababababababababababababababab",
+      "expected": "<hex6<number>>"
+    },
+    {
+      "name": "xkey",
+      "input": "upubAb12Ab12Ab12Ab12Ab12Ab12Ab12Ab12Ab12Ab12Ab12Ab12Ab12Ab12Ab12Ab12Ab12Ab12Ab12Ab12",
+      "expected": "<xkey>"
+    },
+    {
+      "name": "sp_descriptor",
+      "input": "sp(planted-sensitive-key-material)",
+      "expected": "<silent-payment>"
+    },
+    {
+      "name": "sp_text",
+      "input": "spscan1qacdefacdefacdefacdefacdefacdefacdefacdefacdefacdefacdefacdefacdefacdefacdef",
+      "expected": "<silent-payment>"
+    },
+    {
+      "name": "bech32",
+      "input": "bc1qacdefacdefacdefacdefacdefacdefacdefacdefacdefacdefacdefacdef",
+      "expected": "<address>"
+    },
+    {
+      "name": "path",
+      "input": "/home/alice/private-wallet.json",
+      "expected": "<path>"
+    },
+    {
+      "name": "amount",
+      "input": "2500 msat",
+      "expected": "<amount>"
+    },
+    {
+      "name": "number",
+      "input": "2500",
+      "expected": "<number>"
+    },
+    {
+      "name": "ordering",
+      "input": "auth_header=Bearer planted-token seed_phrase=legal winner thank password=secret https://a:b@c/private 2500sats",
+      "expected": "auth_header=<redacted> <redacted> seed_phrase=<redacted> password=<redacted> <url> <amount>"
+    },
+    {
+      "name": "unicode_15",
+      "input": "BEARER planted-token",
+      "expected": "Bearer <redacted>"
+    },
+    {
+      "name": "unicode_16",
+      "input": "\u017fk-planted-token",
+      "expected": "\u017fk-planted-token"
+    },
+    {
+      "name": "unicode_17",
+      "input": "s\u212a-planted-token",
+      "expected": "s\u212a-planted-token"
+    },
+    {
+      "name": "unicode_18",
+      "input": "password\u001c=\u001fplanted",
+      "expected": "password\u001c=\u001f<redacted>"
+    },
+    {
+      "name": "unicode_19",
+      "input": "x\u00e9123",
+      "expected": "x\u00e9<number>"
+    },
+    {
+      "name": "unicode_20",
+      "input": "\u00e9123",
+      "expected": "\u00e9<number>"
+    },
+    {
+      "name": "unicode_21",
+      "input": "\uff11\uff12\uff13 sat",
+      "expected": "<amount>"
+    },
+    {
+      "name": "unicode_22",
+      "input": "Bearer\u2003planted-token",
+      "expected": "Bearer <redacted>"
+    },
+    {
+      "name": "unicode_23",
+      "input": "sp(\nplanted-secret)",
+      "expected": "sp(\nplanted-secret)"
+    },
+    {
+      "name": "unicode_24",
+      "input": "2500sat\n",
+      "expected": "<amount>\n"
+    },
+    {
+      "name": "unicode_25",
+      "input": "seed=alpha beta token=abc123",
+      "expected": "seed=<redacted> token=<redacted>"
+    },
+    {
+      "name": "unicode_26",
+      "input": "api_key=\"planted\"",
+      "expected": "api_key=<redacted>"
+    },
+    {
+      "name": "unicode_27",
+      "input": "C:\\Users\\alice\\private.json",
+      "expected": "<path>"
+    },
+    {
+      "name": "unicode_28",
+      "input": "safe 42e3 mixed",
+      "expected": "safe <number>2e3 mixed"
+    }
+  ],
+  "sensitive_keys": [
+    {
+      "key": "account",
+      "expected": true
+    },
+    {
+      "key": "nested_ACCOUNT_suffix",
+      "expected": false
+    },
+    {
+      "key": "address",
+      "expected": true
+    },
+    {
+      "key": "nested_ADDRESS_suffix",
+      "expected": true
+    },
+    {
+      "key": "amount",
+      "expected": true
+    },
+    {
+      "key": "nested_AMOUNT_suffix",
+      "expected": true
+    },
+    {
+      "key": "asset",
+      "expected": true
+    },
+    {
+      "key": "nested_ASSET_suffix",
+      "expected": false
+    },
+    {
+      "key": "auth",
+      "expected": true
+    },
+    {
+      "key": "nested_AUTH_suffix",
+      "expected": true
+    },
+    {
+      "key": "backend",
+      "expected": true
+    },
+    {
+      "key": "nested_BACKEND_suffix",
+      "expected": false
+    },
+    {
+      "key": "balance",
+      "expected": true
+    },
+    {
+      "key": "nested_BALANCE_suffix",
+      "expected": true
+    },
+    {
+      "key": "basis",
+      "expected": true
+    },
+    {
+      "key": "nested_BASIS_suffix",
+      "expected": true
+    },
+    {
+      "key": "blinding",
+      "expected": true
+    },
+    {
+      "key": "nested_BLINDING_suffix",
+      "expected": true
+    },
+    {
+      "key": "code",
+      "expected": true
+    },
+    {
+      "key": "nested_CODE_suffix",
+      "expected": true
+    },
+    {
+      "key": "config",
+      "expected": true
+    },
+    {
+      "key": "nested_CONFIG_suffix",
+      "expected": true
+    },
+    {
+      "key": "cookie",
+      "expected": true
+    },
+    {
+      "key": "nested_COOKIE_suffix",
+      "expected": true
+    },
+    {
+      "key": "counterparty",
+      "expected": true
+    },
+    {
+      "key": "nested_COUNTERPARTY_suffix",
+      "expected": true
+    },
+    {
+      "key": "credential",
+      "expected": true
+    },
+    {
+      "key": "nested_CREDENTIAL_suffix",
+      "expected": true
+    },
+    {
+      "key": "cursor",
+      "expected": true
+    },
+    {
+      "key": "nested_CURSOR_suffix",
+      "expected": true
+    },
+    {
+      "key": "date",
+      "expected": true
+    },
+    {
+      "key": "nested_DATE_suffix",
+      "expected": true
+    },
+    {
+      "key": "description",
+      "expected": true
+    },
+    {
+      "key": "nested_DESCRIPTION_suffix",
+      "expected": true
+    },
+    {
+      "key": "descriptor",
+      "expected": true
+    },
+    {
+      "key": "nested_DESCRIPTOR_suffix",
+      "expected": true
+    },
+    {
+      "key": "end",
+      "expected": true
+    },
+    {
+      "key": "nested_END_suffix",
+      "expected": true
+    },
+    {
+      "key": "env",
+      "expected": true
+    },
+    {
+      "key": "nested_ENV_suffix",
+      "expected": true
+    },
+    {
+      "key": "external",
+      "expected": true
+    },
+    {
+      "key": "nested_EXTERNAL_suffix",
+      "expected": true
+    },
+    {
+      "key": "fee",
+      "expected": true
+    },
+    {
+      "key": "nested_FEE_suffix",
+      "expected": true
+    },
+    {
+      "key": "file",
+      "expected": true
+    },
+    {
+      "key": "nested_FILE_suffix",
+      "expected": true
+    },
+    {
+      "key": "fingerprint",
+      "expected": true
+    },
+    {
+      "key": "nested_FINGERPRINT_suffix",
+      "expected": true
+    },
+    {
+      "key": "gain",
+      "expected": true
+    },
+    {
+      "key": "nested_GAIN_suffix",
+      "expected": true
+    },
+    {
+      "key": "id",
+      "expected": true
+    },
+    {
+      "key": "nested_ID_suffix",
+      "expected": true
+    },
+    {
+      "key": "key",
+      "expected": true
+    },
+    {
+      "key": "nested_KEY_suffix",
+      "expected": true
+    },
+    {
+      "key": "label",
+      "expected": true
+    },
+    {
+      "key": "nested_LABEL_suffix",
+      "expected": true
+    },
+    {
+      "key": "loss",
+      "expected": true
+    },
+    {
+      "key": "nested_LOSS_suffix",
+      "expected": true
+    },
+    {
+      "key": "mnemonic",
+      "expected": true
+    },
+    {
+      "key": "nested_MNEMONIC_suffix",
+      "expected": true
+    },
+    {
+      "key": "name",
+      "expected": true
+    },
+    {
+      "key": "nested_NAME_suffix",
+      "expected": true
+    },
+    {
+      "key": "note",
+      "expected": true
+    },
+    {
+      "key": "nested_NOTE_suffix",
+      "expected": true
+    },
+    {
+      "key": "output",
+      "expected": true
+    },
+    {
+      "key": "nested_OUTPUT_suffix",
+      "expected": true
+    },
+    {
+      "key": "pair_id",
+      "expected": true
+    },
+    {
+      "key": "nested_PAIR-ID_suffix",
+      "expected": true
+    },
+    {
+      "key": "passphrase",
+      "expected": true
+    },
+    {
+      "key": "nested_PASSPHRASE_suffix",
+      "expected": true
+    },
+    {
+      "key": "password",
+      "expected": true
+    },
+    {
+      "key": "nested_PASSWORD_suffix",
+      "expected": true
+    },
+    {
+      "key": "path",
+      "expected": true
+    },
+    {
+      "key": "nested_PATH_suffix",
+      "expected": true
+    },
+    {
+      "key": "payload",
+      "expected": true
+    },
+    {
+      "key": "nested_PAYLOAD_suffix",
+      "expected": false
+    },
+    {
+      "key": "price",
+      "expected": true
+    },
+    {
+      "key": "nested_PRICE_suffix",
+      "expected": true
+    },
+    {
+      "key": "proceeds",
+      "expected": true
+    },
+    {
+      "key": "nested_PROCEEDS_suffix",
+      "expected": true
+    },
+    {
+      "key": "profile",
+      "expected": true
+    },
+    {
+      "key": "nested_PROFILE_suffix",
+      "expected": true
+    },
+    {
+      "key": "rate",
+      "expected": true
+    },
+    {
+      "key": "nested_RATE_suffix",
+      "expected": true
+    },
+    {
+      "key": "raw",
+      "expected": true
+    },
+    {
+      "key": "nested_RAW_suffix",
+      "expected": true
+    },
+    {
+      "key": "recovery",
+      "expected": true
+    },
+    {
+      "key": "nested_RECOVERY_suffix",
+      "expected": true
+    },
+    {
+      "key": "ref",
+      "expected": true
+    },
+    {
+      "key": "nested_REF_suffix",
+      "expected": true
+    },
+    {
+      "key": "secret",
+      "expected": true
+    },
+    {
+      "key": "nested_SECRET_suffix",
+      "expected": true
+    },
+    {
+      "key": "seed",
+      "expected": true
+    },
+    {
+      "key": "nested_SEED_suffix",
+      "expected": true
+    },
+    {
+      "key": "source",
+      "expected": true
+    },
+    {
+      "key": "nested_SOURCE_suffix",
+      "expected": true
+    },
+    {
+      "key": "start",
+      "expected": true
+    },
+    {
+      "key": "nested_START_suffix",
+      "expected": true
+    },
+    {
+      "key": "store",
+      "expected": true
+    },
+    {
+      "key": "nested_STORE_suffix",
+      "expected": true
+    },
+    {
+      "key": "tag",
+      "expected": true
+    },
+    {
+      "key": "nested_TAG_suffix",
+      "expected": false
+    },
+    {
+      "key": "time",
+      "expected": true
+    },
+    {
+      "key": "nested_TIME_suffix",
+      "expected": true
+    },
+    {
+      "key": "timestamp",
+      "expected": true
+    },
+    {
+      "key": "nested_TIMESTAMP_suffix",
+      "expected": true
+    },
+    {
+      "key": "token",
+      "expected": true
+    },
+    {
+      "key": "nested_TOKEN_suffix",
+      "expected": true
+    },
+    {
+      "key": "transaction",
+      "expected": true
+    },
+    {
+      "key": "nested_TRANSACTION_suffix",
+      "expected": false
+    },
+    {
+      "key": "tx",
+      "expected": true
+    },
+    {
+      "key": "nested_TX_suffix",
+      "expected": true
+    },
+    {
+      "key": "type",
+      "expected": true
+    },
+    {
+      "key": "nested_TYPE_suffix",
+      "expected": false
+    },
+    {
+      "key": "url",
+      "expected": true
+    },
+    {
+      "key": "nested_URL_suffix",
+      "expected": true
+    },
+    {
+      "key": "user",
+      "expected": true
+    },
+    {
+      "key": "nested_USER_suffix",
+      "expected": true
+    },
+    {
+      "key": "value",
+      "expected": true
+    },
+    {
+      "key": "nested_VALUE_suffix",
+      "expected": true
+    },
+    {
+      "key": "wallet",
+      "expected": true
+    },
+    {
+      "key": "nested_WALLET_suffix",
+      "expected": true
+    },
+    {
+      "key": "workspace",
+      "expected": true
+    },
+    {
+      "key": "nested_WORKSPACE_suffix",
+      "expected": true
+    },
+    {
+      "key": "kind",
+      "expected": false
+    },
+    {
+      "key": "kindness",
+      "expected": false
+    },
+    {
+      "key": "foo",
+      "expected": false
+    },
+    {
+      "key": "txid",
+      "expected": false
+    },
+    {
+      "key": "addressed",
+      "expected": false
+    },
+    {
+      "key": "count",
+      "expected": false
+    },
+    {
+      "key": "passphrasefile",
+      "expected": false
+    },
+    {
+      "key": "dry_run",
+      "expected": false
+    },
+    {
+      "key": "DB_PASSWORD",
+      "expected": true
+    },
+    {
+      "key": "sp_descriptor",
+      "expected": true
+    },
+    {
+      "key": "data-root",
+      "expected": false
+    }
+  ],
+  "details": [
+    {
+      "input_bytes": "{\"password\": null}",
+      "expected_bytes": "{\n  \"password\": null\n}\n"
+    },
+    {
+      "input_bytes": "{\"password\": true}",
+      "expected_bytes": "{\n  \"password\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"password\": false}",
+      "expected_bytes": "{\n  \"password\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"password\": 1}",
+      "expected_bytes": "{\n  \"password\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"password\": 1.25}",
+      "expected_bytes": "{\n  \"password\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"password\": []}",
+      "expected_bytes": "{\n  \"password\": {\n    \"items\": 0\n  }\n}\n"
+    },
+    {
+      "input_bytes": "{\"password\": [\"secret1\", \"secret2\"]}",
+      "expected_bytes": "{\n  \"password\": {\n    \"items\": 2\n  }\n}\n"
+    },
+    {
+      "input_bytes": "{\"password\": {\"private_name\": \"planted\", \"path\": [\"/private/secret\"]}}",
+      "expected_bytes": "{\n  \"password\": {\n    \"keys\": [\n      \"path\",\n      \"private_name\"\n    ]\n  }\n}\n"
+    },
+    {
+      "input_bytes": "{\"password\": \"Bearer planted-sensitive-token\"}",
+      "expected_bytes": "{\n  \"password\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"wallet_config\": null}",
+      "expected_bytes": "{\n  \"wallet_config\": null\n}\n"
+    },
+    {
+      "input_bytes": "{\"wallet_config\": true}",
+      "expected_bytes": "{\n  \"wallet_config\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"wallet_config\": false}",
+      "expected_bytes": "{\n  \"wallet_config\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"wallet_config\": 1}",
+      "expected_bytes": "{\n  \"wallet_config\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"wallet_config\": 1.25}",
+      "expected_bytes": "{\n  \"wallet_config\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"wallet_config\": []}",
+      "expected_bytes": "{\n  \"wallet_config\": {\n    \"items\": 0\n  }\n}\n"
+    },
+    {
+      "input_bytes": "{\"wallet_config\": [\"secret1\", \"secret2\"]}",
+      "expected_bytes": "{\n  \"wallet_config\": {\n    \"items\": 2\n  }\n}\n"
+    },
+    {
+      "input_bytes": "{\"wallet_config\": {\"private_name\": \"planted\", \"path\": [\"/private/secret\"]}}",
+      "expected_bytes": "{\n  \"wallet_config\": {\n    \"keys\": [\n      \"path\",\n      \"private_name\"\n    ]\n  }\n}\n"
+    },
+    {
+      "input_bytes": "{\"wallet_config\": \"Bearer planted-sensitive-token\"}",
+      "expected_bytes": "{\n  \"wallet_config\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"payload\": null}",
+      "expected_bytes": "{\n  \"payload\": null\n}\n"
+    },
+    {
+      "input_bytes": "{\"payload\": true}",
+      "expected_bytes": "{\n  \"payload\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"payload\": false}",
+      "expected_bytes": "{\n  \"payload\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"payload\": 1}",
+      "expected_bytes": "{\n  \"payload\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"payload\": 1.25}",
+      "expected_bytes": "{\n  \"payload\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"payload\": []}",
+      "expected_bytes": "{\n  \"payload\": {\n    \"items\": 0\n  }\n}\n"
+    },
+    {
+      "input_bytes": "{\"payload\": [\"secret1\", \"secret2\"]}",
+      "expected_bytes": "{\n  \"payload\": {\n    \"items\": 2\n  }\n}\n"
+    },
+    {
+      "input_bytes": "{\"payload\": {\"private_name\": \"planted\", \"path\": [\"/private/secret\"]}}",
+      "expected_bytes": "{\n  \"payload\": {\n    \"keys\": [\n      \"path\",\n      \"private_name\"\n    ]\n  }\n}\n"
+    },
+    {
+      "input_bytes": "{\"payload\": \"Bearer planted-sensitive-token\"}",
+      "expected_bytes": "{\n  \"payload\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"safe\": null}",
+      "expected_bytes": "{\n  \"safe\": null\n}\n"
+    },
+    {
+      "input_bytes": "{\"safe\": true}",
+      "expected_bytes": "{\n  \"safe\": true\n}\n"
+    },
+    {
+      "input_bytes": "{\"safe\": false}",
+      "expected_bytes": "{\n  \"safe\": false\n}\n"
+    },
+    {
+      "input_bytes": "{\"safe\": 1}",
+      "expected_bytes": "{\n  \"safe\": \"<number>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"safe\": 1.25}",
+      "expected_bytes": "{\n  \"safe\": \"<number>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"safe\": []}",
+      "expected_bytes": "{\n  \"safe\": {\n    \"items\": 0\n  }\n}\n"
+    },
+    {
+      "input_bytes": "{\"safe\": [\"secret1\", \"secret2\"]}",
+      "expected_bytes": "{\n  \"safe\": {\n    \"items\": 2\n  }\n}\n"
+    },
+    {
+      "input_bytes": "{\"safe\": {\"private_name\": \"planted\", \"path\": [\"/private/secret\"]}}",
+      "expected_bytes": "{\n  \"safe\": {\n    \"private_name\": \"<redacted>\",\n    \"path\": {\n      \"items\": 1\n    }\n  }\n}\n"
+    },
+    {
+      "input_bytes": "{\"safe\": \"Bearer planted-sensitive-token\"}",
+      "expected_bytes": "{\n  \"safe\": \"Bearer <redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"balance\": null}",
+      "expected_bytes": "{\n  \"balance\": null\n}\n"
+    },
+    {
+      "input_bytes": "{\"balance\": true}",
+      "expected_bytes": "{\n  \"balance\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"balance\": false}",
+      "expected_bytes": "{\n  \"balance\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"balance\": 1}",
+      "expected_bytes": "{\n  \"balance\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"balance\": 1.25}",
+      "expected_bytes": "{\n  \"balance\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"balance\": []}",
+      "expected_bytes": "{\n  \"balance\": {\n    \"items\": 0\n  }\n}\n"
+    },
+    {
+      "input_bytes": "{\"balance\": [\"secret1\", \"secret2\"]}",
+      "expected_bytes": "{\n  \"balance\": {\n    \"items\": 2\n  }\n}\n"
+    },
+    {
+      "input_bytes": "{\"balance\": {\"private_name\": \"planted\", \"path\": [\"/private/secret\"]}}",
+      "expected_bytes": "{\n  \"balance\": {\n    \"keys\": [\n      \"path\",\n      \"private_name\"\n    ]\n  }\n}\n"
+    },
+    {
+      "input_bytes": "{\"balance\": \"Bearer planted-sensitive-token\"}",
+      "expected_bytes": "{\n  \"balance\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"transaction\": null}",
+      "expected_bytes": "{\n  \"transaction\": null\n}\n"
+    },
+    {
+      "input_bytes": "{\"transaction\": true}",
+      "expected_bytes": "{\n  \"transaction\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"transaction\": false}",
+      "expected_bytes": "{\n  \"transaction\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"transaction\": 1}",
+      "expected_bytes": "{\n  \"transaction\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"transaction\": 1.25}",
+      "expected_bytes": "{\n  \"transaction\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"transaction\": []}",
+      "expected_bytes": "{\n  \"transaction\": {\n    \"items\": 0\n  }\n}\n"
+    },
+    {
+      "input_bytes": "{\"transaction\": [\"secret1\", \"secret2\"]}",
+      "expected_bytes": "{\n  \"transaction\": {\n    \"items\": 2\n  }\n}\n"
+    },
+    {
+      "input_bytes": "{\"transaction\": {\"private_name\": \"planted\", \"path\": [\"/private/secret\"]}}",
+      "expected_bytes": "{\n  \"transaction\": {\n    \"keys\": [\n      \"path\",\n      \"private_name\"\n    ]\n  }\n}\n"
+    },
+    {
+      "input_bytes": "{\"transaction\": \"Bearer planted-sensitive-token\"}",
+      "expected_bytes": "{\n  \"transaction\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"asset\": null}",
+      "expected_bytes": "{\n  \"asset\": null\n}\n"
+    },
+    {
+      "input_bytes": "{\"asset\": true}",
+      "expected_bytes": "{\n  \"asset\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"asset\": false}",
+      "expected_bytes": "{\n  \"asset\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"asset\": 1}",
+      "expected_bytes": "{\n  \"asset\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"asset\": 1.25}",
+      "expected_bytes": "{\n  \"asset\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"asset\": []}",
+      "expected_bytes": "{\n  \"asset\": {\n    \"items\": 0\n  }\n}\n"
+    },
+    {
+      "input_bytes": "{\"asset\": [\"secret1\", \"secret2\"]}",
+      "expected_bytes": "{\n  \"asset\": {\n    \"items\": 2\n  }\n}\n"
+    },
+    {
+      "input_bytes": "{\"asset\": {\"private_name\": \"planted\", \"path\": [\"/private/secret\"]}}",
+      "expected_bytes": "{\n  \"asset\": {\n    \"keys\": [\n      \"path\",\n      \"private_name\"\n    ]\n  }\n}\n"
+    },
+    {
+      "input_bytes": "{\"asset\": \"Bearer planted-sensitive-token\"}",
+      "expected_bytes": "{\n  \"asset\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"foo\": null}",
+      "expected_bytes": "{\n  \"foo\": null\n}\n"
+    },
+    {
+      "input_bytes": "{\"foo\": true}",
+      "expected_bytes": "{\n  \"foo\": true\n}\n"
+    },
+    {
+      "input_bytes": "{\"foo\": false}",
+      "expected_bytes": "{\n  \"foo\": false\n}\n"
+    },
+    {
+      "input_bytes": "{\"foo\": 1}",
+      "expected_bytes": "{\n  \"foo\": \"<number>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"foo\": 1.25}",
+      "expected_bytes": "{\n  \"foo\": \"<number>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"foo\": []}",
+      "expected_bytes": "{\n  \"foo\": {\n    \"items\": 0\n  }\n}\n"
+    },
+    {
+      "input_bytes": "{\"foo\": [\"secret1\", \"secret2\"]}",
+      "expected_bytes": "{\n  \"foo\": {\n    \"items\": 2\n  }\n}\n"
+    },
+    {
+      "input_bytes": "{\"foo\": {\"private_name\": \"planted\", \"path\": [\"/private/secret\"]}}",
+      "expected_bytes": "{\n  \"foo\": {\n    \"private_name\": \"<redacted>\",\n    \"path\": {\n      \"items\": 1\n    }\n  }\n}\n"
+    },
+    {
+      "input_bytes": "{\"foo\": \"Bearer planted-sensitive-token\"}",
+      "expected_bytes": "{\n  \"foo\": \"Bearer <redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"password\": {\"1\": \"secret\", \"2\": \"secret\"}}",
+      "expected_bytes": "{\n  \"password\": {\n    \"keys\": [\n      \"<number>\",\n      \"<number>\"\n    ]\n  }\n}\n"
+    },
+    {
+      "input_bytes": "{\"1\": \"first\", \"2\": \"second\"}",
+      "expected_bytes": "{\n  \"<number>\": \"second\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"safe\": \"before\\ud800 Bearer planted-secret after\\udfff\"}",
+      "expected_bytes": "{\n  \"safe\": \"before\\ud800 Bearer <redacted> after\\udfff\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"\\ud800password\": \"planted\"}",
+      "expected_bytes": "{\n  \"\\ud800password\": \"planted\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"password_\\ud800\": \"Bearer planted-sensitive-secret\"}",
+      "expected_bytes": "{\n  \"password_\\ud800\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"\\ud800_password\": {\"api_key\": \"sk-planted-secret\"}}",
+      "expected_bytes": "{\n  \"\\ud800_password\": {\n    \"keys\": [\n      \"api_key\"\n    ]\n  }\n}\n"
+    },
+    {
+      "input_bytes": "{\"account\": \"sk-planted-account-secret-value\"}",
+      "expected_bytes": "{\n  \"account\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"address\": \"sk-planted-address-secret-value\"}",
+      "expected_bytes": "{\n  \"address\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"amount\": \"sk-planted-amount-secret-value\"}",
+      "expected_bytes": "{\n  \"amount\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"asset\": \"sk-planted-asset-secret-value\"}",
+      "expected_bytes": "{\n  \"asset\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"auth\": \"sk-planted-auth-secret-value\"}",
+      "expected_bytes": "{\n  \"auth\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"backend\": \"sk-planted-backend-secret-value\"}",
+      "expected_bytes": "{\n  \"backend\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"balance\": \"sk-planted-balance-secret-value\"}",
+      "expected_bytes": "{\n  \"balance\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"basis\": \"sk-planted-basis-secret-value\"}",
+      "expected_bytes": "{\n  \"basis\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"blinding\": \"sk-planted-blinding-secret-value\"}",
+      "expected_bytes": "{\n  \"blinding\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"code\": \"sk-planted-code-secret-value\"}",
+      "expected_bytes": "{\n  \"code\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"config\": \"sk-planted-config-secret-value\"}",
+      "expected_bytes": "{\n  \"config\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"cookie\": \"sk-planted-cookie-secret-value\"}",
+      "expected_bytes": "{\n  \"cookie\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"counterparty\": \"sk-planted-counterparty-secret-value\"}",
+      "expected_bytes": "{\n  \"counterparty\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"credential\": \"sk-planted-credential-secret-value\"}",
+      "expected_bytes": "{\n  \"credential\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"cursor\": \"sk-planted-cursor-secret-value\"}",
+      "expected_bytes": "{\n  \"cursor\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"date\": \"sk-planted-date-secret-value\"}",
+      "expected_bytes": "{\n  \"date\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"description\": \"sk-planted-description-secret-value\"}",
+      "expected_bytes": "{\n  \"description\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"descriptor\": \"sk-planted-descriptor-secret-value\"}",
+      "expected_bytes": "{\n  \"descriptor\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"end\": \"sk-planted-end-secret-value\"}",
+      "expected_bytes": "{\n  \"end\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"env\": \"sk-planted-env-secret-value\"}",
+      "expected_bytes": "{\n  \"env\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"external\": \"sk-planted-external-secret-value\"}",
+      "expected_bytes": "{\n  \"external\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"fee\": \"sk-planted-fee-secret-value\"}",
+      "expected_bytes": "{\n  \"fee\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"file\": \"sk-planted-file-secret-value\"}",
+      "expected_bytes": "{\n  \"file\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"fingerprint\": \"sk-planted-fingerprint-secret-value\"}",
+      "expected_bytes": "{\n  \"fingerprint\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"gain\": \"sk-planted-gain-secret-value\"}",
+      "expected_bytes": "{\n  \"gain\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"id\": \"sk-planted-id-secret-value\"}",
+      "expected_bytes": "{\n  \"id\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"key\": \"sk-planted-key-secret-value\"}",
+      "expected_bytes": "{\n  \"key\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"label\": \"sk-planted-label-secret-value\"}",
+      "expected_bytes": "{\n  \"label\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"loss\": \"sk-planted-loss-secret-value\"}",
+      "expected_bytes": "{\n  \"loss\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"mnemonic\": \"sk-planted-mnemonic-secret-value\"}",
+      "expected_bytes": "{\n  \"mnemonic\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"name\": \"sk-planted-name-secret-value\"}",
+      "expected_bytes": "{\n  \"name\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"note\": \"sk-planted-note-secret-value\"}",
+      "expected_bytes": "{\n  \"note\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"output\": \"sk-planted-output-secret-value\"}",
+      "expected_bytes": "{\n  \"output\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"pair_id\": \"sk-planted-pair-id-secret-value\"}",
+      "expected_bytes": "{\n  \"pair_id\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"passphrase\": \"sk-planted-passphrase-secret-value\"}",
+      "expected_bytes": "{\n  \"passphrase\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"password\": \"sk-planted-password-secret-value\"}",
+      "expected_bytes": "{\n  \"password\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"path\": \"sk-planted-path-secret-value\"}",
+      "expected_bytes": "{\n  \"path\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"payload\": \"sk-planted-payload-secret-value\"}",
+      "expected_bytes": "{\n  \"payload\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"price\": \"sk-planted-price-secret-value\"}",
+      "expected_bytes": "{\n  \"price\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"proceeds\": \"sk-planted-proceeds-secret-value\"}",
+      "expected_bytes": "{\n  \"proceeds\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"profile\": \"sk-planted-profile-secret-value\"}",
+      "expected_bytes": "{\n  \"profile\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"rate\": \"sk-planted-rate-secret-value\"}",
+      "expected_bytes": "{\n  \"rate\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"raw\": \"sk-planted-raw-secret-value\"}",
+      "expected_bytes": "{\n  \"raw\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"recovery\": \"sk-planted-recovery-secret-value\"}",
+      "expected_bytes": "{\n  \"recovery\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"ref\": \"sk-planted-ref-secret-value\"}",
+      "expected_bytes": "{\n  \"ref\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"secret\": \"sk-planted-secret-secret-value\"}",
+      "expected_bytes": "{\n  \"secret\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"seed\": \"sk-planted-seed-secret-value\"}",
+      "expected_bytes": "{\n  \"seed\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"source\": \"sk-planted-source-secret-value\"}",
+      "expected_bytes": "{\n  \"source\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"start\": \"sk-planted-start-secret-value\"}",
+      "expected_bytes": "{\n  \"start\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"store\": \"sk-planted-store-secret-value\"}",
+      "expected_bytes": "{\n  \"store\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"tag\": \"sk-planted-tag-secret-value\"}",
+      "expected_bytes": "{\n  \"tag\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"time\": \"sk-planted-time-secret-value\"}",
+      "expected_bytes": "{\n  \"time\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"timestamp\": \"sk-planted-timestamp-secret-value\"}",
+      "expected_bytes": "{\n  \"timestamp\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"token\": \"sk-planted-token-secret-value\"}",
+      "expected_bytes": "{\n  \"token\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"transaction\": \"sk-planted-transaction-secret-value\"}",
+      "expected_bytes": "{\n  \"transaction\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"tx\": \"sk-planted-tx-secret-value\"}",
+      "expected_bytes": "{\n  \"tx\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"type\": \"sk-planted-type-secret-value\"}",
+      "expected_bytes": "{\n  \"type\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"url\": \"sk-planted-url-secret-value\"}",
+      "expected_bytes": "{\n  \"url\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"user\": \"sk-planted-user-secret-value\"}",
+      "expected_bytes": "{\n  \"user\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"value\": \"sk-planted-value-secret-value\"}",
+      "expected_bytes": "{\n  \"value\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"wallet\": \"sk-planted-wallet-secret-value\"}",
+      "expected_bytes": "{\n  \"wallet\": \"<redacted>\"\n}\n"
+    },
+    {
+      "input_bytes": "{\"workspace\": \"sk-planted-workspace-secret-value\"}",
+      "expected_bytes": "{\n  \"workspace\": \"<redacted>\"\n}\n"
+    }
+  ]
+}

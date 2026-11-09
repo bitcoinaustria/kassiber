@@ -1,0 +1,636 @@
+{
+ "segment": [
+  [
+   "rpcpassword=Pw9Leak",
+   "rpcpassword=[redacted]"
+  ],
+  [
+   "dbprivkeyraw=Pw9Leak",
+   "dbprivkeyraw=[redacted]"
+  ],
+  [
+   "krakenpassword=Pw9Leak",
+   "krakenpassword=[redacted]"
+  ],
+  [
+   "passwordbackup=Pw9Leak",
+   "passwordbackup=[redacted]"
+  ],
+  [
+   "dnsseed=Pw9Leak",
+   "dnsseed=Pw9Leak"
+  ],
+  [
+   "bypass=Pw9Leak",
+   "bypass=Pw9Leak"
+  ],
+  [
+   "mytokenizer=Pw9Leak",
+   "mytokenizer=Pw9Leak"
+  ],
+  [
+   "rpcSECRETkeyOLD=Pw9Leak",
+   "rpcSECRETkeyOLD=[redacted]"
+  ],
+  [
+   "newPWDb64=Pw9Leak",
+   "newPWDb64=[redacted]"
+  ],
+  [
+   "pruneheight=12",
+   "pruneheight=12"
+  ],
+  [
+   "ftprune=Pw9Leak",
+   "ftprune=[redacted]"
+  ],
+  [
+   "rootpwdconfirm=Pw9Leak",
+   "rootpwdconfirm=[redacted]"
+  ],
+  [
+   "db_pw=Pw9Leak",
+   "db_pw=[redacted]"
+  ],
+  [
+   "pw_hash=abc",
+   "pw_hash=abc"
+  ],
+  [
+   "author=Pw9Leak",
+   "author=Pw9Leak"
+  ],
+  [
+   "user_id=Pw9Leak",
+   "user_id=[redacted]"
+  ],
+  [
+   "sighash=abc",
+   "sighash=abc"
+  ],
+  [
+   "api key: Pw9Leak",
+   "api key: [redacted]"
+  ],
+  [
+   "\"Secret Key\": \"Pw9Leak\"",
+   "\"Secret Key\": \"[redacted]\""
+  ],
+  [
+   "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxpassword=Pw9Leak",
+   "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxpassword=[redacted]"
+  ],
+  [
+   "secret_v2=Pw9Leak",
+   "secret_v2=[redacted]"
+  ],
+  [
+   "2FA_code=123456",
+   "2FA_code=[redacted]"
+  ],
+  [
+   "passwordless=true",
+   "passwordless=true"
+  ],
+  [
+   "seedwords=Pw9Leak",
+   "seedwords=[redacted]"
+  ]
+ ],
+ "count": [
+  [
+   "max_tokens: 16",
+   "max_tokens: 16"
+  ],
+  [
+   "descriptors=true",
+   "descriptors=true"
+  ],
+  [
+   "disable_private_keys=true",
+   "disable_private_keys=true"
+  ],
+  [
+   "\"max_tokens\": 16",
+   "\"max_tokens\": 16"
+  ],
+  [
+   "\"seed\": 42",
+   "\"seed\": 42"
+  ],
+  [
+   "\"password\": null",
+   "\"password\": null"
+  ],
+  [
+   "\"token_count\": 12, \"x\": 1",
+   "\"token_count\": 12, \"x\": 1"
+  ],
+  [
+   "token_limit=1.5",
+   "token_limit=1.5"
+  ],
+  [
+   "\"prompt_tokens_details\": {\"cached_tokens\": 0}",
+   "\"prompt_tokens_details\": {\"cached_tokens\": 0}"
+  ],
+  [
+   "password=16",
+   "password=[redacted]"
+  ],
+  [
+   "tokens=3",
+   "tokens=3"
+  ]
+ ],
+ "literal": [
+  [
+   "\"password\": 123, \"next\": 1",
+   "\"password\": [redacted], \"next\": 1"
+  ],
+  [
+   "password: 123\n  continued",
+   "password: [redacted]"
+  ],
+  [
+   "password: 123)\nnext",
+   "password: [redacted]\nnext"
+  ],
+  [
+   "--password 123 --verbose",
+   "--password [redacted] --verbose"
+  ],
+  [
+   "password=12a",
+   "password=[redacted]"
+  ],
+  [
+   "\"token\": true}",
+   "\"token\": true}"
+  ],
+  [
+   "password: 1e5 x",
+   "password: [redacted]"
+  ]
+ ],
+ "flag": [
+  [
+   "bitcoind -rpcpassword Pw9Leak -daemon",
+   "bitcoind -rpcpassword [redacted] -daemon"
+  ],
+  [
+   "cmd --password Pw9Leak --verbose",
+   "cmd --password [redacted] --verbose"
+  ],
+  [
+   "cmd --password correct -horse battery",
+   "cmd --password [redacted]"
+  ],
+  [
+   "docker run -e TOKEN Pw9Leak -e NETWORK=mainnet",
+   "docker run -e TOKEN [redacted] -e NETWORK=mainnet"
+  ],
+  [
+   "kassiber --db-passphrase Pw9Leak -nodebuglogfile",
+   "kassiber --db-passphrase [redacted] -nodebuglogfile"
+  ],
+  [
+   "cmd --seed-words 24",
+   "cmd --seed-words 24"
+  ],
+  [
+   "Use --password to set a value.",
+   "Use --password to set a value."
+  ],
+  [
+   "cmd --password Pw9Leak\\ --next",
+   "cmd --password [redacted]"
+  ],
+  [
+   "curl -u alice:Pw9Leak https://h",
+   "curl -u [redacted]"
+  ]
+ ],
+ "continuation": [
+  [
+   "password: Pw9\n  Leak\nnext: 1",
+   "password: [redacted]\nnext: 1"
+  ],
+  [
+   "macaroon: |\n  0201036c\n  Pw9Leak\nother: 1",
+   "macaroon: [redacted]\nother: 1"
+  ],
+  [
+   "- password: Pw9Leak\n  - x",
+   "- password: [redacted]\n  - x"
+  ],
+  [
+   "token: Pw9\r\n  Leak\r\nnext",
+   "token: [redacted]\r\nnext"
+  ],
+  [
+   "password: a\n\n  b",
+   "password: [redacted]\n\n  b"
+  ],
+  [
+   "secret: {\n  a: Pw9Leak\n}\nnext",
+   "secret: [redacted]\nnext"
+  ],
+  [
+   "password: \"Pw9\nLeak",
+   "password: \"[redacted]\nLeak"
+  ]
+ ],
+ "url": [
+  [
+   "https://alice:Pw9Leak@host/path",
+   "https://[redacted-credentials]@host/path"
+  ],
+  [
+   "https://alice:Pw9Leak@host",
+   "https://[redacted-credentials]@host"
+  ],
+  [
+   "http://u:Pw9%40Leak@h/",
+   "http://[redacted-credentials]@h/"
+  ],
+  [
+   "https://Pw9#Leak@host",
+   "https://[redacted-credentials]@host"
+  ],
+  [
+   "see https://example.com/@handle:Pw9Leak today",
+   "see https://example.com/@[redacted-credentials] today"
+  ],
+  [
+   "https://example.com/user@mail.com",
+   "https://example.com/user@mail.com"
+  ],
+  [
+   "url=https://h\nalice:Pw9Leak@host",
+   "url=https://[redacted-credentials]"
+  ],
+  [
+   "https://a.example,http://alice:Pw9Leak@target/",
+   "https://[redacted-credentials]/"
+  ],
+  [
+   "ftp://u:p@ss@word@host/",
+   "ftp://[redacted-credentials]@host/"
+  ],
+  [
+   "https://example.com/path\nPw9Leak@other",
+   "https://[redacted-credentials]"
+  ],
+  [
+   "\"url\": \"http://h\", \"password\": \"Pw9Leak\"",
+   "\"url\": \"http://h\", \"password\": \"[redacted]\""
+  ],
+  [
+   "https://u:%40q (ZK1Pw9Leak@h",
+   "https://[redacted-credentials]"
+  ],
+  [
+   "http://[::1]:8332/x",
+   "http://[::1]:8332/x"
+  ],
+  [
+   "https://host:8332@x",
+   "https://[redacted-credentials]@x"
+  ]
+ ],
+ "path_token": [
+  [
+   "https://api.telegram.org/bot123456:Pw9Leak/getMe",
+   "https://api.telegram.org/bot[redacted]"
+  ],
+  [
+   "https://hooks.slack.com/services/T00/B00/Pw9Leak",
+   "https://hooks.slack.com/services/T00/B00/[redacted]"
+  ],
+  [
+   "https://discord.com/api/webhooks/123/Pw9Leak",
+   "https://discord.com/api/webhooks/123/[redacted]"
+  ],
+  [
+   "token xoxb-1-Pw9Leak",
+   "token [redacted]"
+  ],
+  [
+   "xapp-1-Pw9Leak",
+   "[redacted]"
+  ],
+  [
+   "https://hooks.slack.com/workflows/Pw9Leak",
+   "https://hooks.slack.com/workflows/[redacted]"
+  ]
+ ],
+ "keyed": [
+  [
+   "password=\"Pw9Leak\" next=1",
+   "password=\"[redacted]\" next=1"
+  ],
+  [
+   "password='''Pw9Leak''' x",
+   "password='''[redacted]''' x"
+  ],
+  [
+   "password=\"Pw9Leak\"x",
+   "password=\"[redacted]\""
+  ],
+  [
+   "{\"password\":\"Pw9Leak\",\"ok\":1}",
+   "{\"password\":\"[redacted]\",\"ok\":1}"
+  ],
+  [
+   "Authorization: Basic Pw9Leak\n  more",
+   "Authorization: [redacted]"
+  ],
+  [
+   "Cookie: a=Pw9Leak; b=2",
+   "Cookie: [redacted]"
+  ],
+  [
+   "password -> Pw9Leak",
+   "password -> [redacted]"
+  ],
+  [
+   "password := Pw9Leak",
+   "password := [redacted]"
+  ],
+  [
+   "pass: 123 tests ",
+   "pass: [redacted] "
+  ],
+  [
+   "user: alice",
+   "user: alice"
+  ],
+  [
+   "auth: ok",
+   "auth: ok"
+  ],
+  [
+   "password: none",
+   "password: none"
+  ],
+  [
+   "url?key=Pw9Leak&x=1",
+   "url?key=[redacted]"
+  ],
+  [
+   "password: $(cat secret)",
+   "password: [redacted]"
+  ],
+  [
+   "password: `Pw9Leak`",
+   "password: [redacted]"
+  ]
+ ],
+ "xml": [
+  [
+   "<password>Pw9Leak</password>",
+   "<password>[redacted]</password>"
+  ],
+  [
+   "<entry key=\"password\" value=\"Pw9Leak\"/>",
+   "<entry key=\"password\" value=\"[redacted]\"/>"
+  ],
+  [
+   "<key>password</key><string>Pw9Leak</string>",
+   "<key>password</key><string>[redacted]</string>"
+  ],
+  [
+   "<input name=\"password\" value=\"Pw9Leak\">",
+   "<input name=\"password\" value=\"[redacted]\">"
+  ],
+  [
+   "<user>alice</user>",
+   "<user>alice</user>"
+  ],
+  [
+   "<ns:token>Pw9Leak</ns:token >",
+   "<ns:token>[redacted]</ns:token >"
+  ],
+  [
+   "<entrykey=\"password\"value=\"Pw9Leak\">",
+   "<entrykey=\"password\"value=\"[redacted]\">[redacted]"
+  ],
+  [
+   "<password>Pw9Leak",
+   "<password>[redacted]"
+  ],
+  [
+   "<meta name=\"token\" content=\"Pw9Leak\">",
+   "<meta name=\"token\" content=\"[redacted]\">"
+  ]
+ ],
+ "pair": [
+  [
+   "name=password value=Pw9Leak",
+   "name=password value=[redacted]"
+  ],
+  [
+   "{\"name\": \"api_key\", \"value\": \"Pw9Leak\"}",
+   "{\"name\": \"api_key\", \"value\": \"[redacted]\"}"
+  ],
+  [
+   "key: token, value: Pw9Leak",
+   "key: token, value: [redacted]"
+  ],
+  [
+   "name=xvalue: Pw9Leak",
+   "name=xvalue: Pw9Leak"
+  ],
+  [
+   "name=a:password value=Pw9Leak",
+   "name=a:password value=[redacted]"
+  ],
+  [
+   "\"key\":\"secret\",\"value\":'Pw9Leak'",
+   "\"key\":\"secret\",\"value\":'[redacted]'"
+  ]
+ ],
+ "cli": [
+  [
+   "curl -u alice:Pw9Leak https://h",
+   "curl -u [redacted]"
+  ],
+  [
+   "sshpass -p Pw9Leak ssh h",
+   "sshpass -p [redacted]"
+  ],
+  [
+   "mysql -u root -pPw9Leak db",
+   "mysql -u [redacted]"
+  ],
+  [
+   "curl -u \"alice:Pw9Leak\" x",
+   "curl -u \"[redacted]\" x"
+  ],
+  [
+   "xcurl -u a:b",
+   "xcurl -u [redacted]"
+  ]
+ ],
+ "bare": [
+  [
+   "alice:Pw9Leak@host",
+   "[redacted-credentials]@host"
+  ],
+  [
+   "mailto:alice@example.com",
+   "mailto:alice@example.com"
+  ],
+  [
+   "password:x@h",
+   "password:[redacted]"
+  ],
+  [
+   "a:b@c:d@e",
+   "[redacted-credentials]@e"
+  ],
+  [
+   "user:pw@h https://x",
+   "user:[redacted]"
+  ],
+  [
+   "sip:alice@h",
+   "sip:alice@h"
+  ]
+ ],
+ "view": [
+  [
+   "http%3A%2F%2Falice%3APw9Leak%40host",
+   "http%3A%2F%2F[redacted-credentials]@host"
+  ],
+  [
+   "https:\\/\\/alice:Pw9Leak@host",
+   "https:\\/\\/[redacted-credentials]@host"
+  ],
+  [
+   "http&#58;//alice:Pw9Leak&#64;host",
+   "http&#58;//[redacted-credentials]@host"
+  ],
+  [
+   "\\u0070assword=Pw9Leak",
+   "\\u0070assword=[redacted]"
+  ],
+  [
+   "\uff48\uff54\uff54\uff50://alice:Pw9Leak@host",
+   "\uff48\uff54\uff54\uff50://[redacted-credentials]@host"
+  ],
+  [
+   "&#xD800;password=Pw9Leak",
+   "&#xD800;password=[redacted]"
+  ],
+  [
+   "%2570assword=Pw9Leak",
+   "%2570assword=[redacted]"
+  ],
+  [
+   "pa&#115;sword=Pw9Leak",
+   "pa&#115;sword=[redacted]"
+  ]
+ ],
+ "merge": [
+  [
+   "http://[::1]?rpcpassword=p@Leak9x failed",
+   "http://[redacted]"
+  ],
+  [
+   "http://dom;password:PartA,PartB@host:8332/",
+   "http://[redacted]"
+  ],
+  [
+   "\"HTTP://a%40b:#QJBBBBRDCJQ%2F%2F@[::1]:#f,\"password\":\"x\"",
+   "\"HTTP://[redacted]\"password\":\"[redacted]\""
+  ],
+  [
+   "password=x token: |\n  a\n\n  Pw9Leak\nstatus ok",
+   "password=[redacted]\nstatus ok"
+  ],
+  [
+   "https://alice:Pw9Leak@host password=Pw9Leak2",
+   "https://[redacted-credentials]@host password=[redacted]"
+  ],
+  [
+   "<password>https://u:Pw9Leak@h</password> ok",
+   "<password>[redacted]</password> ok"
+  ],
+  [
+   "token=Pw9Leak https://u:p@h",
+   "token=[redacted]"
+  ],
+  [
+   "name=password value=https://u:Pw9Leak@h",
+   "name=password value=[redacted]"
+  ]
+ ],
+ "floor": [
+  [
+   "xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi",
+   "[redacted-private-key]"
+  ],
+  [
+   "nsec1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqq",
+   "[redacted-private-key]"
+  ],
+  [
+   "5HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH",
+   "[redacted-private-key]"
+  ],
+  [
+   "Kwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww",
+   "[redacted-private-key]"
+  ],
+  [
+   "xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8",
+   "[redacted-extended-key]"
+  ],
+  [
+   "sp(aaaaaaaaaaaa)",
+   "[redacted-silent-payment-descriptor]"
+  ],
+  [
+   "spscan1qaaaaaaaaaaaaaaaaaaaa",
+   "[redacted-silent-payment-key]"
+  ],
+  [
+   "tsp1qaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "[redacted-silent-payment-address]"
+  ],
+  [
+   "wpkh(aaaaaaaaaaaaaaaaaaaa)",
+   "[redacted-descriptor]"
+  ],
+  [
+   "combo(bbbbbbbbbbbbbbbb)",
+   "[redacted-descriptor]"
+  ],
+  [
+   "Bearer abc.def==",
+   "Bearer [redacted]"
+  ],
+  [
+   "sk-abcdefgh",
+   "[redacted-secret]"
+  ],
+  [
+   "sk-abcdef.x_",
+   "[redacted-secret]"
+  ],
+  [
+   "sk-abc.def",
+   "[redacted-secret]"
+  ],
+  [
+   "Bearer\u00a0tok",
+   "Bearer [redacted]"
+  ],
+  [
+   "xsk-abcdefgh",
+   "xsk-abcdefgh"
+  ]
+ ]
+}

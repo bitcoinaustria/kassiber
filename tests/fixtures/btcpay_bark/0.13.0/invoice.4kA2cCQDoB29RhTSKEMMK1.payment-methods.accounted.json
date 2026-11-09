@@ -1,0 +1,59 @@
+{
+  "body": [
+    {
+      "activated": true,
+      "additionalData": {
+        "invoiceId": "0f2734d17c3aecdf5409d8c9865490391a7c77a69a1aebd75a7e7cd8a0bca5b5",
+        "paymentHash": "0f2734d17c3aecdf5409d8c9865490391a7c77a69a1aebd75a7e7cd8a0bca5b5",
+        "preimage": "80274356aad1e9b789a6b3161f7a0a826fb5911f09dfac561dbd3d41a77d7ce0"
+      },
+      "amount": "0.0015",
+      "currency": "BTC",
+      "destination": "lnbcrt1500u1p40ptx4sp5a8p3jf9m06cujmxlqmmmjvca5dqtmjxwmpa9hdxagyfq6st3944spp5punnf5tu8tkd74qfmrycv4ys8yd8caaxngdwh4660e7d3g9u5k6sdqqxqy9gcqcqzgq9qyysgqupg6l39y4qjpmj0gs3pyc20hxa4th5aug3s9f3ce4rll9v0d8k7xyj9qsknq3nal8z970sj7ux7jf683r7hqrnjdms0f58hkhaq4uccp5gy5hm",
+      "due": "0",
+      "paymentLink": "lightning:lnbcrt1500u1p40ptx4sp5a8p3jf9m06cujmxlqmmmjvca5dqtmjxwmpa9hdxagyfq6st3944spp5punnf5tu8tkd74qfmrycv4ys8yd8caaxngdwh4660e7d3g9u5k6sdqqxqy9gcqcqzgq9qyysgqupg6l39y4qjpmj0gs3pyc20hxa4th5aug3s9f3ce4rll9v0d8k7xyj9qsknq3nal8z970sj7ux7jf683r7hqrnjdms0f58hkhaq4uccp5gy5hm",
+      "paymentMethodFee": "0",
+      "paymentMethodId": "BTC-LN",
+      "paymentMethodPaid": "0.0015",
+      "payments": [
+        {
+          "destination": "lnbcrt1500u1p40ptx4sp5a8p3jf9m06cujmxlqmmmjvca5dqtmjxwmpa9hdxagyfq6st3944spp5punnf5tu8tkd74qfmrycv4ys8yd8caaxngdwh4660e7d3g9u5k6sdqqxqy9gcqcqzgq9qyysgqupg6l39y4qjpmj0gs3pyc20hxa4th5aug3s9f3ce4rll9v0d8k7xyj9qsknq3nal8z970sj7ux7jf683r7hqrnjdms0f58hkhaq4uccp5gy5hm",
+          "fee": "0",
+          "id": "0f2734d17c3aecdf5409d8c9865490391a7c77a69a1aebd75a7e7cd8a0bca5b5",
+          "receivedDate": 1794157782,
+          "status": "Settled",
+          "value": "0.0015"
+        }
+      ],
+      "rate": "1.0",
+      "totalPaid": "0.0015"
+    },
+    {
+      "activated": true,
+      "additionalData": {
+        "arkAddress": "tark1ppms64dpzqqpzxyacpq3u3v43s3dwm3nsej9z26vc8948lwy4qw9n7z86rr9rdq3zqyppq0ugfrs506dqxn9sxdnf2drapz2jm54u60nwm2kukh9yuvlp6gse0u2c7",
+        "onchainAddress": null
+      },
+      "amount": "0.0015",
+      "currency": "BTC",
+      "destination": "tark1ppms64dpzqqpzxyacpq3u3v43s3dwm3nsej9z26vc8948lwy4qw9n7z86rr9rdq3zqyppq0ugfrs506dqxn9sxdnf2drapz2jm54u60nwm2kukh9yuvlp6gse0u2c7",
+      "due": "0",
+      "paymentLink": "bitcoin:?amount=0.0&lightning=lnbcrt1500u1p40ptx4sp5a8p3jf9m06cujmxlqmmmjvca5dqtmjxwmpa9hdxagyfq6st3944spp5punnf5tu8tkd74qfmrycv4ys8yd8caaxngdwh4660e7d3g9u5k6sdqqxqy9gcqcqzgq9qyysgqupg6l39y4qjpmj0gs3pyc20hxa4th5aug3s9f3ce4rll9v0d8k7xyj9qsknq3nal8z970sj7ux7jf683r7hqrnjdms0f58hkhaq4uccp5gy5hm&ark=tark1ppms64dpzqqpzxyacpq3u3v43s3dwm3nsej9z26vc8948lwy4qw9n7z86rr9rdq3zqyppq0ugfrs506dqxn9sxdnf2drapz2jm54u60nwm2kukh9yuvlp6gse0u2c7",
+      "paymentMethodFee": "0",
+      "paymentMethodId": "BTC-ARK",
+      "paymentMethodPaid": "0",
+      "payments": [],
+      "rate": "1.0",
+      "totalPaid": "0.0015"
+    }
+  ],
+  "request": {
+    "key": "invoices",
+    "method": "GET",
+    "path": "/api/v1/stores/{storeId}/invoices/4kA2cCQDoB29RhTSKEMMK1/payment-methods?onlyAccountedPayments=true",
+    "permissions": [
+      "btcpay.store.canviewinvoices"
+    ]
+  },
+  "status": 200
+}

@@ -1,0 +1,4608 @@
+[
+  {
+    "operation": "transfers.rules.create",
+    "args": {
+      "name": "\u20ac \ud83d\ude80",
+      "predicate": {
+        "out_asset": "BTC",
+        "in_asset": "LBTC",
+        "max_fee_pct": "0.000_001",
+        "min_confidence": "exact"
+      }
+    },
+    "id": "id-0",
+    "now": "2025-06-01T00:00:00Z",
+    "result": {
+      "id": "id-0",
+      "workspace_id": "w",
+      "profile_id": "p",
+      "name": "\u20ac \ud83d\ude80",
+      "predicate": {
+        "out_asset": "BTC",
+        "in_asset": "LBTC",
+        "max_fee_pct": 1e-06,
+        "min_confidence": "exact"
+      },
+      "kind": "manual",
+      "policy": "carrying-value",
+      "enabled": true,
+      "created_at": "2025-06-01T00:00:00Z",
+      "updated_at": "2025-06-01T00:00:00Z"
+    },
+    "rows": {
+      "swap_matching_rules": [
+        {
+          "id": "00000000-0000-0000-0000-00000000000b",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "z",
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-00000000000c",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "a",
+          "predicate_json": "{\"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "id-0",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "\u20ac \ud83d\ude80",
+          "predicate_json": "{\"in_asset\": \"LBTC\", \"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "invalid",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{bad",
+          "kind": "bad",
+          "policy": "bad",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        }
+      ],
+      "transaction_pair_dismissals": [],
+      "profiles": [
+        {
+          "id": "p",
+          "workspace_id": "w",
+          "label": "Book",
+          "fiat_currency": "EUR",
+          "tax_country": "at",
+          "tax_long_term_days": 365,
+          "gains_algorithm": "FIFO",
+          "require_coarse_review": 0,
+          "bitcoin_rail_carrying_value": 1,
+          "cost_basis_pool_scope": "global",
+          "journal_input_version": 6,
+          "last_processed_input_version": 0,
+          "required_journal_semantics_version": 1,
+          "journal_semantics_version": 0,
+          "last_processed_at": null,
+          "last_processed_tx_count": 0,
+          "ownership_review_counts_json": null,
+          "created_at": "2025-01-01T00:00:00Z",
+          "swap_candidate_count": null
+        }
+      ]
+    }
+  },
+  {
+    "operation": "transfers.rules.create",
+    "args": {
+      "predicate": {}
+    },
+    "id": "id-1",
+    "now": "2025-06-01T01:00:00Z",
+    "result": {
+      "id": "id-1",
+      "workspace_id": "w",
+      "profile_id": "p",
+      "name": null,
+      "predicate": {},
+      "kind": "manual",
+      "policy": "carrying-value",
+      "enabled": true,
+      "created_at": "2025-06-01T01:00:00Z",
+      "updated_at": "2025-06-01T01:00:00Z"
+    },
+    "rows": {
+      "swap_matching_rules": [
+        {
+          "id": "00000000-0000-0000-0000-00000000000b",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "z",
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-00000000000c",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "a",
+          "predicate_json": "{\"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "id-0",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "\u20ac \ud83d\ude80",
+          "predicate_json": "{\"in_asset\": \"LBTC\", \"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "id-1",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T01:00:00Z",
+          "updated_at": "2025-06-01T01:00:00Z"
+        },
+        {
+          "id": "invalid",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{bad",
+          "kind": "bad",
+          "policy": "bad",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        }
+      ],
+      "transaction_pair_dismissals": [],
+      "profiles": [
+        {
+          "id": "p",
+          "workspace_id": "w",
+          "label": "Book",
+          "fiat_currency": "EUR",
+          "tax_country": "at",
+          "tax_long_term_days": 365,
+          "gains_algorithm": "FIFO",
+          "require_coarse_review": 0,
+          "bitcoin_rail_carrying_value": 1,
+          "cost_basis_pool_scope": "global",
+          "journal_input_version": 6,
+          "last_processed_input_version": 0,
+          "required_journal_semantics_version": 1,
+          "journal_semantics_version": 0,
+          "last_processed_at": null,
+          "last_processed_tx_count": 0,
+          "ownership_review_counts_json": null,
+          "created_at": "2025-01-01T00:00:00Z",
+          "swap_candidate_count": null
+        }
+      ]
+    }
+  },
+  {
+    "operation": "transfers.rules.create",
+    "args": {
+      "predicate": {
+        "out_wallet_id": " \u2000",
+        "max_fee_pct": 0
+      },
+      "enabled": false,
+      "policy": "taxable",
+      "kind": "peg-in"
+    },
+    "id": "id-2",
+    "now": "2025-06-01T02:00:00Z",
+    "result": {
+      "id": "id-2",
+      "workspace_id": "w",
+      "profile_id": "p",
+      "name": null,
+      "predicate": {
+        "out_wallet_id": " \u2000",
+        "max_fee_pct": 0.0
+      },
+      "kind": "peg-in",
+      "policy": "taxable",
+      "enabled": false,
+      "created_at": "2025-06-01T02:00:00Z",
+      "updated_at": "2025-06-01T02:00:00Z"
+    },
+    "rows": {
+      "swap_matching_rules": [
+        {
+          "id": "00000000-0000-0000-0000-00000000000b",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "z",
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-00000000000c",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "a",
+          "predicate_json": "{\"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "id-0",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "\u20ac \ud83d\ude80",
+          "predicate_json": "{\"in_asset\": \"LBTC\", \"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "id-1",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T01:00:00Z",
+          "updated_at": "2025-06-01T01:00:00Z"
+        },
+        {
+          "id": "id-2",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{\"max_fee_pct\": 0.0, \"out_wallet_id\": \" \\u2000\"}",
+          "kind": "peg-in",
+          "policy": "taxable",
+          "enabled": 0,
+          "created_at": "2025-06-01T02:00:00Z",
+          "updated_at": "2025-06-01T02:00:00Z"
+        },
+        {
+          "id": "invalid",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{bad",
+          "kind": "bad",
+          "policy": "bad",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        }
+      ],
+      "transaction_pair_dismissals": [],
+      "profiles": [
+        {
+          "id": "p",
+          "workspace_id": "w",
+          "label": "Book",
+          "fiat_currency": "EUR",
+          "tax_country": "at",
+          "tax_long_term_days": 365,
+          "gains_algorithm": "FIFO",
+          "require_coarse_review": 0,
+          "bitcoin_rail_carrying_value": 1,
+          "cost_basis_pool_scope": "global",
+          "journal_input_version": 6,
+          "last_processed_input_version": 0,
+          "required_journal_semantics_version": 1,
+          "journal_semantics_version": 0,
+          "last_processed_at": null,
+          "last_processed_tx_count": 0,
+          "ownership_review_counts_json": null,
+          "created_at": "2025-01-01T00:00:00Z",
+          "swap_candidate_count": null
+        }
+      ]
+    }
+  },
+  {
+    "operation": "transfers.rules.enable",
+    "args": {
+      "rule_id": "invalid"
+    },
+    "id": "id-3",
+    "now": "2025-06-01T03:00:00Z",
+    "error": {
+      "code": "validation",
+      "message": "Invalid auto-pair rule cannot be enabled",
+      "hint": "Delete and recreate the rule with a valid predicate.",
+      "details": {
+        "reason": "predicate JSON is invalid; unsupported kind 'bad'; unsupported policy 'bad'"
+      }
+    },
+    "rows": {
+      "swap_matching_rules": [
+        {
+          "id": "00000000-0000-0000-0000-00000000000b",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "z",
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-00000000000c",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "a",
+          "predicate_json": "{\"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "id-0",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "\u20ac \ud83d\ude80",
+          "predicate_json": "{\"in_asset\": \"LBTC\", \"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "id-1",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T01:00:00Z",
+          "updated_at": "2025-06-01T01:00:00Z"
+        },
+        {
+          "id": "id-2",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{\"max_fee_pct\": 0.0, \"out_wallet_id\": \" \\u2000\"}",
+          "kind": "peg-in",
+          "policy": "taxable",
+          "enabled": 0,
+          "created_at": "2025-06-01T02:00:00Z",
+          "updated_at": "2025-06-01T02:00:00Z"
+        },
+        {
+          "id": "invalid",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{bad",
+          "kind": "bad",
+          "policy": "bad",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        }
+      ],
+      "transaction_pair_dismissals": [],
+      "profiles": [
+        {
+          "id": "p",
+          "workspace_id": "w",
+          "label": "Book",
+          "fiat_currency": "EUR",
+          "tax_country": "at",
+          "tax_long_term_days": 365,
+          "gains_algorithm": "FIFO",
+          "require_coarse_review": 0,
+          "bitcoin_rail_carrying_value": 1,
+          "cost_basis_pool_scope": "global",
+          "journal_input_version": 6,
+          "last_processed_input_version": 0,
+          "required_journal_semantics_version": 1,
+          "journal_semantics_version": 0,
+          "last_processed_at": null,
+          "last_processed_tx_count": 0,
+          "ownership_review_counts_json": null,
+          "created_at": "2025-01-01T00:00:00Z",
+          "swap_candidate_count": null
+        }
+      ]
+    }
+  },
+  {
+    "operation": "transfers.rules.disable",
+    "args": {
+      "rule_id": "invalid"
+    },
+    "id": "id-4",
+    "now": "2025-06-01T04:00:00Z",
+    "result": {
+      "id": "invalid",
+      "workspace_id": "w",
+      "profile_id": "p",
+      "name": null,
+      "predicate": {},
+      "kind": "manual",
+      "policy": "carrying-value",
+      "enabled": false,
+      "created_at": "2025-06-01T00:00:00Z",
+      "updated_at": "2025-06-01T04:00:00Z",
+      "invalid_reason": "predicate JSON is invalid; unsupported kind 'bad'; unsupported policy 'bad'"
+    },
+    "rows": {
+      "swap_matching_rules": [
+        {
+          "id": "00000000-0000-0000-0000-00000000000b",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "z",
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-00000000000c",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "a",
+          "predicate_json": "{\"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "id-0",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "\u20ac \ud83d\ude80",
+          "predicate_json": "{\"in_asset\": \"LBTC\", \"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "id-1",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T01:00:00Z",
+          "updated_at": "2025-06-01T01:00:00Z"
+        },
+        {
+          "id": "id-2",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{\"max_fee_pct\": 0.0, \"out_wallet_id\": \" \\u2000\"}",
+          "kind": "peg-in",
+          "policy": "taxable",
+          "enabled": 0,
+          "created_at": "2025-06-01T02:00:00Z",
+          "updated_at": "2025-06-01T02:00:00Z"
+        },
+        {
+          "id": "invalid",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{bad",
+          "kind": "bad",
+          "policy": "bad",
+          "enabled": 0,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T04:00:00Z"
+        }
+      ],
+      "transaction_pair_dismissals": [],
+      "profiles": [
+        {
+          "id": "p",
+          "workspace_id": "w",
+          "label": "Book",
+          "fiat_currency": "EUR",
+          "tax_country": "at",
+          "tax_long_term_days": 365,
+          "gains_algorithm": "FIFO",
+          "require_coarse_review": 0,
+          "bitcoin_rail_carrying_value": 1,
+          "cost_basis_pool_scope": "global",
+          "journal_input_version": 6,
+          "last_processed_input_version": 0,
+          "required_journal_semantics_version": 1,
+          "journal_semantics_version": 0,
+          "last_processed_at": null,
+          "last_processed_tx_count": 0,
+          "ownership_review_counts_json": null,
+          "created_at": "2025-01-01T00:00:00Z",
+          "swap_candidate_count": null
+        }
+      ]
+    }
+  },
+  {
+    "operation": "transfers.rules.disable",
+    "args": {
+      "rule_id": "id-0"
+    },
+    "id": "id-5",
+    "now": "2025-06-01T05:00:00Z",
+    "result": {
+      "id": "id-0",
+      "workspace_id": "w",
+      "profile_id": "p",
+      "name": "\u20ac \ud83d\ude80",
+      "predicate": {
+        "out_asset": "BTC",
+        "in_asset": "LBTC",
+        "max_fee_pct": 1e-06,
+        "min_confidence": "exact"
+      },
+      "kind": "manual",
+      "policy": "carrying-value",
+      "enabled": false,
+      "created_at": "2025-06-01T00:00:00Z",
+      "updated_at": "2025-06-01T05:00:00Z"
+    },
+    "rows": {
+      "swap_matching_rules": [
+        {
+          "id": "00000000-0000-0000-0000-00000000000b",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "z",
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-00000000000c",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "a",
+          "predicate_json": "{\"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "id-0",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "\u20ac \ud83d\ude80",
+          "predicate_json": "{\"in_asset\": \"LBTC\", \"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 0,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T05:00:00Z"
+        },
+        {
+          "id": "id-1",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T01:00:00Z",
+          "updated_at": "2025-06-01T01:00:00Z"
+        },
+        {
+          "id": "id-2",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{\"max_fee_pct\": 0.0, \"out_wallet_id\": \" \\u2000\"}",
+          "kind": "peg-in",
+          "policy": "taxable",
+          "enabled": 0,
+          "created_at": "2025-06-01T02:00:00Z",
+          "updated_at": "2025-06-01T02:00:00Z"
+        },
+        {
+          "id": "invalid",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{bad",
+          "kind": "bad",
+          "policy": "bad",
+          "enabled": 0,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T04:00:00Z"
+        }
+      ],
+      "transaction_pair_dismissals": [],
+      "profiles": [
+        {
+          "id": "p",
+          "workspace_id": "w",
+          "label": "Book",
+          "fiat_currency": "EUR",
+          "tax_country": "at",
+          "tax_long_term_days": 365,
+          "gains_algorithm": "FIFO",
+          "require_coarse_review": 0,
+          "bitcoin_rail_carrying_value": 1,
+          "cost_basis_pool_scope": "global",
+          "journal_input_version": 6,
+          "last_processed_input_version": 0,
+          "required_journal_semantics_version": 1,
+          "journal_semantics_version": 0,
+          "last_processed_at": null,
+          "last_processed_tx_count": 0,
+          "ownership_review_counts_json": null,
+          "created_at": "2025-01-01T00:00:00Z",
+          "swap_candidate_count": null
+        }
+      ]
+    }
+  },
+  {
+    "operation": "transfers.rules.enable",
+    "args": {
+      "rule_id": "id-0"
+    },
+    "id": "id-6",
+    "now": "2025-06-01T06:00:00Z",
+    "result": {
+      "id": "id-0",
+      "workspace_id": "w",
+      "profile_id": "p",
+      "name": "\u20ac \ud83d\ude80",
+      "predicate": {
+        "out_asset": "BTC",
+        "in_asset": "LBTC",
+        "max_fee_pct": 1e-06,
+        "min_confidence": "exact"
+      },
+      "kind": "manual",
+      "policy": "carrying-value",
+      "enabled": true,
+      "created_at": "2025-06-01T00:00:00Z",
+      "updated_at": "2025-06-01T06:00:00Z"
+    },
+    "rows": {
+      "swap_matching_rules": [
+        {
+          "id": "00000000-0000-0000-0000-00000000000b",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "z",
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-00000000000c",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "a",
+          "predicate_json": "{\"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "id-0",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "\u20ac \ud83d\ude80",
+          "predicate_json": "{\"in_asset\": \"LBTC\", \"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T06:00:00Z"
+        },
+        {
+          "id": "id-1",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T01:00:00Z",
+          "updated_at": "2025-06-01T01:00:00Z"
+        },
+        {
+          "id": "id-2",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{\"max_fee_pct\": 0.0, \"out_wallet_id\": \" \\u2000\"}",
+          "kind": "peg-in",
+          "policy": "taxable",
+          "enabled": 0,
+          "created_at": "2025-06-01T02:00:00Z",
+          "updated_at": "2025-06-01T02:00:00Z"
+        },
+        {
+          "id": "invalid",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{bad",
+          "kind": "bad",
+          "policy": "bad",
+          "enabled": 0,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T04:00:00Z"
+        }
+      ],
+      "transaction_pair_dismissals": [],
+      "profiles": [
+        {
+          "id": "p",
+          "workspace_id": "w",
+          "label": "Book",
+          "fiat_currency": "EUR",
+          "tax_country": "at",
+          "tax_long_term_days": 365,
+          "gains_algorithm": "FIFO",
+          "require_coarse_review": 0,
+          "bitcoin_rail_carrying_value": 1,
+          "cost_basis_pool_scope": "global",
+          "journal_input_version": 6,
+          "last_processed_input_version": 0,
+          "required_journal_semantics_version": 1,
+          "journal_semantics_version": 0,
+          "last_processed_at": null,
+          "last_processed_tx_count": 0,
+          "ownership_review_counts_json": null,
+          "created_at": "2025-01-01T00:00:00Z",
+          "swap_candidate_count": null
+        }
+      ]
+    }
+  },
+  {
+    "operation": "transfers.rules.delete",
+    "args": {
+      "rule_id": "id-1"
+    },
+    "id": "id-7",
+    "now": "2025-06-01T07:00:00Z",
+    "result": {
+      "deleted": "id-1",
+      "rule": {
+        "id": "id-1",
+        "workspace_id": "w",
+        "profile_id": "p",
+        "name": null,
+        "predicate": {},
+        "kind": "manual",
+        "policy": "carrying-value",
+        "enabled": true,
+        "created_at": "2025-06-01T01:00:00Z",
+        "updated_at": "2025-06-01T01:00:00Z"
+      }
+    },
+    "rows": {
+      "swap_matching_rules": [
+        {
+          "id": "00000000-0000-0000-0000-00000000000b",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "z",
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-00000000000c",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "a",
+          "predicate_json": "{\"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "id-0",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "\u20ac \ud83d\ude80",
+          "predicate_json": "{\"in_asset\": \"LBTC\", \"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T06:00:00Z"
+        },
+        {
+          "id": "id-2",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{\"max_fee_pct\": 0.0, \"out_wallet_id\": \" \\u2000\"}",
+          "kind": "peg-in",
+          "policy": "taxable",
+          "enabled": 0,
+          "created_at": "2025-06-01T02:00:00Z",
+          "updated_at": "2025-06-01T02:00:00Z"
+        },
+        {
+          "id": "invalid",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{bad",
+          "kind": "bad",
+          "policy": "bad",
+          "enabled": 0,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T04:00:00Z"
+        }
+      ],
+      "transaction_pair_dismissals": [],
+      "profiles": [
+        {
+          "id": "p",
+          "workspace_id": "w",
+          "label": "Book",
+          "fiat_currency": "EUR",
+          "tax_country": "at",
+          "tax_long_term_days": 365,
+          "gains_algorithm": "FIFO",
+          "require_coarse_review": 0,
+          "bitcoin_rail_carrying_value": 1,
+          "cost_basis_pool_scope": "global",
+          "journal_input_version": 6,
+          "last_processed_input_version": 0,
+          "required_journal_semantics_version": 1,
+          "journal_semantics_version": 0,
+          "last_processed_at": null,
+          "last_processed_tx_count": 0,
+          "ownership_review_counts_json": null,
+          "created_at": "2025-01-01T00:00:00Z",
+          "swap_candidate_count": null
+        }
+      ]
+    }
+  },
+  {
+    "operation": "transfers.rules.delete",
+    "args": {
+      "rule_id": "id-1"
+    },
+    "id": "id-8",
+    "now": "2025-06-01T08:00:00Z",
+    "error": {
+      "code": "not_found",
+      "message": "Rule 'id-1' not found",
+      "hint": null,
+      "details": null
+    },
+    "rows": {
+      "swap_matching_rules": [
+        {
+          "id": "00000000-0000-0000-0000-00000000000b",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "z",
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-00000000000c",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "a",
+          "predicate_json": "{\"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "id-0",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "\u20ac \ud83d\ude80",
+          "predicate_json": "{\"in_asset\": \"LBTC\", \"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T06:00:00Z"
+        },
+        {
+          "id": "id-2",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{\"max_fee_pct\": 0.0, \"out_wallet_id\": \" \\u2000\"}",
+          "kind": "peg-in",
+          "policy": "taxable",
+          "enabled": 0,
+          "created_at": "2025-06-01T02:00:00Z",
+          "updated_at": "2025-06-01T02:00:00Z"
+        },
+        {
+          "id": "invalid",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{bad",
+          "kind": "bad",
+          "policy": "bad",
+          "enabled": 0,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T04:00:00Z"
+        }
+      ],
+      "transaction_pair_dismissals": [],
+      "profiles": [
+        {
+          "id": "p",
+          "workspace_id": "w",
+          "label": "Book",
+          "fiat_currency": "EUR",
+          "tax_country": "at",
+          "tax_long_term_days": 365,
+          "gains_algorithm": "FIFO",
+          "require_coarse_review": 0,
+          "bitcoin_rail_carrying_value": 1,
+          "cost_basis_pool_scope": "global",
+          "journal_input_version": 6,
+          "last_processed_input_version": 0,
+          "required_journal_semantics_version": 1,
+          "journal_semantics_version": 0,
+          "last_processed_at": null,
+          "last_processed_tx_count": 0,
+          "ownership_review_counts_json": null,
+          "created_at": "2025-01-01T00:00:00Z",
+          "swap_candidate_count": null
+        }
+      ]
+    }
+  },
+  {
+    "operation": "transfers.rules.create",
+    "args": {
+      "kind": "invalid"
+    },
+    "id": "id-9",
+    "now": "2025-06-01T09:00:00Z",
+    "error": {
+      "code": "validation",
+      "message": "Unsupported pair kind 'invalid'. Supported: manual, coinjoin, whirlpool, chain-swap, peg-in, peg-out, reverse-submarine-swap, submarine-swap, swap-refund",
+      "hint": null,
+      "details": null
+    },
+    "rows": {
+      "swap_matching_rules": [
+        {
+          "id": "00000000-0000-0000-0000-00000000000b",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "z",
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-00000000000c",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "a",
+          "predicate_json": "{\"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "id-0",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "\u20ac \ud83d\ude80",
+          "predicate_json": "{\"in_asset\": \"LBTC\", \"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T06:00:00Z"
+        },
+        {
+          "id": "id-2",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{\"max_fee_pct\": 0.0, \"out_wallet_id\": \" \\u2000\"}",
+          "kind": "peg-in",
+          "policy": "taxable",
+          "enabled": 0,
+          "created_at": "2025-06-01T02:00:00Z",
+          "updated_at": "2025-06-01T02:00:00Z"
+        },
+        {
+          "id": "invalid",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{bad",
+          "kind": "bad",
+          "policy": "bad",
+          "enabled": 0,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T04:00:00Z"
+        }
+      ],
+      "transaction_pair_dismissals": [],
+      "profiles": [
+        {
+          "id": "p",
+          "workspace_id": "w",
+          "label": "Book",
+          "fiat_currency": "EUR",
+          "tax_country": "at",
+          "tax_long_term_days": 365,
+          "gains_algorithm": "FIFO",
+          "require_coarse_review": 0,
+          "bitcoin_rail_carrying_value": 1,
+          "cost_basis_pool_scope": "global",
+          "journal_input_version": 6,
+          "last_processed_input_version": 0,
+          "required_journal_semantics_version": 1,
+          "journal_semantics_version": 0,
+          "last_processed_at": null,
+          "last_processed_tx_count": 0,
+          "ownership_review_counts_json": null,
+          "created_at": "2025-01-01T00:00:00Z",
+          "swap_candidate_count": null
+        }
+      ]
+    }
+  },
+  {
+    "operation": "transfers.rules.create",
+    "args": {
+      "policy": "invalid"
+    },
+    "id": "id-10",
+    "now": "2025-06-01T10:00:00Z",
+    "error": {
+      "code": "validation",
+      "message": "Unsupported pair policy 'invalid'. Supported: carrying-value, taxable",
+      "hint": null,
+      "details": null
+    },
+    "rows": {
+      "swap_matching_rules": [
+        {
+          "id": "00000000-0000-0000-0000-00000000000b",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "z",
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-00000000000c",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "a",
+          "predicate_json": "{\"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "id-0",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "\u20ac \ud83d\ude80",
+          "predicate_json": "{\"in_asset\": \"LBTC\", \"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T06:00:00Z"
+        },
+        {
+          "id": "id-2",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{\"max_fee_pct\": 0.0, \"out_wallet_id\": \" \\u2000\"}",
+          "kind": "peg-in",
+          "policy": "taxable",
+          "enabled": 0,
+          "created_at": "2025-06-01T02:00:00Z",
+          "updated_at": "2025-06-01T02:00:00Z"
+        },
+        {
+          "id": "invalid",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{bad",
+          "kind": "bad",
+          "policy": "bad",
+          "enabled": 0,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T04:00:00Z"
+        }
+      ],
+      "transaction_pair_dismissals": [],
+      "profiles": [
+        {
+          "id": "p",
+          "workspace_id": "w",
+          "label": "Book",
+          "fiat_currency": "EUR",
+          "tax_country": "at",
+          "tax_long_term_days": 365,
+          "gains_algorithm": "FIFO",
+          "require_coarse_review": 0,
+          "bitcoin_rail_carrying_value": 1,
+          "cost_basis_pool_scope": "global",
+          "journal_input_version": 6,
+          "last_processed_input_version": 0,
+          "required_journal_semantics_version": 1,
+          "journal_semantics_version": 0,
+          "last_processed_at": null,
+          "last_processed_tx_count": 0,
+          "ownership_review_counts_json": null,
+          "created_at": "2025-01-01T00:00:00Z",
+          "swap_candidate_count": null
+        }
+      ]
+    }
+  },
+  {
+    "operation": "transfers.rules.create",
+    "args": {
+      "predicate": []
+    },
+    "id": "id-11",
+    "now": "2025-06-01T11:00:00Z",
+    "error": {
+      "code": "validation",
+      "message": "predicate must be an object",
+      "hint": null,
+      "details": null
+    },
+    "rows": {
+      "swap_matching_rules": [
+        {
+          "id": "00000000-0000-0000-0000-00000000000b",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "z",
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-00000000000c",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "a",
+          "predicate_json": "{\"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "id-0",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "\u20ac \ud83d\ude80",
+          "predicate_json": "{\"in_asset\": \"LBTC\", \"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T06:00:00Z"
+        },
+        {
+          "id": "id-2",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{\"max_fee_pct\": 0.0, \"out_wallet_id\": \" \\u2000\"}",
+          "kind": "peg-in",
+          "policy": "taxable",
+          "enabled": 0,
+          "created_at": "2025-06-01T02:00:00Z",
+          "updated_at": "2025-06-01T02:00:00Z"
+        },
+        {
+          "id": "invalid",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{bad",
+          "kind": "bad",
+          "policy": "bad",
+          "enabled": 0,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T04:00:00Z"
+        }
+      ],
+      "transaction_pair_dismissals": [],
+      "profiles": [
+        {
+          "id": "p",
+          "workspace_id": "w",
+          "label": "Book",
+          "fiat_currency": "EUR",
+          "tax_country": "at",
+          "tax_long_term_days": 365,
+          "gains_algorithm": "FIFO",
+          "require_coarse_review": 0,
+          "bitcoin_rail_carrying_value": 1,
+          "cost_basis_pool_scope": "global",
+          "journal_input_version": 6,
+          "last_processed_input_version": 0,
+          "required_journal_semantics_version": 1,
+          "journal_semantics_version": 0,
+          "last_processed_at": null,
+          "last_processed_tx_count": 0,
+          "ownership_review_counts_json": null,
+          "created_at": "2025-01-01T00:00:00Z",
+          "swap_candidate_count": null
+        }
+      ]
+    }
+  },
+  {
+    "operation": "transfers.rules.create",
+    "args": {
+      "predicate": {
+        "aa": 1,
+        "zz": 2
+      }
+    },
+    "id": "id-12",
+    "now": "2025-06-01T12:00:00Z",
+    "error": {
+      "code": "validation",
+      "message": "predicate has unsupported field(s): aa, zz",
+      "hint": null,
+      "details": null
+    },
+    "rows": {
+      "swap_matching_rules": [
+        {
+          "id": "00000000-0000-0000-0000-00000000000b",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "z",
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-00000000000c",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "a",
+          "predicate_json": "{\"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "id-0",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "\u20ac \ud83d\ude80",
+          "predicate_json": "{\"in_asset\": \"LBTC\", \"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T06:00:00Z"
+        },
+        {
+          "id": "id-2",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{\"max_fee_pct\": 0.0, \"out_wallet_id\": \" \\u2000\"}",
+          "kind": "peg-in",
+          "policy": "taxable",
+          "enabled": 0,
+          "created_at": "2025-06-01T02:00:00Z",
+          "updated_at": "2025-06-01T02:00:00Z"
+        },
+        {
+          "id": "invalid",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{bad",
+          "kind": "bad",
+          "policy": "bad",
+          "enabled": 0,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T04:00:00Z"
+        }
+      ],
+      "transaction_pair_dismissals": [],
+      "profiles": [
+        {
+          "id": "p",
+          "workspace_id": "w",
+          "label": "Book",
+          "fiat_currency": "EUR",
+          "tax_country": "at",
+          "tax_long_term_days": 365,
+          "gains_algorithm": "FIFO",
+          "require_coarse_review": 0,
+          "bitcoin_rail_carrying_value": 1,
+          "cost_basis_pool_scope": "global",
+          "journal_input_version": 6,
+          "last_processed_input_version": 0,
+          "required_journal_semantics_version": 1,
+          "journal_semantics_version": 0,
+          "last_processed_at": null,
+          "last_processed_tx_count": 0,
+          "ownership_review_counts_json": null,
+          "created_at": "2025-01-01T00:00:00Z",
+          "swap_candidate_count": null
+        }
+      ]
+    }
+  },
+  {
+    "operation": "transfers.rules.create",
+    "args": {
+      "predicate": {
+        "out_asset": 1
+      }
+    },
+    "id": "id-13",
+    "now": "2025-06-01T13:00:00Z",
+    "error": {
+      "code": "validation",
+      "message": "predicate field 'out_asset' must be a string",
+      "hint": null,
+      "details": null
+    },
+    "rows": {
+      "swap_matching_rules": [
+        {
+          "id": "00000000-0000-0000-0000-00000000000b",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "z",
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-00000000000c",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "a",
+          "predicate_json": "{\"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "id-0",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "\u20ac \ud83d\ude80",
+          "predicate_json": "{\"in_asset\": \"LBTC\", \"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T06:00:00Z"
+        },
+        {
+          "id": "id-2",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{\"max_fee_pct\": 0.0, \"out_wallet_id\": \" \\u2000\"}",
+          "kind": "peg-in",
+          "policy": "taxable",
+          "enabled": 0,
+          "created_at": "2025-06-01T02:00:00Z",
+          "updated_at": "2025-06-01T02:00:00Z"
+        },
+        {
+          "id": "invalid",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{bad",
+          "kind": "bad",
+          "policy": "bad",
+          "enabled": 0,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T04:00:00Z"
+        }
+      ],
+      "transaction_pair_dismissals": [],
+      "profiles": [
+        {
+          "id": "p",
+          "workspace_id": "w",
+          "label": "Book",
+          "fiat_currency": "EUR",
+          "tax_country": "at",
+          "tax_long_term_days": 365,
+          "gains_algorithm": "FIFO",
+          "require_coarse_review": 0,
+          "bitcoin_rail_carrying_value": 1,
+          "cost_basis_pool_scope": "global",
+          "journal_input_version": 6,
+          "last_processed_input_version": 0,
+          "required_journal_semantics_version": 1,
+          "journal_semantics_version": 0,
+          "last_processed_at": null,
+          "last_processed_tx_count": 0,
+          "ownership_review_counts_json": null,
+          "created_at": "2025-01-01T00:00:00Z",
+          "swap_candidate_count": null
+        }
+      ]
+    }
+  },
+  {
+    "operation": "transfers.rules.create",
+    "args": {
+      "predicate": {
+        "in_asset": 1
+      }
+    },
+    "id": "id-14",
+    "now": "2025-06-01T14:00:00Z",
+    "error": {
+      "code": "validation",
+      "message": "predicate field 'in_asset' must be a string",
+      "hint": null,
+      "details": null
+    },
+    "rows": {
+      "swap_matching_rules": [
+        {
+          "id": "00000000-0000-0000-0000-00000000000b",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "z",
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-00000000000c",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "a",
+          "predicate_json": "{\"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "id-0",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "\u20ac \ud83d\ude80",
+          "predicate_json": "{\"in_asset\": \"LBTC\", \"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T06:00:00Z"
+        },
+        {
+          "id": "id-2",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{\"max_fee_pct\": 0.0, \"out_wallet_id\": \" \\u2000\"}",
+          "kind": "peg-in",
+          "policy": "taxable",
+          "enabled": 0,
+          "created_at": "2025-06-01T02:00:00Z",
+          "updated_at": "2025-06-01T02:00:00Z"
+        },
+        {
+          "id": "invalid",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{bad",
+          "kind": "bad",
+          "policy": "bad",
+          "enabled": 0,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T04:00:00Z"
+        }
+      ],
+      "transaction_pair_dismissals": [],
+      "profiles": [
+        {
+          "id": "p",
+          "workspace_id": "w",
+          "label": "Book",
+          "fiat_currency": "EUR",
+          "tax_country": "at",
+          "tax_long_term_days": 365,
+          "gains_algorithm": "FIFO",
+          "require_coarse_review": 0,
+          "bitcoin_rail_carrying_value": 1,
+          "cost_basis_pool_scope": "global",
+          "journal_input_version": 6,
+          "last_processed_input_version": 0,
+          "required_journal_semantics_version": 1,
+          "journal_semantics_version": 0,
+          "last_processed_at": null,
+          "last_processed_tx_count": 0,
+          "ownership_review_counts_json": null,
+          "created_at": "2025-01-01T00:00:00Z",
+          "swap_candidate_count": null
+        }
+      ]
+    }
+  },
+  {
+    "operation": "transfers.rules.create",
+    "args": {
+      "predicate": {
+        "out_wallet_id": 1
+      }
+    },
+    "id": "id-15",
+    "now": "2025-06-01T15:00:00Z",
+    "error": {
+      "code": "validation",
+      "message": "predicate field 'out_wallet_id' must be a string",
+      "hint": null,
+      "details": null
+    },
+    "rows": {
+      "swap_matching_rules": [
+        {
+          "id": "00000000-0000-0000-0000-00000000000b",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "z",
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-00000000000c",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "a",
+          "predicate_json": "{\"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "id-0",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "\u20ac \ud83d\ude80",
+          "predicate_json": "{\"in_asset\": \"LBTC\", \"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T06:00:00Z"
+        },
+        {
+          "id": "id-2",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{\"max_fee_pct\": 0.0, \"out_wallet_id\": \" \\u2000\"}",
+          "kind": "peg-in",
+          "policy": "taxable",
+          "enabled": 0,
+          "created_at": "2025-06-01T02:00:00Z",
+          "updated_at": "2025-06-01T02:00:00Z"
+        },
+        {
+          "id": "invalid",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{bad",
+          "kind": "bad",
+          "policy": "bad",
+          "enabled": 0,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T04:00:00Z"
+        }
+      ],
+      "transaction_pair_dismissals": [],
+      "profiles": [
+        {
+          "id": "p",
+          "workspace_id": "w",
+          "label": "Book",
+          "fiat_currency": "EUR",
+          "tax_country": "at",
+          "tax_long_term_days": 365,
+          "gains_algorithm": "FIFO",
+          "require_coarse_review": 0,
+          "bitcoin_rail_carrying_value": 1,
+          "cost_basis_pool_scope": "global",
+          "journal_input_version": 6,
+          "last_processed_input_version": 0,
+          "required_journal_semantics_version": 1,
+          "journal_semantics_version": 0,
+          "last_processed_at": null,
+          "last_processed_tx_count": 0,
+          "ownership_review_counts_json": null,
+          "created_at": "2025-01-01T00:00:00Z",
+          "swap_candidate_count": null
+        }
+      ]
+    }
+  },
+  {
+    "operation": "transfers.rules.create",
+    "args": {
+      "predicate": {
+        "in_wallet_id": 1
+      }
+    },
+    "id": "id-16",
+    "now": "2025-06-01T16:00:00Z",
+    "error": {
+      "code": "validation",
+      "message": "predicate field 'in_wallet_id' must be a string",
+      "hint": null,
+      "details": null
+    },
+    "rows": {
+      "swap_matching_rules": [
+        {
+          "id": "00000000-0000-0000-0000-00000000000b",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "z",
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-00000000000c",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "a",
+          "predicate_json": "{\"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "id-0",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "\u20ac \ud83d\ude80",
+          "predicate_json": "{\"in_asset\": \"LBTC\", \"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T06:00:00Z"
+        },
+        {
+          "id": "id-2",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{\"max_fee_pct\": 0.0, \"out_wallet_id\": \" \\u2000\"}",
+          "kind": "peg-in",
+          "policy": "taxable",
+          "enabled": 0,
+          "created_at": "2025-06-01T02:00:00Z",
+          "updated_at": "2025-06-01T02:00:00Z"
+        },
+        {
+          "id": "invalid",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{bad",
+          "kind": "bad",
+          "policy": "bad",
+          "enabled": 0,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T04:00:00Z"
+        }
+      ],
+      "transaction_pair_dismissals": [],
+      "profiles": [
+        {
+          "id": "p",
+          "workspace_id": "w",
+          "label": "Book",
+          "fiat_currency": "EUR",
+          "tax_country": "at",
+          "tax_long_term_days": 365,
+          "gains_algorithm": "FIFO",
+          "require_coarse_review": 0,
+          "bitcoin_rail_carrying_value": 1,
+          "cost_basis_pool_scope": "global",
+          "journal_input_version": 6,
+          "last_processed_input_version": 0,
+          "required_journal_semantics_version": 1,
+          "journal_semantics_version": 0,
+          "last_processed_at": null,
+          "last_processed_tx_count": 0,
+          "ownership_review_counts_json": null,
+          "created_at": "2025-01-01T00:00:00Z",
+          "swap_candidate_count": null
+        }
+      ]
+    }
+  },
+  {
+    "operation": "transfers.rules.create",
+    "args": {
+      "predicate": {
+        "out_wallet_kind": 1
+      }
+    },
+    "id": "id-17",
+    "now": "2025-06-01T17:00:00Z",
+    "error": {
+      "code": "validation",
+      "message": "predicate field 'out_wallet_kind' must be a string",
+      "hint": null,
+      "details": null
+    },
+    "rows": {
+      "swap_matching_rules": [
+        {
+          "id": "00000000-0000-0000-0000-00000000000b",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "z",
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-00000000000c",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "a",
+          "predicate_json": "{\"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "id-0",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "\u20ac \ud83d\ude80",
+          "predicate_json": "{\"in_asset\": \"LBTC\", \"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T06:00:00Z"
+        },
+        {
+          "id": "id-2",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{\"max_fee_pct\": 0.0, \"out_wallet_id\": \" \\u2000\"}",
+          "kind": "peg-in",
+          "policy": "taxable",
+          "enabled": 0,
+          "created_at": "2025-06-01T02:00:00Z",
+          "updated_at": "2025-06-01T02:00:00Z"
+        },
+        {
+          "id": "invalid",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{bad",
+          "kind": "bad",
+          "policy": "bad",
+          "enabled": 0,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T04:00:00Z"
+        }
+      ],
+      "transaction_pair_dismissals": [],
+      "profiles": [
+        {
+          "id": "p",
+          "workspace_id": "w",
+          "label": "Book",
+          "fiat_currency": "EUR",
+          "tax_country": "at",
+          "tax_long_term_days": 365,
+          "gains_algorithm": "FIFO",
+          "require_coarse_review": 0,
+          "bitcoin_rail_carrying_value": 1,
+          "cost_basis_pool_scope": "global",
+          "journal_input_version": 6,
+          "last_processed_input_version": 0,
+          "required_journal_semantics_version": 1,
+          "journal_semantics_version": 0,
+          "last_processed_at": null,
+          "last_processed_tx_count": 0,
+          "ownership_review_counts_json": null,
+          "created_at": "2025-01-01T00:00:00Z",
+          "swap_candidate_count": null
+        }
+      ]
+    }
+  },
+  {
+    "operation": "transfers.rules.create",
+    "args": {
+      "predicate": {
+        "in_wallet_kind": 1
+      }
+    },
+    "id": "id-18",
+    "now": "2025-06-01T18:00:00Z",
+    "error": {
+      "code": "validation",
+      "message": "predicate field 'in_wallet_kind' must be a string",
+      "hint": null,
+      "details": null
+    },
+    "rows": {
+      "swap_matching_rules": [
+        {
+          "id": "00000000-0000-0000-0000-00000000000b",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "z",
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-00000000000c",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "a",
+          "predicate_json": "{\"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "id-0",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "\u20ac \ud83d\ude80",
+          "predicate_json": "{\"in_asset\": \"LBTC\", \"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T06:00:00Z"
+        },
+        {
+          "id": "id-2",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{\"max_fee_pct\": 0.0, \"out_wallet_id\": \" \\u2000\"}",
+          "kind": "peg-in",
+          "policy": "taxable",
+          "enabled": 0,
+          "created_at": "2025-06-01T02:00:00Z",
+          "updated_at": "2025-06-01T02:00:00Z"
+        },
+        {
+          "id": "invalid",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{bad",
+          "kind": "bad",
+          "policy": "bad",
+          "enabled": 0,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T04:00:00Z"
+        }
+      ],
+      "transaction_pair_dismissals": [],
+      "profiles": [
+        {
+          "id": "p",
+          "workspace_id": "w",
+          "label": "Book",
+          "fiat_currency": "EUR",
+          "tax_country": "at",
+          "tax_long_term_days": 365,
+          "gains_algorithm": "FIFO",
+          "require_coarse_review": 0,
+          "bitcoin_rail_carrying_value": 1,
+          "cost_basis_pool_scope": "global",
+          "journal_input_version": 6,
+          "last_processed_input_version": 0,
+          "required_journal_semantics_version": 1,
+          "journal_semantics_version": 0,
+          "last_processed_at": null,
+          "last_processed_tx_count": 0,
+          "ownership_review_counts_json": null,
+          "created_at": "2025-01-01T00:00:00Z",
+          "swap_candidate_count": null
+        }
+      ]
+    }
+  },
+  {
+    "operation": "transfers.rules.create",
+    "args": {
+      "predicate": {
+        "max_fee_pct": true
+      }
+    },
+    "id": "id-19",
+    "now": "2025-06-01T19:00:00Z",
+    "error": {
+      "code": "validation",
+      "message": "predicate field 'max_fee_pct' must be a number",
+      "hint": null,
+      "details": null
+    },
+    "rows": {
+      "swap_matching_rules": [
+        {
+          "id": "00000000-0000-0000-0000-00000000000b",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "z",
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-00000000000c",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "a",
+          "predicate_json": "{\"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "id-0",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "\u20ac \ud83d\ude80",
+          "predicate_json": "{\"in_asset\": \"LBTC\", \"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T06:00:00Z"
+        },
+        {
+          "id": "id-2",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{\"max_fee_pct\": 0.0, \"out_wallet_id\": \" \\u2000\"}",
+          "kind": "peg-in",
+          "policy": "taxable",
+          "enabled": 0,
+          "created_at": "2025-06-01T02:00:00Z",
+          "updated_at": "2025-06-01T02:00:00Z"
+        },
+        {
+          "id": "invalid",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{bad",
+          "kind": "bad",
+          "policy": "bad",
+          "enabled": 0,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T04:00:00Z"
+        }
+      ],
+      "transaction_pair_dismissals": [],
+      "profiles": [
+        {
+          "id": "p",
+          "workspace_id": "w",
+          "label": "Book",
+          "fiat_currency": "EUR",
+          "tax_country": "at",
+          "tax_long_term_days": 365,
+          "gains_algorithm": "FIFO",
+          "require_coarse_review": 0,
+          "bitcoin_rail_carrying_value": 1,
+          "cost_basis_pool_scope": "global",
+          "journal_input_version": 6,
+          "last_processed_input_version": 0,
+          "required_journal_semantics_version": 1,
+          "journal_semantics_version": 0,
+          "last_processed_at": null,
+          "last_processed_tx_count": 0,
+          "ownership_review_counts_json": null,
+          "created_at": "2025-01-01T00:00:00Z",
+          "swap_candidate_count": null
+        }
+      ]
+    }
+  },
+  {
+    "operation": "transfers.rules.create",
+    "args": {
+      "predicate": {
+        "max_fee_pct": []
+      }
+    },
+    "id": "id-20",
+    "now": "2025-06-01T20:00:00Z",
+    "error": {
+      "code": "validation",
+      "message": "predicate field 'max_fee_pct' must be a number",
+      "hint": null,
+      "details": null
+    },
+    "rows": {
+      "swap_matching_rules": [
+        {
+          "id": "00000000-0000-0000-0000-00000000000b",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "z",
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-00000000000c",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "a",
+          "predicate_json": "{\"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "id-0",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "\u20ac \ud83d\ude80",
+          "predicate_json": "{\"in_asset\": \"LBTC\", \"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T06:00:00Z"
+        },
+        {
+          "id": "id-2",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{\"max_fee_pct\": 0.0, \"out_wallet_id\": \" \\u2000\"}",
+          "kind": "peg-in",
+          "policy": "taxable",
+          "enabled": 0,
+          "created_at": "2025-06-01T02:00:00Z",
+          "updated_at": "2025-06-01T02:00:00Z"
+        },
+        {
+          "id": "invalid",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{bad",
+          "kind": "bad",
+          "policy": "bad",
+          "enabled": 0,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T04:00:00Z"
+        }
+      ],
+      "transaction_pair_dismissals": [],
+      "profiles": [
+        {
+          "id": "p",
+          "workspace_id": "w",
+          "label": "Book",
+          "fiat_currency": "EUR",
+          "tax_country": "at",
+          "tax_long_term_days": 365,
+          "gains_algorithm": "FIFO",
+          "require_coarse_review": 0,
+          "bitcoin_rail_carrying_value": 1,
+          "cost_basis_pool_scope": "global",
+          "journal_input_version": 6,
+          "last_processed_input_version": 0,
+          "required_journal_semantics_version": 1,
+          "journal_semantics_version": 0,
+          "last_processed_at": null,
+          "last_processed_tx_count": 0,
+          "ownership_review_counts_json": null,
+          "created_at": "2025-01-01T00:00:00Z",
+          "swap_candidate_count": null
+        }
+      ]
+    }
+  },
+  {
+    "operation": "transfers.rules.create",
+    "args": {
+      "predicate": {
+        "max_fee_pct": {}
+      }
+    },
+    "id": "id-21",
+    "now": "2025-06-01T21:00:00Z",
+    "error": {
+      "code": "validation",
+      "message": "predicate field 'max_fee_pct' must be a number",
+      "hint": null,
+      "details": null
+    },
+    "rows": {
+      "swap_matching_rules": [
+        {
+          "id": "00000000-0000-0000-0000-00000000000b",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "z",
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-00000000000c",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "a",
+          "predicate_json": "{\"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "id-0",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "\u20ac \ud83d\ude80",
+          "predicate_json": "{\"in_asset\": \"LBTC\", \"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T06:00:00Z"
+        },
+        {
+          "id": "id-2",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{\"max_fee_pct\": 0.0, \"out_wallet_id\": \" \\u2000\"}",
+          "kind": "peg-in",
+          "policy": "taxable",
+          "enabled": 0,
+          "created_at": "2025-06-01T02:00:00Z",
+          "updated_at": "2025-06-01T02:00:00Z"
+        },
+        {
+          "id": "invalid",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{bad",
+          "kind": "bad",
+          "policy": "bad",
+          "enabled": 0,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T04:00:00Z"
+        }
+      ],
+      "transaction_pair_dismissals": [],
+      "profiles": [
+        {
+          "id": "p",
+          "workspace_id": "w",
+          "label": "Book",
+          "fiat_currency": "EUR",
+          "tax_country": "at",
+          "tax_long_term_days": 365,
+          "gains_algorithm": "FIFO",
+          "require_coarse_review": 0,
+          "bitcoin_rail_carrying_value": 1,
+          "cost_basis_pool_scope": "global",
+          "journal_input_version": 6,
+          "last_processed_input_version": 0,
+          "required_journal_semantics_version": 1,
+          "journal_semantics_version": 0,
+          "last_processed_at": null,
+          "last_processed_tx_count": 0,
+          "ownership_review_counts_json": null,
+          "created_at": "2025-01-01T00:00:00Z",
+          "swap_candidate_count": null
+        }
+      ]
+    }
+  },
+  {
+    "operation": "transfers.rules.create",
+    "args": {
+      "predicate": {
+        "max_fee_pct": -1
+      }
+    },
+    "id": "id-22",
+    "now": "2025-06-01T22:00:00Z",
+    "error": {
+      "code": "validation",
+      "message": "predicate field 'max_fee_pct' must be a finite non-negative number",
+      "hint": null,
+      "details": null
+    },
+    "rows": {
+      "swap_matching_rules": [
+        {
+          "id": "00000000-0000-0000-0000-00000000000b",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "z",
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-00000000000c",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "a",
+          "predicate_json": "{\"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "id-0",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "\u20ac \ud83d\ude80",
+          "predicate_json": "{\"in_asset\": \"LBTC\", \"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T06:00:00Z"
+        },
+        {
+          "id": "id-2",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{\"max_fee_pct\": 0.0, \"out_wallet_id\": \" \\u2000\"}",
+          "kind": "peg-in",
+          "policy": "taxable",
+          "enabled": 0,
+          "created_at": "2025-06-01T02:00:00Z",
+          "updated_at": "2025-06-01T02:00:00Z"
+        },
+        {
+          "id": "invalid",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{bad",
+          "kind": "bad",
+          "policy": "bad",
+          "enabled": 0,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T04:00:00Z"
+        }
+      ],
+      "transaction_pair_dismissals": [],
+      "profiles": [
+        {
+          "id": "p",
+          "workspace_id": "w",
+          "label": "Book",
+          "fiat_currency": "EUR",
+          "tax_country": "at",
+          "tax_long_term_days": 365,
+          "gains_algorithm": "FIFO",
+          "require_coarse_review": 0,
+          "bitcoin_rail_carrying_value": 1,
+          "cost_basis_pool_scope": "global",
+          "journal_input_version": 6,
+          "last_processed_input_version": 0,
+          "required_journal_semantics_version": 1,
+          "journal_semantics_version": 0,
+          "last_processed_at": null,
+          "last_processed_tx_count": 0,
+          "ownership_review_counts_json": null,
+          "created_at": "2025-01-01T00:00:00Z",
+          "swap_candidate_count": null
+        }
+      ]
+    }
+  },
+  {
+    "operation": "transfers.rules.create",
+    "args": {
+      "predicate": {
+        "max_fee_pct": "NaN"
+      }
+    },
+    "id": "id-23",
+    "now": "2025-06-01T23:00:00Z",
+    "error": {
+      "code": "validation",
+      "message": "predicate field 'max_fee_pct' must be a finite non-negative number",
+      "hint": null,
+      "details": null
+    },
+    "rows": {
+      "swap_matching_rules": [
+        {
+          "id": "00000000-0000-0000-0000-00000000000b",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "z",
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-00000000000c",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "a",
+          "predicate_json": "{\"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "id-0",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "\u20ac \ud83d\ude80",
+          "predicate_json": "{\"in_asset\": \"LBTC\", \"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T06:00:00Z"
+        },
+        {
+          "id": "id-2",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{\"max_fee_pct\": 0.0, \"out_wallet_id\": \" \\u2000\"}",
+          "kind": "peg-in",
+          "policy": "taxable",
+          "enabled": 0,
+          "created_at": "2025-06-01T02:00:00Z",
+          "updated_at": "2025-06-01T02:00:00Z"
+        },
+        {
+          "id": "invalid",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{bad",
+          "kind": "bad",
+          "policy": "bad",
+          "enabled": 0,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T04:00:00Z"
+        }
+      ],
+      "transaction_pair_dismissals": [],
+      "profiles": [
+        {
+          "id": "p",
+          "workspace_id": "w",
+          "label": "Book",
+          "fiat_currency": "EUR",
+          "tax_country": "at",
+          "tax_long_term_days": 365,
+          "gains_algorithm": "FIFO",
+          "require_coarse_review": 0,
+          "bitcoin_rail_carrying_value": 1,
+          "cost_basis_pool_scope": "global",
+          "journal_input_version": 6,
+          "last_processed_input_version": 0,
+          "required_journal_semantics_version": 1,
+          "journal_semantics_version": 0,
+          "last_processed_at": null,
+          "last_processed_tx_count": 0,
+          "ownership_review_counts_json": null,
+          "created_at": "2025-01-01T00:00:00Z",
+          "swap_candidate_count": null
+        }
+      ]
+    }
+  },
+  {
+    "operation": "transfers.rules.create",
+    "args": {
+      "predicate": {
+        "max_fee_pct": "Infinity"
+      }
+    },
+    "id": "id-24",
+    "now": "2025-06-02T00:00:00Z",
+    "error": {
+      "code": "validation",
+      "message": "predicate field 'max_fee_pct' must be a finite non-negative number",
+      "hint": null,
+      "details": null
+    },
+    "rows": {
+      "swap_matching_rules": [
+        {
+          "id": "00000000-0000-0000-0000-00000000000b",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "z",
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-00000000000c",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "a",
+          "predicate_json": "{\"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "id-0",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "\u20ac \ud83d\ude80",
+          "predicate_json": "{\"in_asset\": \"LBTC\", \"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T06:00:00Z"
+        },
+        {
+          "id": "id-2",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{\"max_fee_pct\": 0.0, \"out_wallet_id\": \" \\u2000\"}",
+          "kind": "peg-in",
+          "policy": "taxable",
+          "enabled": 0,
+          "created_at": "2025-06-01T02:00:00Z",
+          "updated_at": "2025-06-01T02:00:00Z"
+        },
+        {
+          "id": "invalid",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{bad",
+          "kind": "bad",
+          "policy": "bad",
+          "enabled": 0,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T04:00:00Z"
+        }
+      ],
+      "transaction_pair_dismissals": [],
+      "profiles": [
+        {
+          "id": "p",
+          "workspace_id": "w",
+          "label": "Book",
+          "fiat_currency": "EUR",
+          "tax_country": "at",
+          "tax_long_term_days": 365,
+          "gains_algorithm": "FIFO",
+          "require_coarse_review": 0,
+          "bitcoin_rail_carrying_value": 1,
+          "cost_basis_pool_scope": "global",
+          "journal_input_version": 6,
+          "last_processed_input_version": 0,
+          "required_journal_semantics_version": 1,
+          "journal_semantics_version": 0,
+          "last_processed_at": null,
+          "last_processed_tx_count": 0,
+          "ownership_review_counts_json": null,
+          "created_at": "2025-01-01T00:00:00Z",
+          "swap_candidate_count": null
+        }
+      ]
+    }
+  },
+  {
+    "operation": "transfers.rules.create",
+    "args": {
+      "predicate": {
+        "max_fee_pct": 10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+      }
+    },
+    "id": "id-25",
+    "now": "2025-06-02T01:00:00Z",
+    "error": {
+      "code": "internal_error",
+      "message": "int too large to convert to float",
+      "hint": null,
+      "details": null
+    },
+    "rows": {
+      "swap_matching_rules": [
+        {
+          "id": "00000000-0000-0000-0000-00000000000b",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "z",
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-00000000000c",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "a",
+          "predicate_json": "{\"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "id-0",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "\u20ac \ud83d\ude80",
+          "predicate_json": "{\"in_asset\": \"LBTC\", \"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T06:00:00Z"
+        },
+        {
+          "id": "id-2",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{\"max_fee_pct\": 0.0, \"out_wallet_id\": \" \\u2000\"}",
+          "kind": "peg-in",
+          "policy": "taxable",
+          "enabled": 0,
+          "created_at": "2025-06-01T02:00:00Z",
+          "updated_at": "2025-06-01T02:00:00Z"
+        },
+        {
+          "id": "invalid",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{bad",
+          "kind": "bad",
+          "policy": "bad",
+          "enabled": 0,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T04:00:00Z"
+        }
+      ],
+      "transaction_pair_dismissals": [],
+      "profiles": [
+        {
+          "id": "p",
+          "workspace_id": "w",
+          "label": "Book",
+          "fiat_currency": "EUR",
+          "tax_country": "at",
+          "tax_long_term_days": 365,
+          "gains_algorithm": "FIFO",
+          "require_coarse_review": 0,
+          "bitcoin_rail_carrying_value": 1,
+          "cost_basis_pool_scope": "global",
+          "journal_input_version": 6,
+          "last_processed_input_version": 0,
+          "required_journal_semantics_version": 1,
+          "journal_semantics_version": 0,
+          "last_processed_at": null,
+          "last_processed_tx_count": 0,
+          "ownership_review_counts_json": null,
+          "created_at": "2025-01-01T00:00:00Z",
+          "swap_candidate_count": null
+        }
+      ]
+    }
+  },
+  {
+    "operation": "transfers.rules.create",
+    "args": {
+      "predicate": {
+        "max_fee_pct": "bad"
+      }
+    },
+    "id": "id-26",
+    "now": "2025-06-02T02:00:00Z",
+    "error": {
+      "code": "validation",
+      "message": "predicate field 'max_fee_pct' must be a number",
+      "hint": null,
+      "details": null
+    },
+    "rows": {
+      "swap_matching_rules": [
+        {
+          "id": "00000000-0000-0000-0000-00000000000b",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "z",
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-00000000000c",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "a",
+          "predicate_json": "{\"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "id-0",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "\u20ac \ud83d\ude80",
+          "predicate_json": "{\"in_asset\": \"LBTC\", \"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T06:00:00Z"
+        },
+        {
+          "id": "id-2",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{\"max_fee_pct\": 0.0, \"out_wallet_id\": \" \\u2000\"}",
+          "kind": "peg-in",
+          "policy": "taxable",
+          "enabled": 0,
+          "created_at": "2025-06-01T02:00:00Z",
+          "updated_at": "2025-06-01T02:00:00Z"
+        },
+        {
+          "id": "invalid",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{bad",
+          "kind": "bad",
+          "policy": "bad",
+          "enabled": 0,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T04:00:00Z"
+        }
+      ],
+      "transaction_pair_dismissals": [],
+      "profiles": [
+        {
+          "id": "p",
+          "workspace_id": "w",
+          "label": "Book",
+          "fiat_currency": "EUR",
+          "tax_country": "at",
+          "tax_long_term_days": 365,
+          "gains_algorithm": "FIFO",
+          "require_coarse_review": 0,
+          "bitcoin_rail_carrying_value": 1,
+          "cost_basis_pool_scope": "global",
+          "journal_input_version": 6,
+          "last_processed_input_version": 0,
+          "required_journal_semantics_version": 1,
+          "journal_semantics_version": 0,
+          "last_processed_at": null,
+          "last_processed_tx_count": 0,
+          "ownership_review_counts_json": null,
+          "created_at": "2025-01-01T00:00:00Z",
+          "swap_candidate_count": null
+        }
+      ]
+    }
+  },
+  {
+    "operation": "transfers.rules.create",
+    "args": {
+      "predicate": {
+        "min_confidence": false
+      }
+    },
+    "id": "id-27",
+    "now": "2025-06-02T03:00:00Z",
+    "error": {
+      "code": "validation",
+      "message": "predicate field 'min_confidence' must be a string",
+      "hint": null,
+      "details": null
+    },
+    "rows": {
+      "swap_matching_rules": [
+        {
+          "id": "00000000-0000-0000-0000-00000000000b",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "z",
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-00000000000c",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "a",
+          "predicate_json": "{\"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "id-0",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "\u20ac \ud83d\ude80",
+          "predicate_json": "{\"in_asset\": \"LBTC\", \"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T06:00:00Z"
+        },
+        {
+          "id": "id-2",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{\"max_fee_pct\": 0.0, \"out_wallet_id\": \" \\u2000\"}",
+          "kind": "peg-in",
+          "policy": "taxable",
+          "enabled": 0,
+          "created_at": "2025-06-01T02:00:00Z",
+          "updated_at": "2025-06-01T02:00:00Z"
+        },
+        {
+          "id": "invalid",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{bad",
+          "kind": "bad",
+          "policy": "bad",
+          "enabled": 0,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T04:00:00Z"
+        }
+      ],
+      "transaction_pair_dismissals": [],
+      "profiles": [
+        {
+          "id": "p",
+          "workspace_id": "w",
+          "label": "Book",
+          "fiat_currency": "EUR",
+          "tax_country": "at",
+          "tax_long_term_days": 365,
+          "gains_algorithm": "FIFO",
+          "require_coarse_review": 0,
+          "bitcoin_rail_carrying_value": 1,
+          "cost_basis_pool_scope": "global",
+          "journal_input_version": 6,
+          "last_processed_input_version": 0,
+          "required_journal_semantics_version": 1,
+          "journal_semantics_version": 0,
+          "last_processed_at": null,
+          "last_processed_tx_count": 0,
+          "ownership_review_counts_json": null,
+          "created_at": "2025-01-01T00:00:00Z",
+          "swap_candidate_count": null
+        }
+      ]
+    }
+  },
+  {
+    "operation": "transfers.rules.create",
+    "args": {
+      "predicate": {
+        "min_confidence": "weak"
+      }
+    },
+    "id": "id-28",
+    "now": "2025-06-02T04:00:00Z",
+    "error": {
+      "code": "validation",
+      "message": "predicate field 'min_confidence' must be one of: exact, strong",
+      "hint": null,
+      "details": null
+    },
+    "rows": {
+      "swap_matching_rules": [
+        {
+          "id": "00000000-0000-0000-0000-00000000000b",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "z",
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-00000000000c",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "a",
+          "predicate_json": "{\"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "id-0",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "\u20ac \ud83d\ude80",
+          "predicate_json": "{\"in_asset\": \"LBTC\", \"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T06:00:00Z"
+        },
+        {
+          "id": "id-2",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{\"max_fee_pct\": 0.0, \"out_wallet_id\": \" \\u2000\"}",
+          "kind": "peg-in",
+          "policy": "taxable",
+          "enabled": 0,
+          "created_at": "2025-06-01T02:00:00Z",
+          "updated_at": "2025-06-01T02:00:00Z"
+        },
+        {
+          "id": "invalid",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{bad",
+          "kind": "bad",
+          "policy": "bad",
+          "enabled": 0,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T04:00:00Z"
+        }
+      ],
+      "transaction_pair_dismissals": [],
+      "profiles": [
+        {
+          "id": "p",
+          "workspace_id": "w",
+          "label": "Book",
+          "fiat_currency": "EUR",
+          "tax_country": "at",
+          "tax_long_term_days": 365,
+          "gains_algorithm": "FIFO",
+          "require_coarse_review": 0,
+          "bitcoin_rail_carrying_value": 1,
+          "cost_basis_pool_scope": "global",
+          "journal_input_version": 6,
+          "last_processed_input_version": 0,
+          "required_journal_semantics_version": 1,
+          "journal_semantics_version": 0,
+          "last_processed_at": null,
+          "last_processed_tx_count": 0,
+          "ownership_review_counts_json": null,
+          "created_at": "2025-01-01T00:00:00Z",
+          "swap_candidate_count": null
+        }
+      ]
+    }
+  },
+  {
+    "operation": "transfers.dismiss",
+    "args": {
+      "tx_out": "tx0",
+      "tx_in": "tx1",
+      "reason": "keep \u20ac"
+    },
+    "id": "id-29",
+    "now": "2025-06-02T05:00:00Z",
+    "result": {
+      "id": "id-29",
+      "workspace_id": "w",
+      "profile_id": "p",
+      "out_transaction_id": "tx0",
+      "in_transaction_id": "tx1",
+      "reason": "keep \u20ac",
+      "created_at": "2025-06-02T05:00:00Z",
+      "expires_at": "2025-08-31T05:00:00Z"
+    },
+    "rows": {
+      "swap_matching_rules": [
+        {
+          "id": "00000000-0000-0000-0000-00000000000b",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "z",
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-00000000000c",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "a",
+          "predicate_json": "{\"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "id-0",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "\u20ac \ud83d\ude80",
+          "predicate_json": "{\"in_asset\": \"LBTC\", \"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T06:00:00Z"
+        },
+        {
+          "id": "id-2",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{\"max_fee_pct\": 0.0, \"out_wallet_id\": \" \\u2000\"}",
+          "kind": "peg-in",
+          "policy": "taxable",
+          "enabled": 0,
+          "created_at": "2025-06-01T02:00:00Z",
+          "updated_at": "2025-06-01T02:00:00Z"
+        },
+        {
+          "id": "invalid",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{bad",
+          "kind": "bad",
+          "policy": "bad",
+          "enabled": 0,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T04:00:00Z"
+        }
+      ],
+      "transaction_pair_dismissals": [
+        {
+          "id": "id-29",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "out_transaction_id": "tx0",
+          "in_transaction_id": "tx1",
+          "reason": "keep \u20ac",
+          "created_at": "2025-06-02T05:00:00Z",
+          "expires_at": "2025-08-31T05:00:00Z"
+        }
+      ],
+      "profiles": [
+        {
+          "id": "p",
+          "workspace_id": "w",
+          "label": "Book",
+          "fiat_currency": "EUR",
+          "tax_country": "at",
+          "tax_long_term_days": 365,
+          "gains_algorithm": "FIFO",
+          "require_coarse_review": 0,
+          "bitcoin_rail_carrying_value": 1,
+          "cost_basis_pool_scope": "global",
+          "journal_input_version": 7,
+          "last_processed_input_version": 0,
+          "required_journal_semantics_version": 1,
+          "journal_semantics_version": 0,
+          "last_processed_at": null,
+          "last_processed_tx_count": 0,
+          "ownership_review_counts_json": null,
+          "created_at": "2025-01-01T00:00:00Z",
+          "swap_candidate_count": null
+        }
+      ]
+    }
+  },
+  {
+    "operation": "transfers.dismiss",
+    "args": {
+      "tx_out": "external0",
+      "tx_in": "external1",
+      "reason": null,
+      "expires_in_days": 0
+    },
+    "id": "id-30",
+    "now": "2025-06-02T06:00:00Z",
+    "result": {
+      "id": "id-29",
+      "workspace_id": "w",
+      "profile_id": "p",
+      "out_transaction_id": "tx0",
+      "in_transaction_id": "tx1",
+      "reason": "keep \u20ac",
+      "created_at": "2025-06-02T05:00:00Z",
+      "expires_at": null
+    },
+    "rows": {
+      "swap_matching_rules": [
+        {
+          "id": "00000000-0000-0000-0000-00000000000b",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "z",
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-00000000000c",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "a",
+          "predicate_json": "{\"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "id-0",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "\u20ac \ud83d\ude80",
+          "predicate_json": "{\"in_asset\": \"LBTC\", \"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T06:00:00Z"
+        },
+        {
+          "id": "id-2",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{\"max_fee_pct\": 0.0, \"out_wallet_id\": \" \\u2000\"}",
+          "kind": "peg-in",
+          "policy": "taxable",
+          "enabled": 0,
+          "created_at": "2025-06-01T02:00:00Z",
+          "updated_at": "2025-06-01T02:00:00Z"
+        },
+        {
+          "id": "invalid",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{bad",
+          "kind": "bad",
+          "policy": "bad",
+          "enabled": 0,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T04:00:00Z"
+        }
+      ],
+      "transaction_pair_dismissals": [
+        {
+          "id": "id-29",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "out_transaction_id": "tx0",
+          "in_transaction_id": "tx1",
+          "reason": "keep \u20ac",
+          "created_at": "2025-06-02T05:00:00Z",
+          "expires_at": null
+        }
+      ],
+      "profiles": [
+        {
+          "id": "p",
+          "workspace_id": "w",
+          "label": "Book",
+          "fiat_currency": "EUR",
+          "tax_country": "at",
+          "tax_long_term_days": 365,
+          "gains_algorithm": "FIFO",
+          "require_coarse_review": 0,
+          "bitcoin_rail_carrying_value": 1,
+          "cost_basis_pool_scope": "global",
+          "journal_input_version": 8,
+          "last_processed_input_version": 0,
+          "required_journal_semantics_version": 1,
+          "journal_semantics_version": 0,
+          "last_processed_at": null,
+          "last_processed_tx_count": 0,
+          "ownership_review_counts_json": null,
+          "created_at": "2025-01-01T00:00:00Z",
+          "swap_candidate_count": null
+        }
+      ]
+    }
+  },
+  {
+    "operation": "transfers.dismiss",
+    "args": {
+      "tx_out": "tx0",
+      "tx_in": "tx1",
+      "reason": "",
+      "expires_in_days": -1
+    },
+    "id": "id-31",
+    "now": "2025-06-02T07:00:00Z",
+    "result": {
+      "id": "id-29",
+      "workspace_id": "w",
+      "profile_id": "p",
+      "out_transaction_id": "tx0",
+      "in_transaction_id": "tx1",
+      "reason": "",
+      "created_at": "2025-06-02T05:00:00Z",
+      "expires_at": null
+    },
+    "rows": {
+      "swap_matching_rules": [
+        {
+          "id": "00000000-0000-0000-0000-00000000000b",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "z",
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-00000000000c",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "a",
+          "predicate_json": "{\"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "id-0",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "\u20ac \ud83d\ude80",
+          "predicate_json": "{\"in_asset\": \"LBTC\", \"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T06:00:00Z"
+        },
+        {
+          "id": "id-2",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{\"max_fee_pct\": 0.0, \"out_wallet_id\": \" \\u2000\"}",
+          "kind": "peg-in",
+          "policy": "taxable",
+          "enabled": 0,
+          "created_at": "2025-06-01T02:00:00Z",
+          "updated_at": "2025-06-01T02:00:00Z"
+        },
+        {
+          "id": "invalid",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{bad",
+          "kind": "bad",
+          "policy": "bad",
+          "enabled": 0,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T04:00:00Z"
+        }
+      ],
+      "transaction_pair_dismissals": [
+        {
+          "id": "id-29",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "out_transaction_id": "tx0",
+          "in_transaction_id": "tx1",
+          "reason": "",
+          "created_at": "2025-06-02T05:00:00Z",
+          "expires_at": null
+        }
+      ],
+      "profiles": [
+        {
+          "id": "p",
+          "workspace_id": "w",
+          "label": "Book",
+          "fiat_currency": "EUR",
+          "tax_country": "at",
+          "tax_long_term_days": 365,
+          "gains_algorithm": "FIFO",
+          "require_coarse_review": 0,
+          "bitcoin_rail_carrying_value": 1,
+          "cost_basis_pool_scope": "global",
+          "journal_input_version": 9,
+          "last_processed_input_version": 0,
+          "required_journal_semantics_version": 1,
+          "journal_semantics_version": 0,
+          "last_processed_at": null,
+          "last_processed_tx_count": 0,
+          "ownership_review_counts_json": null,
+          "created_at": "2025-01-01T00:00:00Z",
+          "swap_candidate_count": null
+        }
+      ]
+    }
+  },
+  {
+    "operation": "transfers.dismiss",
+    "args": {
+      "tx_out": "tx1",
+      "tx_in": "tx0",
+      "expires_in_days": 1
+    },
+    "id": "id-32",
+    "now": "2025-06-02T08:00:00Z",
+    "result": {
+      "id": "id-32",
+      "workspace_id": "w",
+      "profile_id": "p",
+      "out_transaction_id": "tx1",
+      "in_transaction_id": "tx0",
+      "reason": null,
+      "created_at": "2025-06-02T08:00:00Z",
+      "expires_at": "2025-06-03T08:00:00Z"
+    },
+    "rows": {
+      "swap_matching_rules": [
+        {
+          "id": "00000000-0000-0000-0000-00000000000b",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "z",
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-00000000000c",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "a",
+          "predicate_json": "{\"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "id-0",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "\u20ac \ud83d\ude80",
+          "predicate_json": "{\"in_asset\": \"LBTC\", \"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T06:00:00Z"
+        },
+        {
+          "id": "id-2",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{\"max_fee_pct\": 0.0, \"out_wallet_id\": \" \\u2000\"}",
+          "kind": "peg-in",
+          "policy": "taxable",
+          "enabled": 0,
+          "created_at": "2025-06-01T02:00:00Z",
+          "updated_at": "2025-06-01T02:00:00Z"
+        },
+        {
+          "id": "invalid",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{bad",
+          "kind": "bad",
+          "policy": "bad",
+          "enabled": 0,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T04:00:00Z"
+        }
+      ],
+      "transaction_pair_dismissals": [
+        {
+          "id": "id-29",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "out_transaction_id": "tx0",
+          "in_transaction_id": "tx1",
+          "reason": "",
+          "created_at": "2025-06-02T05:00:00Z",
+          "expires_at": null
+        },
+        {
+          "id": "id-32",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "out_transaction_id": "tx1",
+          "in_transaction_id": "tx0",
+          "reason": null,
+          "created_at": "2025-06-02T08:00:00Z",
+          "expires_at": "2025-06-03T08:00:00Z"
+        }
+      ],
+      "profiles": [
+        {
+          "id": "p",
+          "workspace_id": "w",
+          "label": "Book",
+          "fiat_currency": "EUR",
+          "tax_country": "at",
+          "tax_long_term_days": 365,
+          "gains_algorithm": "FIFO",
+          "require_coarse_review": 0,
+          "bitcoin_rail_carrying_value": 1,
+          "cost_basis_pool_scope": "global",
+          "journal_input_version": 10,
+          "last_processed_input_version": 0,
+          "required_journal_semantics_version": 1,
+          "journal_semantics_version": 0,
+          "last_processed_at": null,
+          "last_processed_tx_count": 0,
+          "ownership_review_counts_json": null,
+          "created_at": "2025-01-01T00:00:00Z",
+          "swap_candidate_count": null
+        }
+      ]
+    }
+  },
+  {
+    "operation": "transfers.dismiss",
+    "args": {
+      "tx_out": "absent",
+      "tx_in": "tx1"
+    },
+    "id": "id-33",
+    "now": "2025-06-02T09:00:00Z",
+    "error": {
+      "code": "app_error",
+      "message": "Transaction 'absent' not found",
+      "hint": null,
+      "details": null
+    },
+    "rows": {
+      "swap_matching_rules": [
+        {
+          "id": "00000000-0000-0000-0000-00000000000b",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "z",
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-00000000000c",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "a",
+          "predicate_json": "{\"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "id-0",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "\u20ac \ud83d\ude80",
+          "predicate_json": "{\"in_asset\": \"LBTC\", \"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T06:00:00Z"
+        },
+        {
+          "id": "id-2",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{\"max_fee_pct\": 0.0, \"out_wallet_id\": \" \\u2000\"}",
+          "kind": "peg-in",
+          "policy": "taxable",
+          "enabled": 0,
+          "created_at": "2025-06-01T02:00:00Z",
+          "updated_at": "2025-06-01T02:00:00Z"
+        },
+        {
+          "id": "invalid",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{bad",
+          "kind": "bad",
+          "policy": "bad",
+          "enabled": 0,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T04:00:00Z"
+        }
+      ],
+      "transaction_pair_dismissals": [
+        {
+          "id": "id-29",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "out_transaction_id": "tx0",
+          "in_transaction_id": "tx1",
+          "reason": "",
+          "created_at": "2025-06-02T05:00:00Z",
+          "expires_at": null
+        },
+        {
+          "id": "id-32",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "out_transaction_id": "tx1",
+          "in_transaction_id": "tx0",
+          "reason": null,
+          "created_at": "2025-06-02T08:00:00Z",
+          "expires_at": "2025-06-03T08:00:00Z"
+        }
+      ],
+      "profiles": [
+        {
+          "id": "p",
+          "workspace_id": "w",
+          "label": "Book",
+          "fiat_currency": "EUR",
+          "tax_country": "at",
+          "tax_long_term_days": 365,
+          "gains_algorithm": "FIFO",
+          "require_coarse_review": 0,
+          "bitcoin_rail_carrying_value": 1,
+          "cost_basis_pool_scope": "global",
+          "journal_input_version": 10,
+          "last_processed_input_version": 0,
+          "required_journal_semantics_version": 1,
+          "journal_semantics_version": 0,
+          "last_processed_at": null,
+          "last_processed_tx_count": 0,
+          "ownership_review_counts_json": null,
+          "created_at": "2025-01-01T00:00:00Z",
+          "swap_candidate_count": null
+        }
+      ]
+    }
+  },
+  {
+    "operation": "transfers.dismiss",
+    "args": {
+      "tx_out": "tx0",
+      "tx_in": "tx1",
+      "expires_in_days": 999999999
+    },
+    "id": "id-34",
+    "now": "2025-06-02T10:00:00Z",
+    "error": {
+      "code": "internal_error",
+      "message": "date value out of range",
+      "hint": null,
+      "details": null
+    },
+    "rows": {
+      "swap_matching_rules": [
+        {
+          "id": "00000000-0000-0000-0000-00000000000b",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "z",
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-00000000000c",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "a",
+          "predicate_json": "{\"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "id-0",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "\u20ac \ud83d\ude80",
+          "predicate_json": "{\"in_asset\": \"LBTC\", \"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T06:00:00Z"
+        },
+        {
+          "id": "id-2",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{\"max_fee_pct\": 0.0, \"out_wallet_id\": \" \\u2000\"}",
+          "kind": "peg-in",
+          "policy": "taxable",
+          "enabled": 0,
+          "created_at": "2025-06-01T02:00:00Z",
+          "updated_at": "2025-06-01T02:00:00Z"
+        },
+        {
+          "id": "invalid",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{bad",
+          "kind": "bad",
+          "policy": "bad",
+          "enabled": 0,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T04:00:00Z"
+        }
+      ],
+      "transaction_pair_dismissals": [
+        {
+          "id": "id-29",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "out_transaction_id": "tx0",
+          "in_transaction_id": "tx1",
+          "reason": "",
+          "created_at": "2025-06-02T05:00:00Z",
+          "expires_at": null
+        },
+        {
+          "id": "id-32",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "out_transaction_id": "tx1",
+          "in_transaction_id": "tx0",
+          "reason": null,
+          "created_at": "2025-06-02T08:00:00Z",
+          "expires_at": "2025-06-03T08:00:00Z"
+        }
+      ],
+      "profiles": [
+        {
+          "id": "p",
+          "workspace_id": "w",
+          "label": "Book",
+          "fiat_currency": "EUR",
+          "tax_country": "at",
+          "tax_long_term_days": 365,
+          "gains_algorithm": "FIFO",
+          "require_coarse_review": 0,
+          "bitcoin_rail_carrying_value": 1,
+          "cost_basis_pool_scope": "global",
+          "journal_input_version": 10,
+          "last_processed_input_version": 0,
+          "required_journal_semantics_version": 1,
+          "journal_semantics_version": 0,
+          "last_processed_at": null,
+          "last_processed_tx_count": 0,
+          "ownership_review_counts_json": null,
+          "created_at": "2025-01-01T00:00:00Z",
+          "swap_candidate_count": null
+        }
+      ]
+    }
+  },
+  {
+    "operation": "transfers.dismiss",
+    "args": {
+      "tx_out": "tx0",
+      "tx_in": "tx1",
+      "expires_in_days": 1000000000
+    },
+    "id": "id-35",
+    "now": "2025-06-02T11:00:00Z",
+    "error": {
+      "code": "internal_error",
+      "message": "days=1000000000; must have magnitude <= 999999999",
+      "hint": null,
+      "details": null
+    },
+    "rows": {
+      "swap_matching_rules": [
+        {
+          "id": "00000000-0000-0000-0000-00000000000b",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "z",
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-00000000000c",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "a",
+          "predicate_json": "{\"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "id-0",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "\u20ac \ud83d\ude80",
+          "predicate_json": "{\"in_asset\": \"LBTC\", \"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T06:00:00Z"
+        },
+        {
+          "id": "id-2",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{\"max_fee_pct\": 0.0, \"out_wallet_id\": \" \\u2000\"}",
+          "kind": "peg-in",
+          "policy": "taxable",
+          "enabled": 0,
+          "created_at": "2025-06-01T02:00:00Z",
+          "updated_at": "2025-06-01T02:00:00Z"
+        },
+        {
+          "id": "invalid",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{bad",
+          "kind": "bad",
+          "policy": "bad",
+          "enabled": 0,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T04:00:00Z"
+        }
+      ],
+      "transaction_pair_dismissals": [
+        {
+          "id": "id-29",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "out_transaction_id": "tx0",
+          "in_transaction_id": "tx1",
+          "reason": "",
+          "created_at": "2025-06-02T05:00:00Z",
+          "expires_at": null
+        },
+        {
+          "id": "id-32",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "out_transaction_id": "tx1",
+          "in_transaction_id": "tx0",
+          "reason": null,
+          "created_at": "2025-06-02T08:00:00Z",
+          "expires_at": "2025-06-03T08:00:00Z"
+        }
+      ],
+      "profiles": [
+        {
+          "id": "p",
+          "workspace_id": "w",
+          "label": "Book",
+          "fiat_currency": "EUR",
+          "tax_country": "at",
+          "tax_long_term_days": 365,
+          "gains_algorithm": "FIFO",
+          "require_coarse_review": 0,
+          "bitcoin_rail_carrying_value": 1,
+          "cost_basis_pool_scope": "global",
+          "journal_input_version": 10,
+          "last_processed_input_version": 0,
+          "required_journal_semantics_version": 1,
+          "journal_semantics_version": 0,
+          "last_processed_at": null,
+          "last_processed_tx_count": 0,
+          "ownership_review_counts_json": null,
+          "created_at": "2025-01-01T00:00:00Z",
+          "swap_candidate_count": null
+        }
+      ]
+    }
+  },
+  {
+    "operation": "transfers.dismiss",
+    "args": {
+      "tx_out": "tx0",
+      "tx_in": "tx1",
+      "expires_in_days": 10000000000
+    },
+    "id": "id-36",
+    "now": "2025-06-02T12:00:00Z",
+    "error": {
+      "code": "internal_error",
+      "message": "Python int too large to convert to C int",
+      "hint": null,
+      "details": null
+    },
+    "rows": {
+      "swap_matching_rules": [
+        {
+          "id": "00000000-0000-0000-0000-00000000000b",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "z",
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-00000000000c",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "a",
+          "predicate_json": "{\"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "id-0",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "\u20ac \ud83d\ude80",
+          "predicate_json": "{\"in_asset\": \"LBTC\", \"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T06:00:00Z"
+        },
+        {
+          "id": "id-2",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{\"max_fee_pct\": 0.0, \"out_wallet_id\": \" \\u2000\"}",
+          "kind": "peg-in",
+          "policy": "taxable",
+          "enabled": 0,
+          "created_at": "2025-06-01T02:00:00Z",
+          "updated_at": "2025-06-01T02:00:00Z"
+        },
+        {
+          "id": "invalid",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{bad",
+          "kind": "bad",
+          "policy": "bad",
+          "enabled": 0,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T04:00:00Z"
+        }
+      ],
+      "transaction_pair_dismissals": [
+        {
+          "id": "id-29",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "out_transaction_id": "tx0",
+          "in_transaction_id": "tx1",
+          "reason": "",
+          "created_at": "2025-06-02T05:00:00Z",
+          "expires_at": null
+        },
+        {
+          "id": "id-32",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "out_transaction_id": "tx1",
+          "in_transaction_id": "tx0",
+          "reason": null,
+          "created_at": "2025-06-02T08:00:00Z",
+          "expires_at": "2025-06-03T08:00:00Z"
+        }
+      ],
+      "profiles": [
+        {
+          "id": "p",
+          "workspace_id": "w",
+          "label": "Book",
+          "fiat_currency": "EUR",
+          "tax_country": "at",
+          "tax_long_term_days": 365,
+          "gains_algorithm": "FIFO",
+          "require_coarse_review": 0,
+          "bitcoin_rail_carrying_value": 1,
+          "cost_basis_pool_scope": "global",
+          "journal_input_version": 10,
+          "last_processed_input_version": 0,
+          "required_journal_semantics_version": 1,
+          "journal_semantics_version": 0,
+          "last_processed_at": null,
+          "last_processed_tx_count": 0,
+          "ownership_review_counts_json": null,
+          "created_at": "2025-01-01T00:00:00Z",
+          "swap_candidate_count": null
+        }
+      ]
+    }
+  },
+  {
+    "operation": "transfers.dismiss",
+    "args": {
+      "tx_out": "tx0",
+      "tx_in": "tx1",
+      "expires_in_days": 1000000000000000000000000000000
+    },
+    "id": "id-37",
+    "now": "2025-06-02T13:00:00Z",
+    "error": {
+      "code": "internal_error",
+      "message": "Python int too large to convert to C int",
+      "hint": null,
+      "details": null
+    },
+    "rows": {
+      "swap_matching_rules": [
+        {
+          "id": "00000000-0000-0000-0000-00000000000b",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "z",
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-00000000000c",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "a",
+          "predicate_json": "{\"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "id-0",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "\u20ac \ud83d\ude80",
+          "predicate_json": "{\"in_asset\": \"LBTC\", \"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T06:00:00Z"
+        },
+        {
+          "id": "id-2",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{\"max_fee_pct\": 0.0, \"out_wallet_id\": \" \\u2000\"}",
+          "kind": "peg-in",
+          "policy": "taxable",
+          "enabled": 0,
+          "created_at": "2025-06-01T02:00:00Z",
+          "updated_at": "2025-06-01T02:00:00Z"
+        },
+        {
+          "id": "invalid",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{bad",
+          "kind": "bad",
+          "policy": "bad",
+          "enabled": 0,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T04:00:00Z"
+        }
+      ],
+      "transaction_pair_dismissals": [
+        {
+          "id": "id-29",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "out_transaction_id": "tx0",
+          "in_transaction_id": "tx1",
+          "reason": "",
+          "created_at": "2025-06-02T05:00:00Z",
+          "expires_at": null
+        },
+        {
+          "id": "id-32",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "out_transaction_id": "tx1",
+          "in_transaction_id": "tx0",
+          "reason": null,
+          "created_at": "2025-06-02T08:00:00Z",
+          "expires_at": "2025-06-03T08:00:00Z"
+        }
+      ],
+      "profiles": [
+        {
+          "id": "p",
+          "workspace_id": "w",
+          "label": "Book",
+          "fiat_currency": "EUR",
+          "tax_country": "at",
+          "tax_long_term_days": 365,
+          "gains_algorithm": "FIFO",
+          "require_coarse_review": 0,
+          "bitcoin_rail_carrying_value": 1,
+          "cost_basis_pool_scope": "global",
+          "journal_input_version": 10,
+          "last_processed_input_version": 0,
+          "required_journal_semantics_version": 1,
+          "journal_semantics_version": 0,
+          "last_processed_at": null,
+          "last_processed_tx_count": 0,
+          "ownership_review_counts_json": null,
+          "created_at": "2025-01-01T00:00:00Z",
+          "swap_candidate_count": null
+        }
+      ]
+    }
+  },
+  {
+    "operation": "transfers.dismiss",
+    "args": {
+      "tx_out": "tx0",
+      "tx_in": "tx1",
+      "expires_in_days": "bad"
+    },
+    "id": "id-38",
+    "now": "2025-06-02T14:00:00Z",
+    "error": {
+      "code": "internal_error",
+      "message": "invalid literal for int() with base 10: 'bad'",
+      "hint": null,
+      "details": null
+    },
+    "rows": {
+      "swap_matching_rules": [
+        {
+          "id": "00000000-0000-0000-0000-00000000000b",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "z",
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-00000000000c",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "a",
+          "predicate_json": "{\"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "id-0",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "\u20ac \ud83d\ude80",
+          "predicate_json": "{\"in_asset\": \"LBTC\", \"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T06:00:00Z"
+        },
+        {
+          "id": "id-2",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{\"max_fee_pct\": 0.0, \"out_wallet_id\": \" \\u2000\"}",
+          "kind": "peg-in",
+          "policy": "taxable",
+          "enabled": 0,
+          "created_at": "2025-06-01T02:00:00Z",
+          "updated_at": "2025-06-01T02:00:00Z"
+        },
+        {
+          "id": "invalid",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{bad",
+          "kind": "bad",
+          "policy": "bad",
+          "enabled": 0,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T04:00:00Z"
+        }
+      ],
+      "transaction_pair_dismissals": [
+        {
+          "id": "id-29",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "out_transaction_id": "tx0",
+          "in_transaction_id": "tx1",
+          "reason": "",
+          "created_at": "2025-06-02T05:00:00Z",
+          "expires_at": null
+        },
+        {
+          "id": "id-32",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "out_transaction_id": "tx1",
+          "in_transaction_id": "tx0",
+          "reason": null,
+          "created_at": "2025-06-02T08:00:00Z",
+          "expires_at": "2025-06-03T08:00:00Z"
+        }
+      ],
+      "profiles": [
+        {
+          "id": "p",
+          "workspace_id": "w",
+          "label": "Book",
+          "fiat_currency": "EUR",
+          "tax_country": "at",
+          "tax_long_term_days": 365,
+          "gains_algorithm": "FIFO",
+          "require_coarse_review": 0,
+          "bitcoin_rail_carrying_value": 1,
+          "cost_basis_pool_scope": "global",
+          "journal_input_version": 10,
+          "last_processed_input_version": 0,
+          "required_journal_semantics_version": 1,
+          "journal_semantics_version": 0,
+          "last_processed_at": null,
+          "last_processed_tx_count": 0,
+          "ownership_review_counts_json": null,
+          "created_at": "2025-01-01T00:00:00Z",
+          "swap_candidate_count": null
+        }
+      ]
+    }
+  },
+  {
+    "operation": "transfers.dismiss",
+    "args": {
+      "tx_out": "tx0",
+      "tx_in": "tx1",
+      "expires_in_days": NaN
+    },
+    "id": "id-39",
+    "now": "2025-06-02T15:00:00Z",
+    "error": {
+      "code": "internal_error",
+      "message": "cannot convert float NaN to integer",
+      "hint": null,
+      "details": null
+    },
+    "rows": {
+      "swap_matching_rules": [
+        {
+          "id": "00000000-0000-0000-0000-00000000000b",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "z",
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-00000000000c",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "a",
+          "predicate_json": "{\"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "id-0",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "\u20ac \ud83d\ude80",
+          "predicate_json": "{\"in_asset\": \"LBTC\", \"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T06:00:00Z"
+        },
+        {
+          "id": "id-2",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{\"max_fee_pct\": 0.0, \"out_wallet_id\": \" \\u2000\"}",
+          "kind": "peg-in",
+          "policy": "taxable",
+          "enabled": 0,
+          "created_at": "2025-06-01T02:00:00Z",
+          "updated_at": "2025-06-01T02:00:00Z"
+        },
+        {
+          "id": "invalid",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{bad",
+          "kind": "bad",
+          "policy": "bad",
+          "enabled": 0,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T04:00:00Z"
+        }
+      ],
+      "transaction_pair_dismissals": [
+        {
+          "id": "id-29",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "out_transaction_id": "tx0",
+          "in_transaction_id": "tx1",
+          "reason": "",
+          "created_at": "2025-06-02T05:00:00Z",
+          "expires_at": null
+        },
+        {
+          "id": "id-32",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "out_transaction_id": "tx1",
+          "in_transaction_id": "tx0",
+          "reason": null,
+          "created_at": "2025-06-02T08:00:00Z",
+          "expires_at": "2025-06-03T08:00:00Z"
+        }
+      ],
+      "profiles": [
+        {
+          "id": "p",
+          "workspace_id": "w",
+          "label": "Book",
+          "fiat_currency": "EUR",
+          "tax_country": "at",
+          "tax_long_term_days": 365,
+          "gains_algorithm": "FIFO",
+          "require_coarse_review": 0,
+          "bitcoin_rail_carrying_value": 1,
+          "cost_basis_pool_scope": "global",
+          "journal_input_version": 10,
+          "last_processed_input_version": 0,
+          "required_journal_semantics_version": 1,
+          "journal_semantics_version": 0,
+          "last_processed_at": null,
+          "last_processed_tx_count": 0,
+          "ownership_review_counts_json": null,
+          "created_at": "2025-01-01T00:00:00Z",
+          "swap_candidate_count": null
+        }
+      ]
+    }
+  },
+  {
+    "operation": "transfers.dismiss",
+    "args": {
+      "tx_out": "tx0",
+      "tx_in": "tx1",
+      "expires_in_days": Infinity
+    },
+    "id": "id-40",
+    "now": "2025-06-02T16:00:00Z",
+    "error": {
+      "code": "internal_error",
+      "message": "cannot convert float infinity to integer",
+      "hint": null,
+      "details": null
+    },
+    "rows": {
+      "swap_matching_rules": [
+        {
+          "id": "00000000-0000-0000-0000-00000000000b",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "z",
+          "predicate_json": "{}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "00000000-0000-0000-0000-00000000000c",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "a",
+          "predicate_json": "{\"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T00:00:00Z"
+        },
+        {
+          "id": "id-0",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": "\u20ac \ud83d\ude80",
+          "predicate_json": "{\"in_asset\": \"LBTC\", \"max_fee_pct\": 1e-06, \"min_confidence\": \"exact\", \"out_asset\": \"BTC\"}",
+          "kind": "manual",
+          "policy": "carrying-value",
+          "enabled": 1,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T06:00:00Z"
+        },
+        {
+          "id": "id-2",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{\"max_fee_pct\": 0.0, \"out_wallet_id\": \" \\u2000\"}",
+          "kind": "peg-in",
+          "policy": "taxable",
+          "enabled": 0,
+          "created_at": "2025-06-01T02:00:00Z",
+          "updated_at": "2025-06-01T02:00:00Z"
+        },
+        {
+          "id": "invalid",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "name": null,
+          "predicate_json": "{bad",
+          "kind": "bad",
+          "policy": "bad",
+          "enabled": 0,
+          "created_at": "2025-06-01T00:00:00Z",
+          "updated_at": "2025-06-01T04:00:00Z"
+        }
+      ],
+      "transaction_pair_dismissals": [
+        {
+          "id": "id-29",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "out_transaction_id": "tx0",
+          "in_transaction_id": "tx1",
+          "reason": "",
+          "created_at": "2025-06-02T05:00:00Z",
+          "expires_at": null
+        },
+        {
+          "id": "id-32",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "out_transaction_id": "tx1",
+          "in_transaction_id": "tx0",
+          "reason": null,
+          "created_at": "2025-06-02T08:00:00Z",
+          "expires_at": "2025-06-03T08:00:00Z"
+        }
+      ],
+      "profiles": [
+        {
+          "id": "p",
+          "workspace_id": "w",
+          "label": "Book",
+          "fiat_currency": "EUR",
+          "tax_country": "at",
+          "tax_long_term_days": 365,
+          "gains_algorithm": "FIFO",
+          "require_coarse_review": 0,
+          "bitcoin_rail_carrying_value": 1,
+          "cost_basis_pool_scope": "global",
+          "journal_input_version": 10,
+          "last_processed_input_version": 0,
+          "required_journal_semantics_version": 1,
+          "journal_semantics_version": 0,
+          "last_processed_at": null,
+          "last_processed_tx_count": 0,
+          "ownership_review_counts_json": null,
+          "created_at": "2025-01-01T00:00:00Z",
+          "swap_candidate_count": null
+        }
+      ]
+    }
+  }
+]

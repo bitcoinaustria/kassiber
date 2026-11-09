@@ -1,0 +1,12 @@
+{
+  "body": [],
+  "request": {
+    "key": "payouts",
+    "method": "GET",
+    "path": "/api/v1/stores/{storeId}/payouts?includeCancelled=true",
+    "permissions": [
+      "btcpay.store.canviewpayouts"
+    ]
+  },
+  "status": 200
+}

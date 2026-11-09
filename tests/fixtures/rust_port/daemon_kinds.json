@@ -1,0 +1,4939 @@
+{
+  "allowlists": {
+    "tauri_ai_runtime": [
+      "ai.chat",
+      "ai.chat.cancel",
+      "ai.chat.permission_mode",
+      "ai.list_models",
+      "ai.provider_runtime.status",
+      "ai.test_connection",
+      "ai.tool_call.consent",
+      "ui.chat.attachments.upload",
+      "ui.wallets.document_import.preview"
+    ],
+    "tauri_allowed": [
+      "ai.chat",
+      "ai.chat.cancel",
+      "ai.chat.permission_mode",
+      "ai.list_models",
+      "ai.provider_runtime.status",
+      "ai.providers.acknowledge",
+      "ai.providers.clear_default",
+      "ai.providers.create",
+      "ai.providers.delete",
+      "ai.providers.get",
+      "ai.providers.list",
+      "ai.providers.move_api_key",
+      "ai.providers.set_api_key",
+      "ai.providers.set_default",
+      "ai.providers.update",
+      "ai.test_connection",
+      "ai.tool_call.consent",
+      "daemon.lock",
+      "daemon.unlock",
+      "status",
+      "ui.activity.history",
+      "ui.activity.stale",
+      "ui.agent_access.configure",
+      "ui.agent_access.lock",
+      "ui.agent_access.pairing",
+      "ui.agent_access.status",
+      "ui.agent_access.unlock",
+      "ui.attachments.add",
+      "ui.attachments.copy",
+      "ui.attachments.list",
+      "ui.attachments.open",
+      "ui.attachments.remove",
+      "ui.attachments.rename",
+      "ui.audit.evidence.summary",
+      "ui.backends.bitcoinrpc.test",
+      "ui.backends.btcpay.test",
+      "ui.backends.create",
+      "ui.backends.delete",
+      "ui.backends.detect_core",
+      "ui.backends.electrum.test",
+      "ui.backends.http.test",
+      "ui.backends.lightning.test",
+      "ui.backends.list",
+      "ui.backends.options",
+      "ui.backends.public_defaults",
+      "ui.backends.set_default",
+      "ui.backends.settings.list",
+      "ui.backends.update",
+      "ui.backup.apply",
+      "ui.backup.cancel",
+      "ui.backup.export",
+      "ui.backup.preview",
+      "ui.btcpay.provenance.links",
+      "ui.btcpay.provenance.list",
+      "ui.btcpay.provenance.review",
+      "ui.btcpay.provenance.suggest",
+      "ui.btcpay.provenance.sync",
+      "ui.chain_analysis.acquire.apply",
+      "ui.chain_analysis.acquire.plan",
+      "ui.chain_analysis.ai_context",
+      "ui.chain_analysis.cases.compare",
+      "ui.chain_analysis.cases.delete",
+      "ui.chain_analysis.cases.get",
+      "ui.chain_analysis.cases.list",
+      "ui.chain_analysis.cases.save",
+      "ui.chain_analysis.datasets.discard.start",
+      "ui.chain_analysis.datasets.get",
+      "ui.chain_analysis.datasets.import.start",
+      "ui.chain_analysis.datasets.list",
+      "ui.chain_analysis.datasets.preview.start",
+      "ui.chain_analysis.datasets.query",
+      "ui.chain_analysis.datasets.revoke",
+      "ui.chain_analysis.entropy",
+      "ui.chain_analysis.entropy.start",
+      "ui.chain_analysis.jobs.cancel",
+      "ui.chain_analysis.jobs.get",
+      "ui.chain_analysis.labels.delete",
+      "ui.chain_analysis.labels.import",
+      "ui.chain_analysis.labels.list",
+      "ui.chain_analysis.labels.upsert",
+      "ui.chain_analysis.psbt.analyze",
+      "ui.chain_analysis.psbt.compare",
+      "ui.chain_analysis.psbt.entropy.start",
+      "ui.chain_analysis.query",
+      "ui.chain_analysis.sources.authorize",
+      "ui.chain_analysis.sources.list",
+      "ui.chain_analysis.sources.plan",
+      "ui.chain_analysis.sources.revoke",
+      "ui.chain_analysis.sources.run",
+      "ui.chain_analysis.watches.acknowledge",
+      "ui.chain_analysis.watches.configure",
+      "ui.chain_analysis.watches.create",
+      "ui.chain_analysis.watches.delete",
+      "ui.chain_analysis.watches.evaluate",
+      "ui.chain_analysis.watches.inbox",
+      "ui.chain_analysis.watches.list",
+      "ui.chain_analysis.watches.preview",
+      "ui.chat.attachments.upload",
+      "ui.chat.history.configure",
+      "ui.chat.sessions.clear",
+      "ui.chat.sessions.delete",
+      "ui.chat.sessions.get",
+      "ui.chat.sessions.list",
+      "ui.connections.btcpay.create",
+      "ui.connections.btcpay.discover",
+      "ui.connections.btcpay.key_guide",
+      "ui.connections.btcpay.test",
+      "ui.connections.exchange.create",
+      "ui.connections.exchange.status",
+      "ui.connections.exchange.sync",
+      "ui.connections.exchange.test",
+      "ui.connections.node.snapshot",
+      "ui.connections.sources",
+      "ui.custody.coverage.snapshot",
+      "ui.custody.gaps.history",
+      "ui.custody.gaps.list",
+      "ui.custody.gaps.review_context",
+      "ui.custody.lineage.snapshot",
+      "ui.custody.review.apply",
+      "ui.custody.review.plan",
+      "ui.documents.attach",
+      "ui.documents.create",
+      "ui.documents.import_report",
+      "ui.documents.list",
+      "ui.egress.snapshot",
+      "ui.exports.preview",
+      "ui.freshness.cancel",
+      "ui.freshness.configure",
+      "ui.freshness.pause",
+      "ui.freshness.resume",
+      "ui.freshness.run",
+      "ui.freshness.status",
+      "ui.imports.list",
+      "ui.imports.rollback",
+      "ui.journals.events.list",
+      "ui.journals.process",
+      "ui.journals.quarantine",
+      "ui.journals.snapshot",
+      "ui.journals.transfers.list",
+      "ui.loans.link",
+      "ui.loans.list",
+      "ui.loans.mark",
+      "ui.loans.unmark",
+      "ui.logs.snapshot",
+      "ui.maintenance.configure",
+      "ui.maintenance.run",
+      "ui.maintenance.settings",
+      "ui.metadata.bip329.export",
+      "ui.metadata.bip329.import",
+      "ui.metadata.bip329.preview",
+      "ui.network.offline",
+      "ui.network.offline.set",
+      "ui.networks.bind",
+      "ui.networks.binding",
+      "ui.networks.inventory",
+      "ui.networks.partition_export",
+      "ui.networks.partition_plan",
+      "ui.networks.plan",
+      "ui.next_actions",
+      "ui.onboarding.complete",
+      "ui.overview.snapshot",
+      "ui.privacy_hygiene.snapshot",
+      "ui.profiles.create",
+      "ui.profiles.rename",
+      "ui.profiles.reset_data",
+      "ui.profiles.snapshot",
+      "ui.profiles.switch",
+      "ui.profiles.update",
+      "ui.projects.create",
+      "ui.projects.list",
+      "ui.projects.select",
+      "ui.rates.coverage",
+      "ui.rates.kraken_csv.import",
+      "ui.rates.latest",
+      "ui.rates.rebuild",
+      "ui.rates.summary",
+      "ui.reports.balance_history",
+      "ui.reports.balance_sheet",
+      "ui.reports.capital_gains",
+      "ui.reports.cross_check",
+      "ui.reports.exit_tax_preview",
+      "ui.reports.explain_capital_gain",
+      "ui.reports.export_audit_package",
+      "ui.reports.export_austrian_e1kv_csv",
+      "ui.reports.export_austrian_e1kv_pdf",
+      "ui.reports.export_austrian_e1kv_xlsx",
+      "ui.reports.export_capital_gains_csv",
+      "ui.reports.export_cross_check",
+      "ui.reports.export_csv",
+      "ui.reports.export_exit_tax_pdf",
+      "ui.reports.export_exit_tax_xlsx",
+      "ui.reports.export_pdf",
+      "ui.reports.export_summary_pdf",
+      "ui.reports.export_xlsx",
+      "ui.reports.export_year_handoff",
+      "ui.reports.lightning_profitability",
+      "ui.reports.portfolio_summary",
+      "ui.reports.privacy_hygiene",
+      "ui.reports.privacy_mirror",
+      "ui.reports.psbt_privacy",
+      "ui.reports.summary",
+      "ui.reports.tax_summary",
+      "ui.review.apply",
+      "ui.review.badges",
+      "ui.review.cases",
+      "ui.review.plan",
+      "ui.review.request_input",
+      "ui.saved_views.create",
+      "ui.saved_views.delete",
+      "ui.saved_views.list",
+      "ui.secrets.change_passphrase",
+      "ui.secrets.forget_cli_unlock",
+      "ui.secrets.init",
+      "ui.source_funds.assemble",
+      "ui.source_funds.cases.list",
+      "ui.source_funds.cases.save",
+      "ui.source_funds.coverage",
+      "ui.source_funds.evidence.list",
+      "ui.source_funds.export_bundle",
+      "ui.source_funds.export_pdf",
+      "ui.source_funds.links.attach",
+      "ui.source_funds.links.bulk_review",
+      "ui.source_funds.links.create",
+      "ui.source_funds.links.list",
+      "ui.source_funds.links.review",
+      "ui.source_funds.preview",
+      "ui.source_funds.recipients.create",
+      "ui.source_funds.recipients.delete",
+      "ui.source_funds.recipients.list",
+      "ui.source_funds.recipients.update",
+      "ui.source_funds.request_input",
+      "ui.source_funds.review_context",
+      "ui.source_funds.sources.attach",
+      "ui.source_funds.sources.create",
+      "ui.source_funds.sources.list",
+      "ui.source_funds.suggest",
+      "ui.transactions.commercial_context",
+      "ui.transactions.dashboard",
+      "ui.transactions.export_csv",
+      "ui.transactions.export_platform_csv",
+      "ui.transactions.export_xlsx",
+      "ui.transactions.graph",
+      "ui.transactions.history",
+      "ui.transactions.history.revert",
+      "ui.transactions.ledger_template",
+      "ui.transactions.list",
+      "ui.transactions.metadata.update",
+      "ui.transactions.resolve",
+      "ui.transfers.bulk_pair",
+      "ui.transfers.components.apply",
+      "ui.transfers.components.list",
+      "ui.transfers.components.plan",
+      "ui.transfers.dismiss",
+      "ui.transfers.dismissals.delete",
+      "ui.transfers.list",
+      "ui.transfers.pair",
+      "ui.transfers.payouts.create",
+      "ui.transfers.payouts.delete",
+      "ui.transfers.payouts.list",
+      "ui.transfers.rules.apply",
+      "ui.transfers.rules.create",
+      "ui.transfers.rules.delete",
+      "ui.transfers.rules.list",
+      "ui.transfers.rules.set_enabled",
+      "ui.transfers.suggest",
+      "ui.transfers.unpair",
+      "ui.transfers.update",
+      "ui.wallets.create",
+      "ui.wallets.delete",
+      "ui.wallets.detect_script_types",
+      "ui.wallets.document_import.import",
+      "ui.wallets.document_import.preview",
+      "ui.wallets.identify",
+      "ui.wallets.identify_onchain",
+      "ui.wallets.identify_onchain.cancel",
+      "ui.wallets.import_file",
+      "ui.wallets.import_samourai",
+      "ui.wallets.ledger_preview",
+      "ui.wallets.list",
+      "ui.wallets.preview_descriptor",
+      "ui.wallets.sync",
+      "ui.wallets.update",
+      "ui.wallets.utxos",
+      "ui.workspace.create",
+      "ui.workspace.delete",
+      "ui.workspace.freshness.run",
+      "ui.workspace.health",
+      "ui.workspace.overview.snapshot",
+      "ui.workspace.rename",
+      "wallets.reveal_descriptor"
+    ],
+    "tauri_streaming": [
+      "ai.chat",
+      "ui.backup.apply",
+      "ui.backup.export",
+      "ui.backup.preview",
+      "ui.freshness.run",
+      "ui.journals.process",
+      "ui.rates.rebuild",
+      "ui.review.apply",
+      "ui.review.plan",
+      "ui.source_funds.assemble",
+      "ui.wallets.document_import.import",
+      "ui.wallets.document_import.preview",
+      "ui.wallets.identify_onchain",
+      "ui.wallets.sync",
+      "ui.workspace.freshness.run"
+    ],
+    "vite_allowed": [
+      "ai.chat",
+      "ai.chat.cancel",
+      "ai.chat.permission_mode",
+      "ai.list_models",
+      "ai.provider_runtime.status",
+      "ai.providers.acknowledge",
+      "ai.providers.clear_default",
+      "ai.providers.create",
+      "ai.providers.delete",
+      "ai.providers.get",
+      "ai.providers.list",
+      "ai.providers.move_api_key",
+      "ai.providers.set_api_key",
+      "ai.providers.set_default",
+      "ai.providers.update",
+      "ai.test_connection",
+      "ai.tool_call.consent",
+      "daemon.lock",
+      "daemon.unlock",
+      "status",
+      "ui.activity.history",
+      "ui.activity.stale",
+      "ui.agent_access.configure",
+      "ui.agent_access.lock",
+      "ui.agent_access.pairing",
+      "ui.agent_access.status",
+      "ui.agent_access.unlock",
+      "ui.attachments.add",
+      "ui.attachments.copy",
+      "ui.attachments.list",
+      "ui.attachments.open",
+      "ui.attachments.remove",
+      "ui.attachments.rename",
+      "ui.audit.evidence.summary",
+      "ui.backends.bitcoinrpc.test",
+      "ui.backends.btcpay.test",
+      "ui.backends.create",
+      "ui.backends.delete",
+      "ui.backends.detect_core",
+      "ui.backends.electrum.test",
+      "ui.backends.http.test",
+      "ui.backends.lightning.test",
+      "ui.backends.list",
+      "ui.backends.options",
+      "ui.backends.public_defaults",
+      "ui.backends.set_default",
+      "ui.backends.settings.list",
+      "ui.backends.update",
+      "ui.backup.apply",
+      "ui.backup.cancel",
+      "ui.backup.export",
+      "ui.backup.preview",
+      "ui.btcpay.provenance.links",
+      "ui.btcpay.provenance.list",
+      "ui.btcpay.provenance.review",
+      "ui.btcpay.provenance.suggest",
+      "ui.btcpay.provenance.sync",
+      "ui.chain_analysis.acquire.apply",
+      "ui.chain_analysis.acquire.plan",
+      "ui.chain_analysis.ai_context",
+      "ui.chain_analysis.cases.compare",
+      "ui.chain_analysis.cases.delete",
+      "ui.chain_analysis.cases.get",
+      "ui.chain_analysis.cases.list",
+      "ui.chain_analysis.cases.save",
+      "ui.chain_analysis.datasets.discard.start",
+      "ui.chain_analysis.datasets.get",
+      "ui.chain_analysis.datasets.import.start",
+      "ui.chain_analysis.datasets.list",
+      "ui.chain_analysis.datasets.preview.start",
+      "ui.chain_analysis.datasets.query",
+      "ui.chain_analysis.datasets.revoke",
+      "ui.chain_analysis.entropy",
+      "ui.chain_analysis.entropy.start",
+      "ui.chain_analysis.jobs.cancel",
+      "ui.chain_analysis.jobs.get",
+      "ui.chain_analysis.labels.delete",
+      "ui.chain_analysis.labels.import",
+      "ui.chain_analysis.labels.list",
+      "ui.chain_analysis.labels.upsert",
+      "ui.chain_analysis.psbt.analyze",
+      "ui.chain_analysis.psbt.compare",
+      "ui.chain_analysis.psbt.entropy.start",
+      "ui.chain_analysis.query",
+      "ui.chain_analysis.sources.authorize",
+      "ui.chain_analysis.sources.list",
+      "ui.chain_analysis.sources.plan",
+      "ui.chain_analysis.sources.revoke",
+      "ui.chain_analysis.sources.run",
+      "ui.chain_analysis.watches.acknowledge",
+      "ui.chain_analysis.watches.configure",
+      "ui.chain_analysis.watches.create",
+      "ui.chain_analysis.watches.delete",
+      "ui.chain_analysis.watches.evaluate",
+      "ui.chain_analysis.watches.inbox",
+      "ui.chain_analysis.watches.list",
+      "ui.chain_analysis.watches.preview",
+      "ui.chat.attachments.upload",
+      "ui.chat.history.configure",
+      "ui.chat.sessions.clear",
+      "ui.chat.sessions.delete",
+      "ui.chat.sessions.get",
+      "ui.chat.sessions.list",
+      "ui.connections.btcpay.create",
+      "ui.connections.btcpay.discover",
+      "ui.connections.btcpay.key_guide",
+      "ui.connections.btcpay.test",
+      "ui.connections.exchange.create",
+      "ui.connections.exchange.status",
+      "ui.connections.exchange.sync",
+      "ui.connections.exchange.test",
+      "ui.connections.node.snapshot",
+      "ui.connections.sources",
+      "ui.custody.coverage.snapshot",
+      "ui.custody.gaps.history",
+      "ui.custody.gaps.list",
+      "ui.custody.gaps.review_context",
+      "ui.custody.lineage.snapshot",
+      "ui.custody.review.apply",
+      "ui.custody.review.plan",
+      "ui.documents.attach",
+      "ui.documents.create",
+      "ui.documents.import_report",
+      "ui.documents.list",
+      "ui.egress.snapshot",
+      "ui.exports.preview",
+      "ui.freshness.cancel",
+      "ui.freshness.configure",
+      "ui.freshness.pause",
+      "ui.freshness.resume",
+      "ui.freshness.run",
+      "ui.freshness.status",
+      "ui.imports.list",
+      "ui.imports.rollback",
+      "ui.journals.events.list",
+      "ui.journals.process",
+      "ui.journals.quarantine",
+      "ui.journals.snapshot",
+      "ui.journals.transfers.list",
+      "ui.loans.link",
+      "ui.loans.list",
+      "ui.loans.mark",
+      "ui.loans.unmark",
+      "ui.logs.snapshot",
+      "ui.maintenance.configure",
+      "ui.maintenance.run",
+      "ui.maintenance.settings",
+      "ui.metadata.bip329.export",
+      "ui.metadata.bip329.import",
+      "ui.metadata.bip329.preview",
+      "ui.network.offline",
+      "ui.network.offline.set",
+      "ui.networks.bind",
+      "ui.networks.binding",
+      "ui.networks.inventory",
+      "ui.networks.partition_export",
+      "ui.networks.partition_plan",
+      "ui.networks.plan",
+      "ui.next_actions",
+      "ui.onboarding.complete",
+      "ui.overview.snapshot",
+      "ui.privacy_hygiene.snapshot",
+      "ui.profiles.create",
+      "ui.profiles.rename",
+      "ui.profiles.reset_data",
+      "ui.profiles.snapshot",
+      "ui.profiles.switch",
+      "ui.profiles.update",
+      "ui.projects.create",
+      "ui.projects.list",
+      "ui.projects.select",
+      "ui.rates.coverage",
+      "ui.rates.kraken_csv.import",
+      "ui.rates.latest",
+      "ui.rates.rebuild",
+      "ui.rates.summary",
+      "ui.reports.balance_history",
+      "ui.reports.balance_sheet",
+      "ui.reports.capital_gains",
+      "ui.reports.cross_check",
+      "ui.reports.exit_tax_preview",
+      "ui.reports.explain_capital_gain",
+      "ui.reports.export_audit_package",
+      "ui.reports.export_austrian_e1kv_csv",
+      "ui.reports.export_austrian_e1kv_pdf",
+      "ui.reports.export_austrian_e1kv_xlsx",
+      "ui.reports.export_capital_gains_csv",
+      "ui.reports.export_cross_check",
+      "ui.reports.export_csv",
+      "ui.reports.export_exit_tax_pdf",
+      "ui.reports.export_exit_tax_xlsx",
+      "ui.reports.export_pdf",
+      "ui.reports.export_summary_pdf",
+      "ui.reports.export_xlsx",
+      "ui.reports.export_year_handoff",
+      "ui.reports.lightning_profitability",
+      "ui.reports.portfolio_summary",
+      "ui.reports.privacy_hygiene",
+      "ui.reports.privacy_mirror",
+      "ui.reports.psbt_privacy",
+      "ui.reports.summary",
+      "ui.reports.tax_summary",
+      "ui.review.apply",
+      "ui.review.badges",
+      "ui.review.cases",
+      "ui.review.plan",
+      "ui.review.request_input",
+      "ui.saved_views.create",
+      "ui.saved_views.delete",
+      "ui.saved_views.list",
+      "ui.secrets.change_passphrase",
+      "ui.secrets.forget_cli_unlock",
+      "ui.secrets.init",
+      "ui.source_funds.assemble",
+      "ui.source_funds.cases.list",
+      "ui.source_funds.cases.save",
+      "ui.source_funds.coverage",
+      "ui.source_funds.evidence.list",
+      "ui.source_funds.export_bundle",
+      "ui.source_funds.export_pdf",
+      "ui.source_funds.links.attach",
+      "ui.source_funds.links.bulk_review",
+      "ui.source_funds.links.create",
+      "ui.source_funds.links.list",
+      "ui.source_funds.links.review",
+      "ui.source_funds.preview",
+      "ui.source_funds.recipients.create",
+      "ui.source_funds.recipients.delete",
+      "ui.source_funds.recipients.list",
+      "ui.source_funds.recipients.update",
+      "ui.source_funds.request_input",
+      "ui.source_funds.review_context",
+      "ui.source_funds.sources.attach",
+      "ui.source_funds.sources.create",
+      "ui.source_funds.sources.list",
+      "ui.source_funds.suggest",
+      "ui.transactions.commercial_context",
+      "ui.transactions.dashboard",
+      "ui.transactions.export_csv",
+      "ui.transactions.export_platform_csv",
+      "ui.transactions.export_xlsx",
+      "ui.transactions.graph",
+      "ui.transactions.history",
+      "ui.transactions.history.revert",
+      "ui.transactions.ledger_template",
+      "ui.transactions.list",
+      "ui.transactions.metadata.update",
+      "ui.transactions.resolve",
+      "ui.transfers.bulk_pair",
+      "ui.transfers.components.apply",
+      "ui.transfers.components.list",
+      "ui.transfers.components.plan",
+      "ui.transfers.dismiss",
+      "ui.transfers.dismissals.delete",
+      "ui.transfers.list",
+      "ui.transfers.pair",
+      "ui.transfers.payouts.create",
+      "ui.transfers.payouts.delete",
+      "ui.transfers.payouts.list",
+      "ui.transfers.rules.apply",
+      "ui.transfers.rules.create",
+      "ui.transfers.rules.delete",
+      "ui.transfers.rules.list",
+      "ui.transfers.rules.set_enabled",
+      "ui.transfers.suggest",
+      "ui.transfers.unpair",
+      "ui.transfers.update",
+      "ui.wallets.create",
+      "ui.wallets.delete",
+      "ui.wallets.detect_script_types",
+      "ui.wallets.document_import.import",
+      "ui.wallets.document_import.preview",
+      "ui.wallets.identify",
+      "ui.wallets.identify_onchain",
+      "ui.wallets.identify_onchain.cancel",
+      "ui.wallets.import_file",
+      "ui.wallets.import_samourai",
+      "ui.wallets.ledger_preview",
+      "ui.wallets.list",
+      "ui.wallets.preview_descriptor",
+      "ui.wallets.sync",
+      "ui.wallets.update",
+      "ui.wallets.utxos",
+      "ui.workspace.create",
+      "ui.workspace.delete",
+      "ui.workspace.freshness.run",
+      "ui.workspace.health",
+      "ui.workspace.overview.snapshot",
+      "ui.workspace.rename",
+      "wallets.reveal_descriptor"
+    ],
+    "vite_stream_only": [
+      "ai.chat"
+    ],
+    "vite_streaming": [
+      "ai.chat",
+      "ui.backup.apply",
+      "ui.backup.export",
+      "ui.backup.preview",
+      "ui.freshness.run",
+      "ui.journals.process",
+      "ui.rates.rebuild",
+      "ui.review.apply",
+      "ui.review.plan",
+      "ui.wallets.document_import.import",
+      "ui.wallets.document_import.preview",
+      "ui.wallets.identify_onchain",
+      "ui.wallets.sync",
+      "ui.workspace.freshness.run"
+    ]
+  },
+  "emission_sites": [
+    {
+      "at": "kassiber/daemon.py:1694",
+      "classification": "control",
+      "kind": "supervisor.ai_secret_store.request"
+    },
+    {
+      "at": "kassiber/daemon.py:4346",
+      "classification": "stream",
+      "kind": "auth_required"
+    },
+    {
+      "at": "kassiber/daemon.py:4458",
+      "classification": "terminal",
+      "kind": "ui.projects.select"
+    },
+    {
+      "at": "kassiber/daemon.py:4495",
+      "classification": "stream",
+      "kind": "auth_required"
+    },
+    {
+      "at": "kassiber/daemon.py:4674",
+      "classification": "terminal",
+      "kind": "ui.projects.select"
+    },
+    {
+      "at": "kassiber/daemon.py:7024",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "LOAD_TOOLS_NAME"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:7362",
+      "classification": "stream",
+      "kind": "read_skill_reference"
+    },
+    {
+      "at": "kassiber/daemon.py:7378",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "entry.daemon_kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:7814",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "entry.daemon_kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:7824",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "entry.daemon_kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:7826",
+      "classification": "terminal",
+      "kind": "ui.report.blockers"
+    },
+    {
+      "at": "kassiber/daemon.py:8646",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "entry.daemon_kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:8662",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "export_kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:8698",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "export_kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:8714",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "entry.daemon_kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:8731",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "entry.daemon_kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:8739",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "entry.daemon_kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:8747",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "entry.daemon_kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:8755",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "entry.daemon_kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:8764",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "entry.daemon_kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:8774",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "entry.daemon_kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:8780",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "entry.daemon_kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:8786",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "entry.daemon_kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:8792",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "entry.daemon_kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:8803",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "entry.daemon_kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:8813",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "entry.daemon_kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:8823",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "entry.daemon_kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:8837",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "entry.daemon_kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:8845",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "entry.daemon_kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:8858",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "entry.daemon_kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:8879",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "entry.daemon_kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:8892",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "entry.daemon_kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:8963",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "entry.daemon_kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:8983",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "entry.daemon_kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:10331",
+      "classification": "stream",
+      "kind": "ai.chat.tool_call"
+    },
+    {
+      "at": "kassiber/daemon.py:10349",
+      "classification": "stream",
+      "kind": "ai.chat.tool_result"
+    },
+    {
+      "at": "kassiber/daemon.py:10376",
+      "classification": "stream",
+      "kind": "ai.chat.status"
+    },
+    {
+      "at": "kassiber/daemon.py:10512",
+      "classification": "stream",
+      "kind": "ai.chat.delta"
+    },
+    {
+      "at": "kassiber/daemon.py:10797",
+      "classification": "terminal",
+      "kind": "ai.chat"
+    },
+    {
+      "at": "kassiber/daemon.py:11108",
+      "classification": "stream",
+      "kind": "ai.chat.tool_call"
+    },
+    {
+      "at": "kassiber/daemon.py:11159",
+      "classification": "stream",
+      "kind": "ai.chat.tool_consent_required"
+    },
+    {
+      "at": "kassiber/daemon.py:11230",
+      "classification": "stream",
+      "kind": "ai.chat.tool_call"
+    },
+    {
+      "at": "kassiber/daemon.py:11281",
+      "classification": "stream",
+      "kind": "ai.chat.tool_result"
+    },
+    {
+      "at": "kassiber/daemon.py:11313",
+      "classification": "stream",
+      "kind": "ai.chat.delta"
+    },
+    {
+      "at": "kassiber/daemon.py:11465",
+      "classification": "stream",
+      "kind": "ai.chat.delta"
+    },
+    {
+      "at": "kassiber/daemon.py:11665",
+      "classification": "stream",
+      "kind": "auth_required"
+    },
+    {
+      "at": "kassiber/daemon.py:17363",
+      "classification": "terminal",
+      "kind": "ui.wallets.update"
+    },
+    {
+      "at": "kassiber/daemon.py:17421",
+      "classification": "terminal",
+      "kind": "ui.wallets.delete"
+    },
+    {
+      "at": "kassiber/daemon.py:17451",
+      "classification": "terminal",
+      "kind": "ai.chat.cancel"
+    },
+    {
+      "at": "kassiber/daemon.py:17488",
+      "classification": "terminal",
+      "kind": "ai.tool_call.consent"
+    },
+    {
+      "at": "kassiber/daemon.py:17523",
+      "classification": "terminal",
+      "kind": "ai.chat.permission_mode"
+    },
+    {
+      "at": "kassiber/daemon.py:17707",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:17712",
+      "classification": "terminal",
+      "kind": "daemon.shutdown"
+    },
+    {
+      "at": "kassiber/daemon.py:17730",
+      "classification": "terminal",
+      "kind": "daemon.lock"
+    },
+    {
+      "at": "kassiber/daemon.py:17788",
+      "classification": "terminal",
+      "kind": "daemon.unlock"
+    },
+    {
+      "at": "kassiber/daemon.py:17875",
+      "classification": "terminal",
+      "kind": "ui.secrets.init"
+    },
+    {
+      "at": "kassiber/daemon.py:17964",
+      "classification": "terminal",
+      "kind": "ui.secrets.forget_cli_unlock"
+    },
+    {
+      "at": "kassiber/daemon.py:18064",
+      "classification": "terminal",
+      "kind": "ui.secrets.change_passphrase"
+    },
+    {
+      "at": "kassiber/daemon.py:18097",
+      "classification": "terminal",
+      "kind": "ui.backends.public_defaults"
+    },
+    {
+      "at": "kassiber/daemon.py:18116",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:18125",
+      "classification": "terminal",
+      "kind": "ui.logs.snapshot"
+    },
+    {
+      "at": "kassiber/daemon.py:18134",
+      "classification": "terminal",
+      "kind": "ui.egress.snapshot"
+    },
+    {
+      "at": "kassiber/daemon.py:18145",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:18154",
+      "classification": "terminal",
+      "kind": "ui.projects.list"
+    },
+    {
+      "at": "kassiber/daemon.py:18203",
+      "classification": "terminal",
+      "kind": "ui.projects.create"
+    },
+    {
+      "at": "kassiber/daemon.py:18253",
+      "classification": "terminal",
+      "kind": "status"
+    },
+    {
+      "at": "kassiber/daemon.py:18262",
+      "classification": "terminal",
+      "kind": "ui.overview.snapshot"
+    },
+    {
+      "at": "kassiber/daemon.py:18271",
+      "classification": "terminal",
+      "kind": "ui.workspace.overview.snapshot"
+    },
+    {
+      "at": "kassiber/daemon.py:18283",
+      "classification": "terminal",
+      "kind": "ui.transactions.list"
+    },
+    {
+      "at": "kassiber/daemon.py:18306",
+      "classification": "terminal",
+      "kind": "ui.transactions.dashboard"
+    },
+    {
+      "at": "kassiber/daemon.py:18322",
+      "classification": "terminal",
+      "kind": "ui.transactions.extremes"
+    },
+    {
+      "at": "kassiber/daemon.py:18334",
+      "classification": "terminal",
+      "kind": "ui.transactions.search"
+    },
+    {
+      "at": "kassiber/daemon.py:18346",
+      "classification": "terminal",
+      "kind": "ui.transactions.resolve"
+    },
+    {
+      "at": "kassiber/daemon.py:18358",
+      "classification": "terminal",
+      "kind": "ui.transactions.graph"
+    },
+    {
+      "at": "kassiber/daemon.py:18375",
+      "classification": "terminal",
+      "kind": "ui.transactions.review_context"
+    },
+    {
+      "at": "kassiber/daemon.py:18396",
+      "classification": "terminal",
+      "kind": "ui.transactions.metadata.update"
+    },
+    {
+      "at": "kassiber/daemon.py:18408",
+      "classification": "terminal",
+      "kind": "ui.loans.list"
+    },
+    {
+      "at": "kassiber/daemon.py:18419",
+      "classification": "terminal",
+      "kind": "ui.loans.link"
+    },
+    {
+      "at": "kassiber/daemon.py:18425",
+      "classification": "terminal",
+      "kind": "ui.loans.mark"
+    },
+    {
+      "at": "kassiber/daemon.py:18430",
+      "classification": "terminal",
+      "kind": "ui.loans.unmark"
+    },
+    {
+      "at": "kassiber/daemon.py:18437",
+      "classification": "terminal",
+      "kind": "ui.transactions.history"
+    },
+    {
+      "at": "kassiber/daemon.py:18449",
+      "classification": "terminal",
+      "kind": "ui.activity.history"
+    },
+    {
+      "at": "kassiber/daemon.py:18461",
+      "classification": "terminal",
+      "kind": "ui.activity.stale"
+    },
+    {
+      "at": "kassiber/daemon.py:18473",
+      "classification": "terminal",
+      "kind": "ui.transactions.history.revert"
+    },
+    {
+      "at": "kassiber/daemon.py:18492",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:18508",
+      "classification": "terminal",
+      "kind": "ui.wallets.list"
+    },
+    {
+      "at": "kassiber/daemon.py:18520",
+      "classification": "terminal",
+      "kind": "ui.wallets.utxos"
+    },
+    {
+      "at": "kassiber/daemon.py:18536",
+      "classification": "terminal",
+      "kind": "ui.privacy_hygiene.snapshot"
+    },
+    {
+      "at": "kassiber/daemon.py:18551",
+      "classification": "terminal",
+      "kind": "ui.wallets.identify"
+    },
+    {
+      "at": "kassiber/daemon.py:18589",
+      "classification": "terminal",
+      "kind": "ui.backends.list"
+    },
+    {
+      "at": "kassiber/daemon.py:18601",
+      "classification": "terminal",
+      "kind": "ui.backends.options"
+    },
+    {
+      "at": "kassiber/daemon.py:18613",
+      "classification": "terminal",
+      "kind": "ui.backends.settings.list"
+    },
+    {
+      "at": "kassiber/daemon.py:18625",
+      "classification": "terminal",
+      "kind": "ui.backends.create"
+    },
+    {
+      "at": "kassiber/daemon.py:18640",
+      "classification": "terminal",
+      "kind": "ui.backends.update"
+    },
+    {
+      "at": "kassiber/daemon.py:18655",
+      "classification": "terminal",
+      "kind": "ui.backends.delete"
+    },
+    {
+      "at": "kassiber/daemon.py:18670",
+      "classification": "terminal",
+      "kind": "ui.backends.set_default"
+    },
+    {
+      "at": "kassiber/daemon.py:18685",
+      "classification": "terminal",
+      "kind": "ui.backends.bitcoinrpc.test"
+    },
+    {
+      "at": "kassiber/daemon.py:18700",
+      "classification": "terminal",
+      "kind": "ui.backends.btcpay.test"
+    },
+    {
+      "at": "kassiber/daemon.py:18715",
+      "classification": "terminal",
+      "kind": "ui.backends.detect_core"
+    },
+    {
+      "at": "kassiber/daemon.py:18729",
+      "classification": "terminal",
+      "kind": "ui.backends.electrum.test"
+    },
+    {
+      "at": "kassiber/daemon.py:18743",
+      "classification": "terminal",
+      "kind": "ui.backends.http.test"
+    },
+    {
+      "at": "kassiber/daemon.py:18757",
+      "classification": "terminal",
+      "kind": "ui.backends.lightning.test"
+    },
+    {
+      "at": "kassiber/daemon.py:18785",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:18793",
+      "classification": "terminal",
+      "kind": "ui.reports.capital_gains"
+    },
+    {
+      "at": "kassiber/daemon.py:18805",
+      "classification": "terminal",
+      "kind": "ui.reports.summary"
+    },
+    {
+      "at": "kassiber/daemon.py:18820",
+      "classification": "terminal",
+      "kind": "ui.reports.balance_sheet"
+    },
+    {
+      "at": "kassiber/daemon.py:18832",
+      "classification": "terminal",
+      "kind": "ui.reports.portfolio_summary"
+    },
+    {
+      "at": "kassiber/daemon.py:18844",
+      "classification": "terminal",
+      "kind": "ui.reports.tax_summary"
+    },
+    {
+      "at": "kassiber/daemon.py:18859",
+      "classification": "terminal",
+      "kind": "ui.reports.balance_history"
+    },
+    {
+      "at": "kassiber/daemon.py:18874",
+      "classification": "terminal",
+      "kind": "ui.reports.privacy_hygiene"
+    },
+    {
+      "at": "kassiber/daemon.py:18889",
+      "classification": "terminal",
+      "kind": "ui.reports.privacy_mirror"
+    },
+    {
+      "at": "kassiber/daemon.py:18904",
+      "classification": "terminal",
+      "kind": "ui.reports.psbt_privacy"
+    },
+    {
+      "at": "kassiber/daemon.py:18920",
+      "classification": "terminal",
+      "kind": "ui.reports.exit_tax_preview"
+    },
+    {
+      "at": "kassiber/daemon.py:18956",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:18997",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:19025",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:19043",
+      "classification": "terminal",
+      "kind": "ui.journals.snapshot"
+    },
+    {
+      "at": "kassiber/daemon.py:19055",
+      "classification": "terminal",
+      "kind": "ui.journals.events.list"
+    },
+    {
+      "at": "kassiber/daemon.py:19067",
+      "classification": "terminal",
+      "kind": "ui.journals.quarantine"
+    },
+    {
+      "at": "kassiber/daemon.py:19081",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:19092",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:19099",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:19104",
+      "classification": "terminal",
+      "kind": "ui.journals.quarantine.resolve"
+    },
+    {
+      "at": "kassiber/daemon.py:19120",
+      "classification": "terminal",
+      "kind": "ui.journals.transfers.list"
+    },
+    {
+      "at": "kassiber/daemon.py:19132",
+      "classification": "terminal",
+      "kind": "ui.review.badges"
+    },
+    {
+      "at": "kassiber/daemon.py:19144",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:19160",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:19175",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:19190",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:19223",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:19228",
+      "classification": "terminal",
+      "kind": "ui.profiles.snapshot"
+    },
+    {
+      "at": "kassiber/daemon.py:19240",
+      "classification": "terminal",
+      "kind": "ui.onboarding.complete"
+    },
+    {
+      "at": "kassiber/daemon.py:19255",
+      "classification": "terminal",
+      "kind": "ui.profiles.create"
+    },
+    {
+      "at": "kassiber/daemon.py:19270",
+      "classification": "terminal",
+      "kind": "ui.profiles.rename"
+    },
+    {
+      "at": "kassiber/daemon.py:19285",
+      "classification": "terminal",
+      "kind": "ui.profiles.update"
+    },
+    {
+      "at": "kassiber/daemon.py:19306",
+      "classification": "terminal",
+      "kind": "ui.profiles.switch"
+    },
+    {
+      "at": "kassiber/daemon.py:19318",
+      "classification": "terminal",
+      "kind": "ui.rates.summary"
+    },
+    {
+      "at": "kassiber/daemon.py:19327",
+      "classification": "terminal",
+      "kind": "ui.rates.coverage"
+    },
+    {
+      "at": "kassiber/daemon.py:19339",
+      "classification": "terminal",
+      "kind": "ui.rates.kraken_csv.import"
+    },
+    {
+      "at": "kassiber/daemon.py:19354",
+      "classification": "terminal",
+      "kind": "ui.rates.rebuild"
+    },
+    {
+      "at": "kassiber/daemon.py:19369",
+      "classification": "terminal",
+      "kind": "ui.rates.latest"
+    },
+    {
+      "at": "kassiber/daemon.py:19390",
+      "classification": "terminal",
+      "kind": "ui.report.blockers"
+    },
+    {
+      "at": "kassiber/daemon.py:19405",
+      "classification": "terminal",
+      "kind": "ui.audit.changes_since_last_answer"
+    },
+    {
+      "at": "kassiber/daemon.py:19422",
+      "classification": "terminal",
+      "kind": "ui.audit.evidence.summary"
+    },
+    {
+      "at": "kassiber/daemon.py:19452",
+      "classification": "terminal",
+      "kind": "ui.maintenance.settings"
+    },
+    {
+      "at": "kassiber/daemon.py:19464",
+      "classification": "terminal",
+      "kind": "ui.maintenance.configure"
+    },
+    {
+      "at": "kassiber/daemon.py:19479",
+      "classification": "terminal",
+      "kind": "ui.maintenance.run"
+    },
+    {
+      "at": "kassiber/daemon.py:19496",
+      "classification": "terminal",
+      "kind": "ui.freshness.status"
+    },
+    {
+      "at": "kassiber/daemon.py:19508",
+      "classification": "terminal",
+      "kind": "ui.freshness.configure"
+    },
+    {
+      "at": "kassiber/daemon.py:19524",
+      "classification": "stream",
+      "kind": "ui.freshness.run.progress"
+    },
+    {
+      "at": "kassiber/daemon.py:19531",
+      "classification": "terminal",
+      "kind": "ui.freshness.run"
+    },
+    {
+      "at": "kassiber/daemon.py:19549",
+      "classification": "stream",
+      "kind": "ui.workspace.freshness.run.progress"
+    },
+    {
+      "at": "kassiber/daemon.py:19556",
+      "classification": "terminal",
+      "kind": "ui.workspace.freshness.run"
+    },
+    {
+      "at": "kassiber/daemon.py:19574",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:19590",
+      "classification": "terminal",
+      "kind": "ui.workspace.health"
+    },
+    {
+      "at": "kassiber/daemon.py:19602",
+      "classification": "terminal",
+      "kind": "ui.workspace.create"
+    },
+    {
+      "at": "kassiber/daemon.py:19617",
+      "classification": "terminal",
+      "kind": "ui.workspace.rename"
+    },
+    {
+      "at": "kassiber/daemon.py:19666",
+      "classification": "terminal",
+      "kind": "ui.workspace.delete"
+    },
+    {
+      "at": "kassiber/daemon.py:19736",
+      "classification": "terminal",
+      "kind": "ui.profiles.reset_data"
+    },
+    {
+      "at": "kassiber/daemon.py:19753",
+      "classification": "terminal",
+      "kind": "ui.next_actions"
+    },
+    {
+      "at": "kassiber/daemon.py:19765",
+      "classification": "terminal",
+      "kind": "ui.wallets.create"
+    },
+    {
+      "at": "kassiber/daemon.py:19780",
+      "classification": "terminal",
+      "kind": "ui.transactions.ledger_template"
+    },
+    {
+      "at": "kassiber/daemon.py:19795",
+      "classification": "terminal",
+      "kind": "ui.wallets.ledger_preview"
+    },
+    {
+      "at": "kassiber/daemon.py:19807",
+      "classification": "terminal",
+      "kind": "ui.imports.list"
+    },
+    {
+      "at": "kassiber/daemon.py:19823",
+      "classification": "terminal",
+      "kind": "ui.imports.rollback"
+    },
+    {
+      "at": "kassiber/daemon.py:19830",
+      "classification": "terminal",
+      "kind": "ui.wallets.analyze_file"
+    },
+    {
+      "at": "kassiber/daemon.py:19845",
+      "classification": "terminal",
+      "kind": "ui.wallets.import_file"
+    },
+    {
+      "at": "kassiber/daemon.py:19863",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "daemon_chat_uploads.KIND"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:19878",
+      "classification": "terminal",
+      "kind": "internal.document_import.stage"
+    },
+    {
+      "at": "kassiber/daemon.py:19893",
+      "classification": "terminal",
+      "kind": "ui.wallets.document_import.preview"
+    },
+    {
+      "at": "kassiber/daemon.py:19908",
+      "classification": "terminal",
+      "kind": "ui.wallets.document_import.import"
+    },
+    {
+      "at": "kassiber/daemon.py:19926",
+      "classification": "terminal",
+      "kind": "ui.wallets.import_samourai"
+    },
+    {
+      "at": "kassiber/daemon.py:19944",
+      "classification": "terminal",
+      "kind": "ui.wallets.preview_descriptor"
+    },
+    {
+      "at": "kassiber/daemon.py:19958",
+      "classification": "terminal",
+      "kind": "ui.wallets.detect_script_types"
+    },
+    {
+      "at": "kassiber/daemon.py:19973",
+      "classification": "terminal",
+      "kind": "ui.connections.sources"
+    },
+    {
+      "at": "kassiber/daemon.py:19985",
+      "classification": "terminal",
+      "kind": "ui.connections.btcpay.create"
+    },
+    {
+      "at": "kassiber/daemon.py:20000",
+      "classification": "terminal",
+      "kind": "ui.connections.bullbitcoin_wallet.create"
+    },
+    {
+      "at": "kassiber/daemon.py:20015",
+      "classification": "terminal",
+      "kind": "ui.connections.btcpay.discover"
+    },
+    {
+      "at": "kassiber/daemon.py:20030",
+      "classification": "terminal",
+      "kind": "ui.connections.btcpay.key_guide"
+    },
+    {
+      "at": "kassiber/daemon.py:20045",
+      "classification": "terminal",
+      "kind": "ui.connections.btcpay.test"
+    },
+    {
+      "at": "kassiber/daemon.py:20060",
+      "classification": "terminal",
+      "kind": "ui.connections.node.snapshot"
+    },
+    {
+      "at": "kassiber/daemon.py:20076",
+      "classification": "terminal",
+      "kind": "ui.reports.lightning_profitability"
+    },
+    {
+      "at": "kassiber/daemon.py:20092",
+      "classification": "terminal",
+      "kind": "ui.metadata.bip329.preview"
+    },
+    {
+      "at": "kassiber/daemon.py:20107",
+      "classification": "terminal",
+      "kind": "ui.metadata.bip329.import"
+    },
+    {
+      "at": "kassiber/daemon.py:20136",
+      "classification": "terminal",
+      "kind": "ui.exports.preview"
+    },
+    {
+      "at": "kassiber/daemon.py:20160",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:20169",
+      "classification": "terminal",
+      "kind": "ui.metadata.bip329.export"
+    },
+    {
+      "at": "kassiber/daemon.py:20212",
+      "classification": "stream",
+      "kind": "ui.wallets.sync.progress"
+    },
+    {
+      "at": "kassiber/daemon.py:20230",
+      "classification": "terminal",
+      "kind": "ui.wallets.sync"
+    },
+    {
+      "at": "kassiber/daemon.py:20265",
+      "classification": "stream",
+      "kind": "ui.journals.process.progress"
+    },
+    {
+      "at": "kassiber/daemon.py:20272",
+      "classification": "terminal",
+      "kind": "ui.journals.process"
+    },
+    {
+      "at": "kassiber/daemon.py:20290",
+      "classification": "terminal",
+      "kind": "ai.providers.list"
+    },
+    {
+      "at": "kassiber/daemon.py:20339",
+      "classification": "terminal",
+      "kind": "ai.providers.create"
+    },
+    {
+      "at": "kassiber/daemon.py:20415",
+      "classification": "terminal",
+      "kind": "ai.providers.update"
+    },
+    {
+      "at": "kassiber/daemon.py:20440",
+      "classification": "terminal",
+      "kind": "ai.providers.set_api_key"
+    },
+    {
+      "at": "kassiber/daemon.py:20467",
+      "classification": "terminal",
+      "kind": "ai.providers.move_api_key"
+    },
+    {
+      "at": "kassiber/daemon.py:20484",
+      "classification": "terminal",
+      "kind": "ai.providers.delete"
+    },
+    {
+      "at": "kassiber/daemon.py:20497",
+      "classification": "terminal",
+      "kind": "ai.providers.set_default"
+    },
+    {
+      "at": "kassiber/daemon.py:20506",
+      "classification": "terminal",
+      "kind": "ai.providers.clear_default"
+    },
+    {
+      "at": "kassiber/daemon.py:20520",
+      "classification": "terminal",
+      "kind": "ai.providers.get"
+    },
+    {
+      "at": "kassiber/daemon.py:20533",
+      "classification": "terminal",
+      "kind": "ai.providers.acknowledge"
+    },
+    {
+      "at": "kassiber/daemon.py:20626",
+      "classification": "terminal",
+      "kind": "ai.provider_runtime.status"
+    },
+    {
+      "at": "kassiber/daemon.py:20663",
+      "classification": "terminal",
+      "kind": "ai.list_models"
+    },
+    {
+      "at": "kassiber/daemon.py:20686",
+      "classification": "terminal",
+      "kind": "ai.list_models"
+    },
+    {
+      "at": "kassiber/daemon.py:20861",
+      "classification": "terminal",
+      "kind": "ai.test_connection"
+    },
+    {
+      "at": "kassiber/daemon.py:20967",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:21099",
+      "classification": "dynamic",
+      "kind": {
+        "expression": "kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon.py:21147",
+      "classification": "startup",
+      "kind": "daemon.ready"
+    },
+    {
+      "at": "kassiber/daemon_chain_analysis_watches.py:55",
+      "classification": "event",
+      "kind": "ui.chain_analysis.watches.changed"
+    },
+    {
+      "at": "kassiber/daemon_freshness.py:210",
+      "classification": "event",
+      "kind": "ui.freshness.background"
+    },
+    {
+      "at": "kassiber/daemon_freshness.py:1924",
+      "classification": "event",
+      "kind": {
+        "expression": "kind"
+      }
+    },
+    {
+      "at": "kassiber/daemon_freshness.py:1957",
+      "classification": "event",
+      "kind": "ui.freshness.progress"
+    },
+    {
+      "at": "kassiber/daemon_freshness.py:1971",
+      "classification": "event",
+      "kind": "ui.freshness.background"
+    },
+    {
+      "at": "kassiber/daemon_freshness.py:2026",
+      "classification": "event",
+      "kind": "ui.freshness.worker"
+    },
+    {
+      "at": "kassiber/daemon_freshness.py:2040",
+      "classification": "event",
+      "kind": "ui.freshness.worker"
+    },
+    {
+      "at": "kassiber/daemon_freshness.py:2076",
+      "classification": "event",
+      "kind": "ui.freshness.worker"
+    },
+    {
+      "at": "kassiber/daemon_freshness.py:2889",
+      "classification": "terminal",
+      "kind": "ui.wallets.sync"
+    },
+    {
+      "at": "kassiber/daemon_freshness.py:2894",
+      "classification": "terminal",
+      "kind": "ui.journals.process"
+    },
+    {
+      "at": "kassiber/daemon_freshness.py:2937",
+      "classification": "terminal",
+      "kind": "ui.wallets.sync"
+    },
+    {
+      "at": "kassiber/daemon_freshness.py:2942",
+      "classification": "terminal",
+      "kind": "ui.wallets.sync"
+    },
+    {
+      "at": "kassiber/daemon_freshness.py:2945",
+      "classification": "terminal",
+      "kind": "ui.journals.process"
+    },
+    {
+      "at": "kassiber/daemon_ownership_verify.py:106",
+      "classification": "stream",
+      "kind": "ui.wallets.identify_onchain.progress"
+    },
+    {
+      "at": "kassiber/daemon_ownership_verify.py:119",
+      "classification": "terminal",
+      "kind": "ui.wallets.identify_onchain"
+    },
+    {
+      "at": "kassiber/daemon_ownership_verify.py:136",
+      "classification": "terminal",
+      "kind": "ui.wallets.identify_onchain"
+    },
+    {
+      "at": "kassiber/daemon_ownership_verify.py:141",
+      "classification": "terminal",
+      "kind": "ui.wallets.identify_onchain"
+    },
+    {
+      "at": "kassiber/daemon_ownership_verify.py:171",
+      "classification": "terminal",
+      "kind": "ui.wallets.identify_onchain.cancel"
+    }
+  ],
+  "requests": [
+    {
+      "kind": "ai.chat",
+      "tauri_ai_runtime": true,
+      "tauri_allowed": true,
+      "tauri_streaming": true,
+      "terminal_kind": "ai.chat",
+      "vite_allowed": true,
+      "vite_stream_only": true,
+      "vite_streaming": true
+    },
+    {
+      "kind": "ai.chat.cancel",
+      "tauri_ai_runtime": true,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ai.chat.cancel",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ai.chat.permission_mode",
+      "tauri_ai_runtime": true,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ai.chat.permission_mode",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ai.list_models",
+      "tauri_ai_runtime": true,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ai.list_models",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ai.provider_runtime.status",
+      "tauri_ai_runtime": true,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ai.provider_runtime.status",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ai.providers.acknowledge",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ai.providers.acknowledge",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ai.providers.clear_default",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ai.providers.clear_default",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ai.providers.create",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ai.providers.create",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ai.providers.delete",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ai.providers.delete",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ai.providers.get",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ai.providers.get",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ai.providers.list",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ai.providers.list",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ai.providers.move_api_key",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ai.providers.move_api_key",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ai.providers.set_api_key",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ai.providers.set_api_key",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ai.providers.set_default",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ai.providers.set_default",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ai.providers.update",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ai.providers.update",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ai.test_connection",
+      "tauri_ai_runtime": true,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ai.test_connection",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ai.tool_call.consent",
+      "tauri_ai_runtime": true,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ai.tool_call.consent",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "backends.reveal_token",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": false,
+      "tauri_streaming": false,
+      "terminal_kind": "backends.reveal_token",
+      "vite_allowed": false,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "daemon.lock",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "daemon.lock",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "daemon.shutdown",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": false,
+      "tauri_streaming": false,
+      "terminal_kind": "daemon.shutdown",
+      "vite_allowed": false,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "daemon.unlock",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "daemon.unlock",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "internal.chain_analysis.stage",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": false,
+      "tauri_streaming": false,
+      "terminal_kind": "internal.chain_analysis.stage",
+      "vite_allowed": false,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "internal.document_import.stage",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": false,
+      "tauri_streaming": false,
+      "terminal_kind": "internal.document_import.stage",
+      "vite_allowed": false,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "status",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "status",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.activity.history",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.activity.history",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.activity.stale",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.activity.stale",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.agent_access.configure",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.agent_access.configure",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.agent_access.lock",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.agent_access.lock",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.agent_access.pairing",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.agent_access.pairing",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.agent_access.status",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.agent_access.status",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.agent_access.unlock",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.agent_access.unlock",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.attachments.add",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.attachments.add",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.attachments.copy",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.attachments.copy",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.attachments.list",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.attachments.list",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.attachments.open",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.attachments.open",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.attachments.remove",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.attachments.remove",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.attachments.rename",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.attachments.rename",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.audit.changes_since_last_answer",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": false,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.audit.changes_since_last_answer",
+      "vite_allowed": false,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.audit.evidence.summary",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.audit.evidence.summary",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.backends.bitcoinrpc.test",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.backends.bitcoinrpc.test",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.backends.btcpay.test",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.backends.btcpay.test",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.backends.create",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.backends.create",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.backends.delete",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.backends.delete",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.backends.detect_core",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.backends.detect_core",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.backends.electrum.test",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.backends.electrum.test",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.backends.http.test",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.backends.http.test",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.backends.lightning.test",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.backends.lightning.test",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.backends.list",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.backends.list",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.backends.options",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.backends.options",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.backends.public_defaults",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.backends.public_defaults",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.backends.set_default",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.backends.set_default",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.backends.settings.list",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.backends.settings.list",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.backends.update",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.backends.update",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.backup.apply",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": true,
+      "terminal_kind": "ui.backup.apply",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": true
+    },
+    {
+      "kind": "ui.backup.cancel",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.backup.cancel",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.backup.export",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": true,
+      "terminal_kind": "ui.backup.export",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": true
+    },
+    {
+      "kind": "ui.backup.preview",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": true,
+      "terminal_kind": "ui.backup.preview",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": true
+    },
+    {
+      "kind": "ui.btcpay.provenance.links",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.btcpay.provenance.links",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.btcpay.provenance.list",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.btcpay.provenance.list",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.btcpay.provenance.review",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.btcpay.provenance.review",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.btcpay.provenance.suggest",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.btcpay.provenance.suggest",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.btcpay.provenance.sync",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.btcpay.provenance.sync",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chain_analysis.acquire.apply",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chain_analysis.acquire.apply",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chain_analysis.acquire.plan",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chain_analysis.acquire.plan",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chain_analysis.ai_context",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chain_analysis.ai_context",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chain_analysis.cases.compare",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chain_analysis.cases.compare",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chain_analysis.cases.delete",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chain_analysis.cases.delete",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chain_analysis.cases.get",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chain_analysis.cases.get",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chain_analysis.cases.list",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chain_analysis.cases.list",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chain_analysis.cases.save",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chain_analysis.cases.save",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chain_analysis.datasets.discard",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": false,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chain_analysis.datasets.discard",
+      "vite_allowed": false,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chain_analysis.datasets.discard.start",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chain_analysis.datasets.discard.start",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chain_analysis.datasets.get",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chain_analysis.datasets.get",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chain_analysis.datasets.import",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": false,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chain_analysis.datasets.import",
+      "vite_allowed": false,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chain_analysis.datasets.import.start",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chain_analysis.datasets.import.start",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chain_analysis.datasets.list",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chain_analysis.datasets.list",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chain_analysis.datasets.preview",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": false,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chain_analysis.datasets.preview",
+      "vite_allowed": false,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chain_analysis.datasets.preview.start",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chain_analysis.datasets.preview.start",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chain_analysis.datasets.query",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chain_analysis.datasets.query",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chain_analysis.datasets.revoke",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chain_analysis.datasets.revoke",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chain_analysis.entropy",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chain_analysis.entropy",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chain_analysis.entropy.start",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chain_analysis.entropy.start",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chain_analysis.jobs.cancel",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chain_analysis.jobs.cancel",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chain_analysis.jobs.get",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chain_analysis.jobs.get",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chain_analysis.labels.delete",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chain_analysis.labels.delete",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chain_analysis.labels.import",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chain_analysis.labels.import",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chain_analysis.labels.list",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chain_analysis.labels.list",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chain_analysis.labels.upsert",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chain_analysis.labels.upsert",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chain_analysis.psbt.analyze",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chain_analysis.psbt.analyze",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chain_analysis.psbt.compare",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chain_analysis.psbt.compare",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chain_analysis.psbt.entropy",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": false,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chain_analysis.psbt.entropy",
+      "vite_allowed": false,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chain_analysis.psbt.entropy.start",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chain_analysis.psbt.entropy.start",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chain_analysis.query",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chain_analysis.query",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chain_analysis.sources.authorize",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chain_analysis.sources.authorize",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chain_analysis.sources.list",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chain_analysis.sources.list",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chain_analysis.sources.plan",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chain_analysis.sources.plan",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chain_analysis.sources.revoke",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chain_analysis.sources.revoke",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chain_analysis.sources.run",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chain_analysis.sources.run",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chain_analysis.watches.acknowledge",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chain_analysis.watches.acknowledge",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chain_analysis.watches.configure",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chain_analysis.watches.configure",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chain_analysis.watches.create",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chain_analysis.watches.create",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chain_analysis.watches.delete",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chain_analysis.watches.delete",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chain_analysis.watches.evaluate",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chain_analysis.watches.evaluate",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chain_analysis.watches.inbox",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chain_analysis.watches.inbox",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chain_analysis.watches.list",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chain_analysis.watches.list",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chain_analysis.watches.preview",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chain_analysis.watches.preview",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chat.attachments.upload",
+      "tauri_ai_runtime": true,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chat.attachments.upload",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chat.history.configure",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chat.history.configure",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chat.sessions.clear",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chat.sessions.clear",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chat.sessions.delete",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chat.sessions.delete",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chat.sessions.get",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chat.sessions.get",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.chat.sessions.list",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.chat.sessions.list",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.connections.btcpay.create",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.connections.btcpay.create",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.connections.btcpay.discover",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.connections.btcpay.discover",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.connections.btcpay.key_guide",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.connections.btcpay.key_guide",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.connections.btcpay.test",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.connections.btcpay.test",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.connections.bullbitcoin_wallet.create",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": false,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.connections.bullbitcoin_wallet.create",
+      "vite_allowed": false,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.connections.node.snapshot",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.connections.node.snapshot",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.connections.sources",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.connections.sources",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.custody.coverage.snapshot",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.custody.coverage.snapshot",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.custody.gaps.history",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.custody.gaps.history",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.custody.gaps.list",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.custody.gaps.list",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.custody.gaps.review_context",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.custody.gaps.review_context",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.custody.lineage.snapshot",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.custody.lineage.snapshot",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.custody.review.apply",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.custody.review.apply",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.custody.review.plan",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.custody.review.plan",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.documents.attach",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.documents.attach",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.documents.create",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.documents.create",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.documents.import_report",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.documents.import_report",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.documents.list",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.documents.list",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.egress.snapshot",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.egress.snapshot",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.exports.preview",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.exports.preview",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.freshness.cancel",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.freshness.cancel",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.freshness.configure",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.freshness.configure",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.freshness.pause",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.freshness.pause",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.freshness.resume",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.freshness.resume",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.freshness.run",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": true,
+      "terminal_kind": "ui.freshness.run",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": true
+    },
+    {
+      "kind": "ui.freshness.status",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.freshness.status",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.imports.list",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.imports.list",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.imports.rollback",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.imports.rollback",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.journals.events.list",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.journals.events.list",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.journals.process",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": true,
+      "terminal_kind": "ui.journals.process",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": true
+    },
+    {
+      "kind": "ui.journals.quarantine",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.journals.quarantine",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.journals.quarantine.resolve",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": false,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.journals.quarantine.resolve",
+      "vite_allowed": false,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.journals.snapshot",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.journals.snapshot",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.journals.transfers.list",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.journals.transfers.list",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.loans.link",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.loans.link",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.loans.list",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.loans.list",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.loans.mark",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.loans.mark",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.loans.unmark",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.loans.unmark",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.logs.snapshot",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.logs.snapshot",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.maintenance.configure",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.maintenance.configure",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.maintenance.run",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.maintenance.run",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.maintenance.settings",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.maintenance.settings",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.metadata.bip329.export",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.metadata.bip329.export",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.metadata.bip329.import",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.metadata.bip329.import",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.metadata.bip329.preview",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.metadata.bip329.preview",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.network.offline",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.network.offline",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.network.offline.set",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.network.offline.set",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.networks.bind",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.networks.bind",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.networks.binding",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.networks.binding",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.networks.inventory",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.networks.inventory",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.networks.partition_export",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.networks.partition_export",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.networks.partition_plan",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.networks.partition_plan",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.networks.plan",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.networks.plan",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.next_actions",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.next_actions",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.onboarding.complete",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.onboarding.complete",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.overview.snapshot",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.overview.snapshot",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.privacy_hygiene.snapshot",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.privacy_hygiene.snapshot",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.profiles.create",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.profiles.create",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.profiles.rename",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.profiles.rename",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.profiles.reset_data",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.profiles.reset_data",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.profiles.snapshot",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.profiles.snapshot",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.profiles.switch",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.profiles.switch",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.profiles.update",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.profiles.update",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.projects.create",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.projects.create",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.projects.list",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.projects.list",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.projects.select",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.projects.select",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.rates.coverage",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.rates.coverage",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.rates.kraken_csv.import",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.rates.kraken_csv.import",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.rates.latest",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.rates.latest",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.rates.rebuild",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": true,
+      "terminal_kind": "ui.rates.rebuild",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": true
+    },
+    {
+      "kind": "ui.rates.summary",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.rates.summary",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.report.blockers",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": false,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.report.blockers",
+      "vite_allowed": false,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.reports.balance_history",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.reports.balance_history",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.reports.balance_sheet",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.reports.balance_sheet",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.reports.capital_gains",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.reports.capital_gains",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.reports.cross_check",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.reports.cross_check",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.reports.exit_tax_preview",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.reports.exit_tax_preview",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.reports.explain_capital_gain",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.reports.explain_capital_gain",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.reports.export_audit_package",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.reports.export_audit_package",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.reports.export_austrian_e1kv_csv",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.reports.export_austrian_e1kv_csv",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.reports.export_austrian_e1kv_pdf",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.reports.export_austrian_e1kv_pdf",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.reports.export_austrian_e1kv_xlsx",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.reports.export_austrian_e1kv_xlsx",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.reports.export_capital_gains_csv",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.reports.export_capital_gains_csv",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.reports.export_cross_check",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.reports.export_cross_check",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.reports.export_csv",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.reports.export_csv",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.reports.export_exit_tax_pdf",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.reports.export_exit_tax_pdf",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.reports.export_exit_tax_xlsx",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.reports.export_exit_tax_xlsx",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.reports.export_pdf",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.reports.export_pdf",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.reports.export_summary_pdf",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.reports.export_summary_pdf",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.reports.export_xlsx",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.reports.export_xlsx",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.reports.export_year_handoff",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.reports.export_year_handoff",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.reports.lightning_profitability",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.reports.lightning_profitability",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.reports.portfolio_summary",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.reports.portfolio_summary",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.reports.privacy_hygiene",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.reports.privacy_hygiene",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.reports.privacy_mirror",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.reports.privacy_mirror",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.reports.psbt_privacy",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.reports.psbt_privacy",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.reports.summary",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.reports.summary",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.reports.tax_summary",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.reports.tax_summary",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.review.apply",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": true,
+      "terminal_kind": "ui.review.apply",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": true
+    },
+    {
+      "kind": "ui.review.badges",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.review.badges",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.review.cases",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.review.cases",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.review.plan",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": true,
+      "terminal_kind": "ui.review.plan",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": true
+    },
+    {
+      "kind": "ui.review.receipt",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": false,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.review.receipt",
+      "vite_allowed": false,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.review.request_input",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.review.request_input",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.review.worklist",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": false,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.review.worklist",
+      "vite_allowed": false,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.saved_views.create",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.saved_views.create",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.saved_views.delete",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.saved_views.delete",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.saved_views.list",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.saved_views.list",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.secrets.change_passphrase",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.secrets.change_passphrase",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.secrets.forget_cli_unlock",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.secrets.forget_cli_unlock",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.secrets.init",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.secrets.init",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.source_funds.assemble",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": true,
+      "terminal_kind": "ui.source_funds.assemble",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.source_funds.cases.list",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.source_funds.cases.list",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.source_funds.cases.save",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.source_funds.cases.save",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.source_funds.coverage",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.source_funds.coverage",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.source_funds.evidence.list",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.source_funds.evidence.list",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.source_funds.export_bundle",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.source_funds.export_bundle",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.source_funds.export_pdf",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.source_funds.export_pdf",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.source_funds.links.attach",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.source_funds.links.attach",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.source_funds.links.bulk_review",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.source_funds.links.bulk_review",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.source_funds.links.create",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.source_funds.links.create",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.source_funds.links.list",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.source_funds.links.list",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.source_funds.links.review",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.source_funds.links.review",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.source_funds.preview",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.source_funds.preview",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.source_funds.recipients.create",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.source_funds.recipients.create",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.source_funds.recipients.delete",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.source_funds.recipients.delete",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.source_funds.recipients.list",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.source_funds.recipients.list",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.source_funds.recipients.update",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.source_funds.recipients.update",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.source_funds.request_input",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.source_funds.request_input",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.source_funds.review_context",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.source_funds.review_context",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.source_funds.sources.attach",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.source_funds.sources.attach",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.source_funds.sources.create",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.source_funds.sources.create",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.source_funds.sources.list",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.source_funds.sources.list",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.source_funds.suggest",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.source_funds.suggest",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.transactions.commercial_context",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.transactions.commercial_context",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.transactions.dashboard",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.transactions.dashboard",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.transactions.export_csv",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.transactions.export_csv",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.transactions.export_platform_csv",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.transactions.export_platform_csv",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.transactions.export_xlsx",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.transactions.export_xlsx",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.transactions.extremes",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": false,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.transactions.extremes",
+      "vite_allowed": false,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.transactions.graph",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.transactions.graph",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.transactions.history",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.transactions.history",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.transactions.history.revert",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.transactions.history.revert",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.transactions.ledger_template",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.transactions.ledger_template",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.transactions.list",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.transactions.list",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.transactions.metadata.update",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.transactions.metadata.update",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.transactions.resolve",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.transactions.resolve",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.transactions.review_context",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": false,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.transactions.review_context",
+      "vite_allowed": false,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.transactions.search",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": false,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.transactions.search",
+      "vite_allowed": false,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.transfers.bulk_pair",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.transfers.bulk_pair",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.transfers.components.apply",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.transfers.components.apply",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.transfers.components.get",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": false,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.transfers.components.get",
+      "vite_allowed": false,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.transfers.components.list",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.transfers.components.list",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.transfers.components.plan",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.transfers.components.plan",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.transfers.dismiss",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.transfers.dismiss",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.transfers.dismissals.delete",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.transfers.dismissals.delete",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.transfers.dismissals.list",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": false,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.transfers.dismissals.list",
+      "vite_allowed": false,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.transfers.list",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.transfers.list",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.transfers.pair",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.transfers.pair",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.transfers.payouts.create",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.transfers.payouts.create",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.transfers.payouts.delete",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.transfers.payouts.delete",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.transfers.payouts.list",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.transfers.payouts.list",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.transfers.review_context",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": false,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.transfers.review_context",
+      "vite_allowed": false,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.transfers.rules.apply",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.transfers.rules.apply",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.transfers.rules.create",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.transfers.rules.create",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.transfers.rules.delete",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.transfers.rules.delete",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.transfers.rules.list",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.transfers.rules.list",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.transfers.rules.set_enabled",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.transfers.rules.set_enabled",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.transfers.suggest",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.transfers.suggest",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.transfers.unpair",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.transfers.unpair",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.transfers.update",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.transfers.update",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.wallets.analyze_file",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": false,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.wallets.analyze_file",
+      "vite_allowed": false,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.wallets.create",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.wallets.create",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.wallets.delete",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.wallets.delete",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.wallets.detect_script_types",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.wallets.detect_script_types",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.wallets.document_import.import",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": true,
+      "terminal_kind": "ui.wallets.document_import.import",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": true
+    },
+    {
+      "kind": "ui.wallets.document_import.preview",
+      "tauri_ai_runtime": true,
+      "tauri_allowed": true,
+      "tauri_streaming": true,
+      "terminal_kind": "ui.wallets.document_import.preview",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": true
+    },
+    {
+      "kind": "ui.wallets.identify",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.wallets.identify",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.wallets.identify_onchain",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": true,
+      "terminal_kind": "ui.wallets.identify_onchain",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": true
+    },
+    {
+      "kind": "ui.wallets.identify_onchain.cancel",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.wallets.identify_onchain.cancel",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.wallets.import_file",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.wallets.import_file",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.wallets.import_samourai",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.wallets.import_samourai",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.wallets.ledger_preview",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.wallets.ledger_preview",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.wallets.list",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.wallets.list",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.wallets.preview_descriptor",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.wallets.preview_descriptor",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.wallets.sync",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": true,
+      "terminal_kind": "ui.wallets.sync",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": true
+    },
+    {
+      "kind": "ui.wallets.update",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.wallets.update",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.wallets.utxos",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.wallets.utxos",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.workspace.create",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.workspace.create",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.workspace.delete",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.workspace.delete",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.workspace.freshness.run",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": true,
+      "terminal_kind": "ui.workspace.freshness.run",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": true
+    },
+    {
+      "kind": "ui.workspace.health",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.workspace.health",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.workspace.overview.snapshot",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.workspace.overview.snapshot",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "ui.workspace.rename",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "ui.workspace.rename",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    },
+    {
+      "kind": "wallets.reveal_descriptor",
+      "tauri_ai_runtime": false,
+      "tauri_allowed": true,
+      "tauri_streaming": false,
+      "terminal_kind": "wallets.reveal_descriptor",
+      "vite_allowed": true,
+      "vite_stream_only": false,
+      "vite_streaming": false
+    }
+  ],
+  "schema_version": 1,
+  "terminal_rule": "Matching request_id and exact request kind, or error; event:true has no request_id; daemon.ready is the startup exception"
+}

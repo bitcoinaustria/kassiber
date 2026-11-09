@@ -1,0 +1,2072 @@
+{
+  "schema": "kassiber.tax-country-vectors/1",
+  "country": "ch",
+  "registry_value": "ch",
+  "spec": "docs/reference/tax-country-ch.md",
+  "status": "preview: not reviewed by a tax professional for this country",
+  "retrieved": "2026-11-07",
+  "currency": "CHF",
+  "timezone": "Europe/Zurich",
+  "tax_year": "calendar year (Steuerperiode), Europe/Zurich",
+  "conventions": {
+    "amounts": "decimal strings; fiat in the country currency, rounded half-even to cents after exact computation; quantities exact",
+    "times": "ISO 8601 with offset; every date rule uses the local date in `timezone`",
+    "expected": "computed by the spec's reference model; `refusal` means the implementation must fail closed with that code"
+  },
+  "vectors": [
+    {
+      "id": "ch-01-private-gain-tax-free",
+      "title": "A private capital gain is tax-free (Art. 16 Abs. 3 DBG); shown for information only",
+      "rules": [
+        "CH-CG-PRIVATE",
+        "CH-KS36-C1",
+        "CH-WEALTH"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2024-01-10T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "40000.00"
+        },
+        {
+          "id": "s1",
+          "time": "2024-09-01T10:00:00+02:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "BTC",
+          "quantity": "0.5",
+          "fiat": "30000.00"
+        }
+      ],
+      "valuations": {
+        "2024-12-31": {
+          "BTC": {
+            "chf": "80000.00",
+            "source": "estv_kursliste"
+          }
+        }
+      },
+      "expected": {
+        "disposals": [
+          {
+            "event": "s1",
+            "kind": "sell",
+            "asset": "BTC",
+            "date": "2024-09-01",
+            "fragments": [
+              {
+                "lot": "b1",
+                "acquired": "2024-01-10",
+                "quantity": "0.5",
+                "cost": "20000.00",
+                "proceeds": "30000.00",
+                "gain": "10000.00",
+                "held_6_months": true
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "years": {
+          "2024": {
+            "taxable_capital_gains_chf": "0.00",
+            "informational_realized_gain_chf": "10000.00",
+            "income_by_category_chf": {},
+            "income_total_chf": "0.00",
+            "not_in_income_total": [],
+            "wealth_31_dec": {
+              "rows": [
+                {
+                  "wallet": "A",
+                  "asset": "BTC",
+                  "quantity": "0.5",
+                  "unit_value_chf": "80000.00",
+                  "value_chf": "40000.00",
+                  "source": "estv_kursliste",
+                  "flags": []
+                }
+              ],
+              "total_chf": "40000.00",
+              "complete": true
+            },
+            "ks36": {
+              "c1_holding_6_months": "met",
+              "c2_volume_5x": {
+                "result": "not_assessable",
+                "volume_chf": "70000.00",
+                "limit_chf": null,
+                "basis": "crypto_only"
+              },
+              "c3_gains_under_half_income": {
+                "result": "not_assessable",
+                "realized_gains_chf": "10000.00",
+                "half_net_income_chf": null
+              },
+              "c4_financing": "not_assessable",
+              "c5_derivatives": "not_assessable",
+              "overall": "inconclusive"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "ch-02-private-loss-not-deductible",
+      "title": "A private capital loss is not deductible; taxable capital gains stay 0",
+      "rules": [
+        "CH-CG-PRIVATE"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2024-01-10T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "40000.00"
+        },
+        {
+          "id": "s1",
+          "time": "2024-09-01T10:00:00+02:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "35000.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "s1",
+            "kind": "sell",
+            "asset": "BTC",
+            "date": "2024-09-01",
+            "fragments": [
+              {
+                "lot": "b1",
+                "acquired": "2024-01-10",
+                "quantity": "1",
+                "cost": "40000.00",
+                "proceeds": "35000.00",
+                "gain": "-5000.00",
+                "held_6_months": true
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "years": {
+          "2024": {
+            "taxable_capital_gains_chf": "0.00",
+            "informational_realized_gain_chf": "-5000.00",
+            "income_by_category_chf": {},
+            "income_total_chf": "0.00",
+            "not_in_income_total": [],
+            "wealth_31_dec": {
+              "rows": [],
+              "total_chf": "0.00",
+              "complete": true
+            },
+            "ks36": {
+              "c1_holding_6_months": "met",
+              "c2_volume_5x": {
+                "result": "not_assessable",
+                "volume_chf": "75000.00",
+                "limit_chf": null,
+                "basis": "crypto_only"
+              },
+              "c3_gains_under_half_income": {
+                "result": "not_assessable",
+                "realized_gains_chf": "-5000.00",
+                "half_net_income_chf": null
+              },
+              "c4_financing": "not_assessable",
+              "c5_derivatives": "not_assessable",
+              "overall": "inconclusive"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "ch-03-lending-interest-income",
+      "title": "Interest from lending BTC is income from movable assets at its CHF value when received (Art. 20 DBG)",
+      "rules": [
+        "CH-INC-MOVABLE",
+        "CH-INC-VALUE",
+        "CH-WEALTH"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "i1",
+          "time": "2024-03-31T12:00:00+02:00",
+          "wallet": "A",
+          "type": "income",
+          "subkind": "lending_interest",
+          "asset": "BTC",
+          "quantity": "0.002",
+          "fiat": "120.40"
+        },
+        {
+          "id": "i2",
+          "time": "2024-06-30T12:00:00+02:00",
+          "wallet": "A",
+          "type": "income",
+          "subkind": "lending_interest",
+          "asset": "BTC",
+          "quantity": "0.002",
+          "fiat": "112.10"
+        },
+        {
+          "id": "i3",
+          "time": "2024-09-30T12:00:00+02:00",
+          "wallet": "A",
+          "type": "income",
+          "subkind": "lending_interest",
+          "asset": "BTC",
+          "quantity": "0.002",
+          "fiat": "115.75"
+        }
+      ],
+      "valuations": {
+        "2024-12-31": {
+          "BTC": {
+            "chf": "84000.00",
+            "source": "estv_kursliste"
+          }
+        }
+      },
+      "expected": {
+        "disposals": [],
+        "income": [
+          {
+            "event": "i1",
+            "date": "2024-03-31",
+            "subkind": "lending_interest",
+            "category": "movable_assets_income",
+            "quantity": "0.002",
+            "value_chf": "120.40"
+          },
+          {
+            "event": "i2",
+            "date": "2024-06-30",
+            "subkind": "lending_interest",
+            "category": "movable_assets_income",
+            "quantity": "0.002",
+            "value_chf": "112.10"
+          },
+          {
+            "event": "i3",
+            "date": "2024-09-30",
+            "subkind": "lending_interest",
+            "category": "movable_assets_income",
+            "quantity": "0.002",
+            "value_chf": "115.75"
+          }
+        ],
+        "years": {
+          "2024": {
+            "taxable_capital_gains_chf": "0.00",
+            "informational_realized_gain_chf": "0.00",
+            "income_by_category_chf": {
+              "movable_assets_income": "348.25"
+            },
+            "income_total_chf": "348.25",
+            "not_in_income_total": [],
+            "wealth_31_dec": {
+              "rows": [
+                {
+                  "wallet": "A",
+                  "asset": "BTC",
+                  "quantity": "0.006",
+                  "unit_value_chf": "84000.00",
+                  "value_chf": "504.00",
+                  "source": "estv_kursliste",
+                  "flags": []
+                }
+              ],
+              "total_chf": "504.00",
+              "complete": true
+            },
+            "ks36": {
+              "c1_holding_6_months": "no_disposals",
+              "c2_volume_5x": {
+                "result": "not_assessable",
+                "volume_chf": "0.00",
+                "limit_chf": null,
+                "basis": "crypto_only"
+              },
+              "c3_gains_under_half_income": {
+                "result": "not_assessable",
+                "realized_gains_chf": "0.00",
+                "half_net_income_chf": null
+              },
+              "c4_financing": "not_assessable",
+              "c5_derivatives": "not_assessable",
+              "overall": "inconclusive"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "ch-04-airdrop-income",
+      "title": "An airdrop is income at its market value on allocation; the CHF 1,000 lottery exemption is not assumed",
+      "rules": [
+        "CH-INC-AIRDROP"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "a1",
+          "time": "2024-05-02T10:00:00+02:00",
+          "wallet": "A",
+          "type": "airdrop",
+          "subkind": "airdrop_unclassified",
+          "asset": "TOKZ",
+          "quantity": "500",
+          "fiat": "640.00"
+        }
+      ],
+      "expected": {
+        "disposals": [],
+        "income": [
+          {
+            "event": "a1",
+            "date": "2024-05-02",
+            "subkind": "airdrop",
+            "category": "movable_assets_income",
+            "quantity": "500",
+            "value_chf": "640.00"
+          }
+        ],
+        "years": {
+          "2024": {
+            "taxable_capital_gains_chf": "0.00",
+            "informational_realized_gain_chf": "0.00",
+            "income_by_category_chf": {
+              "movable_assets_income": "640.00"
+            },
+            "income_total_chf": "640.00",
+            "not_in_income_total": [],
+            "wealth_31_dec": {
+              "rows": [
+                {
+                  "wallet": "A",
+                  "asset": "TOKZ",
+                  "quantity": "500",
+                  "unit_value_chf": null,
+                  "value_chf": null,
+                  "source": null,
+                  "flags": [
+                    "missing_valuation"
+                  ]
+                }
+              ],
+              "total_chf": null,
+              "complete": false
+            },
+            "ks36": {
+              "c1_holding_6_months": "no_disposals",
+              "c2_volume_5x": {
+                "result": "not_assessable",
+                "volume_chf": "0.00",
+                "limit_chf": null,
+                "basis": "crypto_only"
+              },
+              "c3_gains_under_half_income": {
+                "result": "not_assessable",
+                "realized_gains_chf": "0.00",
+                "half_net_income_chf": null
+              },
+              "c4_financing": "not_assessable",
+              "c5_derivatives": "not_assessable",
+              "overall": "inconclusive"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "ch-05-mining-income",
+      "title": "Mining rewards are income; whether they are self-employment income needs review",
+      "rules": [
+        "CH-INC-MINING"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "i1",
+          "time": "2024-02-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "income",
+          "subkind": "mining",
+          "asset": "BTC",
+          "quantity": "0.01",
+          "fiat": "420.00"
+        },
+        {
+          "id": "i2",
+          "time": "2024-08-01T10:00:00+02:00",
+          "wallet": "A",
+          "type": "income",
+          "subkind": "mining",
+          "asset": "BTC",
+          "quantity": "0.01",
+          "fiat": "550.00"
+        }
+      ],
+      "valuations": {
+        "2024-12-31": {
+          "BTC": {
+            "chf": "84000.00",
+            "source": "estv_kursliste"
+          }
+        }
+      },
+      "expected": {
+        "disposals": [],
+        "income": [
+          {
+            "event": "i1",
+            "date": "2024-02-01",
+            "subkind": "mining",
+            "category": "mining_income",
+            "quantity": "0.01",
+            "value_chf": "420.00"
+          },
+          {
+            "event": "i2",
+            "date": "2024-08-01",
+            "subkind": "mining",
+            "category": "mining_income",
+            "quantity": "0.01",
+            "value_chf": "550.00"
+          }
+        ],
+        "years": {
+          "2024": {
+            "taxable_capital_gains_chf": "0.00",
+            "informational_realized_gain_chf": "0.00",
+            "income_by_category_chf": {
+              "mining_income": "970.00"
+            },
+            "income_total_chf": "970.00",
+            "not_in_income_total": [],
+            "wealth_31_dec": {
+              "rows": [
+                {
+                  "wallet": "A",
+                  "asset": "BTC",
+                  "quantity": "0.02",
+                  "unit_value_chf": "84000.00",
+                  "value_chf": "1680.00",
+                  "source": "estv_kursliste",
+                  "flags": []
+                }
+              ],
+              "total_chf": "1680.00",
+              "complete": true
+            },
+            "ks36": {
+              "c1_holding_6_months": "no_disposals",
+              "c2_volume_5x": {
+                "result": "not_assessable",
+                "volume_chf": "0.00",
+                "limit_chf": null,
+                "basis": "crypto_only"
+              },
+              "c3_gains_under_half_income": {
+                "result": "not_assessable",
+                "realized_gains_chf": "0.00",
+                "half_net_income_chf": null
+              },
+              "c4_financing": "not_assessable",
+              "c5_derivatives": "not_assessable",
+              "overall": "inconclusive"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "ch-06-wealth-estv-value",
+      "title": "Year-end wealth at the ESTV tax value per 31 December, per wallet",
+      "rules": [
+        "CH-WEALTH",
+        "CH-WEALTH-ESTV"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2024-02-01T10:00:00+01:00",
+          "wallet": "Cold",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "0.5",
+          "fiat": "21000.00"
+        },
+        {
+          "id": "b2",
+          "time": "2024-04-01T10:00:00+02:00",
+          "wallet": "Hot",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "0.3",
+          "fiat": "18000.00"
+        }
+      ],
+      "valuations": {
+        "2024-12-31": {
+          "BTC": {
+            "chf": "84000.00",
+            "source": "estv_kursliste"
+          }
+        }
+      },
+      "expected": {
+        "disposals": [],
+        "income": [],
+        "years": {
+          "2024": {
+            "taxable_capital_gains_chf": "0.00",
+            "informational_realized_gain_chf": "0.00",
+            "income_by_category_chf": {},
+            "income_total_chf": "0.00",
+            "not_in_income_total": [],
+            "wealth_31_dec": {
+              "rows": [
+                {
+                  "wallet": "Cold",
+                  "asset": "BTC",
+                  "quantity": "0.5",
+                  "unit_value_chf": "84000.00",
+                  "value_chf": "42000.00",
+                  "source": "estv_kursliste",
+                  "flags": []
+                },
+                {
+                  "wallet": "Hot",
+                  "asset": "BTC",
+                  "quantity": "0.3",
+                  "unit_value_chf": "84000.00",
+                  "value_chf": "25200.00",
+                  "source": "estv_kursliste",
+                  "flags": []
+                }
+              ],
+              "total_chf": "67200.00",
+              "complete": true
+            },
+            "ks36": {
+              "c1_holding_6_months": "no_disposals",
+              "c2_volume_5x": {
+                "result": "not_assessable",
+                "volume_chf": "39000.00",
+                "limit_chf": null,
+                "basis": "crypto_only"
+              },
+              "c3_gains_under_half_income": {
+                "result": "not_assessable",
+                "realized_gains_chf": "0.00",
+                "half_net_income_chf": null
+              },
+              "c4_financing": "not_assessable",
+              "c5_derivatives": "not_assessable",
+              "overall": "inconclusive"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "ch-07-wealth-market-value",
+      "title": "Without an ESTV value the market close is used and labelled as not the ESTV tax value",
+      "rules": [
+        "CH-WEALTH",
+        "CH-WEALTH-FALLBACK"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2024-02-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "0.5",
+          "fiat": "21000.00"
+        }
+      ],
+      "valuations": {
+        "2024-12-31": {
+          "BTC": {
+            "chf": "85210.33",
+            "source": "market_close"
+          }
+        }
+      },
+      "expected": {
+        "disposals": [],
+        "income": [],
+        "years": {
+          "2024": {
+            "taxable_capital_gains_chf": "0.00",
+            "informational_realized_gain_chf": "0.00",
+            "income_by_category_chf": {},
+            "income_total_chf": "0.00",
+            "not_in_income_total": [],
+            "wealth_31_dec": {
+              "rows": [
+                {
+                  "wallet": "A",
+                  "asset": "BTC",
+                  "quantity": "0.5",
+                  "unit_value_chf": "85210.33",
+                  "value_chf": "42605.16",
+                  "source": "market_close",
+                  "flags": [
+                    "not_estv_tax_value"
+                  ]
+                }
+              ],
+              "total_chf": "42605.16",
+              "complete": true
+            },
+            "ks36": {
+              "c1_holding_6_months": "no_disposals",
+              "c2_volume_5x": {
+                "result": "not_assessable",
+                "volume_chf": "21000.00",
+                "limit_chf": null,
+                "basis": "crypto_only"
+              },
+              "c3_gains_under_half_income": {
+                "result": "not_assessable",
+                "realized_gains_chf": "0.00",
+                "half_net_income_chf": null
+              },
+              "c4_financing": "not_assessable",
+              "c5_derivatives": "not_assessable",
+              "overall": "inconclusive"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "ch-08-wealth-missing-value",
+      "title": "No year-end value at all: wealth stays unknown (never 0, never silently cost)",
+      "rules": [
+        "CH-WEALTH",
+        "CH-FAILCLOSED"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2024-02-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "0.5",
+          "fiat": "21000.00"
+        }
+      ],
+      "expected": {
+        "disposals": [],
+        "income": [],
+        "years": {
+          "2024": {
+            "taxable_capital_gains_chf": "0.00",
+            "informational_realized_gain_chf": "0.00",
+            "income_by_category_chf": {},
+            "income_total_chf": "0.00",
+            "not_in_income_total": [],
+            "wealth_31_dec": {
+              "rows": [
+                {
+                  "wallet": "A",
+                  "asset": "BTC",
+                  "quantity": "0.5",
+                  "unit_value_chf": null,
+                  "value_chf": null,
+                  "source": null,
+                  "flags": [
+                    "missing_valuation"
+                  ]
+                }
+              ],
+              "total_chf": null,
+              "complete": false
+            },
+            "ks36": {
+              "c1_holding_6_months": "no_disposals",
+              "c2_volume_5x": {
+                "result": "not_assessable",
+                "volume_chf": "21000.00",
+                "limit_chf": null,
+                "basis": "crypto_only"
+              },
+              "c3_gains_under_half_income": {
+                "result": "not_assessable",
+                "realized_gains_chf": "0.00",
+                "half_net_income_chf": null
+              },
+              "c4_financing": "not_assessable",
+              "c5_derivatives": "not_assessable",
+              "overall": "inconclusive"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "ch-09-new-year-zurich",
+      "title": "23:30Z on 31 December is 00:30 on 1 January in Zurich: the receipt belongs to the next year",
+      "rules": [
+        "CH-TZ",
+        "CH-WEALTH",
+        "CH-INC-VALUE"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2024-02-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "0.5",
+          "fiat": "21000.00"
+        },
+        {
+          "id": "i1",
+          "time": "2024-12-31T23:30:00Z",
+          "wallet": "A",
+          "type": "income",
+          "subkind": "lending_interest",
+          "asset": "BTC",
+          "quantity": "0.001",
+          "fiat": "88.00"
+        }
+      ],
+      "valuations": {
+        "2024-12-31": {
+          "BTC": {
+            "chf": "84000.00",
+            "source": "estv_kursliste"
+          }
+        },
+        "2025-12-31": {
+          "BTC": {
+            "chf": "90000.00",
+            "source": "estv_kursliste"
+          }
+        }
+      },
+      "expected": {
+        "disposals": [],
+        "income": [
+          {
+            "event": "i1",
+            "date": "2025-01-01",
+            "subkind": "lending_interest",
+            "category": "movable_assets_income",
+            "quantity": "0.001",
+            "value_chf": "88.00"
+          }
+        ],
+        "years": {
+          "2024": {
+            "taxable_capital_gains_chf": "0.00",
+            "informational_realized_gain_chf": "0.00",
+            "income_by_category_chf": {},
+            "income_total_chf": "0.00",
+            "not_in_income_total": [],
+            "wealth_31_dec": {
+              "rows": [
+                {
+                  "wallet": "A",
+                  "asset": "BTC",
+                  "quantity": "0.5",
+                  "unit_value_chf": "84000.00",
+                  "value_chf": "42000.00",
+                  "source": "estv_kursliste",
+                  "flags": []
+                }
+              ],
+              "total_chf": "42000.00",
+              "complete": true
+            },
+            "ks36": {
+              "c1_holding_6_months": "no_disposals",
+              "c2_volume_5x": {
+                "result": "not_assessable",
+                "volume_chf": "21000.00",
+                "limit_chf": null,
+                "basis": "crypto_only"
+              },
+              "c3_gains_under_half_income": {
+                "result": "not_assessable",
+                "realized_gains_chf": "0.00",
+                "half_net_income_chf": null
+              },
+              "c4_financing": "not_assessable",
+              "c5_derivatives": "not_assessable",
+              "overall": "inconclusive"
+            }
+          },
+          "2025": {
+            "taxable_capital_gains_chf": "0.00",
+            "informational_realized_gain_chf": "0.00",
+            "income_by_category_chf": {
+              "movable_assets_income": "88.00"
+            },
+            "income_total_chf": "88.00",
+            "not_in_income_total": [],
+            "wealth_31_dec": {
+              "rows": [
+                {
+                  "wallet": "A",
+                  "asset": "BTC",
+                  "quantity": "0.501",
+                  "unit_value_chf": "90000.00",
+                  "value_chf": "45090.00",
+                  "source": "estv_kursliste",
+                  "flags": []
+                }
+              ],
+              "total_chf": "45090.00",
+              "complete": true
+            },
+            "ks36": {
+              "c1_holding_6_months": "no_disposals",
+              "c2_volume_5x": {
+                "result": "met",
+                "volume_chf": "0.00",
+                "limit_chf": "210000.00",
+                "basis": "crypto_only"
+              },
+              "c3_gains_under_half_income": {
+                "result": "not_assessable",
+                "realized_gains_chf": "0.00",
+                "half_net_income_chf": null
+              },
+              "c4_financing": "not_assessable",
+              "c5_derivatives": "not_assessable",
+              "overall": "inconclusive"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "ch-10-ks36-holding-under-6-months",
+      "title": "KS 36 criterion 1: a sale one day short of six months fails the safe harbour",
+      "rules": [
+        "CH-KS36-C1"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2024-01-31T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "38000.00"
+        },
+        {
+          "id": "s1",
+          "time": "2024-07-30T10:00:00+02:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "55000.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "s1",
+            "kind": "sell",
+            "asset": "BTC",
+            "date": "2024-07-30",
+            "fragments": [
+              {
+                "lot": "b1",
+                "acquired": "2024-01-31",
+                "quantity": "1",
+                "cost": "38000.00",
+                "proceeds": "55000.00",
+                "gain": "17000.00",
+                "held_6_months": false
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "years": {
+          "2024": {
+            "taxable_capital_gains_chf": "0.00",
+            "informational_realized_gain_chf": "17000.00",
+            "income_by_category_chf": {},
+            "income_total_chf": "0.00",
+            "not_in_income_total": [],
+            "wealth_31_dec": {
+              "rows": [],
+              "total_chf": "0.00",
+              "complete": true
+            },
+            "ks36": {
+              "c1_holding_6_months": "not_met",
+              "c2_volume_5x": {
+                "result": "not_assessable",
+                "volume_chf": "93000.00",
+                "limit_chf": null,
+                "basis": "crypto_only"
+              },
+              "c3_gains_under_half_income": {
+                "result": "not_assessable",
+                "realized_gains_chf": "17000.00",
+                "half_net_income_chf": null
+              },
+              "c4_financing": "not_assessable",
+              "c5_derivatives": "not_assessable",
+              "overall": "not_met"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "ch-11-ks36-holding-exactly-6-months",
+      "title": "KS 36 criterion 1: bought 31 August, sold 28 February (month-end) counts as six months",
+      "rules": [
+        "CH-KS36-C1"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2024-08-31T10:00:00+02:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "50000.00"
+        },
+        {
+          "id": "s1",
+          "time": "2025-02-28T10:00:00+01:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "80000.00"
+        }
+      ],
+      "valuations": {
+        "2024-12-31": {
+          "BTC": {
+            "chf": "84000.00",
+            "source": "estv_kursliste"
+          }
+        }
+      },
+      "expected": {
+        "disposals": [
+          {
+            "event": "s1",
+            "kind": "sell",
+            "asset": "BTC",
+            "date": "2025-02-28",
+            "fragments": [
+              {
+                "lot": "b1",
+                "acquired": "2024-08-31",
+                "quantity": "1",
+                "cost": "50000.00",
+                "proceeds": "80000.00",
+                "gain": "30000.00",
+                "held_6_months": true
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "years": {
+          "2024": {
+            "taxable_capital_gains_chf": "0.00",
+            "informational_realized_gain_chf": "0.00",
+            "income_by_category_chf": {},
+            "income_total_chf": "0.00",
+            "not_in_income_total": [],
+            "wealth_31_dec": {
+              "rows": [
+                {
+                  "wallet": "A",
+                  "asset": "BTC",
+                  "quantity": "1",
+                  "unit_value_chf": "84000.00",
+                  "value_chf": "84000.00",
+                  "source": "estv_kursliste",
+                  "flags": []
+                }
+              ],
+              "total_chf": "84000.00",
+              "complete": true
+            },
+            "ks36": {
+              "c1_holding_6_months": "no_disposals",
+              "c2_volume_5x": {
+                "result": "not_assessable",
+                "volume_chf": "50000.00",
+                "limit_chf": null,
+                "basis": "crypto_only"
+              },
+              "c3_gains_under_half_income": {
+                "result": "not_assessable",
+                "realized_gains_chf": "0.00",
+                "half_net_income_chf": null
+              },
+              "c4_financing": "not_assessable",
+              "c5_derivatives": "not_assessable",
+              "overall": "inconclusive"
+            }
+          },
+          "2025": {
+            "taxable_capital_gains_chf": "0.00",
+            "informational_realized_gain_chf": "30000.00",
+            "income_by_category_chf": {},
+            "income_total_chf": "0.00",
+            "not_in_income_total": [],
+            "wealth_31_dec": {
+              "rows": [],
+              "total_chf": "0.00",
+              "complete": true
+            },
+            "ks36": {
+              "c1_holding_6_months": "met",
+              "c2_volume_5x": {
+                "result": "met",
+                "volume_chf": "80000.00",
+                "limit_chf": "420000.00",
+                "basis": "crypto_only"
+              },
+              "c3_gains_under_half_income": {
+                "result": "not_assessable",
+                "realized_gains_chf": "30000.00",
+                "half_net_income_chf": null
+              },
+              "c4_financing": "not_assessable",
+              "c5_derivatives": "not_assessable",
+              "overall": "inconclusive"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "ch-12-ks36-volume-at-limit",
+      "title": "KS 36 criterion 2: purchases plus sales equal to five times the start-of-year value are within the limit",
+      "rules": [
+        "CH-KS36-C2"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "b0",
+          "time": "2023-06-01T10:00:00+02:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "25000.00"
+        },
+        {
+          "id": "b1",
+          "time": "2024-03-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "60000.00"
+        },
+        {
+          "id": "s1",
+          "time": "2024-10-01T10:00:00+02:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "BTC",
+          "quantity": "1.5",
+          "fiat": "120000.00"
+        }
+      ],
+      "valuations": {
+        "2023-12-31": {
+          "BTC": {
+            "chf": "36000.00",
+            "source": "estv_kursliste"
+          }
+        },
+        "2024-12-31": {
+          "BTC": {
+            "chf": "84000.00",
+            "source": "estv_kursliste"
+          }
+        }
+      },
+      "expected": {
+        "disposals": [
+          {
+            "event": "s1",
+            "kind": "sell",
+            "asset": "BTC",
+            "date": "2024-10-01",
+            "fragments": [
+              {
+                "lot": "b0",
+                "acquired": "2023-06-01",
+                "quantity": "1",
+                "cost": "25000.00",
+                "proceeds": "80000.00",
+                "gain": "55000.00",
+                "held_6_months": true
+              },
+              {
+                "lot": "b1",
+                "acquired": "2024-03-01",
+                "quantity": "0.5",
+                "cost": "30000.00",
+                "proceeds": "40000.00",
+                "gain": "10000.00",
+                "held_6_months": true
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "years": {
+          "2023": {
+            "taxable_capital_gains_chf": "0.00",
+            "informational_realized_gain_chf": "0.00",
+            "income_by_category_chf": {},
+            "income_total_chf": "0.00",
+            "not_in_income_total": [],
+            "wealth_31_dec": {
+              "rows": [
+                {
+                  "wallet": "A",
+                  "asset": "BTC",
+                  "quantity": "1",
+                  "unit_value_chf": "36000.00",
+                  "value_chf": "36000.00",
+                  "source": "estv_kursliste",
+                  "flags": []
+                }
+              ],
+              "total_chf": "36000.00",
+              "complete": true
+            },
+            "ks36": {
+              "c1_holding_6_months": "no_disposals",
+              "c2_volume_5x": {
+                "result": "not_assessable",
+                "volume_chf": "25000.00",
+                "limit_chf": null,
+                "basis": "crypto_only"
+              },
+              "c3_gains_under_half_income": {
+                "result": "not_assessable",
+                "realized_gains_chf": "0.00",
+                "half_net_income_chf": null
+              },
+              "c4_financing": "not_assessable",
+              "c5_derivatives": "not_assessable",
+              "overall": "inconclusive"
+            }
+          },
+          "2024": {
+            "taxable_capital_gains_chf": "0.00",
+            "informational_realized_gain_chf": "65000.00",
+            "income_by_category_chf": {},
+            "income_total_chf": "0.00",
+            "not_in_income_total": [],
+            "wealth_31_dec": {
+              "rows": [
+                {
+                  "wallet": "A",
+                  "asset": "BTC",
+                  "quantity": "0.5",
+                  "unit_value_chf": "84000.00",
+                  "value_chf": "42000.00",
+                  "source": "estv_kursliste",
+                  "flags": []
+                }
+              ],
+              "total_chf": "42000.00",
+              "complete": true
+            },
+            "ks36": {
+              "c1_holding_6_months": "met",
+              "c2_volume_5x": {
+                "result": "met",
+                "volume_chf": "180000.00",
+                "limit_chf": "180000.00",
+                "basis": "crypto_only"
+              },
+              "c3_gains_under_half_income": {
+                "result": "not_assessable",
+                "realized_gains_chf": "65000.00",
+                "half_net_income_chf": null
+              },
+              "c4_financing": "not_assessable",
+              "c5_derivatives": "not_assessable",
+              "overall": "inconclusive"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "ch-13-ks36-volume-over-limit",
+      "title": "KS 36 criterion 2: one centime over five times the start-of-year value fails",
+      "rules": [
+        "CH-KS36-C2"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "b0",
+          "time": "2023-06-01T10:00:00+02:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "25000.00"
+        },
+        {
+          "id": "b1",
+          "time": "2024-03-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "60000.00"
+        },
+        {
+          "id": "s1",
+          "time": "2024-10-01T10:00:00+02:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "BTC",
+          "quantity": "1.5",
+          "fiat": "120000.01"
+        }
+      ],
+      "valuations": {
+        "2023-12-31": {
+          "BTC": {
+            "chf": "36000.00",
+            "source": "estv_kursliste"
+          }
+        },
+        "2024-12-31": {
+          "BTC": {
+            "chf": "84000.00",
+            "source": "estv_kursliste"
+          }
+        }
+      },
+      "expected": {
+        "disposals": [
+          {
+            "event": "s1",
+            "kind": "sell",
+            "asset": "BTC",
+            "date": "2024-10-01",
+            "fragments": [
+              {
+                "lot": "b0",
+                "acquired": "2023-06-01",
+                "quantity": "1",
+                "cost": "25000.00",
+                "proceeds": "80000.01",
+                "gain": "55000.01",
+                "held_6_months": true
+              },
+              {
+                "lot": "b1",
+                "acquired": "2024-03-01",
+                "quantity": "0.5",
+                "cost": "30000.00",
+                "proceeds": "40000.00",
+                "gain": "10000.00",
+                "held_6_months": true
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "years": {
+          "2023": {
+            "taxable_capital_gains_chf": "0.00",
+            "informational_realized_gain_chf": "0.00",
+            "income_by_category_chf": {},
+            "income_total_chf": "0.00",
+            "not_in_income_total": [],
+            "wealth_31_dec": {
+              "rows": [
+                {
+                  "wallet": "A",
+                  "asset": "BTC",
+                  "quantity": "1",
+                  "unit_value_chf": "36000.00",
+                  "value_chf": "36000.00",
+                  "source": "estv_kursliste",
+                  "flags": []
+                }
+              ],
+              "total_chf": "36000.00",
+              "complete": true
+            },
+            "ks36": {
+              "c1_holding_6_months": "no_disposals",
+              "c2_volume_5x": {
+                "result": "not_assessable",
+                "volume_chf": "25000.00",
+                "limit_chf": null,
+                "basis": "crypto_only"
+              },
+              "c3_gains_under_half_income": {
+                "result": "not_assessable",
+                "realized_gains_chf": "0.00",
+                "half_net_income_chf": null
+              },
+              "c4_financing": "not_assessable",
+              "c5_derivatives": "not_assessable",
+              "overall": "inconclusive"
+            }
+          },
+          "2024": {
+            "taxable_capital_gains_chf": "0.00",
+            "informational_realized_gain_chf": "65000.01",
+            "income_by_category_chf": {},
+            "income_total_chf": "0.00",
+            "not_in_income_total": [],
+            "wealth_31_dec": {
+              "rows": [
+                {
+                  "wallet": "A",
+                  "asset": "BTC",
+                  "quantity": "0.5",
+                  "unit_value_chf": "84000.00",
+                  "value_chf": "42000.00",
+                  "source": "estv_kursliste",
+                  "flags": []
+                }
+              ],
+              "total_chf": "42000.00",
+              "complete": true
+            },
+            "ks36": {
+              "c1_holding_6_months": "met",
+              "c2_volume_5x": {
+                "result": "not_met",
+                "volume_chf": "180000.01",
+                "limit_chf": "180000.00",
+                "basis": "crypto_only"
+              },
+              "c3_gains_under_half_income": {
+                "result": "not_assessable",
+                "realized_gains_chf": "65000.01",
+                "half_net_income_chf": null
+              },
+              "c4_financing": "not_assessable",
+              "c5_derivatives": "not_assessable",
+              "overall": "not_met"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "ch-14-ks36-gains-half-income",
+      "title": "KS 36 criterion 3: realized gains equal to half the net income are not 'less than 50%'",
+      "rules": [
+        "CH-KS36-C3"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global",
+        "net_income_chf": "60000.00",
+        "declared": {
+          "debt_financed_without_cover": false,
+          "derivatives_only_hedging": true
+        }
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2023-01-10T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "20000.00"
+        },
+        {
+          "id": "s1",
+          "time": "2024-03-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "50000.00"
+        }
+      ],
+      "valuations": {
+        "2023-12-31": {
+          "BTC": {
+            "chf": "38000.00",
+            "source": "estv_kursliste"
+          }
+        }
+      },
+      "expected": {
+        "disposals": [
+          {
+            "event": "s1",
+            "kind": "sell",
+            "asset": "BTC",
+            "date": "2024-03-01",
+            "fragments": [
+              {
+                "lot": "b1",
+                "acquired": "2023-01-10",
+                "quantity": "1",
+                "cost": "20000.00",
+                "proceeds": "50000.00",
+                "gain": "30000.00",
+                "held_6_months": true
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "years": {
+          "2023": {
+            "taxable_capital_gains_chf": "0.00",
+            "informational_realized_gain_chf": "0.00",
+            "income_by_category_chf": {},
+            "income_total_chf": "0.00",
+            "not_in_income_total": [],
+            "wealth_31_dec": {
+              "rows": [
+                {
+                  "wallet": "A",
+                  "asset": "BTC",
+                  "quantity": "1",
+                  "unit_value_chf": "38000.00",
+                  "value_chf": "38000.00",
+                  "source": "estv_kursliste",
+                  "flags": []
+                }
+              ],
+              "total_chf": "38000.00",
+              "complete": true
+            },
+            "ks36": {
+              "c1_holding_6_months": "no_disposals",
+              "c2_volume_5x": {
+                "result": "not_assessable",
+                "volume_chf": "20000.00",
+                "limit_chf": null,
+                "basis": "crypto_only"
+              },
+              "c3_gains_under_half_income": {
+                "result": "met",
+                "realized_gains_chf": "0.00",
+                "half_net_income_chf": "30000.00"
+              },
+              "c4_financing": "met",
+              "c5_derivatives": "met",
+              "overall": "inconclusive"
+            }
+          },
+          "2024": {
+            "taxable_capital_gains_chf": "0.00",
+            "informational_realized_gain_chf": "30000.00",
+            "income_by_category_chf": {},
+            "income_total_chf": "0.00",
+            "not_in_income_total": [],
+            "wealth_31_dec": {
+              "rows": [],
+              "total_chf": "0.00",
+              "complete": true
+            },
+            "ks36": {
+              "c1_holding_6_months": "met",
+              "c2_volume_5x": {
+                "result": "met",
+                "volume_chf": "50000.00",
+                "limit_chf": "190000.00",
+                "basis": "crypto_only"
+              },
+              "c3_gains_under_half_income": {
+                "result": "not_met",
+                "realized_gains_chf": "30000.00",
+                "half_net_income_chf": "30000.00"
+              },
+              "c4_financing": "met",
+              "c5_derivatives": "met",
+              "overall": "not_met"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "ch-15-ks36-all-met",
+      "title": "Every criterion met when the user declares income, financing and derivatives",
+      "rules": [
+        "CH-KS36-C1",
+        "CH-KS36-C2",
+        "CH-KS36-C3",
+        "CH-KS36-C4",
+        "CH-KS36-C5"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global",
+        "net_income_chf": "120000.00",
+        "declared": {
+          "debt_financed_without_cover": false,
+          "derivatives_only_hedging": true
+        }
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2023-01-10T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "20000.00"
+        },
+        {
+          "id": "s1",
+          "time": "2024-03-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "BTC",
+          "quantity": "0.5",
+          "fiat": "30000.00"
+        }
+      ],
+      "valuations": {
+        "2023-12-31": {
+          "BTC": {
+            "chf": "38000.00",
+            "source": "estv_kursliste"
+          }
+        },
+        "2024-12-31": {
+          "BTC": {
+            "chf": "84000.00",
+            "source": "estv_kursliste"
+          }
+        }
+      },
+      "expected": {
+        "disposals": [
+          {
+            "event": "s1",
+            "kind": "sell",
+            "asset": "BTC",
+            "date": "2024-03-01",
+            "fragments": [
+              {
+                "lot": "b1",
+                "acquired": "2023-01-10",
+                "quantity": "0.5",
+                "cost": "10000.00",
+                "proceeds": "30000.00",
+                "gain": "20000.00",
+                "held_6_months": true
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "years": {
+          "2023": {
+            "taxable_capital_gains_chf": "0.00",
+            "informational_realized_gain_chf": "0.00",
+            "income_by_category_chf": {},
+            "income_total_chf": "0.00",
+            "not_in_income_total": [],
+            "wealth_31_dec": {
+              "rows": [
+                {
+                  "wallet": "A",
+                  "asset": "BTC",
+                  "quantity": "1",
+                  "unit_value_chf": "38000.00",
+                  "value_chf": "38000.00",
+                  "source": "estv_kursliste",
+                  "flags": []
+                }
+              ],
+              "total_chf": "38000.00",
+              "complete": true
+            },
+            "ks36": {
+              "c1_holding_6_months": "no_disposals",
+              "c2_volume_5x": {
+                "result": "not_assessable",
+                "volume_chf": "20000.00",
+                "limit_chf": null,
+                "basis": "crypto_only"
+              },
+              "c3_gains_under_half_income": {
+                "result": "met",
+                "realized_gains_chf": "0.00",
+                "half_net_income_chf": "60000.00"
+              },
+              "c4_financing": "met",
+              "c5_derivatives": "met",
+              "overall": "inconclusive"
+            }
+          },
+          "2024": {
+            "taxable_capital_gains_chf": "0.00",
+            "informational_realized_gain_chf": "20000.00",
+            "income_by_category_chf": {},
+            "income_total_chf": "0.00",
+            "not_in_income_total": [],
+            "wealth_31_dec": {
+              "rows": [
+                {
+                  "wallet": "A",
+                  "asset": "BTC",
+                  "quantity": "0.5",
+                  "unit_value_chf": "84000.00",
+                  "value_chf": "42000.00",
+                  "source": "estv_kursliste",
+                  "flags": []
+                }
+              ],
+              "total_chf": "42000.00",
+              "complete": true
+            },
+            "ks36": {
+              "c1_holding_6_months": "met",
+              "c2_volume_5x": {
+                "result": "met",
+                "volume_chf": "30000.00",
+                "limit_chf": "190000.00",
+                "basis": "crypto_only"
+              },
+              "c3_gains_under_half_income": {
+                "result": "met",
+                "realized_gains_chf": "20000.00",
+                "half_net_income_chf": "60000.00"
+              },
+              "c4_financing": "met",
+              "c5_derivatives": "met",
+              "overall": "met"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "ch-16-gift-received-not-income",
+      "title": "A received gift is not income; the coins are wealth",
+      "rules": [
+        "CH-GIFT",
+        "CH-WEALTH"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "g1",
+          "time": "2024-04-01T10:00:00+02:00",
+          "wallet": "A",
+          "type": "gift_in",
+          "asset": "BTC",
+          "quantity": "0.1",
+          "fiat": "6100.00"
+        }
+      ],
+      "valuations": {
+        "2024-12-31": {
+          "BTC": {
+            "chf": "84000.00",
+            "source": "estv_kursliste"
+          }
+        }
+      },
+      "expected": {
+        "disposals": [],
+        "income": [],
+        "years": {
+          "2024": {
+            "taxable_capital_gains_chf": "0.00",
+            "informational_realized_gain_chf": "0.00",
+            "income_by_category_chf": {},
+            "income_total_chf": "0.00",
+            "not_in_income_total": [
+              {
+                "event": "g1",
+                "date": "2024-04-01",
+                "kind": "gift_in",
+                "value_chf": "6100.00",
+                "treatment": "gift: not income (Art. 24 lit. a DBG); cantonal gift tax"
+              }
+            ],
+            "wealth_31_dec": {
+              "rows": [
+                {
+                  "wallet": "A",
+                  "asset": "BTC",
+                  "quantity": "0.1",
+                  "unit_value_chf": "84000.00",
+                  "value_chf": "8400.00",
+                  "source": "estv_kursliste",
+                  "flags": []
+                }
+              ],
+              "total_chf": "8400.00",
+              "complete": true
+            },
+            "ks36": {
+              "c1_holding_6_months": "no_disposals",
+              "c2_volume_5x": {
+                "result": "not_assessable",
+                "volume_chf": "0.00",
+                "limit_chf": null,
+                "basis": "crypto_only"
+              },
+              "c3_gains_under_half_income": {
+                "result": "not_assessable",
+                "realized_gains_chf": "0.00",
+                "half_net_income_chf": null
+              },
+              "c4_financing": "not_assessable",
+              "c5_derivatives": "not_assessable",
+              "overall": "inconclusive"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "ch-17-wages-in-btc",
+      "title": "Salary paid in BTC is employment income on the Lohnausweis, outside Kassiber's income total",
+      "rules": [
+        "CH-WAGES"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "w1",
+          "time": "2024-01-25T10:00:00+01:00",
+          "wallet": "A",
+          "type": "wages",
+          "asset": "BTC",
+          "quantity": "0.05",
+          "fiat": "2000.00"
+        }
+      ],
+      "valuations": {
+        "2024-12-31": {
+          "BTC": {
+            "chf": "84000.00",
+            "source": "estv_kursliste"
+          }
+        }
+      },
+      "expected": {
+        "disposals": [],
+        "income": [],
+        "years": {
+          "2024": {
+            "taxable_capital_gains_chf": "0.00",
+            "informational_realized_gain_chf": "0.00",
+            "income_by_category_chf": {},
+            "income_total_chf": "0.00",
+            "not_in_income_total": [
+              {
+                "event": "w1",
+                "date": "2024-01-25",
+                "kind": "wages",
+                "value_chf": "2000.00",
+                "treatment": "employment income on the Lohnausweis (Art. 17 DBG)"
+              }
+            ],
+            "wealth_31_dec": {
+              "rows": [
+                {
+                  "wallet": "A",
+                  "asset": "BTC",
+                  "quantity": "0.05",
+                  "unit_value_chf": "84000.00",
+                  "value_chf": "4200.00",
+                  "source": "estv_kursliste",
+                  "flags": []
+                }
+              ],
+              "total_chf": "4200.00",
+              "complete": true
+            },
+            "ks36": {
+              "c1_holding_6_months": "no_disposals",
+              "c2_volume_5x": {
+                "result": "not_assessable",
+                "volume_chf": "0.00",
+                "limit_chf": null,
+                "basis": "crypto_only"
+              },
+              "c3_gains_under_half_income": {
+                "result": "not_assessable",
+                "realized_gains_chf": "0.00",
+                "half_net_income_chf": null
+              },
+              "c4_financing": "not_assessable",
+              "c5_derivatives": "not_assessable",
+              "overall": "inconclusive"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "ch-18-lbtc-valued-as-btc",
+      "title": "L-BTC has no ESTV value; it is valued at the BTC tax value and flagged",
+      "rules": [
+        "CH-WEALTH",
+        "CH-RAIL"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2024-02-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "0.5",
+          "fiat": "21000.00"
+        },
+        {
+          "id": "g1",
+          "time": "2024-03-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "peg",
+          "asset": "BTC",
+          "quantity": "0.2",
+          "in_asset": "LBTC",
+          "in_quantity": "0.2"
+        }
+      ],
+      "valuations": {
+        "2024-12-31": {
+          "BTC": {
+            "chf": "84000.00",
+            "source": "estv_kursliste"
+          }
+        }
+      },
+      "expected": {
+        "disposals": [],
+        "income": [],
+        "years": {
+          "2024": {
+            "taxable_capital_gains_chf": "0.00",
+            "informational_realized_gain_chf": "0.00",
+            "income_by_category_chf": {},
+            "income_total_chf": "0.00",
+            "not_in_income_total": [],
+            "wealth_31_dec": {
+              "rows": [
+                {
+                  "wallet": "A",
+                  "asset": "BTC",
+                  "quantity": "0.3",
+                  "unit_value_chf": "84000.00",
+                  "value_chf": "25200.00",
+                  "source": "estv_kursliste",
+                  "flags": []
+                },
+                {
+                  "wallet": "A",
+                  "asset": "LBTC",
+                  "quantity": "0.2",
+                  "unit_value_chf": "84000.00",
+                  "value_chf": "16800.00",
+                  "source": "estv_kursliste",
+                  "flags": [
+                    "lbtc_valued_as_btc"
+                  ]
+                }
+              ],
+              "total_chf": "42000.00",
+              "complete": true
+            },
+            "ks36": {
+              "c1_holding_6_months": "no_disposals",
+              "c2_volume_5x": {
+                "result": "not_assessable",
+                "volume_chf": "21000.00",
+                "limit_chf": null,
+                "basis": "crypto_only"
+              },
+              "c3_gains_under_half_income": {
+                "result": "not_assessable",
+                "realized_gains_chf": "0.00",
+                "half_net_income_chf": null
+              },
+              "c4_financing": "not_assessable",
+              "c5_derivatives": "not_assessable",
+              "overall": "inconclusive"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "ch-19-hardfork-refused",
+      "title": "A hard fork fails closed: no ESTV rule settles its income or cost treatment",
+      "rules": [
+        "CH-HARDFORK",
+        "CH-FAILCLOSED"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2017-01-10T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "900.00"
+        },
+        {
+          "id": "h1",
+          "time": "2017-08-01T15:16:00+02:00",
+          "wallet": "A",
+          "type": "hardfork",
+          "asset": "BCH",
+          "quantity": "1"
+        }
+      ],
+      "expected": {
+        "refusal": {
+          "code": "hardfork_treatment_unsupported",
+          "event": "h1",
+          "reason": "ESTV guidance does not settle the income/cost treatment of fork coins"
+        }
+      }
+    },
+    {
+      "id": "ch-20-professional-trader-refused",
+      "title": "Business-asset (professional trader) accounting is not offered: fail closed",
+      "rules": [
+        "CH-PROFESSIONAL",
+        "CH-FAILCLOSED"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global",
+        "professional_trader": true
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2024-01-10T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "40000.00"
+        }
+      ],
+      "expected": {
+        "refusal": {
+          "code": "professional_trading_unsupported",
+          "event": "-",
+          "reason": "KS 36: business-asset accounting (Art. 18 DBG) is not modelled"
+        }
+      }
+    }
+  ]
+}

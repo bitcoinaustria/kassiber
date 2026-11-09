@@ -1,0 +1,18 @@
+{
+  "body": [
+    {
+      "message": "skip must be 0 or more",
+      "path": "skip"
+    }
+  ],
+  "request": {
+    "key": "read_only",
+    "method": "GET",
+    "path": "/api/v1/stores/{storeId}/payment-methods/BTC-ARK/wallet/transactions?skip=-1",
+    "permissions": [
+      "btcpay.store.canviewstoresettings",
+      "btcpay.store.canviewwallet"
+    ]
+  },
+  "status": 422
+}

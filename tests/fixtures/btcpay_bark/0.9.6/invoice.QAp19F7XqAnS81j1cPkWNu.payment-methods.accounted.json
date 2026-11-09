@@ -1,0 +1,41 @@
+{
+  "body": [
+    {
+      "activated": true,
+      "additionalData": {
+        "invoiceId": "f57869b6c37c21dfaac5bdb8b2496d3bcabaccb3f0d10a44ba631f6f5057bd63",
+        "paymentHash": "f57869b6c37c21dfaac5bdb8b2496d3bcabaccb3f0d10a44ba631f6f5057bd63",
+        "preimage": "522d12d8e142411af969c31843f2725ec7b01fbf8190573d1fe4c53159183a89"
+      },
+      "amount": "0.0012",
+      "currency": "BTC",
+      "destination": "lnbcrt1200u1p40pvznsp5dmamkmadea626s96mxu6f0z04tqnyem2tjurg876je4vp5qufq9spp574uxndkr0ssal2k9hkutyjtd809t4n9n7rgs5396vv0k75zhh43sdqqxqy9gcqcqzgq9qyysgq592r392efx3vcpf2lmg7a93fv5fyhjw78plhjmvlqemvtfgqeqq42et3kv89r58dk5f795slmnl36pfu2pms4ph364s6p8g2uwpqevgqfdck2n",
+      "due": "0",
+      "paymentLink": "lightning:lnbcrt1200u1p40pvznsp5dmamkmadea626s96mxu6f0z04tqnyem2tjurg876je4vp5qufq9spp574uxndkr0ssal2k9hkutyjtd809t4n9n7rgs5396vv0k75zhh43sdqqxqy9gcqcqzgq9qyysgq592r392efx3vcpf2lmg7a93fv5fyhjw78plhjmvlqemvtfgqeqq42et3kv89r58dk5f795slmnl36pfu2pms4ph364s6p8g2uwpqevgqfdck2n",
+      "paymentMethodFee": "0",
+      "paymentMethodId": "BTC-LN",
+      "paymentMethodPaid": "0.0012",
+      "payments": [
+        {
+          "destination": "lnbcrt1200u1p40pvznsp5dmamkmadea626s96mxu6f0z04tqnyem2tjurg876je4vp5qufq9spp574uxndkr0ssal2k9hkutyjtd809t4n9n7rgs5396vv0k75zhh43sdqqxqy9gcqcqzgq9qyysgq592r392efx3vcpf2lmg7a93fv5fyhjw78plhjmvlqemvtfgqeqq42et3kv89r58dk5f795slmnl36pfu2pms4ph364s6p8g2uwpqevgqfdck2n",
+          "fee": "0",
+          "id": "f57869b6c37c21dfaac5bdb8b2496d3bcabaccb3f0d10a44ba631f6f5057bd63",
+          "receivedDate": 1794158676,
+          "status": "Settled",
+          "value": "0.0012"
+        }
+      ],
+      "rate": "1.0",
+      "totalPaid": "0.0012"
+    }
+  ],
+  "request": {
+    "key": "invoices",
+    "method": "GET",
+    "path": "/api/v1/stores/{storeId}/invoices/QAp19F7XqAnS81j1cPkWNu/payment-methods?onlyAccountedPayments=true",
+    "permissions": [
+      "btcpay.store.canviewinvoices"
+    ]
+  },
+  "status": 200
+}

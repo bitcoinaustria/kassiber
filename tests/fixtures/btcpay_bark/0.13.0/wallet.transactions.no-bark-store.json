@@ -1,0 +1,16 @@
+{
+  "body": {
+    "code": "paymentmethod-not-found",
+    "message": "BTC-ARK is not set up for this store"
+  },
+  "request": {
+    "key": "read_only",
+    "method": "GET",
+    "path": "/api/v1/stores/{plainStoreId}/payment-methods/BTC-ARK/wallet/transactions",
+    "permissions": [
+      "btcpay.store.canviewstoresettings",
+      "btcpay.store.canviewwallet"
+    ]
+  },
+  "status": 404
+}

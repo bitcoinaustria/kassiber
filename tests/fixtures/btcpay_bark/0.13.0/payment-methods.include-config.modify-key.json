@@ -1,0 +1,28 @@
+{
+  "body": [
+    {
+      "config": {
+        "connectionString": "type=bark;capability=<redacted>",
+        "internalNodeRef": null
+      },
+      "enabled": true,
+      "paymentMethodId": "BTC-LN"
+    },
+    {
+      "config": {
+        "enabled": true
+      },
+      "enabled": true,
+      "paymentMethodId": "BTC-ARK"
+    }
+  ],
+  "request": {
+    "key": "modify_settings",
+    "method": "GET",
+    "path": "/api/v1/stores/{storeId}/payment-methods?includeConfig=true",
+    "permissions": [
+      "btcpay.store.canmodifystoresettings"
+    ]
+  },
+  "status": 200
+}

@@ -1,0 +1,17 @@
+{
+  "body": {
+    "code": "missing-permission",
+    "message": "Insufficient API Permissions. Please use an API key with permission \"btcpay.store.canmodifystoresettings\". You can create an API key in your account's settings / Api Keys.",
+    "missingPermission": "btcpay.store.canmodifystoresettings"
+  },
+  "request": {
+    "key": "read_only",
+    "method": "GET",
+    "path": "/api/v1/stores/{storeId}/payment-methods/BTC-ARK?includeConfig=true",
+    "permissions": [
+      "btcpay.store.canviewstoresettings",
+      "btcpay.store.canviewwallet"
+    ]
+  },
+  "status": 403
+}

@@ -1,0 +1,1463 @@
+{
+ "message": "IyBLYXNzaWJlciByZWxlYXNlIG1hbmlmZXN0IHYxCiMgVmVyc2lvbjogMS4yLjMKMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMCAga2Fzc2liZXIuZG1nCg==",
+ "cases": [
+  {
+   "name": "valid_sha512",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYgo4ZGxCSWI4M1NJQWJRUGIxd0FBQUFRYTJGemMybGlaWEl0Y21Wc1pXRnpaUUFBQUFBQUFBQUdjMmhoTlRFeUFBQUFVd0FBCkFBdHpjMmd0WldReU5UVXhPUUFBQUVEOVFPSzNaekRkdjBRZkZyMHBmM29DTDgwS1JJY0lMbnpKcjJnZFpZZ0ZqOUZSZjEKb2NnQWR2QjN0MkRJYXFYaFUxTTd0Y0RZeWpCTlJYaVBDZWpMTVAKLS0tLS1FTkQgU1NIIFNJR05BVFVSRS0tLS0tCg==",
+   "result": {
+    "signer": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+   }
+  },
+  {
+   "name": "valid_sha256",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYgo4ZGxCSWI4M1NJQWJRUGIxd0FBQUFRYTJGemMybGlaWEl0Y21Wc1pXRnpaUUFBQUFBQUFBQUdjMmhoTWpVMkFBQUFVd0FBCkFBdHpjMmd0WldReU5UVXhPUUFBQUVBU0lnRE43MzBUMDZUd2xpdkh2dkhKb1pCRnV2M2M2Yy9rQVkzQ1ZwSmJrTEFsMGEKdkFXd3Z1cGZpL1MvT1Ztcjg0R09WQUttZFE3MTJHaGVtaWlFd0sKLS0tLS1FTkQgU1NIIFNJR05BVFVSRS0tLS0tCg==",
+   "result": {
+    "signer": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+   }
+  },
+  {
+   "name": "signed_empty_message",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYgo4ZGxCSWI4M1NJQWJRUGIxd0FBQUFRYTJGemMybGlaWEl0Y21Wc1pXRnpaUUFBQUFBQUFBQUdjMmhoTlRFeUFBQUFVd0FBCkFBdHpjMmd0WldReU5UVXhPUUFBQUVEN2xlanZwN3ZyT0I3R3E4WFF2S1VZMW9DZld3ZG9iR3pwbWsxQ0FnTi9oekpXdjEKc0V0MnBvUXBSajJTRkE0TVc4VEs1b1VTWGh0VFhKWXFOb0hvUUsKLS0tLS1FTkQgU1NIIFNJR05BVFVSRS0tLS0tCg==",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "other_message",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYgo4ZGxCSWI4M1NJQWJRUGIxd0FBQUFRYTJGemMybGlaWEl0Y21Wc1pXRnpaUUFBQUFBQUFBQUdjMmhoTlRFeUFBQUFVd0FBCkFBdHpjMmd0WldReU5UVXhPUUFBQUVCT3k0VktPTmppSXVWY25meHUzTmNLMml2cjlhNmtwT3V6M3pSZjJTVHJCQ0ZjYkoKUjJuVXJzVHhCWW1LUWFUcE9RaDRRd3Ztb2ZrOHlqSHVOVTdETUgKLS0tLS1FTkQgU1NIIFNJR05BVFVSRS0tLS0tCg==",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "hash_sha384",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYgo4ZGxCSWI4M1NJQWJRUGIxd0FBQUFRYTJGemMybGlaWEl0Y21Wc1pXRnpaUUFBQUFBQUFBQUdjMmhoTXpnMEFBQUFVd0FBCkFBdHpjMmd0WldReU5UVXhPUUFBQUVBZG9HZDRzTVMwOUU4Q1l0VmhkRWt6VzQrMHlpTTRtQjAvYzIzRG9LS3o0a1QraGUKdDhGbGVxZWM5dCtrYUlDaTg0YUVTbk5TVDNaRm94YjFKVDIwSUMKLS0tLS1FTkQgU1NIIFNJR05BVFVSRS0tLS0tCg==",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "hash_uppercase",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYgo4ZGxCSWI4M1NJQWJRUGIxd0FBQUFRYTJGemMybGlaWEl0Y21Wc1pXRnpaUUFBQUFBQUFBQUdVMGhCTlRFeUFBQUFVd0FBCkFBdHpjMmd0WldReU5UVXhPUUFBQUVBWTFsdm04TWtsSkJlTms3UElYUWpvaXk4a1lzdHhIZUU3S013VzEyTEpTVzRDby8KR2V6V0t4RlFYMGkzK1dGTjVUREhkeEoreFp0QWUrRmdqcU1SSUkKLS0tLS1FTkQgU1NIIFNJR05BVFVSRS0tLS0tCg==",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "hash_signed_256_declared_512",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYgo4ZGxCSWI4M1NJQWJRUGIxd0FBQUFRYTJGemMybGlaWEl0Y21Wc1pXRnpaUUFBQUFBQUFBQUdjMmhoTlRFeUFBQUFVd0FBCkFBdHpjMmd0WldReU5UVXhPUUFBQUVBU0lnRE43MzBUMDZUd2xpdkh2dkhKb1pCRnV2M2M2Yy9rQVkzQ1ZwSmJrTEFsMGEKdkFXd3Z1cGZpL1MvT1Ztcjg0R09WQUttZFE3MTJHaGVtaWlFd0sKLS0tLS1FTkQgU1NIIFNJR05BVFVSRS0tLS0tCg==",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "namespace_other",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYgo4ZGxCSWI4M1NJQWJRUGIxd0FBQUFGYjNSb1pYSUFBQUFBQUFBQUJuTm9ZVFV4TWdBQUFGTUFBQUFMYzNOb0xXVmtNalUxCk1Ua0FBQUJBc09tRmpsUy9xTW1LUUJWWUhtUmxycGtPdHZxNHdkREJOcFhjYnZPaDd0RCtKUjRRb3NoWnI0LzBFV2l5WlkKZnMxa0RzUU8rVXozZ29ubnlyZncva0JBPT0KLS0tLS1FTkQgU1NIIFNJR05BVFVSRS0tLS0tCg==",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "namespace_empty",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYgo4ZGxCSWI4M1NJQWJRUGIxd0FBQUFBQUFBQUFBQUFBQVp6YUdFMU1USUFBQUJUQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBClFERUNTcVNWeEZVQ2xlNTg4R3RXcmk0ZE1BMVRzVFJNVm8vcHBQcmdKN2ZNRGErczVpS0VEYUpOTEhiTzk2NmQreTlibFgKcEo2UDZCM2lvTVEyUllKUVU9Ci0tLS0tRU5EIFNTSCBTSUdOQVRVUkUtLS0tLQo=",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "namespace_trailing_space",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYgo4ZGxCSWI4M1NJQWJRUGIxd0FBQUFSYTJGemMybGlaWEl0Y21Wc1pXRnpaU0FBQUFBQUFBQUFCbk5vWVRVeE1nQUFBRk1BCkFBQUxjM05vTFdWa01qVTFNVGtBQUFCQVMxVDBFRlNsTVhDdVBYYlJyTEZrTkdPd2ZpR0g0c2I1ZVVXbUdpN2VCNmtMNVoKR044cU5qSUY2TnpDN1NHVXU2MGRSeC9sdlljdXkwdUNaakt4d0NEUT09Ci0tLS0tRU5EIFNTSCBTSUdOQVRVUkUtLS0tLQo=",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "namespace_nul",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYgo4ZGxCSWI4M1NJQWJRUGIxd0FBQUFSYTJGemMybGlaWEl0Y21Wc1pXRnpaUUFBQUFBQUFBQUFCbk5vWVRVeE1nQUFBRk1BCkFBQUxjM05vTFdWa01qVTFNVGtBQUFCQXdmZU9HWlBHbUtjNDlFTStDQVQxNWI4S0ZWcmtsaXdRbGc1bWxlSUJTa2RmWkwKcGcwK09DYyt3ZkZxbVgzZUhYRElacUZRTzY5aU1vNHpiWXJVZ1BEZz09Ci0tLS0tRU5EIFNTSCBTSUdOQVRVUkUtLS0tLQo=",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "namespace_declared_other_signed_expected",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYgo4ZGxCSWI4M1NJQWJRUGIxd0FBQUFGYjNSb1pYSUFBQUFBQUFBQUJuTm9ZVFV4TWdBQUFGTUFBQUFMYzNOb0xXVmtNalUxCk1Ua0FBQUJBL1VEaXQyY3czYjlFSHhhOUtYOTZBaS9OQ2tTSENDNTh5YTlvSFdXSUJZL1JVWDlhSElBSGJ3ZDdkZ3lHcWwKNFZOVE83WEEyTW93VFVWNGp3bm95ekR3PT0KLS0tLS1FTkQgU1NIIFNJR05BVFVSRS0tLS0tCg==",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "reserved_ignored",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYgo4ZGxCSWI4M1NJQWJRUGIxd0FBQUFRYTJGemMybGlaWEl0Y21Wc1pXRnpaUUFBQUFGNEFBQUFCbk5vWVRVeE1nQUFBRk1BCkFBQUxjM05vTFdWa01qVTFNVGtBQUFCQS9VRGl0MmN3M2I5RUh4YTlLWDk2QWkvTkNrU0hDQzU4eWE5b0hXV0lCWS9SVVgKOWFISUFIYndkN2RneUdxbDRWTlRPN1hBMk1vd1RVVjRqd25veXpEdz09Ci0tLS0tRU5EIFNTSCBTSUdOQVRVUkUtLS0tLQo=",
+   "result": {
+    "signer": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+   }
+  },
+  {
+   "name": "reserved_signed",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYgo4ZGxCSWI4M1NJQWJRUGIxd0FBQUFRYTJGemMybGlaWEl0Y21Wc1pXRnpaUUFBQUFGNEFBQUFCbk5vWVRVeE1nQUFBRk1BCkFBQUxjM05vTFdWa01qVTFNVGtBQUFCQXJoUzdiVXFLbnpJNytZMG52WDVJYnloeEswRGE5aUpad2M0SUpKZUtiaUQyL1gKTWFFdmJaajFqUDhxS0tmMFdrNlFDY2JHdUkxMTY5M2pVbmZiNCtCQT09Ci0tLS0tRU5EIFNTSCBTSUdOQVRVUkUtLS0tLQo=",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "version_0",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQUFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYgo4ZGxCSWI4M1NJQWJRUGIxd0FBQUFRYTJGemMybGlaWEl0Y21Wc1pXRnpaUUFBQUFBQUFBQUdjMmhoTlRFeUFBQUFVd0FBCkFBdHpjMmd0WldReU5UVXhPUUFBQUVEOVFPSzNaekRkdjBRZkZyMHBmM29DTDgwS1JJY0lMbnpKcjJnZFpZZ0ZqOUZSZjEKb2NnQWR2QjN0MkRJYXFYaFUxTTd0Y0RZeWpCTlJYaVBDZWpMTVAKLS0tLS1FTkQgU1NIIFNJR05BVFVSRS0tLS0tCg==",
+   "result": {
+    "signer": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+   }
+  },
+  {
+   "name": "version_2",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQWdBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYgo4ZGxCSWI4M1NJQWJRUGIxd0FBQUFRYTJGemMybGlaWEl0Y21Wc1pXRnpaUUFBQUFBQUFBQUdjMmhoTlRFeUFBQUFVd0FBCkFBdHpjMmd0WldReU5UVXhPUUFBQUVEOVFPSzNaekRkdjBRZkZyMHBmM29DTDgwS1JJY0lMbnpKcjJnZFpZZ0ZqOUZSZjEKb2NnQWR2QjN0MkRJYXFYaFUxTTd0Y0RZeWpCTlJYaVBDZWpMTVAKLS0tLS1FTkQgU1NIIFNJR05BVFVSRS0tLS0tCg==",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "magic_wrong",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbElBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYgo4ZGxCSWI4M1NJQWJRUGIxd0FBQUFRYTJGemMybGlaWEl0Y21Wc1pXRnpaUUFBQUFBQUFBQUdjMmhoTlRFeUFBQUFVd0FBCkFBdHpjMmd0WldReU5UVXhPUUFBQUVEOVFPSzNaekRkdjBRZkZyMHBmM29DTDgwS1JJY0lMbnpKcjJnZFpZZ0ZqOUZSZjEKb2NnQWR2QjN0MkRJYXFYaFUxTTd0Y0RZeWpCTlJYaVBDZWpMTVAKLS0tLS1FTkQgU1NIIFNJR05BVFVSRS0tLS0tCg==",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "outer_trailing_byte",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYgo4ZGxCSWI4M1NJQWJRUGIxd0FBQUFRYTJGemMybGlaWEl0Y21Wc1pXRnpaUUFBQUFBQUFBQUdjMmhoTlRFeUFBQUFVd0FBCkFBdHpjMmd0WldReU5UVXhPUUFBQUVEOVFPSzNaekRkdjBRZkZyMHBmM29DTDgwS1JJY0lMbnpKcjJnZFpZZ0ZqOUZSZjEKb2NnQWR2QjN0MkRJYXFYaFUxTTd0Y0RZeWpCTlJYaVBDZWpMTVBBQT09Ci0tLS0tRU5EIFNTSCBTSUdOQVRVUkUtLS0tLQo=",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "truncated",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYgo4ZGxCSWI4M1NJQWJRUGIxd0FBQUFRYTJGemMybGlaWEl0Y21Wc1pXRnpaUUFBQUFBQUFBQUdjMmhoTlRFeUFBQUFVd0FBCkFBdHpjMmd0WldReU5UVXhPUUFBQUVEOVFPSzNaekRkdjBRZkZyMHBmM29DTDgwS1JJY0lMbnpKcjJnZFpZZ0ZqOUZSZjEKb2NnQWR2QjN0MkRJYXFYaFUxTTd0Y0RZeWpCTlJYaVBDZWpMTT0KLS0tLS1FTkQgU1NIIFNJR05BVFVSRS0tLS0tCg==",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "other_signer",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdnVGwzRHFoOUYxOVdvMVJtdzB4K3pNdU5pcApHMDdqZWlYZllQVzQvSnM1UUFBQUFRYTJGemMybGlaWEl0Y21Wc1pXRnpaUUFBQUFBQUFBQUdjMmhoTlRFeUFBQUFVd0FBCkFBdHpjMmd0WldReU5UVXhPUUFBQUVETE51MjJVNWl3MzZJeFNKaUZjdm92TURNVVg1anpHbVBIMVN4T3NWdGdCZFZ1ZzQKV2pCa2JZQXhHbkRlL3ZYWU5rbTBKZmtCZitWSzRJSjQ2bkl5Z04KLS0tLS1FTkQgU1NIIFNJR05BVFVSRS0tLS0tCg==",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "other_signer_claims_pinned_key",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYgo4ZGxCSWI4M1NJQWJRUGIxd0FBQUFRYTJGemMybGlaWEl0Y21Wc1pXRnpaUUFBQUFBQUFBQUdjMmhoTlRFeUFBQUFVd0FBCkFBdHpjMmd0WldReU5UVXhPUUFBQUVETE51MjJVNWl3MzZJeFNKaUZjdm92TURNVVg1anpHbVBIMVN4T3NWdGdCZFZ1ZzQKV2pCa2JZQXhHbkRlL3ZYWU5rbTBKZmtCZitWSzRJSjQ2bkl5Z04KLS0tLS1FTkQgU1NIIFNJR05BVFVSRS0tLS0tCg==",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "embedded_key_trailing_byte",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFEUUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYgo4ZGxCSWI4M1NJQWJRUGIxd0FBQUFBRUd0aGMzTnBZbVZ5TFhKbGJHVmhjMlVBQUFBQUFBQUFCbk5vWVRVeE1nQUFBRk1BCkFBQUxjM05vTFdWa01qVTFNVGtBQUFCQS9VRGl0MmN3M2I5RUh4YTlLWDk2QWkvTkNrU0hDQzU4eWE5b0hXV0lCWS9SVVgKOWFISUFIYndkN2RneUdxbDRWTlRPN1hBMk1vd1RVVjRqd25veXpEdz09Ci0tLS0tRU5EIFNTSCBTSUdOQVRVUkUtLS0tLQo=",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "embedded_key_as_sk",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFFb0FBQUFhYzJzdGMzTm9MV1ZrTWpVMU1UbEFiM0JsYm5OemFDNWpiMjBBQUFBZ2lvamozWApRSjhaWDlVdHN0UExwZGNzcG5DYjhkbEJJYjgzU0lBYlFQYjF3QUFBQUVjM05vT2dBQUFCQnJZWE56YVdKbGNpMXlaV3hsCllYTmxBQUFBQUFBQUFBWnphR0UxTVRJQUFBQm5BQUFBR25OckxYTnphQzFsWkRJMU5URTVRRzl3Wlc1emMyZ3VZMjl0QUEKQUFRT1Q0NU83T2FZS3E0UnJqWE0zbWpjMFo1QW1TRGZUNXU0RFBhWHJHMGRENDk5ZUROUlhaeTRUbzM2ZUcxL3NqOUE0MgpNNW1FYXBnTW9CRFZ3SnhxWEFZQkFBQUFCdz09Ci0tLS0tRU5EIFNTSCBTSUdOQVRVUkUtLS0tLQo=",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "inner_type_sk_for_ed_key",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYgo4ZGxCSWI4M1NJQWJRUGIxd0FBQUFRYTJGemMybGlaWEl0Y21Wc1pXRnpaUUFBQUFBQUFBQUdjMmhoTlRFeUFBQUFZZ0FBCkFCcHpheTF6YzJndFpXUXlOVFV4T1VCdmNHVnVjM05vTG1OdmJRQUFBRUQ5UU9LM1p6RGR2MFFmRnIwcGYzb0NMODBLUkkKY0lMbnpKcjJnZFpZZ0ZqOUZSZjFvY2dBZHZCM3QyRElhcVhoVTFNN3RjRFl5akJOUlhpUENlakxNUAotLS0tLUVORCBTU0ggU0lHTkFUVVJFLS0tLS0K",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "inner_type_rsa",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYgo4ZGxCSWI4M1NJQWJRUGIxd0FBQUFRYTJGemMybGlaWEl0Y21Wc1pXRnpaUUFBQUFBQUFBQUdjMmhoTlRFeUFBQUFWQUFBCkFBeHljMkV0YzJoaE1pMDFNVElBQUFCQS9VRGl0MmN3M2I5RUh4YTlLWDk2QWkvTkNrU0hDQzU4eWE5b0hXV0lCWS9SVVgKOWFISUFIYndkN2RneUdxbDRWTlRPN1hBMk1vd1RVVjRqd25veXpEdz09Ci0tLS0tRU5EIFNTSCBTSUdOQVRVUkUtLS0tLQo=",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "inner_trailing_byte",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYgo4ZGxCSWI4M1NJQWJRUGIxd0FBQUFRYTJGemMybGlaWEl0Y21Wc1pXRnpaUUFBQUFBQUFBQUdjMmhoTlRFeUFBQUFWQUFBCkFBdHpjMmd0WldReU5UVXhPUUFBQUVEOVFPSzNaekRkdjBRZkZyMHBmM29DTDgwS1JJY0lMbnpKcjJnZFpZZ0ZqOUZSZjEKb2NnQWR2QjN0MkRJYXFYaFUxTTd0Y0RZeWpCTlJYaVBDZWpMTVBBQT09Ci0tLS0tRU5EIFNTSCBTSUdOQVRVUkUtLS0tLQo=",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "inner_short",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYgo4ZGxCSWI4M1NJQWJRUGIxd0FBQUFRYTJGemMybGlaWEl0Y21Wc1pXRnpaUUFBQUFBQUFBQUdjMmhoTlRFeUFBQUFVZ0FBCkFBdHpjMmd0WldReU5UVXhPUUFBQUQvOVFPSzNaekRkdjBRZkZyMHBmM29DTDgwS1JJY0lMbnpKcjJnZFpZZ0ZqOUZSZjEKb2NnQWR2QjN0MkRJYXFYaFUxTTd0Y0RZeWpCTlJYaVBDZWpMTT0KLS0tLS1FTkQgU1NIIFNJR05BVFVSRS0tLS0tCg==",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "inner_long",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYgo4ZGxCSWI4M1NJQWJRUGIxd0FBQUFRYTJGemMybGlaWEl0Y21Wc1pXRnpaUUFBQUFBQUFBQUdjMmhoTlRFeUFBQUFWQUFBCkFBdHpjMmd0WldReU5UVXhPUUFBQUVIOVFPSzNaekRkdjBRZkZyMHBmM29DTDgwS1JJY0lMbnpKcjJnZFpZZ0ZqOUZSZjEKb2NnQWR2QjN0MkRJYXFYaFUxTTd0Y0RZeWpCTlJYaVBDZWpMTVBBQT09Ci0tLS0tRU5EIFNTSCBTSUdOQVRVUkUtLS0tLQo=",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "inner_empty",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYgo4ZGxCSWI4M1NJQWJRUGIxd0FBQUFRYTJGemMybGlaWEl0Y21Wc1pXRnpaUUFBQUFBQUFBQUdjMmhoTlRFeUFBQUFBQT09Ci0tLS0tRU5EIFNTSCBTSUdOQVRVUkUtLS0tLQo=",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "scalar_plus_order",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYgo4ZGxCSWI4M1NJQWJRUGIxd0FBQUFRYTJGemMybGlaWEl0Y21Wc1pXRnpaUUFBQUFBQUFBQUdjMmhoTlRFeUFBQUFVd0FBCkFBdHpjMmd0WldReU5UVXhPUUFBQUVEOVFPSzNaekRkdjBRZkZyMHBmM29DTDgwS1JJY0lMbnpKcjJnZFpZZ0ZqNzRsZGIKYzI0eG5IM1JkdXIyU2tQU28xTTd0Y0RZeWpCTlJYaVBDZWpMTWYKLS0tLS1FTkQgU1NIIFNJR05BVFVSRS0tLS0tCg==",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "scalar_plus_two_orders",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYgo4ZGxCSWI4M1NJQWJRUGIxd0FBQUFRYTJGemMybGlaWEl0Y21Wc1pXRnpaUUFBQUFBQUFBQUdjMmhoTlRFeUFBQUFVd0FBCkFBdHpjMmd0WldReU5UVXhPUUFBQUVEOVFPSzNaekRkdjBRZkZyMHBmM29DTDgwS1JJY0lMbnpKcjJnZFpZZ0ZqNnY1YWgKUlJSaXdmdExSbFVrT2VIRDgxTTd0Y0RZeWpCTlJYaVBDZWpMTXYKLS0tLS1FTkQgU1NIIFNJR05BVFVSRS0tLS0tCg==",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "scalar_flipped",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYgo4ZGxCSWI4M1NJQWJRUGIxd0FBQUFRYTJGemMybGlaWEl0Y21Wc1pXRnpaUUFBQUFBQUFBQUdjMmhoTlRFeUFBQUFVd0FBCkFBdHpjMmd0WldReU5UVXhPUUFBQUVEOVFPSzNaekRkdjBRZkZyMHBmM29DTDgwS1JJY0lMbnpKcjJnZFpZZ0ZqOUpSZjEKb2NnQWR2QjN0MkRJYXFYaFUxTTd0Y0RZeWpCTlJYaVBDZWpMTVAKLS0tLS1FTkQgU1NIIFNJR05BVFVSRS0tLS0tCg==",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "r_flipped",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYgo4ZGxCSWI4M1NJQWJRUGIxd0FBQUFRYTJGemMybGlaWEl0Y21Wc1pXRnpaUUFBQUFBQUFBQUdjMmhoTlRFeUFBQUFVd0FBCkFBdHpjMmd0WldReU5UVXhPUUFBQUVEOFFPSzNaekRkdjBRZkZyMHBmM29DTDgwS1JJY0lMbnpKcjJnZFpZZ0ZqOUZSZjEKb2NnQWR2QjN0MkRJYXFYaFUxTTd0Y0RZeWpCTlJYaVBDZWpMTVAKLS0tLS1FTkQgU1NIIFNJR05BVFVSRS0tLS0tCg==",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "sk_valid",
+   "public_key": "sk-ssh-ed25519@openssh.com AAAAGnNrLXNzaC1lZDI1NTE5QG9wZW5zc2guY29tAAAAIO1JKMYo0cLG6ukDOJBZlWEpWSc6XGP5NjbBRhSshzfRAAAABHNzaDo= release\n",
+   "fingerprint": "SHA256:IQp+oTUUvPgXPa3uJqofaqQSJ8en4VjmdtcS1ttw6DU",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFFb0FBQUFhYzJzdGMzTm9MV1ZrTWpVMU1UbEFiM0JsYm5OemFDNWpiMjBBQUFBZzdVa294aQpqUndzYnE2UU00a0ZtVllTbFpKenBjWS9rMk5zRkdGS3lITjlFQUFBQUVjM05vT2dBQUFCQnJZWE56YVdKbGNpMXlaV3hsCllYTmxBQUFBQUFBQUFBWnphR0UxTVRJQUFBQm5BQUFBR25OckxYTnphQzFsWkRJMU5URTVRRzl3Wlc1emMyZ3VZMjl0QUEKQUFRRnVOaWlzanVyVXY3N2l5NnY5REVpM1BXa3g4VlBYbUlseWFWT3lzM05XZTF2UmNlTFE5WGc1QVgzL2o1QW4zSWFJNgp3MDV3dmhaKzc2SGgzdCtWbFFRQkFBQUFCdz09Ci0tLS0tRU5EIFNTSCBTSUdOQVRVUkUtLS0tLQo=",
+   "result": {
+    "signer": "SHA256:IQp+oTUUvPgXPa3uJqofaqQSJ8en4VjmdtcS1ttw6DU"
+   }
+  },
+  {
+   "name": "sk_valid_sha256",
+   "public_key": "sk-ssh-ed25519@openssh.com AAAAGnNrLXNzaC1lZDI1NTE5QG9wZW5zc2guY29tAAAAIO1JKMYo0cLG6ukDOJBZlWEpWSc6XGP5NjbBRhSshzfRAAAABHNzaDo= release\n",
+   "fingerprint": "SHA256:IQp+oTUUvPgXPa3uJqofaqQSJ8en4VjmdtcS1ttw6DU",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFFb0FBQUFhYzJzdGMzTm9MV1ZrTWpVMU1UbEFiM0JsYm5OemFDNWpiMjBBQUFBZzdVa294aQpqUndzYnE2UU00a0ZtVllTbFpKenBjWS9rMk5zRkdGS3lITjlFQUFBQUVjM05vT2dBQUFCQnJZWE56YVdKbGNpMXlaV3hsCllYTmxBQUFBQUFBQUFBWnphR0V5TlRZQUFBQm5BQUFBR25OckxYTnphQzFsWkRJMU5URTVRRzl3Wlc1emMyZ3VZMjl0QUEKQUFRQVhTNCtIL2RVWUdaS2pwWitWSm9qaTJFZDd0dU45OVIxS0RPa2VxUVI5bGt5ckJKajdua2tTRXFkSCsvRGhjcVN5cwo3VXZneDJnbVJaY25oeEpRemdrQkFBQUFCdz09Ci0tLS0tRU5EIFNTSCBTSUdOQVRVUkUtLS0tLQo=",
+   "result": {
+    "signer": "SHA256:IQp+oTUUvPgXPa3uJqofaqQSJ8en4VjmdtcS1ttw6DU"
+   }
+  },
+  {
+   "name": "sk_no_user_presence",
+   "public_key": "sk-ssh-ed25519@openssh.com AAAAGnNrLXNzaC1lZDI1NTE5QG9wZW5zc2guY29tAAAAIO1JKMYo0cLG6ukDOJBZlWEpWSc6XGP5NjbBRhSshzfRAAAABHNzaDo= release\n",
+   "fingerprint": "SHA256:IQp+oTUUvPgXPa3uJqofaqQSJ8en4VjmdtcS1ttw6DU",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFFb0FBQUFhYzJzdGMzTm9MV1ZrTWpVMU1UbEFiM0JsYm5OemFDNWpiMjBBQUFBZzdVa294aQpqUndzYnE2UU00a0ZtVllTbFpKenBjWS9rMk5zRkdGS3lITjlFQUFBQUVjM05vT2dBQUFCQnJZWE56YVdKbGNpMXlaV3hsCllYTmxBQUFBQUFBQUFBWnphR0UxTVRJQUFBQm5BQUFBR25OckxYTnphQzFsWkRJMU5URTVRRzl3Wlc1emMyZ3VZMjl0QUEKQUFRQWQ5MGN1dWFwWGVxZTVUK1paUWtxSDdSQ2gyMStYSytsckdkMjBvZWNWUlZHQ1o0OHNnNVpHTnZ2K1NEVS9BVEo2aQpqRmRLRU1Tb2ROc1lCYlY2OFFNQUFBQUFCdz09Ci0tLS0tRU5EIFNTSCBTSUdOQVRVUkUtLS0tLQo=",
+   "result": {
+    "signer": "SHA256:IQp+oTUUvPgXPa3uJqofaqQSJ8en4VjmdtcS1ttw6DU"
+   }
+  },
+  {
+   "name": "sk_verified_flags",
+   "public_key": "sk-ssh-ed25519@openssh.com AAAAGnNrLXNzaC1lZDI1NTE5QG9wZW5zc2guY29tAAAAIO1JKMYo0cLG6ukDOJBZlWEpWSc6XGP5NjbBRhSshzfRAAAABHNzaDo= release\n",
+   "fingerprint": "SHA256:IQp+oTUUvPgXPa3uJqofaqQSJ8en4VjmdtcS1ttw6DU",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFFb0FBQUFhYzJzdGMzTm9MV1ZrTWpVMU1UbEFiM0JsYm5OemFDNWpiMjBBQUFBZzdVa294aQpqUndzYnE2UU00a0ZtVllTbFpKenBjWS9rMk5zRkdGS3lITjlFQUFBQUVjM05vT2dBQUFCQnJZWE56YVdKbGNpMXlaV3hsCllYTmxBQUFBQUFBQUFBWnphR0UxTVRJQUFBQm5BQUFBR25OckxYTnphQzFsWkRJMU5URTVRRzl3Wlc1emMyZ3VZMjl0QUEKQUFRRk0rVTY3R2VLRUVHcnB3QjlUM3NpSzRYeHQ4T3M0OGgxNW13VHBTR1dSdXNpcXpVdXRpSzhUcFpDQ2ZlVXdQOVkvVgpUcEhuL0xGZm8welE5WWhZOFFRRi8vLy8vdz09Ci0tLS0tRU5EIFNTSCBTSUdOQVRVUkUtLS0tLQo=",
+   "result": {
+    "signer": "SHA256:IQp+oTUUvPgXPa3uJqofaqQSJ8en4VjmdtcS1ttw6DU"
+   }
+  },
+  {
+   "name": "sk_wrong_application_signed",
+   "public_key": "sk-ssh-ed25519@openssh.com AAAAGnNrLXNzaC1lZDI1NTE5QG9wZW5zc2guY29tAAAAIO1JKMYo0cLG6ukDOJBZlWEpWSc6XGP5NjbBRhSshzfRAAAABHNzaDo= release\n",
+   "fingerprint": "SHA256:IQp+oTUUvPgXPa3uJqofaqQSJ8en4VjmdtcS1ttw6DU",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFFb0FBQUFhYzJzdGMzTm9MV1ZrTWpVMU1UbEFiM0JsYm5OemFDNWpiMjBBQUFBZzdVa294aQpqUndzYnE2UU00a0ZtVllTbFpKenBjWS9rMk5zRkdGS3lITjlFQUFBQUVjM05vT2dBQUFCQnJZWE56YVdKbGNpMXlaV3hsCllYTmxBQUFBQUFBQUFBWnphR0UxTVRJQUFBQm5BQUFBR25OckxYTnphQzFsWkRJMU5URTVRRzl3Wlc1emMyZ3VZMjl0QUEKQUFRTVNRZzc5cmJJMXp2Qk5PblNCMTViWFpjaE00azE2aEkyWG94U0pkeFhCNit6bmVtRlczVUpoSG5NWHRvazViR0FTTwpOVG82S1FtUFhQTXlma1p3UWdFQkFBQUFCdz09Ci0tLS0tRU5EIFNTSCBTSUdOQVRVUkUtLS0tLQo=",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:IQp+oTUUvPgXPa3uJqofaqQSJ8en4VjmdtcS1ttw6DU"
+     }
+    }
+   }
+  },
+  {
+   "name": "sk_other_application_key",
+   "public_key": "sk-ssh-ed25519@openssh.com AAAAGnNrLXNzaC1lZDI1NTE5QG9wZW5zc2guY29tAAAAIO1JKMYo0cLG6ukDOJBZlWEpWSc6XGP5NjbBRhSshzfRAAAABHNzaDo= release\n",
+   "fingerprint": "SHA256:IQp+oTUUvPgXPa3uJqofaqQSJ8en4VjmdtcS1ttw6DU",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFFOEFBQUFhYzJzdGMzTm9MV1ZrTWpVMU1UbEFiM0JsYm5OemFDNWpiMjBBQUFBZzdVa294aQpqUndzYnE2UU00a0ZtVllTbFpKenBjWS9rMk5zRkdGS3lITjlFQUFBQUpjM05vT205MGFHVnlBQUFBRUd0aGMzTnBZbVZ5CkxYSmxiR1ZoYzJVQUFBQUFBQUFBQm5Ob1lUVXhNZ0FBQUdjQUFBQWFjMnN0YzNOb0xXVmtNalUxTVRsQWIzQmxibk56YUMKNWpiMjBBQUFCQXhKQ0R2MnRzalhPOEUwNmRJSFhsdGRseUV6aVRYcUVqWmVqRklsM0ZjSHI3T2Q2WVZiZFFtRWVjeGUyaQpUbHNZQkk0MU9qb3BDWTljOHpKK1JuQkNBUUVBQUFBSAotLS0tLUVORCBTU0ggU0lHTkFUVVJFLS0tLS0K",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:IQp+oTUUvPgXPa3uJqofaqQSJ8en4VjmdtcS1ttw6DU"
+     }
+    }
+   }
+  },
+  {
+   "name": "sk_inner_type_ed",
+   "public_key": "sk-ssh-ed25519@openssh.com AAAAGnNrLXNzaC1lZDI1NTE5QG9wZW5zc2guY29tAAAAIO1JKMYo0cLG6ukDOJBZlWEpWSc6XGP5NjbBRhSshzfRAAAABHNzaDo= release\n",
+   "fingerprint": "SHA256:IQp+oTUUvPgXPa3uJqofaqQSJ8en4VjmdtcS1ttw6DU",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFFb0FBQUFhYzJzdGMzTm9MV1ZrTWpVMU1UbEFiM0JsYm5OemFDNWpiMjBBQUFBZzdVa294aQpqUndzYnE2UU00a0ZtVllTbFpKenBjWS9rMk5zRkdGS3lITjlFQUFBQUVjM05vT2dBQUFCQnJZWE56YVdKbGNpMXlaV3hsCllYTmxBQUFBQUFBQUFBWnphR0UxTVRJQUFBQlRBQUFBQzNOemFDMWxaREkxTlRFNUFBQUFRS01tczVjZW5ZZFlMbW96ZEgKdkNtditJYjlEZndobVVBZDJwTXBEQm9SL3dtcGIvTFIvZmRxaEFwbWJDSW1tSUppVU04TG1UcHViT2g3VDJBZkNQdFFNPQotLS0tLUVORCBTU0ggU0lHTkFUVVJFLS0tLS0K",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:IQp+oTUUvPgXPa3uJqofaqQSJ8en4VjmdtcS1ttw6DU"
+     }
+    }
+   }
+  },
+  {
+   "name": "sk_inner_trailing_byte",
+   "public_key": "sk-ssh-ed25519@openssh.com AAAAGnNrLXNzaC1lZDI1NTE5QG9wZW5zc2guY29tAAAAIO1JKMYo0cLG6ukDOJBZlWEpWSc6XGP5NjbBRhSshzfRAAAABHNzaDo= release\n",
+   "fingerprint": "SHA256:IQp+oTUUvPgXPa3uJqofaqQSJ8en4VjmdtcS1ttw6DU",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFFb0FBQUFhYzJzdGMzTm9MV1ZrTWpVMU1UbEFiM0JsYm5OemFDNWpiMjBBQUFBZzdVa294aQpqUndzYnE2UU00a0ZtVllTbFpKenBjWS9rMk5zRkdGS3lITjlFQUFBQUVjM05vT2dBQUFCQnJZWE56YVdKbGNpMXlaV3hsCllYTmxBQUFBQUFBQUFBWnphR0UxTVRJQUFBQm9BQUFBR25OckxYTnphQzFsWkRJMU5URTVRRzl3Wlc1emMyZ3VZMjl0QUEKQUFRRnVOaWlzanVyVXY3N2l5NnY5REVpM1BXa3g4VlBYbUlseWFWT3lzM05XZTF2UmNlTFE5WGc1QVgzL2o1QW4zSWFJNgp3MDV3dmhaKzc2SGgzdCtWbFFRQkFBQUFCd0E9Ci0tLS0tRU5EIFNTSCBTSUdOQVRVUkUtLS0tLQo=",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:IQp+oTUUvPgXPa3uJqofaqQSJ8en4VjmdtcS1ttw6DU"
+     }
+    }
+   }
+  },
+  {
+   "name": "sk_plain_key_for_sk_pin",
+   "public_key": "sk-ssh-ed25519@openssh.com AAAAGnNrLXNzaC1lZDI1NTE5QG9wZW5zc2guY29tAAAAIO1JKMYo0cLG6ukDOJBZlWEpWSc6XGP5NjbBRhSshzfRAAAABHNzaDo= release\n",
+   "fingerprint": "SHA256:IQp+oTUUvPgXPa3uJqofaqQSJ8en4VjmdtcS1ttw6DU",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWc3VWtveGlqUndzYnE2UU00a0ZtVllTbFpKegpwY1kvazJOc0ZHRkt5SE45RUFBQUFRYTJGemMybGlaWEl0Y21Wc1pXRnpaUUFBQUFBQUFBQUdjMmhoTlRFeUFBQUFVd0FBCkFBdHpjMmd0WldReU5UVXhPUUFBQUVDakpyT1hIcDJIV0M1cU0zUjd3cHIvaUcvUTM4SVpsQUhkcVRLUXdhRWY4SnFXL3kKMGYzM2FvUUtabXdpSnBpQ1lsRFBDNWs2Ym16b2UwOWdId2o3VUQKLS0tLS1FTkQgU1NIIFNJR05BVFVSRS0tLS0tCg==",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:IQp+oTUUvPgXPa3uJqofaqQSJ8en4VjmdtcS1ttw6DU"
+     }
+    }
+   }
+  },
+  {
+   "name": "sk_application_ssh_kassiber",
+   "public_key": "sk-ssh-ed25519@openssh.com AAAAGnNrLXNzaC1lZDI1NTE5QG9wZW5zc2guY29tAAAAIO1JKMYo0cLG6ukDOJBZlWEpWSc6XGP5NjbBRhSshzfRAAAADHNzaDprYXNzaWJlcg== release\n",
+   "fingerprint": "SHA256:cwfzmB/Jt3zNkLAD8UGtYU0UytU01WysfBi/mdt2ha8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFGSUFBQUFhYzJzdGMzTm9MV1ZrTWpVMU1UbEFiM0JsYm5OemFDNWpiMjBBQUFBZzdVa294aQpqUndzYnE2UU00a0ZtVllTbFpKenBjWS9rMk5zRkdGS3lITjlFQUFBQU1jM05vT210aGMzTnBZbVZ5QUFBQUVHdGhjM05wClltVnlMWEpsYkdWaGMyVUFBQUFBQUFBQUJuTm9ZVFV4TWdBQUFHY0FBQUFhYzJzdGMzTm9MV1ZrTWpVMU1UbEFiM0JsYm4KTnphQzVqYjIwQUFBQkFSRE1wVW92WWVaclBWUkpvbUV4TEhFWTIvajZCVjJVZnRmcDRrdWM4dnkxc0FhVmx2UE5MQm5uZwpWZmpqZXZXanBIVlZHNEFVVzQvdlhNb0ZpZlpLQXdFQUFBQUgKLS0tLS1FTkQgU1NIIFNJR05BVFVSRS0tLS0tCg==",
+   "result": {
+    "signer": "SHA256:cwfzmB/Jt3zNkLAD8UGtYU0UytU01WysfBi/mdt2ha8"
+   }
+  },
+  {
+   "name": "sk_application_not_utf8",
+   "public_key": "sk-ssh-ed25519@openssh.com AAAAGnNrLXNzaC1lZDI1NTE5QG9wZW5zc2guY29tAAAAIO1JKMYo0cLG6ukDOJBZlWEpWSc6XGP5NjbBRhSshzfRAAAABXNzaDr/ release\n",
+   "fingerprint": "SHA256:E543ChtALZI9boQ2/psH1JtHjTZV32/X3tyAl+2dr0w",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFFc0FBQUFhYzJzdGMzTm9MV1ZrTWpVMU1UbEFiM0JsYm5OemFDNWpiMjBBQUFBZzdVa294aQpqUndzYnE2UU00a0ZtVllTbFpKenBjWS9rMk5zRkdGS3lITjlFQUFBQUZjM05vT3Y4QUFBQVFhMkZ6YzJsaVpYSXRjbVZzClpXRnpaUUFBQUFBQUFBQUdjMmhoTlRFeUFBQUFad0FBQUJwemF5MXpjMmd0WldReU5UVXhPVUJ2Y0dWdWMzTm9MbU52YlEKQUFBRUNoZVVHQUlzM2VvTUpQS2JyNW5TRi81Y1NjeTkvelk2ZnRPb25Nb3JuNnVWOEdVbVdQVUg3U20rSm1laVgwYzBsNwo4TEJ5VGpGaHRNd2N6Yy91bk9FRUFRQUFBQWM9Ci0tLS0tRU5EIFNTSCBTSUdOQVRVUkUtLS0tLQo=",
+   "result": {
+    "signer": "SHA256:E543ChtALZI9boQ2/psH1JtHjTZV32/X3tyAl+2dr0w"
+   }
+  },
+  {
+   "name": "sk_application_nul",
+   "public_key": "sk-ssh-ed25519@openssh.com AAAAGnNrLXNzaC1lZDI1NTE5QG9wZW5zc2guY29tAAAAIO1JKMYo0cLG6ukDOJBZlWEpWSc6XGP5NjbBRhSshzfRAAAABnNzaDoAeA== release\n",
+   "fingerprint": "SHA256:UwNRGHwrItjKDVecHBl0cmPavqbQ0DfMSTY9WGOWlBs",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFFd0FBQUFhYzJzdGMzTm9MV1ZrTWpVMU1UbEFiM0JsYm5OemFDNWpiMjBBQUFBZzdVa294aQpqUndzYnE2UU00a0ZtVllTbFpKenBjWS9rMk5zRkdGS3lITjlFQUFBQUdjM05vT2dCNEFBQUFFR3RoYzNOcFltVnlMWEpsCmJHVmhjMlVBQUFBQUFBQUFCbk5vWVRVeE1nQUFBR2NBQUFBYWMyc3RjM05vTFdWa01qVTFNVGxBYjNCbGJuTnphQzVqYjIKMEFBQUJBRnozNlpkNGxmamNYV1AyclNMYkV0YTdYMWgzaENiU0U2N3RjaEg3a1RIWFRoYkFsZWEwZ3pMM1dZdnc2L2hqMgpQTUNVeVRrbGpjd3ZkTmduTzNOTkFBRUFBQUFICi0tLS0tRU5EIFNTSCBTSUdOQVRVUkUtLS0tLQo=",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:UwNRGHwrItjKDVecHBl0cmPavqbQ0DfMSTY9WGOWlBs"
+     }
+    }
+   }
+  },
+  {
+   "name": "armor_nbsp_in_base64",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQaBBQUFRQUFBRE1BQUFBTGMzTm9MV1ZrTWpVMU1Ua0FBQUFnaW9qajNYUUo4Wlg5VXRzdFBMcGRjc3BuQ2I4ZGxCSWI4M1NJQWJRUGIxd0FBQUFRYTJGemMybGlaWEl0Y21Wc1pXRnpaUUFBQUFBQUFBQUdjMmhoTlRFeUFBQUFVd0FBQUF0emMyZ3RaV1F5TlRVeE9RQUFBRUQ5UU9LM1p6RGR2MFFmRnIwcGYzb0NMODBLUkljSUxuekpyMmdkWllnRmo5RlJmMW9jZ0FkdkIzdDJESWFxWGhVMU03dGNEWXlqQk5SWGlQQ2VqTE1QCi0tLS0tRU5EIFNTSCBTSUdOQVRVUkUtLS0tLQo=",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "armor_nel_in_base64",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQYVBQUFRQUFBRE1BQUFBTGMzTm9MV1ZrTWpVMU1Ua0FBQUFnaW9qajNYUUo4Wlg5VXRzdFBMcGRjc3BuQ2I4ZGxCSWI4M1NJQWJRUGIxd0FBQUFRYTJGemMybGlaWEl0Y21Wc1pXRnpaUUFBQUFBQUFBQUdjMmhoTlRFeUFBQUFVd0FBQUF0emMyZ3RaV1F5TlRVeE9RQUFBRUQ5UU9LM1p6RGR2MFFmRnIwcGYzb0NMODBLUkljSUxuekpyMmdkWllnRmo5RlJmMW9jZ0FkdkIzdDJESWFxWGhVMU03dGNEWXlqQk5SWGlQQ2VqTE1QCi0tLS0tRU5EIFNTSCBTSUdOQVRVUkUtLS0tLQo=",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "armor_leading_whitespace",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "IAoJLS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYgo4ZGxCSWI4M1NJQWJRUGIxd0FBQUFRYTJGemMybGlaWEl0Y21Wc1pXRnpaUUFBQUFBQUFBQUdjMmhoTlRFeUFBQUFVd0FBCkFBdHpjMmd0WldReU5UVXhPUUFBQUVEOVFPSzNaekRkdjBRZkZyMHBmM29DTDgwS1JJY0lMbnpKcjJnZFpZZ0ZqOUZSZjEKb2NnQWR2QjN0MkRJYXFYaFUxTTd0Y0RZeWpCTlJYaVBDZWpMTVAKLS0tLS1FTkQgU1NIIFNJR05BVFVSRS0tLS0tCg==",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "armor_crlf",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0NClUxTklVMGxIQUFBQUFRQUFBRE1BQUFBTGMzTm9MV1ZrTWpVMU1Ua0FBQUFnaW9qajNYUUo4Wlg5VXRzdFBMcGRjc3BuQ2INCjhkbEJJYjgzU0lBYlFQYjF3QUFBQVFhMkZ6YzJsaVpYSXRjbVZzWldGelpRQUFBQUFBQUFBR2MyaGhOVEV5QUFBQVV3QUENCkFBdHpjMmd0WldReU5UVXhPUUFBQUVEOVFPSzNaekRkdjBRZkZyMHBmM29DTDgwS1JJY0lMbnpKcjJnZFpZZ0ZqOUZSZjENCm9jZ0FkdkIzdDJESWFxWGhVMU03dGNEWXlqQk5SWGlQQ2VqTE1QDQotLS0tLUVORCBTU0ggU0lHTkFUVVJFLS0tLS0NCg==",
+   "result": {
+    "signer": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+   }
+  },
+  {
+   "name": "armor_crlf_body_only",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYg0KOGRsQkliODNTSUFiUVBiMXdBQUFBUWEyRnpjMmxpWlhJdGNtVnNaV0Z6WlFBQUFBQUFBQUFHYzJoaE5URXlBQUFBVXdBQUFBdHpjMmd0WldReU5UVXhPUUFBQUVEOVFPSzNaekRkdjBRZkZyMHBmM29DTDgwS1JJY0lMbnpKcjJnZFpZZ0ZqOUZSZjFvY2dBZHZCM3QyRElhcVhoVTFNN3RjRFl5akJOUlhpUENlakxNUAotLS0tLUVORCBTU0ggU0lHTkFUVVJFLS0tLS0K",
+   "result": {
+    "signer": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+   }
+  },
+  {
+   "name": "armor_no_final_newline",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYgo4ZGxCSWI4M1NJQWJRUGIxd0FBQUFRYTJGemMybGlaWEl0Y21Wc1pXRnpaUUFBQUFBQUFBQUdjMmhoTlRFeUFBQUFVd0FBCkFBdHpjMmd0WldReU5UVXhPUUFBQUVEOVFPSzNaekRkdjBRZkZyMHBmM29DTDgwS1JJY0lMbnpKcjJnZFpZZ0ZqOUZSZjEKb2NnQWR2QjN0MkRJYXFYaFUxTTd0Y0RZeWpCTlJYaVBDZWpMTVAKLS0tLS1FTkQgU1NIIFNJR05BVFVSRS0tLS0t",
+   "result": {
+    "signer": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+   }
+  },
+  {
+   "name": "armor_text_after_end",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYgo4ZGxCSWI4M1NJQWJRUGIxd0FBQUFRYTJGemMybGlaWEl0Y21Wc1pXRnpaUUFBQUFBQUFBQUdjMmhoTlRFeUFBQUFVd0FBCkFBdHpjMmd0WldReU5UVXhPUUFBQUVEOVFPSzNaekRkdjBRZkZyMHBmM29DTDgwS1JJY0lMbnpKcjJnZFpZZ0ZqOUZSZjEKb2NnQWR2QjN0MkRJYXFYaFUxTTd0Y0RZeWpCTlJYaVBDZWpMTVAKLS0tLS1FTkQgU1NIIFNJR05BVFVSRS0tLS0tCnRyYWlsaW5nIHRleHQK",
+   "result": {
+    "signer": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+   }
+  },
+  {
+   "name": "armor_second_signature_after",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYgo4ZGxCSWI4M1NJQWJRUGIxd0FBQUFRYTJGemMybGlaWEl0Y21Wc1pXRnpaUUFBQUFBQUFBQUdjMmhoTlRFeUFBQUFVd0FBCkFBdHpjMmd0WldReU5UVXhPUUFBQUVEOVFPSzNaekRkdjBRZkZyMHBmM29DTDgwS1JJY0lMbnpKcjJnZFpZZ0ZqOUZSZjEKb2NnQWR2QjN0MkRJYXFYaFUxTTd0Y0RZeWpCTlJYaVBDZWpMTVAKLS0tLS1FTkQgU1NIIFNJR05BVFVSRS0tLS0tCi0tLS0tQkVHSU4gU1NIIFNJR05BVFVSRS0tLS0tClUxTklVMGxIQUFBQUFRQUFBRE1BQUFBTGMzTm9MV1ZrTWpVMU1Ua0FBQUFnZ1RsM0RxaDlGMTlXbzFSbXcweCt6TXVOaXAKRzA3amVpWGZZUFc0L0pzNVFBQUFBUWEyRnpjMmxpWlhJdGNtVnNaV0Z6WlFBQUFBQUFBQUFHYzJoaE5URXlBQUFBVXdBQQpBQXR6YzJndFpXUXlOVFV4T1FBQUFFRExOdTIyVTVpdzM2SXhTSmlGY3Zvdk1ETVVYNWp6R21QSDFTeE9zVnRnQmRWdWc0CldqQmtiWUF4R25EZS92WFlOa20wSmZrQmYrVks0SUo0Nm5JeWdOCi0tLS0tRU5EIFNTSCBTSUdOQVRVUkUtLS0tLQo=",
+   "result": {
+    "signer": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+   }
+  },
+  {
+   "name": "armor_invalid_first_valid_second",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdnVGwzRHFoOUYxOVdvMVJtdzB4K3pNdU5pcApHMDdqZWlYZllQVzQvSnM1UUFBQUFRYTJGemMybGlaWEl0Y21Wc1pXRnpaUUFBQUFBQUFBQUdjMmhoTlRFeUFBQUFVd0FBCkFBdHpjMmd0WldReU5UVXhPUUFBQUVETE51MjJVNWl3MzZJeFNKaUZjdm92TURNVVg1anpHbVBIMVN4T3NWdGdCZFZ1ZzQKV2pCa2JZQXhHbkRlL3ZYWU5rbTBKZmtCZitWSzRJSjQ2bkl5Z04KLS0tLS1FTkQgU1NIIFNJR05BVFVSRS0tLS0tCi0tLS0tQkVHSU4gU1NIIFNJR05BVFVSRS0tLS0tClUxTklVMGxIQUFBQUFRQUFBRE1BQUFBTGMzTm9MV1ZrTWpVMU1Ua0FBQUFnaW9qajNYUUo4Wlg5VXRzdFBMcGRjc3BuQ2IKOGRsQkliODNTSUFiUVBiMXdBQUFBUWEyRnpjMmxpWlhJdGNtVnNaV0Z6WlFBQUFBQUFBQUFHYzJoaE5URXlBQUFBVXdBQQpBQXR6YzJndFpXUXlOVFV4T1FBQUFFRDlRT0szWnpEZHYwUWZGcjBwZjNvQ0w4MEtSSWNJTG56SnIyZ2RaWWdGajlGUmYxCm9jZ0FkdkIzdDJESWFxWGhVMU03dGNEWXlqQk5SWGlQQ2VqTE1QCi0tLS0tRU5EIFNTSCBTSUdOQVRVUkUtLS0tLQo=",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "armor_width_64",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZApjc3BuQ2I4ZGxCSWI4M1NJQWJRUGIxd0FBQUFRYTJGemMybGlaWEl0Y21Wc1pXRnpaUUFBQUFBQUFBQUdjMmhoCk5URXlBQUFBVXdBQUFBdHpjMmd0WldReU5UVXhPUUFBQUVEOVFPSzNaekRkdjBRZkZyMHBmM29DTDgwS1JJY0kKTG56SnIyZ2RaWWdGajlGUmYxb2NnQWR2QjN0MkRJYXFYaFUxTTd0Y0RZeWpCTlJYaVBDZWpMTVAKLS0tLS1FTkQgU1NIIFNJR05BVFVSRS0tLS0tCg==",
+   "result": {
+    "signer": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+   }
+  },
+  {
+   "name": "armor_single_line",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYjhkbEJJYjgzU0lBYlFQYjF3QUFBQVFhMkZ6YzJsaVpYSXRjbVZzWldGelpRQUFBQUFBQUFBR2MyaGhOVEV5QUFBQVV3QUFBQXR6YzJndFpXUXlOVFV4T1FBQUFFRDlRT0szWnpEZHYwUWZGcjBwZjNvQ0w4MEtSSWNJTG56SnIyZ2RaWWdGajlGUmYxb2NnQWR2QjN0MkRJYXFYaFUxTTd0Y0RZeWpCTlJYaVBDZWpMTVAKLS0tLS1FTkQgU1NIIFNJR05BVFVSRS0tLS0tCg==",
+   "result": {
+    "signer": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+   }
+  },
+  {
+   "name": "armor_width_1",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVQoxCk4KSQpVCjAKbApICkEKQQpBCkEKQQpRCkEKQQpBCkQKTQpBCkEKQQpBCkwKYwozCk4KbwpMClcKVgprCk0KagpVCjEKTQpUCmsKQQpBCkEKQQpnCmkKbwpqCmoKMwpYClEKSgo4CloKWAo5ClUKdApzCnQKUApMCnAKZApjCnMKcApuCkMKYgo4CmQKbApCCkkKYgo4CjMKUwpJCkEKYgpRClAKYgoxCncKQQpBCkEKQQpRCmEKMgpGCnoKYwoyCmwKaQpaClgKSQp0CmMKbQpWCnMKWgpXCkYKegpaClEKQQpBCkEKQQpBCkEKQQpBCkEKRwpjCjIKaApoCk4KVApFCnkKQQpBCkEKQQpVCncKQQpBCkEKQQp0CnoKYwoyCmcKdApaClcKUQp5Ck4KVApVCngKTwpRCkEKQQpBCkUKRAo5ClEKTwpLCjMKWgp6CkQKZAp2CjAKUQpmCkYKcgowCnAKZgozCm8KQwpMCjgKMApLClIKSQpjCkkKTApuCnoKSgpyCjIKZwpkCloKWQpnCkYKago5CkYKUgpmCjEKbwpjCmcKQQpkCnYKQgozCnQKMgpECkkKYQpxClgKaApVCjEKTQo3CnQKYwpEClkKeQpqCkIKTgpSClgKaQpQCkMKZQpqCkwKTQpQCi0tLS0tRU5EIFNTSCBTSUdOQVRVUkUtLS0tLQo=",
+   "result": {
+    "signer": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+   }
+  },
+  {
+   "name": "armor_spaces_in_base64",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEggQUFBQUFRQUEgQURNQUFBQUwgYzNOb0xXVmsgTWpVMU1Ua0EgQUFBZ2lvamogM1hRSjhaWDkgVXRzdFBMcGQgY3NwbkNiOGQgbEJJYjgzU0kgQWJRUGIxd0EgQUFBUWEyRnogYzJsaVpYSXQgY21Wc1pXRnogWlFBQUFBQUEgQUFBR2MyaGggTlRFeUFBQUEgVXdBQUFBdHogYzJndFpXUXkgTlRVeE9RQUEgQUVEOVFPSzMgWnpEZHYwUWYgRnIwcGYzb0MgTDgwS1JJY0kgTG56SnIyZ2QgWllnRmo5RlIgZjFvY2dBZHYgQjN0MkRJYXEgWGhVMU03dGMgRFl5akJOUlggaVBDZWpMTVAKLS0tLS1FTkQgU1NIIFNJR05BVFVSRS0tLS0tCg==",
+   "result": {
+    "signer": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+   }
+  },
+  {
+   "name": "armor_tab_and_vt_in_base64",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQQkLDEFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYjhkbEJJYjgzU0lBYlFQYjF3QUFBQVFhMkZ6YzJsaVpYSXRjbVZzWldGelpRQUFBQUFBQUFBR2MyaGhOVEV5QUFBQVV3QUFBQXR6YzJndFpXUXlOVFV4T1FBQUFFRDlRT0szWnpEZHYwUWZGcjBwZjNvQ0w4MEtSSWNJTG56SnIyZ2RaWWdGajlGUmYxb2NnQWR2QjN0MkRJYXFYaFUxTTd0Y0RZeWpCTlJYaVBDZWpMTVAKLS0tLS1FTkQgU1NIIFNJR05BVFVSRS0tLS0tCg==",
+   "result": {
+    "signer": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+   }
+  },
+  {
+   "name": "armor_header_trailing_space",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0gClUxTklVMGxIQUFBQUFRQUFBRE1BQUFBTGMzTm9MV1ZrTWpVMU1Ua0FBQUFnaW9qajNYUUo4Wlg5VXRzdFBMcGRjc3BuQ2I4ZGxCSWI4M1NJQWJRUGIxd0FBQUFRYTJGemMybGlaWEl0Y21Wc1pXRnpaUUFBQUFBQUFBQUdjMmhoTlRFeUFBQUFVd0FBQUF0emMyZ3RaV1F5TlRVeE9RQUFBRUQ5UU9LM1p6RGR2MFFmRnIwcGYzb0NMODBLUkljSUxuekpyMmdkWllnRmo5RlJmMW9jZ0FkdkIzdDJESWFxWGhVMU03dGNEWXlqQk5SWGlQQ2VqTE1QCi0tLS0tRU5EIFNTSCBTSUdOQVRVUkUtLS0tLQo=",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "armor_header_lowercase",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1iZWdpbiBzc2ggc2lnbmF0dXJlLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYjhkbEJJYjgzU0lBYlFQYjF3QUFBQVFhMkZ6YzJsaVpYSXRjbVZzWldGelpRQUFBQUFBQUFBR2MyaGhOVEV5QUFBQVV3QUFBQXR6YzJndFpXUXlOVFV4T1FBQUFFRDlRT0szWnpEZHYwUWZGcjBwZjNvQ0w4MEtSSWNJTG56SnIyZ2RaWWdGajlGUmYxb2NnQWR2QjN0MkRJYXFYaFUxTTd0Y0RZeWpCTlJYaVBDZWpMTVAKLS0tLS1FTkQgU1NIIFNJR05BVFVSRS0tLS0tCg==",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release signature is not a detached OpenSSH signature",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "armor_end_missing",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYjhkbEJJYjgzU0lBYlFQYjF3QUFBQVFhMkZ6YzJsaVpYSXRjbVZzWldGelpRQUFBQUFBQUFBR2MyaGhOVEV5QUFBQVV3QUFBQXR6YzJndFpXUXlOVFV4T1FBQUFFRDlRT0szWnpEZHYwUWZGcjBwZjNvQ0w4MEtSSWNJTG56SnIyZ2RaWWdGajlGUmYxb2NnQWR2QjN0MkRJYXFYaFUxTTd0Y0RZeWpCTlJYaVBDZWpMTVAK",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "armor_end_without_newline_before",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYjhkbEJJYjgzU0lBYlFQYjF3QUFBQVFhMkZ6YzJsaVpYSXRjbVZzWldGelpRQUFBQUFBQUFBR2MyaGhOVEV5QUFBQVV3QUFBQXR6YzJndFpXUXlOVFV4T1FBQUFFRDlRT0szWnpEZHYwUWZGcjBwZjNvQ0w4MEtSSWNJTG56SnIyZ2RaWWdGajlGUmYxb2NnQWR2QjN0MkRJYXFYaFUxTTd0Y0RZeWpCTlJYaVBDZWpMTVAtLS0tLUVORCBTU0ggU0lHTkFUVVJFLS0tLS0K",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "armor_end_lowercase",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYjhkbEJJYjgzU0lBYlFQYjF3QUFBQVFhMkZ6YzJsaVpYSXRjbVZzWldGelpRQUFBQUFBQUFBR2MyaGhOVEV5QUFBQVV3QUFBQXR6YzJndFpXUXlOVFV4T1FBQUFFRDlRT0szWnpEZHYwUWZGcjBwZjNvQ0w4MEtSSWNJTG56SnIyZ2RaWWdGajlGUmYxb2NnQWR2QjN0MkRJYXFYaFUxTTd0Y0RZeWpCTlJYaVBDZWpMTVAKLS0tLS1lbmQgc3NoIHNpZ25hdHVyZS0tLS0tCg==",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "armor_empty_body",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KLS0tLS1FTkQgU1NIIFNJR05BVFVSRS0tLS0tCg==",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "armor_blank_line_body",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KCi0tLS0tRU5EIFNTSCBTSUdOQVRVUkUtLS0tLQo=",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "armor_nul_in_body",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQQBBQUFRQUFBRE1BQUFBTGMzTm9MV1ZrTWpVMU1Ua0FBQUFnaW9qajNYUUo4Wlg5VXRzdFBMcGRjc3BuQ2I4ZGxCSWI4M1NJQWJRUGIxd0FBQUFRYTJGemMybGlaWEl0Y21Wc1pXRnpaUUFBQUFBQUFBQUdjMmhoTlRFeUFBQUFVd0FBQUF0emMyZ3RaV1F5TlRVeE9RQUFBRUQ5UU9LM1p6RGR2MFFmRnIwcGYzb0NMODBLUkljSUxuekpyMmdkWllnRmo5RlJmMW9jZ0FkdkIzdDJESWFxWGhVMU03dGNEWXlqQk5SWGlQQ2VqTE1QCi0tLS0tRU5EIFNTSCBTSUdOQVRVUkUtLS0tLQo=",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "armor_nul_at_body_end",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYjhkbEJJYjgzU0lBYlFQYjF3QUFBQVFhMkZ6YzJsaVpYSXRjbVZzWldGelpRQUFBQUFBQUFBR2MyaGhOVEV5QUFBQVV3QUFBQXR6YzJndFpXUXlOVFV4T1FBQUFFRDlRT0szWnpEZHYwUWZGcjBwZjNvQ0w4MEtSSWNJTG56SnIyZ2RaWWdGajlGUmYxb2NnQWR2QjN0MkRJYXFYaFUxTTd0Y0RZeWpCTlJYaVBDZWpMTVAACi0tLS0tRU5EIFNTSCBTSUdOQVRVUkUtLS0tLQo=",
+   "result": {
+    "signer": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+   }
+  },
+  {
+   "name": "armor_invalid_character",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQSpBQUFRQUFBRE1BQUFBTGMzTm9MV1ZrTWpVMU1Ua0FBQUFnaW9qajNYUUo4Wlg5VXRzdFBMcGRjc3BuQ2I4ZGxCSWI4M1NJQWJRUGIxd0FBQUFRYTJGemMybGlaWEl0Y21Wc1pXRnpaUUFBQUFBQUFBQUdjMmhoTlRFeUFBQUFVd0FBQUF0emMyZ3RaV1F5TlRVeE9RQUFBRUQ5UU9LM1p6RGR2MFFmRnIwcGYzb0NMODBLUkljSUxuekpyMmdkWllnRmo5RlJmMW9jZ0FkdkIzdDJESWFxWGhVMU03dGNEWXlqQk5SWGlQQ2VqTE1QCi0tLS0tRU5EIFNTSCBTSUdOQVRVUkUtLS0tLQo=",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "armor_plus_slash",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYgo4ZGxCSWI4M1NJQWJRUGIxd0FBQUFRYTJGemMybGlaWEl0Y21Wc1pXRnpaUUFBQUFiNysvdjcrL3NBQUFBR2MyaGhOVEV5CkFBQUFVd0FBQUF0emMyZ3RaV1F5TlRVeE9RQUFBRUQ5UU9LM1p6RGR2MFFmRnIwcGYzb0NMODBLUkljSUxuekpyMmdkWlkKZ0ZqOUZSZjFvY2dBZHZCM3QyRElhcVhoVTFNN3RjRFl5akJOUlhpUENlakxNUAotLS0tLUVORCBTU0ggU0lHTkFUVVJFLS0tLS0K",
+   "result": {
+    "signer": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+   }
+  },
+  {
+   "name": "armor_url_safe_alphabet",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYjhkbEJJYjgzU0lBYlFQYjF3QUFBQVFhMkZ6YzJsaVpYSXRjbVZzWldGelpRQUFBQWI3LV92Ny1fc0FBQUFHYzJoaE5URXlBQUFBVXdBQUFBdHpjMmd0WldReU5UVXhPUUFBQUVEOVFPSzNaekRkdjBRZkZyMHBmM29DTDgwS1JJY0lMbnpKcjJnZFpZZ0ZqOUZSZjFvY2dBZHZCM3QyRElhcVhoVTFNN3RjRFl5akJOUlhpUENlakxNUAotLS0tLUVORCBTU0ggU0lHTkFUVVJFLS0tLS0K",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "armor_pad0",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYjhkbEJJYjgzU0lBYlFQYjF3QUFBQVFhMkZ6YzJsaVpYSXRjbVZzWldGelpRQUFBQU55Y25JQUFBQUdjMmhoTlRFeUFBQUFVd0FBQUF0emMyZ3RaV1F5TlRVeE9RQUFBRUQ5UU9LM1p6RGR2MFFmRnIwcGYzb0NMODBLUkljSUxuekpyMmdkWllnRmo5RlJmMW9jZ0FkdkIzdDJESWFxWGhVMU03dGNEWXlqQk5SWGlQQ2VqTE1QCi0tLS0tRU5EIFNTSCBTSUdOQVRVUkUtLS0tLQo=",
+   "result": {
+    "signer": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+   }
+  },
+  {
+   "name": "armor_pad0_padding_removed",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYjhkbEJJYjgzU0lBYlFQYjF3QUFBQVFhMkZ6YzJsaVpYSXRjbVZzWldGelpRQUFBQU55Y25JQUFBQUdjMmhoTlRFeUFBQUFVd0FBQUF0emMyZ3RaV1F5TlRVeE9RQUFBRUQ5UU9LM1p6RGR2MFFmRnIwcGYzb0NMODBLUkljSUxuekpyMmdkWllnRmo5RlJmMW9jZ0FkdkIzdDJESWFxWGhVMU03dGNEWXlqQk5SWGlQQ2VqTE1QCi0tLS0tRU5EIFNTSCBTSUdOQVRVUkUtLS0tLQo=",
+   "result": {
+    "signer": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+   }
+  },
+  {
+   "name": "armor_pad0_extra_padding",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYjhkbEJJYjgzU0lBYlFQYjF3QUFBQVFhMkZ6YzJsaVpYSXRjbVZzWldGelpRQUFBQU55Y25JQUFBQUdjMmhoTlRFeUFBQUFVd0FBQUF0emMyZ3RaV1F5TlRVeE9RQUFBRUQ5UU9LM1p6RGR2MFFmRnIwcGYzb0NMODBLUkljSUxuekpyMmdkWllnRmo5RlJmMW9jZ0FkdkIzdDJESWFxWGhVMU03dGNEWXlqQk5SWGlQQ2VqTE1QPQotLS0tLUVORCBTU0ggU0lHTkFUVVJFLS0tLS0K",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "armor_pad0_double_extra_padding",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYjhkbEJJYjgzU0lBYlFQYjF3QUFBQVFhMkZ6YzJsaVpYSXRjbVZzWldGelpRQUFBQU55Y25JQUFBQUdjMmhoTlRFeUFBQUFVd0FBQUF0emMyZ3RaV1F5TlRVeE9RQUFBRUQ5UU9LM1p6RGR2MFFmRnIwcGYzb0NMODBLUkljSUxuekpyMmdkWllnRmo5RlJmMW9jZ0FkdkIzdDJESWFxWGhVMU03dGNEWXlqQk5SWGlQQ2VqTE1QPT0KLS0tLS1FTkQgU1NIIFNJR05BVFVSRS0tLS0tCg==",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "armor_pad0_text_after_padding",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYjhkbEJJYjgzU0lBYlFQYjF3QUFBQVFhMkZ6YzJsaVpYSXRjbVZzWldGelpRQUFBQU55Y25JQUFBQUdjMmhoTlRFeUFBQUFVd0FBQUF0emMyZ3RaV1F5TlRVeE9RQUFBRUQ5UU9LM1p6RGR2MFFmRnIwcGYzb0NMODBLUkljSUxuekpyMmdkWllnRmo5RlJmMW9jZ0FkdkIzdDJESWFxWGhVMU03dGNEWXlqQk5SWGlQQ2VqTE1QQUFBQQotLS0tLUVORCBTU0ggU0lHTkFUVVJFLS0tLS0K",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "armor_pad0_space_before_padding",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYjhkbEJJYjgzU0lBYlFQYjF3QUFBQVFhMkZ6YzJsaVpYSXRjbVZzWldGelpRQUFBQU55Y25JQUFBQUdjMmhoTlRFeUFBQUFVd0FBQUF0emMyZ3RaV1F5TlRVeE9RQUFBRUQ5UU9LM1p6RGR2MFFmRnIwcGYzb0NMODBLUkljSUxuekpyMmdkWllnRmo5RlJmMW9jZ0FkdkIzdDJESWFxWGhVMU03dGNEWXlqQk5SWGlQQ2VqTE1QIAotLS0tLUVORCBTU0ggU0lHTkFUVVJFLS0tLS0K",
+   "result": {
+    "signer": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+   }
+  },
+  {
+   "name": "armor_pad0_whitespace_after_padding",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYjhkbEJJYjgzU0lBYlFQYjF3QUFBQVFhMkZ6YzJsaVpYSXRjbVZzWldGelpRQUFBQU55Y25JQUFBQUdjMmhoTlRFeUFBQUFVd0FBQUF0emMyZ3RaV1F5TlRVeE9RQUFBRUQ5UU9LM1p6RGR2MFFmRnIwcGYzb0NMODBLUkljSUxuekpyMmdkWllnRmo5RlJmMW9jZ0FkdkIzdDJESWFxWGhVMU03dGNEWXlqQk5SWGlQQ2VqTE1QIAkKLS0tLS1FTkQgU1NIIFNJR05BVFVSRS0tLS0tCg==",
+   "result": {
+    "signer": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+   }
+  },
+  {
+   "name": "armor_pad0_nonzero_trailing_bits",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYjhkbEJJYjgzU0lBYlFQYjF3QUFBQVFhMkZ6YzJsaVpYSXRjbVZzWldGelpRQUFBQU55Y25JQUFBQUdjMmhoTlRFeUFBQUFVd0FBQUF0emMyZ3RaV1F5TlRVeE9RQUFBRUQ5UU9LM1p6RGR2MFFmRnIwcGYzb0NMODBLUkljSUxuekpyMmdkWllnRmo5RlJmMW9jZ0FkdkIzdDJESWFxWGhVMU03dGNEWXlqQk5SWGlQQ2VqTE1QCi0tLS0tRU5EIFNTSCBTSUdOQVRVUkUtLS0tLQo=",
+   "result": {
+    "signer": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+   }
+  },
+  {
+   "name": "armor_pad0_partial_quantum",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYjhkbEJJYjgzU0lBYlFQYjF3QUFBQVFhMkZ6YzJsaVpYSXRjbVZzWldGelpRQUFBQU55Y25JQUFBQUdjMmhoTlRFeUFBQUFVd0FBQUF0emMyZ3RaV1F5TlRVeE9RQUFBRUQ5UU9LM1p6RGR2MFFmRnIwcGYzb0NMODBLUkljSUxuekpyMmdkWllnRmo5RlJmMW9jZ0FkdkIzdDJESWFxWGhVMU03dGNEWXlqQk5SWGlQQ2VqTE1QQQotLS0tLUVORCBTU0ggU0lHTkFUVVJFLS0tLS0K",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "armor_pad0_one_char_quantum_padded",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYjhkbEJJYjgzU0lBYlFQYjF3QUFBQVFhMkZ6YzJsaVpYSXRjbVZzWldGelpRQUFBQU55Y25JQUFBQUdjMmhoTlRFeUFBQUFVd0FBQUF0emMyZ3RaV1F5TlRVeE9RQUFBRUQ5UU9LM1p6RGR2MFFmRnIwcGYzb0NMODBLUkljSUxuekpyMmdkWllnRmo5RlJmMW9jZ0FkdkIzdDJESWFxWGhVMU03dGNEWXlqQk5SWGlQQ2VqTE1QQT09PQotLS0tLUVORCBTU0ggU0lHTkFUVVJFLS0tLS0K",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "armor_pad2",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYjhkbEJJYjgzU0lBYlFQYjF3QUFBQVFhMkZ6YzJsaVpYSXRjbVZzWldGelpRQUFBQVJ5Y25KeUFBQUFCbk5vWVRVeE1nQUFBRk1BQUFBTGMzTm9MV1ZrTWpVMU1Ua0FBQUJBL1VEaXQyY3czYjlFSHhhOUtYOTZBaS9OQ2tTSENDNTh5YTlvSFdXSUJZL1JVWDlhSElBSGJ3ZDdkZ3lHcWw0Vk5UTzdYQTJNb3dUVVY0andub3l6RHc9PQotLS0tLUVORCBTU0ggU0lHTkFUVVJFLS0tLS0K",
+   "result": {
+    "signer": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+   }
+  },
+  {
+   "name": "armor_pad2_padding_removed",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYjhkbEJJYjgzU0lBYlFQYjF3QUFBQVFhMkZ6YzJsaVpYSXRjbVZzWldGelpRQUFBQVJ5Y25KeUFBQUFCbk5vWVRVeE1nQUFBRk1BQUFBTGMzTm9MV1ZrTWpVMU1Ua0FBQUJBL1VEaXQyY3czYjlFSHhhOUtYOTZBaS9OQ2tTSENDNTh5YTlvSFdXSUJZL1JVWDlhSElBSGJ3ZDdkZ3lHcWw0Vk5UTzdYQTJNb3dUVVY0andub3l6RHcKLS0tLS1FTkQgU1NIIFNJR05BVFVSRS0tLS0tCg==",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "armor_pad2_extra_padding",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYjhkbEJJYjgzU0lBYlFQYjF3QUFBQVFhMkZ6YzJsaVpYSXRjbVZzWldGelpRQUFBQVJ5Y25KeUFBQUFCbk5vWVRVeE1nQUFBRk1BQUFBTGMzTm9MV1ZrTWpVMU1Ua0FBQUJBL1VEaXQyY3czYjlFSHhhOUtYOTZBaS9OQ2tTSENDNTh5YTlvSFdXSUJZL1JVWDlhSElBSGJ3ZDdkZ3lHcWw0Vk5UTzdYQTJNb3dUVVY0andub3l6RHc9PT0KLS0tLS1FTkQgU1NIIFNJR05BVFVSRS0tLS0tCg==",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "armor_pad2_double_extra_padding",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYjhkbEJJYjgzU0lBYlFQYjF3QUFBQVFhMkZ6YzJsaVpYSXRjbVZzWldGelpRQUFBQVJ5Y25KeUFBQUFCbk5vWVRVeE1nQUFBRk1BQUFBTGMzTm9MV1ZrTWpVMU1Ua0FBQUJBL1VEaXQyY3czYjlFSHhhOUtYOTZBaS9OQ2tTSENDNTh5YTlvSFdXSUJZL1JVWDlhSElBSGJ3ZDdkZ3lHcWw0Vk5UTzdYQTJNb3dUVVY0andub3l6RHc9PT09Ci0tLS0tRU5EIFNTSCBTSUdOQVRVUkUtLS0tLQo=",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "armor_pad2_text_after_padding",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYjhkbEJJYjgzU0lBYlFQYjF3QUFBQVFhMkZ6YzJsaVpYSXRjbVZzWldGelpRQUFBQVJ5Y25KeUFBQUFCbk5vWVRVeE1nQUFBRk1BQUFBTGMzTm9MV1ZrTWpVMU1Ua0FBQUJBL1VEaXQyY3czYjlFSHhhOUtYOTZBaS9OQ2tTSENDNTh5YTlvSFdXSUJZL1JVWDlhSElBSGJ3ZDdkZ3lHcWw0Vk5UTzdYQTJNb3dUVVY0andub3l6RHc9PUFBQUEKLS0tLS1FTkQgU1NIIFNJR05BVFVSRS0tLS0tCg==",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "armor_pad2_space_before_padding",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYjhkbEJJYjgzU0lBYlFQYjF3QUFBQVFhMkZ6YzJsaVpYSXRjbVZzWldGelpRQUFBQVJ5Y25KeUFBQUFCbk5vWVRVeE1nQUFBRk1BQUFBTGMzTm9MV1ZrTWpVMU1Ua0FBQUJBL1VEaXQyY3czYjlFSHhhOUtYOTZBaS9OQ2tTSENDNTh5YTlvSFdXSUJZL1JVWDlhSElBSGJ3ZDdkZ3lHcWw0Vk5UTzdYQTJNb3dUVVY0andub3l6RHcgPT0KLS0tLS1FTkQgU1NIIFNJR05BVFVSRS0tLS0tCg==",
+   "result": {
+    "signer": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+   }
+  },
+  {
+   "name": "armor_pad2_whitespace_after_padding",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYjhkbEJJYjgzU0lBYlFQYjF3QUFBQVFhMkZ6YzJsaVpYSXRjbVZzWldGelpRQUFBQVJ5Y25KeUFBQUFCbk5vWVRVeE1nQUFBRk1BQUFBTGMzTm9MV1ZrTWpVMU1Ua0FBQUJBL1VEaXQyY3czYjlFSHhhOUtYOTZBaS9OQ2tTSENDNTh5YTlvSFdXSUJZL1JVWDlhSElBSGJ3ZDdkZ3lHcWw0Vk5UTzdYQTJNb3dUVVY0andub3l6RHc9PSAJCi0tLS0tRU5EIFNTSCBTSUdOQVRVUkUtLS0tLQo=",
+   "result": {
+    "signer": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+   }
+  },
+  {
+   "name": "armor_pad2_nonzero_trailing_bits",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYjhkbEJJYjgzU0lBYlFQYjF3QUFBQVFhMkZ6YzJsaVpYSXRjbVZzWldGelpRQUFBQVJ5Y25KeUFBQUFCbk5vWVRVeE1nQUFBRk1BQUFBTGMzTm9MV1ZrTWpVMU1Ua0FBQUJBL1VEaXQyY3czYjlFSHhhOUtYOTZBaS9OQ2tTSENDNTh5YTlvSFdXSUJZL1JVWDlhSElBSGJ3ZDdkZ3lHcWw0Vk5UTzdYQTJNb3dUVVY0andub3l6RC89PQotLS0tLUVORCBTU0ggU0lHTkFUVVJFLS0tLS0K",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "armor_pad2_partial_quantum",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYjhkbEJJYjgzU0lBYlFQYjF3QUFBQVFhMkZ6YzJsaVpYSXRjbVZzWldGelpRQUFBQVJ5Y25KeUFBQUFCbk5vWVRVeE1nQUFBRk1BQUFBTGMzTm9MV1ZrTWpVMU1Ua0FBQUJBL1VEaXQyY3czYjlFSHhhOUtYOTZBaS9OQ2tTSENDNTh5YTlvSFdXSUJZL1JVWDlhSElBSGJ3ZDdkZ3lHcWw0Vk5UTzdYQTJNb3dUVVY0andub3l6RHdBCi0tLS0tRU5EIFNTSCBTSUdOQVRVUkUtLS0tLQo=",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "armor_pad2_one_char_quantum_padded",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYjhkbEJJYjgzU0lBYlFQYjF3QUFBQVFhMkZ6YzJsaVpYSXRjbVZzWldGelpRQUFBQVJ5Y25KeUFBQUFCbk5vWVRVeE1nQUFBRk1BQUFBTGMzTm9MV1ZrTWpVMU1Ua0FBQUJBL1VEaXQyY3czYjlFSHhhOUtYOTZBaS9OQ2tTSENDNTh5YTlvSFdXSUJZL1JVWDlhSElBSGJ3ZDdkZ3lHcWw0Vk5UTzdYQTJNb3dUVVY0andub3l6RHdBPT09Ci0tLS0tRU5EIFNTSCBTSUdOQVRVUkUtLS0tLQo=",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "armor_pad2_split_padding",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYjhkbEJJYjgzU0lBYlFQYjF3QUFBQVFhMkZ6YzJsaVpYSXRjbVZzWldGelpRQUFBQVJ5Y25KeUFBQUFCbk5vWVRVeE1nQUFBRk1BQUFBTGMzTm9MV1ZrTWpVMU1Ua0FBQUJBL1VEaXQyY3czYjlFSHhhOUtYOTZBaS9OQ2tTSENDNTh5YTlvSFdXSUJZL1JVWDlhSElBSGJ3ZDdkZ3lHcWw0Vk5UTzdYQTJNb3dUVVY0andub3l6RHc9Cj0KLS0tLS1FTkQgU1NIIFNJR05BVFVSRS0tLS0tCg==",
+   "result": {
+    "signer": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+   }
+  },
+  {
+   "name": "armor_pad2_single_of_double_padding",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYjhkbEJJYjgzU0lBYlFQYjF3QUFBQVFhMkZ6YzJsaVpYSXRjbVZzWldGelpRQUFBQVJ5Y25KeUFBQUFCbk5vWVRVeE1nQUFBRk1BQUFBTGMzTm9MV1ZrTWpVMU1Ua0FBQUJBL1VEaXQyY3czYjlFSHhhOUtYOTZBaS9OQ2tTSENDNTh5YTlvSFdXSUJZL1JVWDlhSElBSGJ3ZDdkZ3lHcWw0Vk5UTzdYQTJNb3dUVVY0andub3l6RHc9Ci0tLS0tRU5EIFNTSCBTSUdOQVRVUkUtLS0tLQo=",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "armor_pad1",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYjhkbEJJYjgzU0lBYlFQYjF3QUFBQVFhMkZ6YzJsaVpYSXRjbVZzWldGelpRQUFBQVZ5Y25KeWNnQUFBQVp6YUdFMU1USUFBQUJUQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBUVAxQTRyZG5NTjIvUkI4V3ZTbC9lZ0l2elFwRWh3Z3VmTW12YUIxbGlBV1AwVkYvV2h5QUIyOEhlM1lNaHFwZUZUVXp1MXdOaktNRTFGZUk4SjZNc3c4PQotLS0tLUVORCBTU0ggU0lHTkFUVVJFLS0tLS0K",
+   "result": {
+    "signer": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+   }
+  },
+  {
+   "name": "armor_pad1_padding_removed",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYjhkbEJJYjgzU0lBYlFQYjF3QUFBQVFhMkZ6YzJsaVpYSXRjbVZzWldGelpRQUFBQVZ5Y25KeWNnQUFBQVp6YUdFMU1USUFBQUJUQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBUVAxQTRyZG5NTjIvUkI4V3ZTbC9lZ0l2elFwRWh3Z3VmTW12YUIxbGlBV1AwVkYvV2h5QUIyOEhlM1lNaHFwZUZUVXp1MXdOaktNRTFGZUk4SjZNc3c4Ci0tLS0tRU5EIFNTSCBTSUdOQVRVUkUtLS0tLQo=",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "armor_pad1_extra_padding",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYjhkbEJJYjgzU0lBYlFQYjF3QUFBQVFhMkZ6YzJsaVpYSXRjbVZzWldGelpRQUFBQVZ5Y25KeWNnQUFBQVp6YUdFMU1USUFBQUJUQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBUVAxQTRyZG5NTjIvUkI4V3ZTbC9lZ0l2elFwRWh3Z3VmTW12YUIxbGlBV1AwVkYvV2h5QUIyOEhlM1lNaHFwZUZUVXp1MXdOaktNRTFGZUk4SjZNc3c4PT0KLS0tLS1FTkQgU1NIIFNJR05BVFVSRS0tLS0tCg==",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "armor_pad1_double_extra_padding",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYjhkbEJJYjgzU0lBYlFQYjF3QUFBQVFhMkZ6YzJsaVpYSXRjbVZzWldGelpRQUFBQVZ5Y25KeWNnQUFBQVp6YUdFMU1USUFBQUJUQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBUVAxQTRyZG5NTjIvUkI4V3ZTbC9lZ0l2elFwRWh3Z3VmTW12YUIxbGlBV1AwVkYvV2h5QUIyOEhlM1lNaHFwZUZUVXp1MXdOaktNRTFGZUk4SjZNc3c4PT09Ci0tLS0tRU5EIFNTSCBTSUdOQVRVUkUtLS0tLQo=",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "armor_pad1_text_after_padding",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYjhkbEJJYjgzU0lBYlFQYjF3QUFBQVFhMkZ6YzJsaVpYSXRjbVZzWldGelpRQUFBQVZ5Y25KeWNnQUFBQVp6YUdFMU1USUFBQUJUQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBUVAxQTRyZG5NTjIvUkI4V3ZTbC9lZ0l2elFwRWh3Z3VmTW12YUIxbGlBV1AwVkYvV2h5QUIyOEhlM1lNaHFwZUZUVXp1MXdOaktNRTFGZUk4SjZNc3c4PUFBQUEKLS0tLS1FTkQgU1NIIFNJR05BVFVSRS0tLS0tCg==",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "armor_pad1_space_before_padding",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYjhkbEJJYjgzU0lBYlFQYjF3QUFBQVFhMkZ6YzJsaVpYSXRjbVZzWldGelpRQUFBQVZ5Y25KeWNnQUFBQVp6YUdFMU1USUFBQUJUQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBUVAxQTRyZG5NTjIvUkI4V3ZTbC9lZ0l2elFwRWh3Z3VmTW12YUIxbGlBV1AwVkYvV2h5QUIyOEhlM1lNaHFwZUZUVXp1MXdOaktNRTFGZUk4SjZNc3c4ID0KLS0tLS1FTkQgU1NIIFNJR05BVFVSRS0tLS0tCg==",
+   "result": {
+    "signer": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+   }
+  },
+  {
+   "name": "armor_pad1_whitespace_after_padding",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYjhkbEJJYjgzU0lBYlFQYjF3QUFBQVFhMkZ6YzJsaVpYSXRjbVZzWldGelpRQUFBQVZ5Y25KeWNnQUFBQVp6YUdFMU1USUFBQUJUQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBUVAxQTRyZG5NTjIvUkI4V3ZTbC9lZ0l2elFwRWh3Z3VmTW12YUIxbGlBV1AwVkYvV2h5QUIyOEhlM1lNaHFwZUZUVXp1MXdOaktNRTFGZUk4SjZNc3c4PSAJCi0tLS0tRU5EIFNTSCBTSUdOQVRVUkUtLS0tLQo=",
+   "result": {
+    "signer": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+   }
+  },
+  {
+   "name": "armor_pad1_nonzero_trailing_bits",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYjhkbEJJYjgzU0lBYlFQYjF3QUFBQVFhMkZ6YzJsaVpYSXRjbVZzWldGelpRQUFBQVZ5Y25KeWNnQUFBQVp6YUdFMU1USUFBQUJUQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBUVAxQTRyZG5NTjIvUkI4V3ZTbC9lZ0l2elFwRWh3Z3VmTW12YUIxbGlBV1AwVkYvV2h5QUIyOEhlM1lNaHFwZUZUVXp1MXdOaktNRTFGZUk4SjZNc3cvPQotLS0tLUVORCBTU0ggU0lHTkFUVVJFLS0tLS0K",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "armor_pad1_partial_quantum",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYjhkbEJJYjgzU0lBYlFQYjF3QUFBQVFhMkZ6YzJsaVpYSXRjbVZzWldGelpRQUFBQVZ5Y25KeWNnQUFBQVp6YUdFMU1USUFBQUJUQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBUVAxQTRyZG5NTjIvUkI4V3ZTbC9lZ0l2elFwRWh3Z3VmTW12YUIxbGlBV1AwVkYvV2h5QUIyOEhlM1lNaHFwZUZUVXp1MXdOaktNRTFGZUk4SjZNc3c4QQotLS0tLUVORCBTU0ggU0lHTkFUVVJFLS0tLS0K",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "armor_pad1_one_char_quantum_padded",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "LS0tLS1CRUdJTiBTU0ggU0lHTkFUVVJFLS0tLS0KVTFOSVUwbEhBQUFBQVFBQUFETUFBQUFMYzNOb0xXVmtNalUxTVRrQUFBQWdpb2pqM1hRSjhaWDlVdHN0UExwZGNzcG5DYjhkbEJJYjgzU0lBYlFQYjF3QUFBQVFhMkZ6YzJsaVpYSXRjbVZzWldGelpRQUFBQVZ5Y25KeWNnQUFBQVp6YUdFMU1USUFBQUJUQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBUVAxQTRyZG5NTjIvUkI4V3ZTbC9lZ0l2elFwRWh3Z3VmTW12YUIxbGlBV1AwVkYvV2h5QUIyOEhlM1lNaHFwZUZUVXp1MXdOaktNRTFGZUk4SjZNc3c4QT09PQotLS0tLUVORCBTU0ggU0lHTkFUVVJFLS0tLS0K",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "precheck_garbage",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "bm90IGEgc2lnbmF0dXJlCg==",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release signature is not a detached OpenSSH signature",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "precheck_vertical_tab",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "Cy0tLS0tQkVHSU4gU1NIIFNJR05BVFVSRS0tLS0tClUxTklVMGxIQUFBQUFRQUFBRE1BQUFBTGMzTm9MV1ZrTWpVMU1Ua0FBQUFnaW9qajNYUUo4Wlg5VXRzdFBMcGRjc3BuQ2IKOGRsQkliODNTSUFiUVBiMXdBQUFBUWEyRnpjMmxpWlhJdGNtVnNaV0Z6WlFBQUFBQUFBQUFHYzJoaE5URXlBQUFBVXdBQQpBQXR6YzJndFpXUXlOVFV4T1FBQUFFRDlRT0szWnpEZHYwUWZGcjBwZjNvQ0w4MEtSSWNJTG56SnIyZ2RaWWdGajlGUmYxCm9jZ0FkdkIzdDJESWFxWGhVMU03dGNEWXlqQk5SWGlQQ2VqTE1QCi0tLS0tRU5EIFNTSCBTSUdOQVRVUkUtLS0tLQo=",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release manifest has no valid signature from the expected Kassiber release key",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  },
+  {
+   "name": "precheck_nbsp",
+   "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c release\n",
+   "fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8",
+   "signature": "oC0tLS0tQkVHSU4gU1NIIFNJR05BVFVSRS0tLS0tClUxTklVMGxIQUFBQUFRQUFBRE1BQUFBTGMzTm9MV1ZrTWpVMU1Ua0FBQUFnaW9qajNYUUo4Wlg5VXRzdFBMcGRjc3BuQ2IKOGRsQkliODNTSUFiUVBiMXdBQUFBUWEyRnpjMmxpWlhJdGNtVnNaV0Z6WlFBQUFBQUFBQUFHYzJoaE5URXlBQUFBVXdBQQpBQXR6YzJndFpXUXlOVFV4T1FBQUFFRDlRT0szWnpEZHYwUWZGcjBwZjNvQ0w4MEtSSWNJTG56SnIyZ2RaWWdGajlGUmYxCm9jZ0FkdkIzdDJESWFxWGhVMU03dGNEWXlqQk5SWGlQQ2VqTE1QCi0tLS0tRU5EIFNTSCBTSUdOQVRVUkUtLS0tLQo=",
+   "result": {
+    "error": {
+     "code": "release_signature_verification_failed",
+     "message": "Release signature is not a detached OpenSSH signature",
+     "hint": "Do not install or run the release artifact.",
+     "details": {
+      "expected_fingerprint": "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8"
+     }
+    }
+   }
+  }
+ ]
+}

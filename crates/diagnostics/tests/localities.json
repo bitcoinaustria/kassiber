@@ -1,0 +1,586 @@
+[
+  {
+    "url": "http://0.0.0.0",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://0.255.255.255",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://1.0.0.0",
+    "expected": "remote"
+  },
+  {
+    "url": "http://9.255.255.255",
+    "expected": "remote"
+  },
+  {
+    "url": "http://10.0.0.0",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://10.255.255.255",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://11.0.0.0",
+    "expected": "remote"
+  },
+  {
+    "url": "http://126.255.255.255",
+    "expected": "remote"
+  },
+  {
+    "url": "http://127.0.0.0",
+    "expected": "loopback"
+  },
+  {
+    "url": "http://127.255.255.255",
+    "expected": "loopback"
+  },
+  {
+    "url": "http://128.0.0.0",
+    "expected": "remote"
+  },
+  {
+    "url": "http://169.253.255.255",
+    "expected": "remote"
+  },
+  {
+    "url": "http://169.254.0.0",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://169.254.255.255",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://169.255.0.0",
+    "expected": "remote"
+  },
+  {
+    "url": "http://172.15.255.255",
+    "expected": "remote"
+  },
+  {
+    "url": "http://172.16.0.0",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://172.31.255.255",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://172.32.0.0",
+    "expected": "remote"
+  },
+  {
+    "url": "http://191.255.255.255",
+    "expected": "remote"
+  },
+  {
+    "url": "http://192.0.0.0",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://192.0.0.255",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://192.0.1.0",
+    "expected": "remote"
+  },
+  {
+    "url": "http://192.0.0.169",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://192.0.0.170",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://192.0.0.171",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://192.0.0.172",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://192.0.1.255",
+    "expected": "remote"
+  },
+  {
+    "url": "http://192.0.2.0",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://192.0.2.255",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://192.0.3.0",
+    "expected": "remote"
+  },
+  {
+    "url": "http://192.167.255.255",
+    "expected": "remote"
+  },
+  {
+    "url": "http://192.168.0.0",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://192.168.255.255",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://192.169.0.0",
+    "expected": "remote"
+  },
+  {
+    "url": "http://198.17.255.255",
+    "expected": "remote"
+  },
+  {
+    "url": "http://198.18.0.0",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://198.19.255.255",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://198.20.0.0",
+    "expected": "remote"
+  },
+  {
+    "url": "http://198.51.99.255",
+    "expected": "remote"
+  },
+  {
+    "url": "http://198.51.100.0",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://198.51.100.255",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://198.51.101.0",
+    "expected": "remote"
+  },
+  {
+    "url": "http://203.0.112.255",
+    "expected": "remote"
+  },
+  {
+    "url": "http://203.0.113.0",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://203.0.113.255",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://203.0.114.0",
+    "expected": "remote"
+  },
+  {
+    "url": "http://239.255.255.255",
+    "expected": "remote"
+  },
+  {
+    "url": "http://240.0.0.0",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://255.255.255.255",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://[::1:0:0]",
+    "expected": "remote"
+  },
+  {
+    "url": "http://255.255.255.254",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://255.255.255.255",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://255.255.255.255",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://[::1:0:0]",
+    "expected": "remote"
+  },
+  {
+    "url": "http://192.0.0.8",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://192.0.0.9",
+    "expected": "remote"
+  },
+  {
+    "url": "http://192.0.0.9",
+    "expected": "remote"
+  },
+  {
+    "url": "http://192.0.0.10",
+    "expected": "remote"
+  },
+  {
+    "url": "http://192.0.0.9",
+    "expected": "remote"
+  },
+  {
+    "url": "http://192.0.0.10",
+    "expected": "remote"
+  },
+  {
+    "url": "http://192.0.0.10",
+    "expected": "remote"
+  },
+  {
+    "url": "http://192.0.0.11",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://0.0.0.0",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://0.0.0.1",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://0.0.0.1",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://0.0.0.2",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://0.0.0.0",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://0.0.0.0",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://0.0.0.1",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://[::fffe:ffff:ffff]",
+    "expected": "remote"
+  },
+  {
+    "url": "http://[::ffff:0.0.0.0]",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://[::ffff:255.255.255.255]",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://[::1:0:0:0]",
+    "expected": "remote"
+  },
+  {
+    "url": "http://[64:ff9b:0:ffff:ffff:ffff:ffff:ffff]",
+    "expected": "remote"
+  },
+  {
+    "url": "http://[64:ff9b:1::]",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://[64:ff9b:1:ffff:ffff:ffff:ffff:ffff]",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://[64:ff9b:2::]",
+    "expected": "remote"
+  },
+  {
+    "url": "http://[ff:ffff:ffff:ffff:ffff:ffff:ffff:ffff]",
+    "expected": "remote"
+  },
+  {
+    "url": "http://[100::]",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://[100::ffff:ffff:ffff:ffff]",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://[100:0:0:1::]",
+    "expected": "remote"
+  },
+  {
+    "url": "http://[2000:ffff:ffff:ffff:ffff:ffff:ffff:ffff]",
+    "expected": "remote"
+  },
+  {
+    "url": "http://[2001::]",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://[2001:1ff:ffff:ffff:ffff:ffff:ffff:ffff]",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://[2001:200::]",
+    "expected": "remote"
+  },
+  {
+    "url": "http://[2001:db7:ffff:ffff:ffff:ffff:ffff:ffff]",
+    "expected": "remote"
+  },
+  {
+    "url": "http://[2001:db8::]",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://[2001:db8:ffff:ffff:ffff:ffff:ffff:ffff]",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://[2001:db9::]",
+    "expected": "remote"
+  },
+  {
+    "url": "http://[2001:ffff:ffff:ffff:ffff:ffff:ffff:ffff]",
+    "expected": "remote"
+  },
+  {
+    "url": "http://[2002::]",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://[2002:ffff:ffff:ffff:ffff:ffff:ffff:ffff]",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://[2003::]",
+    "expected": "remote"
+  },
+  {
+    "url": "http://[3ffe:ffff:ffff:ffff:ffff:ffff:ffff:ffff]",
+    "expected": "remote"
+  },
+  {
+    "url": "http://[3fff::]",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://[3fff:fff:ffff:ffff:ffff:ffff:ffff:ffff]",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://[3fff:1000::]",
+    "expected": "remote"
+  },
+  {
+    "url": "http://[fbff:ffff:ffff:ffff:ffff:ffff:ffff:ffff]",
+    "expected": "remote"
+  },
+  {
+    "url": "http://[fc00::]",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://[fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff]",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://[fe00::]",
+    "expected": "remote"
+  },
+  {
+    "url": "http://[fe7f:ffff:ffff:ffff:ffff:ffff:ffff:ffff]",
+    "expected": "remote"
+  },
+  {
+    "url": "http://[fe80::]",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://[febf:ffff:ffff:ffff:ffff:ffff:ffff:ffff]",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://[fec0::]",
+    "expected": "remote"
+  },
+  {
+    "url": "http://[2001:1::]",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://[2001:1::1]",
+    "expected": "remote"
+  },
+  {
+    "url": "http://[2001:1::1]",
+    "expected": "remote"
+  },
+  {
+    "url": "http://[2001:1::2]",
+    "expected": "remote"
+  },
+  {
+    "url": "http://[2001:1::1]",
+    "expected": "remote"
+  },
+  {
+    "url": "http://[2001:1::2]",
+    "expected": "remote"
+  },
+  {
+    "url": "http://[2001:1::2]",
+    "expected": "remote"
+  },
+  {
+    "url": "http://[2001:1::3]",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://[2001:2:ffff:ffff:ffff:ffff:ffff:ffff]",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://[2001:3::]",
+    "expected": "remote"
+  },
+  {
+    "url": "http://[2001:3:ffff:ffff:ffff:ffff:ffff:ffff]",
+    "expected": "remote"
+  },
+  {
+    "url": "http://[2001:4::]",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://[2001:4:111:ffff:ffff:ffff:ffff:ffff]",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://[2001:4:112::]",
+    "expected": "remote"
+  },
+  {
+    "url": "http://[2001:4:112:ffff:ffff:ffff:ffff:ffff]",
+    "expected": "remote"
+  },
+  {
+    "url": "http://[2001:4:113::]",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://[2001:1f:ffff:ffff:ffff:ffff:ffff:ffff]",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://[2001:20::]",
+    "expected": "remote"
+  },
+  {
+    "url": "http://[2001:2f:ffff:ffff:ffff:ffff:ffff:ffff]",
+    "expected": "remote"
+  },
+  {
+    "url": "http://[2001:30::]",
+    "expected": "remote"
+  },
+  {
+    "url": "http://[2001:2f:ffff:ffff:ffff:ffff:ffff:ffff]",
+    "expected": "remote"
+  },
+  {
+    "url": "http://[2001:30::]",
+    "expected": "remote"
+  },
+  {
+    "url": "http://[2001:3f:ffff:ffff:ffff:ffff:ffff:ffff]",
+    "expected": "remote"
+  },
+  {
+    "url": "http://[2001:40::]",
+    "expected": "private_lan"
+  },
+  {
+    "url": " http://local\nhost",
+    "expected": "loopback"
+  },
+  {
+    "url": "\u0000http://127.0.0.1",
+    "expected": "loopback"
+  },
+  {
+    "url": "http://[::ffff:192.168.1.1]",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://[fe80::1%eth0]",
+    "expected": "private_lan"
+  },
+  {
+    "url": "http://[v1.test]",
+    "expected": "remote"
+  },
+  {
+    "url": "http://[vno.test]",
+    "expected": "invalid"
+  },
+  {
+    "url": "http://[127.0.0.1]",
+    "expected": "invalid"
+  },
+  {
+    "url": "http://host]",
+    "expected": "invalid"
+  },
+  {
+    "url": "http://node\u2100private",
+    "expected": "invalid"
+  },
+  {
+    "url": "http://node\uff1a123",
+    "expected": "invalid"
+  },
+  {
+    "url": "http://foo.localhost",
+    "expected": "loopback"
+  },
+  {
+    "url": "//foo.local",
+    "expected": "private_lan"
+  },
+  {
+    "url": "noscheme",
+    "expected": "unknown"
+  },
+  {
+    "url": "1http://host",
+    "expected": "unknown"
+  },
+  {
+    "url": "http://private.example:invalid",
+    "expected": "remote"
+  },
+  {
+    "url": "https://user:password@localhost:8080/private?token=secret",
+    "expected": "loopback"
+  }
+]

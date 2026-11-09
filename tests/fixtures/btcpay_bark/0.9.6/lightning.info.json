@@ -1,0 +1,16 @@
+{
+  "body": {
+    "code": "lightning-node-unavailable",
+    "message": "The lightning node is unavailable (NotSupportedException: Specified method is not supported.)"
+  },
+  "request": {
+    "key": "lightning",
+    "method": "GET",
+    "path": "/api/v1/stores/{storeId}/lightning/BTC/info",
+    "permissions": [
+      "btcpay.store.canviewlightninginvoice",
+      "btcpay.store.canuselightningnode"
+    ]
+  },
+  "status": 503
+}

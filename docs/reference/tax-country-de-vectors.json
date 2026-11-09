@@ -1,0 +1,2156 @@
+{
+  "schema": "kassiber.tax-country-vectors/1",
+  "country": "de",
+  "registry_value": "de",
+  "spec": "docs/reference/tax-country-de.md",
+  "status": "preview: not reviewed by a tax professional for this country",
+  "retrieved": "2026-11-07",
+  "currency": "EUR",
+  "timezone": "Europe/Berlin",
+  "tax_year": "calendar year, Europe/Berlin",
+  "conventions": {
+    "amounts": "decimal strings; fiat in the country currency, rounded half-even to cents after exact computation; quantities exact",
+    "times": "ISO 8601 with offset; every date rule uses the local date in `timezone`",
+    "expected": "computed by the spec's reference model; `refusal` means the implementation must fail closed with that code"
+  },
+  "vectors": [
+    {
+      "id": "de-01-fifo-within-year",
+      "title": "Sale within the year: taxable; acquisition fee raises cost, sale fee is Werbungskosten",
+      "rules": [
+        "DE-EVENT-SELL",
+        "DE-HOLD-1Y",
+        "DE-FEE-ACQ",
+        "DE-FEE-DISP",
+        "DE-FG-23"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "wallet",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2024-01-10T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "40000.00",
+          "fee_fiat": "40.00"
+        },
+        {
+          "id": "s1",
+          "time": "2024-06-15T12:00:00+02:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "BTC",
+          "quantity": "0.5",
+          "fiat": "30000.00",
+          "fee_fiat": "30.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "s1",
+            "kind": "sell",
+            "asset": "BTC",
+            "wallet": "A",
+            "date": "2024-06-15",
+            "fragments": [
+              {
+                "lot": "b1",
+                "acquired": "2024-01-10",
+                "quantity": "0.5",
+                "cost": "20020.00",
+                "proceeds": "30000.00",
+                "expenses": "30.00",
+                "gain": "9950.00",
+                "taxable": true
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "years": {
+          "2024": {
+            "p23_taxable_proceeds": "30000.00",
+            "p23_taxable_cost": "20020.00",
+            "p23_taxable_expenses": "30.00",
+            "p23_net_gain": "9950.00",
+            "p23_freigrenze": "1000.00",
+            "p23_result": "taxable",
+            "p23_amount": "9950.00",
+            "exempt_gain_outside_period": "0.00",
+            "p22_3_total": "0.00",
+            "p22_3_result": "none",
+            "p22_3_amount": "0.00",
+            "mining_classification_required_total": "0.00"
+          }
+        },
+        "holdings": {
+          "A": {
+            "BTC": {
+              "quantity": "0.5",
+              "cost": "20020.00"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "de-02-anniversary-day-taxable",
+      "title": "Disposal on the anniversary date is still within the year (taxable)",
+      "rules": [
+        "DE-HOLD-1Y",
+        "DE-HOLD-CAL"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "wallet",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2023-03-15T09:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "20000.00"
+        },
+        {
+          "id": "s1",
+          "time": "2024-03-15T18:00:00+01:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "60000.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "s1",
+            "kind": "sell",
+            "asset": "BTC",
+            "wallet": "A",
+            "date": "2024-03-15",
+            "fragments": [
+              {
+                "lot": "b1",
+                "acquired": "2023-03-15",
+                "quantity": "1",
+                "cost": "20000.00",
+                "proceeds": "60000.00",
+                "expenses": "0.00",
+                "gain": "40000.00",
+                "taxable": true
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "years": {
+          "2024": {
+            "p23_taxable_proceeds": "60000.00",
+            "p23_taxable_cost": "20000.00",
+            "p23_taxable_expenses": "0.00",
+            "p23_net_gain": "40000.00",
+            "p23_freigrenze": "1000.00",
+            "p23_result": "taxable",
+            "p23_amount": "40000.00",
+            "exempt_gain_outside_period": "0.00",
+            "p22_3_total": "0.00",
+            "p22_3_result": "none",
+            "p22_3_amount": "0.00",
+            "mining_classification_required_total": "0.00"
+          }
+        },
+        "holdings": {}
+      }
+    },
+    {
+      "id": "de-03-day-after-anniversary-exempt",
+      "title": "Disposal on the day after the anniversary is outside the period (not taxable)",
+      "rules": [
+        "DE-HOLD-1Y",
+        "DE-HOLD-CAL"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "wallet",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2023-03-15T09:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "20000.00"
+        },
+        {
+          "id": "s1",
+          "time": "2024-03-16T00:05:00+01:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "60000.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "s1",
+            "kind": "sell",
+            "asset": "BTC",
+            "wallet": "A",
+            "date": "2024-03-16",
+            "fragments": [
+              {
+                "lot": "b1",
+                "acquired": "2023-03-15",
+                "quantity": "1",
+                "cost": "20000.00",
+                "proceeds": "60000.00",
+                "expenses": "0.00",
+                "gain": "40000.00",
+                "taxable": false
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "years": {
+          "2024": {
+            "p23_taxable_proceeds": "0.00",
+            "p23_taxable_cost": "0.00",
+            "p23_taxable_expenses": "0.00",
+            "p23_net_gain": "0.00",
+            "p23_freigrenze": "1000.00",
+            "p23_result": "none",
+            "p23_amount": "0.00",
+            "exempt_gain_outside_period": "40000.00",
+            "p22_3_total": "0.00",
+            "p22_3_result": "none",
+            "p22_3_amount": "0.00",
+            "mining_classification_required_total": "0.00"
+          }
+        },
+        "holdings": {}
+      }
+    },
+    {
+      "id": "de-04-leap-day-acquisition",
+      "title": "Acquired 29 Feb: the period ends 28 Feb of the next year (§188 Abs. 3 BGB)",
+      "rules": [
+        "DE-HOLD-CAL",
+        "DE-HOLD-LEAP"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "wallet",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2024-02-29T12:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "0.1",
+          "fiat": "5000.00"
+        },
+        {
+          "id": "s1",
+          "time": "2025-02-28T12:00:00+01:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "BTC",
+          "quantity": "0.05",
+          "fiat": "4500.00"
+        },
+        {
+          "id": "s2",
+          "time": "2025-03-01T12:00:00+01:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "BTC",
+          "quantity": "0.05",
+          "fiat": "4600.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "s1",
+            "kind": "sell",
+            "asset": "BTC",
+            "wallet": "A",
+            "date": "2025-02-28",
+            "fragments": [
+              {
+                "lot": "b1",
+                "acquired": "2024-02-29",
+                "quantity": "0.05",
+                "cost": "2500.00",
+                "proceeds": "4500.00",
+                "expenses": "0.00",
+                "gain": "2000.00",
+                "taxable": true
+              }
+            ]
+          },
+          {
+            "event": "s2",
+            "kind": "sell",
+            "asset": "BTC",
+            "wallet": "A",
+            "date": "2025-03-01",
+            "fragments": [
+              {
+                "lot": "b1",
+                "acquired": "2024-02-29",
+                "quantity": "0.05",
+                "cost": "2500.00",
+                "proceeds": "4600.00",
+                "expenses": "0.00",
+                "gain": "2100.00",
+                "taxable": false
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "years": {
+          "2025": {
+            "p23_taxable_proceeds": "4500.00",
+            "p23_taxable_cost": "2500.00",
+            "p23_taxable_expenses": "0.00",
+            "p23_net_gain": "2000.00",
+            "p23_freigrenze": "1000.00",
+            "p23_result": "taxable",
+            "p23_amount": "2000.00",
+            "exempt_gain_outside_period": "2100.00",
+            "p22_3_total": "0.00",
+            "p22_3_result": "none",
+            "p22_3_amount": "0.00",
+            "mining_classification_required_total": "0.00"
+          }
+        },
+        "holdings": {}
+      }
+    },
+    {
+      "id": "de-05-365-days-still-taxable",
+      "title": "365 elapsed days across 29 Feb are not more than one year: the generic day count would call it long-term",
+      "rules": [
+        "DE-HOLD-CAL",
+        "DE-ENGINE-DAYCOUNT"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "wallet",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2023-03-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "21000.00"
+        },
+        {
+          "id": "s1",
+          "time": "2024-02-29T10:00:00+01:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "55000.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "s1",
+            "kind": "sell",
+            "asset": "BTC",
+            "wallet": "A",
+            "date": "2024-02-29",
+            "fragments": [
+              {
+                "lot": "b1",
+                "acquired": "2023-03-01",
+                "quantity": "1",
+                "cost": "21000.00",
+                "proceeds": "55000.00",
+                "expenses": "0.00",
+                "gain": "34000.00",
+                "taxable": true
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "years": {
+          "2024": {
+            "p23_taxable_proceeds": "55000.00",
+            "p23_taxable_cost": "21000.00",
+            "p23_taxable_expenses": "0.00",
+            "p23_net_gain": "34000.00",
+            "p23_freigrenze": "1000.00",
+            "p23_result": "taxable",
+            "p23_amount": "34000.00",
+            "exempt_gain_outside_period": "0.00",
+            "p22_3_total": "0.00",
+            "p22_3_result": "none",
+            "p22_3_amount": "0.00",
+            "mining_classification_required_total": "0.00"
+          }
+        },
+        "holdings": {}
+      }
+    },
+    {
+      "id": "de-06-berlin-calendar-day",
+      "title": "Holding period uses Europe/Berlin dates: a UTC-date implementation gets the opposite answer",
+      "rules": [
+        "DE-HOLD-CAL",
+        "DE-TZ"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "wallet",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2023-06-10T22:30:00Z",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "0.2",
+          "fiat": "5000.00"
+        },
+        {
+          "id": "s1",
+          "time": "2024-06-11T21:30:00Z",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "BTC",
+          "quantity": "0.2",
+          "fiat": "13000.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "s1",
+            "kind": "sell",
+            "asset": "BTC",
+            "wallet": "A",
+            "date": "2024-06-11",
+            "fragments": [
+              {
+                "lot": "b1",
+                "acquired": "2023-06-11",
+                "quantity": "0.2",
+                "cost": "5000.00",
+                "proceeds": "13000.00",
+                "expenses": "0.00",
+                "gain": "8000.00",
+                "taxable": true
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "years": {
+          "2024": {
+            "p23_taxable_proceeds": "13000.00",
+            "p23_taxable_cost": "5000.00",
+            "p23_taxable_expenses": "0.00",
+            "p23_net_gain": "8000.00",
+            "p23_freigrenze": "1000.00",
+            "p23_result": "taxable",
+            "p23_amount": "8000.00",
+            "exempt_gain_outside_period": "0.00",
+            "p22_3_total": "0.00",
+            "p22_3_result": "none",
+            "p22_3_amount": "0.00",
+            "mining_classification_required_total": "0.00"
+          }
+        },
+        "holdings": {}
+      }
+    },
+    {
+      "id": "de-07-mixed-lots-expense-split",
+      "title": "One sale consumes an old (exempt) and a new (taxable) lot; Werbungskosten split by quantity (Rn. 57)",
+      "rules": [
+        "DE-METHOD-FIFO",
+        "DE-HOLD-1Y",
+        "DE-FEE-SPLIT"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "wallet",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2022-05-01T10:00:00+02:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "0.3",
+          "fiat": "9000.00"
+        },
+        {
+          "id": "b2",
+          "time": "2024-01-20T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "0.3",
+          "fiat": "12000.00"
+        },
+        {
+          "id": "s1",
+          "time": "2024-09-01T10:00:00+02:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "BTC",
+          "quantity": "0.4",
+          "fiat": "24000.00",
+          "fee_fiat": "40.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "s1",
+            "kind": "sell",
+            "asset": "BTC",
+            "wallet": "A",
+            "date": "2024-09-01",
+            "fragments": [
+              {
+                "lot": "b1",
+                "acquired": "2022-05-01",
+                "quantity": "0.3",
+                "cost": "9000.00",
+                "proceeds": "18000.00",
+                "expenses": "30.00",
+                "gain": "8970.00",
+                "taxable": false
+              },
+              {
+                "lot": "b2",
+                "acquired": "2024-01-20",
+                "quantity": "0.1",
+                "cost": "4000.00",
+                "proceeds": "6000.00",
+                "expenses": "10.00",
+                "gain": "1990.00",
+                "taxable": true
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "years": {
+          "2024": {
+            "p23_taxable_proceeds": "6000.00",
+            "p23_taxable_cost": "4000.00",
+            "p23_taxable_expenses": "10.00",
+            "p23_net_gain": "1990.00",
+            "p23_freigrenze": "1000.00",
+            "p23_result": "taxable",
+            "p23_amount": "1990.00",
+            "exempt_gain_outside_period": "8970.00",
+            "p22_3_total": "0.00",
+            "p22_3_result": "none",
+            "p22_3_amount": "0.00",
+            "mining_classification_required_total": "0.00"
+          }
+        },
+        "holdings": {
+          "A": {
+            "BTC": {
+              "quantity": "0.2",
+              "cost": "8000.00"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "de-08-freigrenze-2024-below",
+      "title": "2024 total gain 999.99 EUR is below the 1,000 EUR Freigrenze: not taxable",
+      "rules": [
+        "DE-FG-23",
+        "DE-FG-23-2024"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "wallet",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2024-02-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "0.1",
+          "fiat": "4000.00"
+        },
+        {
+          "id": "s1",
+          "time": "2024-05-01T10:00:00+02:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "BTC",
+          "quantity": "0.1",
+          "fiat": "4999.99"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "s1",
+            "kind": "sell",
+            "asset": "BTC",
+            "wallet": "A",
+            "date": "2024-05-01",
+            "fragments": [
+              {
+                "lot": "b1",
+                "acquired": "2024-02-01",
+                "quantity": "0.1",
+                "cost": "4000.00",
+                "proceeds": "4999.99",
+                "expenses": "0.00",
+                "gain": "999.99",
+                "taxable": true
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "years": {
+          "2024": {
+            "p23_taxable_proceeds": "4999.99",
+            "p23_taxable_cost": "4000.00",
+            "p23_taxable_expenses": "0.00",
+            "p23_net_gain": "999.99",
+            "p23_freigrenze": "1000.00",
+            "p23_result": "exempt_freigrenze",
+            "p23_amount": "0.00",
+            "exempt_gain_outside_period": "0.00",
+            "p22_3_total": "0.00",
+            "p22_3_result": "none",
+            "p22_3_amount": "0.00",
+            "mining_classification_required_total": "0.00"
+          }
+        },
+        "holdings": {}
+      }
+    },
+    {
+      "id": "de-09-freigrenze-2024-at-limit",
+      "title": "2024 total gain exactly 1,000.00 EUR is not below the Freigrenze: fully taxable",
+      "rules": [
+        "DE-FG-23",
+        "DE-FG-23-2024"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "wallet",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2024-02-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "0.1",
+          "fiat": "4000.00"
+        },
+        {
+          "id": "s1",
+          "time": "2024-05-01T10:00:00+02:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "BTC",
+          "quantity": "0.1",
+          "fiat": "5000.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "s1",
+            "kind": "sell",
+            "asset": "BTC",
+            "wallet": "A",
+            "date": "2024-05-01",
+            "fragments": [
+              {
+                "lot": "b1",
+                "acquired": "2024-02-01",
+                "quantity": "0.1",
+                "cost": "4000.00",
+                "proceeds": "5000.00",
+                "expenses": "0.00",
+                "gain": "1000.00",
+                "taxable": true
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "years": {
+          "2024": {
+            "p23_taxable_proceeds": "5000.00",
+            "p23_taxable_cost": "4000.00",
+            "p23_taxable_expenses": "0.00",
+            "p23_net_gain": "1000.00",
+            "p23_freigrenze": "1000.00",
+            "p23_result": "taxable",
+            "p23_amount": "1000.00",
+            "exempt_gain_outside_period": "0.00",
+            "p22_3_total": "0.00",
+            "p22_3_result": "none",
+            "p22_3_amount": "0.00",
+            "mining_classification_required_total": "0.00"
+          }
+        },
+        "holdings": {}
+      }
+    },
+    {
+      "id": "de-10-freigrenze-2023-600",
+      "title": "2023 used the 600 EUR Freigrenze: a 600.00 gain is taxable (it would be exempt under the 2024 limit)",
+      "rules": [
+        "DE-FG-23",
+        "DE-FG-23-2023"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "wallet",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2023-02-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "0.1",
+          "fiat": "2000.00"
+        },
+        {
+          "id": "s1",
+          "time": "2023-07-01T10:00:00+02:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "BTC",
+          "quantity": "0.1",
+          "fiat": "2600.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "s1",
+            "kind": "sell",
+            "asset": "BTC",
+            "wallet": "A",
+            "date": "2023-07-01",
+            "fragments": [
+              {
+                "lot": "b1",
+                "acquired": "2023-02-01",
+                "quantity": "0.1",
+                "cost": "2000.00",
+                "proceeds": "2600.00",
+                "expenses": "0.00",
+                "gain": "600.00",
+                "taxable": true
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "years": {
+          "2023": {
+            "p23_taxable_proceeds": "2600.00",
+            "p23_taxable_cost": "2000.00",
+            "p23_taxable_expenses": "0.00",
+            "p23_net_gain": "600.00",
+            "p23_freigrenze": "600.00",
+            "p23_result": "taxable",
+            "p23_amount": "600.00",
+            "exempt_gain_outside_period": "0.00",
+            "p22_3_total": "0.00",
+            "p22_3_result": "none",
+            "p22_3_amount": "0.00",
+            "mining_classification_required_total": "0.00"
+          }
+        },
+        "holdings": {}
+      }
+    },
+    {
+      "id": "de-11-loss-netting-under-freigrenze",
+      "title": "Same-year §23 loss nets against §23 gain; the net 800 EUR is below the Freigrenze",
+      "rules": [
+        "DE-LOSS-23",
+        "DE-FG-23"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "wallet",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2024-01-05T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "0.1",
+          "fiat": "4000.00"
+        },
+        {
+          "id": "b2",
+          "time": "2024-03-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "0.1",
+          "fiat": "6500.00"
+        },
+        {
+          "id": "s1",
+          "time": "2024-04-01T10:00:00+02:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "BTC",
+          "quantity": "0.1",
+          "fiat": "5500.00"
+        },
+        {
+          "id": "s2",
+          "time": "2024-08-01T10:00:00+02:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "BTC",
+          "quantity": "0.1",
+          "fiat": "5800.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "s1",
+            "kind": "sell",
+            "asset": "BTC",
+            "wallet": "A",
+            "date": "2024-04-01",
+            "fragments": [
+              {
+                "lot": "b1",
+                "acquired": "2024-01-05",
+                "quantity": "0.1",
+                "cost": "4000.00",
+                "proceeds": "5500.00",
+                "expenses": "0.00",
+                "gain": "1500.00",
+                "taxable": true
+              }
+            ]
+          },
+          {
+            "event": "s2",
+            "kind": "sell",
+            "asset": "BTC",
+            "wallet": "A",
+            "date": "2024-08-01",
+            "fragments": [
+              {
+                "lot": "b2",
+                "acquired": "2024-03-01",
+                "quantity": "0.1",
+                "cost": "6500.00",
+                "proceeds": "5800.00",
+                "expenses": "0.00",
+                "gain": "-700.00",
+                "taxable": true
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "years": {
+          "2024": {
+            "p23_taxable_proceeds": "11300.00",
+            "p23_taxable_cost": "10500.00",
+            "p23_taxable_expenses": "0.00",
+            "p23_net_gain": "800.00",
+            "p23_freigrenze": "1000.00",
+            "p23_result": "exempt_freigrenze",
+            "p23_amount": "0.00",
+            "exempt_gain_outside_period": "0.00",
+            "p22_3_total": "0.00",
+            "p22_3_result": "none",
+            "p22_3_amount": "0.00",
+            "mining_classification_required_total": "0.00"
+          }
+        },
+        "holdings": {}
+      }
+    },
+    {
+      "id": "de-12-net-loss-year",
+      "title": "A net §23 loss is reported as a loss (only offsettable against §23 gains, §23 Abs. 3 Sätze 7-8)",
+      "rules": [
+        "DE-LOSS-23"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "wallet",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2024-03-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "0.1",
+          "fiat": "6500.00"
+        },
+        {
+          "id": "s1",
+          "time": "2024-08-01T10:00:00+02:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "BTC",
+          "quantity": "0.1",
+          "fiat": "6200.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "s1",
+            "kind": "sell",
+            "asset": "BTC",
+            "wallet": "A",
+            "date": "2024-08-01",
+            "fragments": [
+              {
+                "lot": "b1",
+                "acquired": "2024-03-01",
+                "quantity": "0.1",
+                "cost": "6500.00",
+                "proceeds": "6200.00",
+                "expenses": "0.00",
+                "gain": "-300.00",
+                "taxable": true
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "years": {
+          "2024": {
+            "p23_taxable_proceeds": "6200.00",
+            "p23_taxable_cost": "6500.00",
+            "p23_taxable_expenses": "0.00",
+            "p23_net_gain": "-300.00",
+            "p23_freigrenze": "1000.00",
+            "p23_result": "loss",
+            "p23_amount": "-300.00",
+            "exempt_gain_outside_period": "0.00",
+            "p22_3_total": "0.00",
+            "p22_3_result": "none",
+            "p22_3_amount": "0.00",
+            "mining_classification_required_total": "0.00"
+          }
+        },
+        "holdings": {}
+      }
+    },
+    {
+      "id": "de-13-swap-btc-usdt",
+      "title": "Crypto-to-crypto swap: proceeds at the received token's value, its cost at the given token's value; new period for USDT",
+      "rules": [
+        "DE-EVENT-SWAP",
+        "DE-SWAP-VALUES",
+        "DE-HOLD-RESTART"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "wallet",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2024-01-10T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "0.5",
+          "fiat": "20000.00"
+        },
+        {
+          "id": "x1",
+          "time": "2024-04-10T10:00:00+02:00",
+          "wallet": "A",
+          "type": "swap",
+          "asset": "BTC",
+          "quantity": "0.25",
+          "fiat": "14250.00",
+          "in_asset": "USDT",
+          "in_quantity": "15500",
+          "in_fiat": "14300.00"
+        },
+        {
+          "id": "s1",
+          "time": "2024-05-10T10:00:00+02:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "USDT",
+          "quantity": "15500",
+          "fiat": "14400.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "x1",
+            "kind": "swap",
+            "asset": "BTC",
+            "wallet": "A",
+            "date": "2024-04-10",
+            "fragments": [
+              {
+                "lot": "b1",
+                "acquired": "2024-01-10",
+                "quantity": "0.25",
+                "cost": "10000.00",
+                "proceeds": "14300.00",
+                "expenses": "0.00",
+                "gain": "4300.00",
+                "taxable": true
+              }
+            ]
+          },
+          {
+            "event": "s1",
+            "kind": "sell",
+            "asset": "USDT",
+            "wallet": "A",
+            "date": "2024-05-10",
+            "fragments": [
+              {
+                "lot": "x1:in",
+                "acquired": "2024-04-10",
+                "quantity": "15500",
+                "cost": "14250.00",
+                "proceeds": "14400.00",
+                "expenses": "0.00",
+                "gain": "150.00",
+                "taxable": true
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "years": {
+          "2024": {
+            "p23_taxable_proceeds": "28700.00",
+            "p23_taxable_cost": "24250.00",
+            "p23_taxable_expenses": "0.00",
+            "p23_net_gain": "4450.00",
+            "p23_freigrenze": "1000.00",
+            "p23_result": "taxable",
+            "p23_amount": "4450.00",
+            "exempt_gain_outside_period": "0.00",
+            "p22_3_total": "0.00",
+            "p22_3_result": "none",
+            "p22_3_amount": "0.00",
+            "mining_classification_required_total": "0.00"
+          }
+        },
+        "holdings": {
+          "A": {
+            "BTC": {
+              "quantity": "0.25",
+              "cost": "10000.00"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "de-14-swap-received-value-unknown",
+      "title": "Swap where the received token has no market value: the given token's value is used (Rn. 58 Satz 3)",
+      "rules": [
+        "DE-EVENT-SWAP",
+        "DE-SWAP-FALLBACK"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "wallet",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2024-01-10T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "0.5",
+          "fiat": "20000.00"
+        },
+        {
+          "id": "x1",
+          "time": "2024-04-10T10:00:00+02:00",
+          "wallet": "A",
+          "type": "swap",
+          "asset": "BTC",
+          "quantity": "0.25",
+          "fiat": "14250.00",
+          "in_asset": "USDT",
+          "in_quantity": "15500",
+          "in_fiat": null
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "x1",
+            "kind": "swap",
+            "asset": "BTC",
+            "wallet": "A",
+            "date": "2024-04-10",
+            "fragments": [
+              {
+                "lot": "b1",
+                "acquired": "2024-01-10",
+                "quantity": "0.25",
+                "cost": "10000.00",
+                "proceeds": "14250.00",
+                "expenses": "0.00",
+                "gain": "4250.00",
+                "taxable": true
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "years": {
+          "2024": {
+            "p23_taxable_proceeds": "14250.00",
+            "p23_taxable_cost": "10000.00",
+            "p23_taxable_expenses": "0.00",
+            "p23_net_gain": "4250.00",
+            "p23_freigrenze": "1000.00",
+            "p23_result": "taxable",
+            "p23_amount": "4250.00",
+            "exempt_gain_outside_period": "0.00",
+            "p22_3_total": "0.00",
+            "p22_3_result": "none",
+            "p22_3_amount": "0.00",
+            "mining_classification_required_total": "0.00"
+          }
+        },
+        "holdings": {
+          "A": {
+            "BTC": {
+              "quantity": "0.25",
+              "cost": "10000.00"
+            },
+            "USDT": {
+              "quantity": "15500",
+              "cost": "14250.00"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "de-15-lending-income-under-256",
+      "title": "Lending interest totalling 255.99 EUR is below the §22 Nr. 3 Freigrenze; the coins are acquisitions at that value",
+      "rules": [
+        "DE-INC-LENDING",
+        "DE-FG-22-3",
+        "DE-INC-ACQ",
+        "DE-FG-23"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "wallet",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "i1",
+          "time": "2024-02-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "income",
+          "subkind": "lending_interest",
+          "asset": "BTC",
+          "quantity": "0.001",
+          "fiat": "60.00"
+        },
+        {
+          "id": "i2",
+          "time": "2024-06-01T10:00:00+02:00",
+          "wallet": "A",
+          "type": "income",
+          "subkind": "lending_interest",
+          "asset": "BTC",
+          "quantity": "0.002",
+          "fiat": "130.00"
+        },
+        {
+          "id": "i3",
+          "time": "2024-11-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "income",
+          "subkind": "lending_interest",
+          "asset": "BTC",
+          "quantity": "0.001",
+          "fiat": "65.99"
+        },
+        {
+          "id": "s1",
+          "time": "2024-12-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "BTC",
+          "quantity": "0.004",
+          "fiat": "380.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "s1",
+            "kind": "sell",
+            "asset": "BTC",
+            "wallet": "A",
+            "date": "2024-12-01",
+            "fragments": [
+              {
+                "lot": "i1",
+                "acquired": "2024-02-01",
+                "quantity": "0.001",
+                "cost": "60.00",
+                "proceeds": "95.00",
+                "expenses": "0.00",
+                "gain": "35.00",
+                "taxable": true
+              },
+              {
+                "lot": "i2",
+                "acquired": "2024-06-01",
+                "quantity": "0.002",
+                "cost": "130.00",
+                "proceeds": "190.00",
+                "expenses": "0.00",
+                "gain": "60.00",
+                "taxable": true
+              },
+              {
+                "lot": "i3",
+                "acquired": "2024-11-01",
+                "quantity": "0.001",
+                "cost": "65.99",
+                "proceeds": "95.00",
+                "expenses": "0.00",
+                "gain": "29.01",
+                "taxable": true
+              }
+            ]
+          }
+        ],
+        "income": [
+          {
+            "event": "i1",
+            "date": "2024-02-01",
+            "subkind": "lending_interest",
+            "quantity": "0.001",
+            "value": "60.00",
+            "section": "p22_3"
+          },
+          {
+            "event": "i2",
+            "date": "2024-06-01",
+            "subkind": "lending_interest",
+            "quantity": "0.002",
+            "value": "130.00",
+            "section": "p22_3"
+          },
+          {
+            "event": "i3",
+            "date": "2024-11-01",
+            "subkind": "lending_interest",
+            "quantity": "0.001",
+            "value": "65.99",
+            "section": "p22_3"
+          }
+        ],
+        "years": {
+          "2024": {
+            "p23_taxable_proceeds": "380.00",
+            "p23_taxable_cost": "255.99",
+            "p23_taxable_expenses": "0.00",
+            "p23_net_gain": "124.01",
+            "p23_freigrenze": "1000.00",
+            "p23_result": "exempt_freigrenze",
+            "p23_amount": "0.00",
+            "exempt_gain_outside_period": "0.00",
+            "p22_3_total": "255.99",
+            "p22_3_result": "exempt_freigrenze",
+            "p22_3_amount": "0.00",
+            "mining_classification_required_total": "0.00"
+          }
+        },
+        "holdings": {}
+      }
+    },
+    {
+      "id": "de-16-routing-income-at-256",
+      "title": "Leistung income of exactly 256.00 EUR is not below the Freigrenze: fully taxable",
+      "rules": [
+        "DE-INC-ROUTING",
+        "DE-FG-22-3"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "wallet",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "i1",
+          "time": "2024-03-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "income",
+          "subkind": "routing_income",
+          "asset": "BTC",
+          "quantity": "0.002",
+          "fiat": "120.00"
+        },
+        {
+          "id": "i2",
+          "time": "2024-09-01T10:00:00+02:00",
+          "wallet": "A",
+          "type": "income",
+          "subkind": "routing_income",
+          "asset": "BTC",
+          "quantity": "0.002",
+          "fiat": "136.00"
+        }
+      ],
+      "expected": {
+        "disposals": [],
+        "income": [
+          {
+            "event": "i1",
+            "date": "2024-03-01",
+            "subkind": "routing_income",
+            "quantity": "0.002",
+            "value": "120.00",
+            "section": "p22_3"
+          },
+          {
+            "event": "i2",
+            "date": "2024-09-01",
+            "subkind": "routing_income",
+            "quantity": "0.002",
+            "value": "136.00",
+            "section": "p22_3"
+          }
+        ],
+        "years": {
+          "2024": {
+            "p23_taxable_proceeds": "0.00",
+            "p23_taxable_cost": "0.00",
+            "p23_taxable_expenses": "0.00",
+            "p23_net_gain": "0.00",
+            "p23_freigrenze": "1000.00",
+            "p23_result": "none",
+            "p23_amount": "0.00",
+            "exempt_gain_outside_period": "0.00",
+            "p22_3_total": "256.00",
+            "p22_3_result": "taxable",
+            "p22_3_amount": "256.00",
+            "mining_classification_required_total": "0.00"
+          }
+        },
+        "holdings": {
+          "A": {
+            "BTC": {
+              "quantity": "0.004",
+              "cost": "256.00"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "de-17-wallet-based-fifo",
+      "title": "FIFO runs per wallet (Rn. 62): a sale from wallet B takes B's lot even though A holds an older one",
+      "rules": [
+        "DE-POOL-WALLET",
+        "DE-METHOD-FIFO"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "wallet",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2023-01-10T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "15000.00"
+        },
+        {
+          "id": "b2",
+          "time": "2024-02-01T10:00:00+01:00",
+          "wallet": "B",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "38000.00"
+        },
+        {
+          "id": "s1",
+          "time": "2024-07-01T10:00:00+02:00",
+          "wallet": "B",
+          "type": "sell",
+          "asset": "BTC",
+          "quantity": "0.5",
+          "fiat": "28000.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "s1",
+            "kind": "sell",
+            "asset": "BTC",
+            "wallet": "B",
+            "date": "2024-07-01",
+            "fragments": [
+              {
+                "lot": "b2",
+                "acquired": "2024-02-01",
+                "quantity": "0.5",
+                "cost": "19000.00",
+                "proceeds": "28000.00",
+                "expenses": "0.00",
+                "gain": "9000.00",
+                "taxable": true
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "years": {
+          "2024": {
+            "p23_taxable_proceeds": "28000.00",
+            "p23_taxable_cost": "19000.00",
+            "p23_taxable_expenses": "0.00",
+            "p23_net_gain": "9000.00",
+            "p23_freigrenze": "1000.00",
+            "p23_result": "taxable",
+            "p23_amount": "9000.00",
+            "exempt_gain_outside_period": "0.00",
+            "p22_3_total": "0.00",
+            "p22_3_result": "none",
+            "p22_3_amount": "0.00",
+            "mining_classification_required_total": "0.00"
+          }
+        },
+        "holdings": {
+          "A": {
+            "BTC": {
+              "quantity": "1",
+              "cost": "15000.00"
+            }
+          },
+          "B": {
+            "BTC": {
+              "quantity": "0.5",
+              "cost": "19000.00"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "de-18-own-transfer-keeps-dates-fee-is-disposal",
+      "title": "Own-wallet transfer carries lots with their dates; the network fee units are a disposal at market value",
+      "rules": [
+        "DE-TRANSFER",
+        "DE-FEE-TRANSFER",
+        "DE-POOL-WALLET"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "wallet",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2024-01-10T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "40000.00"
+        },
+        {
+          "id": "t1",
+          "time": "2024-03-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "transfer",
+          "asset": "BTC",
+          "quantity": "0.5",
+          "to_wallet": "B",
+          "fee_quantity": "0.0001",
+          "fee_fiat_value": "5.80"
+        },
+        {
+          "id": "s1",
+          "time": "2024-05-01T10:00:00+02:00",
+          "wallet": "B",
+          "type": "sell",
+          "asset": "BTC",
+          "quantity": "0.5",
+          "fiat": "31000.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "t1:fee",
+            "kind": "fee",
+            "asset": "BTC",
+            "wallet": "A",
+            "date": "2024-03-01",
+            "fragments": [
+              {
+                "lot": "b1",
+                "acquired": "2024-01-10",
+                "quantity": "0.0001",
+                "cost": "4.00",
+                "proceeds": "5.80",
+                "expenses": "0.00",
+                "gain": "1.80",
+                "taxable": true
+              }
+            ]
+          },
+          {
+            "event": "s1",
+            "kind": "sell",
+            "asset": "BTC",
+            "wallet": "B",
+            "date": "2024-05-01",
+            "fragments": [
+              {
+                "lot": "b1",
+                "acquired": "2024-01-10",
+                "quantity": "0.5",
+                "cost": "20000.00",
+                "proceeds": "31000.00",
+                "expenses": "0.00",
+                "gain": "11000.00",
+                "taxable": true
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "years": {
+          "2024": {
+            "p23_taxable_proceeds": "31005.80",
+            "p23_taxable_cost": "20004.00",
+            "p23_taxable_expenses": "0.00",
+            "p23_net_gain": "11001.80",
+            "p23_freigrenze": "1000.00",
+            "p23_result": "taxable",
+            "p23_amount": "11001.80",
+            "exempt_gain_outside_period": "0.00",
+            "p22_3_total": "0.00",
+            "p22_3_result": "none",
+            "p22_3_amount": "0.00",
+            "mining_classification_required_total": "0.00"
+          }
+        },
+        "holdings": {
+          "A": {
+            "BTC": {
+              "quantity": "0.4999",
+              "cost": "19996.00"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "de-19-average-method",
+      "title": "Rn. 61 main rule: FIFO decides the holding period, the wallet's average cost the value",
+      "rules": [
+        "DE-METHOD-AVG",
+        "DE-HOLD-1Y"
+      ],
+      "policy": {
+        "method": "average",
+        "pool_scope": "wallet",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2023-01-10T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "0.5",
+          "fiat": "8000.00"
+        },
+        {
+          "id": "b2",
+          "time": "2024-02-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "0.5",
+          "fiat": "20000.00"
+        },
+        {
+          "id": "s1",
+          "time": "2024-06-01T10:00:00+02:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "BTC",
+          "quantity": "0.6",
+          "fiat": "36000.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "s1",
+            "kind": "sell",
+            "asset": "BTC",
+            "wallet": "A",
+            "date": "2024-06-01",
+            "fragments": [
+              {
+                "lot": "b1",
+                "acquired": "2023-01-10",
+                "quantity": "0.5",
+                "cost": "14000.00",
+                "proceeds": "30000.00",
+                "expenses": "0.00",
+                "gain": "16000.00",
+                "taxable": false
+              },
+              {
+                "lot": "b2",
+                "acquired": "2024-02-01",
+                "quantity": "0.1",
+                "cost": "2800.00",
+                "proceeds": "6000.00",
+                "expenses": "0.00",
+                "gain": "3200.00",
+                "taxable": true
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "years": {
+          "2024": {
+            "p23_taxable_proceeds": "6000.00",
+            "p23_taxable_cost": "2800.00",
+            "p23_taxable_expenses": "0.00",
+            "p23_net_gain": "3200.00",
+            "p23_freigrenze": "1000.00",
+            "p23_result": "taxable",
+            "p23_amount": "3200.00",
+            "exempt_gain_outside_period": "16000.00",
+            "p22_3_total": "0.00",
+            "p22_3_result": "none",
+            "p22_3_amount": "0.00",
+            "mining_classification_required_total": "0.00"
+          }
+        },
+        "holdings": {
+          "A": {
+            "BTC": {
+              "quantity": "0.4",
+              "cost": "11200.00"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "de-20-spend-agreed-price",
+      "title": "Paying for goods: proceeds are the agreed EUR price (Rn. 60)",
+      "rules": [
+        "DE-EVENT-SPEND"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "wallet",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2024-01-10T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "0.1",
+          "fiat": "4000.00"
+        },
+        {
+          "id": "p1",
+          "time": "2024-03-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "spend",
+          "asset": "BTC",
+          "quantity": "0.01",
+          "fiat": "650.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "p1",
+            "kind": "spend",
+            "asset": "BTC",
+            "wallet": "A",
+            "date": "2024-03-01",
+            "fragments": [
+              {
+                "lot": "b1",
+                "acquired": "2024-01-10",
+                "quantity": "0.01",
+                "cost": "400.00",
+                "proceeds": "650.00",
+                "expenses": "0.00",
+                "gain": "250.00",
+                "taxable": true
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "years": {
+          "2024": {
+            "p23_taxable_proceeds": "650.00",
+            "p23_taxable_cost": "400.00",
+            "p23_taxable_expenses": "0.00",
+            "p23_net_gain": "250.00",
+            "p23_freigrenze": "1000.00",
+            "p23_result": "exempt_freigrenze",
+            "p23_amount": "0.00",
+            "exempt_gain_outside_period": "0.00",
+            "p22_3_total": "0.00",
+            "p22_3_result": "none",
+            "p22_3_amount": "0.00",
+            "mining_classification_required_total": "0.00"
+          }
+        },
+        "holdings": {
+          "A": {
+            "BTC": {
+              "quantity": "0.09",
+              "cost": "3600.00"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "de-21-network-fee-on-sale",
+      "title": "Network fee paid in BTC: the fee units are a disposal of their own (taken first), and their value is Werbungskosten split over the sale",
+      "rules": [
+        "DE-FEE-NETWORK",
+        "DE-FEE-SPLIT",
+        "DE-HOLD-1Y"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "wallet",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2023-01-10T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "15000.00"
+        },
+        {
+          "id": "b2",
+          "time": "2024-02-01T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "0.5",
+          "fiat": "20000.00"
+        },
+        {
+          "id": "s1",
+          "time": "2024-06-01T10:00:00+02:00",
+          "wallet": "A",
+          "type": "sell",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "60000.00",
+          "fee_quantity": "0.0002",
+          "fee_fiat_value": "12.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "s1:fee",
+            "kind": "fee",
+            "asset": "BTC",
+            "wallet": "A",
+            "date": "2024-06-01",
+            "fragments": [
+              {
+                "lot": "b1",
+                "acquired": "2023-01-10",
+                "quantity": "0.0002",
+                "cost": "3.00",
+                "proceeds": "12.00",
+                "expenses": "0.00",
+                "gain": "9.00",
+                "taxable": false
+              }
+            ]
+          },
+          {
+            "event": "s1",
+            "kind": "sell",
+            "asset": "BTC",
+            "wallet": "A",
+            "date": "2024-06-01",
+            "fragments": [
+              {
+                "lot": "b1",
+                "acquired": "2023-01-10",
+                "quantity": "0.9998",
+                "cost": "14997.00",
+                "proceeds": "59988.00",
+                "expenses": "12.00",
+                "gain": "44979.00",
+                "taxable": false
+              },
+              {
+                "lot": "b2",
+                "acquired": "2024-02-01",
+                "quantity": "0.0002",
+                "cost": "8.00",
+                "proceeds": "12.00",
+                "expenses": "0.00",
+                "gain": "4.00",
+                "taxable": true
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "years": {
+          "2024": {
+            "p23_taxable_proceeds": "12.00",
+            "p23_taxable_cost": "8.00",
+            "p23_taxable_expenses": "0.00",
+            "p23_net_gain": "4.00",
+            "p23_freigrenze": "1000.00",
+            "p23_result": "exempt_freigrenze",
+            "p23_amount": "0.00",
+            "exempt_gain_outside_period": "44988.00",
+            "p22_3_total": "0.00",
+            "p22_3_result": "none",
+            "p22_3_amount": "0.00",
+            "mining_classification_required_total": "0.00"
+          }
+        },
+        "holdings": {
+          "A": {
+            "BTC": {
+              "quantity": "0.4998",
+              "cost": "19992.00"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "de-22-mining-needs-classification",
+      "title": "Mining income is reported apart from §22 Nr. 3 until classified (Rn. 34-45: commercial or not)",
+      "rules": [
+        "DE-INC-MINING"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "wallet",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "i1",
+          "time": "2024-05-01T10:00:00+02:00",
+          "wallet": "A",
+          "type": "income",
+          "subkind": "mining",
+          "asset": "BTC",
+          "quantity": "0.01",
+          "fiat": "600.00"
+        }
+      ],
+      "expected": {
+        "disposals": [],
+        "income": [
+          {
+            "event": "i1",
+            "date": "2024-05-01",
+            "subkind": "mining",
+            "quantity": "0.01",
+            "value": "600.00",
+            "section": "mining_classification_required"
+          }
+        ],
+        "years": {
+          "2024": {
+            "p23_taxable_proceeds": "0.00",
+            "p23_taxable_cost": "0.00",
+            "p23_taxable_expenses": "0.00",
+            "p23_net_gain": "0.00",
+            "p23_freigrenze": "1000.00",
+            "p23_result": "none",
+            "p23_amount": "0.00",
+            "exempt_gain_outside_period": "0.00",
+            "p22_3_total": "0.00",
+            "p22_3_result": "none",
+            "p22_3_amount": "0.00",
+            "mining_classification_required_total": "600.00"
+          }
+        },
+        "holdings": {
+          "A": {
+            "BTC": {
+              "quantity": "0.01",
+              "cost": "600.00"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "de-23-airdrop-unclassified-refused",
+      "title": "An airdrop without a reviewed classification fails closed",
+      "rules": [
+        "DE-INC-AIRDROP",
+        "DE-FAILCLOSED"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "wallet",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2024-01-10T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "0.1",
+          "fiat": "4000.00"
+        },
+        {
+          "id": "a1",
+          "time": "2024-02-10T10:00:00+01:00",
+          "wallet": "A",
+          "type": "airdrop",
+          "subkind": "airdrop_unclassified",
+          "asset": "XYZ",
+          "quantity": "100",
+          "fiat": "50.00"
+        }
+      ],
+      "expected": {
+        "refusal": {
+          "code": "airdrop_classification_required",
+          "event": "a1",
+          "reason": "airdrop without a reviewed Leistung/gift classification"
+        }
+      }
+    },
+    {
+      "id": "de-24-rail-change-needs-policy",
+      "title": "A BTC to LBTC peg fails closed until the book records an explicit decision",
+      "rules": [
+        "DE-RAIL",
+        "DE-FAILCLOSED"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "wallet",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2024-01-10T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "0.1",
+          "fiat": "4000.00"
+        },
+        {
+          "id": "g1",
+          "time": "2024-02-10T10:00:00+01:00",
+          "wallet": "A",
+          "type": "peg",
+          "asset": "BTC",
+          "quantity": "0.05",
+          "in_asset": "LBTC",
+          "in_quantity": "0.04999"
+        }
+      ],
+      "expected": {
+        "refusal": {
+          "code": "rail_policy_required",
+          "event": "g1",
+          "reason": "BTC↔LBTC change needs an explicit book decision"
+        }
+      }
+    },
+    {
+      "id": "de-25-hardfork-refused",
+      "title": "A hard fork needs a cost split by market values (Rn. 67), which is not modelled: fail closed",
+      "rules": [
+        "DE-HARDFORK",
+        "DE-FAILCLOSED"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "wallet",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "b1",
+          "time": "2017-01-10T10:00:00+01:00",
+          "wallet": "A",
+          "type": "buy",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "900.00"
+        },
+        {
+          "id": "h1",
+          "time": "2017-08-01T15:16:00+02:00",
+          "wallet": "A",
+          "type": "hardfork",
+          "asset": "BCH",
+          "quantity": "1"
+        }
+      ],
+      "expected": {
+        "refusal": {
+          "code": "hardfork_cost_split_unsupported",
+          "event": "h1",
+          "reason": "Rn. 67: cost split by market-value ratio is not modelled"
+        }
+      }
+    },
+    {
+      "id": "de-26-gift-without-donor-data-refused",
+      "title": "Received gift without the donor's acquisition data fails closed (§23 Abs. 1 Satz 3)",
+      "rules": [
+        "DE-GIFT-IN",
+        "DE-FAILCLOSED"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "wallet",
+        "rail_policy": null
+      },
+      "events": [
+        {
+          "id": "g1",
+          "time": "2024-02-10T10:00:00+01:00",
+          "wallet": "A",
+          "type": "gift_in",
+          "asset": "BTC",
+          "quantity": "0.1",
+          "fiat": "4200.00"
+        }
+      ],
+      "expected": {
+        "refusal": {
+          "code": "gift_predecessor_data_required",
+          "event": "g1",
+          "reason": "§23 Abs. 1 Satz 3: the donor's acquisition date and cost are required"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "body": {
+    "code": "paymentmethod-not-found",
+    "message": "The payment method is not found"
+  },
+  "request": {
+    "key": "modify_settings",
+    "method": "GET",
+    "path": "/api/v1/stores/{storeId}/payment-methods/BTC-ARK?includeConfig=true",
+    "permissions": [
+      "btcpay.store.canmodifystoresettings"
+    ]
+  },
+  "status": 404
+}

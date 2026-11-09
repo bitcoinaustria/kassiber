@@ -1,0 +1,751 @@
+{
+  "id_stability_after_restart": {
+    "amount_or_fee_changed": [],
+    "comparable": true,
+    "missing_after": [],
+    "new_after": [],
+    "rows_after": 23,
+    "rows_before": 23,
+    "same_order": true
+  },
+  "id_stability_second_read": {
+    "amount_or_fee_changed": [],
+    "comparable": true,
+    "missing_after": [],
+    "new_after": [],
+    "rows_after": 23,
+    "rows_before": 23,
+    "same_order": true
+  },
+  "invoice_payment_matches": [
+    {
+      "invoice": "E5mxtedvENirbwt55k2V1m",
+      "invoice_label_ref_matches": true,
+      "matched_kind": "lightning-receive",
+      "paymentMethodId": "BTC-LN",
+      "payment_id_shape": "<hex64>",
+      "payment_value_sat": 120000,
+      "row_amount_sat": 119660,
+      "row_fee_sat": 340
+    },
+    {
+      "invoice": "4kA2cCQDoB29RhTSKEMMK1",
+      "invoice_label_ref_matches": true,
+      "matched_kind": "lightning-receive",
+      "paymentMethodId": "BTC-LN",
+      "payment_id_shape": "<hex64>",
+      "payment_value_sat": 150000,
+      "row_amount_sat": 149600,
+      "row_fee_sat": 400
+    },
+    {
+      "invoice": "6zTrmwy5tNVt5gzCBmCXvy",
+      "invoice_label_ref_matches": true,
+      "matched_kind": "ark-receive",
+      "paymentMethodId": "BTC-ARK",
+      "payment_id_shape": "<hex64>-0",
+      "payment_value_sat": 200000,
+      "row_amount_sat": 200000,
+      "row_fee_sat": 0
+    }
+  ],
+  "kinds": {
+    "ark-receive": 2,
+    "ark-send": 1,
+    "board": 1,
+    "exit": 1,
+    "exit-claim": 1,
+    "exit-fee": 2,
+    "lightning-receive": 3,
+    "lightning-send": 4,
+    "offboard": 2,
+    "onchain-receive": 2,
+    "onchain-send": 2,
+    "refresh": 1,
+    "send-onchain": 1
+  },
+  "network_hints": [
+    {
+      "file": "payment-methods.include-config.modify-key",
+      "hint": "field connectionString",
+      "path": "$[0].config.connectionString",
+      "sample": "type=bark;capability=<redacted>"
+    },
+    {
+      "file": "payment-methods.include-config.modify-key",
+      "hint": "connection string",
+      "path": "$[0].config.connectionString",
+      "sample": "type=bark;capability=<redacted>"
+    },
+    {
+      "file": "payment-method.BTC-LN.include-config.modify-key",
+      "hint": "field connectionString",
+      "path": "$.config.connectionString",
+      "sample": "type=bark;capability=<redacted>"
+    },
+    {
+      "file": "payment-method.BTC-LN.include-config.modify-key",
+      "hint": "connection string",
+      "path": "$.config.connectionString",
+      "sample": "type=bark;capability=<redacted>"
+    },
+    {
+      "file": "invoices",
+      "hint": "bolt11 regtest (lnbcrt)",
+      "path": "$[0].paymentMethods[0].destination",
+      "sample": "lnbcrt1200u1p40ptxesp5uc3rhhwgx3y5x0hnqg"
+    },
+    {
+      "file": "invoices",
+      "hint": "bolt11 regtest (lnbcrt)",
+      "path": "$[0].paymentMethods[0].paymentLink",
+      "sample": "lightning:lnbcrt1200u1p40ptxesp5uc3rhhwg"
+    },
+    {
+      "file": "invoices",
+      "hint": "bolt11 regtest (lnbcrt)",
+      "path": "$[0].paymentMethods[0].payments[0].destination",
+      "sample": "lnbcrt1200u1p40ptxesp5uc3rhhwgx3y5x0hnqg"
+    },
+    {
+      "file": "invoices",
+      "hint": "bolt11 regtest (lnbcrt)",
+      "path": "$[1].paymentMethods[0].destination",
+      "sample": "lnbcrt1500u1p40ptx4sp5a8p3jf9m06cujmxlqm"
+    },
+    {
+      "file": "invoices",
+      "hint": "bolt11 regtest (lnbcrt)",
+      "path": "$[1].paymentMethods[0].paymentLink",
+      "sample": "lightning:lnbcrt1500u1p40ptx4sp5a8p3jf9m"
+    },
+    {
+      "file": "invoices",
+      "hint": "bolt11 regtest (lnbcrt)",
+      "path": "$[1].paymentMethods[0].payments[0].destination",
+      "sample": "lnbcrt1500u1p40ptx4sp5a8p3jf9m06cujmxlqm"
+    },
+    {
+      "file": "invoices",
+      "hint": "ark address (testnet HRP tark)",
+      "path": "$[1].paymentMethods[1].destination",
+      "sample": "tark1ppms64dpzqqpzxyacpq3u3v43s3dwm3nsej"
+    },
+    {
+      "file": "invoices",
+      "hint": "BIP21/321 link",
+      "path": "$[1].paymentMethods[1].paymentLink",
+      "sample": "bitcoin:?amount=0.0&lightning=lnbcrt1500"
+    },
+    {
+      "file": "invoices",
+      "hint": "ark address (testnet HRP tark)",
+      "path": "$[1].paymentMethods[1].additionalData.arkAddress",
+      "sample": "tark1ppms64dpzqqpzxyacpq3u3v43s3dwm3nsej"
+    },
+    {
+      "file": "invoices",
+      "hint": "bolt11 regtest (lnbcrt)",
+      "path": "$[2].paymentMethods[0].destination",
+      "sample": "lnbcrt2m1p40pt9asp56sw36qtjye3lq7myf5tpy"
+    },
+    {
+      "file": "invoices",
+      "hint": "bolt11 regtest (lnbcrt)",
+      "path": "$[2].paymentMethods[0].paymentLink",
+      "sample": "lightning:lnbcrt2m1p40pt9asp56sw36qtjye3"
+    },
+    {
+      "file": "invoices",
+      "hint": "ark address (testnet HRP tark)",
+      "path": "$[2].paymentMethods[1].destination",
+      "sample": "tark1ppms64dpzqqpkm0k0vlkvaevuyye9jywgaj"
+    },
+    {
+      "file": "invoices",
+      "hint": "BIP21/321 link",
+      "path": "$[2].paymentMethods[1].paymentLink",
+      "sample": "bitcoin:?amount=0.0&lightning=lnbcrt2m1p"
+    },
+    {
+      "file": "invoices",
+      "hint": "ark address (testnet HRP tark)",
+      "path": "$[2].paymentMethods[1].payments[0].destination",
+      "sample": "tark1ppms64dpzqqpkm0k0vlkvaevuyye9jywgaj"
+    },
+    {
+      "file": "invoices",
+      "hint": "ark address (testnet HRP tark)",
+      "path": "$[2].paymentMethods[1].additionalData.arkAddress",
+      "sample": "tark1ppms64dpzqqpkm0k0vlkvaevuyye9jywgaj"
+    },
+    {
+      "file": "invoice.E5mxtedvENirbwt55k2V1m.payment-methods.accounted",
+      "hint": "bolt11 regtest (lnbcrt)",
+      "path": "$[0].destination",
+      "sample": "lnbcrt1200u1p40ptxesp5uc3rhhwgx3y5x0hnqg"
+    },
+    {
+      "file": "invoice.E5mxtedvENirbwt55k2V1m.payment-methods.accounted",
+      "hint": "bolt11 regtest (lnbcrt)",
+      "path": "$[0].paymentLink",
+      "sample": "lightning:lnbcrt1200u1p40ptxesp5uc3rhhwg"
+    },
+    {
+      "file": "invoice.E5mxtedvENirbwt55k2V1m.payment-methods.accounted",
+      "hint": "bolt11 regtest (lnbcrt)",
+      "path": "$[0].payments[0].destination",
+      "sample": "lnbcrt1200u1p40ptxesp5uc3rhhwgx3y5x0hnqg"
+    },
+    {
+      "file": "invoice.4kA2cCQDoB29RhTSKEMMK1.payment-methods.accounted",
+      "hint": "bolt11 regtest (lnbcrt)",
+      "path": "$[0].destination",
+      "sample": "lnbcrt1500u1p40ptx4sp5a8p3jf9m06cujmxlqm"
+    },
+    {
+      "file": "invoice.4kA2cCQDoB29RhTSKEMMK1.payment-methods.accounted",
+      "hint": "bolt11 regtest (lnbcrt)",
+      "path": "$[0].paymentLink",
+      "sample": "lightning:lnbcrt1500u1p40ptx4sp5a8p3jf9m"
+    },
+    {
+      "file": "invoice.4kA2cCQDoB29RhTSKEMMK1.payment-methods.accounted",
+      "hint": "bolt11 regtest (lnbcrt)",
+      "path": "$[0].payments[0].destination",
+      "sample": "lnbcrt1500u1p40ptx4sp5a8p3jf9m06cujmxlqm"
+    },
+    {
+      "file": "invoice.4kA2cCQDoB29RhTSKEMMK1.payment-methods.accounted",
+      "hint": "ark address (testnet HRP tark)",
+      "path": "$[1].destination",
+      "sample": "tark1ppms64dpzqqpzxyacpq3u3v43s3dwm3nsej"
+    },
+    {
+      "file": "invoice.4kA2cCQDoB29RhTSKEMMK1.payment-methods.accounted",
+      "hint": "BIP21/321 link",
+      "path": "$[1].paymentLink",
+      "sample": "bitcoin:?amount=0.0&lightning=lnbcrt1500"
+    },
+    {
+      "file": "invoice.4kA2cCQDoB29RhTSKEMMK1.payment-methods.accounted",
+      "hint": "ark address (testnet HRP tark)",
+      "path": "$[1].additionalData.arkAddress",
+      "sample": "tark1ppms64dpzqqpzxyacpq3u3v43s3dwm3nsej"
+    },
+    {
+      "file": "invoice.6zTrmwy5tNVt5gzCBmCXvy.payment-methods.accounted",
+      "hint": "bolt11 regtest (lnbcrt)",
+      "path": "$[0].destination",
+      "sample": "lnbcrt2m1p40pt9asp56sw36qtjye3lq7myf5tpy"
+    },
+    {
+      "file": "invoice.6zTrmwy5tNVt5gzCBmCXvy.payment-methods.accounted",
+      "hint": "bolt11 regtest (lnbcrt)",
+      "path": "$[0].paymentLink",
+      "sample": "lightning:lnbcrt2m1p40pt9asp56sw36qtjye3"
+    },
+    {
+      "file": "invoice.6zTrmwy5tNVt5gzCBmCXvy.payment-methods.accounted",
+      "hint": "ark address (testnet HRP tark)",
+      "path": "$[1].destination",
+      "sample": "tark1ppms64dpzqqpkm0k0vlkvaevuyye9jywgaj"
+    },
+    {
+      "file": "invoice.6zTrmwy5tNVt5gzCBmCXvy.payment-methods.accounted",
+      "hint": "BIP21/321 link",
+      "path": "$[1].paymentLink",
+      "sample": "bitcoin:?amount=0.0&lightning=lnbcrt2m1p"
+    },
+    {
+      "file": "invoice.6zTrmwy5tNVt5gzCBmCXvy.payment-methods.accounted",
+      "hint": "ark address (testnet HRP tark)",
+      "path": "$[1].payments[0].destination",
+      "sample": "tark1ppms64dpzqqpkm0k0vlkvaevuyye9jywgaj"
+    },
+    {
+      "file": "invoice.6zTrmwy5tNVt5gzCBmCXvy.payment-methods.accounted",
+      "hint": "ark address (testnet HRP tark)",
+      "path": "$[1].additionalData.arkAddress",
+      "sample": "tark1ppms64dpzqqpkm0k0vlkvaevuyye9jywgaj"
+    },
+    {
+      "file": "payouts",
+      "hint": "bolt11 regtest (lnbcrt)",
+      "path": "$[0].destination",
+      "sample": "lnbcrt120u1p40pt8dsp5a3203kzp7qxxyx6w5v2"
+    },
+    {
+      "file": "payouts",
+      "hint": "bolt11 regtest (lnbcrt)",
+      "path": "$[1].destination",
+      "sample": "lnbcrt100u1p40pt8nsp5j5yp7cclalwhxhjfnan"
+    },
+    {
+      "file": "lightning.invoices",
+      "hint": "bolt11 regtest (lnbcrt)",
+      "path": "$[0].BOLT11",
+      "sample": "lnbcrt2m1p40pt9asp56sw36qtjye3lq7myf5tpy"
+    },
+    {
+      "file": "lightning.invoices",
+      "hint": "bolt11 regtest (lnbcrt)",
+      "path": "$[1].BOLT11",
+      "sample": "lnbcrt1500u1p40ptx4sp5a8p3jf9m06cujmxlqm"
+    },
+    {
+      "file": "lightning.invoices",
+      "hint": "bolt11 regtest (lnbcrt)",
+      "path": "$[2].BOLT11",
+      "sample": "lnbcrt1200u1p40ptxesp5uc3rhhwgx3y5x0hnqg"
+    },
+    {
+      "file": "lightning.invoices",
+      "hint": "bolt11 regtest (lnbcrt)",
+      "path": "$[3].BOLT11",
+      "sample": "lnbcrt300u1p40ptx7sp5gxvllhzut6tnje2wfeu"
+    },
+    {
+      "file": "lightning.payments",
+      "hint": "bolt11 regtest (lnbcrt)",
+      "path": "$[0].BOLT11",
+      "sample": "lnbcrt250u1p40pt8xsp5lxa4eknuqg4355vhgle"
+    },
+    {
+      "file": "lightning.payments",
+      "hint": "bolt11 regtest (lnbcrt)",
+      "path": "$[1].BOLT11",
+      "sample": "lnbcrt150u1p40pt82sp5p2vmwchkhhqlfpdg3ls"
+    },
+    {
+      "file": "lightning.payments",
+      "hint": "bolt11 regtest (lnbcrt)",
+      "path": "$[2].BOLT11",
+      "sample": "lnbcrt120u1p40pt8dsp5a3203kzp7qxxyx6w5v2"
+    },
+    {
+      "file": "lightning.payments",
+      "hint": "bolt11 regtest (lnbcrt)",
+      "path": "$[3].BOLT11",
+      "sample": "lnbcrt100u1p40pt8nsp5j5yp7cclalwhxhjfnan"
+    }
+  ],
+  "plugin": "0.13.0",
+  "rows_by_kind": {
+    "ark-receive": [
+      {
+        "amount_sat": 50000,
+        "confirmations": 1,
+        "fee_sat": 0,
+        "has_block": false,
+        "has_outpoint": true,
+        "has_paymentHash": false,
+        "has_transactionHash": true,
+        "id_shape": "3-<n>:7c8f8c34c<n>f98182ddf185ef9a96ee9fee37f2f7e1a1f036bcb421ca981:0",
+        "labels": [],
+        "movementId": 3,
+        "status": "Confirmed"
+      },
+      {
+        "amount_sat": 200000,
+        "confirmations": 1,
+        "fee_sat": 0,
+        "has_block": false,
+        "has_outpoint": true,
+        "has_paymentHash": false,
+        "has_transactionHash": true,
+        "id_shape": "2-<n>:14ff40b88bc<n>af67548c03b74c73d<n>e4a99feb98816bc006:0",
+        "labels": [
+          "invoice"
+        ],
+        "movementId": 2,
+        "status": "Confirmed"
+      }
+    ],
+    "ark-send": [
+      {
+        "amount_sat": -40000,
+        "confirmations": 1,
+        "fee_sat": 0,
+        "has_block": false,
+        "has_outpoint": false,
+        "has_paymentHash": false,
+        "has_transactionHash": false,
+        "id_shape": "7-<n>",
+        "labels": [],
+        "movementId": 7,
+        "status": "Confirmed"
+      }
+    ],
+    "board": [
+      {
+        "amount_sat": -1313,
+        "confirmations": 168,
+        "fee_sat": 1313,
+        "has_block": true,
+        "has_outpoint": false,
+        "has_paymentHash": false,
+        "has_transactionHash": true,
+        "id_shape": "1-<n>",
+        "labels": [],
+        "movementId": 1,
+        "status": "Confirmed"
+      }
+    ],
+    "exit": [
+      {
+        "amount_sat": 0,
+        "confirmations": 0,
+        "fee_sat": 0,
+        "has_block": false,
+        "has_outpoint": false,
+        "has_paymentHash": false,
+        "has_transactionHash": true,
+        "id_shape": "16-<n>",
+        "labels": [],
+        "movementId": 16,
+        "status": "Unconfirmed"
+      }
+    ],
+    "exit-claim": [
+      {
+        "amount_sat": -130,
+        "confirmations": 3,
+        "fee_sat": 130,
+        "has_block": true,
+        "has_outpoint": false,
+        "has_paymentHash": false,
+        "has_transactionHash": true,
+        "id_shape": "16-<n>:842ac72f2fe110cca52bba<n>e399b8789dc28c89202d635c6bade65184f",
+        "labels": [],
+        "movementId": 16,
+        "status": "Confirmed"
+      }
+    ],
+    "exit-fee": [
+      {
+        "amount_sat": -317,
+        "confirmations": 150,
+        "fee_sat": 317,
+        "has_block": true,
+        "has_outpoint": false,
+        "has_paymentHash": false,
+        "has_transactionHash": true,
+        "id_shape": "16-<n>:d<n>c<n>fdaaa87bce36423dda876bdf25e668a98244d0f77e4c24a0",
+        "labels": [],
+        "movementId": 16,
+        "status": "Confirmed"
+      },
+      {
+        "amount_sat": -320,
+        "confirmations": 156,
+        "fee_sat": 320,
+        "has_block": true,
+        "has_outpoint": false,
+        "has_paymentHash": false,
+        "has_transactionHash": true,
+        "id_shape": "16-<n>:e5249c5a23ea7c5e16569b<n>e<n>c0c64f57938d29a794cc7a3be5",
+        "labels": [],
+        "movementId": 16,
+        "status": "Confirmed"
+      }
+    ],
+    "lightning-receive": [
+      {
+        "amount_sat": 29840,
+        "confirmations": 1,
+        "fee_sat": 160,
+        "has_block": false,
+        "has_outpoint": false,
+        "has_paymentHash": true,
+        "has_transactionHash": false,
+        "id_shape": "6-<n>",
+        "labels": [],
+        "movementId": 6,
+        "status": "Confirmed"
+      },
+      {
+        "amount_sat": 119660,
+        "confirmations": 1,
+        "fee_sat": 340,
+        "has_block": false,
+        "has_outpoint": false,
+        "has_paymentHash": true,
+        "has_transactionHash": false,
+        "id_shape": "5-<n>",
+        "labels": [
+          "invoice"
+        ],
+        "movementId": 5,
+        "status": "Confirmed"
+      },
+      {
+        "amount_sat": 149600,
+        "confirmations": 1,
+        "fee_sat": 400,
+        "has_block": false,
+        "has_outpoint": false,
+        "has_paymentHash": true,
+        "has_transactionHash": false,
+        "id_shape": "4-<n>",
+        "labels": [
+          "invoice"
+        ],
+        "movementId": 4,
+        "status": "Confirmed"
+      }
+    ],
+    "lightning-send": [
+      {
+        "amount_sat": -10115,
+        "confirmations": 1,
+        "fee_sat": 115,
+        "has_block": false,
+        "has_outpoint": false,
+        "has_paymentHash": true,
+        "has_transactionHash": false,
+        "id_shape": "11-<n>",
+        "labels": [],
+        "movementId": 11,
+        "status": "Confirmed"
+      },
+      {
+        "amount_sat": -12123,
+        "confirmations": 1,
+        "fee_sat": 123,
+        "has_block": false,
+        "has_outpoint": false,
+        "has_paymentHash": true,
+        "has_transactionHash": false,
+        "id_shape": "10-<n>",
+        "labels": [],
+        "movementId": 10,
+        "status": "Confirmed"
+      },
+      {
+        "amount_sat": -15135,
+        "confirmations": 1,
+        "fee_sat": 135,
+        "has_block": false,
+        "has_outpoint": false,
+        "has_paymentHash": true,
+        "has_transactionHash": false,
+        "id_shape": "9-<n>",
+        "labels": [],
+        "movementId": 9,
+        "status": "Confirmed"
+      },
+      {
+        "amount_sat": -25175,
+        "confirmations": 1,
+        "fee_sat": 175,
+        "has_block": false,
+        "has_outpoint": false,
+        "has_paymentHash": true,
+        "has_transactionHash": false,
+        "id_shape": "8-<n>",
+        "labels": [],
+        "movementId": 8,
+        "status": "Confirmed"
+      }
+    ],
+    "offboard": [
+      {
+        "amount_sat": -2888,
+        "confirmations": 160,
+        "fee_sat": 2888,
+        "has_block": true,
+        "has_outpoint": false,
+        "has_paymentHash": false,
+        "has_transactionHash": true,
+        "id_shape": "15-<n>",
+        "labels": [],
+        "movementId": 15,
+        "status": "Confirmed"
+      },
+      {
+        "amount_sat": -17155,
+        "confirmations": 1,
+        "fee_sat": 2768,
+        "has_block": false,
+        "has_outpoint": false,
+        "has_paymentHash": false,
+        "has_transactionHash": true,
+        "id_shape": "14-<n>",
+        "labels": [],
+        "movementId": 14,
+        "status": "Confirmed"
+      }
+    ],
+    "onchain-receive": [
+      {
+        "amount_sat": 500000,
+        "confirmations": 169,
+        "fee_sat": null,
+        "has_block": true,
+        "has_outpoint": false,
+        "has_paymentHash": false,
+        "has_transactionHash": true,
+        "id_shape": "tx:<txid>",
+        "labels": [],
+        "movementId": null,
+        "status": "Confirmed"
+      },
+      {
+        "amount_sat": 2000000,
+        "confirmations": 169,
+        "fee_sat": null,
+        "has_block": true,
+        "has_outpoint": false,
+        "has_paymentHash": false,
+        "has_transactionHash": true,
+        "id_shape": "tx:<n>a538ce759d53e87c52f4251b<n>bc47bc4f848b64e15827",
+        "labels": [],
+        "movementId": null,
+        "status": "Confirmed"
+      }
+    ],
+    "onchain-send": [
+      {
+        "amount_sat": -155,
+        "confirmations": 157,
+        "fee_sat": 155,
+        "has_block": true,
+        "has_outpoint": false,
+        "has_paymentHash": false,
+        "has_transactionHash": true,
+        "id_shape": "tx:cb57fe9f78b8e<n>dadcc1da566fc051df0fbe1485de6db1ef3bf3f8928c4",
+        "labels": [],
+        "movementId": null,
+        "status": "Confirmed"
+      },
+      {
+        "amount_sat": -20201,
+        "confirmations": 158,
+        "fee_sat": 201,
+        "has_block": true,
+        "has_outpoint": false,
+        "has_paymentHash": false,
+        "has_transactionHash": true,
+        "id_shape": "tx:2fbca4ba3bd7cde03bd8c2d67fbe1e51fb2b722c282be<n>bf1e46f6e0a66",
+        "labels": [],
+        "movementId": null,
+        "status": "Confirmed"
+      }
+    ],
+    "refresh": [
+      {
+        "amount_sat": -868,
+        "confirmations": 1,
+        "fee_sat": 868,
+        "has_block": false,
+        "has_outpoint": false,
+        "has_paymentHash": false,
+        "has_transactionHash": true,
+        "id_shape": "12-<n>",
+        "labels": [],
+        "movementId": 12,
+        "status": "Confirmed"
+      }
+    ],
+    "send-onchain": [
+      {
+        "amount_sat": -32802,
+        "confirmations": 1,
+        "fee_sat": 2802,
+        "has_block": false,
+        "has_outpoint": false,
+        "has_paymentHash": false,
+        "has_transactionHash": true,
+        "id_shape": "13-<n>",
+        "labels": [
+          "kassiber-send-onchain"
+        ],
+        "movementId": 13,
+        "status": "Confirmed"
+      }
+    ]
+  },
+  "scenario": [
+    {
+      "outcome": "ok",
+      "step": "onchain-receive"
+    },
+    {
+      "outcome": "ok",
+      "step": "board"
+    },
+    {
+      "outcome": "ok",
+      "step": "ark-receive-invoice"
+    },
+    {
+      "outcome": "ok",
+      "step": "ark-receive-plain"
+    },
+    {
+      "outcome": "ok",
+      "step": "lightning-receive-invoice"
+    },
+    {
+      "outcome": "ok",
+      "step": "lightning-receive-ln-only"
+    },
+    {
+      "outcome": "ok",
+      "step": "lightning-receive-plain"
+    },
+    {
+      "outcome": "ok",
+      "step": "ark-send"
+    },
+    {
+      "outcome": "ok",
+      "step": "lightning-send"
+    },
+    {
+      "outcome": "ok",
+      "step": "lightning-api-pay"
+    },
+    {
+      "outcome": "ok",
+      "step": "payout"
+    },
+    {
+      "outcome": "ok",
+      "step": "refund"
+    },
+    {
+      "outcome": "ok",
+      "step": "refresh"
+    },
+    {
+      "outcome": "ok",
+      "step": "send-onchain"
+    },
+    {
+      "outcome": "ok",
+      "step": "offboard-external"
+    },
+    {
+      "outcome": "ok",
+      "step": "offboard-own"
+    },
+    {
+      "outcome": "ok",
+      "step": "onchain-send"
+    },
+    {
+      "outcome": "ok",
+      "step": "onchain-internal"
+    },
+    {
+      "outcome": "ok",
+      "step": "exit"
+    },
+    {
+      "outcome": "ok",
+      "step": "settle"
+    }
+  ]
+}

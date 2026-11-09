@@ -1,0 +1,36 @@
+{
+  "body": {
+    "fullySynched": true,
+    "onion": null,
+    "supportedPaymentMethods": [
+      "BTC-CHAIN",
+      "BTC-LN",
+      "BTC-LNURL",
+      "BARK"
+    ],
+    "syncStatus": [
+      {
+        "available": true,
+        "chainHeight": 117,
+        "nodeInformation": {
+          "blocks": 117,
+          "headers": 117,
+          "verificationProgress": 1.0
+        },
+        "paymentMethodId": "BTC-CHAIN",
+        "syncHeight": 117
+      }
+    ],
+    "version": "2.4.7"
+  },
+  "request": {
+    "key": "read_only",
+    "method": "GET",
+    "path": "/api/v1/server/info",
+    "permissions": [
+      "btcpay.store.canviewstoresettings",
+      "btcpay.store.canviewwallet"
+    ]
+  },
+  "status": 200
+}

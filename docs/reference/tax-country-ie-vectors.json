@@ -1,0 +1,2378 @@
+{
+  "schema": "kassiber.tax-country-vectors/1",
+  "country": "ie",
+  "registry_value": "ie",
+  "spec": "docs/reference/tax-country-ie.md",
+  "status": "preview: not reviewed by a tax professional for this country",
+  "retrieved": "2026-11-07",
+  "currency": "EUR",
+  "timezone": "Europe/Dublin",
+  "tax_year": "calendar year, Europe/Dublin",
+  "conventions": {
+    "amounts": "decimal strings; quantities in asset units (exact multiples of 1e-11, Kassiber's msat); fiat in the country currency",
+    "times": "ISO 8601 with offset; every date rule uses the local date in `timezone`",
+    "expected": "the spec's hand-computed results, which scripts/tax-country-vectors.py check recomputes; `rp2.computed` is RP2's plugin on the same inputs"
+  },
+  "notes": "Quantities are decimal strings in asset units (Kassiber stores msat; every quantity here is an exact multiple of 1e-11). Fiat amounts are EUR decimal strings. Year blocks name the Form CG1 lines (Form 11 has the same CGT panel). `expected` follows the rules of the spec; `rp2.computed` is RP2's IE plugin (FIFO) on the same inputs, written by scripts/tax-country-vectors.py; `rp2.differences` explains every gap.",
+  "vectors": [
+    {
+      "id": "ie-01",
+      "title": "Revenue TDM 02-01-03 example 1 (John): the exemption is limited to the gain",
+      "rules": [
+        "IE-R2",
+        "IE-R6"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "t1",
+          "time": "2023-05-01T10:00:00+01:00",
+          "type": "buy",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "0.1",
+          "fiat": "4500.00"
+        },
+        {
+          "id": "t2",
+          "time": "2024-05-01T10:00:00+01:00",
+          "type": "sell",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "0.1",
+          "fiat": "5000.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "t2",
+            "asset": "BTC",
+            "qty": "0.1",
+            "kind": "sale",
+            "date": "2024-05-01",
+            "period": "initial",
+            "rate": "0.33",
+            "consideration": "5000.00",
+            "allowable_cost": "4500.00",
+            "gain": "500.00",
+            "lots": [
+              {
+                "lot": "t1",
+                "qty": "0.1",
+                "cost": "4500.00"
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "quarantines": [],
+        "flags": [],
+        "years": {
+          "2024": {
+            "line_1k_disposals": 1,
+            "line_1k_consideration": "5000.00",
+            "line_10": "500.00",
+            "line_11": "0.00",
+            "line_14": "500.00",
+            "line_17": "0.00",
+            "line_18": "500.00",
+            "line_19": "0.00",
+            "line_21": "0.00",
+            "line_22": "0.00",
+            "line_23": "0.00",
+            "rate_lines": {
+              "line_24_at_33pct": "0.00"
+            },
+            "tax_total": "0.00",
+            "payment_initial": "0.00",
+            "payment_later": "0.00",
+            "overpaid_initial": "0.00",
+            "case_iv_income": "0.00"
+          }
+        }
+      },
+      "rp2": {
+        "computed": {
+          "status": "ok",
+          "method": "fifo",
+          "gains": [
+            {
+              "event": "t2",
+              "type": "sell",
+              "asset": "BTC",
+              "lot": "t1",
+              "qty": "0.1",
+              "proceeds": "5000.00",
+              "cost_basis": "4500.00",
+              "gain": "500.00",
+              "year": 2024
+            }
+          ],
+          "yearly": [
+            {
+              "year": 2024,
+              "asset": "BTC",
+              "type": "sell",
+              "long_term": false,
+              "proceeds": "5000.00",
+              "cost_basis": "4500.00",
+              "gain": "500.00"
+            }
+          ],
+          "notes": []
+        },
+        "differences": [
+          "Disposal rows identical. RP2 has no annual exemption, rate, payment-period, loss carry-forward or CG1 line logic (its IE report lists the rows only)."
+        ]
+      }
+    },
+    {
+      "id": "ie-02",
+      "title": "Revenue TDM 02-01-03 example 2 (Mary): losses brought forward, then the exemption",
+      "rules": [
+        "IE-R6",
+        "IE-R7",
+        "IE-R5"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global",
+        "losses_brought_forward_opening": "2500.00"
+      },
+      "events": [
+        {
+          "id": "t1",
+          "time": "2023-06-01T10:00:00+01:00",
+          "type": "buy",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "0.3",
+          "fiat": "4500.00"
+        },
+        {
+          "id": "t2",
+          "time": "2024-06-01T10:00:00+01:00",
+          "type": "sell",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "0.3",
+          "fiat": "15000.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "t2",
+            "asset": "BTC",
+            "qty": "0.3",
+            "kind": "sale",
+            "date": "2024-06-01",
+            "period": "initial",
+            "rate": "0.33",
+            "consideration": "15000.00",
+            "allowable_cost": "4500.00",
+            "gain": "10500.00",
+            "lots": [
+              {
+                "lot": "t1",
+                "qty": "0.3",
+                "cost": "4500.00"
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "quarantines": [],
+        "flags": [],
+        "years": {
+          "2024": {
+            "line_1k_disposals": 1,
+            "line_1k_consideration": "15000.00",
+            "line_10": "10500.00",
+            "line_11": "0.00",
+            "line_14": "10500.00",
+            "line_17": "2500.00",
+            "line_18": "1270.00",
+            "line_19": "6730.00",
+            "line_21": "0.00",
+            "line_22": "0.00",
+            "line_23": "0.00",
+            "rate_lines": {
+              "line_24_at_33pct": "6730.00"
+            },
+            "tax_total": "2220.90",
+            "payment_initial": "2220.90",
+            "payment_later": "0.00",
+            "overpaid_initial": "0.00",
+            "case_iv_income": "0.00"
+          }
+        }
+      },
+      "rp2": {
+        "computed": {
+          "status": "ok",
+          "method": "fifo",
+          "gains": [
+            {
+              "event": "t2",
+              "type": "sell",
+              "asset": "BTC",
+              "lot": "t1",
+              "qty": "0.3",
+              "proceeds": "15000.00",
+              "cost_basis": "4500.00",
+              "gain": "10500.00",
+              "year": 2024
+            }
+          ],
+          "yearly": [
+            {
+              "year": 2024,
+              "asset": "BTC",
+              "type": "sell",
+              "long_term": false,
+              "proceeds": "15000.00",
+              "cost_basis": "4500.00",
+              "gain": "10500.00"
+            }
+          ],
+          "notes": []
+        },
+        "differences": [
+          "Disposal rows identical. RP2 has no annual exemption, rate, payment-period, loss carry-forward or CG1 line logic (its IE report lists the rows only)."
+        ]
+      }
+    },
+    {
+      "id": "ie-03",
+      "title": "FIFO (s.580(1) via s.580(4)) runs over all of the person's wallets",
+      "rules": [
+        "IE-R3"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "t1",
+          "time": "2022-03-01T10:00:00+00:00",
+          "type": "buy",
+          "wallet": "WalletA",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "20000.00"
+        },
+        {
+          "id": "t2",
+          "time": "2023-03-01T10:00:00+00:00",
+          "type": "buy",
+          "wallet": "WalletB",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "50000.00"
+        },
+        {
+          "id": "t3",
+          "time": "2024-07-01T10:00:00+01:00",
+          "type": "sell",
+          "wallet": "WalletB",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "60000.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "t3",
+            "asset": "BTC",
+            "qty": "1",
+            "kind": "sale",
+            "date": "2024-07-01",
+            "period": "initial",
+            "rate": "0.33",
+            "consideration": "60000.00",
+            "allowable_cost": "20000.00",
+            "gain": "40000.00",
+            "lots": [
+              {
+                "lot": "t1",
+                "qty": "1",
+                "cost": "20000.00"
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "quarantines": [],
+        "flags": [],
+        "years": {
+          "2024": {
+            "line_1k_disposals": 1,
+            "line_1k_consideration": "60000.00",
+            "line_10": "40000.00",
+            "line_11": "0.00",
+            "line_14": "40000.00",
+            "line_17": "0.00",
+            "line_18": "1270.00",
+            "line_19": "38730.00",
+            "line_21": "0.00",
+            "line_22": "0.00",
+            "line_23": "0.00",
+            "rate_lines": {
+              "line_24_at_33pct": "38730.00"
+            },
+            "tax_total": "12780.90",
+            "payment_initial": "12780.90",
+            "payment_later": "0.00",
+            "overpaid_initial": "0.00",
+            "case_iv_income": "0.00"
+          }
+        }
+      },
+      "rp2": {
+        "computed": {
+          "status": "ok",
+          "method": "fifo",
+          "gains": [
+            {
+              "event": "t3",
+              "type": "sell",
+              "asset": "BTC",
+              "lot": "t1",
+              "qty": "1",
+              "proceeds": "60000.00",
+              "cost_basis": "20000.00",
+              "gain": "40000.00",
+              "year": 2024
+            }
+          ],
+          "yearly": [
+            {
+              "year": 2024,
+              "asset": "BTC",
+              "type": "sell",
+              "long_term": false,
+              "proceeds": "60000.00",
+              "cost_basis": "20000.00",
+              "gain": "40000.00"
+            }
+          ],
+          "notes": []
+        },
+        "differences": [
+          "Disposal rows identical. RP2 has no annual exemption, rate, payment-period, loss carry-forward or CG1 line logic (its IE report lists the rows only)."
+        ]
+      }
+    },
+    {
+      "id": "ie-04",
+      "title": "Partial lots: the s.580 Notes for Guidance example without indexation",
+      "rules": [
+        "IE-R3",
+        "IE-R5",
+        "IE-R6"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "t1",
+          "time": "2022-02-01T10:00:00+00:00",
+          "type": "buy",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "0.2",
+          "fiat": "1000.00"
+        },
+        {
+          "id": "t2",
+          "time": "2023-02-01T10:00:00+00:00",
+          "type": "buy",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "0.3",
+          "fiat": "1800.00"
+        },
+        {
+          "id": "t3",
+          "time": "2024-08-01T10:00:00+01:00",
+          "type": "sell",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "0.3",
+          "fiat": "3000.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "t3",
+            "asset": "BTC",
+            "qty": "0.3",
+            "kind": "sale",
+            "date": "2024-08-01",
+            "period": "initial",
+            "rate": "0.33",
+            "consideration": "3000.00",
+            "allowable_cost": "1600.00",
+            "gain": "1400.00",
+            "lots": [
+              {
+                "lot": "t1",
+                "qty": "0.2",
+                "cost": "1000.00"
+              },
+              {
+                "lot": "t2",
+                "qty": "0.1",
+                "cost": "600.00"
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "quarantines": [],
+        "flags": [],
+        "years": {
+          "2024": {
+            "line_1k_disposals": 1,
+            "line_1k_consideration": "3000.00",
+            "line_10": "1400.00",
+            "line_11": "0.00",
+            "line_14": "1400.00",
+            "line_17": "0.00",
+            "line_18": "1270.00",
+            "line_19": "130.00",
+            "line_21": "0.00",
+            "line_22": "0.00",
+            "line_23": "0.00",
+            "rate_lines": {
+              "line_24_at_33pct": "130.00"
+            },
+            "tax_total": "42.90",
+            "payment_initial": "42.90",
+            "payment_later": "0.00",
+            "overpaid_initial": "0.00",
+            "case_iv_income": "0.00"
+          }
+        }
+      },
+      "rp2": {
+        "computed": {
+          "status": "ok",
+          "method": "fifo",
+          "gains": [
+            {
+              "event": "t3",
+              "type": "sell",
+              "asset": "BTC",
+              "lot": "t1",
+              "qty": "0.2",
+              "proceeds": "2000.00",
+              "cost_basis": "1000.00",
+              "gain": "1000.00",
+              "year": 2024
+            },
+            {
+              "event": "t3",
+              "type": "sell",
+              "asset": "BTC",
+              "lot": "t2",
+              "qty": "0.1",
+              "proceeds": "1000.00",
+              "cost_basis": "600.00",
+              "gain": "400.00",
+              "year": 2024
+            }
+          ],
+          "yearly": [
+            {
+              "year": 2024,
+              "asset": "BTC",
+              "type": "sell",
+              "long_term": false,
+              "proceeds": "3000.00",
+              "cost_basis": "1600.00",
+              "gain": "1400.00"
+            }
+          ],
+          "notes": []
+        },
+        "differences": [
+          "Disposal rows identical. RP2 has no annual exemption, rate, payment-period, loss carry-forward or CG1 line logic (its IE report lists the rows only)."
+        ]
+      }
+    },
+    {
+      "id": "ie-05",
+      "title": "Incidental costs of acquisition and of disposal are allowable (s.552(1))",
+      "rules": [
+        "IE-R2",
+        "IE-R10"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "t1",
+          "time": "2024-01-10T10:00:00+00:00",
+          "type": "buy",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "30000.00",
+          "fee_fiat": "150.00"
+        },
+        {
+          "id": "t2",
+          "time": "2024-09-10T10:00:00+01:00",
+          "type": "sell",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "40000.00",
+          "fee_fiat": "200.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "t2",
+            "asset": "BTC",
+            "qty": "1",
+            "kind": "sale",
+            "date": "2024-09-10",
+            "period": "initial",
+            "rate": "0.33",
+            "consideration": "40000.00",
+            "allowable_cost": "30350.00",
+            "gain": "9650.00",
+            "lots": [
+              {
+                "lot": "t1",
+                "qty": "1",
+                "cost": "30150.00"
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "quarantines": [],
+        "flags": [],
+        "years": {
+          "2024": {
+            "line_1k_disposals": 1,
+            "line_1k_consideration": "40000.00",
+            "line_10": "9650.00",
+            "line_11": "0.00",
+            "line_14": "9650.00",
+            "line_17": "0.00",
+            "line_18": "1270.00",
+            "line_19": "8380.00",
+            "line_21": "0.00",
+            "line_22": "0.00",
+            "line_23": "0.00",
+            "rate_lines": {
+              "line_24_at_33pct": "8380.00"
+            },
+            "tax_total": "2765.40",
+            "payment_initial": "2765.40",
+            "payment_later": "0.00",
+            "overpaid_initial": "0.00",
+            "case_iv_income": "0.00"
+          }
+        }
+      },
+      "rp2": {
+        "computed": {
+          "status": "ok",
+          "method": "fifo",
+          "gains": [
+            {
+              "event": "t2",
+              "type": "sell",
+              "asset": "BTC",
+              "lot": "t1",
+              "qty": "1",
+              "proceeds": "40000.00",
+              "cost_basis": "30150.00",
+              "gain": "9850.00",
+              "year": 2024
+            }
+          ],
+          "yearly": [
+            {
+              "year": 2024,
+              "asset": "BTC",
+              "type": "sell",
+              "long_term": false,
+              "proceeds": "40000.00",
+              "cost_basis": "30150.00",
+              "gain": "9850.00"
+            }
+          ],
+          "notes": []
+        },
+        "differences": [
+          "RP2 does not deduct the 200.00 disposal cost (s.552(1)): gain 9,850.00 against 9,650.00.",
+          "Disposal rows identical. RP2 has no annual exemption, rate, payment-period, loss carry-forward or CG1 line logic (its IE report lists the rows only)."
+        ]
+      }
+    },
+    {
+      "id": "ie-06",
+      "title": "Crypto-to-crypto is a disposal; consideration is the market value of the coins received",
+      "rules": [
+        "IE-R1"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "t1",
+          "time": "2024-01-10T10:00:00+00:00",
+          "type": "buy",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "25000.00"
+        },
+        {
+          "id": "t2",
+          "time": "2024-06-10T10:00:00+01:00",
+          "type": "swap",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "60800.00",
+          "in_asset": "ETH",
+          "in_quantity": "15",
+          "in_fiat": "61000.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "t2",
+            "asset": "BTC",
+            "qty": "1",
+            "kind": "swap",
+            "date": "2024-06-10",
+            "period": "initial",
+            "rate": "0.33",
+            "consideration": "61000.00",
+            "allowable_cost": "25000.00",
+            "gain": "36000.00",
+            "lots": [
+              {
+                "lot": "t1",
+                "qty": "1",
+                "cost": "25000.00"
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "quarantines": [],
+        "flags": [],
+        "years": {
+          "2024": {
+            "line_1k_disposals": 1,
+            "line_1k_consideration": "61000.00",
+            "line_10": "36000.00",
+            "line_11": "0.00",
+            "line_14": "36000.00",
+            "line_17": "0.00",
+            "line_18": "1270.00",
+            "line_19": "34730.00",
+            "line_21": "0.00",
+            "line_22": "0.00",
+            "line_23": "0.00",
+            "rate_lines": {
+              "line_24_at_33pct": "34730.00"
+            },
+            "tax_total": "11460.90",
+            "payment_initial": "11460.90",
+            "payment_later": "0.00",
+            "overpaid_initial": "0.00",
+            "case_iv_income": "0.00"
+          }
+        }
+      },
+      "rp2": {
+        "computed": {
+          "status": "ok",
+          "method": "fifo",
+          "gains": [
+            {
+              "event": "t2",
+              "type": "sell",
+              "asset": "BTC",
+              "lot": "t1",
+              "qty": "1",
+              "proceeds": "60800.00",
+              "cost_basis": "25000.00",
+              "gain": "35800.00",
+              "year": 2024
+            }
+          ],
+          "yearly": [
+            {
+              "year": 2024,
+              "asset": "BTC",
+              "type": "sell",
+              "long_term": false,
+              "proceeds": "60800.00",
+              "cost_basis": "25000.00",
+              "gain": "35800.00"
+            }
+          ],
+          "notes": []
+        },
+        "differences": [
+          "RP2 uses the BTC leg's own value 60,800 as consideration (gain 35,800 against 36,000). The ETH basis is 61,000 in both."
+        ]
+      }
+    },
+    {
+      "id": "ie-07",
+      "title": "A net loss carries forward (s.31) and is used before the next year's exemption",
+      "rules": [
+        "IE-R7",
+        "IE-R6"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "t1",
+          "time": "2024-01-10T10:00:00+00:00",
+          "type": "buy",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "40000.00"
+        },
+        {
+          "id": "t2",
+          "time": "2024-02-10T10:00:00+00:00",
+          "type": "buy",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "44000.00"
+        },
+        {
+          "id": "t3",
+          "time": "2024-03-10T10:00:00+00:00",
+          "type": "sell",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "0.5",
+          "fiat": "23000.00"
+        },
+        {
+          "id": "t4",
+          "time": "2024-08-10T10:00:00+01:00",
+          "type": "sell",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "0.5",
+          "fiat": "15000.00"
+        },
+        {
+          "id": "t5",
+          "time": "2025-05-10T10:00:00+01:00",
+          "type": "sell",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "0.5",
+          "fiat": "26000.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "t3",
+            "asset": "BTC",
+            "qty": "0.5",
+            "kind": "sale",
+            "date": "2024-03-10",
+            "period": "initial",
+            "rate": "0.33",
+            "consideration": "23000.00",
+            "allowable_cost": "20000.00",
+            "gain": "3000.00",
+            "lots": [
+              {
+                "lot": "t1",
+                "qty": "0.5",
+                "cost": "20000.00"
+              }
+            ]
+          },
+          {
+            "event": "t4",
+            "asset": "BTC",
+            "qty": "0.5",
+            "kind": "sale",
+            "date": "2024-08-10",
+            "period": "initial",
+            "rate": "0.33",
+            "consideration": "15000.00",
+            "allowable_cost": "20000.00",
+            "gain": "-5000.00",
+            "lots": [
+              {
+                "lot": "t1",
+                "qty": "0.5",
+                "cost": "20000.00"
+              }
+            ]
+          },
+          {
+            "event": "t5",
+            "asset": "BTC",
+            "qty": "0.5",
+            "kind": "sale",
+            "date": "2025-05-10",
+            "period": "initial",
+            "rate": "0.33",
+            "consideration": "26000.00",
+            "allowable_cost": "22000.00",
+            "gain": "4000.00",
+            "lots": [
+              {
+                "lot": "t2",
+                "qty": "0.5",
+                "cost": "22000.00"
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "quarantines": [],
+        "flags": [],
+        "years": {
+          "2024": {
+            "line_1k_disposals": 2,
+            "line_1k_consideration": "38000.00",
+            "line_10": "3000.00",
+            "line_11": "5000.00",
+            "line_14": "0.00",
+            "line_17": "0.00",
+            "line_18": "0.00",
+            "line_19": "0.00",
+            "line_21": "2000.00",
+            "line_22": "0.00",
+            "line_23": "2000.00",
+            "rate_lines": {
+              "line_24_at_33pct": "0.00"
+            },
+            "tax_total": "0.00",
+            "payment_initial": "0.00",
+            "payment_later": "0.00",
+            "overpaid_initial": "0.00",
+            "case_iv_income": "0.00"
+          },
+          "2025": {
+            "line_1k_disposals": 1,
+            "line_1k_consideration": "26000.00",
+            "line_10": "4000.00",
+            "line_11": "0.00",
+            "line_14": "4000.00",
+            "line_17": "2000.00",
+            "line_18": "1270.00",
+            "line_19": "730.00",
+            "line_21": "0.00",
+            "line_22": "0.00",
+            "line_23": "0.00",
+            "rate_lines": {
+              "line_24_at_33pct": "730.00"
+            },
+            "tax_total": "240.90",
+            "payment_initial": "240.90",
+            "payment_later": "0.00",
+            "overpaid_initial": "0.00",
+            "case_iv_income": "0.00"
+          }
+        }
+      },
+      "rp2": {
+        "computed": {
+          "status": "ok",
+          "method": "fifo",
+          "gains": [
+            {
+              "event": "t3",
+              "type": "sell",
+              "asset": "BTC",
+              "lot": "t1",
+              "qty": "0.5",
+              "proceeds": "23000.00",
+              "cost_basis": "20000.00",
+              "gain": "3000.00",
+              "year": 2024
+            },
+            {
+              "event": "t4",
+              "type": "sell",
+              "asset": "BTC",
+              "lot": "t1",
+              "qty": "0.5",
+              "proceeds": "15000.00",
+              "cost_basis": "20000.00",
+              "gain": "-5000.00",
+              "year": 2024
+            },
+            {
+              "event": "t5",
+              "type": "sell",
+              "asset": "BTC",
+              "lot": "t2",
+              "qty": "0.5",
+              "proceeds": "26000.00",
+              "cost_basis": "22000.00",
+              "gain": "4000.00",
+              "year": 2025
+            }
+          ],
+          "yearly": [
+            {
+              "year": 2025,
+              "asset": "BTC",
+              "type": "sell",
+              "long_term": false,
+              "proceeds": "26000.00",
+              "cost_basis": "22000.00",
+              "gain": "4000.00"
+            },
+            {
+              "year": 2024,
+              "asset": "BTC",
+              "type": "sell",
+              "long_term": false,
+              "proceeds": "38000.00",
+              "cost_basis": "40000.00",
+              "gain": "-2000.00"
+            }
+          ],
+          "notes": []
+        },
+        "differences": [
+          "Disposal rows identical. RP2 has no annual exemption, rate, payment-period, loss carry-forward or CG1 line logic (its IE report lists the rows only)."
+        ]
+      }
+    },
+    {
+      "id": "ie-08",
+      "title": "s.601 Notes for Guidance: net gains of 1,000 use 1,000 of the exemption and no loss carries forward",
+      "rules": [
+        "IE-R6",
+        "IE-R7"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "t1",
+          "time": "2024-01-10T10:00:00+00:00",
+          "type": "buy",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "10000.00"
+        },
+        {
+          "id": "t2",
+          "time": "2024-04-10T10:00:00+01:00",
+          "type": "sell",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "0.5",
+          "fiat": "6270.00"
+        },
+        {
+          "id": "t3",
+          "time": "2024-05-10T10:00:00+01:00",
+          "type": "sell",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "0.5",
+          "fiat": "4730.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "t2",
+            "asset": "BTC",
+            "qty": "0.5",
+            "kind": "sale",
+            "date": "2024-04-10",
+            "period": "initial",
+            "rate": "0.33",
+            "consideration": "6270.00",
+            "allowable_cost": "5000.00",
+            "gain": "1270.00",
+            "lots": [
+              {
+                "lot": "t1",
+                "qty": "0.5",
+                "cost": "5000.00"
+              }
+            ]
+          },
+          {
+            "event": "t3",
+            "asset": "BTC",
+            "qty": "0.5",
+            "kind": "sale",
+            "date": "2024-05-10",
+            "period": "initial",
+            "rate": "0.33",
+            "consideration": "4730.00",
+            "allowable_cost": "5000.00",
+            "gain": "-270.00",
+            "lots": [
+              {
+                "lot": "t1",
+                "qty": "0.5",
+                "cost": "5000.00"
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "quarantines": [],
+        "flags": [],
+        "years": {
+          "2024": {
+            "line_1k_disposals": 2,
+            "line_1k_consideration": "11000.00",
+            "line_10": "1270.00",
+            "line_11": "270.00",
+            "line_14": "1000.00",
+            "line_17": "0.00",
+            "line_18": "1000.00",
+            "line_19": "0.00",
+            "line_21": "0.00",
+            "line_22": "0.00",
+            "line_23": "0.00",
+            "rate_lines": {
+              "line_24_at_33pct": "0.00"
+            },
+            "tax_total": "0.00",
+            "payment_initial": "0.00",
+            "payment_later": "0.00",
+            "overpaid_initial": "0.00",
+            "case_iv_income": "0.00"
+          }
+        }
+      },
+      "rp2": {
+        "computed": {
+          "status": "ok",
+          "method": "fifo",
+          "gains": [
+            {
+              "event": "t2",
+              "type": "sell",
+              "asset": "BTC",
+              "lot": "t1",
+              "qty": "0.5",
+              "proceeds": "6270.00",
+              "cost_basis": "5000.00",
+              "gain": "1270.00",
+              "year": 2024
+            },
+            {
+              "event": "t3",
+              "type": "sell",
+              "asset": "BTC",
+              "lot": "t1",
+              "qty": "0.5",
+              "proceeds": "4730.00",
+              "cost_basis": "5000.00",
+              "gain": "-270.00",
+              "year": 2024
+            }
+          ],
+          "yearly": [
+            {
+              "year": 2024,
+              "asset": "BTC",
+              "type": "sell",
+              "long_term": false,
+              "proceeds": "11000.00",
+              "cost_basis": "10000.00",
+              "gain": "1000.00"
+            }
+          ],
+          "notes": []
+        },
+        "differences": [
+          "Disposal rows identical. RP2 has no annual exemption, rate, payment-period, loss carry-forward or CG1 line logic (its IE report lists the rows only)."
+        ]
+      }
+    },
+    {
+      "id": "ie-09",
+      "title": "A gain of exactly 1,270 is fully exempt",
+      "rules": [
+        "IE-R6"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "t1",
+          "time": "2024-02-01T10:00:00+00:00",
+          "type": "buy",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "0.1",
+          "fiat": "3000.00"
+        },
+        {
+          "id": "t2",
+          "time": "2024-09-01T10:00:00+01:00",
+          "type": "sell",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "0.1",
+          "fiat": "4270.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "t2",
+            "asset": "BTC",
+            "qty": "0.1",
+            "kind": "sale",
+            "date": "2024-09-01",
+            "period": "initial",
+            "rate": "0.33",
+            "consideration": "4270.00",
+            "allowable_cost": "3000.00",
+            "gain": "1270.00",
+            "lots": [
+              {
+                "lot": "t1",
+                "qty": "0.1",
+                "cost": "3000.00"
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "quarantines": [],
+        "flags": [],
+        "years": {
+          "2024": {
+            "line_1k_disposals": 1,
+            "line_1k_consideration": "4270.00",
+            "line_10": "1270.00",
+            "line_11": "0.00",
+            "line_14": "1270.00",
+            "line_17": "0.00",
+            "line_18": "1270.00",
+            "line_19": "0.00",
+            "line_21": "0.00",
+            "line_22": "0.00",
+            "line_23": "0.00",
+            "rate_lines": {
+              "line_24_at_33pct": "0.00"
+            },
+            "tax_total": "0.00",
+            "payment_initial": "0.00",
+            "payment_later": "0.00",
+            "overpaid_initial": "0.00",
+            "case_iv_income": "0.00"
+          }
+        }
+      },
+      "rp2": {
+        "computed": {
+          "status": "ok",
+          "method": "fifo",
+          "gains": [
+            {
+              "event": "t2",
+              "type": "sell",
+              "asset": "BTC",
+              "lot": "t1",
+              "qty": "0.1",
+              "proceeds": "4270.00",
+              "cost_basis": "3000.00",
+              "gain": "1270.00",
+              "year": 2024
+            }
+          ],
+          "yearly": [
+            {
+              "year": 2024,
+              "asset": "BTC",
+              "type": "sell",
+              "long_term": false,
+              "proceeds": "4270.00",
+              "cost_basis": "3000.00",
+              "gain": "1270.00"
+            }
+          ],
+          "notes": []
+        },
+        "differences": [
+          "Disposal rows identical. RP2 has no annual exemption, rate, payment-period, loss carry-forward or CG1 line logic (its IE report lists the rows only)."
+        ]
+      }
+    },
+    {
+      "id": "ie-10",
+      "title": "Just above the exemption: tax of 0.825 rounds half-up to 0.83",
+      "rules": [
+        "IE-R6",
+        "IE-R15"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "t1",
+          "time": "2024-02-01T10:00:00+00:00",
+          "type": "buy",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "0.1",
+          "fiat": "3000.00"
+        },
+        {
+          "id": "t2",
+          "time": "2024-09-01T10:00:00+01:00",
+          "type": "sell",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "0.1",
+          "fiat": "4272.50"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "t2",
+            "asset": "BTC",
+            "qty": "0.1",
+            "kind": "sale",
+            "date": "2024-09-01",
+            "period": "initial",
+            "rate": "0.33",
+            "consideration": "4272.50",
+            "allowable_cost": "3000.00",
+            "gain": "1272.50",
+            "lots": [
+              {
+                "lot": "t1",
+                "qty": "0.1",
+                "cost": "3000.00"
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "quarantines": [],
+        "flags": [],
+        "years": {
+          "2024": {
+            "line_1k_disposals": 1,
+            "line_1k_consideration": "4272.50",
+            "line_10": "1272.50",
+            "line_11": "0.00",
+            "line_14": "1272.50",
+            "line_17": "0.00",
+            "line_18": "1270.00",
+            "line_19": "2.50",
+            "line_21": "0.00",
+            "line_22": "0.00",
+            "line_23": "0.00",
+            "rate_lines": {
+              "line_24_at_33pct": "2.50"
+            },
+            "tax_total": "0.83",
+            "payment_initial": "0.83",
+            "payment_later": "0.00",
+            "overpaid_initial": "0.00",
+            "case_iv_income": "0.00"
+          }
+        }
+      },
+      "rp2": {
+        "computed": {
+          "status": "ok",
+          "method": "fifo",
+          "gains": [
+            {
+              "event": "t2",
+              "type": "sell",
+              "asset": "BTC",
+              "lot": "t1",
+              "qty": "0.1",
+              "proceeds": "4272.50",
+              "cost_basis": "3000.00",
+              "gain": "1272.50",
+              "year": 2024
+            }
+          ],
+          "yearly": [
+            {
+              "year": 2024,
+              "asset": "BTC",
+              "type": "sell",
+              "long_term": false,
+              "proceeds": "4272.50",
+              "cost_basis": "3000.00",
+              "gain": "1272.50"
+            }
+          ],
+          "notes": []
+        },
+        "differences": [
+          "Disposal rows identical. RP2 has no annual exemption, rate, payment-period, loss carry-forward or CG1 line logic (its IE report lists the rows only)."
+        ]
+      }
+    },
+    {
+      "id": "ie-11",
+      "title": "2026: 33 % before 7 October, 31 % from 7 October (Dublin time); the exemption goes against the 33 % gains first (s.601(3))",
+      "rules": [
+        "IE-R5",
+        "IE-R6",
+        "IE-R12"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "t1",
+          "time": "2025-01-10T10:00:00+00:00",
+          "type": "buy",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "50000.00"
+        },
+        {
+          "id": "t2",
+          "time": "2026-03-10T10:00:00+00:00",
+          "type": "sell",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "0.25",
+          "fiat": "14500.00"
+        },
+        {
+          "id": "t3",
+          "time": "2026-10-06T23:30:00Z",
+          "type": "sell",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "0.25",
+          "fiat": "15500.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "t2",
+            "asset": "BTC",
+            "qty": "0.25",
+            "kind": "sale",
+            "date": "2026-03-10",
+            "period": "initial",
+            "rate": "0.33",
+            "consideration": "14500.00",
+            "allowable_cost": "12500.00",
+            "gain": "2000.00",
+            "lots": [
+              {
+                "lot": "t1",
+                "qty": "0.25",
+                "cost": "12500.00"
+              }
+            ]
+          },
+          {
+            "event": "t3",
+            "asset": "BTC",
+            "qty": "0.25",
+            "kind": "sale",
+            "date": "2026-10-07",
+            "period": "initial",
+            "rate": "0.31",
+            "consideration": "15500.00",
+            "allowable_cost": "12500.00",
+            "gain": "3000.00",
+            "lots": [
+              {
+                "lot": "t1",
+                "qty": "0.25",
+                "cost": "12500.00"
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "quarantines": [],
+        "flags": [
+          {
+            "event": "t3",
+            "code": "ie_rate_31_pending_finance_act"
+          }
+        ],
+        "years": {
+          "2026": {
+            "line_1k_disposals": 2,
+            "line_1k_consideration": "30000.00",
+            "line_10": "5000.00",
+            "line_11": "0.00",
+            "line_14": "5000.00",
+            "line_17": "0.00",
+            "line_18": "1270.00",
+            "line_19": "3730.00",
+            "line_21": "0.00",
+            "line_22": "0.00",
+            "line_23": "0.00",
+            "rate_lines": {
+              "line_24_at_33pct": "730.00",
+              "line_24_at_31pct": "3000.00"
+            },
+            "tax_total": "1170.90",
+            "payment_initial": "1170.90",
+            "payment_later": "0.00",
+            "overpaid_initial": "0.00",
+            "case_iv_income": "0.00"
+          }
+        }
+      },
+      "rp2": {
+        "computed": {
+          "status": "ok",
+          "method": "fifo",
+          "gains": [
+            {
+              "event": "t2",
+              "type": "sell",
+              "asset": "BTC",
+              "lot": "t1",
+              "qty": "0.25",
+              "proceeds": "14500.00",
+              "cost_basis": "12500.00",
+              "gain": "2000.00",
+              "year": 2026
+            },
+            {
+              "event": "t3",
+              "type": "sell",
+              "asset": "BTC",
+              "lot": "t1",
+              "qty": "0.25",
+              "proceeds": "15500.00",
+              "cost_basis": "12500.00",
+              "gain": "3000.00",
+              "year": 2026
+            }
+          ],
+          "yearly": [
+            {
+              "year": 2026,
+              "asset": "BTC",
+              "type": "sell",
+              "long_term": false,
+              "proceeds": "30000.00",
+              "cost_basis": "25000.00",
+              "gain": "5000.00"
+            }
+          ],
+          "notes": []
+        },
+        "differences": [
+          "Disposal rows identical. RP2 has no annual exemption, rate, payment-period, loss carry-forward or CG1 line logic (its IE report lists the rows only). The 31 % rate from 7 October 2026 postdates RP2."
+        ]
+      }
+    },
+    {
+      "id": "ie-12",
+      "title": "A December loss cannot reduce the 15 December payment; it reduces the year's liability and the initial payment is partly overpaid",
+      "rules": [
+        "IE-R8",
+        "IE-R7"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "t1",
+          "time": "2025-01-10T10:00:00+00:00",
+          "type": "buy",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "2",
+          "fiat": "80000.00"
+        },
+        {
+          "id": "t2",
+          "time": "2025-06-01T10:00:00+01:00",
+          "type": "sell",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "0.5",
+          "fiat": "30000.00"
+        },
+        {
+          "id": "t3",
+          "time": "2025-12-10T10:00:00+00:00",
+          "type": "sell",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "0.5",
+          "fiat": "16000.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "t2",
+            "asset": "BTC",
+            "qty": "0.5",
+            "kind": "sale",
+            "date": "2025-06-01",
+            "period": "initial",
+            "rate": "0.33",
+            "consideration": "30000.00",
+            "allowable_cost": "20000.00",
+            "gain": "10000.00",
+            "lots": [
+              {
+                "lot": "t1",
+                "qty": "0.5",
+                "cost": "20000.00"
+              }
+            ]
+          },
+          {
+            "event": "t3",
+            "asset": "BTC",
+            "qty": "0.5",
+            "kind": "sale",
+            "date": "2025-12-10",
+            "period": "later",
+            "rate": "0.33",
+            "consideration": "16000.00",
+            "allowable_cost": "20000.00",
+            "gain": "-4000.00",
+            "lots": [
+              {
+                "lot": "t1",
+                "qty": "0.5",
+                "cost": "20000.00"
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "quarantines": [],
+        "flags": [],
+        "years": {
+          "2025": {
+            "line_1k_disposals": 2,
+            "line_1k_consideration": "46000.00",
+            "line_10": "10000.00",
+            "line_11": "4000.00",
+            "line_14": "6000.00",
+            "line_17": "0.00",
+            "line_18": "1270.00",
+            "line_19": "4730.00",
+            "line_21": "0.00",
+            "line_22": "0.00",
+            "line_23": "0.00",
+            "rate_lines": {
+              "line_24_at_33pct": "4730.00"
+            },
+            "tax_total": "1560.90",
+            "payment_initial": "2880.90",
+            "payment_later": "0.00",
+            "overpaid_initial": "1320.00",
+            "case_iv_income": "0.00"
+          }
+        }
+      },
+      "rp2": {
+        "computed": {
+          "status": "ok",
+          "method": "fifo",
+          "gains": [
+            {
+              "event": "t2",
+              "type": "sell",
+              "asset": "BTC",
+              "lot": "t1",
+              "qty": "0.5",
+              "proceeds": "30000.00",
+              "cost_basis": "20000.00",
+              "gain": "10000.00",
+              "year": 2025
+            },
+            {
+              "event": "t3",
+              "type": "sell",
+              "asset": "BTC",
+              "lot": "t1",
+              "qty": "0.5",
+              "proceeds": "16000.00",
+              "cost_basis": "20000.00",
+              "gain": "-4000.00",
+              "year": 2025
+            }
+          ],
+          "yearly": [
+            {
+              "year": 2025,
+              "asset": "BTC",
+              "type": "sell",
+              "long_term": false,
+              "proceeds": "46000.00",
+              "cost_basis": "40000.00",
+              "gain": "6000.00"
+            }
+          ],
+          "notes": []
+        },
+        "differences": [
+          "Disposal rows identical. RP2 has no annual exemption, rate, payment-period, loss carry-forward or CG1 line logic (its IE report lists the rows only)."
+        ]
+      }
+    },
+    {
+      "id": "ie-13",
+      "title": "A December gain is paid by 31 January and goes on line 25",
+      "rules": [
+        "IE-R8"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "t1",
+          "time": "2025-01-10T10:00:00+00:00",
+          "type": "buy",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "40000.00"
+        },
+        {
+          "id": "t2",
+          "time": "2025-12-05T10:00:00+00:00",
+          "type": "sell",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "0.5",
+          "fiat": "25000.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "t2",
+            "asset": "BTC",
+            "qty": "0.5",
+            "kind": "sale",
+            "date": "2025-12-05",
+            "period": "later",
+            "rate": "0.33",
+            "consideration": "25000.00",
+            "allowable_cost": "20000.00",
+            "gain": "5000.00",
+            "lots": [
+              {
+                "lot": "t1",
+                "qty": "0.5",
+                "cost": "20000.00"
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "quarantines": [],
+        "flags": [],
+        "years": {
+          "2025": {
+            "line_1k_disposals": 1,
+            "line_1k_consideration": "25000.00",
+            "line_10": "5000.00",
+            "line_11": "0.00",
+            "line_14": "5000.00",
+            "line_17": "0.00",
+            "line_18": "1270.00",
+            "line_19": "3730.00",
+            "line_21": "0.00",
+            "line_22": "0.00",
+            "line_23": "0.00",
+            "rate_lines": {
+              "line_25_at_33pct": "3730.00"
+            },
+            "tax_total": "1230.90",
+            "payment_initial": "0.00",
+            "payment_later": "1230.90",
+            "overpaid_initial": "0.00",
+            "case_iv_income": "0.00"
+          }
+        }
+      },
+      "rp2": {
+        "computed": {
+          "status": "ok",
+          "method": "fifo",
+          "gains": [
+            {
+              "event": "t2",
+              "type": "sell",
+              "asset": "BTC",
+              "lot": "t1",
+              "qty": "0.5",
+              "proceeds": "25000.00",
+              "cost_basis": "20000.00",
+              "gain": "5000.00",
+              "year": 2025
+            }
+          ],
+          "yearly": [
+            {
+              "year": 2025,
+              "asset": "BTC",
+              "type": "sell",
+              "long_term": false,
+              "proceeds": "25000.00",
+              "cost_basis": "20000.00",
+              "gain": "5000.00"
+            }
+          ],
+          "notes": []
+        },
+        "differences": [
+          "Disposal rows identical. RP2 has no annual exemption, rate, payment-period, loss carry-forward or CG1 line logic (its IE report lists the rows only)."
+        ]
+      }
+    },
+    {
+      "id": "ie-14",
+      "title": "Lending interest is Case IV income at market value and sets the basis; spending the coins is a disposal",
+      "rules": [
+        "IE-R9",
+        "IE-R1"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "t1",
+          "time": "2025-01-15T10:00:00+00:00",
+          "type": "income",
+          "subkind": "lending_interest",
+          "wallet": "Lender",
+          "asset": "BTC",
+          "quantity": "0.01",
+          "fiat": "400.00"
+        },
+        {
+          "id": "t2",
+          "time": "2025-04-15T10:00:00+01:00",
+          "type": "spend",
+          "wallet": "Lender",
+          "asset": "BTC",
+          "quantity": "0.01",
+          "fiat": "500.00",
+          "market_value": "500.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "t2",
+            "asset": "BTC",
+            "qty": "0.01",
+            "kind": "spend",
+            "date": "2025-04-15",
+            "period": "initial",
+            "rate": "0.33",
+            "consideration": "500.00",
+            "allowable_cost": "400.00",
+            "gain": "100.00",
+            "lots": [
+              {
+                "lot": "t1",
+                "qty": "0.01",
+                "cost": "400.00"
+              }
+            ]
+          }
+        ],
+        "income": [
+          {
+            "event": "t1",
+            "asset": "BTC",
+            "kind": "lending_interest",
+            "schedule": "case_iv",
+            "value": "400.00"
+          }
+        ],
+        "quarantines": [],
+        "flags": [],
+        "years": {
+          "2025": {
+            "line_1k_disposals": 1,
+            "line_1k_consideration": "500.00",
+            "line_10": "100.00",
+            "line_11": "0.00",
+            "line_14": "100.00",
+            "line_17": "0.00",
+            "line_18": "100.00",
+            "line_19": "0.00",
+            "line_21": "0.00",
+            "line_22": "0.00",
+            "line_23": "0.00",
+            "rate_lines": {
+              "line_24_at_33pct": "0.00"
+            },
+            "tax_total": "0.00",
+            "payment_initial": "0.00",
+            "payment_later": "0.00",
+            "overpaid_initial": "0.00",
+            "case_iv_income": "400.00"
+          }
+        }
+      },
+      "rp2": {
+        "computed": {
+          "status": "ok",
+          "method": "fifo",
+          "gains": [
+            {
+              "event": "t1",
+              "type": "interest",
+              "asset": "BTC",
+              "lot": null,
+              "qty": "0.01",
+              "proceeds": "400.00",
+              "cost_basis": "0.00",
+              "gain": "400.00",
+              "year": 2025
+            },
+            {
+              "event": "t2",
+              "type": "sell",
+              "asset": "BTC",
+              "lot": "t1",
+              "qty": "0.01",
+              "proceeds": "500.00",
+              "cost_basis": "400.00",
+              "gain": "100.00",
+              "year": 2025
+            }
+          ],
+          "yearly": [
+            {
+              "year": 2025,
+              "asset": "BTC",
+              "type": "sell",
+              "long_term": false,
+              "proceeds": "500.00",
+              "cost_basis": "400.00",
+              "gain": "100.00"
+            },
+            {
+              "year": 2025,
+              "asset": "BTC",
+              "type": "interest",
+              "long_term": false,
+              "proceeds": "400.00",
+              "cost_basis": "0.00",
+              "gain": "400.00"
+            }
+          ],
+          "notes": []
+        },
+        "differences": [
+          "Disposal identical. RP2 lists the interest as an INTEREST taxable event (gain 400) instead of separate Case IV income."
+        ]
+      }
+    },
+    {
+      "id": "ie-15",
+      "title": "A loss with a repurchase 19 days later: allowed by default, flagged for s.581 review",
+      "rules": [
+        "IE-R4",
+        "IE-R7"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "t1",
+          "time": "2025-01-05T10:00:00+00:00",
+          "type": "buy",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "60000.00"
+        },
+        {
+          "id": "t2",
+          "time": "2025-03-01T10:00:00+00:00",
+          "type": "sell",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "50000.00"
+        },
+        {
+          "id": "t3",
+          "time": "2025-03-20T10:00:00+00:00",
+          "type": "buy",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "51000.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "t2",
+            "asset": "BTC",
+            "qty": "1",
+            "kind": "sale",
+            "date": "2025-03-01",
+            "period": "initial",
+            "rate": "0.33",
+            "consideration": "50000.00",
+            "allowable_cost": "60000.00",
+            "gain": "-10000.00",
+            "lots": [
+              {
+                "lot": "t1",
+                "qty": "1",
+                "cost": "60000.00"
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "quarantines": [],
+        "flags": [
+          {
+            "event": "t2",
+            "code": "ie_s581_four_week_review"
+          }
+        ],
+        "years": {
+          "2025": {
+            "line_1k_disposals": 1,
+            "line_1k_consideration": "50000.00",
+            "line_10": "0.00",
+            "line_11": "10000.00",
+            "line_14": "0.00",
+            "line_17": "0.00",
+            "line_18": "0.00",
+            "line_19": "0.00",
+            "line_21": "10000.00",
+            "line_22": "0.00",
+            "line_23": "10000.00",
+            "rate_lines": {},
+            "tax_total": "0.00",
+            "payment_initial": "0.00",
+            "payment_later": "0.00",
+            "overpaid_initial": "0.00",
+            "case_iv_income": "0.00"
+          }
+        }
+      },
+      "rp2": {
+        "computed": {
+          "status": "ok",
+          "method": "fifo",
+          "gains": [
+            {
+              "event": "t2",
+              "type": "sell",
+              "asset": "BTC",
+              "lot": "t1",
+              "qty": "1",
+              "proceeds": "50000.00",
+              "cost_basis": "60000.00",
+              "gain": "-10000.00",
+              "year": 2025
+            }
+          ],
+          "yearly": [
+            {
+              "year": 2025,
+              "asset": "BTC",
+              "type": "sell",
+              "long_term": false,
+              "proceeds": "50000.00",
+              "cost_basis": "60000.00",
+              "gain": "-10000.00"
+            }
+          ],
+          "notes": []
+        },
+        "differences": [
+          "None in the numbers. Neither applies s.581; Kassiber adds the review flag.",
+          "Disposal rows identical. RP2 has no annual exemption, rate, payment-period, loss carry-forward or CG1 line logic (its IE report lists the rows only)."
+        ]
+      }
+    },
+    {
+      "id": "ie-16",
+      "title": "A gift is a disposal at market value (s.547); the CG1 connected-party question is flagged",
+      "rules": [
+        "IE-R1"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "t1",
+          "time": "2024-01-10T10:00:00+00:00",
+          "type": "buy",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "10000.00"
+        },
+        {
+          "id": "t2",
+          "time": "2025-02-01T10:00:00+00:00",
+          "type": "gift_out",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "0.5",
+          "fiat": "30000.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "t2",
+            "asset": "BTC",
+            "qty": "0.5",
+            "kind": "gift",
+            "date": "2025-02-01",
+            "period": "initial",
+            "rate": "0.33",
+            "consideration": "30000.00",
+            "allowable_cost": "5000.00",
+            "gain": "25000.00",
+            "lots": [
+              {
+                "lot": "t1",
+                "qty": "0.5",
+                "cost": "5000.00"
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "quarantines": [],
+        "flags": [
+          {
+            "event": "t2",
+            "code": "ie_gift_connected_party"
+          }
+        ],
+        "years": {
+          "2025": {
+            "line_1k_disposals": 1,
+            "line_1k_consideration": "30000.00",
+            "line_10": "25000.00",
+            "line_11": "0.00",
+            "line_14": "25000.00",
+            "line_17": "0.00",
+            "line_18": "1270.00",
+            "line_19": "23730.00",
+            "line_21": "0.00",
+            "line_22": "0.00",
+            "line_23": "0.00",
+            "rate_lines": {
+              "line_24_at_33pct": "23730.00"
+            },
+            "tax_total": "7830.90",
+            "payment_initial": "7830.90",
+            "payment_later": "0.00",
+            "overpaid_initial": "0.00",
+            "case_iv_income": "0.00"
+          }
+        }
+      },
+      "rp2": {
+        "computed": {
+          "status": "ok",
+          "method": "fifo",
+          "gains": [
+            {
+              "event": "t2",
+              "type": "gift",
+              "asset": "BTC",
+              "lot": "t1",
+              "qty": "0.5",
+              "proceeds": "30000.00",
+              "cost_basis": "5000.00",
+              "gain": "25000.00",
+              "year": 2025
+            }
+          ],
+          "yearly": [
+            {
+              "year": 2025,
+              "asset": "BTC",
+              "type": "gift",
+              "long_term": false,
+              "proceeds": "30000.00",
+              "cost_basis": "5000.00",
+              "gain": "25000.00"
+            }
+          ],
+          "notes": []
+        },
+        "differences": [
+          "Disposal rows identical. RP2 has no annual exemption, rate, payment-period, loss carry-forward or CG1 line logic (its IE report lists the rows only)."
+        ]
+      }
+    },
+    {
+      "id": "ie-17",
+      "title": "Lost coins need a negligible-value claim (s.538(2)); Kassiber quarantines instead of booking a loss",
+      "rules": [
+        "IE-R13"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "t1",
+          "time": "2025-01-10T10:00:00+00:00",
+          "type": "buy",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "0.5",
+          "fiat": "20000.00"
+        },
+        {
+          "id": "t2",
+          "time": "2025-06-01T10:00:00+01:00",
+          "type": "lost",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "0.1"
+        }
+      ],
+      "expected": {
+        "disposals": [],
+        "income": [],
+        "quarantines": [
+          {
+            "event": "t2",
+            "reason": "ie_lost_requires_negligible_value_claim"
+          }
+        ],
+        "flags": [],
+        "years": {}
+      },
+      "rp2": {
+        "computed": {
+          "status": "ok",
+          "method": "fifo",
+          "gains": [
+            {
+              "event": "t2",
+              "type": "lost",
+              "asset": "BTC",
+              "lot": "t1",
+              "qty": "0.1",
+              "proceeds": "0.00",
+              "cost_basis": "4000.00",
+              "gain": "-4000.00",
+              "year": 2025
+            }
+          ],
+          "yearly": [
+            {
+              "year": 2025,
+              "asset": "BTC",
+              "type": "lost",
+              "long_term": false,
+              "proceeds": "0.00",
+              "cost_basis": "4000.00",
+              "gain": "-4000.00"
+            }
+          ],
+          "notes": []
+        },
+        "differences": [
+          "RP2 books LOST as a full capital loss (-4,000.00); Kassiber quarantines until a negligible-value claim is recorded."
+        ]
+      }
+    },
+    {
+      "id": "ie-18",
+      "title": "A network fee on a move between own wallets disposes of the fee coins",
+      "rules": [
+        "IE-R10"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "t1",
+          "time": "2025-01-05T10:00:00+00:00",
+          "type": "buy",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "30000.00"
+        },
+        {
+          "id": "t2",
+          "time": "2025-04-10T10:00:00+01:00",
+          "type": "transfer",
+          "wallet": "Exchange",
+          "to_wallet": "Hardware",
+          "asset": "BTC",
+          "quantity": "0.5",
+          "fee_quantity": "0.0001",
+          "fee_fiat_value": "6.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "t2",
+            "asset": "BTC",
+            "qty": "0.0001",
+            "kind": "network_fee",
+            "date": "2025-04-10",
+            "period": "initial",
+            "rate": "0.33",
+            "consideration": "6.00",
+            "allowable_cost": "3.00",
+            "gain": "3.00",
+            "lots": [
+              {
+                "lot": "t1",
+                "qty": "0.0001",
+                "cost": "3.00"
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "quarantines": [],
+        "flags": [],
+        "years": {
+          "2025": {
+            "line_1k_disposals": 1,
+            "line_1k_consideration": "6.00",
+            "line_10": "3.00",
+            "line_11": "0.00",
+            "line_14": "3.00",
+            "line_17": "0.00",
+            "line_18": "3.00",
+            "line_19": "0.00",
+            "line_21": "0.00",
+            "line_22": "0.00",
+            "line_23": "0.00",
+            "rate_lines": {
+              "line_24_at_33pct": "0.00"
+            },
+            "tax_total": "0.00",
+            "payment_initial": "0.00",
+            "payment_later": "0.00",
+            "overpaid_initial": "0.00",
+            "case_iv_income": "0.00"
+          }
+        }
+      },
+      "rp2": {
+        "computed": {
+          "status": "ok",
+          "method": "fifo",
+          "gains": [
+            {
+              "event": "t2",
+              "type": "move",
+              "asset": "BTC",
+              "lot": "t1",
+              "qty": "0.0001",
+              "proceeds": "6.00",
+              "cost_basis": "3.00",
+              "gain": "3.00",
+              "year": 2025
+            }
+          ],
+          "yearly": [
+            {
+              "year": 2025,
+              "asset": "BTC",
+              "type": "move",
+              "long_term": false,
+              "proceeds": "6.00",
+              "cost_basis": "3.00",
+              "gain": "3.00"
+            }
+          ],
+          "notes": []
+        },
+        "differences": [
+          "None. RP2 treats the move's fee as a taxable event: 6.00 - 3.00 = 3.00."
+        ]
+      }
+    }
+  ]
+}

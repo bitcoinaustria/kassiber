@@ -1,0 +1,18 @@
+{
+  "body": [
+    {
+      "message": "The value 'Bogus' is not valid.",
+      "path": "statusFilter"
+    }
+  ],
+  "request": {
+    "key": "read_only",
+    "method": "GET",
+    "path": "/api/v1/stores/{storeId}/payment-methods/BTC-ARK/wallet/transactions?statusFilter=Bogus",
+    "permissions": [
+      "btcpay.store.canviewstoresettings",
+      "btcpay.store.canviewwallet"
+    ]
+  },
+  "status": 422
+}

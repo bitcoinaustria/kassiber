@@ -1,0 +1,54 @@
+{
+  "body": [
+    {
+      "BOLT11": "lnbcrt250u1p40pt8xsp5lxa4eknuqg4355vhgle6h64n3tmxsv0wu84m4ytcses7srl9zc8spp5y4wdrmsghyr3jt5cs39cusd5fmcaxcr8hlx9uvywyznn5c4n2zqsdp9ddshxumfvfjhygrvd9nksarwd9hxwgrnv4hxgxqyjw5qcqp29qxpqysgqjv5adxctpa8g5dlsmlyg9ykszyuyk3pvnd0hxlm6567ha54nxu8ny2cyynnvvlwtdm6lx7txhcrmfcdau4ye3uqxkf9cptyslj4v98sqndr9tm",
+      "createdAt": 1794157798,
+      "feeAmount": "175000",
+      "id": "255cd1ee08b907192e98844b8e41b44ef1d36067bfcc5e308e20a73a62b35081",
+      "paymentHash": "255cd1ee08b907192e98844b8e41b44ef1d36067bfcc5e308e20a73a62b35081",
+      "preimage": "f722c99ae9ac9cf103f15821cb0b7b13caa021281361a9068c4152f56c1c3b36",
+      "status": "Complete",
+      "totalAmount": "25175000"
+    },
+    {
+      "BOLT11": "lnbcrt150u1p40pt82sp5p2vmwchkhhqlfpdg3lsl9yaxu3yw9m4w0menkyc6nzp6vvjld8xqpp5htl098hrj44m673pxe0hf906442m45grgveuluykr5q39snq4vzsdp8vaex2etwve5k2mryypkxjemgw3hxjmn8ypcxz7gxqyjw5qcqp29qxpqysgq9w0m0fe0vfuu6707vrx369vmn803v4knh84nfpn8vg7nfsqvmkp30uzmqqpa59x3yfpp34crj0kj9rufhfqtq0slqfe96fd6ev2hcdspan9ue7",
+      "createdAt": 1794157803,
+      "feeAmount": "135000",
+      "id": "bafef29ee3956bbd7a21365f7495faad55bad1034333cff0961d0112c260ab05",
+      "paymentHash": "bafef29ee3956bbd7a21365f7495faad55bad1034333cff0961d0112c260ab05",
+      "preimage": "165b18d1718a53303aba0d355ac1dd0484d07e1aa8d26849a819d35158dfc50f",
+      "status": "Complete",
+      "totalAmount": "15135000"
+    },
+    {
+      "BOLT11": "lnbcrt120u1p40pt8dsp5a3203kzp7qxxyx6w5v2da99aal398kjs2qc6d3z6udn8p5ydq2pspp5r399yltk35agyx983kgqpxf4k4mvp7wp5us8tazkw5vnrzrert3sdqcddshxumfvfjhygrsv9uk7at5xqyjw5qcqp29qxpqysgq9yaur756css7cju0s6c7ym94zm39qdw0pzhdy6d66wwqlcn5punk5yq7nguzhcgrxp723vhht6ef49kurl73pxawwsun65220hrxeycp4rt5ev",
+      "createdAt": 1794157806,
+      "feeAmount": "123000",
+      "id": "1c4a527d768d3a8218a78d90009935b576c0f9c1a72075f45675193188791ae3",
+      "paymentHash": "1c4a527d768d3a8218a78d90009935b576c0f9c1a72075f45675193188791ae3",
+      "preimage": "dfcd5d7f3890f3b36a8c1dc99db434b1d459e03ccc78538a7a24f7743a4bd054",
+      "status": "Complete",
+      "totalAmount": "12123000"
+    },
+    {
+      "BOLT11": "lnbcrt100u1p40pt8nsp5j5yp7cclalwhxhjfnandgjeszcp8n974luffjgl2fylkgeykwywspp57zau5nypsfz9zyauj6sj89rhha68u5f4h0n8jjtewdeq928fz7dqdqcddshxumfvfjhygrjv4n82mnyxq9z3h5qcqp29qxpqysgqj0t64fhhynqlmu0trm7pqryvpg0d7q8vqpnsruypgkdald990n6598nj48h7nhudh09jr7j57vjuqu83t8wxad0kwfxqsyvksfn6xxqp0fjy0r",
+      "createdAt": 1794157811,
+      "feeAmount": "115000",
+      "id": "f0bbca4c8182445113bc96a1239477bf747e5135bbe6794979737202a8e9179a",
+      "paymentHash": "f0bbca4c8182445113bc96a1239477bf747e5135bbe6794979737202a8e9179a",
+      "preimage": "c40c24b54e0b888d9e00e590853b7e9015434e0f2c36d4a33b0a8378eb514b83",
+      "status": "Complete",
+      "totalAmount": "10115000"
+    }
+  ],
+  "request": {
+    "key": "lightning",
+    "method": "GET",
+    "path": "/api/v1/stores/{storeId}/lightning/BTC/payments?includePending=true",
+    "permissions": [
+      "btcpay.store.canviewlightninginvoice",
+      "btcpay.store.canuselightningnode"
+    ]
+  },
+  "status": 200
+}

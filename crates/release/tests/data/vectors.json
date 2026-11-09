@@ -1,0 +1,321 @@
+{
+  "versions": [
+    [
+      "1.2.3",
+      true
+    ],
+    [
+      "v1.2.3",
+      true
+    ],
+    [
+      " v1.2.3 ",
+      true
+    ],
+    [
+      "vv1.2.3",
+      false
+    ],
+    [
+      "01.2.3",
+      false
+    ],
+    [
+      "1.2",
+      false
+    ],
+    [
+      "1.2.3.4",
+      false
+    ],
+    [
+      "1.2.3-rc.1",
+      true
+    ],
+    [
+      "1.2.3-rc.01",
+      false
+    ],
+    [
+      "1.2.3-rc..1",
+      false
+    ],
+    [
+      "1.2.3-",
+      false
+    ],
+    [
+      "1.2.3+build",
+      true
+    ],
+    [
+      "1.2.3+build.01",
+      true
+    ],
+    [
+      "1.2.3+",
+      false
+    ],
+    [
+      "1.2.3-alpha-1+b-2",
+      true
+    ],
+    [
+      "1.2.3-\u03b1",
+      false
+    ],
+    [
+      "99999999999999999999.0.0",
+      true
+    ],
+    [
+      "0.0.0",
+      true
+    ],
+    [
+      "1.2.3\n",
+      true
+    ],
+    [
+      "1.2.3-0",
+      true
+    ],
+    [
+      "1.2.3-00",
+      false
+    ]
+  ],
+  "newer": [
+    [
+      "1.2.3",
+      "1.2.3-rc.1",
+      true,
+      false
+    ],
+    [
+      "1.2.3-rc.10",
+      "1.2.3-rc.9",
+      true,
+      false
+    ],
+    [
+      "1.2.3-rc.a",
+      "1.2.3-rc.1",
+      true,
+      false
+    ],
+    [
+      "1.2.3-rc.1.1",
+      "1.2.3-rc.1",
+      true,
+      false
+    ],
+    [
+      "10.0.0",
+      "9.99.99",
+      true,
+      false
+    ],
+    [
+      "1.2.3+b",
+      "1.2.3",
+      false,
+      false
+    ],
+    [
+      "1.2.3-B",
+      "1.2.3-a",
+      false,
+      true
+    ],
+    [
+      "1.2.3-a",
+      "1.2.3-B",
+      true,
+      false
+    ],
+    [
+      "v2.0.0",
+      "1.9.9",
+      true,
+      false
+    ],
+    [
+      "junk",
+      "1.0.0",
+      false,
+      false
+    ],
+    [
+      "99999999999999999999.0.0",
+      "99999999999999999998.9.9",
+      true,
+      false
+    ],
+    [
+      "1.0.0-1",
+      "1.0.0-a",
+      false,
+      true
+    ]
+  ],
+  "selection": [
+    [
+      [],
+      {
+        "error": "GitHub did not return a valid Kassiber release"
+      }
+    ],
+    [
+      {},
+      {
+        "error": "GitHub returned an invalid releases response"
+      }
+    ],
+    [
+      [
+        {
+          "tag_name": "v1.0.0"
+        },
+        {
+          "tag_name": "v2.0.0",
+          "draft": true
+        },
+        {
+          "tag_name": " v1.1.0-rc.1 "
+        },
+        {
+          "tag_name": "junk"
+        },
+        {
+          "tag_name": "v1.1.0-rc.1",
+          "prerelease": false
+        }
+      ],
+      {
+        "latest_version": "1.1.0-rc.1",
+        "release_tag": "v1.1.0-rc.1",
+        "release_url": "https://github.com/bitcoinaustria/kassiber/releases/tag/v1.1.0-rc.1",
+        "prerelease": true
+      }
+    ],
+    [
+      [
+        {
+          "tag_name": "v1.0.0",
+          "prerelease": 1
+        },
+        {
+          "tag_name": 5
+        },
+        {
+          "tag_name": null
+        },
+        "x",
+        {
+          "draft": 0,
+          "tag_name": "1.0.1"
+        }
+      ],
+      {
+        "latest_version": "1.0.1",
+        "release_tag": "1.0.1",
+        "release_url": "https://github.com/bitcoinaustria/kassiber/releases/tag/1.0.1",
+        "prerelease": false
+      }
+    ],
+    [
+      [
+        {
+          "tag_name": "v1.0.0/../x"
+        },
+        {
+          "tag_name": "v0.9.0+meta"
+        }
+      ],
+      {
+        "latest_version": "0.9.0+meta",
+        "release_tag": "v0.9.0+meta",
+        "release_url": "https://github.com/bitcoinaustria/kassiber/releases/tag/v0.9.0%2Bmeta",
+        "prerelease": false
+      }
+    ],
+    [
+      [
+        {
+          "tag_name": "v3.0.0",
+          "draft": ""
+        },
+        {
+          "tag_name": "v3.0.0",
+          "prerelease": true
+        }
+      ],
+      {
+        "latest_version": "3.0.0",
+        "release_tag": "v3.0.0",
+        "release_url": "https://github.com/bitcoinaustria/kassiber/releases/tag/v3.0.0",
+        "prerelease": false
+      }
+    ]
+  ],
+  "render": [
+    [
+      {
+        "current_version": "1.0.0",
+        "latest_version": "1.0.0",
+        "update_available": false,
+        "release_url": "https://github.com/bitcoinaustria/kassiber/releases/tag/v1.0.0"
+      },
+      "Kassiber 1.0.0 is current (latest: 1.0.0).\n",
+      "Kassiber 1.0.0 is current (latest: 1.0.0).\n"
+    ],
+    [
+      {
+        "current_version": "1.0.0",
+        "latest_version": "1.1.0",
+        "update_available": true,
+        "release_url": "https://github.com/bitcoinaustria/kassiber/releases/tag/v1.1.0",
+        "update_command": null
+      },
+      "\u2728 Update available: Kassiber 1.0.0 \u2192 1.1.0\n  Download and install the release manually.\n  Release notes: https://github.com/bitcoinaustria/kassiber/releases/tag/v1.1.0\n",
+      "\u001b[1;36m\u2728 Update available: Kassiber 1.0.0 \u2192 1.1.0\u001b[0m\n  Download and install the release manually.\n  Release notes: https://github.com/bitcoinaustria/kassiber/releases/tag/v1.1.0\n"
+    ],
+    [
+      {
+        "current_version": "1.0.0",
+        "latest_version": "1.1.0",
+        "update_available": true,
+        "release_url": "u",
+        "update_command": "brew upgrade --cask bitcoinaustria/kassiber/kassiber"
+      },
+      "\u2728 Update available: Kassiber 1.0.0 \u2192 1.1.0\n  Run brew upgrade --cask bitcoinaustria/kassiber/kassiber to update.\n  Release notes: u\n",
+      "\u001b[1;36m\u2728 Update available: Kassiber 1.0.0 \u2192 1.1.0\u001b[0m\n  Run \u001b[36mbrew upgrade --cask bitcoinaustria/kassiber/kassiber\u001b[0m to update.\n  Release notes: u\n"
+    ],
+    [
+      {
+        "current_version": "1.0.0",
+        "latest_version": "1.1.0",
+        "update_available": true,
+        "release_url": "u",
+        "update_command": ""
+      },
+      "\u2728 Update available: Kassiber 1.0.0 \u2192 1.1.0\n  Download and install the release manually.\n  Release notes: u\n",
+      "\u001b[1;36m\u2728 Update available: Kassiber 1.0.0 \u2192 1.1.0\u001b[0m\n  Download and install the release manually.\n  Release notes: u\n"
+    ]
+  ],
+  "release_url": [
+    [
+      "v1.0.0",
+      "https://github.com/bitcoinaustria/kassiber/releases/tag/v1.0.0"
+    ],
+    [
+      "v1.0.0/\u00e4 b",
+      "https://github.com/bitcoinaustria/kassiber/releases/tag/v1.0.0%2F%C3%A4%20b"
+    ],
+    [
+      "~x_y.z-",
+      "https://github.com/bitcoinaustria/kassiber/releases/tag/~x_y.z-"
+    ]
+  ]
+}

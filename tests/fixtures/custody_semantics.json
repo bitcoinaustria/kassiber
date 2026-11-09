@@ -1,0 +1,1017 @@
+[
+  {
+    "case": "split_hex_pair",
+    "row": {
+      "id": "fallback",
+      "wallet_id": "wallet",
+      "asset": "BTC",
+      "wallet_kind": "descriptor",
+      "config_json": "{}",
+      "raw_json": "{\"txid\": \"a bccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc d\"}"
+    },
+    "key": {
+      "chain": "bitcoin",
+      "network": "main",
+      "native_namespace": "wallet",
+      "native_event_id": "a bccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc d"
+    }
+  },
+  {
+    "case": "new_case_mapping_key",
+    "row": {
+      "id": "fallback",
+      "wallet_id": "wallet",
+      "asset": "BTC",
+      "wallet_kind": "descriptor",
+      "config_json": "{}",
+      "raw_json": "{\"t\\ua7dcxid\": \"abababababababababababababababababababababababababababababababab\"}"
+    },
+    "key": {
+      "chain": "bitcoin",
+      "network": "main",
+      "native_namespace": "chain",
+      "native_event_id": "abababababababababababababababababababababababababababababababab"
+    }
+  },
+  {
+    "case": "new_case_mapping_native",
+    "row": {
+      "id": "fallback",
+      "wallet_id": "wallet",
+      "asset": "BTC",
+      "wallet_kind": "descriptor",
+      "config_json": "{}",
+      "raw_json": "{\"txid\": \"\\u1c89\"}"
+    },
+    "key": {
+      "chain": "bitcoin",
+      "network": "main",
+      "native_namespace": "wallet",
+      "native_event_id": "\u1c89"
+    }
+  },
+  {
+    "case": "unicode_version_key",
+    "row": {
+      "id": "fallback",
+      "wallet_id": "wallet",
+      "asset": "BTC",
+      "wallet_kind": "descriptor",
+      "config_json": "{}",
+      "raw_json": "{\"t\\u1c89xid\": \"abababababababababababababababababababababababababababababababab\"}"
+    },
+    "key": {
+      "chain": "bitcoin",
+      "network": "main",
+      "native_namespace": "chain",
+      "native_event_id": "abababababababababababababababababababababababababababababababab"
+    }
+  },
+  {
+    "case": "combining_key",
+    "row": {
+      "id": "fallback",
+      "wallet_id": "wallet",
+      "asset": "BTC",
+      "wallet_kind": "descriptor",
+      "config_json": "{}",
+      "raw_json": "{\"t\\u0345xid\": \"abababababababababababababababababababababababababababababababab\"}"
+    },
+    "key": {
+      "chain": "bitcoin",
+      "network": "main",
+      "native_namespace": "chain",
+      "native_event_id": "abababababababababababababababababababababababababababababababab"
+    }
+  },
+  {
+    "case": "python_strip",
+    "row": {
+      "id": "fallback",
+      "wallet_id": "wallet",
+      "asset": "BTC",
+      "wallet_kind": "descriptor",
+      "config_json": "{}",
+      "raw_json": "{\"txid\": \"abababababababababababababababababababababababababababababababab\\u001f\"}"
+    },
+    "key": {
+      "chain": "bitcoin",
+      "network": "main",
+      "native_namespace": "chain",
+      "native_event_id": "abababababababababababababababababababababababababababababababab"
+    }
+  },
+  {
+    "case": "false_chain",
+    "row": {
+      "id": "fallback",
+      "wallet_id": "wallet",
+      "asset": "BTC",
+      "wallet_kind": "lnd",
+      "config_json": "{\"chain\":\"liquid\"}",
+      "raw_json": "{\"chain\": false, \"txid\": \"abababababababababababababababababababababababababababababababab\"}"
+    },
+    "key": {
+      "chain": "bitcoin",
+      "network": "main",
+      "native_namespace": "chain",
+      "native_event_id": "abababababababababababababababababababababababababababababababab"
+    }
+  },
+  {
+    "case": "zero_chain",
+    "row": {
+      "id": "fallback",
+      "wallet_id": "wallet",
+      "asset": "BTC",
+      "wallet_kind": "lnd",
+      "config_json": "{}",
+      "raw_json": "{\"chain\": 0, \"txid\": \"abababababababababababababababababababababababababababababababab\"}"
+    },
+    "key": {
+      "chain": "bitcoin",
+      "network": "main",
+      "native_namespace": "chain",
+      "native_event_id": "abababababababababababababababababababababababababababababababab"
+    }
+  },
+  {
+    "case": "lowercase_network_error",
+    "row": {
+      "id": "fallback",
+      "wallet_id": "wallet",
+      "asset": "BTC",
+      "wallet_kind": "descriptor",
+      "config_json": "{}",
+      "raw_json": "{\"network\": \"Testnet4\"}"
+    },
+    "error": "Unsupported bitcoin network 'testnet4'"
+  },
+  {
+    "case": "contextual_lowercase_network_error",
+    "row": {
+      "id": "fallback",
+      "wallet_id": "wallet",
+      "asset": "BTC",
+      "wallet_kind": "descriptor",
+      "config_json": "{}",
+      "raw_json": "{\"network\": \"A\\u03a3\"}"
+    },
+    "error": "Unsupported bitcoin network 'a\u03c2'"
+  },
+  {
+    "case": "contextual_lowercase_ignorable",
+    "row": {
+      "id": "fallback",
+      "wallet_id": "wallet",
+      "asset": "BTC",
+      "wallet_kind": "descriptor",
+      "config_json": "{}",
+      "raw_json": "{\"network\": \"A\\u03a3\\u0345\"}"
+    },
+    "error": "Unsupported bitcoin network 'a\u03c2\u0345'"
+  },
+  {
+    "case": "contextual_lowercase_following",
+    "row": {
+      "id": "fallback",
+      "wallet_id": "wallet",
+      "asset": "BTC",
+      "wallet_kind": "descriptor",
+      "config_json": "{}",
+      "raw_json": "{\"network\": \"A\\u03a3'A\"}"
+    },
+    "error": "Unsupported bitcoin network 'a\u03c3'a'"
+  },
+  {
+    "case": "contextual_lowercase_preceding",
+    "row": {
+      "id": "fallback",
+      "wallet_id": "wallet",
+      "asset": "BTC",
+      "wallet_kind": "descriptor",
+      "config_json": "{}",
+      "raw_json": "{\"network\": \"A\\u0345\\u03a3\"}"
+    },
+    "error": "Unsupported bitcoin network 'a\u0345\u03c2'"
+  },
+  {
+    "case": "contextual_lowercase_uncased",
+    "row": {
+      "id": "fallback",
+      "wallet_id": "wallet",
+      "asset": "BTC",
+      "wallet_kind": "descriptor",
+      "config_json": "{}",
+      "raw_json": "{\"network\": \"\\u03a3\"}"
+    },
+    "error": "Unsupported bitcoin network '\u03c3'"
+  },
+  {
+    "case": "vout_None",
+    "raw": {
+      "chain": "bitcoin",
+      "network": "main",
+      "txid": "abababababababababababababababababababababababababababababababab",
+      "vin": [
+        {
+          "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+          "vout": 1
+        }
+      ],
+      "vout": [
+        {
+          "n": 0
+        },
+        {
+          "n": null
+        }
+      ]
+    },
+    "graph": {
+      "txid": "abababababababababababababababababababababababababababababababab",
+      "chain": "bitcoin",
+      "network": "main",
+      "inputs": [
+        {
+          "outpoint": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd:1",
+          "script": null,
+          "value_sats": null,
+          "asset_id": "BTC",
+          "asset": "BTC"
+        }
+      ],
+      "outputs": [
+        {
+          "n": 0,
+          "script": null,
+          "value_sats": null,
+          "asset_id": "BTC",
+          "asset": "BTC",
+          "role": null
+        },
+        {
+          "n": 1,
+          "script": null,
+          "value_sats": null,
+          "asset_id": "BTC",
+          "asset": "BTC",
+          "role": null
+        }
+      ],
+      "component": {},
+      "evidence_conflicts": []
+    }
+  },
+  {
+    "case": "vout_''",
+    "raw": {
+      "chain": "bitcoin",
+      "network": "main",
+      "txid": "abababababababababababababababababababababababababababababababab",
+      "vin": [
+        {
+          "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+          "vout": 1
+        }
+      ],
+      "vout": [
+        {
+          "n": 0
+        },
+        {
+          "n": ""
+        }
+      ]
+    },
+    "graph": {
+      "txid": "abababababababababababababababababababababababababababababababab",
+      "chain": "bitcoin",
+      "network": "main",
+      "inputs": [
+        {
+          "outpoint": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd:1",
+          "script": null,
+          "value_sats": null,
+          "asset_id": "BTC",
+          "asset": "BTC"
+        }
+      ],
+      "outputs": [
+        {
+          "n": 0,
+          "script": null,
+          "value_sats": null,
+          "asset_id": "BTC",
+          "asset": "BTC",
+          "role": null
+        },
+        {
+          "n": 1,
+          "script": null,
+          "value_sats": null,
+          "asset_id": "BTC",
+          "asset": "BTC",
+          "role": null
+        }
+      ],
+      "component": {},
+      "evidence_conflicts": []
+    }
+  },
+  {
+    "case": "vout_False",
+    "raw": {
+      "chain": "bitcoin",
+      "network": "main",
+      "txid": "abababababababababababababababababababababababababababababababab",
+      "vin": [
+        {
+          "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+          "vout": 1
+        }
+      ],
+      "vout": [
+        {
+          "n": 0
+        },
+        {
+          "n": false
+        }
+      ]
+    },
+    "graph": {
+      "txid": "abababababababababababababababababababababababababababababababab",
+      "chain": "bitcoin",
+      "network": "main",
+      "inputs": [
+        {
+          "outpoint": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd:1",
+          "script": null,
+          "value_sats": null,
+          "asset_id": "BTC",
+          "asset": "BTC"
+        }
+      ],
+      "outputs": [
+        {
+          "n": 0,
+          "script": null,
+          "value_sats": null,
+          "asset_id": "BTC",
+          "asset": "BTC",
+          "role": null
+        }
+      ],
+      "component": {},
+      "evidence_conflicts": []
+    }
+  },
+  {
+    "case": "vout_0",
+    "raw": {
+      "chain": "bitcoin",
+      "network": "main",
+      "txid": "abababababababababababababababababababababababababababababababab",
+      "vin": [
+        {
+          "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+          "vout": 1
+        }
+      ],
+      "vout": [
+        {
+          "n": 0
+        },
+        {
+          "n": 0
+        }
+      ]
+    },
+    "graph": {
+      "txid": "abababababababababababababababababababababababababababababababab",
+      "chain": "bitcoin",
+      "network": "main",
+      "inputs": [
+        {
+          "outpoint": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd:1",
+          "script": null,
+          "value_sats": null,
+          "asset_id": "BTC",
+          "asset": "BTC"
+        }
+      ],
+      "outputs": [
+        {
+          "n": 0,
+          "script": null,
+          "value_sats": null,
+          "asset_id": "BTC",
+          "asset": "BTC",
+          "role": null
+        }
+      ],
+      "component": {},
+      "evidence_conflicts": []
+    }
+  },
+  {
+    "case": "vin_None",
+    "raw": {
+      "chain": "bitcoin",
+      "network": "main",
+      "txid": "abababababababababababababababababababababababababababababababab",
+      "vin": [
+        {
+          "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+          "vout": null
+        }
+      ],
+      "vout": [
+        {
+          "n": 0
+        },
+        {
+          "n": 1
+        }
+      ]
+    },
+    "graph": {
+      "txid": "abababababababababababababababababababababababababababababababab",
+      "chain": "bitcoin",
+      "network": "main",
+      "inputs": [
+        {
+          "outpoint": null,
+          "script": null,
+          "value_sats": null,
+          "asset_id": "BTC",
+          "asset": "BTC"
+        }
+      ],
+      "outputs": [
+        {
+          "n": 0,
+          "script": null,
+          "value_sats": null,
+          "asset_id": "BTC",
+          "asset": "BTC",
+          "role": null
+        },
+        {
+          "n": 1,
+          "script": null,
+          "value_sats": null,
+          "asset_id": "BTC",
+          "asset": "BTC",
+          "role": null
+        }
+      ],
+      "component": {},
+      "evidence_conflicts": []
+    }
+  },
+  {
+    "case": "vin_''",
+    "raw": {
+      "chain": "bitcoin",
+      "network": "main",
+      "txid": "abababababababababababababababababababababababababababababababab",
+      "vin": [
+        {
+          "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+          "vout": ""
+        }
+      ],
+      "vout": [
+        {
+          "n": 0
+        },
+        {
+          "n": 1
+        }
+      ]
+    },
+    "graph": {
+      "txid": "abababababababababababababababababababababababababababababababab",
+      "chain": "bitcoin",
+      "network": "main",
+      "inputs": [
+        {
+          "outpoint": null,
+          "script": null,
+          "value_sats": null,
+          "asset_id": "BTC",
+          "asset": "BTC"
+        }
+      ],
+      "outputs": [
+        {
+          "n": 0,
+          "script": null,
+          "value_sats": null,
+          "asset_id": "BTC",
+          "asset": "BTC",
+          "role": null
+        },
+        {
+          "n": 1,
+          "script": null,
+          "value_sats": null,
+          "asset_id": "BTC",
+          "asset": "BTC",
+          "role": null
+        }
+      ],
+      "component": {},
+      "evidence_conflicts": []
+    }
+  },
+  {
+    "case": "vin_[]",
+    "raw": {
+      "chain": "bitcoin",
+      "network": "main",
+      "txid": "abababababababababababababababababababababababababababababababab",
+      "vin": [
+        {
+          "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+          "vout": []
+        }
+      ],
+      "vout": [
+        {
+          "n": 0
+        },
+        {
+          "n": 1
+        }
+      ]
+    },
+    "graph": {
+      "txid": "abababababababababababababababababababababababababababababababab",
+      "chain": "bitcoin",
+      "network": "main",
+      "inputs": [
+        {
+          "outpoint": null,
+          "script": null,
+          "value_sats": null,
+          "asset_id": "BTC",
+          "asset": "BTC"
+        }
+      ],
+      "outputs": [
+        {
+          "n": 0,
+          "script": null,
+          "value_sats": null,
+          "asset_id": "BTC",
+          "asset": "BTC",
+          "role": null
+        },
+        {
+          "n": 1,
+          "script": null,
+          "value_sats": null,
+          "asset_id": "BTC",
+          "asset": "BTC",
+          "role": null
+        }
+      ],
+      "component": {},
+      "evidence_conflicts": []
+    }
+  },
+  {
+    "case": "vin_False",
+    "raw": {
+      "chain": "bitcoin",
+      "network": "main",
+      "txid": "abababababababababababababababababababababababababababababababab",
+      "vin": [
+        {
+          "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+          "vout": false
+        }
+      ],
+      "vout": [
+        {
+          "n": 0
+        },
+        {
+          "n": 1
+        }
+      ]
+    },
+    "graph": {
+      "txid": "abababababababababababababababababababababababababababababababab",
+      "chain": "bitcoin",
+      "network": "main",
+      "inputs": [
+        {
+          "outpoint": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd:0",
+          "script": null,
+          "value_sats": null,
+          "asset_id": "BTC",
+          "asset": "BTC"
+        }
+      ],
+      "outputs": [
+        {
+          "n": 0,
+          "script": null,
+          "value_sats": null,
+          "asset_id": "BTC",
+          "asset": "BTC",
+          "role": null
+        },
+        {
+          "n": 1,
+          "script": null,
+          "value_sats": null,
+          "asset_id": "BTC",
+          "asset": "BTC",
+          "role": null
+        }
+      ],
+      "component": {},
+      "evidence_conflicts": []
+    }
+  },
+  {
+    "case": "vin_0",
+    "raw": {
+      "chain": "bitcoin",
+      "network": "main",
+      "txid": "abababababababababababababababababababababababababababababababab",
+      "vin": [
+        {
+          "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+          "vout": 0
+        }
+      ],
+      "vout": [
+        {
+          "n": 0
+        },
+        {
+          "n": 1
+        }
+      ]
+    },
+    "graph": {
+      "txid": "abababababababababababababababababababababababababababababababab",
+      "chain": "bitcoin",
+      "network": "main",
+      "inputs": [
+        {
+          "outpoint": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd:0",
+          "script": null,
+          "value_sats": null,
+          "asset_id": "BTC",
+          "asset": "BTC"
+        }
+      ],
+      "outputs": [
+        {
+          "n": 0,
+          "script": null,
+          "value_sats": null,
+          "asset_id": "BTC",
+          "asset": "BTC",
+          "role": null
+        },
+        {
+          "n": 1,
+          "script": null,
+          "value_sats": null,
+          "asset_id": "BTC",
+          "asset": "BTC",
+          "role": null
+        }
+      ],
+      "component": {},
+      "evidence_conflicts": []
+    }
+  },
+  {
+    "case": "scope_combining_key",
+    "scope_row": {
+      "id": "fallback",
+      "wallet_id": "wallet",
+      "asset": "BTC",
+      "wallet_kind": "descriptor",
+      "config_json": "{}",
+      "external_id": "abababababababababababababababababababababababababababababababab",
+      "raw_json": "{\"t\\u0345xid\": \"abababababababababababababababababababababababababababababababab\"}"
+    },
+    "onchain_scope": [
+      "bitcoin",
+      "main",
+      "abababababababababababababababababababababababababababababababab",
+      "BTC"
+    ]
+  },
+  {
+    "case": "scope_unicode_version_key",
+    "scope_row": {
+      "id": "fallback",
+      "wallet_id": "wallet",
+      "asset": "BTC",
+      "wallet_kind": "descriptor",
+      "config_json": "{}",
+      "external_id": "abababababababababababababababababababababababababababababababab",
+      "raw_json": "{\"t\\u1c89xid\": \"abababababababababababababababababababababababababababababababab\"}"
+    },
+    "onchain_scope": [
+      "bitcoin",
+      "main",
+      "abababababababababababababababababababababababababababababababab",
+      "BTC"
+    ]
+  },
+  {
+    "case": "lightning_alias",
+    "network_row": {
+      "raw_json": {
+        "chain": "core_lightning",
+        "network": "regtest"
+      }
+    },
+    "network_evidence": [
+      "regtest",
+      null,
+      true
+    ]
+  },
+  {
+    "case": "ln_is_not_book_evidence",
+    "network_row": {
+      "raw_json": {
+        "chain": "ln",
+        "network": "main"
+      }
+    },
+    "network_evidence": [
+      null,
+      null,
+      false
+    ]
+  },
+  {
+    "case": "raw_config_conflict",
+    "network_row": {
+      "raw_json": {
+        "network": "main"
+      },
+      "config_json": {
+        "network": "regtest"
+      }
+    },
+    "network_evidence": [
+      null,
+      null,
+      false
+    ]
+  },
+  {
+    "case": "config_precedence",
+    "network_row": {
+      "config_json": {
+        "network": "main"
+      },
+      "wallet_config_json": {
+        "network": "regtest"
+      }
+    },
+    "network_evidence": [
+      "main",
+      null,
+      true
+    ]
+  },
+  {
+    "case": "importer_rail",
+    "network_row": {
+      "raw_json": {
+        "source": "bullbitcoin_wallet_csv",
+        "network": "lightning"
+      }
+    },
+    "network_evidence": [
+      null,
+      null,
+      true
+    ]
+  },
+  {
+    "case": "importer_rail_whitespace",
+    "network_row": {
+      "raw_json": {
+        "source": "bullbitcoin_wallet_csv",
+        "network": " lightning "
+      }
+    },
+    "network_evidence": [
+      null,
+      null,
+      false
+    ]
+  },
+  {
+    "case": "coinbase_network_object",
+    "network_row": {
+      "wallet_kind": "coinbase",
+      "raw_json": {
+        "network": {
+          "hash": "abcd"
+        }
+      }
+    },
+    "network_evidence": [
+      null,
+      null,
+      true
+    ]
+  },
+  {
+    "case": "instance_conflict",
+    "network_row": {
+      "chain_instance_id": "a",
+      "raw_json": {
+        "chain_instance_id": "b",
+        "network": "regtest"
+      }
+    },
+    "network_evidence": [
+      "regtest",
+      null,
+      false
+    ]
+  },
+  {
+    "case": "row_scope_conflict",
+    "network_row": {
+      "chain": "bitcoin",
+      "network": "regtest",
+      "raw_json": {
+        "network": "main"
+      }
+    },
+    "network_evidence": [
+      "main",
+      null,
+      false
+    ]
+  },
+  {
+    "case": "liquid_asset_conflict",
+    "network_row": {
+      "asset": "BTC",
+      "raw_json": {
+        "chain": "liquid"
+      }
+    },
+    "network_evidence": [
+      null,
+      null,
+      false
+    ]
+  },
+  {
+    "case": "binance_btc_rail",
+    "network_row": {
+      "wallet_kind": "binance",
+      "asset": "BTC",
+      "raw_json": {
+        "network": "BTC"
+      }
+    },
+    "network_evidence": [
+      "main",
+      null,
+      true
+    ]
+  },
+  {
+    "case": "binance_btc_rail_text",
+    "network_row": {
+      "wallet_kind": "binance",
+      "asset": "BTC",
+      "raw_json": "{\"network\": \"BTC\"}"
+    },
+    "network_evidence": [
+      "main",
+      null,
+      true
+    ]
+  },
+  {
+    "case": "binance_lightning_rail",
+    "network_row": {
+      "wallet_kind": "binance",
+      "asset": "BTC",
+      "raw_json": {
+        "network": "LIGHTNING"
+      }
+    },
+    "network_evidence": [
+      null,
+      null,
+      false
+    ]
+  },
+  {
+    "case": "binance_token_rail",
+    "network_row": {
+      "wallet_kind": "binance",
+      "asset": "BTC",
+      "raw_json": {
+        "network": "BSC"
+      }
+    },
+    "network_evidence": [
+      null,
+      null,
+      false
+    ]
+  },
+  {
+    "case": "binance_lowercase_rail",
+    "network_row": {
+      "wallet_kind": "binance",
+      "asset": "BTC",
+      "raw_json": {
+        "network": "btc"
+      }
+    },
+    "network_evidence": [
+      null,
+      null,
+      false
+    ]
+  },
+  {
+    "case": "binance_rail_on_liquid",
+    "network_row": {
+      "wallet_kind": "binance",
+      "asset": "LBTC",
+      "raw_json": {
+        "network": "BTC"
+      }
+    },
+    "network_evidence": [
+      null,
+      null,
+      false
+    ]
+  },
+  {
+    "case": "binance_rail_without_asset",
+    "network_row": {
+      "wallet_kind": "binance",
+      "raw_json": {
+        "network": "BTC"
+      }
+    },
+    "network_evidence": [
+      null,
+      null,
+      false
+    ]
+  },
+  {
+    "case": "binance_rail_regtest_config",
+    "network_row": {
+      "wallet_kind": "binance",
+      "asset": "BTC",
+      "raw_json": {
+        "network": "BTC"
+      },
+      "wallet_config_json": {
+        "network": "regtest"
+      }
+    },
+    "network_evidence": [
+      null,
+      null,
+      false
+    ]
+  },
+  {
+    "case": "btc_rail_outside_binance",
+    "network_row": {
+      "wallet_kind": "custom",
+      "asset": "BTC",
+      "raw_json": {
+        "network": "BTC"
+      }
+    },
+    "network_evidence": [
+      null,
+      null,
+      false
+    ]
+  }
+]

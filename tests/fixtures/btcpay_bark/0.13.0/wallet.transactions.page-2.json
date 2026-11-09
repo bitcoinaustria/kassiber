@@ -1,0 +1,65 @@
+{
+  "body": [
+    {
+      "amount": "0",
+      "blockHash": null,
+      "blockHeight": null,
+      "comment": "",
+      "confirmations": 0,
+      "fee": "0",
+      "id": "16-639297549175577978",
+      "kind": "exit",
+      "labels": {},
+      "movementId": 16,
+      "outpoint": null,
+      "paymentHash": null,
+      "status": "Unconfirmed",
+      "timestamp": 1794158117,
+      "transactionHash": "906962e9ce662e2f4684984a06ee54a09e06af716909b889aa6ac2f453a7af8e"
+    },
+    {
+      "amount": "-0.00000155",
+      "blockHash": "16c3b569935dd45238333339bf94db894530626fb596aabf00bcb0e72d499368",
+      "blockHeight": 124,
+      "comment": "",
+      "confirmations": 157,
+      "fee": "0.00000155",
+      "id": "tx:cb57fe9f78b8e472534dadcc1da566fc051df0fbe1485de6db1ef3bf3f8928c4",
+      "kind": "onchain-send",
+      "labels": {},
+      "movementId": null,
+      "outpoint": null,
+      "paymentHash": null,
+      "status": "Confirmed",
+      "timestamp": 1794158093,
+      "transactionHash": "cb57fe9f78b8e472534dadcc1da566fc051df0fbe1485de6db1ef3bf3f8928c4"
+    },
+    {
+      "amount": "-0.00020201",
+      "blockHash": "41d1eb74e8a74daeda7211573566100dc5e9ba62a430855ab0c60b0ae9bd1d4e",
+      "blockHeight": 123,
+      "comment": "",
+      "confirmations": 158,
+      "fee": "0.00000201",
+      "id": "tx:2fbca4ba3bd7cde03bd8c2d67fbe1e51fb2b722c282be000896bf1e46f6e0a66",
+      "kind": "onchain-send",
+      "labels": {},
+      "movementId": null,
+      "outpoint": null,
+      "paymentHash": null,
+      "status": "Confirmed",
+      "timestamp": 1794158058,
+      "transactionHash": "2fbca4ba3bd7cde03bd8c2d67fbe1e51fb2b722c282be000896bf1e46f6e0a66"
+    }
+  ],
+  "request": {
+    "key": "read_only",
+    "method": "GET",
+    "path": "/api/v1/stores/{storeId}/payment-methods/BTC-ARK/wallet/transactions?skip=3&limit=3",
+    "permissions": [
+      "btcpay.store.canviewstoresettings",
+      "btcpay.store.canviewwallet"
+    ]
+  },
+  "status": 200
+}

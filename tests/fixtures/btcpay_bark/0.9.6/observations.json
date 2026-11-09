@@ -1,0 +1,260 @@
+{
+  "id_stability_after_restart": {},
+  "id_stability_second_read": {
+    "comparable": false
+  },
+  "network_hints": [
+    {
+      "file": "payment-methods.include-config.modify-key",
+      "hint": "field connectionString",
+      "path": "$[1].config.connectionString",
+      "sample": "type=bark;capability=<redacted>"
+    },
+    {
+      "file": "payment-methods.include-config.modify-key",
+      "hint": "connection string",
+      "path": "$[1].config.connectionString",
+      "sample": "type=bark;capability=<redacted>"
+    },
+    {
+      "file": "payment-method.BTC-LN.include-config.modify-key",
+      "hint": "field connectionString",
+      "path": "$.config.connectionString",
+      "sample": "type=bark;capability=<redacted>"
+    },
+    {
+      "file": "payment-method.BTC-LN.include-config.modify-key",
+      "hint": "connection string",
+      "path": "$.config.connectionString",
+      "sample": "type=bark;capability=<redacted>"
+    },
+    {
+      "file": "invoices",
+      "hint": "bolt11 regtest (lnbcrt)",
+      "path": "$[0].paymentMethods[0].destination",
+      "sample": "lnbcrt1200u1p40pvznsp5dmamkmadea626s96mx"
+    },
+    {
+      "file": "invoices",
+      "hint": "bolt11 regtest (lnbcrt)",
+      "path": "$[0].paymentMethods[0].paymentLink",
+      "sample": "lightning:lnbcrt1200u1p40pvznsp5dmamkmad"
+    },
+    {
+      "file": "invoices",
+      "hint": "bolt11 regtest (lnbcrt)",
+      "path": "$[0].paymentMethods[0].payments[0].destination",
+      "sample": "lnbcrt1200u1p40pvznsp5dmamkmadea626s96mx"
+    },
+    {
+      "file": "invoices",
+      "hint": "ark address (testnet HRP tark)",
+      "path": "$[1].paymentMethods[0].destination",
+      "sample": "tark1p652ycpezqqp8e8asc8hv3wm4hzm02efcmm"
+    },
+    {
+      "file": "invoices",
+      "hint": "BIP21/321 link",
+      "path": "$[1].paymentMethods[0].paymentLink",
+      "sample": "bitcoin:?amount=0.0&lightning=lnbcrt1500"
+    },
+    {
+      "file": "invoices",
+      "hint": "ark address (testnet HRP tark)",
+      "path": "$[1].paymentMethods[0].additionalData.arkAddress",
+      "sample": "tark1p652ycpezqqp8e8asc8hv3wm4hzm02efcmm"
+    },
+    {
+      "file": "invoices",
+      "hint": "bolt11 regtest (lnbcrt)",
+      "path": "$[1].paymentMethods[1].destination",
+      "sample": "lnbcrt1500u1p40pvz0sp52sp90nefxzu2reu84a"
+    },
+    {
+      "file": "invoices",
+      "hint": "bolt11 regtest (lnbcrt)",
+      "path": "$[1].paymentMethods[1].paymentLink",
+      "sample": "lightning:lnbcrt1500u1p40pvz0sp52sp90nef"
+    },
+    {
+      "file": "invoices",
+      "hint": "bolt11 regtest (lnbcrt)",
+      "path": "$[1].paymentMethods[1].payments[0].destination",
+      "sample": "lnbcrt1500u1p40pvz0sp52sp90nefxzu2reu84a"
+    },
+    {
+      "file": "invoices",
+      "hint": "ark address (testnet HRP tark)",
+      "path": "$[2].paymentMethods[0].destination",
+      "sample": "tark1p652ycpezqqpqvldq6j54q0vd473hygtxyu"
+    },
+    {
+      "file": "invoices",
+      "hint": "BIP21/321 link",
+      "path": "$[2].paymentMethods[0].paymentLink",
+      "sample": "bitcoin:?amount=0.0&lightning=lnbcrt2m1p"
+    },
+    {
+      "file": "invoices",
+      "hint": "ark address (testnet HRP tark)",
+      "path": "$[2].paymentMethods[0].payments[0].destination",
+      "sample": "tark1p652ycpezqqpqvldq6j54q0vd473hygtxyu"
+    },
+    {
+      "file": "invoices",
+      "hint": "ark address (testnet HRP tark)",
+      "path": "$[2].paymentMethods[0].additionalData.arkAddress",
+      "sample": "tark1p652ycpezqqpqvldq6j54q0vd473hygtxyu"
+    },
+    {
+      "file": "invoices",
+      "hint": "bolt11 regtest (lnbcrt)",
+      "path": "$[2].paymentMethods[1].destination",
+      "sample": "lnbcrt2m1p40pvpksp563elvuvg3w0t967seqfsk"
+    },
+    {
+      "file": "invoices",
+      "hint": "bolt11 regtest (lnbcrt)",
+      "path": "$[2].paymentMethods[1].paymentLink",
+      "sample": "lightning:lnbcrt2m1p40pvpksp563elvuvg3w0"
+    },
+    {
+      "file": "invoice.QAp19F7XqAnS81j1cPkWNu.payment-methods.accounted",
+      "hint": "bolt11 regtest (lnbcrt)",
+      "path": "$[0].destination",
+      "sample": "lnbcrt1200u1p40pvznsp5dmamkmadea626s96mx"
+    },
+    {
+      "file": "invoice.QAp19F7XqAnS81j1cPkWNu.payment-methods.accounted",
+      "hint": "bolt11 regtest (lnbcrt)",
+      "path": "$[0].paymentLink",
+      "sample": "lightning:lnbcrt1200u1p40pvznsp5dmamkmad"
+    },
+    {
+      "file": "invoice.QAp19F7XqAnS81j1cPkWNu.payment-methods.accounted",
+      "hint": "bolt11 regtest (lnbcrt)",
+      "path": "$[0].payments[0].destination",
+      "sample": "lnbcrt1200u1p40pvznsp5dmamkmadea626s96mx"
+    },
+    {
+      "file": "invoice.37mRWRWtZsxmVdNf22EsJc.payment-methods.accounted",
+      "hint": "ark address (testnet HRP tark)",
+      "path": "$[0].destination",
+      "sample": "tark1p652ycpezqqp8e8asc8hv3wm4hzm02efcmm"
+    },
+    {
+      "file": "invoice.37mRWRWtZsxmVdNf22EsJc.payment-methods.accounted",
+      "hint": "BIP21/321 link",
+      "path": "$[0].paymentLink",
+      "sample": "bitcoin:?amount=0.0&lightning=lnbcrt1500"
+    },
+    {
+      "file": "invoice.37mRWRWtZsxmVdNf22EsJc.payment-methods.accounted",
+      "hint": "ark address (testnet HRP tark)",
+      "path": "$[0].additionalData.arkAddress",
+      "sample": "tark1p652ycpezqqp8e8asc8hv3wm4hzm02efcmm"
+    },
+    {
+      "file": "invoice.37mRWRWtZsxmVdNf22EsJc.payment-methods.accounted",
+      "hint": "bolt11 regtest (lnbcrt)",
+      "path": "$[1].destination",
+      "sample": "lnbcrt1500u1p40pvz0sp52sp90nefxzu2reu84a"
+    },
+    {
+      "file": "invoice.37mRWRWtZsxmVdNf22EsJc.payment-methods.accounted",
+      "hint": "bolt11 regtest (lnbcrt)",
+      "path": "$[1].paymentLink",
+      "sample": "lightning:lnbcrt1500u1p40pvz0sp52sp90nef"
+    },
+    {
+      "file": "invoice.37mRWRWtZsxmVdNf22EsJc.payment-methods.accounted",
+      "hint": "bolt11 regtest (lnbcrt)",
+      "path": "$[1].payments[0].destination",
+      "sample": "lnbcrt1500u1p40pvz0sp52sp90nefxzu2reu84a"
+    },
+    {
+      "file": "invoice.6CV5Yy4JCsfYxU6wKuY4XH.payment-methods.accounted",
+      "hint": "ark address (testnet HRP tark)",
+      "path": "$[0].destination",
+      "sample": "tark1p652ycpezqqpqvldq6j54q0vd473hygtxyu"
+    },
+    {
+      "file": "invoice.6CV5Yy4JCsfYxU6wKuY4XH.payment-methods.accounted",
+      "hint": "BIP21/321 link",
+      "path": "$[0].paymentLink",
+      "sample": "bitcoin:?amount=0.0&lightning=lnbcrt2m1p"
+    },
+    {
+      "file": "invoice.6CV5Yy4JCsfYxU6wKuY4XH.payment-methods.accounted",
+      "hint": "ark address (testnet HRP tark)",
+      "path": "$[0].payments[0].destination",
+      "sample": "tark1p652ycpezqqpqvldq6j54q0vd473hygtxyu"
+    },
+    {
+      "file": "invoice.6CV5Yy4JCsfYxU6wKuY4XH.payment-methods.accounted",
+      "hint": "ark address (testnet HRP tark)",
+      "path": "$[0].additionalData.arkAddress",
+      "sample": "tark1p652ycpezqqpqvldq6j54q0vd473hygtxyu"
+    },
+    {
+      "file": "invoice.6CV5Yy4JCsfYxU6wKuY4XH.payment-methods.accounted",
+      "hint": "bolt11 regtest (lnbcrt)",
+      "path": "$[1].destination",
+      "sample": "lnbcrt2m1p40pvpksp563elvuvg3w0t967seqfsk"
+    },
+    {
+      "file": "invoice.6CV5Yy4JCsfYxU6wKuY4XH.payment-methods.accounted",
+      "hint": "bolt11 regtest (lnbcrt)",
+      "path": "$[1].paymentLink",
+      "sample": "lightning:lnbcrt2m1p40pvpksp563elvuvg3w0"
+    }
+  ],
+  "plugin": "0.9.6",
+  "scenario": [
+    {
+      "outcome": "ok",
+      "step": "onchain-receive"
+    },
+    {
+      "outcome": "ok",
+      "step": "board"
+    },
+    {
+      "outcome": "ok",
+      "step": "ark-receive-invoice"
+    },
+    {
+      "outcome": "ok",
+      "step": "ark-receive-plain"
+    },
+    {
+      "outcome": "ok",
+      "step": "lightning-receive-invoice"
+    },
+    {
+      "outcome": "ok",
+      "step": "lightning-receive-ln-only"
+    },
+    {
+      "outcome": "ok",
+      "step": "lightning-receive-plain"
+    },
+    {
+      "outcome": "ok",
+      "step": "ark-send"
+    },
+    {
+      "outcome": "ok",
+      "step": "lightning-send"
+    },
+    {
+      "error": "RuntimeError: no antiforgery token on page",
+      "outcome": "failed",
+      "step": "refresh"
+    },
+    {
+      "outcome": "ok",
+      "step": "settle"
+    }
+  ]
+}

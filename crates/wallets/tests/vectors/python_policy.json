@@ -1,0 +1,4982 @@
+{
+ "cases": [
+  {
+   "name": "fresh",
+   "steps": [
+    {
+     "after": {
+      "accounts": [],
+      "ai_chat_messages": [],
+      "ai_chat_sessions": [],
+      "ai_provider_checks": [],
+      "ai_provider_secret_refs": [],
+      "ai_providers": [],
+      "attachments": [],
+      "backends": [],
+      "bip329_labels": [],
+      "book_network_bindings": [],
+      "book_reset_parked_rows": [],
+      "book_reset_transactions": [],
+      "btcpay_account_routes": [],
+      "btcpay_provenance_records": [],
+      "btcpay_store_sync_states": [],
+      "chain_analysis_acquisition_grants": [],
+      "chain_analysis_cases": [],
+      "chain_analysis_dataset_claims": [],
+      "chain_analysis_datasets": [],
+      "chain_analysis_label_history": [],
+      "chain_analysis_labels": [],
+      "chain_analysis_observations": [],
+      "chain_analysis_reference_assertions": [],
+      "chain_analysis_reference_blocks": [],
+      "chain_analysis_watch_inbox": [],
+      "chain_analysis_watches": [],
+      "chain_index_aliases": [],
+      "chain_index_clock": [
+       [
+        1,
+        6
+       ]
+      ],
+      "chain_index_dirty": [
+       [
+        "profiles",
+        -1,
+        2
+       ],
+       [
+        "wallets",
+        -1,
+        6
+       ]
+      ],
+      "chain_index_edges": [],
+      "chain_index_finding_nodes": [],
+      "chain_index_findings": [],
+      "chain_index_label_nodes": [],
+      "chain_index_labels": [],
+      "chain_index_nodes": [],
+      "chain_index_source_nodes": [],
+      "chain_index_sources": [],
+      "chain_index_state": [],
+      "chain_observation_provenance": [],
+      "chain_observer_coverage": [],
+      "chain_observer_instances": [],
+      "chain_observer_values": [],
+      "commercial_links": [],
+      "custody_ai_assistance_audits": [],
+      "custody_authored_evidence_snapshots": [],
+      "custody_authored_migration_issues": [],
+      "custody_component_allocations": [],
+      "custody_component_economic_terms": [],
+      "custody_component_evidence_commitments": [],
+      "custody_component_legs": [],
+      "custody_component_purge_authorizations": [],
+      "custody_component_transaction_memberships": [],
+      "custody_components": [],
+      "custody_filed_report_impact_resolutions": [],
+      "custody_filed_report_impacts": [],
+      "custody_gap_review_relation_sets": [],
+      "custody_gap_review_transactions": [],
+      "custody_gap_reviews": [],
+      "direct_swap_payouts": [],
+      "external_document_attachments": [],
+      "external_documents": [],
+      "filed_report_chain_captures": [],
+      "filed_report_chain_dependencies": [],
+      "filed_report_chain_impacts": [],
+      "filed_report_chain_resolutions": [],
+      "filed_report_snapshots": [],
+      "freshness_jobs": [],
+      "freshness_source_states": [],
+      "import_batch_transactions": [],
+      "import_batches": [],
+      "journal_account_holdings": [],
+      "journal_custody_decisions": [],
+      "journal_custody_economic_relations": [],
+      "journal_custody_gap_inputs": [],
+      "journal_custody_reconciliations": [],
+      "journal_entries": [],
+      "journal_quantity_balances": [],
+      "journal_quantity_issues": [],
+      "journal_quantity_postings": [],
+      "journal_quarantines": [],
+      "journal_tax_summary": [],
+      "journal_wallet_holdings": [],
+      "lightning_node_records": [],
+      "lightning_node_syncs": [],
+      "loan_legs": [],
+      "profiles": [
+       [
+        "p",
+        "w",
+        "primary",
+        "EUR",
+        "generic",
+        365,
+        "FIFO",
+        0,
+        1,
+        "global",
+        4,
+        4,
+        0,
+        0,
+        "processed",
+        3,
+        null,
+        "fixed",
+        null
+       ],
+       [
+        "q",
+        "w",
+        "other",
+        "USD",
+        "generic",
+        365,
+        "FIFO",
+        0,
+        1,
+        "global",
+        0,
+        0,
+        0,
+        0,
+        null,
+        0,
+        null,
+        "fixed",
+        null
+       ]
+      ],
+      "rates_cache": [],
+      "rates_checked_minutes": [],
+      "review_workflow_receipts": [],
+      "saved_views": [],
+      "schema_migration_audits": [],
+      "settings": [],
+      "source_funds_cases": [],
+      "source_funds_link_attachments": [],
+      "source_funds_links": [],
+      "source_funds_recipients": [],
+      "source_funds_snapshots": [],
+      "source_funds_source_attachments": [],
+      "source_funds_sources": [],
+      "swap_matching_rules": [],
+      "synthetic_import_duplicate_reviews": [],
+      "tags": [],
+      "transaction_edit_events": [],
+      "transaction_edit_fields": [],
+      "transaction_graph_cache": [],
+      "transaction_pair_dismissals": [],
+      "transaction_pairs": [],
+      "transaction_tags": [],
+      "transactions": [],
+      "wallet_policy_coverage_witnesses": [
+       [
+        "id-0002",
+        "change",
+        3,
+        null,
+        "bdk",
+        "2030-01-01T00:00:02Z"
+       ],
+       [
+        "id-0002",
+        "receive",
+        5,
+        2,
+        "bdk",
+        "2030-01-01T00:00:02Z"
+       ]
+      ],
+      "wallet_policy_epochs": [
+       [
+        "id-0001",
+        "w",
+        "p",
+        "a",
+        "bitcoin",
+        "main",
+        "active",
+        "{\"chain\": \"Bitcoin\", \"descriptor\": \"wpkh(synthetic)\", \"gap_limit\": 20, \"network\": \"mainnet\", \"samourai\": {\"role\": \"x\"}, \"script_types\": [\"p2wpkh\"]}",
+        "2030-01-01T00:00:01Z",
+        null
+       ]
+      ],
+      "wallet_policy_sources": [
+       [
+        "id-0002",
+        "id-0001",
+        "a",
+        "descriptor:default",
+        "bdk",
+        "[\"receive\", \"change\"]",
+        "2030-01-01T00:00:02Z",
+        "2030-01-01T00:00:02Z"
+       ]
+      ],
+      "wallet_utxo_refreshes": [],
+      "wallet_utxos": [],
+      "wallets": [
+       [
+        "a",
+        "w",
+        "p",
+        null,
+        "Wällét",
+        "descriptor",
+        "{\"descriptor\": \"wpkh(synthetic)\", \"change_descriptor\": \"\", \"gap_limit\": 20, \"addresses\": [], \"script_types\": [\"p2wpkh\"], \"label\": \"not private\", \"chain\": \"Bitcoin\", \"network\": \"mainnet\", \"samourai\": {\"role\": \"x\"}, \"xpub\": null}",
+        "fixed"
+       ],
+       [
+        "b",
+        "w",
+        "p",
+        null,
+        "second",
+        "descriptor",
+        "{}",
+        "fixed"
+       ],
+       [
+        "c",
+        "w",
+        "q",
+        null,
+        "foreign",
+        "descriptor",
+        "{}",
+        "fixed"
+       ]
+      ],
+      "workspaces": [
+       [
+        "w",
+        "synthetic",
+        "fixed"
+       ]
+      ]
+     },
+     "before": {
+      "chain_index_clock": {
+       "columns": [
+        "id",
+        "revision"
+       ],
+       "rows": [
+        [
+         1,
+         6
+        ]
+       ]
+      },
+      "chain_index_dirty": {
+       "columns": [
+        "source_table",
+        "source_key",
+        "revision"
+       ],
+       "rows": [
+        [
+         "profiles",
+         -1,
+         2
+        ],
+        [
+         "wallets",
+         -1,
+         6
+        ]
+       ]
+      },
+      "profiles": {
+       "columns": [
+        "id",
+        "workspace_id",
+        "label",
+        "fiat_currency",
+        "tax_country",
+        "tax_long_term_days",
+        "gains_algorithm",
+        "require_coarse_review",
+        "bitcoin_rail_carrying_value",
+        "cost_basis_pool_scope",
+        "journal_input_version",
+        "last_processed_input_version",
+        "required_journal_semantics_version",
+        "journal_semantics_version",
+        "last_processed_at",
+        "last_processed_tx_count",
+        "ownership_review_counts_json",
+        "created_at",
+        "swap_candidate_count"
+       ],
+       "rows": [
+        [
+         "p",
+         "w",
+         "primary",
+         "EUR",
+         "generic",
+         365,
+         "FIFO",
+         0,
+         1,
+         "global",
+         4,
+         4,
+         0,
+         0,
+         "processed",
+         3,
+         null,
+         "fixed",
+         null
+        ],
+        [
+         "q",
+         "w",
+         "other",
+         "USD",
+         "generic",
+         365,
+         "FIFO",
+         0,
+         1,
+         "global",
+         0,
+         0,
+         0,
+         0,
+         null,
+         0,
+         null,
+         "fixed",
+         null
+        ]
+       ]
+      },
+      "wallets": {
+       "columns": [
+        "id",
+        "workspace_id",
+        "profile_id",
+        "account_id",
+        "label",
+        "kind",
+        "config_json",
+        "created_at"
+       ],
+       "rows": [
+        [
+         "a",
+         "w",
+         "p",
+         null,
+         "Wällét",
+         "descriptor",
+         "{\"descriptor\": \"wpkh(synthetic)\", \"change_descriptor\": \"\", \"gap_limit\": 20, \"addresses\": [], \"script_types\": [\"p2wpkh\"], \"label\": \"not private\", \"chain\": \"Bitcoin\", \"network\": \"mainnet\", \"samourai\": {\"role\": \"x\"}, \"xpub\": null}",
+         "fixed"
+        ],
+        [
+         "b",
+         "w",
+         "p",
+         null,
+         "second",
+         "descriptor",
+         "{}",
+         "fixed"
+        ],
+        [
+         "c",
+         "w",
+         "q",
+         null,
+         "foreign",
+         "descriptor",
+         "{}",
+         "fixed"
+        ]
+       ]
+      },
+      "workspaces": {
+       "columns": [
+        "id",
+        "label",
+        "created_at"
+       ],
+       "rows": [
+        [
+         "w",
+         "synthetic",
+         "fixed"
+        ]
+       ]
+      }
+     },
+     "coverage": [
+      [
+       "receive",
+       5,
+       2
+      ],
+      [
+       "change",
+       3,
+       null
+      ]
+     ],
+     "identity": {
+      "branch_keys": [
+       "receive",
+       "change",
+       "receive"
+      ],
+      "chain": "bitcoin",
+      "network": "main",
+      "observer_kind": "bdk",
+      "source_key": "descriptor:default",
+      "source_wallet_id": "a"
+     },
+     "outcome": {
+      "result": "id-0001"
+     }
+    }
+   ]
+  },
+  {
+   "name": "private-scan-depth",
+   "steps": [
+    {
+     "after": {
+      "accounts": [],
+      "ai_chat_messages": [],
+      "ai_chat_sessions": [],
+      "ai_provider_checks": [],
+      "ai_provider_secret_refs": [],
+      "ai_providers": [],
+      "attachments": [],
+      "backends": [],
+      "bip329_labels": [],
+      "book_network_bindings": [],
+      "book_reset_parked_rows": [],
+      "book_reset_transactions": [],
+      "btcpay_account_routes": [],
+      "btcpay_provenance_records": [],
+      "btcpay_store_sync_states": [],
+      "chain_analysis_acquisition_grants": [],
+      "chain_analysis_cases": [],
+      "chain_analysis_dataset_claims": [],
+      "chain_analysis_datasets": [],
+      "chain_analysis_label_history": [],
+      "chain_analysis_labels": [],
+      "chain_analysis_observations": [],
+      "chain_analysis_reference_assertions": [],
+      "chain_analysis_reference_blocks": [],
+      "chain_analysis_watch_inbox": [],
+      "chain_analysis_watches": [],
+      "chain_index_aliases": [],
+      "chain_index_clock": [
+       [
+        1,
+        6
+       ]
+      ],
+      "chain_index_dirty": [
+       [
+        "profiles",
+        -1,
+        2
+       ],
+       [
+        "wallets",
+        -1,
+        6
+       ]
+      ],
+      "chain_index_edges": [],
+      "chain_index_finding_nodes": [],
+      "chain_index_findings": [],
+      "chain_index_label_nodes": [],
+      "chain_index_labels": [],
+      "chain_index_nodes": [],
+      "chain_index_source_nodes": [],
+      "chain_index_sources": [],
+      "chain_index_state": [],
+      "chain_observation_provenance": [],
+      "chain_observer_coverage": [],
+      "chain_observer_instances": [],
+      "chain_observer_values": [],
+      "commercial_links": [],
+      "custody_ai_assistance_audits": [],
+      "custody_authored_evidence_snapshots": [],
+      "custody_authored_migration_issues": [],
+      "custody_component_allocations": [],
+      "custody_component_economic_terms": [],
+      "custody_component_evidence_commitments": [],
+      "custody_component_legs": [],
+      "custody_component_purge_authorizations": [],
+      "custody_component_transaction_memberships": [],
+      "custody_components": [],
+      "custody_filed_report_impact_resolutions": [],
+      "custody_filed_report_impacts": [],
+      "custody_gap_review_relation_sets": [],
+      "custody_gap_review_transactions": [],
+      "custody_gap_reviews": [],
+      "direct_swap_payouts": [],
+      "external_document_attachments": [],
+      "external_documents": [],
+      "filed_report_chain_captures": [],
+      "filed_report_chain_dependencies": [],
+      "filed_report_chain_impacts": [],
+      "filed_report_chain_resolutions": [],
+      "filed_report_snapshots": [],
+      "freshness_jobs": [],
+      "freshness_source_states": [],
+      "import_batch_transactions": [],
+      "import_batches": [],
+      "journal_account_holdings": [],
+      "journal_custody_decisions": [],
+      "journal_custody_economic_relations": [],
+      "journal_custody_gap_inputs": [],
+      "journal_custody_reconciliations": [],
+      "journal_entries": [],
+      "journal_quantity_balances": [],
+      "journal_quantity_issues": [],
+      "journal_quantity_postings": [],
+      "journal_quarantines": [],
+      "journal_tax_summary": [],
+      "journal_wallet_holdings": [],
+      "lightning_node_records": [],
+      "lightning_node_syncs": [],
+      "loan_legs": [],
+      "profiles": [
+       [
+        "p",
+        "w",
+        "primary",
+        "EUR",
+        "generic",
+        365,
+        "FIFO",
+        0,
+        1,
+        "global",
+        4,
+        4,
+        0,
+        0,
+        "processed",
+        3,
+        null,
+        "fixed",
+        null
+       ],
+       [
+        "q",
+        "w",
+        "other",
+        "USD",
+        "generic",
+        365,
+        "FIFO",
+        0,
+        1,
+        "global",
+        0,
+        0,
+        0,
+        0,
+        null,
+        0,
+        null,
+        "fixed",
+        null
+       ]
+      ],
+      "rates_cache": [],
+      "rates_checked_minutes": [],
+      "review_workflow_receipts": [],
+      "saved_views": [],
+      "schema_migration_audits": [],
+      "settings": [],
+      "source_funds_cases": [],
+      "source_funds_link_attachments": [],
+      "source_funds_links": [],
+      "source_funds_recipients": [],
+      "source_funds_snapshots": [],
+      "source_funds_source_attachments": [],
+      "source_funds_sources": [],
+      "swap_matching_rules": [],
+      "synthetic_import_duplicate_reviews": [],
+      "tags": [],
+      "transaction_edit_events": [],
+      "transaction_edit_fields": [],
+      "transaction_graph_cache": [],
+      "transaction_pair_dismissals": [],
+      "transaction_pairs": [],
+      "transaction_tags": [],
+      "transactions": [],
+      "wallet_policy_coverage_witnesses": [
+       [
+        "id-0002",
+        "change",
+        3,
+        null,
+        "bdk",
+        "2030-01-01T00:00:02Z"
+       ],
+       [
+        "id-0002",
+        "receive",
+        5,
+        2,
+        "bdk",
+        "2030-01-01T00:00:02Z"
+       ]
+      ],
+      "wallet_policy_epochs": [
+       [
+        "id-0001",
+        "w",
+        "p",
+        "a",
+        "bitcoin",
+        "main",
+        "active",
+        "{\"chain\": \"Bitcoin\", \"descriptor\": \"wpkh(synthetic)\", \"gap_limit\": 20, \"network\": \"mainnet\", \"ownership_scan_to_index\": 37, \"samourai\": {\"role\": \"x\"}, \"script_types\": [\"p2wpkh\"]}",
+        "2030-01-01T00:00:01Z",
+        null
+       ]
+      ],
+      "wallet_policy_sources": [
+       [
+        "id-0002",
+        "id-0001",
+        "a",
+        "descriptor:default",
+        "bdk",
+        "[\"receive\", \"change\"]",
+        "2030-01-01T00:00:02Z",
+        "2030-01-01T00:00:02Z"
+       ]
+      ],
+      "wallet_utxo_refreshes": [],
+      "wallet_utxos": [],
+      "wallets": [
+       [
+        "a",
+        "w",
+        "p",
+        null,
+        "Wällét",
+        "descriptor",
+        "{\"descriptor\": \"wpkh(synthetic)\", \"change_descriptor\": \"\", \"gap_limit\": 20, \"addresses\": [], \"script_types\": [\"p2wpkh\"], \"label\": \"not private\", \"chain\": \"Bitcoin\", \"network\": \"mainnet\", \"samourai\": {\"role\": \"x\"}, \"xpub\": null, \"ownership_scan_to_index\": 37}",
+        "fixed"
+       ],
+       [
+        "b",
+        "w",
+        "p",
+        null,
+        "second",
+        "descriptor",
+        "{}",
+        "fixed"
+       ],
+       [
+        "c",
+        "w",
+        "q",
+        null,
+        "foreign",
+        "descriptor",
+        "{}",
+        "fixed"
+       ]
+      ],
+      "workspaces": [
+       [
+        "w",
+        "synthetic",
+        "fixed"
+       ]
+      ]
+     },
+     "before": {
+      "chain_index_clock": {
+       "columns": [
+        "id",
+        "revision"
+       ],
+       "rows": [
+        [
+         1,
+         6
+        ]
+       ]
+      },
+      "chain_index_dirty": {
+       "columns": [
+        "source_table",
+        "source_key",
+        "revision"
+       ],
+       "rows": [
+        [
+         "profiles",
+         -1,
+         2
+        ],
+        [
+         "wallets",
+         -1,
+         6
+        ]
+       ]
+      },
+      "profiles": {
+       "columns": [
+        "id",
+        "workspace_id",
+        "label",
+        "fiat_currency",
+        "tax_country",
+        "tax_long_term_days",
+        "gains_algorithm",
+        "require_coarse_review",
+        "bitcoin_rail_carrying_value",
+        "cost_basis_pool_scope",
+        "journal_input_version",
+        "last_processed_input_version",
+        "required_journal_semantics_version",
+        "journal_semantics_version",
+        "last_processed_at",
+        "last_processed_tx_count",
+        "ownership_review_counts_json",
+        "created_at",
+        "swap_candidate_count"
+       ],
+       "rows": [
+        [
+         "p",
+         "w",
+         "primary",
+         "EUR",
+         "generic",
+         365,
+         "FIFO",
+         0,
+         1,
+         "global",
+         4,
+         4,
+         0,
+         0,
+         "processed",
+         3,
+         null,
+         "fixed",
+         null
+        ],
+        [
+         "q",
+         "w",
+         "other",
+         "USD",
+         "generic",
+         365,
+         "FIFO",
+         0,
+         1,
+         "global",
+         0,
+         0,
+         0,
+         0,
+         null,
+         0,
+         null,
+         "fixed",
+         null
+        ]
+       ]
+      },
+      "wallets": {
+       "columns": [
+        "id",
+        "workspace_id",
+        "profile_id",
+        "account_id",
+        "label",
+        "kind",
+        "config_json",
+        "created_at"
+       ],
+       "rows": [
+        [
+         "a",
+         "w",
+         "p",
+         null,
+         "Wällét",
+         "descriptor",
+         "{\"descriptor\": \"wpkh(synthetic)\", \"change_descriptor\": \"\", \"gap_limit\": 20, \"addresses\": [], \"script_types\": [\"p2wpkh\"], \"label\": \"not private\", \"chain\": \"Bitcoin\", \"network\": \"mainnet\", \"samourai\": {\"role\": \"x\"}, \"xpub\": null, \"ownership_scan_to_index\": 37}",
+         "fixed"
+        ],
+        [
+         "b",
+         "w",
+         "p",
+         null,
+         "second",
+         "descriptor",
+         "{}",
+         "fixed"
+        ],
+        [
+         "c",
+         "w",
+         "q",
+         null,
+         "foreign",
+         "descriptor",
+         "{}",
+         "fixed"
+        ]
+       ]
+      },
+      "workspaces": {
+       "columns": [
+        "id",
+        "label",
+        "created_at"
+       ],
+       "rows": [
+        [
+         "w",
+         "synthetic",
+         "fixed"
+        ]
+       ]
+      }
+     },
+     "coverage": [
+      [
+       "receive",
+       5,
+       2
+      ],
+      [
+       "change",
+       3,
+       null
+      ]
+     ],
+     "identity": {
+      "branch_keys": [
+       "receive",
+       "change",
+       "receive"
+      ],
+      "chain": "bitcoin",
+      "network": "main",
+      "observer_kind": "bdk",
+      "source_key": "descriptor:default",
+      "source_wallet_id": "a"
+     },
+     "outcome": {
+      "result": "id-0001"
+     }
+    }
+   ]
+  },
+  {
+   "name": "refresh",
+   "steps": [
+    {
+     "after": {
+      "accounts": [],
+      "ai_chat_messages": [],
+      "ai_chat_sessions": [],
+      "ai_provider_checks": [],
+      "ai_provider_secret_refs": [],
+      "ai_providers": [],
+      "attachments": [],
+      "backends": [],
+      "bip329_labels": [],
+      "book_network_bindings": [],
+      "book_reset_parked_rows": [],
+      "book_reset_transactions": [],
+      "btcpay_account_routes": [],
+      "btcpay_provenance_records": [],
+      "btcpay_store_sync_states": [],
+      "chain_analysis_acquisition_grants": [],
+      "chain_analysis_cases": [],
+      "chain_analysis_dataset_claims": [],
+      "chain_analysis_datasets": [],
+      "chain_analysis_label_history": [],
+      "chain_analysis_labels": [],
+      "chain_analysis_observations": [],
+      "chain_analysis_reference_assertions": [],
+      "chain_analysis_reference_blocks": [],
+      "chain_analysis_watch_inbox": [],
+      "chain_analysis_watches": [],
+      "chain_index_aliases": [],
+      "chain_index_clock": [
+       [
+        1,
+        6
+       ]
+      ],
+      "chain_index_dirty": [
+       [
+        "profiles",
+        -1,
+        2
+       ],
+       [
+        "wallets",
+        -1,
+        6
+       ]
+      ],
+      "chain_index_edges": [],
+      "chain_index_finding_nodes": [],
+      "chain_index_findings": [],
+      "chain_index_label_nodes": [],
+      "chain_index_labels": [],
+      "chain_index_nodes": [],
+      "chain_index_source_nodes": [],
+      "chain_index_sources": [],
+      "chain_index_state": [],
+      "chain_observation_provenance": [],
+      "chain_observer_coverage": [],
+      "chain_observer_instances": [],
+      "chain_observer_values": [],
+      "commercial_links": [],
+      "custody_ai_assistance_audits": [],
+      "custody_authored_evidence_snapshots": [],
+      "custody_authored_migration_issues": [],
+      "custody_component_allocations": [],
+      "custody_component_economic_terms": [],
+      "custody_component_evidence_commitments": [],
+      "custody_component_legs": [],
+      "custody_component_purge_authorizations": [],
+      "custody_component_transaction_memberships": [],
+      "custody_components": [],
+      "custody_filed_report_impact_resolutions": [],
+      "custody_filed_report_impacts": [],
+      "custody_gap_review_relation_sets": [],
+      "custody_gap_review_transactions": [],
+      "custody_gap_reviews": [],
+      "direct_swap_payouts": [],
+      "external_document_attachments": [],
+      "external_documents": [],
+      "filed_report_chain_captures": [],
+      "filed_report_chain_dependencies": [],
+      "filed_report_chain_impacts": [],
+      "filed_report_chain_resolutions": [],
+      "filed_report_snapshots": [],
+      "freshness_jobs": [],
+      "freshness_source_states": [],
+      "import_batch_transactions": [],
+      "import_batches": [],
+      "journal_account_holdings": [],
+      "journal_custody_decisions": [],
+      "journal_custody_economic_relations": [],
+      "journal_custody_gap_inputs": [],
+      "journal_custody_reconciliations": [],
+      "journal_entries": [],
+      "journal_quantity_balances": [],
+      "journal_quantity_issues": [],
+      "journal_quantity_postings": [],
+      "journal_quarantines": [],
+      "journal_tax_summary": [],
+      "journal_wallet_holdings": [],
+      "lightning_node_records": [],
+      "lightning_node_syncs": [],
+      "loan_legs": [],
+      "profiles": [
+       [
+        "p",
+        "w",
+        "primary",
+        "EUR",
+        "generic",
+        365,
+        "FIFO",
+        0,
+        1,
+        "global",
+        4,
+        4,
+        0,
+        0,
+        "processed",
+        3,
+        null,
+        "fixed",
+        null
+       ],
+       [
+        "q",
+        "w",
+        "other",
+        "USD",
+        "generic",
+        365,
+        "FIFO",
+        0,
+        1,
+        "global",
+        0,
+        0,
+        0,
+        0,
+        null,
+        0,
+        null,
+        "fixed",
+        null
+       ]
+      ],
+      "rates_cache": [],
+      "rates_checked_minutes": [],
+      "review_workflow_receipts": [],
+      "saved_views": [],
+      "schema_migration_audits": [],
+      "settings": [],
+      "source_funds_cases": [],
+      "source_funds_link_attachments": [],
+      "source_funds_links": [],
+      "source_funds_recipients": [],
+      "source_funds_snapshots": [],
+      "source_funds_source_attachments": [],
+      "source_funds_sources": [],
+      "swap_matching_rules": [],
+      "synthetic_import_duplicate_reviews": [],
+      "tags": [],
+      "transaction_edit_events": [],
+      "transaction_edit_fields": [],
+      "transaction_graph_cache": [],
+      "transaction_pair_dismissals": [],
+      "transaction_pairs": [],
+      "transaction_tags": [],
+      "transactions": [],
+      "wallet_policy_coverage_witnesses": [
+       [
+        "id-0002",
+        "change",
+        3,
+        null,
+        "bdk",
+        "2030-01-01T00:00:02Z"
+       ],
+       [
+        "id-0002",
+        "receive",
+        5,
+        2,
+        "bdk",
+        "2030-01-01T00:00:02Z"
+       ]
+      ],
+      "wallet_policy_epochs": [
+       [
+        "id-0001",
+        "w",
+        "p",
+        "a",
+        "bitcoin",
+        "main",
+        "active",
+        "{\"chain\": \"Bitcoin\", \"descriptor\": \"wpkh(synthetic)\", \"gap_limit\": 20, \"network\": \"mainnet\", \"samourai\": {\"role\": \"x\"}, \"script_types\": [\"p2wpkh\"]}",
+        "2030-01-01T00:00:01Z",
+        null
+       ]
+      ],
+      "wallet_policy_sources": [
+       [
+        "id-0002",
+        "id-0001",
+        "a",
+        "descriptor:default",
+        "bdk",
+        "[\"receive\", \"change\"]",
+        "2030-01-01T00:00:02Z",
+        "2030-01-01T00:00:02Z"
+       ]
+      ],
+      "wallet_utxo_refreshes": [],
+      "wallet_utxos": [],
+      "wallets": [
+       [
+        "a",
+        "w",
+        "p",
+        null,
+        "Wällét",
+        "descriptor",
+        "{\"descriptor\": \"wpkh(synthetic)\", \"change_descriptor\": \"\", \"gap_limit\": 20, \"addresses\": [], \"script_types\": [\"p2wpkh\"], \"label\": \"not private\", \"chain\": \"Bitcoin\", \"network\": \"mainnet\", \"samourai\": {\"role\": \"x\"}, \"xpub\": null}",
+        "fixed"
+       ],
+       [
+        "b",
+        "w",
+        "p",
+        null,
+        "second",
+        "descriptor",
+        "{}",
+        "fixed"
+       ],
+       [
+        "c",
+        "w",
+        "q",
+        null,
+        "foreign",
+        "descriptor",
+        "{}",
+        "fixed"
+       ]
+      ],
+      "workspaces": [
+       [
+        "w",
+        "synthetic",
+        "fixed"
+       ]
+      ]
+     },
+     "before": {
+      "chain_index_clock": {
+       "columns": [
+        "id",
+        "revision"
+       ],
+       "rows": [
+        [
+         1,
+         6
+        ]
+       ]
+      },
+      "chain_index_dirty": {
+       "columns": [
+        "source_table",
+        "source_key",
+        "revision"
+       ],
+       "rows": [
+        [
+         "profiles",
+         -1,
+         2
+        ],
+        [
+         "wallets",
+         -1,
+         6
+        ]
+       ]
+      },
+      "profiles": {
+       "columns": [
+        "id",
+        "workspace_id",
+        "label",
+        "fiat_currency",
+        "tax_country",
+        "tax_long_term_days",
+        "gains_algorithm",
+        "require_coarse_review",
+        "bitcoin_rail_carrying_value",
+        "cost_basis_pool_scope",
+        "journal_input_version",
+        "last_processed_input_version",
+        "required_journal_semantics_version",
+        "journal_semantics_version",
+        "last_processed_at",
+        "last_processed_tx_count",
+        "ownership_review_counts_json",
+        "created_at",
+        "swap_candidate_count"
+       ],
+       "rows": [
+        [
+         "p",
+         "w",
+         "primary",
+         "EUR",
+         "generic",
+         365,
+         "FIFO",
+         0,
+         1,
+         "global",
+         4,
+         4,
+         0,
+         0,
+         "processed",
+         3,
+         null,
+         "fixed",
+         null
+        ],
+        [
+         "q",
+         "w",
+         "other",
+         "USD",
+         "generic",
+         365,
+         "FIFO",
+         0,
+         1,
+         "global",
+         0,
+         0,
+         0,
+         0,
+         null,
+         0,
+         null,
+         "fixed",
+         null
+        ]
+       ]
+      },
+      "wallets": {
+       "columns": [
+        "id",
+        "workspace_id",
+        "profile_id",
+        "account_id",
+        "label",
+        "kind",
+        "config_json",
+        "created_at"
+       ],
+       "rows": [
+        [
+         "a",
+         "w",
+         "p",
+         null,
+         "Wällét",
+         "descriptor",
+         "{\"descriptor\": \"wpkh(synthetic)\", \"change_descriptor\": \"\", \"gap_limit\": 20, \"addresses\": [], \"script_types\": [\"p2wpkh\"], \"label\": \"not private\", \"chain\": \"Bitcoin\", \"network\": \"mainnet\", \"samourai\": {\"role\": \"x\"}, \"xpub\": null}",
+         "fixed"
+        ],
+        [
+         "b",
+         "w",
+         "p",
+         null,
+         "second",
+         "descriptor",
+         "{}",
+         "fixed"
+        ],
+        [
+         "c",
+         "w",
+         "q",
+         null,
+         "foreign",
+         "descriptor",
+         "{}",
+         "fixed"
+        ]
+       ]
+      },
+      "workspaces": {
+       "columns": [
+        "id",
+        "label",
+        "created_at"
+       ],
+       "rows": [
+        [
+         "w",
+         "synthetic",
+         "fixed"
+        ]
+       ]
+      }
+     },
+     "coverage": [
+      [
+       "receive",
+       5,
+       2
+      ],
+      [
+       "change",
+       3,
+       null
+      ]
+     ],
+     "identity": {
+      "branch_keys": [
+       "receive",
+       "change",
+       "receive"
+      ],
+      "chain": "bitcoin",
+      "network": "main",
+      "observer_kind": "bdk",
+      "source_key": "descriptor:default",
+      "source_wallet_id": "a"
+     },
+     "outcome": {
+      "result": "id-0001"
+     }
+    },
+    {
+     "after": {
+      "accounts": [],
+      "ai_chat_messages": [],
+      "ai_chat_sessions": [],
+      "ai_provider_checks": [],
+      "ai_provider_secret_refs": [],
+      "ai_providers": [],
+      "attachments": [],
+      "backends": [],
+      "bip329_labels": [],
+      "book_network_bindings": [],
+      "book_reset_parked_rows": [],
+      "book_reset_transactions": [],
+      "btcpay_account_routes": [],
+      "btcpay_provenance_records": [],
+      "btcpay_store_sync_states": [],
+      "chain_analysis_acquisition_grants": [],
+      "chain_analysis_cases": [],
+      "chain_analysis_dataset_claims": [],
+      "chain_analysis_datasets": [],
+      "chain_analysis_label_history": [],
+      "chain_analysis_labels": [],
+      "chain_analysis_observations": [],
+      "chain_analysis_reference_assertions": [],
+      "chain_analysis_reference_blocks": [],
+      "chain_analysis_watch_inbox": [],
+      "chain_analysis_watches": [],
+      "chain_index_aliases": [],
+      "chain_index_clock": [
+       [
+        1,
+        6
+       ]
+      ],
+      "chain_index_dirty": [
+       [
+        "profiles",
+        -1,
+        2
+       ],
+       [
+        "wallets",
+        -1,
+        6
+       ]
+      ],
+      "chain_index_edges": [],
+      "chain_index_finding_nodes": [],
+      "chain_index_findings": [],
+      "chain_index_label_nodes": [],
+      "chain_index_labels": [],
+      "chain_index_nodes": [],
+      "chain_index_source_nodes": [],
+      "chain_index_sources": [],
+      "chain_index_state": [],
+      "chain_observation_provenance": [],
+      "chain_observer_coverage": [],
+      "chain_observer_instances": [],
+      "chain_observer_values": [],
+      "commercial_links": [],
+      "custody_ai_assistance_audits": [],
+      "custody_authored_evidence_snapshots": [],
+      "custody_authored_migration_issues": [],
+      "custody_component_allocations": [],
+      "custody_component_economic_terms": [],
+      "custody_component_evidence_commitments": [],
+      "custody_component_legs": [],
+      "custody_component_purge_authorizations": [],
+      "custody_component_transaction_memberships": [],
+      "custody_components": [],
+      "custody_filed_report_impact_resolutions": [],
+      "custody_filed_report_impacts": [],
+      "custody_gap_review_relation_sets": [],
+      "custody_gap_review_transactions": [],
+      "custody_gap_reviews": [],
+      "direct_swap_payouts": [],
+      "external_document_attachments": [],
+      "external_documents": [],
+      "filed_report_chain_captures": [],
+      "filed_report_chain_dependencies": [],
+      "filed_report_chain_impacts": [],
+      "filed_report_chain_resolutions": [],
+      "filed_report_snapshots": [],
+      "freshness_jobs": [],
+      "freshness_source_states": [],
+      "import_batch_transactions": [],
+      "import_batches": [],
+      "journal_account_holdings": [],
+      "journal_custody_decisions": [],
+      "journal_custody_economic_relations": [],
+      "journal_custody_gap_inputs": [],
+      "journal_custody_reconciliations": [],
+      "journal_entries": [],
+      "journal_quantity_balances": [],
+      "journal_quantity_issues": [],
+      "journal_quantity_postings": [],
+      "journal_quarantines": [],
+      "journal_tax_summary": [],
+      "journal_wallet_holdings": [],
+      "lightning_node_records": [],
+      "lightning_node_syncs": [],
+      "loan_legs": [],
+      "profiles": [
+       [
+        "p",
+        "w",
+        "primary",
+        "EUR",
+        "generic",
+        365,
+        "FIFO",
+        0,
+        1,
+        "global",
+        4,
+        4,
+        0,
+        0,
+        "processed",
+        3,
+        null,
+        "fixed",
+        null
+       ],
+       [
+        "q",
+        "w",
+        "other",
+        "USD",
+        "generic",
+        365,
+        "FIFO",
+        0,
+        1,
+        "global",
+        0,
+        0,
+        0,
+        0,
+        null,
+        0,
+        null,
+        "fixed",
+        null
+       ]
+      ],
+      "rates_cache": [],
+      "rates_checked_minutes": [],
+      "review_workflow_receipts": [],
+      "saved_views": [],
+      "schema_migration_audits": [],
+      "settings": [],
+      "source_funds_cases": [],
+      "source_funds_link_attachments": [],
+      "source_funds_links": [],
+      "source_funds_recipients": [],
+      "source_funds_snapshots": [],
+      "source_funds_source_attachments": [],
+      "source_funds_sources": [],
+      "swap_matching_rules": [],
+      "synthetic_import_duplicate_reviews": [],
+      "tags": [],
+      "transaction_edit_events": [],
+      "transaction_edit_fields": [],
+      "transaction_graph_cache": [],
+      "transaction_pair_dismissals": [],
+      "transaction_pairs": [],
+      "transaction_tags": [],
+      "transactions": [],
+      "wallet_policy_coverage_witnesses": [
+       [
+        "id-0002",
+        "change",
+        3,
+        null,
+        "bdk",
+        "2030-01-01T00:00:02Z"
+       ],
+       [
+        "id-0002",
+        "receive",
+        9,
+        7,
+        "bdk-2",
+        "2030-01-01T00:00:03Z"
+       ]
+      ],
+      "wallet_policy_epochs": [
+       [
+        "id-0001",
+        "w",
+        "p",
+        "a",
+        "bitcoin",
+        "main",
+        "active",
+        "{\"chain\": \"Bitcoin\", \"descriptor\": \"wpkh(synthetic)\", \"gap_limit\": 20, \"network\": \"mainnet\", \"samourai\": {\"role\": \"x\"}, \"script_types\": [\"p2wpkh\"]}",
+        "2030-01-01T00:00:01Z",
+        null
+       ]
+      ],
+      "wallet_policy_sources": [
+       [
+        "id-0002",
+        "id-0001",
+        "a",
+        "descriptor:default",
+        "bdk-2",
+        "[\"change\"]",
+        "2030-01-01T00:00:02Z",
+        "2030-01-01T00:00:03Z"
+       ]
+      ],
+      "wallet_utxo_refreshes": [],
+      "wallet_utxos": [],
+      "wallets": [
+       [
+        "a",
+        "w",
+        "p",
+        null,
+        "Wällét",
+        "descriptor",
+        "{\"descriptor\": \"wpkh(synthetic)\", \"change_descriptor\": \"\", \"gap_limit\": 20, \"addresses\": [], \"script_types\": [\"p2wpkh\"], \"label\": \"not private\", \"chain\": \"Bitcoin\", \"network\": \"mainnet\", \"samourai\": {\"role\": \"x\"}, \"xpub\": null}",
+        "fixed"
+       ],
+       [
+        "b",
+        "w",
+        "p",
+        null,
+        "second",
+        "descriptor",
+        "{}",
+        "fixed"
+       ],
+       [
+        "c",
+        "w",
+        "q",
+        null,
+        "foreign",
+        "descriptor",
+        "{}",
+        "fixed"
+       ]
+      ],
+      "workspaces": [
+       [
+        "w",
+        "synthetic",
+        "fixed"
+       ]
+      ]
+     },
+     "before": {
+      "chain_index_clock": {
+       "columns": [
+        "id",
+        "revision"
+       ],
+       "rows": [
+        [
+         1,
+         6
+        ]
+       ]
+      },
+      "chain_index_dirty": {
+       "columns": [
+        "source_table",
+        "source_key",
+        "revision"
+       ],
+       "rows": [
+        [
+         "profiles",
+         -1,
+         2
+        ],
+        [
+         "wallets",
+         -1,
+         6
+        ]
+       ]
+      },
+      "profiles": {
+       "columns": [
+        "id",
+        "workspace_id",
+        "label",
+        "fiat_currency",
+        "tax_country",
+        "tax_long_term_days",
+        "gains_algorithm",
+        "require_coarse_review",
+        "bitcoin_rail_carrying_value",
+        "cost_basis_pool_scope",
+        "journal_input_version",
+        "last_processed_input_version",
+        "required_journal_semantics_version",
+        "journal_semantics_version",
+        "last_processed_at",
+        "last_processed_tx_count",
+        "ownership_review_counts_json",
+        "created_at",
+        "swap_candidate_count"
+       ],
+       "rows": [
+        [
+         "p",
+         "w",
+         "primary",
+         "EUR",
+         "generic",
+         365,
+         "FIFO",
+         0,
+         1,
+         "global",
+         4,
+         4,
+         0,
+         0,
+         "processed",
+         3,
+         null,
+         "fixed",
+         null
+        ],
+        [
+         "q",
+         "w",
+         "other",
+         "USD",
+         "generic",
+         365,
+         "FIFO",
+         0,
+         1,
+         "global",
+         0,
+         0,
+         0,
+         0,
+         null,
+         0,
+         null,
+         "fixed",
+         null
+        ]
+       ]
+      },
+      "wallet_policy_coverage_witnesses": {
+       "columns": [
+        "source_id",
+        "branch_key",
+        "scanned_to_exclusive",
+        "highest_used",
+        "observer_kind",
+        "observed_at"
+       ],
+       "rows": [
+        [
+         "id-0002",
+         "receive",
+         5,
+         2,
+         "bdk",
+         "2030-01-01T00:00:02Z"
+        ],
+        [
+         "id-0002",
+         "change",
+         3,
+         null,
+         "bdk",
+         "2030-01-01T00:00:02Z"
+        ]
+       ]
+      },
+      "wallet_policy_epochs": {
+       "columns": [
+        "id",
+        "workspace_id",
+        "profile_id",
+        "wallet_id",
+        "chain",
+        "network",
+        "status",
+        "private_material_json",
+        "created_at",
+        "retired_at"
+       ],
+       "rows": [
+        [
+         "id-0001",
+         "w",
+         "p",
+         "a",
+         "bitcoin",
+         "main",
+         "active",
+         "{\"chain\": \"Bitcoin\", \"descriptor\": \"wpkh(synthetic)\", \"gap_limit\": 20, \"network\": \"mainnet\", \"samourai\": {\"role\": \"x\"}, \"script_types\": [\"p2wpkh\"]}",
+         "2030-01-01T00:00:01Z",
+         null
+        ]
+       ]
+      },
+      "wallet_policy_sources": {
+       "columns": [
+        "id",
+        "epoch_id",
+        "source_wallet_id",
+        "source_key",
+        "observer_kind",
+        "branch_keys_json",
+        "created_at",
+        "updated_at"
+       ],
+       "rows": [
+        [
+         "id-0002",
+         "id-0001",
+         "a",
+         "descriptor:default",
+         "bdk",
+         "[\"receive\", \"change\"]",
+         "2030-01-01T00:00:02Z",
+         "2030-01-01T00:00:02Z"
+        ]
+       ]
+      },
+      "wallets": {
+       "columns": [
+        "id",
+        "workspace_id",
+        "profile_id",
+        "account_id",
+        "label",
+        "kind",
+        "config_json",
+        "created_at"
+       ],
+       "rows": [
+        [
+         "a",
+         "w",
+         "p",
+         null,
+         "Wällét",
+         "descriptor",
+         "{\"descriptor\": \"wpkh(synthetic)\", \"change_descriptor\": \"\", \"gap_limit\": 20, \"addresses\": [], \"script_types\": [\"p2wpkh\"], \"label\": \"not private\", \"chain\": \"Bitcoin\", \"network\": \"mainnet\", \"samourai\": {\"role\": \"x\"}, \"xpub\": null}",
+         "fixed"
+        ],
+        [
+         "b",
+         "w",
+         "p",
+         null,
+         "second",
+         "descriptor",
+         "{}",
+         "fixed"
+        ],
+        [
+         "c",
+         "w",
+         "q",
+         null,
+         "foreign",
+         "descriptor",
+         "{}",
+         "fixed"
+        ]
+       ]
+      },
+      "workspaces": {
+       "columns": [
+        "id",
+        "label",
+        "created_at"
+       ],
+       "rows": [
+        [
+         "w",
+         "synthetic",
+         "fixed"
+        ]
+       ]
+      }
+     },
+     "coverage": [
+      [
+       "receive",
+       9,
+       7
+      ]
+     ],
+     "identity": {
+      "branch_keys": [
+       "change"
+      ],
+      "chain": "bitcoin",
+      "network": "main",
+      "observer_kind": "bdk-2",
+      "source_key": "descriptor:default",
+      "source_wallet_id": "a"
+     },
+     "outcome": {
+      "result": "id-0001"
+     }
+    }
+   ]
+  },
+  {
+   "name": "second-source",
+   "steps": [
+    {
+     "after": {
+      "accounts": [],
+      "ai_chat_messages": [],
+      "ai_chat_sessions": [],
+      "ai_provider_checks": [],
+      "ai_provider_secret_refs": [],
+      "ai_providers": [],
+      "attachments": [],
+      "backends": [],
+      "bip329_labels": [],
+      "book_network_bindings": [],
+      "book_reset_parked_rows": [],
+      "book_reset_transactions": [],
+      "btcpay_account_routes": [],
+      "btcpay_provenance_records": [],
+      "btcpay_store_sync_states": [],
+      "chain_analysis_acquisition_grants": [],
+      "chain_analysis_cases": [],
+      "chain_analysis_dataset_claims": [],
+      "chain_analysis_datasets": [],
+      "chain_analysis_label_history": [],
+      "chain_analysis_labels": [],
+      "chain_analysis_observations": [],
+      "chain_analysis_reference_assertions": [],
+      "chain_analysis_reference_blocks": [],
+      "chain_analysis_watch_inbox": [],
+      "chain_analysis_watches": [],
+      "chain_index_aliases": [],
+      "chain_index_clock": [
+       [
+        1,
+        6
+       ]
+      ],
+      "chain_index_dirty": [
+       [
+        "profiles",
+        -1,
+        2
+       ],
+       [
+        "wallets",
+        -1,
+        6
+       ]
+      ],
+      "chain_index_edges": [],
+      "chain_index_finding_nodes": [],
+      "chain_index_findings": [],
+      "chain_index_label_nodes": [],
+      "chain_index_labels": [],
+      "chain_index_nodes": [],
+      "chain_index_source_nodes": [],
+      "chain_index_sources": [],
+      "chain_index_state": [],
+      "chain_observation_provenance": [],
+      "chain_observer_coverage": [],
+      "chain_observer_instances": [],
+      "chain_observer_values": [],
+      "commercial_links": [],
+      "custody_ai_assistance_audits": [],
+      "custody_authored_evidence_snapshots": [],
+      "custody_authored_migration_issues": [],
+      "custody_component_allocations": [],
+      "custody_component_economic_terms": [],
+      "custody_component_evidence_commitments": [],
+      "custody_component_legs": [],
+      "custody_component_purge_authorizations": [],
+      "custody_component_transaction_memberships": [],
+      "custody_components": [],
+      "custody_filed_report_impact_resolutions": [],
+      "custody_filed_report_impacts": [],
+      "custody_gap_review_relation_sets": [],
+      "custody_gap_review_transactions": [],
+      "custody_gap_reviews": [],
+      "direct_swap_payouts": [],
+      "external_document_attachments": [],
+      "external_documents": [],
+      "filed_report_chain_captures": [],
+      "filed_report_chain_dependencies": [],
+      "filed_report_chain_impacts": [],
+      "filed_report_chain_resolutions": [],
+      "filed_report_snapshots": [],
+      "freshness_jobs": [],
+      "freshness_source_states": [],
+      "import_batch_transactions": [],
+      "import_batches": [],
+      "journal_account_holdings": [],
+      "journal_custody_decisions": [],
+      "journal_custody_economic_relations": [],
+      "journal_custody_gap_inputs": [],
+      "journal_custody_reconciliations": [],
+      "journal_entries": [],
+      "journal_quantity_balances": [],
+      "journal_quantity_issues": [],
+      "journal_quantity_postings": [],
+      "journal_quarantines": [],
+      "journal_tax_summary": [],
+      "journal_wallet_holdings": [],
+      "lightning_node_records": [],
+      "lightning_node_syncs": [],
+      "loan_legs": [],
+      "profiles": [
+       [
+        "p",
+        "w",
+        "primary",
+        "EUR",
+        "generic",
+        365,
+        "FIFO",
+        0,
+        1,
+        "global",
+        4,
+        4,
+        0,
+        0,
+        "processed",
+        3,
+        null,
+        "fixed",
+        null
+       ],
+       [
+        "q",
+        "w",
+        "other",
+        "USD",
+        "generic",
+        365,
+        "FIFO",
+        0,
+        1,
+        "global",
+        0,
+        0,
+        0,
+        0,
+        null,
+        0,
+        null,
+        "fixed",
+        null
+       ]
+      ],
+      "rates_cache": [],
+      "rates_checked_minutes": [],
+      "review_workflow_receipts": [],
+      "saved_views": [],
+      "schema_migration_audits": [],
+      "settings": [],
+      "source_funds_cases": [],
+      "source_funds_link_attachments": [],
+      "source_funds_links": [],
+      "source_funds_recipients": [],
+      "source_funds_snapshots": [],
+      "source_funds_source_attachments": [],
+      "source_funds_sources": [],
+      "swap_matching_rules": [],
+      "synthetic_import_duplicate_reviews": [],
+      "tags": [],
+      "transaction_edit_events": [],
+      "transaction_edit_fields": [],
+      "transaction_graph_cache": [],
+      "transaction_pair_dismissals": [],
+      "transaction_pairs": [],
+      "transaction_tags": [],
+      "transactions": [],
+      "wallet_policy_coverage_witnesses": [
+       [
+        "id-0002",
+        "change",
+        3,
+        null,
+        "bdk",
+        "2030-01-01T00:00:02Z"
+       ],
+       [
+        "id-0002",
+        "receive",
+        5,
+        2,
+        "bdk",
+        "2030-01-01T00:00:02Z"
+       ]
+      ],
+      "wallet_policy_epochs": [
+       [
+        "id-0001",
+        "w",
+        "p",
+        "a",
+        "bitcoin",
+        "main",
+        "active",
+        "{\"chain\": \"Bitcoin\", \"descriptor\": \"wpkh(synthetic)\", \"gap_limit\": 20, \"network\": \"mainnet\", \"samourai\": {\"role\": \"x\"}, \"script_types\": [\"p2wpkh\"]}",
+        "2030-01-01T00:00:01Z",
+        null
+       ]
+      ],
+      "wallet_policy_sources": [
+       [
+        "id-0002",
+        "id-0001",
+        "a",
+        "descriptor:default",
+        "bdk",
+        "[\"receive\", \"change\"]",
+        "2030-01-01T00:00:02Z",
+        "2030-01-01T00:00:02Z"
+       ]
+      ],
+      "wallet_utxo_refreshes": [],
+      "wallet_utxos": [],
+      "wallets": [
+       [
+        "a",
+        "w",
+        "p",
+        null,
+        "Wällét",
+        "descriptor",
+        "{\"descriptor\": \"wpkh(synthetic)\", \"change_descriptor\": \"\", \"gap_limit\": 20, \"addresses\": [], \"script_types\": [\"p2wpkh\"], \"label\": \"not private\", \"chain\": \"Bitcoin\", \"network\": \"mainnet\", \"samourai\": {\"role\": \"x\"}, \"xpub\": null}",
+        "fixed"
+       ],
+       [
+        "b",
+        "w",
+        "p",
+        null,
+        "second",
+        "descriptor",
+        "{}",
+        "fixed"
+       ],
+       [
+        "c",
+        "w",
+        "q",
+        null,
+        "foreign",
+        "descriptor",
+        "{}",
+        "fixed"
+       ]
+      ],
+      "workspaces": [
+       [
+        "w",
+        "synthetic",
+        "fixed"
+       ]
+      ]
+     },
+     "before": {
+      "chain_index_clock": {
+       "columns": [
+        "id",
+        "revision"
+       ],
+       "rows": [
+        [
+         1,
+         6
+        ]
+       ]
+      },
+      "chain_index_dirty": {
+       "columns": [
+        "source_table",
+        "source_key",
+        "revision"
+       ],
+       "rows": [
+        [
+         "profiles",
+         -1,
+         2
+        ],
+        [
+         "wallets",
+         -1,
+         6
+        ]
+       ]
+      },
+      "profiles": {
+       "columns": [
+        "id",
+        "workspace_id",
+        "label",
+        "fiat_currency",
+        "tax_country",
+        "tax_long_term_days",
+        "gains_algorithm",
+        "require_coarse_review",
+        "bitcoin_rail_carrying_value",
+        "cost_basis_pool_scope",
+        "journal_input_version",
+        "last_processed_input_version",
+        "required_journal_semantics_version",
+        "journal_semantics_version",
+        "last_processed_at",
+        "last_processed_tx_count",
+        "ownership_review_counts_json",
+        "created_at",
+        "swap_candidate_count"
+       ],
+       "rows": [
+        [
+         "p",
+         "w",
+         "primary",
+         "EUR",
+         "generic",
+         365,
+         "FIFO",
+         0,
+         1,
+         "global",
+         4,
+         4,
+         0,
+         0,
+         "processed",
+         3,
+         null,
+         "fixed",
+         null
+        ],
+        [
+         "q",
+         "w",
+         "other",
+         "USD",
+         "generic",
+         365,
+         "FIFO",
+         0,
+         1,
+         "global",
+         0,
+         0,
+         0,
+         0,
+         null,
+         0,
+         null,
+         "fixed",
+         null
+        ]
+       ]
+      },
+      "wallets": {
+       "columns": [
+        "id",
+        "workspace_id",
+        "profile_id",
+        "account_id",
+        "label",
+        "kind",
+        "config_json",
+        "created_at"
+       ],
+       "rows": [
+        [
+         "a",
+         "w",
+         "p",
+         null,
+         "Wällét",
+         "descriptor",
+         "{\"descriptor\": \"wpkh(synthetic)\", \"change_descriptor\": \"\", \"gap_limit\": 20, \"addresses\": [], \"script_types\": [\"p2wpkh\"], \"label\": \"not private\", \"chain\": \"Bitcoin\", \"network\": \"mainnet\", \"samourai\": {\"role\": \"x\"}, \"xpub\": null}",
+         "fixed"
+        ],
+        [
+         "b",
+         "w",
+         "p",
+         null,
+         "second",
+         "descriptor",
+         "{}",
+         "fixed"
+        ],
+        [
+         "c",
+         "w",
+         "q",
+         null,
+         "foreign",
+         "descriptor",
+         "{}",
+         "fixed"
+        ]
+       ]
+      },
+      "workspaces": {
+       "columns": [
+        "id",
+        "label",
+        "created_at"
+       ],
+       "rows": [
+        [
+         "w",
+         "synthetic",
+         "fixed"
+        ]
+       ]
+      }
+     },
+     "coverage": [
+      [
+       "receive",
+       5,
+       2
+      ],
+      [
+       "change",
+       3,
+       null
+      ]
+     ],
+     "identity": {
+      "branch_keys": [
+       "receive",
+       "change",
+       "receive"
+      ],
+      "chain": "bitcoin",
+      "network": "main",
+      "observer_kind": "bdk",
+      "source_key": "descriptor:default",
+      "source_wallet_id": "a"
+     },
+     "outcome": {
+      "result": "id-0001"
+     }
+    },
+    {
+     "after": {
+      "accounts": [],
+      "ai_chat_messages": [],
+      "ai_chat_sessions": [],
+      "ai_provider_checks": [],
+      "ai_provider_secret_refs": [],
+      "ai_providers": [],
+      "attachments": [],
+      "backends": [],
+      "bip329_labels": [],
+      "book_network_bindings": [],
+      "book_reset_parked_rows": [],
+      "book_reset_transactions": [],
+      "btcpay_account_routes": [],
+      "btcpay_provenance_records": [],
+      "btcpay_store_sync_states": [],
+      "chain_analysis_acquisition_grants": [],
+      "chain_analysis_cases": [],
+      "chain_analysis_dataset_claims": [],
+      "chain_analysis_datasets": [],
+      "chain_analysis_label_history": [],
+      "chain_analysis_labels": [],
+      "chain_analysis_observations": [],
+      "chain_analysis_reference_assertions": [],
+      "chain_analysis_reference_blocks": [],
+      "chain_analysis_watch_inbox": [],
+      "chain_analysis_watches": [],
+      "chain_index_aliases": [],
+      "chain_index_clock": [
+       [
+        1,
+        6
+       ]
+      ],
+      "chain_index_dirty": [
+       [
+        "profiles",
+        -1,
+        2
+       ],
+       [
+        "wallets",
+        -1,
+        6
+       ]
+      ],
+      "chain_index_edges": [],
+      "chain_index_finding_nodes": [],
+      "chain_index_findings": [],
+      "chain_index_label_nodes": [],
+      "chain_index_labels": [],
+      "chain_index_nodes": [],
+      "chain_index_source_nodes": [],
+      "chain_index_sources": [],
+      "chain_index_state": [],
+      "chain_observation_provenance": [],
+      "chain_observer_coverage": [],
+      "chain_observer_instances": [],
+      "chain_observer_values": [],
+      "commercial_links": [],
+      "custody_ai_assistance_audits": [],
+      "custody_authored_evidence_snapshots": [],
+      "custody_authored_migration_issues": [],
+      "custody_component_allocations": [],
+      "custody_component_economic_terms": [],
+      "custody_component_evidence_commitments": [],
+      "custody_component_legs": [],
+      "custody_component_purge_authorizations": [],
+      "custody_component_transaction_memberships": [],
+      "custody_components": [],
+      "custody_filed_report_impact_resolutions": [],
+      "custody_filed_report_impacts": [],
+      "custody_gap_review_relation_sets": [],
+      "custody_gap_review_transactions": [],
+      "custody_gap_reviews": [],
+      "direct_swap_payouts": [],
+      "external_document_attachments": [],
+      "external_documents": [],
+      "filed_report_chain_captures": [],
+      "filed_report_chain_dependencies": [],
+      "filed_report_chain_impacts": [],
+      "filed_report_chain_resolutions": [],
+      "filed_report_snapshots": [],
+      "freshness_jobs": [],
+      "freshness_source_states": [],
+      "import_batch_transactions": [],
+      "import_batches": [],
+      "journal_account_holdings": [],
+      "journal_custody_decisions": [],
+      "journal_custody_economic_relations": [],
+      "journal_custody_gap_inputs": [],
+      "journal_custody_reconciliations": [],
+      "journal_entries": [],
+      "journal_quantity_balances": [],
+      "journal_quantity_issues": [],
+      "journal_quantity_postings": [],
+      "journal_quarantines": [],
+      "journal_tax_summary": [],
+      "journal_wallet_holdings": [],
+      "lightning_node_records": [],
+      "lightning_node_syncs": [],
+      "loan_legs": [],
+      "profiles": [
+       [
+        "p",
+        "w",
+        "primary",
+        "EUR",
+        "generic",
+        365,
+        "FIFO",
+        0,
+        1,
+        "global",
+        4,
+        4,
+        0,
+        0,
+        "processed",
+        3,
+        null,
+        "fixed",
+        null
+       ],
+       [
+        "q",
+        "w",
+        "other",
+        "USD",
+        "generic",
+        365,
+        "FIFO",
+        0,
+        1,
+        "global",
+        0,
+        0,
+        0,
+        0,
+        null,
+        0,
+        null,
+        "fixed",
+        null
+       ]
+      ],
+      "rates_cache": [],
+      "rates_checked_minutes": [],
+      "review_workflow_receipts": [],
+      "saved_views": [],
+      "schema_migration_audits": [],
+      "settings": [],
+      "source_funds_cases": [],
+      "source_funds_link_attachments": [],
+      "source_funds_links": [],
+      "source_funds_recipients": [],
+      "source_funds_snapshots": [],
+      "source_funds_source_attachments": [],
+      "source_funds_sources": [],
+      "swap_matching_rules": [],
+      "synthetic_import_duplicate_reviews": [],
+      "tags": [],
+      "transaction_edit_events": [],
+      "transaction_edit_fields": [],
+      "transaction_graph_cache": [],
+      "transaction_pair_dismissals": [],
+      "transaction_pairs": [],
+      "transaction_tags": [],
+      "transactions": [],
+      "wallet_policy_coverage_witnesses": [
+       [
+        "id-0002",
+        "change",
+        3,
+        null,
+        "bdk",
+        "2030-01-01T00:00:02Z"
+       ],
+       [
+        "id-0002",
+        "receive",
+        5,
+        2,
+        "bdk",
+        "2030-01-01T00:00:02Z"
+       ],
+       [
+        "id-0003",
+        "receive",
+        1,
+        null,
+        "bdk",
+        "2030-01-01T00:00:03Z"
+       ]
+      ],
+      "wallet_policy_epochs": [
+       [
+        "id-0001",
+        "w",
+        "p",
+        "a",
+        "bitcoin",
+        "main",
+        "active",
+        "{\"chain\": \"Bitcoin\", \"descriptor\": \"wpkh(synthetic)\", \"gap_limit\": 20, \"network\": \"mainnet\", \"samourai\": {\"role\": \"x\"}, \"script_types\": [\"p2wpkh\"]}",
+        "2030-01-01T00:00:01Z",
+        null
+       ]
+      ],
+      "wallet_policy_sources": [
+       [
+        "id-0002",
+        "id-0001",
+        "a",
+        "descriptor:default",
+        "bdk",
+        "[\"receive\", \"change\"]",
+        "2030-01-01T00:00:02Z",
+        "2030-01-01T00:00:02Z"
+       ],
+       [
+        "id-0003",
+        "id-0001",
+        "a",
+        "xpub:p2tr",
+        "bdk",
+        "[\"receive\", \"change\"]",
+        "2030-01-01T00:00:03Z",
+        "2030-01-01T00:00:03Z"
+       ]
+      ],
+      "wallet_utxo_refreshes": [],
+      "wallet_utxos": [],
+      "wallets": [
+       [
+        "a",
+        "w",
+        "p",
+        null,
+        "Wällét",
+        "descriptor",
+        "{\"descriptor\": \"wpkh(synthetic)\", \"change_descriptor\": \"\", \"gap_limit\": 20, \"addresses\": [], \"script_types\": [\"p2wpkh\"], \"label\": \"not private\", \"chain\": \"Bitcoin\", \"network\": \"mainnet\", \"samourai\": {\"role\": \"x\"}, \"xpub\": null}",
+        "fixed"
+       ],
+       [
+        "b",
+        "w",
+        "p",
+        null,
+        "second",
+        "descriptor",
+        "{}",
+        "fixed"
+       ],
+       [
+        "c",
+        "w",
+        "q",
+        null,
+        "foreign",
+        "descriptor",
+        "{}",
+        "fixed"
+       ]
+      ],
+      "workspaces": [
+       [
+        "w",
+        "synthetic",
+        "fixed"
+       ]
+      ]
+     },
+     "before": {
+      "chain_index_clock": {
+       "columns": [
+        "id",
+        "revision"
+       ],
+       "rows": [
+        [
+         1,
+         6
+        ]
+       ]
+      },
+      "chain_index_dirty": {
+       "columns": [
+        "source_table",
+        "source_key",
+        "revision"
+       ],
+       "rows": [
+        [
+         "profiles",
+         -1,
+         2
+        ],
+        [
+         "wallets",
+         -1,
+         6
+        ]
+       ]
+      },
+      "profiles": {
+       "columns": [
+        "id",
+        "workspace_id",
+        "label",
+        "fiat_currency",
+        "tax_country",
+        "tax_long_term_days",
+        "gains_algorithm",
+        "require_coarse_review",
+        "bitcoin_rail_carrying_value",
+        "cost_basis_pool_scope",
+        "journal_input_version",
+        "last_processed_input_version",
+        "required_journal_semantics_version",
+        "journal_semantics_version",
+        "last_processed_at",
+        "last_processed_tx_count",
+        "ownership_review_counts_json",
+        "created_at",
+        "swap_candidate_count"
+       ],
+       "rows": [
+        [
+         "p",
+         "w",
+         "primary",
+         "EUR",
+         "generic",
+         365,
+         "FIFO",
+         0,
+         1,
+         "global",
+         4,
+         4,
+         0,
+         0,
+         "processed",
+         3,
+         null,
+         "fixed",
+         null
+        ],
+        [
+         "q",
+         "w",
+         "other",
+         "USD",
+         "generic",
+         365,
+         "FIFO",
+         0,
+         1,
+         "global",
+         0,
+         0,
+         0,
+         0,
+         null,
+         0,
+         null,
+         "fixed",
+         null
+        ]
+       ]
+      },
+      "wallet_policy_coverage_witnesses": {
+       "columns": [
+        "source_id",
+        "branch_key",
+        "scanned_to_exclusive",
+        "highest_used",
+        "observer_kind",
+        "observed_at"
+       ],
+       "rows": [
+        [
+         "id-0002",
+         "receive",
+         5,
+         2,
+         "bdk",
+         "2030-01-01T00:00:02Z"
+        ],
+        [
+         "id-0002",
+         "change",
+         3,
+         null,
+         "bdk",
+         "2030-01-01T00:00:02Z"
+        ]
+       ]
+      },
+      "wallet_policy_epochs": {
+       "columns": [
+        "id",
+        "workspace_id",
+        "profile_id",
+        "wallet_id",
+        "chain",
+        "network",
+        "status",
+        "private_material_json",
+        "created_at",
+        "retired_at"
+       ],
+       "rows": [
+        [
+         "id-0001",
+         "w",
+         "p",
+         "a",
+         "bitcoin",
+         "main",
+         "active",
+         "{\"chain\": \"Bitcoin\", \"descriptor\": \"wpkh(synthetic)\", \"gap_limit\": 20, \"network\": \"mainnet\", \"samourai\": {\"role\": \"x\"}, \"script_types\": [\"p2wpkh\"]}",
+         "2030-01-01T00:00:01Z",
+         null
+        ]
+       ]
+      },
+      "wallet_policy_sources": {
+       "columns": [
+        "id",
+        "epoch_id",
+        "source_wallet_id",
+        "source_key",
+        "observer_kind",
+        "branch_keys_json",
+        "created_at",
+        "updated_at"
+       ],
+       "rows": [
+        [
+         "id-0002",
+         "id-0001",
+         "a",
+         "descriptor:default",
+         "bdk",
+         "[\"receive\", \"change\"]",
+         "2030-01-01T00:00:02Z",
+         "2030-01-01T00:00:02Z"
+        ]
+       ]
+      },
+      "wallets": {
+       "columns": [
+        "id",
+        "workspace_id",
+        "profile_id",
+        "account_id",
+        "label",
+        "kind",
+        "config_json",
+        "created_at"
+       ],
+       "rows": [
+        [
+         "a",
+         "w",
+         "p",
+         null,
+         "Wällét",
+         "descriptor",
+         "{\"descriptor\": \"wpkh(synthetic)\", \"change_descriptor\": \"\", \"gap_limit\": 20, \"addresses\": [], \"script_types\": [\"p2wpkh\"], \"label\": \"not private\", \"chain\": \"Bitcoin\", \"network\": \"mainnet\", \"samourai\": {\"role\": \"x\"}, \"xpub\": null}",
+         "fixed"
+        ],
+        [
+         "b",
+         "w",
+         "p",
+         null,
+         "second",
+         "descriptor",
+         "{}",
+         "fixed"
+        ],
+        [
+         "c",
+         "w",
+         "q",
+         null,
+         "foreign",
+         "descriptor",
+         "{}",
+         "fixed"
+        ]
+       ]
+      },
+      "workspaces": {
+       "columns": [
+        "id",
+        "label",
+        "created_at"
+       ],
+       "rows": [
+        [
+         "w",
+         "synthetic",
+         "fixed"
+        ]
+       ]
+      }
+     },
+     "coverage": [
+      [
+       "receive",
+       1,
+       null
+      ]
+     ],
+     "identity": {
+      "branch_keys": [
+       "receive",
+       "change",
+       "receive"
+      ],
+      "chain": "bitcoin",
+      "network": "main",
+      "observer_kind": "bdk",
+      "source_key": "xpub:p2tr",
+      "source_wallet_id": "a"
+     },
+     "outcome": {
+      "result": "id-0001"
+     }
+    }
+   ]
+  },
+  {
+   "name": "config-scope",
+   "steps": [
+    {
+     "after": {
+      "accounts": [],
+      "ai_chat_messages": [],
+      "ai_chat_sessions": [],
+      "ai_provider_checks": [],
+      "ai_provider_secret_refs": [],
+      "ai_providers": [],
+      "attachments": [],
+      "backends": [],
+      "bip329_labels": [],
+      "book_network_bindings": [],
+      "book_reset_parked_rows": [],
+      "book_reset_transactions": [],
+      "btcpay_account_routes": [],
+      "btcpay_provenance_records": [],
+      "btcpay_store_sync_states": [],
+      "chain_analysis_acquisition_grants": [],
+      "chain_analysis_cases": [],
+      "chain_analysis_dataset_claims": [],
+      "chain_analysis_datasets": [],
+      "chain_analysis_label_history": [],
+      "chain_analysis_labels": [],
+      "chain_analysis_observations": [],
+      "chain_analysis_reference_assertions": [],
+      "chain_analysis_reference_blocks": [],
+      "chain_analysis_watch_inbox": [],
+      "chain_analysis_watches": [],
+      "chain_index_aliases": [],
+      "chain_index_clock": [
+       [
+        1,
+        6
+       ]
+      ],
+      "chain_index_dirty": [
+       [
+        "profiles",
+        -1,
+        2
+       ],
+       [
+        "wallets",
+        -1,
+        6
+       ]
+      ],
+      "chain_index_edges": [],
+      "chain_index_finding_nodes": [],
+      "chain_index_findings": [],
+      "chain_index_label_nodes": [],
+      "chain_index_labels": [],
+      "chain_index_nodes": [],
+      "chain_index_source_nodes": [],
+      "chain_index_sources": [],
+      "chain_index_state": [],
+      "chain_observation_provenance": [],
+      "chain_observer_coverage": [],
+      "chain_observer_instances": [],
+      "chain_observer_values": [],
+      "commercial_links": [],
+      "custody_ai_assistance_audits": [],
+      "custody_authored_evidence_snapshots": [],
+      "custody_authored_migration_issues": [],
+      "custody_component_allocations": [],
+      "custody_component_economic_terms": [],
+      "custody_component_evidence_commitments": [],
+      "custody_component_legs": [],
+      "custody_component_purge_authorizations": [],
+      "custody_component_transaction_memberships": [],
+      "custody_components": [],
+      "custody_filed_report_impact_resolutions": [],
+      "custody_filed_report_impacts": [],
+      "custody_gap_review_relation_sets": [],
+      "custody_gap_review_transactions": [],
+      "custody_gap_reviews": [],
+      "direct_swap_payouts": [],
+      "external_document_attachments": [],
+      "external_documents": [],
+      "filed_report_chain_captures": [],
+      "filed_report_chain_dependencies": [],
+      "filed_report_chain_impacts": [],
+      "filed_report_chain_resolutions": [],
+      "filed_report_snapshots": [],
+      "freshness_jobs": [],
+      "freshness_source_states": [],
+      "import_batch_transactions": [],
+      "import_batches": [],
+      "journal_account_holdings": [],
+      "journal_custody_decisions": [],
+      "journal_custody_economic_relations": [],
+      "journal_custody_gap_inputs": [],
+      "journal_custody_reconciliations": [],
+      "journal_entries": [],
+      "journal_quantity_balances": [],
+      "journal_quantity_issues": [],
+      "journal_quantity_postings": [],
+      "journal_quarantines": [],
+      "journal_tax_summary": [],
+      "journal_wallet_holdings": [],
+      "lightning_node_records": [],
+      "lightning_node_syncs": [],
+      "loan_legs": [],
+      "profiles": [
+       [
+        "p",
+        "w",
+        "primary",
+        "EUR",
+        "generic",
+        365,
+        "FIFO",
+        0,
+        1,
+        "global",
+        4,
+        4,
+        0,
+        0,
+        "processed",
+        3,
+        null,
+        "fixed",
+        null
+       ],
+       [
+        "q",
+        "w",
+        "other",
+        "USD",
+        "generic",
+        365,
+        "FIFO",
+        0,
+        1,
+        "global",
+        0,
+        0,
+        0,
+        0,
+        null,
+        0,
+        null,
+        "fixed",
+        null
+       ]
+      ],
+      "rates_cache": [],
+      "rates_checked_minutes": [],
+      "review_workflow_receipts": [],
+      "saved_views": [],
+      "schema_migration_audits": [],
+      "settings": [],
+      "source_funds_cases": [],
+      "source_funds_link_attachments": [],
+      "source_funds_links": [],
+      "source_funds_recipients": [],
+      "source_funds_snapshots": [],
+      "source_funds_source_attachments": [],
+      "source_funds_sources": [],
+      "swap_matching_rules": [],
+      "synthetic_import_duplicate_reviews": [],
+      "tags": [],
+      "transaction_edit_events": [],
+      "transaction_edit_fields": [],
+      "transaction_graph_cache": [],
+      "transaction_pair_dismissals": [],
+      "transaction_pairs": [],
+      "transaction_tags": [],
+      "transactions": [],
+      "wallet_policy_coverage_witnesses": [],
+      "wallet_policy_epochs": [
+       [
+        "id-0001",
+        "w",
+        "p",
+        "a",
+        "bitcoin",
+        "main",
+        "active",
+        "{\"chain\": \"Bitcoin\", \"descriptor\": \"wpkh(synthetic)\", \"gap_limit\": 20, \"network\": \"mainnet\", \"samourai\": {\"role\": \"x\"}, \"script_types\": [\"p2wpkh\"]}",
+        "2030-01-01T00:00:01Z",
+        null
+       ]
+      ],
+      "wallet_policy_sources": [
+       [
+        "id-0002",
+        "id-0001",
+        "a",
+        "descriptor:default",
+        "bdk",
+        "[\"receive\", \"change\"]",
+        "2030-01-01T00:00:02Z",
+        "2030-01-01T00:00:02Z"
+       ]
+      ],
+      "wallet_utxo_refreshes": [],
+      "wallet_utxos": [],
+      "wallets": [
+       [
+        "a",
+        "w",
+        "p",
+        null,
+        "Wällét",
+        "descriptor",
+        "{\"descriptor\": \"wpkh(synthetic)\", \"change_descriptor\": \"\", \"gap_limit\": 20, \"addresses\": [], \"script_types\": [\"p2wpkh\"], \"label\": \"not private\", \"chain\": \"Bitcoin\", \"network\": \"mainnet\", \"samourai\": {\"role\": \"x\"}, \"xpub\": null}",
+        "fixed"
+       ],
+       [
+        "b",
+        "w",
+        "p",
+        null,
+        "second",
+        "descriptor",
+        "{}",
+        "fixed"
+       ],
+       [
+        "c",
+        "w",
+        "q",
+        null,
+        "foreign",
+        "descriptor",
+        "{}",
+        "fixed"
+       ]
+      ],
+      "workspaces": [
+       [
+        "w",
+        "synthetic",
+        "fixed"
+       ]
+      ]
+     },
+     "before": {
+      "chain_index_clock": {
+       "columns": [
+        "id",
+        "revision"
+       ],
+       "rows": [
+        [
+         1,
+         6
+        ]
+       ]
+      },
+      "chain_index_dirty": {
+       "columns": [
+        "source_table",
+        "source_key",
+        "revision"
+       ],
+       "rows": [
+        [
+         "profiles",
+         -1,
+         2
+        ],
+        [
+         "wallets",
+         -1,
+         6
+        ]
+       ]
+      },
+      "profiles": {
+       "columns": [
+        "id",
+        "workspace_id",
+        "label",
+        "fiat_currency",
+        "tax_country",
+        "tax_long_term_days",
+        "gains_algorithm",
+        "require_coarse_review",
+        "bitcoin_rail_carrying_value",
+        "cost_basis_pool_scope",
+        "journal_input_version",
+        "last_processed_input_version",
+        "required_journal_semantics_version",
+        "journal_semantics_version",
+        "last_processed_at",
+        "last_processed_tx_count",
+        "ownership_review_counts_json",
+        "created_at",
+        "swap_candidate_count"
+       ],
+       "rows": [
+        [
+         "p",
+         "w",
+         "primary",
+         "EUR",
+         "generic",
+         365,
+         "FIFO",
+         0,
+         1,
+         "global",
+         4,
+         4,
+         0,
+         0,
+         "processed",
+         3,
+         null,
+         "fixed",
+         null
+        ],
+        [
+         "q",
+         "w",
+         "other",
+         "USD",
+         "generic",
+         365,
+         "FIFO",
+         0,
+         1,
+         "global",
+         0,
+         0,
+         0,
+         0,
+         null,
+         0,
+         null,
+         "fixed",
+         null
+        ]
+       ]
+      },
+      "wallets": {
+       "columns": [
+        "id",
+        "workspace_id",
+        "profile_id",
+        "account_id",
+        "label",
+        "kind",
+        "config_json",
+        "created_at"
+       ],
+       "rows": [
+        [
+         "a",
+         "w",
+         "p",
+         null,
+         "Wällét",
+         "descriptor",
+         "{\"descriptor\": \"wpkh(synthetic)\", \"change_descriptor\": \"\", \"gap_limit\": 20, \"addresses\": [], \"script_types\": [\"p2wpkh\"], \"label\": \"not private\", \"chain\": \"Bitcoin\", \"network\": \"mainnet\", \"samourai\": {\"role\": \"x\"}, \"xpub\": null}",
+         "fixed"
+        ],
+        [
+         "b",
+         "w",
+         "p",
+         null,
+         "second",
+         "descriptor",
+         "{}",
+         "fixed"
+        ],
+        [
+         "c",
+         "w",
+         "q",
+         null,
+         "foreign",
+         "descriptor",
+         "{}",
+         "fixed"
+        ]
+       ]
+      },
+      "workspaces": {
+       "columns": [
+        "id",
+        "label",
+        "created_at"
+       ],
+       "rows": [
+        [
+         "w",
+         "synthetic",
+         "fixed"
+        ]
+       ]
+      }
+     },
+     "coverage": [],
+     "identity": {
+      "branch_keys": [
+       "receive",
+       "change",
+       "receive"
+      ],
+      "chain": "",
+      "network": "",
+      "observer_kind": "bdk",
+      "source_key": "descriptor:default",
+      "source_wallet_id": "a"
+     },
+     "outcome": {
+      "result": "id-0001"
+     }
+    }
+   ]
+  },
+  {
+   "name": "bad-network",
+   "steps": [
+    {
+     "after": {
+      "accounts": [],
+      "ai_chat_messages": [],
+      "ai_chat_sessions": [],
+      "ai_provider_checks": [],
+      "ai_provider_secret_refs": [],
+      "ai_providers": [],
+      "attachments": [],
+      "backends": [],
+      "bip329_labels": [],
+      "book_network_bindings": [],
+      "book_reset_parked_rows": [],
+      "book_reset_transactions": [],
+      "btcpay_account_routes": [],
+      "btcpay_provenance_records": [],
+      "btcpay_store_sync_states": [],
+      "chain_analysis_acquisition_grants": [],
+      "chain_analysis_cases": [],
+      "chain_analysis_dataset_claims": [],
+      "chain_analysis_datasets": [],
+      "chain_analysis_label_history": [],
+      "chain_analysis_labels": [],
+      "chain_analysis_observations": [],
+      "chain_analysis_reference_assertions": [],
+      "chain_analysis_reference_blocks": [],
+      "chain_analysis_watch_inbox": [],
+      "chain_analysis_watches": [],
+      "chain_index_aliases": [],
+      "chain_index_clock": [
+       [
+        1,
+        6
+       ]
+      ],
+      "chain_index_dirty": [
+       [
+        "profiles",
+        -1,
+        2
+       ],
+       [
+        "wallets",
+        -1,
+        6
+       ]
+      ],
+      "chain_index_edges": [],
+      "chain_index_finding_nodes": [],
+      "chain_index_findings": [],
+      "chain_index_label_nodes": [],
+      "chain_index_labels": [],
+      "chain_index_nodes": [],
+      "chain_index_source_nodes": [],
+      "chain_index_sources": [],
+      "chain_index_state": [],
+      "chain_observation_provenance": [],
+      "chain_observer_coverage": [],
+      "chain_observer_instances": [],
+      "chain_observer_values": [],
+      "commercial_links": [],
+      "custody_ai_assistance_audits": [],
+      "custody_authored_evidence_snapshots": [],
+      "custody_authored_migration_issues": [],
+      "custody_component_allocations": [],
+      "custody_component_economic_terms": [],
+      "custody_component_evidence_commitments": [],
+      "custody_component_legs": [],
+      "custody_component_purge_authorizations": [],
+      "custody_component_transaction_memberships": [],
+      "custody_components": [],
+      "custody_filed_report_impact_resolutions": [],
+      "custody_filed_report_impacts": [],
+      "custody_gap_review_relation_sets": [],
+      "custody_gap_review_transactions": [],
+      "custody_gap_reviews": [],
+      "direct_swap_payouts": [],
+      "external_document_attachments": [],
+      "external_documents": [],
+      "filed_report_chain_captures": [],
+      "filed_report_chain_dependencies": [],
+      "filed_report_chain_impacts": [],
+      "filed_report_chain_resolutions": [],
+      "filed_report_snapshots": [],
+      "freshness_jobs": [],
+      "freshness_source_states": [],
+      "import_batch_transactions": [],
+      "import_batches": [],
+      "journal_account_holdings": [],
+      "journal_custody_decisions": [],
+      "journal_custody_economic_relations": [],
+      "journal_custody_gap_inputs": [],
+      "journal_custody_reconciliations": [],
+      "journal_entries": [],
+      "journal_quantity_balances": [],
+      "journal_quantity_issues": [],
+      "journal_quantity_postings": [],
+      "journal_quarantines": [],
+      "journal_tax_summary": [],
+      "journal_wallet_holdings": [],
+      "lightning_node_records": [],
+      "lightning_node_syncs": [],
+      "loan_legs": [],
+      "profiles": [
+       [
+        "p",
+        "w",
+        "primary",
+        "EUR",
+        "generic",
+        365,
+        "FIFO",
+        0,
+        1,
+        "global",
+        4,
+        4,
+        0,
+        0,
+        "processed",
+        3,
+        null,
+        "fixed",
+        null
+       ],
+       [
+        "q",
+        "w",
+        "other",
+        "USD",
+        "generic",
+        365,
+        "FIFO",
+        0,
+        1,
+        "global",
+        0,
+        0,
+        0,
+        0,
+        null,
+        0,
+        null,
+        "fixed",
+        null
+       ]
+      ],
+      "rates_cache": [],
+      "rates_checked_minutes": [],
+      "review_workflow_receipts": [],
+      "saved_views": [],
+      "schema_migration_audits": [],
+      "settings": [],
+      "source_funds_cases": [],
+      "source_funds_link_attachments": [],
+      "source_funds_links": [],
+      "source_funds_recipients": [],
+      "source_funds_snapshots": [],
+      "source_funds_source_attachments": [],
+      "source_funds_sources": [],
+      "swap_matching_rules": [],
+      "synthetic_import_duplicate_reviews": [],
+      "tags": [],
+      "transaction_edit_events": [],
+      "transaction_edit_fields": [],
+      "transaction_graph_cache": [],
+      "transaction_pair_dismissals": [],
+      "transaction_pairs": [],
+      "transaction_tags": [],
+      "transactions": [],
+      "wallet_policy_coverage_witnesses": [],
+      "wallet_policy_epochs": [],
+      "wallet_policy_sources": [],
+      "wallet_utxo_refreshes": [],
+      "wallet_utxos": [],
+      "wallets": [
+       [
+        "a",
+        "w",
+        "p",
+        null,
+        "Wällét",
+        "descriptor",
+        "{\"descriptor\": \"wpkh(synthetic)\", \"change_descriptor\": \"\", \"gap_limit\": 20, \"addresses\": [], \"script_types\": [\"p2wpkh\"], \"label\": \"not private\", \"chain\": \"Bitcoin\", \"network\": \"mainnet\", \"samourai\": {\"role\": \"x\"}, \"xpub\": null}",
+        "fixed"
+       ],
+       [
+        "b",
+        "w",
+        "p",
+        null,
+        "second",
+        "descriptor",
+        "{}",
+        "fixed"
+       ],
+       [
+        "c",
+        "w",
+        "q",
+        null,
+        "foreign",
+        "descriptor",
+        "{}",
+        "fixed"
+       ]
+      ],
+      "workspaces": [
+       [
+        "w",
+        "synthetic",
+        "fixed"
+       ]
+      ]
+     },
+     "before": {
+      "chain_index_clock": {
+       "columns": [
+        "id",
+        "revision"
+       ],
+       "rows": [
+        [
+         1,
+         6
+        ]
+       ]
+      },
+      "chain_index_dirty": {
+       "columns": [
+        "source_table",
+        "source_key",
+        "revision"
+       ],
+       "rows": [
+        [
+         "profiles",
+         -1,
+         2
+        ],
+        [
+         "wallets",
+         -1,
+         6
+        ]
+       ]
+      },
+      "profiles": {
+       "columns": [
+        "id",
+        "workspace_id",
+        "label",
+        "fiat_currency",
+        "tax_country",
+        "tax_long_term_days",
+        "gains_algorithm",
+        "require_coarse_review",
+        "bitcoin_rail_carrying_value",
+        "cost_basis_pool_scope",
+        "journal_input_version",
+        "last_processed_input_version",
+        "required_journal_semantics_version",
+        "journal_semantics_version",
+        "last_processed_at",
+        "last_processed_tx_count",
+        "ownership_review_counts_json",
+        "created_at",
+        "swap_candidate_count"
+       ],
+       "rows": [
+        [
+         "p",
+         "w",
+         "primary",
+         "EUR",
+         "generic",
+         365,
+         "FIFO",
+         0,
+         1,
+         "global",
+         4,
+         4,
+         0,
+         0,
+         "processed",
+         3,
+         null,
+         "fixed",
+         null
+        ],
+        [
+         "q",
+         "w",
+         "other",
+         "USD",
+         "generic",
+         365,
+         "FIFO",
+         0,
+         1,
+         "global",
+         0,
+         0,
+         0,
+         0,
+         null,
+         0,
+         null,
+         "fixed",
+         null
+        ]
+       ]
+      },
+      "wallets": {
+       "columns": [
+        "id",
+        "workspace_id",
+        "profile_id",
+        "account_id",
+        "label",
+        "kind",
+        "config_json",
+        "created_at"
+       ],
+       "rows": [
+        [
+         "a",
+         "w",
+         "p",
+         null,
+         "Wällét",
+         "descriptor",
+         "{\"descriptor\": \"wpkh(synthetic)\", \"change_descriptor\": \"\", \"gap_limit\": 20, \"addresses\": [], \"script_types\": [\"p2wpkh\"], \"label\": \"not private\", \"chain\": \"Bitcoin\", \"network\": \"mainnet\", \"samourai\": {\"role\": \"x\"}, \"xpub\": null}",
+         "fixed"
+        ],
+        [
+         "b",
+         "w",
+         "p",
+         null,
+         "second",
+         "descriptor",
+         "{}",
+         "fixed"
+        ],
+        [
+         "c",
+         "w",
+         "q",
+         null,
+         "foreign",
+         "descriptor",
+         "{}",
+         "fixed"
+        ]
+       ]
+      },
+      "workspaces": {
+       "columns": [
+        "id",
+        "label",
+        "created_at"
+       ],
+       "rows": [
+        [
+         "w",
+         "synthetic",
+         "fixed"
+        ]
+       ]
+      }
+     },
+     "coverage": [
+      [
+       "receive",
+       5,
+       2
+      ],
+      [
+       "change",
+       3,
+       null
+      ]
+     ],
+     "identity": {
+      "branch_keys": [
+       "receive",
+       "change",
+       "receive"
+      ],
+      "chain": "bitcoin",
+      "network": "moon",
+      "observer_kind": "bdk",
+      "source_key": "descriptor:default",
+      "source_wallet_id": "a"
+     },
+     "outcome": {
+      "error": {
+       "code": "app_error",
+       "details": null,
+       "hint": null,
+       "message": "Unsupported bitcoin network 'moon'"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "bad-chain",
+   "steps": [
+    {
+     "after": {
+      "accounts": [],
+      "ai_chat_messages": [],
+      "ai_chat_sessions": [],
+      "ai_provider_checks": [],
+      "ai_provider_secret_refs": [],
+      "ai_providers": [],
+      "attachments": [],
+      "backends": [],
+      "bip329_labels": [],
+      "book_network_bindings": [],
+      "book_reset_parked_rows": [],
+      "book_reset_transactions": [],
+      "btcpay_account_routes": [],
+      "btcpay_provenance_records": [],
+      "btcpay_store_sync_states": [],
+      "chain_analysis_acquisition_grants": [],
+      "chain_analysis_cases": [],
+      "chain_analysis_dataset_claims": [],
+      "chain_analysis_datasets": [],
+      "chain_analysis_label_history": [],
+      "chain_analysis_labels": [],
+      "chain_analysis_observations": [],
+      "chain_analysis_reference_assertions": [],
+      "chain_analysis_reference_blocks": [],
+      "chain_analysis_watch_inbox": [],
+      "chain_analysis_watches": [],
+      "chain_index_aliases": [],
+      "chain_index_clock": [
+       [
+        1,
+        6
+       ]
+      ],
+      "chain_index_dirty": [
+       [
+        "profiles",
+        -1,
+        2
+       ],
+       [
+        "wallets",
+        -1,
+        6
+       ]
+      ],
+      "chain_index_edges": [],
+      "chain_index_finding_nodes": [],
+      "chain_index_findings": [],
+      "chain_index_label_nodes": [],
+      "chain_index_labels": [],
+      "chain_index_nodes": [],
+      "chain_index_source_nodes": [],
+      "chain_index_sources": [],
+      "chain_index_state": [],
+      "chain_observation_provenance": [],
+      "chain_observer_coverage": [],
+      "chain_observer_instances": [],
+      "chain_observer_values": [],
+      "commercial_links": [],
+      "custody_ai_assistance_audits": [],
+      "custody_authored_evidence_snapshots": [],
+      "custody_authored_migration_issues": [],
+      "custody_component_allocations": [],
+      "custody_component_economic_terms": [],
+      "custody_component_evidence_commitments": [],
+      "custody_component_legs": [],
+      "custody_component_purge_authorizations": [],
+      "custody_component_transaction_memberships": [],
+      "custody_components": [],
+      "custody_filed_report_impact_resolutions": [],
+      "custody_filed_report_impacts": [],
+      "custody_gap_review_relation_sets": [],
+      "custody_gap_review_transactions": [],
+      "custody_gap_reviews": [],
+      "direct_swap_payouts": [],
+      "external_document_attachments": [],
+      "external_documents": [],
+      "filed_report_chain_captures": [],
+      "filed_report_chain_dependencies": [],
+      "filed_report_chain_impacts": [],
+      "filed_report_chain_resolutions": [],
+      "filed_report_snapshots": [],
+      "freshness_jobs": [],
+      "freshness_source_states": [],
+      "import_batch_transactions": [],
+      "import_batches": [],
+      "journal_account_holdings": [],
+      "journal_custody_decisions": [],
+      "journal_custody_economic_relations": [],
+      "journal_custody_gap_inputs": [],
+      "journal_custody_reconciliations": [],
+      "journal_entries": [],
+      "journal_quantity_balances": [],
+      "journal_quantity_issues": [],
+      "journal_quantity_postings": [],
+      "journal_quarantines": [],
+      "journal_tax_summary": [],
+      "journal_wallet_holdings": [],
+      "lightning_node_records": [],
+      "lightning_node_syncs": [],
+      "loan_legs": [],
+      "profiles": [
+       [
+        "p",
+        "w",
+        "primary",
+        "EUR",
+        "generic",
+        365,
+        "FIFO",
+        0,
+        1,
+        "global",
+        4,
+        4,
+        0,
+        0,
+        "processed",
+        3,
+        null,
+        "fixed",
+        null
+       ],
+       [
+        "q",
+        "w",
+        "other",
+        "USD",
+        "generic",
+        365,
+        "FIFO",
+        0,
+        1,
+        "global",
+        0,
+        0,
+        0,
+        0,
+        null,
+        0,
+        null,
+        "fixed",
+        null
+       ]
+      ],
+      "rates_cache": [],
+      "rates_checked_minutes": [],
+      "review_workflow_receipts": [],
+      "saved_views": [],
+      "schema_migration_audits": [],
+      "settings": [],
+      "source_funds_cases": [],
+      "source_funds_link_attachments": [],
+      "source_funds_links": [],
+      "source_funds_recipients": [],
+      "source_funds_snapshots": [],
+      "source_funds_source_attachments": [],
+      "source_funds_sources": [],
+      "swap_matching_rules": [],
+      "synthetic_import_duplicate_reviews": [],
+      "tags": [],
+      "transaction_edit_events": [],
+      "transaction_edit_fields": [],
+      "transaction_graph_cache": [],
+      "transaction_pair_dismissals": [],
+      "transaction_pairs": [],
+      "transaction_tags": [],
+      "transactions": [],
+      "wallet_policy_coverage_witnesses": [],
+      "wallet_policy_epochs": [],
+      "wallet_policy_sources": [],
+      "wallet_utxo_refreshes": [],
+      "wallet_utxos": [],
+      "wallets": [
+       [
+        "a",
+        "w",
+        "p",
+        null,
+        "Wällét",
+        "descriptor",
+        "{\"descriptor\": \"wpkh(synthetic)\", \"change_descriptor\": \"\", \"gap_limit\": 20, \"addresses\": [], \"script_types\": [\"p2wpkh\"], \"label\": \"not private\", \"chain\": \"Bitcoin\", \"network\": \"mainnet\", \"samourai\": {\"role\": \"x\"}, \"xpub\": null}",
+        "fixed"
+       ],
+       [
+        "b",
+        "w",
+        "p",
+        null,
+        "second",
+        "descriptor",
+        "{}",
+        "fixed"
+       ],
+       [
+        "c",
+        "w",
+        "q",
+        null,
+        "foreign",
+        "descriptor",
+        "{}",
+        "fixed"
+       ]
+      ],
+      "workspaces": [
+       [
+        "w",
+        "synthetic",
+        "fixed"
+       ]
+      ]
+     },
+     "before": {
+      "chain_index_clock": {
+       "columns": [
+        "id",
+        "revision"
+       ],
+       "rows": [
+        [
+         1,
+         6
+        ]
+       ]
+      },
+      "chain_index_dirty": {
+       "columns": [
+        "source_table",
+        "source_key",
+        "revision"
+       ],
+       "rows": [
+        [
+         "profiles",
+         -1,
+         2
+        ],
+        [
+         "wallets",
+         -1,
+         6
+        ]
+       ]
+      },
+      "profiles": {
+       "columns": [
+        "id",
+        "workspace_id",
+        "label",
+        "fiat_currency",
+        "tax_country",
+        "tax_long_term_days",
+        "gains_algorithm",
+        "require_coarse_review",
+        "bitcoin_rail_carrying_value",
+        "cost_basis_pool_scope",
+        "journal_input_version",
+        "last_processed_input_version",
+        "required_journal_semantics_version",
+        "journal_semantics_version",
+        "last_processed_at",
+        "last_processed_tx_count",
+        "ownership_review_counts_json",
+        "created_at",
+        "swap_candidate_count"
+       ],
+       "rows": [
+        [
+         "p",
+         "w",
+         "primary",
+         "EUR",
+         "generic",
+         365,
+         "FIFO",
+         0,
+         1,
+         "global",
+         4,
+         4,
+         0,
+         0,
+         "processed",
+         3,
+         null,
+         "fixed",
+         null
+        ],
+        [
+         "q",
+         "w",
+         "other",
+         "USD",
+         "generic",
+         365,
+         "FIFO",
+         0,
+         1,
+         "global",
+         0,
+         0,
+         0,
+         0,
+         null,
+         0,
+         null,
+         "fixed",
+         null
+        ]
+       ]
+      },
+      "wallets": {
+       "columns": [
+        "id",
+        "workspace_id",
+        "profile_id",
+        "account_id",
+        "label",
+        "kind",
+        "config_json",
+        "created_at"
+       ],
+       "rows": [
+        [
+         "a",
+         "w",
+         "p",
+         null,
+         "Wällét",
+         "descriptor",
+         "{\"descriptor\": \"wpkh(synthetic)\", \"change_descriptor\": \"\", \"gap_limit\": 20, \"addresses\": [], \"script_types\": [\"p2wpkh\"], \"label\": \"not private\", \"chain\": \"Bitcoin\", \"network\": \"mainnet\", \"samourai\": {\"role\": \"x\"}, \"xpub\": null}",
+         "fixed"
+        ],
+        [
+         "b",
+         "w",
+         "p",
+         null,
+         "second",
+         "descriptor",
+         "{}",
+         "fixed"
+        ],
+        [
+         "c",
+         "w",
+         "q",
+         null,
+         "foreign",
+         "descriptor",
+         "{}",
+         "fixed"
+        ]
+       ]
+      },
+      "workspaces": {
+       "columns": [
+        "id",
+        "label",
+        "created_at"
+       ],
+       "rows": [
+        [
+         "w",
+         "synthetic",
+         "fixed"
+        ]
+       ]
+      }
+     },
+     "coverage": [
+      [
+       "receive",
+       5,
+       2
+      ],
+      [
+       "change",
+       3,
+       null
+      ]
+     ],
+     "identity": {
+      "branch_keys": [
+       "receive",
+       "change",
+       "receive"
+      ],
+      "chain": "dogecoin",
+      "network": "main",
+      "observer_kind": "bdk",
+      "source_key": "descriptor:default",
+      "source_wallet_id": "a"
+     },
+     "outcome": {
+      "error": {
+       "code": "app_error",
+       "details": null,
+       "hint": null,
+       "message": "Unsupported wallet chain 'dogecoin'"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "missing-wallet",
+   "steps": [
+    {
+     "after": {
+      "accounts": [],
+      "ai_chat_messages": [],
+      "ai_chat_sessions": [],
+      "ai_provider_checks": [],
+      "ai_provider_secret_refs": [],
+      "ai_providers": [],
+      "attachments": [],
+      "backends": [],
+      "bip329_labels": [],
+      "book_network_bindings": [],
+      "book_reset_parked_rows": [],
+      "book_reset_transactions": [],
+      "btcpay_account_routes": [],
+      "btcpay_provenance_records": [],
+      "btcpay_store_sync_states": [],
+      "chain_analysis_acquisition_grants": [],
+      "chain_analysis_cases": [],
+      "chain_analysis_dataset_claims": [],
+      "chain_analysis_datasets": [],
+      "chain_analysis_label_history": [],
+      "chain_analysis_labels": [],
+      "chain_analysis_observations": [],
+      "chain_analysis_reference_assertions": [],
+      "chain_analysis_reference_blocks": [],
+      "chain_analysis_watch_inbox": [],
+      "chain_analysis_watches": [],
+      "chain_index_aliases": [],
+      "chain_index_clock": [
+       [
+        1,
+        6
+       ]
+      ],
+      "chain_index_dirty": [
+       [
+        "profiles",
+        -1,
+        2
+       ],
+       [
+        "wallets",
+        -1,
+        6
+       ]
+      ],
+      "chain_index_edges": [],
+      "chain_index_finding_nodes": [],
+      "chain_index_findings": [],
+      "chain_index_label_nodes": [],
+      "chain_index_labels": [],
+      "chain_index_nodes": [],
+      "chain_index_source_nodes": [],
+      "chain_index_sources": [],
+      "chain_index_state": [],
+      "chain_observation_provenance": [],
+      "chain_observer_coverage": [],
+      "chain_observer_instances": [],
+      "chain_observer_values": [],
+      "commercial_links": [],
+      "custody_ai_assistance_audits": [],
+      "custody_authored_evidence_snapshots": [],
+      "custody_authored_migration_issues": [],
+      "custody_component_allocations": [],
+      "custody_component_economic_terms": [],
+      "custody_component_evidence_commitments": [],
+      "custody_component_legs": [],
+      "custody_component_purge_authorizations": [],
+      "custody_component_transaction_memberships": [],
+      "custody_components": [],
+      "custody_filed_report_impact_resolutions": [],
+      "custody_filed_report_impacts": [],
+      "custody_gap_review_relation_sets": [],
+      "custody_gap_review_transactions": [],
+      "custody_gap_reviews": [],
+      "direct_swap_payouts": [],
+      "external_document_attachments": [],
+      "external_documents": [],
+      "filed_report_chain_captures": [],
+      "filed_report_chain_dependencies": [],
+      "filed_report_chain_impacts": [],
+      "filed_report_chain_resolutions": [],
+      "filed_report_snapshots": [],
+      "freshness_jobs": [],
+      "freshness_source_states": [],
+      "import_batch_transactions": [],
+      "import_batches": [],
+      "journal_account_holdings": [],
+      "journal_custody_decisions": [],
+      "journal_custody_economic_relations": [],
+      "journal_custody_gap_inputs": [],
+      "journal_custody_reconciliations": [],
+      "journal_entries": [],
+      "journal_quantity_balances": [],
+      "journal_quantity_issues": [],
+      "journal_quantity_postings": [],
+      "journal_quarantines": [],
+      "journal_tax_summary": [],
+      "journal_wallet_holdings": [],
+      "lightning_node_records": [],
+      "lightning_node_syncs": [],
+      "loan_legs": [],
+      "profiles": [
+       [
+        "p",
+        "w",
+        "primary",
+        "EUR",
+        "generic",
+        365,
+        "FIFO",
+        0,
+        1,
+        "global",
+        4,
+        4,
+        0,
+        0,
+        "processed",
+        3,
+        null,
+        "fixed",
+        null
+       ],
+       [
+        "q",
+        "w",
+        "other",
+        "USD",
+        "generic",
+        365,
+        "FIFO",
+        0,
+        1,
+        "global",
+        0,
+        0,
+        0,
+        0,
+        null,
+        0,
+        null,
+        "fixed",
+        null
+       ]
+      ],
+      "rates_cache": [],
+      "rates_checked_minutes": [],
+      "review_workflow_receipts": [],
+      "saved_views": [],
+      "schema_migration_audits": [],
+      "settings": [],
+      "source_funds_cases": [],
+      "source_funds_link_attachments": [],
+      "source_funds_links": [],
+      "source_funds_recipients": [],
+      "source_funds_snapshots": [],
+      "source_funds_source_attachments": [],
+      "source_funds_sources": [],
+      "swap_matching_rules": [],
+      "synthetic_import_duplicate_reviews": [],
+      "tags": [],
+      "transaction_edit_events": [],
+      "transaction_edit_fields": [],
+      "transaction_graph_cache": [],
+      "transaction_pair_dismissals": [],
+      "transaction_pairs": [],
+      "transaction_tags": [],
+      "transactions": [],
+      "wallet_policy_coverage_witnesses": [],
+      "wallet_policy_epochs": [],
+      "wallet_policy_sources": [],
+      "wallet_utxo_refreshes": [],
+      "wallet_utxos": [],
+      "wallets": [
+       [
+        "a",
+        "w",
+        "p",
+        null,
+        "Wällét",
+        "descriptor",
+        "{\"descriptor\": \"wpkh(synthetic)\", \"change_descriptor\": \"\", \"gap_limit\": 20, \"addresses\": [], \"script_types\": [\"p2wpkh\"], \"label\": \"not private\", \"chain\": \"Bitcoin\", \"network\": \"mainnet\", \"samourai\": {\"role\": \"x\"}, \"xpub\": null}",
+        "fixed"
+       ],
+       [
+        "b",
+        "w",
+        "p",
+        null,
+        "second",
+        "descriptor",
+        "{}",
+        "fixed"
+       ],
+       [
+        "c",
+        "w",
+        "q",
+        null,
+        "foreign",
+        "descriptor",
+        "{}",
+        "fixed"
+       ]
+      ],
+      "workspaces": [
+       [
+        "w",
+        "synthetic",
+        "fixed"
+       ]
+      ]
+     },
+     "before": {
+      "chain_index_clock": {
+       "columns": [
+        "id",
+        "revision"
+       ],
+       "rows": [
+        [
+         1,
+         6
+        ]
+       ]
+      },
+      "chain_index_dirty": {
+       "columns": [
+        "source_table",
+        "source_key",
+        "revision"
+       ],
+       "rows": [
+        [
+         "profiles",
+         -1,
+         2
+        ],
+        [
+         "wallets",
+         -1,
+         6
+        ]
+       ]
+      },
+      "profiles": {
+       "columns": [
+        "id",
+        "workspace_id",
+        "label",
+        "fiat_currency",
+        "tax_country",
+        "tax_long_term_days",
+        "gains_algorithm",
+        "require_coarse_review",
+        "bitcoin_rail_carrying_value",
+        "cost_basis_pool_scope",
+        "journal_input_version",
+        "last_processed_input_version",
+        "required_journal_semantics_version",
+        "journal_semantics_version",
+        "last_processed_at",
+        "last_processed_tx_count",
+        "ownership_review_counts_json",
+        "created_at",
+        "swap_candidate_count"
+       ],
+       "rows": [
+        [
+         "p",
+         "w",
+         "primary",
+         "EUR",
+         "generic",
+         365,
+         "FIFO",
+         0,
+         1,
+         "global",
+         4,
+         4,
+         0,
+         0,
+         "processed",
+         3,
+         null,
+         "fixed",
+         null
+        ],
+        [
+         "q",
+         "w",
+         "other",
+         "USD",
+         "generic",
+         365,
+         "FIFO",
+         0,
+         1,
+         "global",
+         0,
+         0,
+         0,
+         0,
+         null,
+         0,
+         null,
+         "fixed",
+         null
+        ]
+       ]
+      },
+      "wallets": {
+       "columns": [
+        "id",
+        "workspace_id",
+        "profile_id",
+        "account_id",
+        "label",
+        "kind",
+        "config_json",
+        "created_at"
+       ],
+       "rows": [
+        [
+         "a",
+         "w",
+         "p",
+         null,
+         "Wällét",
+         "descriptor",
+         "{\"descriptor\": \"wpkh(synthetic)\", \"change_descriptor\": \"\", \"gap_limit\": 20, \"addresses\": [], \"script_types\": [\"p2wpkh\"], \"label\": \"not private\", \"chain\": \"Bitcoin\", \"network\": \"mainnet\", \"samourai\": {\"role\": \"x\"}, \"xpub\": null}",
+         "fixed"
+        ],
+        [
+         "b",
+         "w",
+         "p",
+         null,
+         "second",
+         "descriptor",
+         "{}",
+         "fixed"
+        ],
+        [
+         "c",
+         "w",
+         "q",
+         null,
+         "foreign",
+         "descriptor",
+         "{}",
+         "fixed"
+        ]
+       ]
+      },
+      "workspaces": {
+       "columns": [
+        "id",
+        "label",
+        "created_at"
+       ],
+       "rows": [
+        [
+         "w",
+         "synthetic",
+         "fixed"
+        ]
+       ]
+      }
+     },
+     "coverage": [
+      [
+       "receive",
+       5,
+       2
+      ],
+      [
+       "change",
+       3,
+       null
+      ]
+     ],
+     "identity": {
+      "branch_keys": [
+       "receive",
+       "change",
+       "receive"
+      ],
+      "chain": "bitcoin",
+      "network": "main",
+      "observer_kind": "bdk",
+      "source_key": "descriptor:default",
+      "source_wallet_id": "missing"
+     },
+     "outcome": {
+      "error": {
+       "code": "ValueError",
+       "details": null,
+       "hint": null,
+       "message": "observer policy source wallet does not exist"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "retired-then-active",
+   "steps": [
+    {
+     "after": {
+      "accounts": [],
+      "ai_chat_messages": [],
+      "ai_chat_sessions": [],
+      "ai_provider_checks": [],
+      "ai_provider_secret_refs": [],
+      "ai_providers": [],
+      "attachments": [],
+      "backends": [],
+      "bip329_labels": [],
+      "book_network_bindings": [],
+      "book_reset_parked_rows": [],
+      "book_reset_transactions": [],
+      "btcpay_account_routes": [],
+      "btcpay_provenance_records": [],
+      "btcpay_store_sync_states": [],
+      "chain_analysis_acquisition_grants": [],
+      "chain_analysis_cases": [],
+      "chain_analysis_dataset_claims": [],
+      "chain_analysis_datasets": [],
+      "chain_analysis_label_history": [],
+      "chain_analysis_labels": [],
+      "chain_analysis_observations": [],
+      "chain_analysis_reference_assertions": [],
+      "chain_analysis_reference_blocks": [],
+      "chain_analysis_watch_inbox": [],
+      "chain_analysis_watches": [],
+      "chain_index_aliases": [],
+      "chain_index_clock": [
+       [
+        1,
+        6
+       ]
+      ],
+      "chain_index_dirty": [
+       [
+        "profiles",
+        -1,
+        2
+       ],
+       [
+        "wallets",
+        -1,
+        6
+       ]
+      ],
+      "chain_index_edges": [],
+      "chain_index_finding_nodes": [],
+      "chain_index_findings": [],
+      "chain_index_label_nodes": [],
+      "chain_index_labels": [],
+      "chain_index_nodes": [],
+      "chain_index_source_nodes": [],
+      "chain_index_sources": [],
+      "chain_index_state": [],
+      "chain_observation_provenance": [],
+      "chain_observer_coverage": [],
+      "chain_observer_instances": [],
+      "chain_observer_values": [],
+      "commercial_links": [],
+      "custody_ai_assistance_audits": [],
+      "custody_authored_evidence_snapshots": [],
+      "custody_authored_migration_issues": [],
+      "custody_component_allocations": [],
+      "custody_component_economic_terms": [],
+      "custody_component_evidence_commitments": [],
+      "custody_component_legs": [],
+      "custody_component_purge_authorizations": [],
+      "custody_component_transaction_memberships": [],
+      "custody_components": [],
+      "custody_filed_report_impact_resolutions": [],
+      "custody_filed_report_impacts": [],
+      "custody_gap_review_relation_sets": [],
+      "custody_gap_review_transactions": [],
+      "custody_gap_reviews": [],
+      "direct_swap_payouts": [],
+      "external_document_attachments": [],
+      "external_documents": [],
+      "filed_report_chain_captures": [],
+      "filed_report_chain_dependencies": [],
+      "filed_report_chain_impacts": [],
+      "filed_report_chain_resolutions": [],
+      "filed_report_snapshots": [],
+      "freshness_jobs": [],
+      "freshness_source_states": [],
+      "import_batch_transactions": [],
+      "import_batches": [],
+      "journal_account_holdings": [],
+      "journal_custody_decisions": [],
+      "journal_custody_economic_relations": [],
+      "journal_custody_gap_inputs": [],
+      "journal_custody_reconciliations": [],
+      "journal_entries": [],
+      "journal_quantity_balances": [],
+      "journal_quantity_issues": [],
+      "journal_quantity_postings": [],
+      "journal_quarantines": [],
+      "journal_tax_summary": [],
+      "journal_wallet_holdings": [],
+      "lightning_node_records": [],
+      "lightning_node_syncs": [],
+      "loan_legs": [],
+      "profiles": [
+       [
+        "p",
+        "w",
+        "primary",
+        "EUR",
+        "generic",
+        365,
+        "FIFO",
+        0,
+        1,
+        "global",
+        4,
+        4,
+        0,
+        0,
+        "processed",
+        3,
+        null,
+        "fixed",
+        null
+       ],
+       [
+        "q",
+        "w",
+        "other",
+        "USD",
+        "generic",
+        365,
+        "FIFO",
+        0,
+        1,
+        "global",
+        0,
+        0,
+        0,
+        0,
+        null,
+        0,
+        null,
+        "fixed",
+        null
+       ]
+      ],
+      "rates_cache": [],
+      "rates_checked_minutes": [],
+      "review_workflow_receipts": [],
+      "saved_views": [],
+      "schema_migration_audits": [],
+      "settings": [],
+      "source_funds_cases": [],
+      "source_funds_link_attachments": [],
+      "source_funds_links": [],
+      "source_funds_recipients": [],
+      "source_funds_snapshots": [],
+      "source_funds_source_attachments": [],
+      "source_funds_sources": [],
+      "swap_matching_rules": [],
+      "synthetic_import_duplicate_reviews": [],
+      "tags": [],
+      "transaction_edit_events": [],
+      "transaction_edit_fields": [],
+      "transaction_graph_cache": [],
+      "transaction_pair_dismissals": [],
+      "transaction_pairs": [],
+      "transaction_tags": [],
+      "transactions": [],
+      "wallet_policy_coverage_witnesses": [
+       [
+        "id-0002",
+        "change",
+        3,
+        null,
+        "bdk",
+        "2030-01-01T00:00:02Z"
+       ],
+       [
+        "id-0002",
+        "receive",
+        5,
+        2,
+        "bdk",
+        "2030-01-01T00:00:02Z"
+       ]
+      ],
+      "wallet_policy_epochs": [
+       [
+        "id-0001",
+        "w",
+        "p",
+        "a",
+        "bitcoin",
+        "main",
+        "active",
+        "{\"chain\": \"Bitcoin\", \"descriptor\": \"wpkh(synthetic)\", \"gap_limit\": 20, \"network\": \"mainnet\", \"samourai\": {\"role\": \"x\"}, \"script_types\": [\"p2wpkh\"]}",
+        "2030-01-01T00:00:01Z",
+        null
+       ],
+       [
+        "old",
+        "w",
+        "p",
+        "a",
+        "bitcoin",
+        "main",
+        "retired",
+        "{}",
+        "x",
+        "y"
+       ]
+      ],
+      "wallet_policy_sources": [
+       [
+        "id-0002",
+        "id-0001",
+        "a",
+        "descriptor:default",
+        "bdk",
+        "[\"receive\", \"change\"]",
+        "2030-01-01T00:00:02Z",
+        "2030-01-01T00:00:02Z"
+       ]
+      ],
+      "wallet_utxo_refreshes": [],
+      "wallet_utxos": [],
+      "wallets": [
+       [
+        "a",
+        "w",
+        "p",
+        null,
+        "Wällét",
+        "descriptor",
+        "{\"descriptor\": \"wpkh(synthetic)\", \"change_descriptor\": \"\", \"gap_limit\": 20, \"addresses\": [], \"script_types\": [\"p2wpkh\"], \"label\": \"not private\", \"chain\": \"Bitcoin\", \"network\": \"mainnet\", \"samourai\": {\"role\": \"x\"}, \"xpub\": null}",
+        "fixed"
+       ],
+       [
+        "b",
+        "w",
+        "p",
+        null,
+        "second",
+        "descriptor",
+        "{}",
+        "fixed"
+       ],
+       [
+        "c",
+        "w",
+        "q",
+        null,
+        "foreign",
+        "descriptor",
+        "{}",
+        "fixed"
+       ]
+      ],
+      "workspaces": [
+       [
+        "w",
+        "synthetic",
+        "fixed"
+       ]
+      ]
+     },
+     "before": {
+      "chain_index_clock": {
+       "columns": [
+        "id",
+        "revision"
+       ],
+       "rows": [
+        [
+         1,
+         6
+        ]
+       ]
+      },
+      "chain_index_dirty": {
+       "columns": [
+        "source_table",
+        "source_key",
+        "revision"
+       ],
+       "rows": [
+        [
+         "profiles",
+         -1,
+         2
+        ],
+        [
+         "wallets",
+         -1,
+         6
+        ]
+       ]
+      },
+      "profiles": {
+       "columns": [
+        "id",
+        "workspace_id",
+        "label",
+        "fiat_currency",
+        "tax_country",
+        "tax_long_term_days",
+        "gains_algorithm",
+        "require_coarse_review",
+        "bitcoin_rail_carrying_value",
+        "cost_basis_pool_scope",
+        "journal_input_version",
+        "last_processed_input_version",
+        "required_journal_semantics_version",
+        "journal_semantics_version",
+        "last_processed_at",
+        "last_processed_tx_count",
+        "ownership_review_counts_json",
+        "created_at",
+        "swap_candidate_count"
+       ],
+       "rows": [
+        [
+         "p",
+         "w",
+         "primary",
+         "EUR",
+         "generic",
+         365,
+         "FIFO",
+         0,
+         1,
+         "global",
+         4,
+         4,
+         0,
+         0,
+         "processed",
+         3,
+         null,
+         "fixed",
+         null
+        ],
+        [
+         "q",
+         "w",
+         "other",
+         "USD",
+         "generic",
+         365,
+         "FIFO",
+         0,
+         1,
+         "global",
+         0,
+         0,
+         0,
+         0,
+         null,
+         0,
+         null,
+         "fixed",
+         null
+        ]
+       ]
+      },
+      "wallet_policy_epochs": {
+       "columns": [
+        "id",
+        "workspace_id",
+        "profile_id",
+        "wallet_id",
+        "chain",
+        "network",
+        "status",
+        "private_material_json",
+        "created_at",
+        "retired_at"
+       ],
+       "rows": [
+        [
+         "old",
+         "w",
+         "p",
+         "a",
+         "bitcoin",
+         "main",
+         "retired",
+         "{}",
+         "x",
+         "y"
+        ]
+       ]
+      },
+      "wallets": {
+       "columns": [
+        "id",
+        "workspace_id",
+        "profile_id",
+        "account_id",
+        "label",
+        "kind",
+        "config_json",
+        "created_at"
+       ],
+       "rows": [
+        [
+         "a",
+         "w",
+         "p",
+         null,
+         "Wällét",
+         "descriptor",
+         "{\"descriptor\": \"wpkh(synthetic)\", \"change_descriptor\": \"\", \"gap_limit\": 20, \"addresses\": [], \"script_types\": [\"p2wpkh\"], \"label\": \"not private\", \"chain\": \"Bitcoin\", \"network\": \"mainnet\", \"samourai\": {\"role\": \"x\"}, \"xpub\": null}",
+         "fixed"
+        ],
+        [
+         "b",
+         "w",
+         "p",
+         null,
+         "second",
+         "descriptor",
+         "{}",
+         "fixed"
+        ],
+        [
+         "c",
+         "w",
+         "q",
+         null,
+         "foreign",
+         "descriptor",
+         "{}",
+         "fixed"
+        ]
+       ]
+      },
+      "workspaces": {
+       "columns": [
+        "id",
+        "label",
+        "created_at"
+       ],
+       "rows": [
+        [
+         "w",
+         "synthetic",
+         "fixed"
+        ]
+       ]
+      }
+     },
+     "coverage": [
+      [
+       "receive",
+       5,
+       2
+      ],
+      [
+       "change",
+       3,
+       null
+      ]
+     ],
+     "identity": {
+      "branch_keys": [
+       "receive",
+       "change",
+       "receive"
+      ],
+      "chain": "bitcoin",
+      "network": "main",
+      "observer_kind": "bdk",
+      "source_key": "descriptor:default",
+      "source_wallet_id": "a"
+     },
+     "outcome": {
+      "result": "id-0001"
+     }
+    }
+   ]
+  }
+ ],
+ "generator": "crates/wallets/scripts/generate_policy_vectors.py"
+}

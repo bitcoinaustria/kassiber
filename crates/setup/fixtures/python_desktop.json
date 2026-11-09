@@ -1,0 +1,3476 @@
+{
+  "tables": [
+    "workspaces",
+    "profiles",
+    "accounts",
+    "wallets",
+    "transactions",
+    "custody_components",
+    "custody_component_legs",
+    "custody_gap_reviews",
+    "custody_gap_review_transactions",
+    "custody_component_purge_authorizations",
+    "saved_views",
+    "attachments",
+    "ai_chat_sessions",
+    "ai_chat_messages",
+    "rates_cache",
+    "rates_checked_minutes",
+    "loan_legs",
+    "book_reset_transactions",
+    "book_reset_parked_rows"
+  ],
+  "records": [
+    {
+      "kind": "ui.profiles.snapshot",
+      "args": {},
+      "sql": "",
+      "ok": {
+        "workspaces": [],
+        "activeWorkspaceId": "",
+        "activeProfileId": ""
+      },
+      "state": {
+        "workspaces": [],
+        "profiles": [],
+        "accounts": [],
+        "wallets": [],
+        "transactions": [],
+        "custody_components": [],
+        "custody_component_legs": [],
+        "custody_gap_reviews": [],
+        "custody_gap_review_transactions": [],
+        "custody_component_purge_authorizations": [],
+        "saved_views": [],
+        "attachments": [],
+        "ai_chat_sessions": [],
+        "ai_chat_messages": [],
+        "rates_cache": [],
+        "rates_checked_minutes": [],
+        "loan_legs": [],
+        "book_reset_transactions": [],
+        "book_reset_parked_rows": [],
+        "context": []
+      }
+    },
+    {
+      "kind": "ui.workspace.create",
+      "args": {
+        "label": null
+      },
+      "sql": "",
+      "error": {
+        "code": "validation",
+        "message": "Books set name is required.",
+        "hint": "Enter a books set name.",
+        "details": null,
+        "retryable": false
+      },
+      "state": {
+        "workspaces": [],
+        "profiles": [],
+        "accounts": [],
+        "wallets": [],
+        "transactions": [],
+        "custody_components": [],
+        "custody_component_legs": [],
+        "custody_gap_reviews": [],
+        "custody_gap_review_transactions": [],
+        "custody_component_purge_authorizations": [],
+        "saved_views": [],
+        "attachments": [],
+        "ai_chat_sessions": [],
+        "ai_chat_messages": [],
+        "rates_cache": [],
+        "rates_checked_minutes": [],
+        "loan_legs": [],
+        "book_reset_transactions": [],
+        "book_reset_parked_rows": [],
+        "context": []
+      }
+    },
+    {
+      "kind": "ui.workspace.create",
+      "args": {
+        "label": 9
+      },
+      "sql": "",
+      "error": {
+        "code": "validation",
+        "message": "Books set name is required.",
+        "hint": "Enter a books set name.",
+        "details": null,
+        "retryable": false
+      },
+      "state": {
+        "workspaces": [],
+        "profiles": [],
+        "accounts": [],
+        "wallets": [],
+        "transactions": [],
+        "custody_components": [],
+        "custody_component_legs": [],
+        "custody_gap_reviews": [],
+        "custody_gap_review_transactions": [],
+        "custody_component_purge_authorizations": [],
+        "saved_views": [],
+        "attachments": [],
+        "ai_chat_sessions": [],
+        "ai_chat_messages": [],
+        "rates_cache": [],
+        "rates_checked_minutes": [],
+        "loan_legs": [],
+        "book_reset_transactions": [],
+        "book_reset_parked_rows": [],
+        "context": []
+      }
+    },
+    {
+      "kind": "ui.workspace.create",
+      "args": {
+        "label": " "
+      },
+      "sql": "",
+      "error": {
+        "code": "validation",
+        "message": "Books set name is required.",
+        "hint": "Enter a books set name.",
+        "details": null,
+        "retryable": false
+      },
+      "state": {
+        "workspaces": [],
+        "profiles": [],
+        "accounts": [],
+        "wallets": [],
+        "transactions": [],
+        "custody_components": [],
+        "custody_component_legs": [],
+        "custody_gap_reviews": [],
+        "custody_gap_review_transactions": [],
+        "custody_component_purge_authorizations": [],
+        "saved_views": [],
+        "attachments": [],
+        "ai_chat_sessions": [],
+        "ai_chat_messages": [],
+        "rates_cache": [],
+        "rates_checked_minutes": [],
+        "loan_legs": [],
+        "book_reset_transactions": [],
+        "book_reset_parked_rows": [],
+        "context": []
+      }
+    },
+    {
+      "kind": "ui.workspace.create",
+      "args": {
+        "label": " Main "
+      },
+      "sql": "",
+      "ok": {
+        "workspace": {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "name": "Main",
+          "created": "2026-01-01"
+        },
+        "activeWorkspaceId": "00000000-0000-4000-8000-000000000001",
+        "activeProfileId": ""
+      },
+      "state": {
+        "workspaces": [
+          {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "label": "Main",
+            "created_at": "2026-01-01T00:00:00Z"
+          }
+        ],
+        "profiles": [],
+        "accounts": [],
+        "wallets": [],
+        "transactions": [],
+        "custody_components": [],
+        "custody_component_legs": [],
+        "custody_gap_reviews": [],
+        "custody_gap_review_transactions": [],
+        "custody_component_purge_authorizations": [],
+        "saved_views": [],
+        "attachments": [],
+        "ai_chat_sessions": [],
+        "ai_chat_messages": [],
+        "rates_cache": [],
+        "rates_checked_minutes": [],
+        "loan_legs": [],
+        "book_reset_transactions": [],
+        "book_reset_parked_rows": [],
+        "context": [
+          {
+            "key": "context_profile",
+            "value": ""
+          },
+          {
+            "key": "context_workspace",
+            "value": "00000000-0000-4000-8000-000000000001"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "ui.workspace.create",
+      "args": {
+        "label": "Main"
+      },
+      "sql": "",
+      "error": {
+        "code": "conflict",
+        "message": "Workspace 'Main' already exists",
+        "hint": "Choose a different workspace label or use the existing workspace.",
+        "details": null,
+        "retryable": false
+      },
+      "state": {
+        "workspaces": [
+          {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "label": "Main",
+            "created_at": "2026-01-01T00:00:00Z"
+          }
+        ],
+        "profiles": [],
+        "accounts": [],
+        "wallets": [],
+        "transactions": [],
+        "custody_components": [],
+        "custody_component_legs": [],
+        "custody_gap_reviews": [],
+        "custody_gap_review_transactions": [],
+        "custody_component_purge_authorizations": [],
+        "saved_views": [],
+        "attachments": [],
+        "ai_chat_sessions": [],
+        "ai_chat_messages": [],
+        "rates_cache": [],
+        "rates_checked_minutes": [],
+        "loan_legs": [],
+        "book_reset_transactions": [],
+        "book_reset_parked_rows": [],
+        "context": [
+          {
+            "key": "context_profile",
+            "value": ""
+          },
+          {
+            "key": "context_workspace",
+            "value": "00000000-0000-4000-8000-000000000001"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "ui.workspace.rename",
+      "args": {},
+      "sql": "",
+      "error": {
+        "code": "validation",
+        "message": "Books set selection is missing.",
+        "hint": "Choose the books set to rename.",
+        "details": null,
+        "retryable": false
+      },
+      "state": {
+        "workspaces": [
+          {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "label": "Main",
+            "created_at": "2026-01-01T00:00:00Z"
+          }
+        ],
+        "profiles": [],
+        "accounts": [],
+        "wallets": [],
+        "transactions": [],
+        "custody_components": [],
+        "custody_component_legs": [],
+        "custody_gap_reviews": [],
+        "custody_gap_review_transactions": [],
+        "custody_component_purge_authorizations": [],
+        "saved_views": [],
+        "attachments": [],
+        "ai_chat_sessions": [],
+        "ai_chat_messages": [],
+        "rates_cache": [],
+        "rates_checked_minutes": [],
+        "loan_legs": [],
+        "book_reset_transactions": [],
+        "book_reset_parked_rows": [],
+        "context": [
+          {
+            "key": "context_profile",
+            "value": ""
+          },
+          {
+            "key": "context_workspace",
+            "value": "00000000-0000-4000-8000-000000000001"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "ui.workspace.rename",
+      "args": {
+        "workspace_id": "00000000-0000-4000-8000-000000000001"
+      },
+      "sql": "",
+      "error": {
+        "code": "validation",
+        "message": "Books set name is required.",
+        "hint": "Enter a books set name.",
+        "details": null,
+        "retryable": false
+      },
+      "state": {
+        "workspaces": [
+          {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "label": "Main",
+            "created_at": "2026-01-01T00:00:00Z"
+          }
+        ],
+        "profiles": [],
+        "accounts": [],
+        "wallets": [],
+        "transactions": [],
+        "custody_components": [],
+        "custody_component_legs": [],
+        "custody_gap_reviews": [],
+        "custody_gap_review_transactions": [],
+        "custody_component_purge_authorizations": [],
+        "saved_views": [],
+        "attachments": [],
+        "ai_chat_sessions": [],
+        "ai_chat_messages": [],
+        "rates_cache": [],
+        "rates_checked_minutes": [],
+        "loan_legs": [],
+        "book_reset_transactions": [],
+        "book_reset_parked_rows": [],
+        "context": [
+          {
+            "key": "context_profile",
+            "value": ""
+          },
+          {
+            "key": "context_workspace",
+            "value": "00000000-0000-4000-8000-000000000001"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "ui.workspace.rename",
+      "args": {
+        "workspace_id": "Main",
+        "label": "Wrong"
+      },
+      "sql": "",
+      "error": {
+        "code": "validation",
+        "message": "Books set not found.",
+        "hint": "Choose an existing books set.",
+        "details": {
+          "workspace_id": "Main"
+        },
+        "retryable": false
+      },
+      "state": {
+        "workspaces": [
+          {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "label": "Main",
+            "created_at": "2026-01-01T00:00:00Z"
+          }
+        ],
+        "profiles": [],
+        "accounts": [],
+        "wallets": [],
+        "transactions": [],
+        "custody_components": [],
+        "custody_component_legs": [],
+        "custody_gap_reviews": [],
+        "custody_gap_review_transactions": [],
+        "custody_component_purge_authorizations": [],
+        "saved_views": [],
+        "attachments": [],
+        "ai_chat_sessions": [],
+        "ai_chat_messages": [],
+        "rates_cache": [],
+        "rates_checked_minutes": [],
+        "loan_legs": [],
+        "book_reset_transactions": [],
+        "book_reset_parked_rows": [],
+        "context": [
+          {
+            "key": "context_profile",
+            "value": ""
+          },
+          {
+            "key": "context_workspace",
+            "value": "00000000-0000-4000-8000-000000000001"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "ui.profiles.create",
+      "args": {
+        "workspace_id": "00000000-0000-4000-8000-000000000001",
+        "label": "Austrian FIFO",
+        "tax_country": "at",
+        "gains_algorithm": "FIFO"
+      },
+      "sql": "",
+      "ok": {
+        "activeProfileId": "00000000-0000-4000-8000-000000000003",
+        "activeWorkspaceId": "00000000-0000-4000-8000-000000000001",
+        "profile": {
+          "id": "00000000-0000-4000-8000-000000000003",
+          "name": "Austrian FIFO"
+        },
+        "workspace": {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "name": "Main"
+        },
+        "defaults": {
+          "fiat_currency": "EUR",
+          "tax_country": "at",
+          "tax_long_term_days": 9223372036854775807,
+          "gains_algorithm": "FIFO",
+          "cost_basis_pool_scope": "global"
+        }
+      },
+      "state": {
+        "workspaces": [
+          {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "label": "Main",
+            "created_at": "2026-01-01T00:00:00Z"
+          }
+        ],
+        "profiles": [
+          {
+            "id": "00000000-0000-4000-8000-000000000003",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "label": "Austrian FIFO",
+            "fiat_currency": "EUR",
+            "tax_country": "at",
+            "tax_long_term_days": 9223372036854775807,
+            "gains_algorithm": "FIFO",
+            "require_coarse_review": 0,
+            "bitcoin_rail_carrying_value": 1,
+            "cost_basis_pool_scope": "global",
+            "journal_input_version": 0,
+            "last_processed_input_version": 0,
+            "required_journal_semantics_version": 0,
+            "journal_semantics_version": 0,
+            "last_processed_at": null,
+            "last_processed_tx_count": 0,
+            "ownership_review_counts_json": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "swap_candidate_count": null
+          }
+        ],
+        "accounts": [
+          {
+            "id": "00000000-0000-4000-8000-000000000004",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000003",
+            "code": "treasury",
+            "label": "Treasury",
+            "account_type": "asset",
+            "asset": "BTC",
+            "created_at": "2026-01-01T00:00:00Z"
+          }
+        ],
+        "wallets": [],
+        "transactions": [],
+        "custody_components": [],
+        "custody_component_legs": [],
+        "custody_gap_reviews": [],
+        "custody_gap_review_transactions": [],
+        "custody_component_purge_authorizations": [],
+        "saved_views": [],
+        "attachments": [],
+        "ai_chat_sessions": [],
+        "ai_chat_messages": [],
+        "rates_cache": [],
+        "rates_checked_minutes": [],
+        "loan_legs": [],
+        "book_reset_transactions": [],
+        "book_reset_parked_rows": [],
+        "context": [
+          {
+            "key": "context_profile",
+            "value": "00000000-0000-4000-8000-000000000003"
+          },
+          {
+            "key": "context_workspace",
+            "value": "00000000-0000-4000-8000-000000000001"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "ui.profiles.create",
+      "args": {
+        "workspace_id": "00000000-0000-4000-8000-000000000001",
+        "label": "Generic",
+        "tax_country": "generic",
+        "fiat_currency": "CHF"
+      },
+      "sql": "",
+      "ok": {
+        "activeProfileId": "00000000-0000-4000-8000-000000000005",
+        "activeWorkspaceId": "00000000-0000-4000-8000-000000000001",
+        "profile": {
+          "id": "00000000-0000-4000-8000-000000000005",
+          "name": "Generic"
+        },
+        "workspace": {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "name": "Main"
+        },
+        "defaults": {
+          "fiat_currency": "EUR",
+          "tax_country": "generic",
+          "tax_long_term_days": 365,
+          "gains_algorithm": "FIFO",
+          "cost_basis_pool_scope": "global"
+        }
+      },
+      "state": {
+        "workspaces": [
+          {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "label": "Main",
+            "created_at": "2026-01-01T00:00:00Z"
+          }
+        ],
+        "profiles": [
+          {
+            "id": "00000000-0000-4000-8000-000000000003",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "label": "Austrian FIFO",
+            "fiat_currency": "EUR",
+            "tax_country": "at",
+            "tax_long_term_days": 9223372036854775807,
+            "gains_algorithm": "FIFO",
+            "require_coarse_review": 0,
+            "bitcoin_rail_carrying_value": 1,
+            "cost_basis_pool_scope": "global",
+            "journal_input_version": 0,
+            "last_processed_input_version": 0,
+            "required_journal_semantics_version": 0,
+            "journal_semantics_version": 0,
+            "last_processed_at": null,
+            "last_processed_tx_count": 0,
+            "ownership_review_counts_json": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "swap_candidate_count": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000005",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "label": "Generic",
+            "fiat_currency": "EUR",
+            "tax_country": "generic",
+            "tax_long_term_days": 365,
+            "gains_algorithm": "FIFO",
+            "require_coarse_review": 0,
+            "bitcoin_rail_carrying_value": 1,
+            "cost_basis_pool_scope": "global",
+            "journal_input_version": 0,
+            "last_processed_input_version": 0,
+            "required_journal_semantics_version": 0,
+            "journal_semantics_version": 0,
+            "last_processed_at": null,
+            "last_processed_tx_count": 0,
+            "ownership_review_counts_json": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "swap_candidate_count": null
+          }
+        ],
+        "accounts": [
+          {
+            "id": "00000000-0000-4000-8000-000000000004",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000003",
+            "code": "treasury",
+            "label": "Treasury",
+            "account_type": "asset",
+            "asset": "BTC",
+            "created_at": "2026-01-01T00:00:00Z"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000006",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000005",
+            "code": "treasury",
+            "label": "Treasury",
+            "account_type": "asset",
+            "asset": "BTC",
+            "created_at": "2026-01-01T00:00:00Z"
+          }
+        ],
+        "wallets": [],
+        "transactions": [],
+        "custody_components": [],
+        "custody_component_legs": [],
+        "custody_gap_reviews": [],
+        "custody_gap_review_transactions": [],
+        "custody_component_purge_authorizations": [],
+        "saved_views": [],
+        "attachments": [],
+        "ai_chat_sessions": [],
+        "ai_chat_messages": [],
+        "rates_cache": [],
+        "rates_checked_minutes": [],
+        "loan_legs": [],
+        "book_reset_transactions": [],
+        "book_reset_parked_rows": [],
+        "context": [
+          {
+            "key": "context_profile",
+            "value": "00000000-0000-4000-8000-000000000005"
+          },
+          {
+            "key": "context_workspace",
+            "value": "00000000-0000-4000-8000-000000000001"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "ui.profiles.create",
+      "args": {
+        "workspace_id": "00000000-0000-4000-8000-000000000001",
+        "label": "Austrian ATM",
+        "tax_country": "at"
+      },
+      "sql": "",
+      "ok": {
+        "activeProfileId": "00000000-0000-4000-8000-000000000007",
+        "activeWorkspaceId": "00000000-0000-4000-8000-000000000001",
+        "profile": {
+          "id": "00000000-0000-4000-8000-000000000007",
+          "name": "Austrian ATM"
+        },
+        "workspace": {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "name": "Main"
+        },
+        "defaults": {
+          "fiat_currency": "EUR",
+          "tax_country": "at",
+          "tax_long_term_days": 9223372036854775807,
+          "gains_algorithm": "FIFO",
+          "cost_basis_pool_scope": "global"
+        }
+      },
+      "state": {
+        "workspaces": [
+          {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "label": "Main",
+            "created_at": "2026-01-01T00:00:00Z"
+          }
+        ],
+        "profiles": [
+          {
+            "id": "00000000-0000-4000-8000-000000000003",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "label": "Austrian FIFO",
+            "fiat_currency": "EUR",
+            "tax_country": "at",
+            "tax_long_term_days": 9223372036854775807,
+            "gains_algorithm": "FIFO",
+            "require_coarse_review": 0,
+            "bitcoin_rail_carrying_value": 1,
+            "cost_basis_pool_scope": "global",
+            "journal_input_version": 0,
+            "last_processed_input_version": 0,
+            "required_journal_semantics_version": 0,
+            "journal_semantics_version": 0,
+            "last_processed_at": null,
+            "last_processed_tx_count": 0,
+            "ownership_review_counts_json": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "swap_candidate_count": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000005",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "label": "Generic",
+            "fiat_currency": "EUR",
+            "tax_country": "generic",
+            "tax_long_term_days": 365,
+            "gains_algorithm": "FIFO",
+            "require_coarse_review": 0,
+            "bitcoin_rail_carrying_value": 1,
+            "cost_basis_pool_scope": "global",
+            "journal_input_version": 0,
+            "last_processed_input_version": 0,
+            "required_journal_semantics_version": 0,
+            "journal_semantics_version": 0,
+            "last_processed_at": null,
+            "last_processed_tx_count": 0,
+            "ownership_review_counts_json": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "swap_candidate_count": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000007",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "label": "Austrian ATM",
+            "fiat_currency": "EUR",
+            "tax_country": "at",
+            "tax_long_term_days": 9223372036854775807,
+            "gains_algorithm": "FIFO",
+            "require_coarse_review": 0,
+            "bitcoin_rail_carrying_value": 1,
+            "cost_basis_pool_scope": "global",
+            "journal_input_version": 0,
+            "last_processed_input_version": 0,
+            "required_journal_semantics_version": 0,
+            "journal_semantics_version": 0,
+            "last_processed_at": null,
+            "last_processed_tx_count": 0,
+            "ownership_review_counts_json": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "swap_candidate_count": null
+          }
+        ],
+        "accounts": [
+          {
+            "id": "00000000-0000-4000-8000-000000000004",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000003",
+            "code": "treasury",
+            "label": "Treasury",
+            "account_type": "asset",
+            "asset": "BTC",
+            "created_at": "2026-01-01T00:00:00Z"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000006",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000005",
+            "code": "treasury",
+            "label": "Treasury",
+            "account_type": "asset",
+            "asset": "BTC",
+            "created_at": "2026-01-01T00:00:00Z"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000008",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000007",
+            "code": "treasury",
+            "label": "Treasury",
+            "account_type": "asset",
+            "asset": "BTC",
+            "created_at": "2026-01-01T00:00:00Z"
+          }
+        ],
+        "wallets": [],
+        "transactions": [],
+        "custody_components": [],
+        "custody_component_legs": [],
+        "custody_gap_reviews": [],
+        "custody_gap_review_transactions": [],
+        "custody_component_purge_authorizations": [],
+        "saved_views": [],
+        "attachments": [],
+        "ai_chat_sessions": [],
+        "ai_chat_messages": [],
+        "rates_cache": [],
+        "rates_checked_minutes": [],
+        "loan_legs": [],
+        "book_reset_transactions": [],
+        "book_reset_parked_rows": [],
+        "context": [
+          {
+            "key": "context_profile",
+            "value": "00000000-0000-4000-8000-000000000007"
+          },
+          {
+            "key": "context_workspace",
+            "value": "00000000-0000-4000-8000-000000000001"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "ui.profiles.snapshot",
+      "args": {},
+      "sql": "",
+      "ok": {
+        "workspaces": [
+          {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "name": "Main",
+            "currency": "EUR",
+            "jurisdiction": "Mixed",
+            "created": "2026-01-01",
+            "profiles": [
+              {
+                "id": "00000000-0000-4000-8000-000000000007",
+                "name": "Austrian ATM",
+                "taxPolicy": "Austria - FIFO - EUR",
+                "fiatCurrency": "EUR",
+                "taxCountry": "at",
+                "taxLongTermDays": 9223372036854775807,
+                "gainsAlgorithm": "FIFO",
+                "costBasisPoolScope": "global",
+                "allowedCostBasisPoolScopes": [
+                  "global"
+                ],
+                "accounts": 1,
+                "wallets": 0,
+                "lastOpened": "Just now",
+                "active": true
+              },
+              {
+                "id": "00000000-0000-4000-8000-000000000003",
+                "name": "Austrian FIFO",
+                "taxPolicy": "Austria - FIFO - EUR",
+                "fiatCurrency": "EUR",
+                "taxCountry": "at",
+                "taxLongTermDays": 9223372036854775807,
+                "gainsAlgorithm": "FIFO",
+                "costBasisPoolScope": "global",
+                "allowedCostBasisPoolScopes": [
+                  "global"
+                ],
+                "accounts": 1,
+                "wallets": 0,
+                "lastOpened": "just now",
+                "active": false
+              },
+              {
+                "id": "00000000-0000-4000-8000-000000000005",
+                "name": "Generic",
+                "taxPolicy": "Generic - FIFO - EUR - 365 day long-term",
+                "fiatCurrency": "EUR",
+                "taxCountry": "generic",
+                "taxLongTermDays": 365,
+                "gainsAlgorithm": "FIFO",
+                "costBasisPoolScope": "global",
+                "allowedCostBasisPoolScopes": [
+                  "global"
+                ],
+                "accounts": 1,
+                "wallets": 0,
+                "lastOpened": "just now",
+                "active": false
+              }
+            ]
+          }
+        ],
+        "activeWorkspaceId": "00000000-0000-4000-8000-000000000001",
+        "activeProfileId": "00000000-0000-4000-8000-000000000007"
+      },
+      "state": {
+        "workspaces": [
+          {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "label": "Main",
+            "created_at": "2026-01-01T00:00:00Z"
+          }
+        ],
+        "profiles": [
+          {
+            "id": "00000000-0000-4000-8000-000000000003",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "label": "Austrian FIFO",
+            "fiat_currency": "EUR",
+            "tax_country": "at",
+            "tax_long_term_days": 9223372036854775807,
+            "gains_algorithm": "FIFO",
+            "require_coarse_review": 0,
+            "bitcoin_rail_carrying_value": 1,
+            "cost_basis_pool_scope": "global",
+            "journal_input_version": 0,
+            "last_processed_input_version": 0,
+            "required_journal_semantics_version": 0,
+            "journal_semantics_version": 0,
+            "last_processed_at": null,
+            "last_processed_tx_count": 0,
+            "ownership_review_counts_json": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "swap_candidate_count": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000005",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "label": "Generic",
+            "fiat_currency": "EUR",
+            "tax_country": "generic",
+            "tax_long_term_days": 365,
+            "gains_algorithm": "FIFO",
+            "require_coarse_review": 0,
+            "bitcoin_rail_carrying_value": 1,
+            "cost_basis_pool_scope": "global",
+            "journal_input_version": 0,
+            "last_processed_input_version": 0,
+            "required_journal_semantics_version": 0,
+            "journal_semantics_version": 0,
+            "last_processed_at": null,
+            "last_processed_tx_count": 0,
+            "ownership_review_counts_json": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "swap_candidate_count": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000007",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "label": "Austrian ATM",
+            "fiat_currency": "EUR",
+            "tax_country": "at",
+            "tax_long_term_days": 9223372036854775807,
+            "gains_algorithm": "FIFO",
+            "require_coarse_review": 0,
+            "bitcoin_rail_carrying_value": 1,
+            "cost_basis_pool_scope": "global",
+            "journal_input_version": 0,
+            "last_processed_input_version": 0,
+            "required_journal_semantics_version": 0,
+            "journal_semantics_version": 0,
+            "last_processed_at": null,
+            "last_processed_tx_count": 0,
+            "ownership_review_counts_json": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "swap_candidate_count": null
+          }
+        ],
+        "accounts": [
+          {
+            "id": "00000000-0000-4000-8000-000000000004",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000003",
+            "code": "treasury",
+            "label": "Treasury",
+            "account_type": "asset",
+            "asset": "BTC",
+            "created_at": "2026-01-01T00:00:00Z"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000006",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000005",
+            "code": "treasury",
+            "label": "Treasury",
+            "account_type": "asset",
+            "asset": "BTC",
+            "created_at": "2026-01-01T00:00:00Z"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000008",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000007",
+            "code": "treasury",
+            "label": "Treasury",
+            "account_type": "asset",
+            "asset": "BTC",
+            "created_at": "2026-01-01T00:00:00Z"
+          }
+        ],
+        "wallets": [],
+        "transactions": [],
+        "custody_components": [],
+        "custody_component_legs": [],
+        "custody_gap_reviews": [],
+        "custody_gap_review_transactions": [],
+        "custody_component_purge_authorizations": [],
+        "saved_views": [],
+        "attachments": [],
+        "ai_chat_sessions": [],
+        "ai_chat_messages": [],
+        "rates_cache": [],
+        "rates_checked_minutes": [],
+        "loan_legs": [],
+        "book_reset_transactions": [],
+        "book_reset_parked_rows": [],
+        "context": [
+          {
+            "key": "context_profile",
+            "value": "00000000-0000-4000-8000-000000000007"
+          },
+          {
+            "key": "context_workspace",
+            "value": "00000000-0000-4000-8000-000000000001"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "ui.workspace.create",
+      "args": {
+        "label": "Other"
+      },
+      "sql": "",
+      "ok": {
+        "workspace": {
+          "id": "00000000-0000-4000-8000-000000000009",
+          "name": "Other",
+          "created": "2026-01-01"
+        },
+        "activeWorkspaceId": "00000000-0000-4000-8000-000000000009",
+        "activeProfileId": ""
+      },
+      "state": {
+        "workspaces": [
+          {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "label": "Main",
+            "created_at": "2026-01-01T00:00:00Z"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000009",
+            "label": "Other",
+            "created_at": "2026-01-01T00:00:00Z"
+          }
+        ],
+        "profiles": [
+          {
+            "id": "00000000-0000-4000-8000-000000000003",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "label": "Austrian FIFO",
+            "fiat_currency": "EUR",
+            "tax_country": "at",
+            "tax_long_term_days": 9223372036854775807,
+            "gains_algorithm": "FIFO",
+            "require_coarse_review": 0,
+            "bitcoin_rail_carrying_value": 1,
+            "cost_basis_pool_scope": "global",
+            "journal_input_version": 0,
+            "last_processed_input_version": 0,
+            "required_journal_semantics_version": 0,
+            "journal_semantics_version": 0,
+            "last_processed_at": null,
+            "last_processed_tx_count": 0,
+            "ownership_review_counts_json": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "swap_candidate_count": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000005",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "label": "Generic",
+            "fiat_currency": "EUR",
+            "tax_country": "generic",
+            "tax_long_term_days": 365,
+            "gains_algorithm": "FIFO",
+            "require_coarse_review": 0,
+            "bitcoin_rail_carrying_value": 1,
+            "cost_basis_pool_scope": "global",
+            "journal_input_version": 0,
+            "last_processed_input_version": 0,
+            "required_journal_semantics_version": 0,
+            "journal_semantics_version": 0,
+            "last_processed_at": null,
+            "last_processed_tx_count": 0,
+            "ownership_review_counts_json": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "swap_candidate_count": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000007",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "label": "Austrian ATM",
+            "fiat_currency": "EUR",
+            "tax_country": "at",
+            "tax_long_term_days": 9223372036854775807,
+            "gains_algorithm": "FIFO",
+            "require_coarse_review": 0,
+            "bitcoin_rail_carrying_value": 1,
+            "cost_basis_pool_scope": "global",
+            "journal_input_version": 0,
+            "last_processed_input_version": 0,
+            "required_journal_semantics_version": 0,
+            "journal_semantics_version": 0,
+            "last_processed_at": null,
+            "last_processed_tx_count": 0,
+            "ownership_review_counts_json": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "swap_candidate_count": null
+          }
+        ],
+        "accounts": [
+          {
+            "id": "00000000-0000-4000-8000-000000000004",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000003",
+            "code": "treasury",
+            "label": "Treasury",
+            "account_type": "asset",
+            "asset": "BTC",
+            "created_at": "2026-01-01T00:00:00Z"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000006",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000005",
+            "code": "treasury",
+            "label": "Treasury",
+            "account_type": "asset",
+            "asset": "BTC",
+            "created_at": "2026-01-01T00:00:00Z"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000008",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000007",
+            "code": "treasury",
+            "label": "Treasury",
+            "account_type": "asset",
+            "asset": "BTC",
+            "created_at": "2026-01-01T00:00:00Z"
+          }
+        ],
+        "wallets": [],
+        "transactions": [],
+        "custody_components": [],
+        "custody_component_legs": [],
+        "custody_gap_reviews": [],
+        "custody_gap_review_transactions": [],
+        "custody_component_purge_authorizations": [],
+        "saved_views": [],
+        "attachments": [],
+        "ai_chat_sessions": [],
+        "ai_chat_messages": [],
+        "rates_cache": [],
+        "rates_checked_minutes": [],
+        "loan_legs": [],
+        "book_reset_transactions": [],
+        "book_reset_parked_rows": [],
+        "context": [
+          {
+            "key": "context_profile",
+            "value": ""
+          },
+          {
+            "key": "context_workspace",
+            "value": "00000000-0000-4000-8000-000000000009"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "ui.workspace.rename",
+      "args": {
+        "workspace_id": "00000000-0000-4000-8000-000000000009",
+        "label": "Main"
+      },
+      "sql": "",
+      "error": {
+        "code": "conflict",
+        "message": "Books set name already exists.",
+        "hint": "Choose a different books set name.",
+        "details": {
+          "workspace_id": "00000000-0000-4000-8000-000000000009",
+          "label": "Main"
+        },
+        "retryable": false
+      },
+      "state": {
+        "workspaces": [
+          {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "label": "Main",
+            "created_at": "2026-01-01T00:00:00Z"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000009",
+            "label": "Other",
+            "created_at": "2026-01-01T00:00:00Z"
+          }
+        ],
+        "profiles": [
+          {
+            "id": "00000000-0000-4000-8000-000000000003",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "label": "Austrian FIFO",
+            "fiat_currency": "EUR",
+            "tax_country": "at",
+            "tax_long_term_days": 9223372036854775807,
+            "gains_algorithm": "FIFO",
+            "require_coarse_review": 0,
+            "bitcoin_rail_carrying_value": 1,
+            "cost_basis_pool_scope": "global",
+            "journal_input_version": 0,
+            "last_processed_input_version": 0,
+            "required_journal_semantics_version": 0,
+            "journal_semantics_version": 0,
+            "last_processed_at": null,
+            "last_processed_tx_count": 0,
+            "ownership_review_counts_json": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "swap_candidate_count": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000005",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "label": "Generic",
+            "fiat_currency": "EUR",
+            "tax_country": "generic",
+            "tax_long_term_days": 365,
+            "gains_algorithm": "FIFO",
+            "require_coarse_review": 0,
+            "bitcoin_rail_carrying_value": 1,
+            "cost_basis_pool_scope": "global",
+            "journal_input_version": 0,
+            "last_processed_input_version": 0,
+            "required_journal_semantics_version": 0,
+            "journal_semantics_version": 0,
+            "last_processed_at": null,
+            "last_processed_tx_count": 0,
+            "ownership_review_counts_json": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "swap_candidate_count": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000007",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "label": "Austrian ATM",
+            "fiat_currency": "EUR",
+            "tax_country": "at",
+            "tax_long_term_days": 9223372036854775807,
+            "gains_algorithm": "FIFO",
+            "require_coarse_review": 0,
+            "bitcoin_rail_carrying_value": 1,
+            "cost_basis_pool_scope": "global",
+            "journal_input_version": 0,
+            "last_processed_input_version": 0,
+            "required_journal_semantics_version": 0,
+            "journal_semantics_version": 0,
+            "last_processed_at": null,
+            "last_processed_tx_count": 0,
+            "ownership_review_counts_json": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "swap_candidate_count": null
+          }
+        ],
+        "accounts": [
+          {
+            "id": "00000000-0000-4000-8000-000000000004",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000003",
+            "code": "treasury",
+            "label": "Treasury",
+            "account_type": "asset",
+            "asset": "BTC",
+            "created_at": "2026-01-01T00:00:00Z"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000006",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000005",
+            "code": "treasury",
+            "label": "Treasury",
+            "account_type": "asset",
+            "asset": "BTC",
+            "created_at": "2026-01-01T00:00:00Z"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000008",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000007",
+            "code": "treasury",
+            "label": "Treasury",
+            "account_type": "asset",
+            "asset": "BTC",
+            "created_at": "2026-01-01T00:00:00Z"
+          }
+        ],
+        "wallets": [],
+        "transactions": [],
+        "custody_components": [],
+        "custody_component_legs": [],
+        "custody_gap_reviews": [],
+        "custody_gap_review_transactions": [],
+        "custody_component_purge_authorizations": [],
+        "saved_views": [],
+        "attachments": [],
+        "ai_chat_sessions": [],
+        "ai_chat_messages": [],
+        "rates_cache": [],
+        "rates_checked_minutes": [],
+        "loan_legs": [],
+        "book_reset_transactions": [],
+        "book_reset_parked_rows": [],
+        "context": [
+          {
+            "key": "context_profile",
+            "value": ""
+          },
+          {
+            "key": "context_workspace",
+            "value": "00000000-0000-4000-8000-000000000009"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "ui.workspace.rename",
+      "args": {
+        "workspace_id": "00000000-0000-4000-8000-000000000001",
+        "label": "Renamed"
+      },
+      "sql": "",
+      "ok": {
+        "workspace": {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "name": "Renamed"
+        }
+      },
+      "state": {
+        "workspaces": [
+          {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "label": "Renamed",
+            "created_at": "2026-01-01T00:00:00Z"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000009",
+            "label": "Other",
+            "created_at": "2026-01-01T00:00:00Z"
+          }
+        ],
+        "profiles": [
+          {
+            "id": "00000000-0000-4000-8000-000000000003",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "label": "Austrian FIFO",
+            "fiat_currency": "EUR",
+            "tax_country": "at",
+            "tax_long_term_days": 9223372036854775807,
+            "gains_algorithm": "FIFO",
+            "require_coarse_review": 0,
+            "bitcoin_rail_carrying_value": 1,
+            "cost_basis_pool_scope": "global",
+            "journal_input_version": 0,
+            "last_processed_input_version": 0,
+            "required_journal_semantics_version": 0,
+            "journal_semantics_version": 0,
+            "last_processed_at": null,
+            "last_processed_tx_count": 0,
+            "ownership_review_counts_json": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "swap_candidate_count": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000005",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "label": "Generic",
+            "fiat_currency": "EUR",
+            "tax_country": "generic",
+            "tax_long_term_days": 365,
+            "gains_algorithm": "FIFO",
+            "require_coarse_review": 0,
+            "bitcoin_rail_carrying_value": 1,
+            "cost_basis_pool_scope": "global",
+            "journal_input_version": 0,
+            "last_processed_input_version": 0,
+            "required_journal_semantics_version": 0,
+            "journal_semantics_version": 0,
+            "last_processed_at": null,
+            "last_processed_tx_count": 0,
+            "ownership_review_counts_json": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "swap_candidate_count": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000007",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "label": "Austrian ATM",
+            "fiat_currency": "EUR",
+            "tax_country": "at",
+            "tax_long_term_days": 9223372036854775807,
+            "gains_algorithm": "FIFO",
+            "require_coarse_review": 0,
+            "bitcoin_rail_carrying_value": 1,
+            "cost_basis_pool_scope": "global",
+            "journal_input_version": 0,
+            "last_processed_input_version": 0,
+            "required_journal_semantics_version": 0,
+            "journal_semantics_version": 0,
+            "last_processed_at": null,
+            "last_processed_tx_count": 0,
+            "ownership_review_counts_json": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "swap_candidate_count": null
+          }
+        ],
+        "accounts": [
+          {
+            "id": "00000000-0000-4000-8000-000000000004",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000003",
+            "code": "treasury",
+            "label": "Treasury",
+            "account_type": "asset",
+            "asset": "BTC",
+            "created_at": "2026-01-01T00:00:00Z"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000006",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000005",
+            "code": "treasury",
+            "label": "Treasury",
+            "account_type": "asset",
+            "asset": "BTC",
+            "created_at": "2026-01-01T00:00:00Z"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000008",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000007",
+            "code": "treasury",
+            "label": "Treasury",
+            "account_type": "asset",
+            "asset": "BTC",
+            "created_at": "2026-01-01T00:00:00Z"
+          }
+        ],
+        "wallets": [],
+        "transactions": [],
+        "custody_components": [],
+        "custody_component_legs": [],
+        "custody_gap_reviews": [],
+        "custody_gap_review_transactions": [],
+        "custody_component_purge_authorizations": [],
+        "saved_views": [],
+        "attachments": [],
+        "ai_chat_sessions": [],
+        "ai_chat_messages": [],
+        "rates_cache": [],
+        "rates_checked_minutes": [],
+        "loan_legs": [],
+        "book_reset_transactions": [],
+        "book_reset_parked_rows": [],
+        "context": [
+          {
+            "key": "context_profile",
+            "value": ""
+          },
+          {
+            "key": "context_workspace",
+            "value": "00000000-0000-4000-8000-000000000009"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "ui.profiles.snapshot",
+      "args": {},
+      "sql": "",
+      "ok": {
+        "workspaces": [
+          {
+            "id": "00000000-0000-4000-8000-000000000009",
+            "name": "Other",
+            "currency": "Mixed",
+            "jurisdiction": "Generic",
+            "created": "2026-01-01",
+            "profiles": []
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "name": "Renamed",
+            "currency": "EUR",
+            "jurisdiction": "Mixed",
+            "created": "2026-01-01",
+            "profiles": [
+              {
+                "id": "00000000-0000-4000-8000-000000000007",
+                "name": "Austrian ATM",
+                "taxPolicy": "Austria - FIFO - EUR",
+                "fiatCurrency": "EUR",
+                "taxCountry": "at",
+                "taxLongTermDays": 9223372036854775807,
+                "gainsAlgorithm": "FIFO",
+                "costBasisPoolScope": "global",
+                "allowedCostBasisPoolScopes": [
+                  "global"
+                ],
+                "accounts": 1,
+                "wallets": 0,
+                "lastOpened": "just now",
+                "active": false
+              },
+              {
+                "id": "00000000-0000-4000-8000-000000000003",
+                "name": "Austrian FIFO",
+                "taxPolicy": "Austria - FIFO - EUR",
+                "fiatCurrency": "EUR",
+                "taxCountry": "at",
+                "taxLongTermDays": 9223372036854775807,
+                "gainsAlgorithm": "FIFO",
+                "costBasisPoolScope": "global",
+                "allowedCostBasisPoolScopes": [
+                  "global"
+                ],
+                "accounts": 1,
+                "wallets": 0,
+                "lastOpened": "just now",
+                "active": false
+              },
+              {
+                "id": "00000000-0000-4000-8000-000000000005",
+                "name": "Generic",
+                "taxPolicy": "Generic - FIFO - EUR - 365 day long-term",
+                "fiatCurrency": "EUR",
+                "taxCountry": "generic",
+                "taxLongTermDays": 365,
+                "gainsAlgorithm": "FIFO",
+                "costBasisPoolScope": "global",
+                "allowedCostBasisPoolScopes": [
+                  "global"
+                ],
+                "accounts": 1,
+                "wallets": 0,
+                "lastOpened": "just now",
+                "active": false
+              }
+            ]
+          }
+        ],
+        "activeWorkspaceId": "00000000-0000-4000-8000-000000000009",
+        "activeProfileId": ""
+      },
+      "state": {
+        "workspaces": [
+          {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "label": "Renamed",
+            "created_at": "2026-01-01T00:00:00Z"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000009",
+            "label": "Other",
+            "created_at": "2026-01-01T00:00:00Z"
+          }
+        ],
+        "profiles": [
+          {
+            "id": "00000000-0000-4000-8000-000000000003",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "label": "Austrian FIFO",
+            "fiat_currency": "EUR",
+            "tax_country": "at",
+            "tax_long_term_days": 9223372036854775807,
+            "gains_algorithm": "FIFO",
+            "require_coarse_review": 0,
+            "bitcoin_rail_carrying_value": 1,
+            "cost_basis_pool_scope": "global",
+            "journal_input_version": 0,
+            "last_processed_input_version": 0,
+            "required_journal_semantics_version": 0,
+            "journal_semantics_version": 0,
+            "last_processed_at": null,
+            "last_processed_tx_count": 0,
+            "ownership_review_counts_json": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "swap_candidate_count": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000005",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "label": "Generic",
+            "fiat_currency": "EUR",
+            "tax_country": "generic",
+            "tax_long_term_days": 365,
+            "gains_algorithm": "FIFO",
+            "require_coarse_review": 0,
+            "bitcoin_rail_carrying_value": 1,
+            "cost_basis_pool_scope": "global",
+            "journal_input_version": 0,
+            "last_processed_input_version": 0,
+            "required_journal_semantics_version": 0,
+            "journal_semantics_version": 0,
+            "last_processed_at": null,
+            "last_processed_tx_count": 0,
+            "ownership_review_counts_json": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "swap_candidate_count": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000007",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "label": "Austrian ATM",
+            "fiat_currency": "EUR",
+            "tax_country": "at",
+            "tax_long_term_days": 9223372036854775807,
+            "gains_algorithm": "FIFO",
+            "require_coarse_review": 0,
+            "bitcoin_rail_carrying_value": 1,
+            "cost_basis_pool_scope": "global",
+            "journal_input_version": 0,
+            "last_processed_input_version": 0,
+            "required_journal_semantics_version": 0,
+            "journal_semantics_version": 0,
+            "last_processed_at": null,
+            "last_processed_tx_count": 0,
+            "ownership_review_counts_json": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "swap_candidate_count": null
+          }
+        ],
+        "accounts": [
+          {
+            "id": "00000000-0000-4000-8000-000000000004",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000003",
+            "code": "treasury",
+            "label": "Treasury",
+            "account_type": "asset",
+            "asset": "BTC",
+            "created_at": "2026-01-01T00:00:00Z"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000006",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000005",
+            "code": "treasury",
+            "label": "Treasury",
+            "account_type": "asset",
+            "asset": "BTC",
+            "created_at": "2026-01-01T00:00:00Z"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000008",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000007",
+            "code": "treasury",
+            "label": "Treasury",
+            "account_type": "asset",
+            "asset": "BTC",
+            "created_at": "2026-01-01T00:00:00Z"
+          }
+        ],
+        "wallets": [],
+        "transactions": [],
+        "custody_components": [],
+        "custody_component_legs": [],
+        "custody_gap_reviews": [],
+        "custody_gap_review_transactions": [],
+        "custody_component_purge_authorizations": [],
+        "saved_views": [],
+        "attachments": [],
+        "ai_chat_sessions": [],
+        "ai_chat_messages": [],
+        "rates_cache": [],
+        "rates_checked_minutes": [],
+        "loan_legs": [],
+        "book_reset_transactions": [],
+        "book_reset_parked_rows": [],
+        "context": [
+          {
+            "key": "context_profile",
+            "value": ""
+          },
+          {
+            "key": "context_workspace",
+            "value": "00000000-0000-4000-8000-000000000009"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "ui.profiles.switch",
+      "args": {
+        "profile_id": "00000000-0000-4000-8000-000000000003"
+      },
+      "sql": "",
+      "ok": {
+        "activeProfileId": "00000000-0000-4000-8000-000000000003",
+        "activeWorkspaceId": "00000000-0000-4000-8000-000000000001",
+        "profile": {
+          "id": "00000000-0000-4000-8000-000000000003",
+          "name": "Austrian FIFO"
+        },
+        "workspace": {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "name": "Renamed"
+        }
+      },
+      "state": {
+        "workspaces": [
+          {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "label": "Renamed",
+            "created_at": "2026-01-01T00:00:00Z"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000009",
+            "label": "Other",
+            "created_at": "2026-01-01T00:00:00Z"
+          }
+        ],
+        "profiles": [
+          {
+            "id": "00000000-0000-4000-8000-000000000003",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "label": "Austrian FIFO",
+            "fiat_currency": "EUR",
+            "tax_country": "at",
+            "tax_long_term_days": 9223372036854775807,
+            "gains_algorithm": "FIFO",
+            "require_coarse_review": 0,
+            "bitcoin_rail_carrying_value": 1,
+            "cost_basis_pool_scope": "global",
+            "journal_input_version": 0,
+            "last_processed_input_version": 0,
+            "required_journal_semantics_version": 0,
+            "journal_semantics_version": 0,
+            "last_processed_at": null,
+            "last_processed_tx_count": 0,
+            "ownership_review_counts_json": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "swap_candidate_count": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000005",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "label": "Generic",
+            "fiat_currency": "EUR",
+            "tax_country": "generic",
+            "tax_long_term_days": 365,
+            "gains_algorithm": "FIFO",
+            "require_coarse_review": 0,
+            "bitcoin_rail_carrying_value": 1,
+            "cost_basis_pool_scope": "global",
+            "journal_input_version": 0,
+            "last_processed_input_version": 0,
+            "required_journal_semantics_version": 0,
+            "journal_semantics_version": 0,
+            "last_processed_at": null,
+            "last_processed_tx_count": 0,
+            "ownership_review_counts_json": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "swap_candidate_count": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000007",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "label": "Austrian ATM",
+            "fiat_currency": "EUR",
+            "tax_country": "at",
+            "tax_long_term_days": 9223372036854775807,
+            "gains_algorithm": "FIFO",
+            "require_coarse_review": 0,
+            "bitcoin_rail_carrying_value": 1,
+            "cost_basis_pool_scope": "global",
+            "journal_input_version": 0,
+            "last_processed_input_version": 0,
+            "required_journal_semantics_version": 0,
+            "journal_semantics_version": 0,
+            "last_processed_at": null,
+            "last_processed_tx_count": 0,
+            "ownership_review_counts_json": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "swap_candidate_count": null
+          }
+        ],
+        "accounts": [
+          {
+            "id": "00000000-0000-4000-8000-000000000004",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000003",
+            "code": "treasury",
+            "label": "Treasury",
+            "account_type": "asset",
+            "asset": "BTC",
+            "created_at": "2026-01-01T00:00:00Z"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000006",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000005",
+            "code": "treasury",
+            "label": "Treasury",
+            "account_type": "asset",
+            "asset": "BTC",
+            "created_at": "2026-01-01T00:00:00Z"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000008",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000007",
+            "code": "treasury",
+            "label": "Treasury",
+            "account_type": "asset",
+            "asset": "BTC",
+            "created_at": "2026-01-01T00:00:00Z"
+          }
+        ],
+        "wallets": [],
+        "transactions": [],
+        "custody_components": [],
+        "custody_component_legs": [],
+        "custody_gap_reviews": [],
+        "custody_gap_review_transactions": [],
+        "custody_component_purge_authorizations": [],
+        "saved_views": [],
+        "attachments": [],
+        "ai_chat_sessions": [],
+        "ai_chat_messages": [],
+        "rates_cache": [],
+        "rates_checked_minutes": [],
+        "loan_legs": [],
+        "book_reset_transactions": [],
+        "book_reset_parked_rows": [],
+        "context": [
+          {
+            "key": "context_profile",
+            "value": "00000000-0000-4000-8000-000000000003"
+          },
+          {
+            "key": "context_workspace",
+            "value": "00000000-0000-4000-8000-000000000001"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "ui.profiles.snapshot",
+      "args": {},
+      "sql": "",
+      "ok": {
+        "workspaces": [
+          {
+            "id": "00000000-0000-4000-8000-000000000009",
+            "name": "Other",
+            "currency": "Mixed",
+            "jurisdiction": "Generic",
+            "created": "2026-01-01",
+            "profiles": []
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "name": "Renamed",
+            "currency": "EUR",
+            "jurisdiction": "Mixed",
+            "created": "2026-01-01",
+            "profiles": [
+              {
+                "id": "00000000-0000-4000-8000-000000000007",
+                "name": "Austrian ATM",
+                "taxPolicy": "Austria - FIFO - EUR",
+                "fiatCurrency": "EUR",
+                "taxCountry": "at",
+                "taxLongTermDays": 9223372036854775807,
+                "gainsAlgorithm": "FIFO",
+                "costBasisPoolScope": "global",
+                "allowedCostBasisPoolScopes": [
+                  "global"
+                ],
+                "accounts": 1,
+                "wallets": 0,
+                "lastOpened": "just now",
+                "active": false
+              },
+              {
+                "id": "00000000-0000-4000-8000-000000000003",
+                "name": "Austrian FIFO",
+                "taxPolicy": "Austria - FIFO - EUR",
+                "fiatCurrency": "EUR",
+                "taxCountry": "at",
+                "taxLongTermDays": 9223372036854775807,
+                "gainsAlgorithm": "FIFO",
+                "costBasisPoolScope": "global",
+                "allowedCostBasisPoolScopes": [
+                  "global"
+                ],
+                "accounts": 1,
+                "wallets": 0,
+                "lastOpened": "Just now",
+                "active": true
+              },
+              {
+                "id": "00000000-0000-4000-8000-000000000005",
+                "name": "Generic",
+                "taxPolicy": "Generic - FIFO - EUR - 365 day long-term",
+                "fiatCurrency": "EUR",
+                "taxCountry": "generic",
+                "taxLongTermDays": 365,
+                "gainsAlgorithm": "FIFO",
+                "costBasisPoolScope": "global",
+                "allowedCostBasisPoolScopes": [
+                  "global"
+                ],
+                "accounts": 1,
+                "wallets": 0,
+                "lastOpened": "just now",
+                "active": false
+              }
+            ]
+          }
+        ],
+        "activeWorkspaceId": "00000000-0000-4000-8000-000000000001",
+        "activeProfileId": "00000000-0000-4000-8000-000000000003"
+      },
+      "state": {
+        "workspaces": [
+          {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "label": "Renamed",
+            "created_at": "2026-01-01T00:00:00Z"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000009",
+            "label": "Other",
+            "created_at": "2026-01-01T00:00:00Z"
+          }
+        ],
+        "profiles": [
+          {
+            "id": "00000000-0000-4000-8000-000000000003",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "label": "Austrian FIFO",
+            "fiat_currency": "EUR",
+            "tax_country": "at",
+            "tax_long_term_days": 9223372036854775807,
+            "gains_algorithm": "FIFO",
+            "require_coarse_review": 0,
+            "bitcoin_rail_carrying_value": 1,
+            "cost_basis_pool_scope": "global",
+            "journal_input_version": 0,
+            "last_processed_input_version": 0,
+            "required_journal_semantics_version": 0,
+            "journal_semantics_version": 0,
+            "last_processed_at": null,
+            "last_processed_tx_count": 0,
+            "ownership_review_counts_json": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "swap_candidate_count": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000005",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "label": "Generic",
+            "fiat_currency": "EUR",
+            "tax_country": "generic",
+            "tax_long_term_days": 365,
+            "gains_algorithm": "FIFO",
+            "require_coarse_review": 0,
+            "bitcoin_rail_carrying_value": 1,
+            "cost_basis_pool_scope": "global",
+            "journal_input_version": 0,
+            "last_processed_input_version": 0,
+            "required_journal_semantics_version": 0,
+            "journal_semantics_version": 0,
+            "last_processed_at": null,
+            "last_processed_tx_count": 0,
+            "ownership_review_counts_json": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "swap_candidate_count": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000007",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "label": "Austrian ATM",
+            "fiat_currency": "EUR",
+            "tax_country": "at",
+            "tax_long_term_days": 9223372036854775807,
+            "gains_algorithm": "FIFO",
+            "require_coarse_review": 0,
+            "bitcoin_rail_carrying_value": 1,
+            "cost_basis_pool_scope": "global",
+            "journal_input_version": 0,
+            "last_processed_input_version": 0,
+            "required_journal_semantics_version": 0,
+            "journal_semantics_version": 0,
+            "last_processed_at": null,
+            "last_processed_tx_count": 0,
+            "ownership_review_counts_json": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "swap_candidate_count": null
+          }
+        ],
+        "accounts": [
+          {
+            "id": "00000000-0000-4000-8000-000000000004",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000003",
+            "code": "treasury",
+            "label": "Treasury",
+            "account_type": "asset",
+            "asset": "BTC",
+            "created_at": "2026-01-01T00:00:00Z"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000006",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000005",
+            "code": "treasury",
+            "label": "Treasury",
+            "account_type": "asset",
+            "asset": "BTC",
+            "created_at": "2026-01-01T00:00:00Z"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000008",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000007",
+            "code": "treasury",
+            "label": "Treasury",
+            "account_type": "asset",
+            "asset": "BTC",
+            "created_at": "2026-01-01T00:00:00Z"
+          }
+        ],
+        "wallets": [],
+        "transactions": [],
+        "custody_components": [],
+        "custody_component_legs": [],
+        "custody_gap_reviews": [],
+        "custody_gap_review_transactions": [],
+        "custody_component_purge_authorizations": [],
+        "saved_views": [],
+        "attachments": [],
+        "ai_chat_sessions": [],
+        "ai_chat_messages": [],
+        "rates_cache": [],
+        "rates_checked_minutes": [],
+        "loan_legs": [],
+        "book_reset_transactions": [],
+        "book_reset_parked_rows": [],
+        "context": [
+          {
+            "key": "context_profile",
+            "value": "00000000-0000-4000-8000-000000000003"
+          },
+          {
+            "key": "context_workspace",
+            "value": "00000000-0000-4000-8000-000000000001"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "ui.profiles.reset_data",
+      "args": {},
+      "sql": "\nINSERT INTO wallets(id,workspace_id,profile_id,label,kind,created_at) VALUES('w','00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000003','Cold','address','t');\nINSERT INTO transactions(id,workspace_id,profile_id,wallet_id,external_id,fingerprint,direction,asset,amount,fee,occurred_at,created_at) VALUES('tx','00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000003','w','tx','tx','inbound','BTC',1000,0,'2026-01-01T00:00:00Z','t');\nINSERT INTO custody_components(id,lineage_id,workspace_id,profile_id,revision,component_type,expected_leg_count,expected_allocation_count,created_at) VALUES('component','lineage','00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000003',1,'transfer',1,0,'t');\nINSERT INTO custody_component_legs(id,component_id,workspace_id,profile_id,ordinal,role,rail,asset,exposure,conservation_unit,amount_msat,created_at) VALUES('leg','component','00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000003',0,'source','bitcoin','BTC','asset','BTC',1000,'t');\nINSERT INTO custody_gap_reviews(id,workspace_id,profile_id,gap_id,revision,candidate_fingerprint,action,authored_source,snapshot_json,created_at) VALUES('review','00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000003','gap',1,'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','dismissed','user','{}','t');\nINSERT INTO custody_gap_review_transactions(id,review_id,workspace_id,profile_id,role,transaction_id,created_at) VALUES('review-tx','review','00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000003','source','tx','t');\nINSERT INTO rates_cache(pair,timestamp,rate,source,fetched_at) VALUES('BTC-EUR','2026-01-01T00:00:00Z','50000','manual','t');\nINSERT INTO loan_legs(id,workspace_id,profile_id,transaction_id,loan_id,role,created_at) VALUES('loan','00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000003','tx','loan-1','collateral','t');\nUPDATE transactions SET note='Kept note', fiat_rate=51000.5, pricing_source_kind='manual_override' WHERE id='tx';\n",
+      "ok": {
+        "reset": true,
+        "mode": "keep_decisions",
+        "workspace": {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "label": "Renamed"
+        },
+        "profile": {
+          "id": "00000000-0000-4000-8000-000000000003",
+          "label": "Austrian FIFO"
+        },
+        "preserved": {
+          "workspaces": 1,
+          "profiles": 1,
+          "accounts": 1,
+          "wallets": 1,
+          "backends": 0,
+          "rates_cache": 1,
+          "rates_checked_minutes": 0
+        },
+        "removed": {
+          "transactions": 1,
+          "chain_analysis_observations": 0,
+          "chain_observer_instances": 0,
+          "chain_observer_coverage": 0,
+          "chain_observer_values": 0,
+          "journal_entries": 0,
+          "journal_quarantines": 0,
+          "journal_tax_summary": 0,
+          "journal_account_holdings": 0,
+          "journal_wallet_holdings": 0,
+          "journal_quantity_postings": 0,
+          "journal_quantity_issues": 0,
+          "journal_quantity_balances": 0,
+          "journal_custody_decisions": 0,
+          "journal_custody_economic_relations": 0,
+          "journal_custody_gap_inputs": 0,
+          "journal_custody_reconciliations": 0,
+          "rates_cache": 0,
+          "rates_checked_minutes": 0,
+          "sync_checkpoints": 0,
+          "wallet_sync_times": 0,
+          "attachment_files": 0
+        },
+        "rates_scope": "preserved",
+        "shared_rates_cleared": false,
+        "decisions": {
+          "kept": 4,
+          "bind_after_resync": {
+            "transaction_tags": 0,
+            "loan_legs": 1,
+            "transaction_pairs": 0,
+            "transaction_pair_dismissals": 0,
+            "direct_swap_payouts": 0,
+            "custody_component_transaction_memberships": 0,
+            "commercial_links": 0,
+            "attachments": 0,
+            "external_document_attachments": 0,
+            "source_funds_links": 0,
+            "source_funds_link_attachments": 0,
+            "source_funds_source_attachments": 0,
+            "source_funds_cases": 0,
+            "source_funds_snapshots": 0,
+            "transaction_edit_events": 0,
+            "transaction_edit_fields": 0,
+            "transaction_metadata": 1
+          },
+          "kept_in_place": {
+            "custody_components": 1,
+            "custody_gap_reviews": 1,
+            "custody_authored_evidence_snapshots": 0,
+            "filed_report_snapshots": 0,
+            "review_workflow_receipts": 0,
+            "external_documents": 0,
+            "source_funds_sources": 0,
+            "source_funds_recipients": 0,
+            "tags": 0,
+            "saved_views": 0,
+            "swap_matching_rules": 0,
+            "bip329_labels": 0,
+            "chain_analysis_cases": 0,
+            "chain_analysis_labels": 0,
+            "chain_analysis_datasets": 0,
+            "ai_chat_sessions": 0,
+            "attachments": 0
+          }
+        }
+      },
+      "state": {
+        "workspaces": [
+          {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "label": "Renamed",
+            "created_at": "2026-01-01T00:00:00Z"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000009",
+            "label": "Other",
+            "created_at": "2026-01-01T00:00:00Z"
+          }
+        ],
+        "profiles": [
+          {
+            "id": "00000000-0000-4000-8000-000000000003",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "label": "Austrian FIFO",
+            "fiat_currency": "EUR",
+            "tax_country": "at",
+            "tax_long_term_days": 9223372036854775807,
+            "gains_algorithm": "FIFO",
+            "require_coarse_review": 0,
+            "bitcoin_rail_carrying_value": 1,
+            "cost_basis_pool_scope": "global",
+            "journal_input_version": 1,
+            "last_processed_input_version": 0,
+            "required_journal_semantics_version": 1,
+            "journal_semantics_version": 0,
+            "last_processed_at": null,
+            "last_processed_tx_count": 0,
+            "ownership_review_counts_json": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "swap_candidate_count": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000005",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "label": "Generic",
+            "fiat_currency": "EUR",
+            "tax_country": "generic",
+            "tax_long_term_days": 365,
+            "gains_algorithm": "FIFO",
+            "require_coarse_review": 0,
+            "bitcoin_rail_carrying_value": 1,
+            "cost_basis_pool_scope": "global",
+            "journal_input_version": 0,
+            "last_processed_input_version": 0,
+            "required_journal_semantics_version": 0,
+            "journal_semantics_version": 0,
+            "last_processed_at": null,
+            "last_processed_tx_count": 0,
+            "ownership_review_counts_json": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "swap_candidate_count": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000007",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "label": "Austrian ATM",
+            "fiat_currency": "EUR",
+            "tax_country": "at",
+            "tax_long_term_days": 9223372036854775807,
+            "gains_algorithm": "FIFO",
+            "require_coarse_review": 0,
+            "bitcoin_rail_carrying_value": 1,
+            "cost_basis_pool_scope": "global",
+            "journal_input_version": 0,
+            "last_processed_input_version": 0,
+            "required_journal_semantics_version": 0,
+            "journal_semantics_version": 0,
+            "last_processed_at": null,
+            "last_processed_tx_count": 0,
+            "ownership_review_counts_json": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "swap_candidate_count": null
+          }
+        ],
+        "accounts": [
+          {
+            "id": "00000000-0000-4000-8000-000000000004",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000003",
+            "code": "treasury",
+            "label": "Treasury",
+            "account_type": "asset",
+            "asset": "BTC",
+            "created_at": "2026-01-01T00:00:00Z"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000006",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000005",
+            "code": "treasury",
+            "label": "Treasury",
+            "account_type": "asset",
+            "asset": "BTC",
+            "created_at": "2026-01-01T00:00:00Z"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000008",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000007",
+            "code": "treasury",
+            "label": "Treasury",
+            "account_type": "asset",
+            "asset": "BTC",
+            "created_at": "2026-01-01T00:00:00Z"
+          }
+        ],
+        "wallets": [
+          {
+            "id": "w",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000003",
+            "account_id": null,
+            "label": "Cold",
+            "kind": "address",
+            "config_json": "{}",
+            "created_at": "t"
+          }
+        ],
+        "transactions": [],
+        "custody_components": [
+          {
+            "id": "component",
+            "lineage_id": "lineage",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000003",
+            "revision": 1,
+            "component_type": "transfer",
+            "conservation_mode": "quantity",
+            "state": "draft",
+            "evidence_kind": null,
+            "evidence_grade": null,
+            "evidence_json": "{}",
+            "conversion_policy": null,
+            "conversion_reviewed": 0,
+            "conversion_metadata_json": "{}",
+            "expected_leg_count": 1,
+            "expected_allocation_count": 0,
+            "expected_economic_term_count": null,
+            "expected_evidence_count": null,
+            "authored_source": "user",
+            "notes": null,
+            "change_reason": null,
+            "supersedes_component_id": null,
+            "superseded_by_component_id": null,
+            "activated_at": null,
+            "superseded_at": null,
+            "created_at": "t"
+          }
+        ],
+        "custody_component_legs": [
+          {
+            "id": "leg",
+            "component_id": "component",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000003",
+            "ordinal": 0,
+            "role": "source",
+            "rail": "bitcoin",
+            "chain": null,
+            "network": null,
+            "asset": "BTC",
+            "exposure": "asset",
+            "conservation_unit": "BTC",
+            "amount_msat": 1000,
+            "valuation_unit": null,
+            "valuation_amount": null,
+            "occurred_at": null,
+            "transaction_id": null,
+            "anchor_transaction_id": null,
+            "wallet_id": null,
+            "location_ref": null,
+            "notes": null,
+            "created_at": "t"
+          }
+        ],
+        "custody_gap_reviews": [
+          {
+            "id": "review",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000003",
+            "gap_id": "gap",
+            "revision": 1,
+            "candidate_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "action": "dismissed",
+            "event_kind": "review_decision",
+            "component_id": null,
+            "authored_source": "user",
+            "reason": null,
+            "snapshot_json": "{}",
+            "created_at": "t"
+          }
+        ],
+        "custody_gap_review_transactions": [
+          {
+            "id": "review-tx",
+            "review_id": "review",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000003",
+            "role": "source",
+            "transaction_id": "tx",
+            "created_at": "t"
+          }
+        ],
+        "custody_component_purge_authorizations": [],
+        "saved_views": [],
+        "attachments": [],
+        "ai_chat_sessions": [],
+        "ai_chat_messages": [],
+        "rates_cache": [
+          {
+            "pair": "BTC-EUR",
+            "timestamp": "2026-01-01T00:00:00Z",
+            "rate": 50000.0,
+            "rate_exact": null,
+            "source": "manual",
+            "fetched_at": "t",
+            "granularity": null,
+            "method": null,
+            "open_rate": null,
+            "open_rate_exact": null,
+            "high_rate": null,
+            "high_rate_exact": null,
+            "low_rate": null,
+            "low_rate_exact": null,
+            "close_rate": null,
+            "close_rate_exact": null,
+            "volume": null,
+            "volume_exact": null,
+            "trades": null
+          }
+        ],
+        "rates_checked_minutes": [],
+        "loan_legs": [],
+        "book_reset_transactions": [
+          {
+            "transaction_id": "tx",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000003",
+            "wallet_id": "w",
+            "fingerprint": "tx",
+            "external_id": "tx",
+            "occurred_at": "2026-01-01T00:00:00Z",
+            "direction": "inbound",
+            "asset": "BTC",
+            "amount": 1000,
+            "fee": 0,
+            "amount_includes_fee": 0,
+            "metadata_json": "{\"fiat_currency\": null, \"fiat_price_source\": null, \"fiat_rate\": 51000.5, \"fiat_rate_exact\": null, \"fiat_value\": null, \"fiat_value_exact\": null, \"note\": \"Kept note\", \"pricing_external_ref\": null, \"pricing_fetched_at\": null, \"pricing_granularity\": null, \"pricing_method\": null, \"pricing_pair\": null, \"pricing_provider\": null, \"pricing_quality\": null, \"pricing_source_kind\": \"manual_override\", \"pricing_timestamp\": null}",
+            "state": "pending",
+            "changed_fields_json": "[]",
+            "created_at": "2026-01-01T00:00:00Z"
+          }
+        ],
+        "book_reset_parked_rows": [
+          {
+            "seq": 1,
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000003",
+            "table_name": "loan_legs",
+            "row_json": "{\"id\": \"loan\", \"workspace_id\": \"00000000-0000-4000-8000-000000000001\", \"profile_id\": \"00000000-0000-4000-8000-000000000003\", \"transaction_id\": \"tx\", \"loan_id\": \"loan-1\", \"role\": \"collateral\", \"note\": null, \"deleted_at\": null, \"created_at\": \"t\"}",
+            "transaction_ids_json": "[\"tx\"]",
+            "created_at": "2026-01-01T00:00:00Z"
+          }
+        ],
+        "context": [
+          {
+            "key": "context_profile",
+            "value": "00000000-0000-4000-8000-000000000003"
+          },
+          {
+            "key": "context_workspace",
+            "value": "00000000-0000-4000-8000-000000000001"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "ui.profiles.snapshot",
+      "args": {},
+      "sql": "",
+      "ok": {
+        "workspaces": [
+          {
+            "id": "00000000-0000-4000-8000-000000000009",
+            "name": "Other",
+            "currency": "Mixed",
+            "jurisdiction": "Generic",
+            "created": "2026-01-01",
+            "profiles": []
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "name": "Renamed",
+            "currency": "EUR",
+            "jurisdiction": "Mixed",
+            "created": "2026-01-01",
+            "profiles": [
+              {
+                "id": "00000000-0000-4000-8000-000000000007",
+                "name": "Austrian ATM",
+                "taxPolicy": "Austria - FIFO - EUR",
+                "fiatCurrency": "EUR",
+                "taxCountry": "at",
+                "taxLongTermDays": 9223372036854775807,
+                "gainsAlgorithm": "FIFO",
+                "costBasisPoolScope": "global",
+                "allowedCostBasisPoolScopes": [
+                  "global"
+                ],
+                "accounts": 1,
+                "wallets": 0,
+                "lastOpened": "just now",
+                "active": false
+              },
+              {
+                "id": "00000000-0000-4000-8000-000000000003",
+                "name": "Austrian FIFO",
+                "taxPolicy": "Austria - FIFO - EUR",
+                "fiatCurrency": "EUR",
+                "taxCountry": "at",
+                "taxLongTermDays": 9223372036854775807,
+                "gainsAlgorithm": "FIFO",
+                "costBasisPoolScope": "global",
+                "allowedCostBasisPoolScopes": [
+                  "global"
+                ],
+                "accounts": 1,
+                "wallets": 1,
+                "lastOpened": "Just now",
+                "active": true
+              },
+              {
+                "id": "00000000-0000-4000-8000-000000000005",
+                "name": "Generic",
+                "taxPolicy": "Generic - FIFO - EUR - 365 day long-term",
+                "fiatCurrency": "EUR",
+                "taxCountry": "generic",
+                "taxLongTermDays": 365,
+                "gainsAlgorithm": "FIFO",
+                "costBasisPoolScope": "global",
+                "allowedCostBasisPoolScopes": [
+                  "global"
+                ],
+                "accounts": 1,
+                "wallets": 0,
+                "lastOpened": "just now",
+                "active": false
+              }
+            ]
+          }
+        ],
+        "activeWorkspaceId": "00000000-0000-4000-8000-000000000001",
+        "activeProfileId": "00000000-0000-4000-8000-000000000003"
+      },
+      "state": {
+        "workspaces": [
+          {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "label": "Renamed",
+            "created_at": "2026-01-01T00:00:00Z"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000009",
+            "label": "Other",
+            "created_at": "2026-01-01T00:00:00Z"
+          }
+        ],
+        "profiles": [
+          {
+            "id": "00000000-0000-4000-8000-000000000003",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "label": "Austrian FIFO",
+            "fiat_currency": "EUR",
+            "tax_country": "at",
+            "tax_long_term_days": 9223372036854775807,
+            "gains_algorithm": "FIFO",
+            "require_coarse_review": 0,
+            "bitcoin_rail_carrying_value": 1,
+            "cost_basis_pool_scope": "global",
+            "journal_input_version": 1,
+            "last_processed_input_version": 0,
+            "required_journal_semantics_version": 1,
+            "journal_semantics_version": 0,
+            "last_processed_at": null,
+            "last_processed_tx_count": 0,
+            "ownership_review_counts_json": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "swap_candidate_count": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000005",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "label": "Generic",
+            "fiat_currency": "EUR",
+            "tax_country": "generic",
+            "tax_long_term_days": 365,
+            "gains_algorithm": "FIFO",
+            "require_coarse_review": 0,
+            "bitcoin_rail_carrying_value": 1,
+            "cost_basis_pool_scope": "global",
+            "journal_input_version": 0,
+            "last_processed_input_version": 0,
+            "required_journal_semantics_version": 0,
+            "journal_semantics_version": 0,
+            "last_processed_at": null,
+            "last_processed_tx_count": 0,
+            "ownership_review_counts_json": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "swap_candidate_count": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000007",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "label": "Austrian ATM",
+            "fiat_currency": "EUR",
+            "tax_country": "at",
+            "tax_long_term_days": 9223372036854775807,
+            "gains_algorithm": "FIFO",
+            "require_coarse_review": 0,
+            "bitcoin_rail_carrying_value": 1,
+            "cost_basis_pool_scope": "global",
+            "journal_input_version": 0,
+            "last_processed_input_version": 0,
+            "required_journal_semantics_version": 0,
+            "journal_semantics_version": 0,
+            "last_processed_at": null,
+            "last_processed_tx_count": 0,
+            "ownership_review_counts_json": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "swap_candidate_count": null
+          }
+        ],
+        "accounts": [
+          {
+            "id": "00000000-0000-4000-8000-000000000004",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000003",
+            "code": "treasury",
+            "label": "Treasury",
+            "account_type": "asset",
+            "asset": "BTC",
+            "created_at": "2026-01-01T00:00:00Z"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000006",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000005",
+            "code": "treasury",
+            "label": "Treasury",
+            "account_type": "asset",
+            "asset": "BTC",
+            "created_at": "2026-01-01T00:00:00Z"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000008",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000007",
+            "code": "treasury",
+            "label": "Treasury",
+            "account_type": "asset",
+            "asset": "BTC",
+            "created_at": "2026-01-01T00:00:00Z"
+          }
+        ],
+        "wallets": [
+          {
+            "id": "w",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000003",
+            "account_id": null,
+            "label": "Cold",
+            "kind": "address",
+            "config_json": "{}",
+            "created_at": "t"
+          }
+        ],
+        "transactions": [],
+        "custody_components": [
+          {
+            "id": "component",
+            "lineage_id": "lineage",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000003",
+            "revision": 1,
+            "component_type": "transfer",
+            "conservation_mode": "quantity",
+            "state": "draft",
+            "evidence_kind": null,
+            "evidence_grade": null,
+            "evidence_json": "{}",
+            "conversion_policy": null,
+            "conversion_reviewed": 0,
+            "conversion_metadata_json": "{}",
+            "expected_leg_count": 1,
+            "expected_allocation_count": 0,
+            "expected_economic_term_count": null,
+            "expected_evidence_count": null,
+            "authored_source": "user",
+            "notes": null,
+            "change_reason": null,
+            "supersedes_component_id": null,
+            "superseded_by_component_id": null,
+            "activated_at": null,
+            "superseded_at": null,
+            "created_at": "t"
+          }
+        ],
+        "custody_component_legs": [
+          {
+            "id": "leg",
+            "component_id": "component",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000003",
+            "ordinal": 0,
+            "role": "source",
+            "rail": "bitcoin",
+            "chain": null,
+            "network": null,
+            "asset": "BTC",
+            "exposure": "asset",
+            "conservation_unit": "BTC",
+            "amount_msat": 1000,
+            "valuation_unit": null,
+            "valuation_amount": null,
+            "occurred_at": null,
+            "transaction_id": null,
+            "anchor_transaction_id": null,
+            "wallet_id": null,
+            "location_ref": null,
+            "notes": null,
+            "created_at": "t"
+          }
+        ],
+        "custody_gap_reviews": [
+          {
+            "id": "review",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000003",
+            "gap_id": "gap",
+            "revision": 1,
+            "candidate_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "action": "dismissed",
+            "event_kind": "review_decision",
+            "component_id": null,
+            "authored_source": "user",
+            "reason": null,
+            "snapshot_json": "{}",
+            "created_at": "t"
+          }
+        ],
+        "custody_gap_review_transactions": [
+          {
+            "id": "review-tx",
+            "review_id": "review",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000003",
+            "role": "source",
+            "transaction_id": "tx",
+            "created_at": "t"
+          }
+        ],
+        "custody_component_purge_authorizations": [],
+        "saved_views": [],
+        "attachments": [],
+        "ai_chat_sessions": [],
+        "ai_chat_messages": [],
+        "rates_cache": [
+          {
+            "pair": "BTC-EUR",
+            "timestamp": "2026-01-01T00:00:00Z",
+            "rate": 50000.0,
+            "rate_exact": null,
+            "source": "manual",
+            "fetched_at": "t",
+            "granularity": null,
+            "method": null,
+            "open_rate": null,
+            "open_rate_exact": null,
+            "high_rate": null,
+            "high_rate_exact": null,
+            "low_rate": null,
+            "low_rate_exact": null,
+            "close_rate": null,
+            "close_rate_exact": null,
+            "volume": null,
+            "volume_exact": null,
+            "trades": null
+          }
+        ],
+        "rates_checked_minutes": [],
+        "loan_legs": [],
+        "book_reset_transactions": [
+          {
+            "transaction_id": "tx",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000003",
+            "wallet_id": "w",
+            "fingerprint": "tx",
+            "external_id": "tx",
+            "occurred_at": "2026-01-01T00:00:00Z",
+            "direction": "inbound",
+            "asset": "BTC",
+            "amount": 1000,
+            "fee": 0,
+            "amount_includes_fee": 0,
+            "metadata_json": "{\"fiat_currency\": null, \"fiat_price_source\": null, \"fiat_rate\": 51000.5, \"fiat_rate_exact\": null, \"fiat_value\": null, \"fiat_value_exact\": null, \"note\": \"Kept note\", \"pricing_external_ref\": null, \"pricing_fetched_at\": null, \"pricing_granularity\": null, \"pricing_method\": null, \"pricing_pair\": null, \"pricing_provider\": null, \"pricing_quality\": null, \"pricing_source_kind\": \"manual_override\", \"pricing_timestamp\": null}",
+            "state": "pending",
+            "changed_fields_json": "[]",
+            "created_at": "2026-01-01T00:00:00Z"
+          }
+        ],
+        "book_reset_parked_rows": [
+          {
+            "seq": 1,
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000003",
+            "table_name": "loan_legs",
+            "row_json": "{\"id\": \"loan\", \"workspace_id\": \"00000000-0000-4000-8000-000000000001\", \"profile_id\": \"00000000-0000-4000-8000-000000000003\", \"transaction_id\": \"tx\", \"loan_id\": \"loan-1\", \"role\": \"collateral\", \"note\": null, \"deleted_at\": null, \"created_at\": \"t\"}",
+            "transaction_ids_json": "[\"tx\"]",
+            "created_at": "2026-01-01T00:00:00Z"
+          }
+        ],
+        "context": [
+          {
+            "key": "context_profile",
+            "value": "00000000-0000-4000-8000-000000000003"
+          },
+          {
+            "key": "context_workspace",
+            "value": "00000000-0000-4000-8000-000000000001"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "ui.profiles.reset_data",
+      "args": {
+        "clear_shared_rates": true
+      },
+      "sql": "",
+      "ok": {
+        "reset": true,
+        "mode": "keep_decisions",
+        "workspace": {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "label": "Renamed"
+        },
+        "profile": {
+          "id": "00000000-0000-4000-8000-000000000003",
+          "label": "Austrian FIFO"
+        },
+        "preserved": {
+          "workspaces": 1,
+          "profiles": 1,
+          "accounts": 1,
+          "wallets": 1,
+          "backends": 0,
+          "rates_cache": 0,
+          "rates_checked_minutes": 0
+        },
+        "removed": {
+          "transactions": 0,
+          "chain_analysis_observations": 0,
+          "chain_observer_instances": 0,
+          "chain_observer_coverage": 0,
+          "chain_observer_values": 0,
+          "journal_entries": 0,
+          "journal_quarantines": 0,
+          "journal_tax_summary": 0,
+          "journal_account_holdings": 0,
+          "journal_wallet_holdings": 0,
+          "journal_quantity_postings": 0,
+          "journal_quantity_issues": 0,
+          "journal_quantity_balances": 0,
+          "journal_custody_decisions": 0,
+          "journal_custody_economic_relations": 0,
+          "journal_custody_gap_inputs": 0,
+          "journal_custody_reconciliations": 0,
+          "rates_cache": 1,
+          "rates_checked_minutes": 0,
+          "sync_checkpoints": 0,
+          "wallet_sync_times": 0,
+          "attachment_files": 0
+        },
+        "rates_scope": "global",
+        "shared_rates_cleared": true,
+        "decisions": {
+          "kept": 2,
+          "bind_after_resync": {
+            "transaction_tags": 0,
+            "loan_legs": 0,
+            "transaction_pairs": 0,
+            "transaction_pair_dismissals": 0,
+            "direct_swap_payouts": 0,
+            "custody_component_transaction_memberships": 0,
+            "commercial_links": 0,
+            "attachments": 0,
+            "external_document_attachments": 0,
+            "source_funds_links": 0,
+            "source_funds_link_attachments": 0,
+            "source_funds_source_attachments": 0,
+            "source_funds_cases": 0,
+            "source_funds_snapshots": 0,
+            "transaction_edit_events": 0,
+            "transaction_edit_fields": 0,
+            "transaction_metadata": 0
+          },
+          "kept_in_place": {
+            "custody_components": 1,
+            "custody_gap_reviews": 1,
+            "custody_authored_evidence_snapshots": 0,
+            "filed_report_snapshots": 0,
+            "review_workflow_receipts": 0,
+            "external_documents": 0,
+            "source_funds_sources": 0,
+            "source_funds_recipients": 0,
+            "tags": 0,
+            "saved_views": 0,
+            "swap_matching_rules": 0,
+            "bip329_labels": 0,
+            "chain_analysis_cases": 0,
+            "chain_analysis_labels": 0,
+            "chain_analysis_datasets": 0,
+            "ai_chat_sessions": 0,
+            "attachments": 0
+          }
+        }
+      },
+      "state": {
+        "workspaces": [
+          {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "label": "Renamed",
+            "created_at": "2026-01-01T00:00:00Z"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000009",
+            "label": "Other",
+            "created_at": "2026-01-01T00:00:00Z"
+          }
+        ],
+        "profiles": [
+          {
+            "id": "00000000-0000-4000-8000-000000000003",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "label": "Austrian FIFO",
+            "fiat_currency": "EUR",
+            "tax_country": "at",
+            "tax_long_term_days": 9223372036854775807,
+            "gains_algorithm": "FIFO",
+            "require_coarse_review": 0,
+            "bitcoin_rail_carrying_value": 1,
+            "cost_basis_pool_scope": "global",
+            "journal_input_version": 2,
+            "last_processed_input_version": 0,
+            "required_journal_semantics_version": 1,
+            "journal_semantics_version": 0,
+            "last_processed_at": null,
+            "last_processed_tx_count": 0,
+            "ownership_review_counts_json": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "swap_candidate_count": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000005",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "label": "Generic",
+            "fiat_currency": "EUR",
+            "tax_country": "generic",
+            "tax_long_term_days": 365,
+            "gains_algorithm": "FIFO",
+            "require_coarse_review": 0,
+            "bitcoin_rail_carrying_value": 1,
+            "cost_basis_pool_scope": "global",
+            "journal_input_version": 0,
+            "last_processed_input_version": 0,
+            "required_journal_semantics_version": 0,
+            "journal_semantics_version": 0,
+            "last_processed_at": null,
+            "last_processed_tx_count": 0,
+            "ownership_review_counts_json": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "swap_candidate_count": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000007",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "label": "Austrian ATM",
+            "fiat_currency": "EUR",
+            "tax_country": "at",
+            "tax_long_term_days": 9223372036854775807,
+            "gains_algorithm": "FIFO",
+            "require_coarse_review": 0,
+            "bitcoin_rail_carrying_value": 1,
+            "cost_basis_pool_scope": "global",
+            "journal_input_version": 0,
+            "last_processed_input_version": 0,
+            "required_journal_semantics_version": 0,
+            "journal_semantics_version": 0,
+            "last_processed_at": null,
+            "last_processed_tx_count": 0,
+            "ownership_review_counts_json": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "swap_candidate_count": null
+          }
+        ],
+        "accounts": [
+          {
+            "id": "00000000-0000-4000-8000-000000000004",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000003",
+            "code": "treasury",
+            "label": "Treasury",
+            "account_type": "asset",
+            "asset": "BTC",
+            "created_at": "2026-01-01T00:00:00Z"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000006",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000005",
+            "code": "treasury",
+            "label": "Treasury",
+            "account_type": "asset",
+            "asset": "BTC",
+            "created_at": "2026-01-01T00:00:00Z"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000008",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000007",
+            "code": "treasury",
+            "label": "Treasury",
+            "account_type": "asset",
+            "asset": "BTC",
+            "created_at": "2026-01-01T00:00:00Z"
+          }
+        ],
+        "wallets": [
+          {
+            "id": "w",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000003",
+            "account_id": null,
+            "label": "Cold",
+            "kind": "address",
+            "config_json": "{}",
+            "created_at": "t"
+          }
+        ],
+        "transactions": [],
+        "custody_components": [
+          {
+            "id": "component",
+            "lineage_id": "lineage",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000003",
+            "revision": 1,
+            "component_type": "transfer",
+            "conservation_mode": "quantity",
+            "state": "draft",
+            "evidence_kind": null,
+            "evidence_grade": null,
+            "evidence_json": "{}",
+            "conversion_policy": null,
+            "conversion_reviewed": 0,
+            "conversion_metadata_json": "{}",
+            "expected_leg_count": 1,
+            "expected_allocation_count": 0,
+            "expected_economic_term_count": null,
+            "expected_evidence_count": null,
+            "authored_source": "user",
+            "notes": null,
+            "change_reason": null,
+            "supersedes_component_id": null,
+            "superseded_by_component_id": null,
+            "activated_at": null,
+            "superseded_at": null,
+            "created_at": "t"
+          }
+        ],
+        "custody_component_legs": [
+          {
+            "id": "leg",
+            "component_id": "component",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000003",
+            "ordinal": 0,
+            "role": "source",
+            "rail": "bitcoin",
+            "chain": null,
+            "network": null,
+            "asset": "BTC",
+            "exposure": "asset",
+            "conservation_unit": "BTC",
+            "amount_msat": 1000,
+            "valuation_unit": null,
+            "valuation_amount": null,
+            "occurred_at": null,
+            "transaction_id": null,
+            "anchor_transaction_id": null,
+            "wallet_id": null,
+            "location_ref": null,
+            "notes": null,
+            "created_at": "t"
+          }
+        ],
+        "custody_gap_reviews": [
+          {
+            "id": "review",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000003",
+            "gap_id": "gap",
+            "revision": 1,
+            "candidate_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "action": "dismissed",
+            "event_kind": "review_decision",
+            "component_id": null,
+            "authored_source": "user",
+            "reason": null,
+            "snapshot_json": "{}",
+            "created_at": "t"
+          }
+        ],
+        "custody_gap_review_transactions": [
+          {
+            "id": "review-tx",
+            "review_id": "review",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000003",
+            "role": "source",
+            "transaction_id": "tx",
+            "created_at": "t"
+          }
+        ],
+        "custody_component_purge_authorizations": [],
+        "saved_views": [],
+        "attachments": [],
+        "ai_chat_sessions": [],
+        "ai_chat_messages": [],
+        "rates_cache": [],
+        "rates_checked_minutes": [],
+        "loan_legs": [],
+        "book_reset_transactions": [
+          {
+            "transaction_id": "tx",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000003",
+            "wallet_id": "w",
+            "fingerprint": "tx",
+            "external_id": "tx",
+            "occurred_at": "2026-01-01T00:00:00Z",
+            "direction": "inbound",
+            "asset": "BTC",
+            "amount": 1000,
+            "fee": 0,
+            "amount_includes_fee": 0,
+            "metadata_json": "{\"fiat_currency\": null, \"fiat_price_source\": null, \"fiat_rate\": 51000.5, \"fiat_rate_exact\": null, \"fiat_value\": null, \"fiat_value_exact\": null, \"note\": \"Kept note\", \"pricing_external_ref\": null, \"pricing_fetched_at\": null, \"pricing_granularity\": null, \"pricing_method\": null, \"pricing_pair\": null, \"pricing_provider\": null, \"pricing_quality\": null, \"pricing_source_kind\": \"manual_override\", \"pricing_timestamp\": null}",
+            "state": "pending",
+            "changed_fields_json": "[]",
+            "created_at": "2026-01-01T00:00:00Z"
+          }
+        ],
+        "book_reset_parked_rows": [
+          {
+            "seq": 1,
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000003",
+            "table_name": "loan_legs",
+            "row_json": "{\"id\": \"loan\", \"workspace_id\": \"00000000-0000-4000-8000-000000000001\", \"profile_id\": \"00000000-0000-4000-8000-000000000003\", \"transaction_id\": \"tx\", \"loan_id\": \"loan-1\", \"role\": \"collateral\", \"note\": null, \"deleted_at\": null, \"created_at\": \"t\"}",
+            "transaction_ids_json": "[\"tx\"]",
+            "created_at": "2026-01-01T00:00:00Z"
+          }
+        ],
+        "context": [
+          {
+            "key": "context_profile",
+            "value": "00000000-0000-4000-8000-000000000003"
+          },
+          {
+            "key": "context_workspace",
+            "value": "00000000-0000-4000-8000-000000000001"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "ui.profiles.reset_data",
+      "args": {
+        "wipe_everything": true
+      },
+      "sql": "",
+      "ok": {
+        "reset": true,
+        "mode": "wipe_everything",
+        "workspace": {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "label": "Renamed"
+        },
+        "profile": {
+          "id": "00000000-0000-4000-8000-000000000003",
+          "label": "Austrian FIFO"
+        },
+        "preserved": {
+          "workspaces": 1,
+          "profiles": 1,
+          "accounts": 1,
+          "wallets": 1,
+          "backends": 0,
+          "rates_cache": 0,
+          "rates_checked_minutes": 0
+        },
+        "removed": {
+          "transactions": 0,
+          "chain_analysis_observations": 0,
+          "chain_analysis_cases": 0,
+          "chain_analysis_labels": 0,
+          "chain_analysis_datasets": 0,
+          "chain_analysis_dataset_claims": 0,
+          "chain_analysis_label_history": 0,
+          "chain_observer_instances": 0,
+          "chain_observer_coverage": 0,
+          "chain_observer_values": 0,
+          "custody_components": 1,
+          "custody_component_legs": 1,
+          "custody_component_allocations": 0,
+          "custody_component_evidence_commitments": 0,
+          "transaction_tags": 0,
+          "journal_entries": 0,
+          "journal_quarantines": 0,
+          "journal_tax_summary": 0,
+          "journal_account_holdings": 0,
+          "journal_wallet_holdings": 0,
+          "journal_quantity_postings": 0,
+          "journal_quantity_issues": 0,
+          "journal_quantity_balances": 0,
+          "journal_custody_decisions": 0,
+          "journal_custody_economic_relations": 0,
+          "journal_custody_gap_inputs": 0,
+          "journal_custody_reconciliations": 0,
+          "custody_authored_evidence_snapshots": 0,
+          "review_workflow_receipts": 0,
+          "synthetic_import_duplicate_reviews": 0,
+          "custody_gap_reviews": 1,
+          "custody_gap_review_relation_sets": 0,
+          "custody_gap_review_transactions": 1,
+          "filed_report_snapshots": 0,
+          "custody_filed_report_impacts": 0,
+          "custody_filed_report_impact_resolutions": 0,
+          "transaction_pairs": 0,
+          "direct_swap_payouts": 0,
+          "transaction_pair_dismissals": 0,
+          "swap_matching_rules": 0,
+          "saved_views": 0,
+          "bip329_labels": 0,
+          "attachments": 0,
+          "tags": 0,
+          "source_funds_sources": 0,
+          "source_funds_links": 0,
+          "source_funds_link_attachments": 0,
+          "source_funds_source_attachments": 0,
+          "source_funds_cases": 0,
+          "source_funds_snapshots": 0,
+          "source_funds_recipients": 0,
+          "ai_chat_sessions": 0,
+          "ai_chat_messages": 0,
+          "rates_cache": 0,
+          "rates_checked_minutes": 0,
+          "book_reset_transactions": 1,
+          "book_reset_parked_rows": 1,
+          "sync_checkpoints": 0,
+          "wallet_sync_times": 0,
+          "attachment_files": 0
+        },
+        "rates_scope": "preserved",
+        "shared_rates_cleared": false
+      },
+      "state": {
+        "workspaces": [
+          {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "label": "Renamed",
+            "created_at": "2026-01-01T00:00:00Z"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000009",
+            "label": "Other",
+            "created_at": "2026-01-01T00:00:00Z"
+          }
+        ],
+        "profiles": [
+          {
+            "id": "00000000-0000-4000-8000-000000000003",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "label": "Austrian FIFO",
+            "fiat_currency": "EUR",
+            "tax_country": "at",
+            "tax_long_term_days": 9223372036854775807,
+            "gains_algorithm": "FIFO",
+            "require_coarse_review": 0,
+            "bitcoin_rail_carrying_value": 1,
+            "cost_basis_pool_scope": "global",
+            "journal_input_version": 3,
+            "last_processed_input_version": 0,
+            "required_journal_semantics_version": 1,
+            "journal_semantics_version": 0,
+            "last_processed_at": null,
+            "last_processed_tx_count": 0,
+            "ownership_review_counts_json": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "swap_candidate_count": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000005",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "label": "Generic",
+            "fiat_currency": "EUR",
+            "tax_country": "generic",
+            "tax_long_term_days": 365,
+            "gains_algorithm": "FIFO",
+            "require_coarse_review": 0,
+            "bitcoin_rail_carrying_value": 1,
+            "cost_basis_pool_scope": "global",
+            "journal_input_version": 0,
+            "last_processed_input_version": 0,
+            "required_journal_semantics_version": 0,
+            "journal_semantics_version": 0,
+            "last_processed_at": null,
+            "last_processed_tx_count": 0,
+            "ownership_review_counts_json": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "swap_candidate_count": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000007",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "label": "Austrian ATM",
+            "fiat_currency": "EUR",
+            "tax_country": "at",
+            "tax_long_term_days": 9223372036854775807,
+            "gains_algorithm": "FIFO",
+            "require_coarse_review": 0,
+            "bitcoin_rail_carrying_value": 1,
+            "cost_basis_pool_scope": "global",
+            "journal_input_version": 0,
+            "last_processed_input_version": 0,
+            "required_journal_semantics_version": 0,
+            "journal_semantics_version": 0,
+            "last_processed_at": null,
+            "last_processed_tx_count": 0,
+            "ownership_review_counts_json": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "swap_candidate_count": null
+          }
+        ],
+        "accounts": [
+          {
+            "id": "00000000-0000-4000-8000-000000000004",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000003",
+            "code": "treasury",
+            "label": "Treasury",
+            "account_type": "asset",
+            "asset": "BTC",
+            "created_at": "2026-01-01T00:00:00Z"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000006",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000005",
+            "code": "treasury",
+            "label": "Treasury",
+            "account_type": "asset",
+            "asset": "BTC",
+            "created_at": "2026-01-01T00:00:00Z"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000008",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000007",
+            "code": "treasury",
+            "label": "Treasury",
+            "account_type": "asset",
+            "asset": "BTC",
+            "created_at": "2026-01-01T00:00:00Z"
+          }
+        ],
+        "wallets": [
+          {
+            "id": "w",
+            "workspace_id": "00000000-0000-4000-8000-000000000001",
+            "profile_id": "00000000-0000-4000-8000-000000000003",
+            "account_id": null,
+            "label": "Cold",
+            "kind": "address",
+            "config_json": "{}",
+            "created_at": "t"
+          }
+        ],
+        "transactions": [],
+        "custody_components": [],
+        "custody_component_legs": [],
+        "custody_gap_reviews": [],
+        "custody_gap_review_transactions": [],
+        "custody_component_purge_authorizations": [],
+        "saved_views": [],
+        "attachments": [],
+        "ai_chat_sessions": [],
+        "ai_chat_messages": [],
+        "rates_cache": [],
+        "rates_checked_minutes": [],
+        "loan_legs": [],
+        "book_reset_transactions": [],
+        "book_reset_parked_rows": [],
+        "context": [
+          {
+            "key": "context_profile",
+            "value": "00000000-0000-4000-8000-000000000003"
+          },
+          {
+            "key": "context_workspace",
+            "value": "00000000-0000-4000-8000-000000000001"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "ui.workspace.delete",
+      "args": {},
+      "sql": "",
+      "ok": {
+        "deleted": true,
+        "workspace": {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "label": "Renamed"
+        },
+        "removed": {
+          "profiles": 3,
+          "wallets": 1,
+          "transactions": 0
+        }
+      },
+      "state": {
+        "workspaces": [
+          {
+            "id": "00000000-0000-4000-8000-000000000009",
+            "label": "Other",
+            "created_at": "2026-01-01T00:00:00Z"
+          }
+        ],
+        "profiles": [],
+        "accounts": [],
+        "wallets": [],
+        "transactions": [],
+        "custody_components": [],
+        "custody_component_legs": [],
+        "custody_gap_reviews": [],
+        "custody_gap_review_transactions": [],
+        "custody_component_purge_authorizations": [],
+        "saved_views": [],
+        "attachments": [],
+        "ai_chat_sessions": [],
+        "ai_chat_messages": [],
+        "rates_cache": [],
+        "rates_checked_minutes": [],
+        "loan_legs": [],
+        "book_reset_transactions": [],
+        "book_reset_parked_rows": [],
+        "context": []
+      }
+    },
+    {
+      "kind": "ui.profiles.snapshot",
+      "args": {},
+      "sql": "",
+      "ok": {
+        "workspaces": [
+          {
+            "id": "00000000-0000-4000-8000-000000000009",
+            "name": "Other",
+            "currency": "Mixed",
+            "jurisdiction": "Generic",
+            "created": "2026-01-01",
+            "profiles": []
+          }
+        ],
+        "activeWorkspaceId": "",
+        "activeProfileId": ""
+      },
+      "state": {
+        "workspaces": [
+          {
+            "id": "00000000-0000-4000-8000-000000000009",
+            "label": "Other",
+            "created_at": "2026-01-01T00:00:00Z"
+          }
+        ],
+        "profiles": [],
+        "accounts": [],
+        "wallets": [],
+        "transactions": [],
+        "custody_components": [],
+        "custody_component_legs": [],
+        "custody_gap_reviews": [],
+        "custody_gap_review_transactions": [],
+        "custody_component_purge_authorizations": [],
+        "saved_views": [],
+        "attachments": [],
+        "ai_chat_sessions": [],
+        "ai_chat_messages": [],
+        "rates_cache": [],
+        "rates_checked_minutes": [],
+        "loan_legs": [],
+        "book_reset_transactions": [],
+        "book_reset_parked_rows": [],
+        "context": []
+      }
+    }
+  ]
+}

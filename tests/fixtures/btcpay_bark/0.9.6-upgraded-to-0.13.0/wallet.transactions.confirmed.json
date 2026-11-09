@@ -1,0 +1,271 @@
+{
+  "body": [
+    {
+      "amount": "0.001496",
+      "blockHash": null,
+      "blockHeight": null,
+      "comment": "",
+      "confirmations": 1,
+      "fee": "0.000004",
+      "id": "10-639297562360838720",
+      "kind": "lightning-receive",
+      "labels": {
+        "invoice": {
+          "ref": "Rj6vnjnQvHAQfECvKG6JQh",
+          "text": "invoice",
+          "type": "invoice"
+        }
+      },
+      "movementId": 10,
+      "outpoint": null,
+      "paymentHash": "188337eca9a430ace5f95a6746a23b47408426a91996e53b60a719a884635db4",
+      "status": "Confirmed",
+      "timestamp": 1794159436,
+      "transactionHash": null
+    },
+    {
+      "amount": "0.0004",
+      "blockHash": null,
+      "blockHeight": null,
+      "comment": "",
+      "confirmations": 1,
+      "fee": "0",
+      "id": "9-639297562290852639:31811d535bc68b2b77a409c3818cb61a3e5ca6f57fff95d0ef20681066d0121a:0",
+      "kind": "ark-receive",
+      "labels": {
+        "invoice": {
+          "ref": "GmbHBYcV9TCudNwKY3PRZF",
+          "text": "invoice",
+          "type": "invoice"
+        }
+      },
+      "movementId": 9,
+      "outpoint": "31811d535bc68b2b77a409c3818cb61a3e5ca6f57fff95d0ef20681066d0121a:0",
+      "paymentHash": null,
+      "status": "Confirmed",
+      "timestamp": 1794159429,
+      "transactionHash": "31811d535bc68b2b77a409c3818cb61a3e5ca6f57fff95d0ef20681066d0121a"
+    },
+    {
+      "amount": "0.0016",
+      "blockHash": null,
+      "blockHeight": null,
+      "comment": "",
+      "confirmations": 1,
+      "fee": "0",
+      "id": "9-639297562290852639:eb34b740645f4c51e384f1edf716d0d5a644e18e7940cac0b998520a48ff6d6f:0",
+      "kind": "ark-receive",
+      "labels": {
+        "invoice": {
+          "ref": "GmbHBYcV9TCudNwKY3PRZF",
+          "text": "invoice",
+          "type": "invoice"
+        }
+      },
+      "movementId": 9,
+      "outpoint": "eb34b740645f4c51e384f1edf716d0d5a644e18e7940cac0b998520a48ff6d6f:0",
+      "paymentHash": null,
+      "status": "Confirmed",
+      "timestamp": 1794159429,
+      "transactionHash": "eb34b740645f4c51e384f1edf716d0d5a644e18e7940cac0b998520a48ff6d6f"
+    },
+    {
+      "amount": "-0.00025175",
+      "blockHash": null,
+      "blockHeight": null,
+      "comment": "",
+      "confirmations": 1,
+      "fee": "0.00000175",
+      "id": "8-639297555011120527",
+      "kind": "lightning-send",
+      "labels": {},
+      "movementId": 8,
+      "outpoint": null,
+      "paymentHash": "ac06877a02765f7df83f1a9012dbe34cfc9c193da2d10823268f169ca620fc62",
+      "status": "Confirmed",
+      "timestamp": 1794158701,
+      "transactionHash": null
+    },
+    {
+      "amount": "-0.0004",
+      "blockHash": null,
+      "blockHeight": null,
+      "comment": "",
+      "confirmations": 1,
+      "fee": "0",
+      "id": "7-639297555005228415",
+      "kind": "ark-send",
+      "labels": {},
+      "movementId": 7,
+      "outpoint": null,
+      "paymentHash": null,
+      "status": "Confirmed",
+      "timestamp": 1794158700,
+      "transactionHash": null
+    },
+    {
+      "amount": "0.0002984",
+      "blockHash": null,
+      "blockHeight": null,
+      "comment": "",
+      "confirmations": 1,
+      "fee": "0.0000016",
+      "id": "6-639297554798984797",
+      "kind": "lightning-receive",
+      "labels": {},
+      "movementId": 6,
+      "outpoint": null,
+      "paymentHash": "72c8d435f467e241747879259f17632f4ea3cb65870d19ad6f09b83b8bb0029c",
+      "status": "Confirmed",
+      "timestamp": 1794158679,
+      "transactionHash": null
+    },
+    {
+      "amount": "0.0011966",
+      "blockHash": null,
+      "blockHeight": null,
+      "comment": "",
+      "confirmations": 1,
+      "fee": "0.0000034",
+      "id": "5-639297554758708092",
+      "kind": "lightning-receive",
+      "labels": {
+        "invoice": {
+          "ref": "QAp19F7XqAnS81j1cPkWNu",
+          "text": "invoice",
+          "type": "invoice"
+        }
+      },
+      "movementId": 5,
+      "outpoint": null,
+      "paymentHash": "f57869b6c37c21dfaac5bdb8b2496d3bcabaccb3f0d10a44ba631f6f5057bd63",
+      "status": "Confirmed",
+      "timestamp": 1794158675,
+      "transactionHash": null
+    },
+    {
+      "amount": "0.001496",
+      "blockHash": null,
+      "blockHeight": null,
+      "comment": "",
+      "confirmations": 1,
+      "fee": "0.000004",
+      "id": "4-639297554719381294",
+      "kind": "lightning-receive",
+      "labels": {
+        "invoice": {
+          "ref": "37mRWRWtZsxmVdNf22EsJc",
+          "text": "invoice",
+          "type": "invoice"
+        }
+      },
+      "movementId": 4,
+      "outpoint": null,
+      "paymentHash": "875f25f7118748dceb934344375b5adbc906b3fa86016c2df1de998a2e2d6646",
+      "status": "Confirmed",
+      "timestamp": 1794158671,
+      "transactionHash": null
+    },
+    {
+      "amount": "0.0005",
+      "blockHash": null,
+      "blockHeight": null,
+      "comment": "",
+      "confirmations": 1,
+      "fee": "0",
+      "id": "3-639297554509202502:f5355df7a1572c98e4c2daf3a9632db5e79954a58be0e7f4c848ee801ca1cf92:0",
+      "kind": "ark-receive",
+      "labels": {},
+      "movementId": 3,
+      "outpoint": "f5355df7a1572c98e4c2daf3a9632db5e79954a58be0e7f4c848ee801ca1cf92:0",
+      "paymentHash": null,
+      "status": "Confirmed",
+      "timestamp": 1794158650,
+      "transactionHash": "f5355df7a1572c98e4c2daf3a9632db5e79954a58be0e7f4c848ee801ca1cf92"
+    },
+    {
+      "amount": "0.002",
+      "blockHash": null,
+      "blockHeight": null,
+      "comment": "",
+      "confirmations": 1,
+      "fee": "0",
+      "id": "2-639297554470744861:db3c6a6fc01c9989e1bf16b979e5b2f18954dd3eeec4f8689960fb151ea0be36:0",
+      "kind": "ark-receive",
+      "labels": {
+        "invoice": {
+          "ref": "6CV5Yy4JCsfYxU6wKuY4XH",
+          "text": "invoice",
+          "type": "invoice"
+        }
+      },
+      "movementId": 2,
+      "outpoint": "db3c6a6fc01c9989e1bf16b979e5b2f18954dd3eeec4f8689960fb151ea0be36:0",
+      "paymentHash": null,
+      "status": "Confirmed",
+      "timestamp": 1794158647,
+      "transactionHash": "db3c6a6fc01c9989e1bf16b979e5b2f18954dd3eeec4f8689960fb151ea0be36"
+    },
+    {
+      "amount": "-0.00001313",
+      "blockHash": "3f7e69ebe8062ce66ad5cc8cf222b20f3465470a3342f5044b73278fcd635936",
+      "blockHeight": 113,
+      "comment": "",
+      "confirmations": 8,
+      "fee": "0.00001313",
+      "id": "1-639297554165983444",
+      "kind": "board",
+      "labels": {},
+      "movementId": 1,
+      "outpoint": null,
+      "paymentHash": null,
+      "status": "Confirmed",
+      "timestamp": 1794158616,
+      "transactionHash": "fc071adc6b8e33ba7e7aa8b40f9aff52685397e16874744233ec7d39ac7aec60"
+    },
+    {
+      "amount": "0.02",
+      "blockHash": "3865ce4764eea3ed1d7771b24bd9dd24651f966d2e16134d821c93848a7346a2",
+      "blockHeight": 112,
+      "comment": "",
+      "confirmations": 9,
+      "fee": null,
+      "id": "tx:8e4daf27bad9e2d0622adc8ae52f89681cd7655aa4f1ce85e6e380b09aacd899",
+      "kind": "onchain-receive",
+      "labels": {},
+      "movementId": null,
+      "outpoint": null,
+      "paymentHash": null,
+      "status": "Confirmed",
+      "timestamp": 1794158587,
+      "transactionHash": "8e4daf27bad9e2d0622adc8ae52f89681cd7655aa4f1ce85e6e380b09aacd899"
+    },
+    {
+      "amount": "0.005",
+      "blockHash": "3865ce4764eea3ed1d7771b24bd9dd24651f966d2e16134d821c93848a7346a2",
+      "blockHeight": 112,
+      "comment": "",
+      "confirmations": 9,
+      "fee": null,
+      "id": "tx:5d8458bc913f25e3ba9df0b36a20d321bad5061e4f7bf7696477ad1482e493f4",
+      "kind": "onchain-receive",
+      "labels": {},
+      "movementId": null,
+      "outpoint": null,
+      "paymentHash": null,
+      "status": "Confirmed",
+      "timestamp": 1794158587,
+      "transactionHash": "5d8458bc913f25e3ba9df0b36a20d321bad5061e4f7bf7696477ad1482e493f4"
+    }
+  ],
+  "request": {
+    "key": "read_only",
+    "method": "GET",
+    "path": "/api/v1/stores/{storeId}/payment-methods/BTC-ARK/wallet/transactions?statusFilter=Confirmed",
+    "permissions": [
+      "btcpay.store.canviewstoresettings",
+      "btcpay.store.canviewwallet"
+    ]
+  },
+  "status": 200
+}

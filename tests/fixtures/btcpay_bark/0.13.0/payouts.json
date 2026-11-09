@@ -1,0 +1,55 @@
+{
+  "body": [
+    {
+      "date": 1794157805,
+      "destination": "lnbcrt120u1p40pt8dsp5a3203kzp7qxxyx6w5v2da99aal398kjs2qc6d3z6udn8p5ydq2pspp5r399yltk35agyx983kgqpxf4k4mvp7wp5us8tazkw5vnrzrert3sdqcddshxumfvfjhygrsv9uk7at5xqyjw5qcqp29qxpqysgq9yaur756css7cju0s6c7ym94zm39qdw0pzhdy6d66wwqlcn5punk5yq7nguzhcgrxp723vhht6ef49kurl73pxawwsun65220hrxeycp4rt5ev",
+      "id": "423X27Nbwrt1Mp99dp23DYk32KvA",
+      "metadata": {},
+      "originalAmount": "0.00012",
+      "originalCurrency": "BTC",
+      "paymentProof": {
+        "Id": "1c4a527d768d3a8218a78d90009935b576c0f9c1a72075f45675193188791ae3",
+        "Link": null,
+        "PaymentHash": "1c4a527d768d3a8218a78d90009935b576c0f9c1a72075f45675193188791ae3",
+        "Preimage": "dfcd5d7f3890f3b36a8c1dc99db434b1d459e03ccc78538a7a24f7743a4bd054",
+        "ProofType": "PayoutLightningBlob"
+      },
+      "payoutAmount": "0.00012",
+      "payoutCurrency": "BTC",
+      "payoutMethodId": "BTC-LN",
+      "pullPaymentId": null,
+      "revision": 0,
+      "state": "Completed"
+    },
+    {
+      "date": 1794157811,
+      "destination": "lnbcrt100u1p40pt8nsp5j5yp7cclalwhxhjfnandgjeszcp8n974luffjgl2fylkgeykwywspp57zau5nypsfz9zyauj6sj89rhha68u5f4h0n8jjtewdeq928fz7dqdqcddshxumfvfjhygrjv4n82mnyxq9z3h5qcqp29qxpqysgqj0t64fhhynqlmu0trm7pqryvpg0d7q8vqpnsruypgkdald990n6598nj48h7nhudh09jr7j57vjuqu83t8wxad0kwfxqsyvksfn6xxqp0fjy0r",
+      "id": "4Zkfmkr1rdto4XZ437aSgabUy9bv",
+      "metadata": {},
+      "originalAmount": "0.0001",
+      "originalCurrency": "BTC",
+      "paymentProof": {
+        "Id": "f0bbca4c8182445113bc96a1239477bf747e5135bbe6794979737202a8e9179a",
+        "Link": null,
+        "PaymentHash": "f0bbca4c8182445113bc96a1239477bf747e5135bbe6794979737202a8e9179a",
+        "Preimage": "c40c24b54e0b888d9e00e590853b7e9015434e0f2c36d4a33b0a8378eb514b83",
+        "ProofType": "PayoutLightningBlob"
+      },
+      "payoutAmount": "0.0001",
+      "payoutCurrency": "BTC",
+      "payoutMethodId": "BTC-LN",
+      "pullPaymentId": "4HLTHnDFnm4xWWdVgcq1X32ogJdf",
+      "revision": 0,
+      "state": "Completed"
+    }
+  ],
+  "request": {
+    "key": "payouts",
+    "method": "GET",
+    "path": "/api/v1/stores/{storeId}/payouts?includeCancelled=true",
+    "permissions": [
+      "btcpay.store.canviewpayouts"
+    ]
+  },
+  "status": 200
+}

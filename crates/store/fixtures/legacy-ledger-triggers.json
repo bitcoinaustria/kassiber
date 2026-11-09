@@ -1,0 +1,1224 @@
+{
+ "introduced": "7ce7f9b31",
+ "removed": "f36af60de",
+ "triggers": [
+  {
+   "name": "gl_accounting_task_cancellations_no_delete",
+   "table": "gl_accounting_task_cancellations",
+   "sql": "CREATE TRIGGER gl_accounting_task_cancellations_no_delete\n              BEFORE DELETE ON gl_accounting_task_cancellations BEGIN SELECT RAISE(ABORT,'accounting_task_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_accounting_task_cancellations_no_replace",
+   "table": "gl_accounting_task_cancellations",
+   "sql": "CREATE TRIGGER gl_accounting_task_cancellations_no_replace BEFORE INSERT ON gl_accounting_task_cancellations\n          WHEN EXISTS(SELECT 1 FROM gl_accounting_task_cancellations WHERE task_id=NEW.task_id)\n          BEGIN SELECT RAISE(ABORT,'accounting_task_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_accounting_task_cancellations_no_update",
+   "table": "gl_accounting_task_cancellations",
+   "sql": "CREATE TRIGGER gl_accounting_task_cancellations_no_update\n              BEFORE UPDATE ON gl_accounting_task_cancellations BEGIN SELECT RAISE(ABORT,'accounting_task_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_accounting_task_claims_no_delete",
+   "table": "gl_accounting_task_claims",
+   "sql": "CREATE TRIGGER gl_accounting_task_claims_no_delete\n              BEFORE DELETE ON gl_accounting_task_claims BEGIN SELECT RAISE(ABORT,'accounting_task_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_accounting_task_claims_no_replace",
+   "table": "gl_accounting_task_claims",
+   "sql": "CREATE TRIGGER gl_accounting_task_claims_no_replace BEFORE INSERT ON gl_accounting_task_claims\n          WHEN EXISTS(SELECT 1 FROM gl_accounting_task_claims WHERE profile_id=NEW.profile_id AND source_kind=NEW.source_kind AND source_id=NEW.source_id)\n          BEGIN SELECT RAISE(ABORT,'accounting_task_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_accounting_task_claims_no_update",
+   "table": "gl_accounting_task_claims",
+   "sql": "CREATE TRIGGER gl_accounting_task_claims_no_update\n              BEFORE UPDATE ON gl_accounting_task_claims BEGIN SELECT RAISE(ABORT,'accounting_task_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_accounting_task_evidence_assignments_no_delete",
+   "table": "gl_accounting_task_evidence_assignments",
+   "sql": "CREATE TRIGGER gl_accounting_task_evidence_assignments_no_delete\n              BEFORE DELETE ON gl_accounting_task_evidence_assignments BEGIN SELECT RAISE(ABORT,'accounting_task_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_accounting_task_evidence_assignments_no_replace",
+   "table": "gl_accounting_task_evidence_assignments",
+   "sql": "CREATE TRIGGER gl_accounting_task_evidence_assignments_no_replace BEFORE INSERT ON gl_accounting_task_evidence_assignments\n          WHEN EXISTS(SELECT 1 FROM gl_accounting_task_evidence_assignments WHERE id=NEW.id OR (profile_id=NEW.profile_id AND idempotency_key=NEW.idempotency_key) OR (previous_id IS NOT NULL AND previous_id=NEW.previous_id))\n          BEGIN SELECT RAISE(ABORT,'accounting_task_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_accounting_task_evidence_assignments_no_update",
+   "table": "gl_accounting_task_evidence_assignments",
+   "sql": "CREATE TRIGGER gl_accounting_task_evidence_assignments_no_update\n              BEFORE UPDATE ON gl_accounting_task_evidence_assignments BEGIN SELECT RAISE(ABORT,'accounting_task_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_accounting_task_receipts_no_delete",
+   "table": "gl_accounting_task_receipts",
+   "sql": "CREATE TRIGGER gl_accounting_task_receipts_no_delete\n              BEFORE DELETE ON gl_accounting_task_receipts BEGIN SELECT RAISE(ABORT,'accounting_task_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_accounting_task_receipts_no_replace",
+   "table": "gl_accounting_task_receipts",
+   "sql": "CREATE TRIGGER gl_accounting_task_receipts_no_replace BEFORE INSERT ON gl_accounting_task_receipts\n          WHEN EXISTS(SELECT 1 FROM gl_accounting_task_receipts WHERE id=NEW.id OR (profile_id=NEW.profile_id AND idempotency_key=NEW.idempotency_key))\n          BEGIN SELECT RAISE(ABORT,'accounting_task_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_accounting_task_receipts_no_update",
+   "table": "gl_accounting_task_receipts",
+   "sql": "CREATE TRIGGER gl_accounting_task_receipts_no_update\n              BEFORE UPDATE ON gl_accounting_task_receipts BEGIN SELECT RAISE(ABORT,'accounting_task_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_accounting_task_rule_revocations_no_delete",
+   "table": "gl_accounting_task_rule_revocations",
+   "sql": "CREATE TRIGGER gl_accounting_task_rule_revocations_no_delete\n              BEFORE DELETE ON gl_accounting_task_rule_revocations BEGIN SELECT RAISE(ABORT,'accounting_task_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_accounting_task_rule_revocations_no_replace",
+   "table": "gl_accounting_task_rule_revocations",
+   "sql": "CREATE TRIGGER gl_accounting_task_rule_revocations_no_replace BEFORE INSERT ON gl_accounting_task_rule_revocations\n          WHEN EXISTS(SELECT 1 FROM gl_accounting_task_rule_revocations WHERE rule_id=NEW.rule_id)\n          BEGIN SELECT RAISE(ABORT,'accounting_task_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_accounting_task_rule_revocations_no_update",
+   "table": "gl_accounting_task_rule_revocations",
+   "sql": "CREATE TRIGGER gl_accounting_task_rule_revocations_no_update\n              BEFORE UPDATE ON gl_accounting_task_rule_revocations BEGIN SELECT RAISE(ABORT,'accounting_task_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_accounting_task_rules_no_delete",
+   "table": "gl_accounting_task_rules",
+   "sql": "CREATE TRIGGER gl_accounting_task_rules_no_delete\n              BEFORE DELETE ON gl_accounting_task_rules BEGIN SELECT RAISE(ABORT,'accounting_task_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_accounting_task_rules_no_replace",
+   "table": "gl_accounting_task_rules",
+   "sql": "CREATE TRIGGER gl_accounting_task_rules_no_replace BEFORE INSERT ON gl_accounting_task_rules\n          WHEN EXISTS(SELECT 1 FROM gl_accounting_task_rules WHERE id=NEW.id OR (profile_id=NEW.profile_id AND idempotency_key=NEW.idempotency_key))\n          BEGIN SELECT RAISE(ABORT,'accounting_task_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_accounting_task_rules_no_update",
+   "table": "gl_accounting_task_rules",
+   "sql": "CREATE TRIGGER gl_accounting_task_rules_no_update\n              BEFORE UPDATE ON gl_accounting_task_rules BEGIN SELECT RAISE(ABORT,'accounting_task_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_accounting_tasks_no_delete",
+   "table": "gl_accounting_tasks",
+   "sql": "CREATE TRIGGER gl_accounting_tasks_no_delete\n              BEFORE DELETE ON gl_accounting_tasks BEGIN SELECT RAISE(ABORT,'accounting_task_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_accounting_tasks_no_replace",
+   "table": "gl_accounting_tasks",
+   "sql": "CREATE TRIGGER gl_accounting_tasks_no_replace BEFORE INSERT ON gl_accounting_tasks\n          WHEN EXISTS(SELECT 1 FROM gl_accounting_tasks WHERE id=NEW.id OR (profile_id=NEW.profile_id AND idempotency_key=NEW.idempotency_key))\n          BEGIN SELECT RAISE(ABORT,'accounting_task_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_accounting_tasks_no_update",
+   "table": "gl_accounting_tasks",
+   "sql": "CREATE TRIGGER gl_accounting_tasks_no_update\n              BEFORE UPDATE ON gl_accounting_tasks BEGIN SELECT RAISE(ABORT,'accounting_task_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_accounts_immutable_delete",
+   "table": "gl_accounts",
+   "sql": "CREATE TRIGGER gl_accounts_immutable_delete\n                BEFORE DELETE ON gl_accounts BEGIN\n                SELECT RAISE(ABORT,'accounting immutable record'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_accounts_immutable_update",
+   "table": "gl_accounts",
+   "sql": "CREATE TRIGGER gl_accounts_immutable_update\n                BEFORE UPDATE ON gl_accounts BEGIN\n                SELECT RAISE(ABORT,'accounting immutable record'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_accounts_no_replace",
+   "table": "gl_accounts",
+   "sql": "CREATE TRIGGER gl_accounts_no_replace\n            BEFORE INSERT ON gl_accounts WHEN EXISTS(SELECT 1 FROM gl_accounts WHERE profile_id=NEW.profile_id AND code=NEW.code)\n            BEGIN SELECT RAISE(ABORT,'accounting record replacement forbidden'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_ai_proposal_no_delete",
+   "table": "gl_ai_proposal_applications",
+   "sql": "CREATE TRIGGER gl_ai_proposal_no_delete\n            BEFORE DELETE ON gl_ai_proposal_applications BEGIN SELECT RAISE(ABORT,'accounting_ai_proposal_retained'); END",
+   "first_seen": "894c494b7"
+  },
+  {
+   "name": "gl_ai_proposal_no_replace",
+   "table": "gl_ai_proposal_applications",
+   "sql": "CREATE TRIGGER gl_ai_proposal_no_replace BEFORE INSERT ON gl_ai_proposal_applications\n        WHEN EXISTS(SELECT 1 FROM gl_ai_proposal_applications WHERE id=NEW.id\n            OR (profile_id=NEW.profile_id AND approval_digest=NEW.approval_digest))\n        BEGIN SELECT RAISE(ABORT,'accounting_ai_proposal_retained'); END",
+   "first_seen": "894c494b7"
+  },
+  {
+   "name": "gl_ai_proposal_no_update",
+   "table": "gl_ai_proposal_applications",
+   "sql": "CREATE TRIGGER gl_ai_proposal_no_update\n            BEFORE UPDATE ON gl_ai_proposal_applications BEGIN SELECT RAISE(ABORT,'accounting_ai_proposal_retained'); END",
+   "first_seen": "894c494b7"
+  },
+  {
+   "name": "gl_bank_allocation_budget",
+   "table": "gl_bank_allocations",
+   "sql": "CREATE TRIGGER gl_bank_allocation_budget BEFORE INSERT ON gl_bank_allocations\n        WHEN NEW.amount_minor + COALESCE((SELECT SUM(a.amount_minor) FROM gl_bank_allocations a\n          WHERE a.row_id=NEW.row_id AND NOT EXISTS (SELECT 1 FROM gl_bank_allocation_voids v WHERE v.allocation_id=a.id)),0)\n          > (SELECT abs(amount_minor) FROM gl_bank_rows WHERE id=NEW.row_id)\n        OR NEW.amount_minor + COALESCE((SELECT SUM(a.amount_minor) FROM gl_bank_allocations a\n          WHERE a.line_id=NEW.line_id AND NOT EXISTS (SELECT 1 FROM gl_bank_allocation_voids v WHERE v.allocation_id=a.id)),0)\n          > (SELECT debit_minor+credit_minor FROM gl_lines WHERE id=NEW.line_id)\n        BEGIN SELECT RAISE(ABORT,'accounting_allocation_exceeded'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_bank_allocation_scope",
+   "table": "gl_bank_allocations",
+   "sql": "CREATE TRIGGER gl_bank_allocation_scope BEFORE INSERT ON gl_bank_allocations\n        WHEN NOT EXISTS (SELECT 1 FROM gl_bank_rows r JOIN gl_bank_statements s\n          ON s.id=r.statement_id AND s.profile_id=r.profile_id JOIN gl_lines l\n          ON l.id=NEW.line_id AND l.profile_id=r.profile_id JOIN gl_entries e\n          ON e.id=l.entry_id AND e.profile_id=l.profile_id\n          WHERE r.id=NEW.row_id AND r.profile_id=NEW.profile_id AND e.status='posted'\n          AND NOT EXISTS (SELECT 1 FROM gl_entries reversal WHERE reversal.reversal_of=e.id AND reversal.status='posted')\n          AND l.account_code=s.account_code AND ((r.amount_minor>0 AND l.debit_minor>0)\n            OR (r.amount_minor<0 AND l.credit_minor>0))\n          AND NOT EXISTS (SELECT 1 FROM gl_bank_statement_voids v WHERE v.statement_id=s.id))\n        BEGIN SELECT RAISE(ABORT,'accounting_bank_scope'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_bank_allocation_voids_no_delete",
+   "table": "gl_bank_allocation_voids",
+   "sql": "CREATE TRIGGER gl_bank_allocation_voids_no_delete BEFORE DELETE ON gl_bank_allocation_voids\n                BEGIN SELECT RAISE(ABORT,'accounting_bank_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_bank_allocation_voids_no_replace",
+   "table": "gl_bank_allocation_voids",
+   "sql": "CREATE TRIGGER gl_bank_allocation_voids_no_replace BEFORE INSERT ON gl_bank_allocation_voids\n            WHEN EXISTS (SELECT 1 FROM gl_bank_allocation_voids WHERE allocation_id=NEW.allocation_id\n                OR (profile_id=NEW.profile_id AND idempotency_key=NEW.idempotency_key))\n            BEGIN SELECT RAISE(ABORT,'accounting_bank_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_bank_allocation_voids_no_update",
+   "table": "gl_bank_allocation_voids",
+   "sql": "CREATE TRIGGER gl_bank_allocation_voids_no_update BEFORE UPDATE ON gl_bank_allocation_voids\n                BEGIN SELECT RAISE(ABORT,'accounting_bank_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_bank_allocation_voids_scope",
+   "table": "gl_bank_allocation_voids",
+   "sql": "CREATE TRIGGER gl_bank_allocation_voids_scope BEFORE INSERT ON gl_bank_allocation_voids\n            WHEN NOT EXISTS (SELECT 1 FROM gl_bank_allocations WHERE id=NEW.allocation_id AND profile_id=NEW.profile_id)\n            BEGIN SELECT RAISE(ABORT,'accounting_bank_scope'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_bank_allocations_no_delete",
+   "table": "gl_bank_allocations",
+   "sql": "CREATE TRIGGER gl_bank_allocations_no_delete\n                BEFORE DELETE ON gl_bank_allocations BEGIN SELECT RAISE(ABORT,'accounting_bank_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_bank_allocations_no_replace",
+   "table": "gl_bank_allocations",
+   "sql": "CREATE TRIGGER gl_bank_allocations_no_replace BEFORE INSERT ON gl_bank_allocations\n            WHEN EXISTS (SELECT 1 FROM gl_bank_allocations WHERE id=NEW.id OR (profile_id=NEW.profile_id AND idempotency_key=NEW.idempotency_key))\n            BEGIN SELECT RAISE(ABORT,'accounting_bank_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_bank_allocations_no_update",
+   "table": "gl_bank_allocations",
+   "sql": "CREATE TRIGGER gl_bank_allocations_no_update\n                BEFORE UPDATE ON gl_bank_allocations BEGIN SELECT RAISE(ABORT,'accounting_bank_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_bank_control_scope",
+   "table": "gl_bank_statements",
+   "sql": "CREATE TRIGGER gl_bank_control_scope BEFORE INSERT ON gl_bank_statements\n        WHEN (NEW.control_evidence_id IS NULL AND (NEW.control_review_reason IS NOT NULL OR NEW.control_locator IS NOT NULL))\n        OR (NEW.control_evidence_id IS NOT NULL AND (\n          NEW.control_review_reason IS NULL OR length(trim(NEW.control_review_reason))=0 OR length(NEW.control_review_reason)>2000\n          OR NEW.control_locator IS NULL OR length(trim(NEW.control_locator))=0 OR length(NEW.control_locator)>1000\n          OR NEW.opening_minor IS NULL OR NEW.closing_minor IS NULL\n          OR NOT EXISTS(SELECT 1 FROM gl_evidence e WHERE e.id=NEW.control_evidence_id AND e.profile_id=NEW.profile_id)))\n        BEGIN SELECT RAISE(ABORT,'accounting_bank_control_scope'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_bank_evidence_single_source",
+   "table": "gl_bank_statements",
+   "sql": "CREATE TRIGGER gl_bank_evidence_single_source BEFORE INSERT ON gl_bank_statements\n        WHEN NEW.evidence_id IS NOT NULL AND EXISTS (SELECT 1 FROM gl_bank_statements s\n          WHERE s.profile_id=NEW.profile_id AND s.evidence_id=NEW.evidence_id\n            AND NOT EXISTS (SELECT 1 FROM gl_bank_statement_voids v WHERE v.statement_id=s.id))\n        BEGIN SELECT RAISE(ABORT,'accounting_bank_source_reused'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_bank_rows_no_delete",
+   "table": "gl_bank_rows",
+   "sql": "CREATE TRIGGER gl_bank_rows_no_delete\n                BEFORE DELETE ON gl_bank_rows BEGIN SELECT RAISE(ABORT,'accounting_bank_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_bank_rows_no_replace",
+   "table": "gl_bank_rows",
+   "sql": "CREATE TRIGGER gl_bank_rows_no_replace BEFORE INSERT ON gl_bank_rows\n            WHEN EXISTS (SELECT 1 FROM gl_bank_rows WHERE id=NEW.id OR (statement_id=NEW.statement_id AND row_id=NEW.row_id))\n            BEGIN SELECT RAISE(ABORT,'accounting_bank_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_bank_rows_no_update",
+   "table": "gl_bank_rows",
+   "sql": "CREATE TRIGGER gl_bank_rows_no_update\n                BEFORE UPDATE ON gl_bank_rows BEGIN SELECT RAISE(ABORT,'accounting_bank_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_bank_statement_voids_no_delete",
+   "table": "gl_bank_statement_voids",
+   "sql": "CREATE TRIGGER gl_bank_statement_voids_no_delete BEFORE DELETE ON gl_bank_statement_voids\n                BEGIN SELECT RAISE(ABORT,'accounting_bank_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_bank_statement_voids_no_replace",
+   "table": "gl_bank_statement_voids",
+   "sql": "CREATE TRIGGER gl_bank_statement_voids_no_replace BEFORE INSERT ON gl_bank_statement_voids\n            WHEN EXISTS (SELECT 1 FROM gl_bank_statement_voids WHERE statement_id=NEW.statement_id\n                OR (profile_id=NEW.profile_id AND idempotency_key=NEW.idempotency_key))\n            BEGIN SELECT RAISE(ABORT,'accounting_bank_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_bank_statement_voids_no_update",
+   "table": "gl_bank_statement_voids",
+   "sql": "CREATE TRIGGER gl_bank_statement_voids_no_update BEFORE UPDATE ON gl_bank_statement_voids\n                BEGIN SELECT RAISE(ABORT,'accounting_bank_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_bank_statement_voids_scope",
+   "table": "gl_bank_statement_voids",
+   "sql": "CREATE TRIGGER gl_bank_statement_voids_scope BEFORE INSERT ON gl_bank_statement_voids\n            WHEN NOT EXISTS (SELECT 1 FROM gl_bank_statements WHERE id=NEW.statement_id AND profile_id=NEW.profile_id)\n            BEGIN SELECT RAISE(ABORT,'accounting_bank_scope'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_bank_statements_no_delete",
+   "table": "gl_bank_statements",
+   "sql": "CREATE TRIGGER gl_bank_statements_no_delete\n                BEFORE DELETE ON gl_bank_statements BEGIN SELECT RAISE(ABORT,'accounting_bank_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_bank_statements_no_replace",
+   "table": "gl_bank_statements",
+   "sql": "CREATE TRIGGER gl_bank_statements_no_replace BEFORE INSERT ON gl_bank_statements\n            WHEN EXISTS (SELECT 1 FROM gl_bank_statements WHERE id=NEW.id OR (profile_id=NEW.profile_id AND account_code=NEW.account_code AND statement_id=NEW.statement_id))\n            BEGIN SELECT RAISE(ABORT,'accounting_bank_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_bank_statements_no_update",
+   "table": "gl_bank_statements",
+   "sql": "CREATE TRIGGER gl_bank_statements_no_update\n                BEFORE UPDATE ON gl_bank_statements BEGIN SELECT RAISE(ABORT,'accounting_bank_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_book_config_immutable",
+   "table": "gl_books",
+   "sql": "CREATE TRIGGER gl_book_config_immutable\n        BEFORE UPDATE ON gl_books WHEN NEW.profile_id!=OLD.profile_id OR\n        NEW.currency!=OLD.currency OR NEW.minor_unit_exponent!=OLD.minor_unit_exponent OR\n        NEW.timezone!=OLD.timezone OR NEW.entity_kind!=OLD.entity_kind OR\n        NEW.accounting_regime!=OLD.accounting_regime OR NEW.created_at!=OLD.created_at\n        BEGIN SELECT RAISE(ABORT,'accounting immutable configuration'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_book_valuations_no_delete",
+   "table": "gl_book_valuations",
+   "sql": "CREATE TRIGGER gl_book_valuations_no_delete BEFORE DELETE ON gl_book_valuations\n                BEGIN SELECT RAISE(ABORT,'accounting_valuation_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_book_valuations_no_replace",
+   "table": "gl_book_valuations",
+   "sql": "CREATE TRIGGER gl_book_valuations_no_replace BEFORE INSERT ON gl_book_valuations\n            WHEN EXISTS(SELECT 1 FROM gl_book_valuations WHERE id=NEW.id OR draft_id=NEW.draft_id OR (profile_id=NEW.profile_id AND idempotency_key=NEW.idempotency_key)) BEGIN SELECT RAISE(ABORT,'accounting_valuation_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_book_valuations_no_update",
+   "table": "gl_book_valuations",
+   "sql": "CREATE TRIGGER gl_book_valuations_no_update BEFORE UPDATE ON gl_book_valuations\n                BEGIN SELECT RAISE(ABORT,'accounting_valuation_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_books_no_replace",
+   "table": "gl_books",
+   "sql": "CREATE TRIGGER gl_books_no_replace\n            BEFORE INSERT ON gl_books WHEN EXISTS(SELECT 1 FROM gl_books WHERE profile_id=NEW.profile_id)\n            BEGIN SELECT RAISE(ABORT,'accounting record replacement forbidden'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_calculation_artifacts_no_delete",
+   "table": "gl_calculation_artifacts",
+   "sql": "CREATE TRIGGER gl_calculation_artifacts_no_delete\n            BEFORE DELETE ON gl_calculation_artifacts BEGIN\n            SELECT RAISE(ABORT,'accounting_calculation_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_calculation_artifacts_no_replace",
+   "table": "gl_calculation_artifacts",
+   "sql": "CREATE TRIGGER gl_calculation_artifacts_no_replace\n        BEFORE INSERT ON gl_calculation_artifacts WHEN EXISTS(SELECT 1 FROM gl_calculation_artifacts\n            WHERE id=NEW.id OR (profile_id=NEW.profile_id AND payload_digest=NEW.payload_digest))\n        BEGIN SELECT RAISE(ABORT,'accounting_calculation_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_calculation_artifacts_no_update",
+   "table": "gl_calculation_artifacts",
+   "sql": "CREATE TRIGGER gl_calculation_artifacts_no_update\n            BEFORE UPDATE ON gl_calculation_artifacts BEGIN\n            SELECT RAISE(ABORT,'accounting_calculation_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_cash_account_unique",
+   "table": "gl_cash_accounts",
+   "sql": "CREATE TRIGGER gl_cash_account_unique BEFORE INSERT ON gl_cash_accounts\n        WHEN EXISTS(SELECT 1 FROM gl_cash_accounts a WHERE a.profile_id=NEW.profile_id\n            AND a.account_code=NEW.account_code AND NOT EXISTS\n            (SELECT 1 FROM gl_cash_accounts_voids v WHERE v.record_id=a.id))\n        OR NOT EXISTS(SELECT 1 FROM gl_accounts a WHERE a.profile_id=NEW.profile_id\n            AND a.code=NEW.account_code AND (a.kind='asset' OR (NEW.role='loan' AND a.kind='liability')))\n        OR EXISTS(SELECT 1 FROM gl_cash_flows f JOIN gl_lines l ON l.id=f.cash_line_id\n            JOIN gl_lines o ON o.id=f.offset_line_id WHERE f.profile_id=NEW.profile_id\n            AND (l.account_code=NEW.account_code OR o.account_code=NEW.account_code)\n            AND NOT EXISTS(SELECT 1 FROM gl_cash_flows_voids v WHERE v.record_id=f.id))\n        BEGIN SELECT RAISE(ABORT,'accounting_cash_account'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_cash_account_void_dependencies",
+   "table": "gl_cash_accounts_voids",
+   "sql": "CREATE TRIGGER gl_cash_account_void_dependencies BEFORE INSERT ON gl_cash_accounts_voids\n        WHEN EXISTS(SELECT 1 FROM gl_cash_counts c WHERE c.selection_id=NEW.record_id\n            AND NOT EXISTS(SELECT 1 FROM gl_cash_counts_voids v WHERE v.record_id=c.id))\n        OR EXISTS(SELECT 1 FROM gl_cash_flows f JOIN gl_lines l ON l.id=f.cash_line_id\n            JOIN gl_lines o ON o.id=f.offset_line_id JOIN gl_cash_accounts a ON a.id=NEW.record_id\n            WHERE f.profile_id=a.profile_id AND (l.account_code=a.account_code OR o.account_code=a.account_code)\n            AND NOT EXISTS(SELECT 1 FROM gl_cash_flows_voids v WHERE v.record_id=f.id))\n        BEGIN SELECT RAISE(ABORT,'accounting_cash_account_dependencies'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_cash_accounts_no_delete",
+   "table": "gl_cash_accounts",
+   "sql": "CREATE TRIGGER gl_cash_accounts_no_delete\n                    BEFORE DELETE ON gl_cash_accounts BEGIN SELECT RAISE(ABORT,'accounting_cash_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_cash_accounts_no_replace",
+   "table": "gl_cash_accounts",
+   "sql": "CREATE TRIGGER gl_cash_accounts_no_replace BEFORE INSERT ON gl_cash_accounts\n                WHEN EXISTS(SELECT 1 FROM gl_cash_accounts WHERE id=NEW.id\n                    OR (profile_id=NEW.profile_id AND idempotency_key=NEW.idempotency_key))\n                BEGIN SELECT RAISE(ABORT,'accounting_cash_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_cash_accounts_no_update",
+   "table": "gl_cash_accounts",
+   "sql": "CREATE TRIGGER gl_cash_accounts_no_update\n                    BEFORE UPDATE ON gl_cash_accounts BEGIN SELECT RAISE(ABORT,'accounting_cash_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_cash_accounts_voids_no_delete",
+   "table": "gl_cash_accounts_voids",
+   "sql": "CREATE TRIGGER gl_cash_accounts_voids_no_delete\n                    BEFORE DELETE ON gl_cash_accounts_voids BEGIN SELECT RAISE(ABORT,'accounting_cash_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_cash_accounts_voids_no_replace",
+   "table": "gl_cash_accounts_voids",
+   "sql": "CREATE TRIGGER gl_cash_accounts_voids_no_replace BEFORE INSERT ON gl_cash_accounts_voids\n                WHEN EXISTS(SELECT 1 FROM gl_cash_accounts_voids WHERE record_id=NEW.record_id\n                    OR (profile_id=NEW.profile_id AND idempotency_key=NEW.idempotency_key))\n                BEGIN SELECT RAISE(ABORT,'accounting_cash_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_cash_accounts_voids_no_update",
+   "table": "gl_cash_accounts_voids",
+   "sql": "CREATE TRIGGER gl_cash_accounts_voids_no_update\n                    BEFORE UPDATE ON gl_cash_accounts_voids BEGIN SELECT RAISE(ABORT,'accounting_cash_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_cash_count_scope",
+   "table": "gl_cash_counts",
+   "sql": "CREATE TRIGGER gl_cash_count_scope BEFORE INSERT ON gl_cash_counts\n        WHEN NOT EXISTS(SELECT 1 FROM gl_cash_accounts a WHERE a.id=NEW.selection_id\n            AND a.profile_id=NEW.profile_id AND a.role='cash' AND a.effective_from<=NEW.count_date\n            AND NOT EXISTS(SELECT 1 FROM gl_cash_accounts_voids v WHERE v.record_id=a.id))\n        OR EXISTS(SELECT 1 FROM gl_cash_counts c WHERE c.selection_id=NEW.selection_id\n            AND c.count_date=NEW.count_date AND NOT EXISTS(SELECT 1 FROM gl_cash_counts_voids v WHERE v.record_id=c.id))\n        BEGIN SELECT RAISE(ABORT,'accounting_cash_count_scope'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_cash_counts_no_delete",
+   "table": "gl_cash_counts",
+   "sql": "CREATE TRIGGER gl_cash_counts_no_delete\n                    BEFORE DELETE ON gl_cash_counts BEGIN SELECT RAISE(ABORT,'accounting_cash_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_cash_counts_no_replace",
+   "table": "gl_cash_counts",
+   "sql": "CREATE TRIGGER gl_cash_counts_no_replace BEFORE INSERT ON gl_cash_counts\n                WHEN EXISTS(SELECT 1 FROM gl_cash_counts WHERE id=NEW.id\n                    OR (profile_id=NEW.profile_id AND idempotency_key=NEW.idempotency_key))\n                BEGIN SELECT RAISE(ABORT,'accounting_cash_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_cash_counts_no_update",
+   "table": "gl_cash_counts",
+   "sql": "CREATE TRIGGER gl_cash_counts_no_update\n                    BEFORE UPDATE ON gl_cash_counts BEGIN SELECT RAISE(ABORT,'accounting_cash_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_cash_counts_voids_no_delete",
+   "table": "gl_cash_counts_voids",
+   "sql": "CREATE TRIGGER gl_cash_counts_voids_no_delete\n                    BEFORE DELETE ON gl_cash_counts_voids BEGIN SELECT RAISE(ABORT,'accounting_cash_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_cash_counts_voids_no_replace",
+   "table": "gl_cash_counts_voids",
+   "sql": "CREATE TRIGGER gl_cash_counts_voids_no_replace BEFORE INSERT ON gl_cash_counts_voids\n                WHEN EXISTS(SELECT 1 FROM gl_cash_counts_voids WHERE record_id=NEW.record_id\n                    OR (profile_id=NEW.profile_id AND idempotency_key=NEW.idempotency_key))\n                BEGIN SELECT RAISE(ABORT,'accounting_cash_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_cash_counts_voids_no_update",
+   "table": "gl_cash_counts_voids",
+   "sql": "CREATE TRIGGER gl_cash_counts_voids_no_update\n                    BEFORE UPDATE ON gl_cash_counts_voids BEGIN SELECT RAISE(ABORT,'accounting_cash_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_cash_flow_cash_line_id_budget",
+   "table": "gl_cash_flows",
+   "sql": "CREATE TRIGGER gl_cash_flow_cash_line_id_budget BEFORE INSERT ON gl_cash_flows\n            WHEN NEW.amount_minor > (SELECT debit_minor+credit_minor FROM gl_lines WHERE id=NEW.cash_line_id)\n                - COALESCE((SELECT SUM(f.amount_minor) FROM gl_cash_flows f\n                    WHERE (f.cash_line_id=NEW.cash_line_id OR f.offset_line_id=NEW.cash_line_id)\n                    AND NOT EXISTS(SELECT 1 FROM gl_cash_flows_voids v WHERE v.record_id=f.id)),0)\n            BEGIN SELECT RAISE(ABORT,'accounting_cash_allocation_exceeded'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_cash_flow_offset_line_id_budget",
+   "table": "gl_cash_flows",
+   "sql": "CREATE TRIGGER gl_cash_flow_offset_line_id_budget BEFORE INSERT ON gl_cash_flows\n            WHEN NEW.amount_minor > (SELECT debit_minor+credit_minor FROM gl_lines WHERE id=NEW.offset_line_id)\n                - COALESCE((SELECT SUM(f.amount_minor) FROM gl_cash_flows f\n                    WHERE (f.cash_line_id=NEW.offset_line_id OR f.offset_line_id=NEW.offset_line_id)\n                    AND NOT EXISTS(SELECT 1 FROM gl_cash_flows_voids v WHERE v.record_id=f.id)),0)\n            BEGIN SELECT RAISE(ABORT,'accounting_cash_allocation_exceeded'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_cash_flow_scope",
+   "table": "gl_cash_flows",
+   "sql": "CREATE TRIGGER gl_cash_flow_scope BEFORE INSERT ON gl_cash_flows\n        WHEN NOT EXISTS(SELECT 1 FROM gl_lines l JOIN gl_entries e ON e.id=l.entry_id\n            JOIN gl_lines o ON o.id=NEW.offset_line_id AND o.entry_id=e.id AND o.profile_id=e.profile_id\n            JOIN gl_cash_accounts a ON a.profile_id=l.profile_id AND a.account_code=l.account_code\n            WHERE l.id=NEW.cash_line_id AND l.profile_id=NEW.profile_id AND e.status='posted'\n            AND e.entry_kind='normal' AND a.role IN ('cash','bank') AND a.effective_from<=e.entry_date\n            AND NOT EXISTS(SELECT 1 FROM gl_cash_accounts_voids v WHERE v.record_id=a.id)\n            AND ((l.debit_minor>0 AND o.credit_minor>0) OR (l.credit_minor>0 AND o.debit_minor>0))\n            AND (NEW.classification='non_result' OR (o.account_kind!='equity'\n                AND NOT EXISTS(SELECT 1 FROM gl_cash_accounts b WHERE b.profile_id=o.profile_id\n                    AND b.account_code=o.account_code AND b.effective_from<=e.entry_date\n                    AND NOT EXISTS(SELECT 1 FROM gl_cash_accounts_voids v WHERE v.record_id=b.id))\n                AND ((NEW.classification='income' AND l.debit_minor>0)\n                    OR (NEW.classification='expenditure' AND l.credit_minor>0)))))\n        BEGIN SELECT RAISE(ABORT,'accounting_cash_flow_scope'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_cash_flows_no_delete",
+   "table": "gl_cash_flows",
+   "sql": "CREATE TRIGGER gl_cash_flows_no_delete\n                    BEFORE DELETE ON gl_cash_flows BEGIN SELECT RAISE(ABORT,'accounting_cash_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_cash_flows_no_replace",
+   "table": "gl_cash_flows",
+   "sql": "CREATE TRIGGER gl_cash_flows_no_replace BEFORE INSERT ON gl_cash_flows\n                WHEN EXISTS(SELECT 1 FROM gl_cash_flows WHERE id=NEW.id\n                    OR (profile_id=NEW.profile_id AND idempotency_key=NEW.idempotency_key))\n                BEGIN SELECT RAISE(ABORT,'accounting_cash_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_cash_flows_no_update",
+   "table": "gl_cash_flows",
+   "sql": "CREATE TRIGGER gl_cash_flows_no_update\n                    BEFORE UPDATE ON gl_cash_flows BEGIN SELECT RAISE(ABORT,'accounting_cash_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_cash_flows_voids_no_delete",
+   "table": "gl_cash_flows_voids",
+   "sql": "CREATE TRIGGER gl_cash_flows_voids_no_delete\n                    BEFORE DELETE ON gl_cash_flows_voids BEGIN SELECT RAISE(ABORT,'accounting_cash_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_cash_flows_voids_no_replace",
+   "table": "gl_cash_flows_voids",
+   "sql": "CREATE TRIGGER gl_cash_flows_voids_no_replace BEFORE INSERT ON gl_cash_flows_voids\n                WHEN EXISTS(SELECT 1 FROM gl_cash_flows_voids WHERE record_id=NEW.record_id\n                    OR (profile_id=NEW.profile_id AND idempotency_key=NEW.idempotency_key))\n                BEGIN SELECT RAISE(ABORT,'accounting_cash_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_cash_flows_voids_no_update",
+   "table": "gl_cash_flows_voids",
+   "sql": "CREATE TRIGGER gl_cash_flows_voids_no_update\n                    BEFORE UPDATE ON gl_cash_flows_voids BEGIN SELECT RAISE(ABORT,'accounting_cash_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_entries_no_replace",
+   "table": "gl_entries",
+   "sql": "CREATE TRIGGER gl_entries_no_replace\n            BEFORE INSERT ON gl_entries WHEN EXISTS(SELECT 1 FROM gl_entries WHERE id=NEW.id OR (profile_id=NEW.profile_id AND idempotency_key=NEW.idempotency_key))\n            BEGIN SELECT RAISE(ABORT,'accounting record replacement forbidden'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_entry_insert_draft",
+   "table": "gl_entries",
+   "sql": "CREATE TRIGGER gl_entry_insert_draft\n        BEFORE INSERT ON gl_entries WHEN NEW.status!='draft'\n        BEGIN SELECT RAISE(ABORT,'accounting entries must start as drafts'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_evidence_chunk_no_replace",
+   "table": "gl_evidence_upload_chunks",
+   "sql": "CREATE TRIGGER gl_evidence_chunk_no_replace BEFORE INSERT ON gl_evidence_upload_chunks\n        WHEN EXISTS (SELECT 1 FROM gl_evidence_upload_chunks WHERE upload_id=NEW.upload_id AND offset=NEW.offset)\n        BEGIN SELECT RAISE(ABORT,'accounting_upload_immutable'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_evidence_chunk_no_update",
+   "table": "gl_evidence_upload_chunks",
+   "sql": "CREATE TRIGGER gl_evidence_chunk_no_update BEFORE UPDATE ON gl_evidence_upload_chunks\n        BEGIN SELECT RAISE(ABORT,'accounting_upload_immutable'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_evidence_document_no_replace",
+   "table": "external_documents",
+   "sql": "CREATE TRIGGER gl_evidence_document_no_replace\n        BEFORE INSERT ON external_documents WHEN EXISTS\n        (SELECT 1 FROM gl_evidence WHERE source_document_id=NEW.id)\n        BEGIN SELECT RAISE(ABORT,'accounting_evidence_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_evidence_document_retained",
+   "table": "external_documents",
+   "sql": "CREATE TRIGGER gl_evidence_document_retained\n        BEFORE DELETE ON external_documents WHEN EXISTS\n        (SELECT 1 FROM gl_evidence WHERE source_document_id=OLD.id)\n        BEGIN SELECT RAISE(ABORT,'accounting_evidence_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_evidence_document_scope",
+   "table": "gl_evidence",
+   "sql": "CREATE TRIGGER gl_evidence_document_scope\n        BEFORE INSERT ON gl_evidence WHEN NEW.source_document_id IS NOT NULL\n        AND NOT EXISTS (SELECT 1 FROM external_documents WHERE id=NEW.source_document_id\n            AND profile_id=NEW.profile_id)\n        BEGIN SELECT RAISE(ABORT,'accounting_evidence_scope'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_evidence_document_scope_retained",
+   "table": "external_documents",
+   "sql": "CREATE TRIGGER gl_evidence_document_scope_retained\n        BEFORE UPDATE ON external_documents WHEN (NEW.id!=OLD.id OR NEW.profile_id!=OLD.profile_id)\n        AND EXISTS (SELECT 1 FROM gl_evidence WHERE source_document_id=OLD.id)\n        BEGIN SELECT RAISE(ABORT,'accounting_evidence_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_evidence_extractions_no_delete",
+   "table": "gl_evidence_extractions",
+   "sql": "CREATE TRIGGER gl_evidence_extractions_no_delete\n                BEFORE DELETE ON gl_evidence_extractions BEGIN SELECT RAISE(ABORT,'accounting_evidence_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_evidence_extractions_no_replace",
+   "table": "gl_evidence_extractions",
+   "sql": "CREATE TRIGGER gl_evidence_extractions_no_replace\n            BEFORE INSERT ON gl_evidence_extractions WHEN EXISTS(SELECT 1 FROM gl_evidence_extractions WHERE id=NEW.id)\n            BEGIN SELECT RAISE(ABORT,'accounting_evidence_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_evidence_extractions_no_update",
+   "table": "gl_evidence_extractions",
+   "sql": "CREATE TRIGGER gl_evidence_extractions_no_update\n                BEFORE UPDATE ON gl_evidence_extractions BEGIN SELECT RAISE(ABORT,'accounting_evidence_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_evidence_field_reviews_no_delete",
+   "table": "gl_evidence_field_reviews",
+   "sql": "CREATE TRIGGER gl_evidence_field_reviews_no_delete\n                BEFORE DELETE ON gl_evidence_field_reviews BEGIN SELECT RAISE(ABORT,'accounting_evidence_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_evidence_field_reviews_no_replace",
+   "table": "gl_evidence_field_reviews",
+   "sql": "CREATE TRIGGER gl_evidence_field_reviews_no_replace\n            BEFORE INSERT ON gl_evidence_field_reviews WHEN EXISTS(SELECT 1 FROM gl_evidence_field_reviews WHERE id=NEW.id)\n            BEGIN SELECT RAISE(ABORT,'accounting_evidence_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_evidence_field_reviews_no_update",
+   "table": "gl_evidence_field_reviews",
+   "sql": "CREATE TRIGGER gl_evidence_field_reviews_no_update\n                BEFORE UPDATE ON gl_evidence_field_reviews BEGIN SELECT RAISE(ABORT,'accounting_evidence_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_evidence_no_delete",
+   "table": "gl_evidence",
+   "sql": "CREATE TRIGGER gl_evidence_no_delete\n            BEFORE DELETE ON gl_evidence BEGIN\n            SELECT RAISE(ABORT,'accounting_evidence_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_evidence_no_replace",
+   "table": "gl_evidence",
+   "sql": "CREATE TRIGGER gl_evidence_no_replace\n        BEFORE INSERT ON gl_evidence WHEN EXISTS (SELECT 1 FROM gl_evidence WHERE id=NEW.id)\n        BEGIN SELECT RAISE(ABORT,'accounting_evidence_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_evidence_no_update",
+   "table": "gl_evidence",
+   "sql": "CREATE TRIGGER gl_evidence_no_update\n            BEFORE UPDATE ON gl_evidence BEGIN\n            SELECT RAISE(ABORT,'accounting_evidence_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_evidence_upload_no_replace",
+   "table": "gl_evidence_uploads",
+   "sql": "CREATE TRIGGER gl_evidence_upload_no_replace BEFORE INSERT ON gl_evidence_uploads\n        WHEN EXISTS (SELECT 1 FROM gl_evidence_uploads WHERE id=NEW.id OR\n          (profile_id=NEW.profile_id AND idempotency_key=NEW.idempotency_key))\n        BEGIN SELECT RAISE(ABORT,'accounting_upload_immutable'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_evidence_upload_no_rewrite",
+   "table": "gl_evidence_uploads",
+   "sql": "CREATE TRIGGER gl_evidence_upload_no_rewrite BEFORE UPDATE ON gl_evidence_uploads\n        WHEN OLD.evidence_id IS NOT NULL OR NEW.id!=OLD.id OR NEW.profile_id!=OLD.profile_id\n          OR NEW.name!=OLD.name OR NEW.media_type!=OLD.media_type OR NEW.total_bytes!=OLD.total_bytes\n          OR NEW.content_sha256!=OLD.content_sha256 OR NEW.idempotency_key!=OLD.idempotency_key\n          OR NEW.source_document_id IS NOT OLD.source_document_id\n          OR NOT EXISTS (SELECT 1 FROM gl_evidence WHERE id=NEW.evidence_id AND profile_id=OLD.profile_id\n             AND content_sha256=OLD.content_sha256 AND byte_length=OLD.total_bytes)\n        BEGIN SELECT RAISE(ABORT,'accounting_upload_immutable'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_evidence_upload_retained",
+   "table": "gl_evidence_uploads",
+   "sql": "CREATE TRIGGER gl_evidence_upload_retained BEFORE DELETE ON gl_evidence_uploads\n        WHEN OLD.evidence_id IS NOT NULL BEGIN SELECT RAISE(ABORT,'accounting_evidence_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_evidence_upload_scope",
+   "table": "gl_evidence_uploads",
+   "sql": "CREATE TRIGGER gl_evidence_upload_scope BEFORE INSERT ON gl_evidence_uploads\n        WHEN NEW.source_document_id IS NOT NULL AND NOT EXISTS\n        (SELECT 1 FROM external_documents WHERE id=NEW.source_document_id AND profile_id=NEW.profile_id)\n        BEGIN SELECT RAISE(ABORT,'accounting_evidence_scope'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_lines_no_replace",
+   "table": "gl_lines",
+   "sql": "CREATE TRIGGER gl_lines_no_replace\n            BEFORE INSERT ON gl_lines WHEN EXISTS(SELECT 1 FROM gl_lines WHERE id=NEW.id OR (entry_id=NEW.entry_id AND position=NEW.position))\n            BEGIN SELECT RAISE(ABORT,'accounting record replacement forbidden'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_open_item_active_document",
+   "table": "gl_open_items",
+   "sql": "CREATE TRIGGER gl_open_item_active_document BEFORE INSERT ON gl_open_items\n        WHEN EXISTS (SELECT 1 FROM gl_open_items i WHERE i.profile_id=NEW.profile_id\n          AND i.direction=NEW.direction AND COALESCE((SELECT r.document_ref FROM gl_open_item_revisions r\n            WHERE r.item_id=i.id AND r.profile_id=i.profile_id ORDER BY r.revision DESC LIMIT 1),i.document_ref)=NEW.document_ref AND NOT EXISTS\n          (SELECT 1 FROM gl_open_item_voids v WHERE v.item_id=i.id))\n        BEGIN SELECT RAISE(ABORT,'accounting_open_item_duplicate'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_open_item_allocation_voids_no_delete",
+   "table": "gl_open_item_allocation_voids",
+   "sql": "CREATE TRIGGER gl_open_item_allocation_voids_no_delete BEFORE DELETE ON gl_open_item_allocation_voids\n                BEGIN SELECT RAISE(ABORT,'accounting_schedule_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_open_item_allocation_voids_no_replace",
+   "table": "gl_open_item_allocation_voids",
+   "sql": "CREATE TRIGGER gl_open_item_allocation_voids_no_replace BEFORE INSERT ON gl_open_item_allocation_voids\n            WHEN EXISTS (SELECT 1 FROM gl_open_item_allocation_voids WHERE allocation_id=NEW.allocation_id\n                OR (profile_id=NEW.profile_id AND idempotency_key=NEW.idempotency_key))\n            BEGIN SELECT RAISE(ABORT,'accounting_schedule_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_open_item_allocation_voids_no_update",
+   "table": "gl_open_item_allocation_voids",
+   "sql": "CREATE TRIGGER gl_open_item_allocation_voids_no_update BEFORE UPDATE ON gl_open_item_allocation_voids\n                BEGIN SELECT RAISE(ABORT,'accounting_schedule_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_open_item_allocation_voids_scope",
+   "table": "gl_open_item_allocation_voids",
+   "sql": "CREATE TRIGGER gl_open_item_allocation_voids_scope BEFORE INSERT ON gl_open_item_allocation_voids\n            WHEN NOT EXISTS (SELECT 1 FROM gl_open_item_allocations WHERE id=NEW.allocation_id AND profile_id=NEW.profile_id)\n            BEGIN SELECT RAISE(ABORT,'accounting_schedule_scope'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_open_item_allocations_no_delete",
+   "table": "gl_open_item_allocations",
+   "sql": "CREATE TRIGGER gl_open_item_allocations_no_delete\n                BEFORE DELETE ON gl_open_item_allocations BEGIN SELECT RAISE(ABORT,'accounting_schedule_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_open_item_allocations_no_replace",
+   "table": "gl_open_item_allocations",
+   "sql": "CREATE TRIGGER gl_open_item_allocations_no_replace BEFORE INSERT ON gl_open_item_allocations\n            WHEN EXISTS (SELECT 1 FROM gl_open_item_allocations WHERE id=NEW.id OR (profile_id=NEW.profile_id AND idempotency_key=NEW.idempotency_key))\n            BEGIN SELECT RAISE(ABORT,'accounting_schedule_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_open_item_allocations_no_update",
+   "table": "gl_open_item_allocations",
+   "sql": "CREATE TRIGGER gl_open_item_allocations_no_update\n                BEFORE UPDATE ON gl_open_item_allocations BEGIN SELECT RAISE(ABORT,'accounting_schedule_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_open_item_origin_scope",
+   "table": "gl_open_items",
+   "sql": "CREATE TRIGGER gl_open_item_origin_scope BEFORE INSERT ON gl_open_items\n        WHEN NOT EXISTS (SELECT 1 FROM gl_lines l JOIN gl_entries e ON e.id=l.entry_id AND e.profile_id=l.profile_id\n          WHERE l.id=NEW.origin_line_id AND l.profile_id=NEW.profile_id AND e.status='posted'\n          AND NOT EXISTS (SELECT 1 FROM gl_entries reversal WHERE reversal.reversal_of=e.id AND reversal.status='posted')\n          AND ((NEW.direction='receivable' AND l.account_kind='asset' AND l.debit_minor=NEW.amount_minor)\n            OR (NEW.direction='payable' AND l.account_kind='liability' AND l.credit_minor=NEW.amount_minor)))\n        BEGIN SELECT RAISE(ABORT,'accounting_schedule_scope'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_open_item_revision_scope",
+   "table": "gl_open_item_revisions",
+   "sql": "CREATE TRIGGER gl_open_item_revision_scope BEFORE INSERT ON gl_open_item_revisions\n        WHEN NOT EXISTS (SELECT 1 FROM gl_open_items i JOIN gl_lines l ON l.id=i.origin_line_id AND l.profile_id=i.profile_id\n          JOIN gl_entries e ON e.id=l.entry_id AND e.profile_id=l.profile_id WHERE i.id=NEW.item_id AND i.profile_id=NEW.profile_id\n          AND e.entry_date<=NEW.effective_date AND NOT EXISTS(SELECT 1 FROM gl_open_item_voids v WHERE v.item_id=i.id))\n        OR NEW.revision!=COALESCE((SELECT MAX(revision)+1 FROM gl_open_item_revisions WHERE item_id=NEW.item_id),1)\n        OR EXISTS(SELECT 1 FROM gl_open_item_revisions r WHERE r.item_id=NEW.item_id AND\n          (r.effective_date>NEW.effective_date OR (r.revision=NEW.revision-1 AND r.payload_digest!=NEW.previous_digest)))\n        OR EXISTS(SELECT 1 FROM gl_periods p WHERE p.profile_id=NEW.profile_id AND p.state!='open' AND p.end_date>=NEW.effective_date)\n        OR EXISTS(SELECT 1 FROM gl_open_items i WHERE i.profile_id=NEW.profile_id AND i.id!=NEW.item_id\n          AND i.direction=(SELECT direction FROM gl_open_items WHERE id=NEW.item_id)\n          AND COALESCE((SELECT r.document_ref FROM gl_open_item_revisions r WHERE r.item_id=i.id AND r.profile_id=i.profile_id\n              ORDER BY r.revision DESC LIMIT 1),i.document_ref)=NEW.document_ref\n          AND NOT EXISTS(SELECT 1 FROM gl_open_item_voids v WHERE v.item_id=i.id))\n        BEGIN SELECT RAISE(ABORT,'accounting_item_revision_integrity'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_open_item_revisions_no_delete",
+   "table": "gl_open_item_revisions",
+   "sql": "CREATE TRIGGER gl_open_item_revisions_no_delete\n                BEFORE DELETE ON gl_open_item_revisions BEGIN SELECT RAISE(ABORT,'accounting_schedule_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_open_item_revisions_no_replace",
+   "table": "gl_open_item_revisions",
+   "sql": "CREATE TRIGGER gl_open_item_revisions_no_replace BEFORE INSERT ON gl_open_item_revisions\n            WHEN EXISTS (SELECT 1 FROM gl_open_item_revisions WHERE id=NEW.id OR (item_id=NEW.item_id AND revision=NEW.revision) OR (profile_id=NEW.profile_id AND idempotency_key=NEW.idempotency_key))\n            BEGIN SELECT RAISE(ABORT,'accounting_schedule_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_open_item_revisions_no_update",
+   "table": "gl_open_item_revisions",
+   "sql": "CREATE TRIGGER gl_open_item_revisions_no_update\n                BEFORE UPDATE ON gl_open_item_revisions BEGIN SELECT RAISE(ABORT,'accounting_schedule_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_open_item_voids_no_delete",
+   "table": "gl_open_item_voids",
+   "sql": "CREATE TRIGGER gl_open_item_voids_no_delete BEFORE DELETE ON gl_open_item_voids\n                BEGIN SELECT RAISE(ABORT,'accounting_schedule_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_open_item_voids_no_replace",
+   "table": "gl_open_item_voids",
+   "sql": "CREATE TRIGGER gl_open_item_voids_no_replace BEFORE INSERT ON gl_open_item_voids\n            WHEN EXISTS (SELECT 1 FROM gl_open_item_voids WHERE item_id=NEW.item_id\n                OR (profile_id=NEW.profile_id AND idempotency_key=NEW.idempotency_key))\n            BEGIN SELECT RAISE(ABORT,'accounting_schedule_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_open_item_voids_no_update",
+   "table": "gl_open_item_voids",
+   "sql": "CREATE TRIGGER gl_open_item_voids_no_update BEFORE UPDATE ON gl_open_item_voids\n                BEGIN SELECT RAISE(ABORT,'accounting_schedule_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_open_item_voids_scope",
+   "table": "gl_open_item_voids",
+   "sql": "CREATE TRIGGER gl_open_item_voids_scope BEFORE INSERT ON gl_open_item_voids\n            WHEN NOT EXISTS (SELECT 1 FROM gl_open_items WHERE id=NEW.item_id AND profile_id=NEW.profile_id)\n            BEGIN SELECT RAISE(ABORT,'accounting_schedule_scope'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_open_items_no_delete",
+   "table": "gl_open_items",
+   "sql": "CREATE TRIGGER gl_open_items_no_delete\n                BEFORE DELETE ON gl_open_items BEGIN SELECT RAISE(ABORT,'accounting_schedule_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_open_items_no_replace",
+   "table": "gl_open_items",
+   "sql": "CREATE TRIGGER gl_open_items_no_replace BEFORE INSERT ON gl_open_items\n            WHEN EXISTS (SELECT 1 FROM gl_open_items WHERE id=NEW.id OR (profile_id=NEW.profile_id AND origin_line_id=NEW.origin_line_id))\n            BEGIN SELECT RAISE(ABORT,'accounting_schedule_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_open_items_no_update",
+   "table": "gl_open_items",
+   "sql": "CREATE TRIGGER gl_open_items_no_update\n                BEFORE UPDATE ON gl_open_items BEGIN SELECT RAISE(ABORT,'accounting_schedule_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_period_dates_immutable",
+   "table": "gl_periods",
+   "sql": "CREATE TRIGGER gl_period_dates_immutable\n        BEFORE UPDATE ON gl_periods WHEN NEW.profile_id!=OLD.profile_id OR NEW.id!=OLD.id\n        OR NEW.start_date!=OLD.start_date OR NEW.end_date!=OLD.end_date\n        BEGIN SELECT RAISE(ABORT,'accounting fiscal interval immutable'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_period_events_immutable_delete",
+   "table": "gl_period_events",
+   "sql": "CREATE TRIGGER gl_period_events_immutable_delete\n                BEFORE DELETE ON gl_period_events BEGIN\n                SELECT RAISE(ABORT,'accounting immutable record'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_period_events_immutable_update",
+   "table": "gl_period_events",
+   "sql": "CREATE TRIGGER gl_period_events_immutable_update\n                BEFORE UPDATE ON gl_period_events BEGIN\n                SELECT RAISE(ABORT,'accounting immutable record'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_period_events_no_replace",
+   "table": "gl_period_events",
+   "sql": "CREATE TRIGGER gl_period_events_no_replace\n            BEFORE INSERT ON gl_period_events WHEN EXISTS(SELECT 1 FROM gl_period_events WHERE id=NEW.id OR (profile_id=NEW.profile_id AND period_id=NEW.period_id AND revision=NEW.revision))\n            BEGIN SELECT RAISE(ABORT,'accounting record replacement forbidden'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_periods_no_replace",
+   "table": "gl_periods",
+   "sql": "CREATE TRIGGER gl_periods_no_replace\n            BEFORE INSERT ON gl_periods WHEN EXISTS(SELECT 1 FROM gl_periods WHERE profile_id=NEW.profile_id AND id=NEW.id)\n            BEGIN SELECT RAISE(ABORT,'accounting record replacement forbidden'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_post_validate",
+   "table": "gl_entries",
+   "sql": "CREATE TRIGGER gl_post_validate\n        BEFORE UPDATE OF status ON gl_entries WHEN NEW.status='posted' BEGIN\n        SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM gl_periods p\n            WHERE p.profile_id=NEW.profile_id AND p.id=NEW.period_id AND p.state='open'\n            AND NEW.entry_date BETWEEN p.start_date AND p.end_date)\n            THEN RAISE(ABORT,'accounting period not open') END;\n        SELECT CASE WHEN (SELECT COUNT(*) FROM gl_lines WHERE entry_id=NEW.id)<2\n            OR (SELECT COALESCE(SUM(debit_minor),0) FROM gl_lines WHERE entry_id=NEW.id)\n            !=(SELECT COALESCE(SUM(credit_minor),0) FROM gl_lines WHERE entry_id=NEW.id)\n            THEN RAISE(ABORT,'accounting unbalanced posting') END;\n        SELECT CASE WHEN EXISTS(SELECT 1 FROM gl_lines l LEFT JOIN gl_accounts a\n            ON a.profile_id=l.profile_id AND a.code=l.account_code WHERE l.entry_id=NEW.id\n            AND (l.profile_id!=NEW.profile_id OR a.code IS NULL OR l.account_name!=a.name\n            OR l.account_kind!=a.kind)) THEN RAISE(ABORT,'accounting invalid chart snapshot') END;\n        END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_posted_entry_delete",
+   "table": "gl_entries",
+   "sql": "CREATE TRIGGER gl_posted_entry_delete\n            BEFORE DELETE ON gl_entries WHEN OLD.status='posted'\n            BEGIN SELECT RAISE(ABORT,'accounting posted entry immutable'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_posted_entry_update",
+   "table": "gl_entries",
+   "sql": "CREATE TRIGGER gl_posted_entry_update\n            BEFORE UPDATE ON gl_entries WHEN OLD.status='posted'\n            BEGIN SELECT RAISE(ABORT,'accounting posted entry immutable'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_posted_line_delete",
+   "table": "gl_lines",
+   "sql": "CREATE TRIGGER gl_posted_line_delete\n            BEFORE DELETE ON gl_lines WHEN EXISTS(SELECT 1 FROM gl_entries WHERE id=OLD.entry_id AND status='posted')\n            BEGIN SELECT RAISE(ABORT,'accounting posted lines immutable'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_posted_line_insert",
+   "table": "gl_lines",
+   "sql": "CREATE TRIGGER gl_posted_line_insert\n            BEFORE INSERT ON gl_lines WHEN EXISTS(SELECT 1 FROM gl_entries WHERE id=NEW.entry_id AND status='posted')\n            BEGIN SELECT RAISE(ABORT,'accounting posted lines immutable'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_posted_line_update",
+   "table": "gl_lines",
+   "sql": "CREATE TRIGGER gl_posted_line_update\n            BEFORE UPDATE ON gl_lines WHEN EXISTS(SELECT 1 FROM gl_entries WHERE id=NEW.entry_id AND status='posted') OR EXISTS(SELECT 1 FROM gl_entries WHERE id=OLD.entry_id AND status='posted')\n            BEGIN SELECT RAISE(ABORT,'accounting posted lines immutable'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_posting_batches_no_delete",
+   "table": "gl_posting_batches",
+   "sql": "CREATE TRIGGER gl_posting_batches_no_delete\n            BEFORE DELETE ON gl_posting_batches BEGIN SELECT RAISE(ABORT,'accounting_posting_batch_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_posting_batches_no_replace",
+   "table": "gl_posting_batches",
+   "sql": "CREATE TRIGGER gl_posting_batches_no_replace BEFORE INSERT ON gl_posting_batches\n        WHEN EXISTS(SELECT 1 FROM gl_posting_batches WHERE id=NEW.id OR (profile_id=NEW.profile_id AND idempotency_key=NEW.idempotency_key))\n        BEGIN SELECT RAISE(ABORT,'accounting_posting_batch_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_posting_batches_no_update",
+   "table": "gl_posting_batches",
+   "sql": "CREATE TRIGGER gl_posting_batches_no_update\n            BEFORE UPDATE ON gl_posting_batches BEGIN SELECT RAISE(ABORT,'accounting_posting_batch_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_projection_event_once",
+   "table": "gl_projection_proposals",
+   "sql": "CREATE TRIGGER gl_projection_event_once BEFORE INSERT ON gl_projection_proposals\n        WHEN EXISTS(SELECT 1 FROM gl_projection_proposals p WHERE p.profile_id=NEW.profile_id AND p.event_id=NEW.event_id\n            AND NOT EXISTS(SELECT 1 FROM gl_projection_voids v WHERE v.proposal_id=p.id))\n        BEGIN SELECT RAISE(ABORT,'accounting_projection_duplicate'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_projection_policies_no_delete",
+   "table": "gl_projection_policies",
+   "sql": "CREATE TRIGGER gl_projection_policies_no_delete BEFORE DELETE ON gl_projection_policies\n                BEGIN SELECT RAISE(ABORT,'accounting_projection_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_projection_policies_no_replace",
+   "table": "gl_projection_policies",
+   "sql": "CREATE TRIGGER gl_projection_policies_no_replace BEFORE INSERT ON gl_projection_policies\n            WHEN EXISTS(SELECT 1 FROM gl_projection_policies WHERE id=NEW.id OR (profile_id=NEW.profile_id AND payload_digest=NEW.payload_digest))\n            BEGIN SELECT RAISE(ABORT,'accounting_projection_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_projection_policies_no_update",
+   "table": "gl_projection_policies",
+   "sql": "CREATE TRIGGER gl_projection_policies_no_update BEFORE UPDATE ON gl_projection_policies\n                BEGIN SELECT RAISE(ABORT,'accounting_projection_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_projection_proposals_no_delete",
+   "table": "gl_projection_proposals",
+   "sql": "CREATE TRIGGER gl_projection_proposals_no_delete BEFORE DELETE ON gl_projection_proposals\n                BEGIN SELECT RAISE(ABORT,'accounting_projection_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_projection_proposals_no_replace",
+   "table": "gl_projection_proposals",
+   "sql": "CREATE TRIGGER gl_projection_proposals_no_replace BEFORE INSERT ON gl_projection_proposals\n            WHEN EXISTS(SELECT 1 FROM gl_projection_proposals WHERE id=NEW.id OR draft_id=NEW.draft_id OR (profile_id=NEW.profile_id AND idempotency_key=NEW.idempotency_key))\n            BEGIN SELECT RAISE(ABORT,'accounting_projection_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_projection_proposals_no_update",
+   "table": "gl_projection_proposals",
+   "sql": "CREATE TRIGGER gl_projection_proposals_no_update BEFORE UPDATE ON gl_projection_proposals\n                BEGIN SELECT RAISE(ABORT,'accounting_projection_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_projection_publications_no_delete",
+   "table": "gl_projection_publications",
+   "sql": "CREATE TRIGGER gl_projection_publications_no_delete BEFORE DELETE ON gl_projection_publications\n                BEGIN SELECT RAISE(ABORT,'accounting_projection_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_projection_publications_no_replace",
+   "table": "gl_projection_publications",
+   "sql": "CREATE TRIGGER gl_projection_publications_no_replace BEFORE INSERT ON gl_projection_publications\n            WHEN EXISTS(SELECT 1 FROM gl_projection_publications WHERE proposal_id=NEW.proposal_id)\n            BEGIN SELECT RAISE(ABORT,'accounting_projection_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_projection_publications_no_update",
+   "table": "gl_projection_publications",
+   "sql": "CREATE TRIGGER gl_projection_publications_no_update BEFORE UPDATE ON gl_projection_publications\n                BEGIN SELECT RAISE(ABORT,'accounting_projection_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_projection_voids_no_delete",
+   "table": "gl_projection_voids",
+   "sql": "CREATE TRIGGER gl_projection_voids_no_delete BEFORE DELETE ON gl_projection_voids\n                BEGIN SELECT RAISE(ABORT,'accounting_projection_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_projection_voids_no_replace",
+   "table": "gl_projection_voids",
+   "sql": "CREATE TRIGGER gl_projection_voids_no_replace BEFORE INSERT ON gl_projection_voids\n            WHEN EXISTS(SELECT 1 FROM gl_projection_voids WHERE proposal_id=NEW.proposal_id)\n            BEGIN SELECT RAISE(ABORT,'accounting_projection_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_projection_voids_no_update",
+   "table": "gl_projection_voids",
+   "sql": "CREATE TRIGGER gl_projection_voids_no_update BEFORE UPDATE ON gl_projection_voids\n                BEGIN SELECT RAISE(ABORT,'accounting_projection_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_schedule_entry_scope",
+   "table": "gl_schedule_revisions",
+   "sql": "CREATE TRIGGER gl_schedule_entry_scope BEFORE INSERT ON gl_schedule_revisions\n        WHEN NEW.entry_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM gl_entries\n          WHERE id=NEW.entry_id AND profile_id=NEW.profile_id AND status='posted')\n        BEGIN SELECT RAISE(ABORT,'accounting_schedule_scope'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_schedule_revisions_no_delete",
+   "table": "gl_schedule_revisions",
+   "sql": "CREATE TRIGGER gl_schedule_revisions_no_delete\n                BEFORE DELETE ON gl_schedule_revisions BEGIN SELECT RAISE(ABORT,'accounting_schedule_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_schedule_revisions_no_replace",
+   "table": "gl_schedule_revisions",
+   "sql": "CREATE TRIGGER gl_schedule_revisions_no_replace BEFORE INSERT ON gl_schedule_revisions\n            WHEN EXISTS (SELECT 1 FROM gl_schedule_revisions WHERE id=NEW.id OR (schedule_id=NEW.schedule_id AND revision=NEW.revision))\n            BEGIN SELECT RAISE(ABORT,'accounting_schedule_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_schedule_revisions_no_update",
+   "table": "gl_schedule_revisions",
+   "sql": "CREATE TRIGGER gl_schedule_revisions_no_update\n                BEFORE UPDATE ON gl_schedule_revisions BEGIN SELECT RAISE(ABORT,'accounting_schedule_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_schedules_no_delete",
+   "table": "gl_schedules",
+   "sql": "CREATE TRIGGER gl_schedules_no_delete\n                BEFORE DELETE ON gl_schedules BEGIN SELECT RAISE(ABORT,'accounting_schedule_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_schedules_no_replace",
+   "table": "gl_schedules",
+   "sql": "CREATE TRIGGER gl_schedules_no_replace BEFORE INSERT ON gl_schedules\n            WHEN EXISTS (SELECT 1 FROM gl_schedules WHERE id=NEW.id)\n            BEGIN SELECT RAISE(ABORT,'accounting_schedule_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_schedules_no_update",
+   "table": "gl_schedules",
+   "sql": "CREATE TRIGGER gl_schedules_no_update\n                BEFORE UPDATE ON gl_schedules BEGIN SELECT RAISE(ABORT,'accounting_schedule_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_settlement_budget",
+   "table": "gl_open_item_allocations",
+   "sql": "CREATE TRIGGER gl_settlement_budget BEFORE INSERT ON gl_open_item_allocations\n        WHEN NEW.amount_minor + COALESCE((SELECT SUM(a.amount_minor) FROM gl_open_item_allocations a\n          WHERE a.item_id=NEW.item_id AND NOT EXISTS\n            (SELECT 1 FROM gl_open_item_allocation_voids v WHERE v.allocation_id=a.id)),0)\n          > (SELECT amount_minor FROM gl_open_items WHERE id=NEW.item_id)\n        OR NEW.amount_minor + COALESCE((SELECT SUM(a.amount_minor) FROM gl_open_item_allocations a\n          WHERE a.line_id=NEW.line_id AND NOT EXISTS\n            (SELECT 1 FROM gl_open_item_allocation_voids v WHERE v.allocation_id=a.id)),0)\n          > (SELECT debit_minor+credit_minor FROM gl_lines WHERE id=NEW.line_id)\n        BEGIN SELECT RAISE(ABORT,'accounting_allocation_exceeded'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_settlement_scope",
+   "table": "gl_open_item_allocations",
+   "sql": "CREATE TRIGGER gl_settlement_scope BEFORE INSERT ON gl_open_item_allocations\n        WHEN NOT EXISTS (SELECT 1 FROM gl_open_items i JOIN gl_lines o ON o.id=i.origin_line_id\n          AND o.profile_id=i.profile_id JOIN gl_lines l ON l.id=NEW.line_id AND l.profile_id=i.profile_id\n          JOIN gl_entries e ON e.id=l.entry_id AND e.profile_id=l.profile_id\n          WHERE i.id=NEW.item_id AND i.profile_id=NEW.profile_id AND e.status='posted'\n            AND NOT EXISTS (SELECT 1 FROM gl_entries reversal WHERE reversal.reversal_of=e.id AND reversal.status='posted')\n            AND l.account_code=o.account_code AND ((i.direction='receivable' AND l.credit_minor>0)\n              OR (i.direction='payable' AND l.debit_minor>0)) AND NOT EXISTS\n            (SELECT 1 FROM gl_open_item_voids v WHERE v.item_id=i.id))\n        BEGIN SELECT RAISE(ABORT,'accounting_schedule_scope'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_source_binding_voids_no_delete",
+   "table": "gl_source_binding_voids",
+   "sql": "CREATE TRIGGER gl_source_binding_voids_no_delete BEFORE DELETE ON gl_source_binding_voids\n                BEGIN SELECT RAISE(ABORT,'accounting_source_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_source_binding_voids_no_replace",
+   "table": "gl_source_binding_voids",
+   "sql": "CREATE TRIGGER gl_source_binding_voids_no_replace BEFORE INSERT ON gl_source_binding_voids\n            WHEN EXISTS(SELECT 1 FROM gl_source_binding_voids WHERE binding_id=NEW.binding_id OR (profile_id=NEW.profile_id AND idempotency_key=NEW.idempotency_key))\n            BEGIN SELECT RAISE(ABORT,'accounting_source_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_source_binding_voids_no_update",
+   "table": "gl_source_binding_voids",
+   "sql": "CREATE TRIGGER gl_source_binding_voids_no_update BEFORE UPDATE ON gl_source_binding_voids\n                BEGIN SELECT RAISE(ABORT,'accounting_source_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_source_bindings_no_delete",
+   "table": "gl_source_bindings",
+   "sql": "CREATE TRIGGER gl_source_bindings_no_delete BEFORE DELETE ON gl_source_bindings\n                BEGIN SELECT RAISE(ABORT,'accounting_source_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_source_bindings_no_replace",
+   "table": "gl_source_bindings",
+   "sql": "CREATE TRIGGER gl_source_bindings_no_replace BEFORE INSERT ON gl_source_bindings\n            WHEN EXISTS(SELECT 1 FROM gl_source_bindings WHERE id=NEW.id OR (profile_id=NEW.profile_id AND idempotency_key=NEW.idempotency_key))\n            BEGIN SELECT RAISE(ABORT,'accounting_source_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_source_bindings_no_update",
+   "table": "gl_source_bindings",
+   "sql": "CREATE TRIGGER gl_source_bindings_no_update BEFORE UPDATE ON gl_source_bindings\n                BEGIN SELECT RAISE(ABORT,'accounting_source_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_source_claim_overlap",
+   "table": "gl_source_claims",
+   "sql": "CREATE TRIGGER gl_source_claim_overlap BEFORE INSERT ON gl_source_claims\n        WHEN EXISTS(SELECT 1 FROM gl_source_claims c WHERE c.profile_id=NEW.profile_id\n          AND c.source_id=NEW.source_id AND c.start_atomic<NEW.end_atomic AND c.end_atomic>NEW.start_atomic\n          AND NOT EXISTS(SELECT 1 FROM gl_source_binding_voids v WHERE v.profile_id=c.profile_id AND v.binding_id=c.binding_id))\n        BEGIN SELECT RAISE(ABORT,'accounting_source_claim_overlap'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_source_claim_snapshot",
+   "table": "gl_source_claims",
+   "sql": "CREATE TRIGGER gl_source_claim_snapshot BEFORE INSERT ON gl_source_claims\n        WHEN NOT EXISTS(SELECT 1 FROM gl_source_bindings b JOIN gl_source_snapshots s\n          ON s.id=b.snapshot_id AND s.profile_id=b.profile_id,json_each(s.payload_json,'$.sources') r\n          WHERE b.id=NEW.binding_id AND b.profile_id=NEW.profile_id\n            AND json_extract(r.value,'$.source_id')=NEW.source_id\n            AND json_extract(r.value,'$.source_digest')=NEW.source_digest\n            AND json_extract(r.value,'$.unit')=NEW.unit\n            AND json_extract(r.value,'$.amount_atomic')>=NEW.end_atomic)\n        BEGIN SELECT RAISE(ABORT,'accounting_source_claim_invalid'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_source_claims_no_delete",
+   "table": "gl_source_claims",
+   "sql": "CREATE TRIGGER gl_source_claims_no_delete BEFORE DELETE ON gl_source_claims\n                BEGIN SELECT RAISE(ABORT,'accounting_source_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_source_claims_no_replace",
+   "table": "gl_source_claims",
+   "sql": "CREATE TRIGGER gl_source_claims_no_replace BEFORE INSERT ON gl_source_claims\n            WHEN EXISTS(SELECT 1 FROM gl_source_claims WHERE id=NEW.id)\n            BEGIN SELECT RAISE(ABORT,'accounting_source_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_source_claims_no_update",
+   "table": "gl_source_claims",
+   "sql": "CREATE TRIGGER gl_source_claims_no_update BEFORE UPDATE ON gl_source_claims\n                BEGIN SELECT RAISE(ABORT,'accounting_source_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_source_snapshots_no_delete",
+   "table": "gl_source_snapshots",
+   "sql": "CREATE TRIGGER gl_source_snapshots_no_delete BEFORE DELETE ON gl_source_snapshots\n                BEGIN SELECT RAISE(ABORT,'accounting_source_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_source_snapshots_no_replace",
+   "table": "gl_source_snapshots",
+   "sql": "CREATE TRIGGER gl_source_snapshots_no_replace BEFORE INSERT ON gl_source_snapshots\n            WHEN EXISTS(SELECT 1 FROM gl_source_snapshots WHERE id=NEW.id OR (profile_id=NEW.profile_id AND input_digest=NEW.input_digest))\n            BEGIN SELECT RAISE(ABORT,'accounting_source_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_source_snapshots_no_update",
+   "table": "gl_source_snapshots",
+   "sql": "CREATE TRIGGER gl_source_snapshots_no_update BEFORE UPDATE ON gl_source_snapshots\n                BEGIN SELECT RAISE(ABORT,'accounting_source_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_tax_assessment_no_replace",
+   "table": "gl_tax_workpapers",
+   "sql": "CREATE TRIGGER gl_tax_assessment_no_replace BEFORE INSERT ON gl_tax_workpapers\n        WHEN EXISTS(SELECT 1 FROM gl_tax_workpapers WHERE profile_id=NEW.profile_id AND pack_id=NEW.pack_id)\n        BEGIN SELECT RAISE(ABORT,'accounting tax replacement forbidden'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_tax_evidence_refs_immutable_delete",
+   "table": "gl_tax_evidence_refs",
+   "sql": "CREATE TRIGGER gl_tax_evidence_refs_immutable_delete BEFORE DELETE ON gl_tax_evidence_refs BEGIN SELECT RAISE(ABORT,'accounting tax record retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_tax_evidence_refs_immutable_update",
+   "table": "gl_tax_evidence_refs",
+   "sql": "CREATE TRIGGER gl_tax_evidence_refs_immutable_update BEFORE UPDATE ON gl_tax_evidence_refs BEGIN SELECT RAISE(ABORT,'accounting tax record retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_tax_evidence_refs_no_replace",
+   "table": "gl_tax_evidence_refs",
+   "sql": "CREATE TRIGGER gl_tax_evidence_refs_no_replace BEFORE INSERT ON gl_tax_evidence_refs WHEN EXISTS(SELECT 1 FROM gl_tax_evidence_refs WHERE profile_id=NEW.profile_id AND revision_id=NEW.revision_id AND evidence_id=NEW.evidence_id) BEGIN SELECT RAISE(ABORT,'accounting tax replacement forbidden'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_tax_evidence_scope",
+   "table": "gl_tax_evidence_refs",
+   "sql": "CREATE TRIGGER gl_tax_evidence_scope BEFORE INSERT ON gl_tax_evidence_refs\n        WHEN NOT EXISTS(SELECT 1 FROM gl_evidence WHERE id=NEW.evidence_id AND profile_id=NEW.profile_id)\n        BEGIN SELECT RAISE(ABORT,'accounting tax evidence scope'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_tax_final_scope",
+   "table": "gl_tax_finals",
+   "sql": "CREATE TRIGGER gl_tax_final_scope BEFORE INSERT ON gl_tax_finals\n        WHEN NOT EXISTS(SELECT 1 FROM gl_period_events e JOIN gl_tax_workpapers w ON w.profile_id=e.profile_id AND w.period_id=e.period_id\n            JOIN gl_tax_revisions r ON r.workpaper_id=w.id AND r.profile_id=w.profile_id\n            WHERE w.id=NEW.workpaper_id AND w.profile_id=NEW.profile_id AND r.id=NEW.revision_id AND e.id=NEW.close_event_id AND e.action='close')\n        BEGIN SELECT RAISE(ABORT,'accounting tax final scope'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_tax_finals_immutable_delete",
+   "table": "gl_tax_finals",
+   "sql": "CREATE TRIGGER gl_tax_finals_immutable_delete BEFORE DELETE ON gl_tax_finals BEGIN SELECT RAISE(ABORT,'accounting tax record retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_tax_finals_immutable_update",
+   "table": "gl_tax_finals",
+   "sql": "CREATE TRIGGER gl_tax_finals_immutable_update BEFORE UPDATE ON gl_tax_finals BEGIN SELECT RAISE(ABORT,'accounting tax record retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_tax_finals_no_replace",
+   "table": "gl_tax_finals",
+   "sql": "CREATE TRIGGER gl_tax_finals_no_replace BEFORE INSERT ON gl_tax_finals WHEN EXISTS(SELECT 1 FROM gl_tax_finals WHERE id=NEW.id OR (profile_id=NEW.profile_id AND workpaper_id=NEW.workpaper_id AND input_digest=NEW.input_digest)) BEGIN SELECT RAISE(ABORT,'accounting tax replacement forbidden'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_tax_line_refs_immutable_delete",
+   "table": "gl_tax_line_refs",
+   "sql": "CREATE TRIGGER gl_tax_line_refs_immutable_delete BEFORE DELETE ON gl_tax_line_refs BEGIN SELECT RAISE(ABORT,'accounting tax record retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_tax_line_refs_immutable_update",
+   "table": "gl_tax_line_refs",
+   "sql": "CREATE TRIGGER gl_tax_line_refs_immutable_update BEFORE UPDATE ON gl_tax_line_refs BEGIN SELECT RAISE(ABORT,'accounting tax record retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_tax_line_refs_no_replace",
+   "table": "gl_tax_line_refs",
+   "sql": "CREATE TRIGGER gl_tax_line_refs_no_replace BEFORE INSERT ON gl_tax_line_refs WHEN EXISTS(SELECT 1 FROM gl_tax_line_refs WHERE profile_id=NEW.profile_id AND revision_id=NEW.revision_id AND line_id=NEW.line_id) BEGIN SELECT RAISE(ABORT,'accounting tax replacement forbidden'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_tax_line_scope",
+   "table": "gl_tax_line_refs",
+   "sql": "CREATE TRIGGER gl_tax_line_scope BEFORE INSERT ON gl_tax_line_refs\n        WHEN NOT EXISTS(SELECT 1 FROM gl_lines l JOIN gl_entries e ON e.id=l.entry_id AND e.profile_id=l.profile_id\n            WHERE l.id=NEW.line_id AND l.profile_id=NEW.profile_id AND e.status='posted')\n        BEGIN SELECT RAISE(ABORT,'accounting tax line scope'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_tax_prior_refs_immutable_delete",
+   "table": "gl_tax_prior_refs",
+   "sql": "CREATE TRIGGER gl_tax_prior_refs_immutable_delete BEFORE DELETE ON gl_tax_prior_refs BEGIN SELECT RAISE(ABORT,'accounting tax record retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_tax_prior_refs_immutable_update",
+   "table": "gl_tax_prior_refs",
+   "sql": "CREATE TRIGGER gl_tax_prior_refs_immutable_update BEFORE UPDATE ON gl_tax_prior_refs BEGIN SELECT RAISE(ABORT,'accounting tax record retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_tax_prior_refs_no_replace",
+   "table": "gl_tax_prior_refs",
+   "sql": "CREATE TRIGGER gl_tax_prior_refs_no_replace BEFORE INSERT ON gl_tax_prior_refs WHEN EXISTS(SELECT 1 FROM gl_tax_prior_refs WHERE profile_id=NEW.profile_id AND revision_id=NEW.revision_id AND final_id=NEW.final_id) BEGIN SELECT RAISE(ABORT,'accounting tax replacement forbidden'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_tax_revisions_immutable_delete",
+   "table": "gl_tax_revisions",
+   "sql": "CREATE TRIGGER gl_tax_revisions_immutable_delete BEFORE DELETE ON gl_tax_revisions BEGIN SELECT RAISE(ABORT,'accounting tax record retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_tax_revisions_immutable_update",
+   "table": "gl_tax_revisions",
+   "sql": "CREATE TRIGGER gl_tax_revisions_immutable_update BEFORE UPDATE ON gl_tax_revisions BEGIN SELECT RAISE(ABORT,'accounting tax record retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_tax_revisions_no_replace",
+   "table": "gl_tax_revisions",
+   "sql": "CREATE TRIGGER gl_tax_revisions_no_replace BEFORE INSERT ON gl_tax_revisions WHEN EXISTS(SELECT 1 FROM gl_tax_revisions WHERE id=NEW.id OR (profile_id=NEW.profile_id AND workpaper_id=NEW.workpaper_id AND (revision=NEW.revision OR idempotency_key=NEW.idempotency_key))) BEGIN SELECT RAISE(ABORT,'accounting tax replacement forbidden'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_tax_workpapers_immutable_delete",
+   "table": "gl_tax_workpapers",
+   "sql": "CREATE TRIGGER gl_tax_workpapers_immutable_delete BEFORE DELETE ON gl_tax_workpapers BEGIN SELECT RAISE(ABORT,'accounting tax record retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_tax_workpapers_immutable_update",
+   "table": "gl_tax_workpapers",
+   "sql": "CREATE TRIGGER gl_tax_workpapers_immutable_update BEFORE UPDATE ON gl_tax_workpapers BEGIN SELECT RAISE(ABORT,'accounting tax record retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_tax_workpapers_no_replace",
+   "table": "gl_tax_workpapers",
+   "sql": "CREATE TRIGGER gl_tax_workpapers_no_replace BEFORE INSERT ON gl_tax_workpapers WHEN EXISTS(SELECT 1 FROM gl_tax_workpapers WHERE id=NEW.id OR (profile_id=NEW.profile_id AND (idempotency_key=NEW.idempotency_key OR (period_id=NEW.period_id AND pack_id=NEW.pack_id)))) BEGIN SELECT RAISE(ABORT,'accounting tax replacement forbidden'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_valuation_publications_no_delete",
+   "table": "gl_valuation_publications",
+   "sql": "CREATE TRIGGER gl_valuation_publications_no_delete BEFORE DELETE ON gl_valuation_publications\n                BEGIN SELECT RAISE(ABORT,'accounting_valuation_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_valuation_publications_no_replace",
+   "table": "gl_valuation_publications",
+   "sql": "CREATE TRIGGER gl_valuation_publications_no_replace BEFORE INSERT ON gl_valuation_publications\n            WHEN EXISTS(SELECT 1 FROM gl_valuation_publications WHERE valuation_id=NEW.valuation_id) BEGIN SELECT RAISE(ABORT,'accounting_valuation_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_valuation_publications_no_update",
+   "table": "gl_valuation_publications",
+   "sql": "CREATE TRIGGER gl_valuation_publications_no_update BEFORE UPDATE ON gl_valuation_publications\n                BEGIN SELECT RAISE(ABORT,'accounting_valuation_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_valuation_releases_no_delete",
+   "table": "gl_valuation_releases",
+   "sql": "CREATE TRIGGER gl_valuation_releases_no_delete BEFORE DELETE ON gl_valuation_releases\n                BEGIN SELECT RAISE(ABORT,'accounting_valuation_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_valuation_releases_no_replace",
+   "table": "gl_valuation_releases",
+   "sql": "CREATE TRIGGER gl_valuation_releases_no_replace BEFORE INSERT ON gl_valuation_releases\n            WHEN EXISTS(SELECT 1 FROM gl_valuation_releases WHERE proposal_id=NEW.proposal_id) BEGIN SELECT RAISE(ABORT,'accounting_valuation_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_valuation_releases_no_update",
+   "table": "gl_valuation_releases",
+   "sql": "CREATE TRIGGER gl_valuation_releases_no_update BEFORE UPDATE ON gl_valuation_releases\n                BEGIN SELECT RAISE(ABORT,'accounting_valuation_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_valuation_voids_no_delete",
+   "table": "gl_valuation_voids",
+   "sql": "CREATE TRIGGER gl_valuation_voids_no_delete BEFORE DELETE ON gl_valuation_voids\n                BEGIN SELECT RAISE(ABORT,'accounting_valuation_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_valuation_voids_no_replace",
+   "table": "gl_valuation_voids",
+   "sql": "CREATE TRIGGER gl_valuation_voids_no_replace BEFORE INSERT ON gl_valuation_voids\n            WHEN EXISTS(SELECT 1 FROM gl_valuation_voids WHERE valuation_id=NEW.valuation_id) BEGIN SELECT RAISE(ABORT,'accounting_valuation_retained'); END",
+   "first_seen": "7ce7f9b31"
+  },
+  {
+   "name": "gl_valuation_voids_no_update",
+   "table": "gl_valuation_voids",
+   "sql": "CREATE TRIGGER gl_valuation_voids_no_update BEFORE UPDATE ON gl_valuation_voids\n                BEGIN SELECT RAISE(ABORT,'accounting_valuation_retained'); END",
+   "first_seen": "7ce7f9b31"
+  }
+ ]
+}

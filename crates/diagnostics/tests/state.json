@@ -1,0 +1,244 @@
+{
+  "available": true,
+  "counts": {
+    "workspaces": 1,
+    "profiles": 2,
+    "accounts": 1,
+    "wallets": 2,
+    "transactions": 2,
+    "journal_entries": 2,
+    "journal_quarantines": 1,
+    "transaction_pairs": 1,
+    "direct_swap_payouts": 1,
+    "bip329_labels": 1,
+    "backends": 1,
+    "rates_cache": 2,
+    "attachments": 2
+  },
+  "profiles": {
+    "total": 2,
+    "processed": 1,
+    "stale_or_unprocessed": 1,
+    "by_tax_country": [
+      {
+        "tax_country": "at",
+        "count": 1
+      },
+      {
+        "tax_country": "us",
+        "count": 1
+      }
+    ],
+    "by_fiat_currency": [
+      {
+        "fiat_currency": "EUR",
+        "count": 1
+      },
+      {
+        "fiat_currency": "USD",
+        "count": 1
+      }
+    ],
+    "by_gains_algorithm": [
+      {
+        "gains_algorithm": "FIFO",
+        "count": 1
+      },
+      {
+        "gains_algorithm": "MOVING_AVERAGE_AT",
+        "count": 1
+      }
+    ]
+  },
+  "wallets": {
+    "total": 2,
+    "by_kind": [
+      {
+        "kind": "custom",
+        "count": 1
+      },
+      {
+        "kind": "descriptor",
+        "count": 1
+      }
+    ],
+    "by_chain_network": [
+      {
+        "chain_network": "bitcoin/mainnet",
+        "count": 1
+      },
+      {
+        "chain_network": "unspecified/unspecified",
+        "count": 1
+      }
+    ],
+    "descriptor_configured": 1,
+    "change_descriptor_configured": 1,
+    "address_lists_configured": 1,
+    "source_files_configured": 1,
+    "btcpay_sync_configured": 1,
+    "silent_payment_configured": 1,
+    "explicit_backend_configured": 1,
+    "invalid_config_rows": 1
+  },
+  "backends": {
+    "total": 11,
+    "default_backend_configured": true,
+    "by_kind": [
+      {
+        "kind": "electrum",
+        "count": 11
+      }
+    ],
+    "by_chain_network": [
+      {
+        "chain_network": "bitcoin/mainnet",
+        "count": 11
+      }
+    ],
+    "by_source": [
+      {
+        "source": "database",
+        "count": 11
+      }
+    ],
+    "by_locality": [
+      {
+        "locality": "invalid",
+        "count": 1
+      },
+      {
+        "locality": "loopback",
+        "count": 3
+      },
+      {
+        "locality": "missing",
+        "count": 1
+      },
+      {
+        "locality": "private_lan",
+        "count": 3
+      },
+      {
+        "locality": "remote",
+        "count": 2
+      },
+      {
+        "locality": "unknown",
+        "count": 1
+      }
+    ],
+    "credential_presence": {
+      "auth_header": 11,
+      "cookiefile": 11,
+      "password": 11,
+      "token": 11,
+      "username": 11
+    },
+    "tor_proxy_configured": 11
+  },
+  "transactions": {
+    "total": 2,
+    "excluded": 1,
+    "priced": 1,
+    "confirmed": 1,
+    "with_notes": 1,
+    "by_direction": [
+      {
+        "direction": "inbound",
+        "count": 1
+      },
+      {
+        "direction": "outbound",
+        "count": 1
+      }
+    ],
+    "by_asset_bucket": [
+      {
+        "asset_bucket": "BTC",
+        "count": 1
+      },
+      {
+        "asset_bucket": "other",
+        "count": 1
+      }
+    ]
+  },
+  "journals": {
+    "entries": 2,
+    "quarantines": 1,
+    "entries_by_type": [
+      {
+        "entry_type": "income",
+        "count": 1
+      },
+      {
+        "entry_type": "spend",
+        "count": 1
+      }
+    ],
+    "entries_by_asset_bucket": [
+      {
+        "asset_bucket": "BTC",
+        "count": 1
+      },
+      {
+        "asset_bucket": "other",
+        "count": 1
+      }
+    ],
+    "entries_by_at_category": [
+      {
+        "at_category": "none",
+        "count": 1
+      },
+      {
+        "at_category": "taxable",
+        "count": 1
+      }
+    ],
+    "quarantines_by_reason": [
+      {
+        "reason": "Failed <url> amount <amount>",
+        "count": 1
+      }
+    ]
+  },
+  "rates": {
+    "samples": 2,
+    "pairs": 1,
+    "sources": 1
+  },
+  "attachments": {
+    "total": 2,
+    "by_type": [
+      {
+        "attachment_type": "file",
+        "count": 1
+      },
+      {
+        "attachment_type": "url",
+        "count": 1
+      }
+    ],
+    "url_references": 2,
+    "stored_files": 1
+  },
+  "manual_pairs": {
+    "total": 1,
+    "manual_pairs": 1,
+    "direct_swap_payouts": 0,
+    "by_kind": [
+      {
+        "kind": "transfer",
+        "count": 1
+      }
+    ],
+    "by_policy": [
+      {
+        "policy": "tax-neutral",
+        "count": 1
+      }
+    ]
+  }
+}

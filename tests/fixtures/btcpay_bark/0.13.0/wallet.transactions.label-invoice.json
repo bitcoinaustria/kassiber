@@ -1,0 +1,83 @@
+{
+  "body": [
+    {
+      "amount": "0.0011966",
+      "blockHash": null,
+      "blockHeight": null,
+      "comment": "",
+      "confirmations": 1,
+      "fee": "0.0000034",
+      "id": "5-639297545866676689",
+      "kind": "lightning-receive",
+      "labels": {
+        "invoice": {
+          "ref": "E5mxtedvENirbwt55k2V1m",
+          "text": "invoice",
+          "type": "invoice"
+        }
+      },
+      "movementId": 5,
+      "outpoint": null,
+      "paymentHash": "3d8dae33184f263a00ef259b6bf304a7ba962c857e14c822e0e1d6a3a0979da7",
+      "status": "Confirmed",
+      "timestamp": 1794157786,
+      "transactionHash": null
+    },
+    {
+      "amount": "0.001496",
+      "blockHash": null,
+      "blockHeight": null,
+      "comment": "",
+      "confirmations": 1,
+      "fee": "0.000004",
+      "id": "4-639297545822394922",
+      "kind": "lightning-receive",
+      "labels": {
+        "invoice": {
+          "ref": "4kA2cCQDoB29RhTSKEMMK1",
+          "text": "invoice",
+          "type": "invoice"
+        }
+      },
+      "movementId": 4,
+      "outpoint": null,
+      "paymentHash": "0f2734d17c3aecdf5409d8c9865490391a7c77a69a1aebd75a7e7cd8a0bca5b5",
+      "status": "Confirmed",
+      "timestamp": 1794157782,
+      "transactionHash": null
+    },
+    {
+      "amount": "0.002",
+      "blockHash": null,
+      "blockHeight": null,
+      "comment": "",
+      "confirmations": 1,
+      "fee": "0",
+      "id": "2-639297545582853037:14ff40b88bc0669889748af67548c03b74c73d42933943e4a99feb98816bc006:0",
+      "kind": "ark-receive",
+      "labels": {
+        "invoice": {
+          "ref": "6zTrmwy5tNVt5gzCBmCXvy",
+          "text": "invoice",
+          "type": "invoice"
+        }
+      },
+      "movementId": 2,
+      "outpoint": "14ff40b88bc0669889748af67548c03b74c73d42933943e4a99feb98816bc006:0",
+      "paymentHash": null,
+      "status": "Confirmed",
+      "timestamp": 1794157758,
+      "transactionHash": "14ff40b88bc0669889748af67548c03b74c73d42933943e4a99feb98816bc006"
+    }
+  ],
+  "request": {
+    "key": "read_only",
+    "method": "GET",
+    "path": "/api/v1/stores/{storeId}/payment-methods/BTC-ARK/wallet/transactions?labelFilter=invoice",
+    "permissions": [
+      "btcpay.store.canviewstoresettings",
+      "btcpay.store.canviewwallet"
+    ]
+  },
+  "status": 200
+}

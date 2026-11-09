@@ -1,0 +1,378 @@
+{
+  "tables": [
+    "chain_index_clock",
+    "chain_index_dirty",
+    "profiles",
+    "custody_components",
+    "custody_component_legs",
+    "custody_component_allocations",
+    "custody_component_economic_terms",
+    "custody_component_transaction_memberships",
+    "custody_authored_evidence_snapshots",
+    "custody_component_evidence_commitments",
+    "custody_gap_reviews",
+    "custody_gap_review_relation_sets",
+    "custody_gap_review_transactions",
+    "custody_filed_report_impacts"
+  ],
+  "states": {
+    "0c673988609cc53f962dc3fd34a9c94f6a543e72027923e4815cbd416d976f38": [
+      {
+        "id": "other",
+        "workspace_id": "w",
+        "label": "Other",
+        "fiat_currency": "USD",
+        "tax_country": "generic",
+        "tax_long_term_days": 365,
+        "gains_algorithm": "FIFO",
+        "require_coarse_review": 0,
+        "bitcoin_rail_carrying_value": 1,
+        "cost_basis_pool_scope": "global",
+        "journal_input_version": 0,
+        "last_processed_input_version": 0,
+        "required_journal_semantics_version": 0,
+        "journal_semantics_version": 0,
+        "last_processed_at": null,
+        "last_processed_tx_count": 0,
+        "ownership_review_counts_json": null,
+        "created_at": "2025-01-01T00:00:00Z",
+        "swap_candidate_count": null
+      },
+      {
+        "id": "p",
+        "workspace_id": "w",
+        "label": "Book",
+        "fiat_currency": "USD",
+        "tax_country": "generic",
+        "tax_long_term_days": 365,
+        "gains_algorithm": "FIFO",
+        "require_coarse_review": 0,
+        "bitcoin_rail_carrying_value": 1,
+        "cost_basis_pool_scope": "global",
+        "journal_input_version": 0,
+        "last_processed_input_version": 0,
+        "required_journal_semantics_version": 0,
+        "journal_semantics_version": 0,
+        "last_processed_at": "2025-01-01T00:00:00Z",
+        "last_processed_tx_count": 42,
+        "ownership_review_counts_json": "{\"owned\":7}",
+        "created_at": "2025-01-01T00:00:00Z",
+        "swap_candidate_count": null
+      }
+    ],
+    "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945": [],
+    "e25e95cb618e67f53a624d333b411b957df53051e82c8433cb122fbdf06e56be": [
+      {
+        "id": 1,
+        "revision": 50021
+      }
+    ],
+    "b4055316075e20405d64697080ab632667c8b22d2b86f09fafa9ebed7333515c": [
+      {
+        "id": 1,
+        "revision": 50024
+      }
+    ]
+  },
+  "scenarios": [
+    {
+      "name": "large",
+      "sql": [
+        "INSERT INTO workspaces(id,label,created_at) VALUES('w','Main','2025-01-01T00:00:00Z')",
+        "INSERT INTO profiles(id,workspace_id,label,created_at,last_processed_at,last_processed_tx_count,ownership_review_counts_json) VALUES('p','w','Book','2025-01-01T00:00:00Z','2025-01-01T00:00:00Z',42,'{\"owned\":7}')",
+        "INSERT INTO profiles(id,workspace_id,label,created_at) VALUES('other','w','Other','2025-01-01T00:00:00Z')",
+        "INSERT INTO wallets(id,workspace_id,profile_id,label,kind,created_at) VALUES('source','w','p','source','custom','2025-01-01T00:00:00Z')",
+        "INSERT INTO wallets(id,workspace_id,profile_id,label,kind,created_at) VALUES('target','w','p','target','custom','2025-01-01T00:00:00Z')",
+        "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,amount_includes_fee,occurred_at,kind,raw_json,created_at,privacy_boundary) VALUES('out','w','p','source','fp-out','ext-out','BTC','outbound',1000,10,0,'2020-01-01T00:00:00Z','withdrawal','{}','2025-01-01T00:00:00Z','coinjoin')",
+        "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,amount_includes_fee,occurred_at,kind,raw_json,created_at,privacy_boundary) VALUES('in','w','p','target','fp-in','ext-in','BTC','inbound',900,0,0,'2021-01-01T00:00:00Z','withdrawal','{}','2025-01-01T00:00:00Z','coinjoin')",
+        "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,amount_includes_fee,occurred_at,kind,raw_json,created_at,privacy_boundary) VALUES('later','w','p','target','fp-later','ext-later','BTC','outbound',50,0,0,'2023-01-01T00:00:00Z','withdrawal','{}','2025-01-01T00:00:00Z','coinjoin')",
+        "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<50000) INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,occurred_at,kind,raw_json,created_at) SELECT 'filler-'||i,'w','p','source','filler-fp-'||i,'filler-ext-'||i,'BTC','neutral',1,0,'2019-01-01T00:00:00Z','fee','{}','2019-01-01T00:00:00Z' FROM n",
+        "DELETE FROM chain_index_dirty"
+      ],
+      "cases": [
+        {
+          "operation": "transfers.gaps.plan",
+          "args": {
+            "gap_id": "cg_ea0336cc17b9c71196c9c091",
+            "authored_source": "cli",
+            "action": "create"
+          },
+          "setup": [],
+          "profile": "p",
+          "id": "26c52331-59c5-5bed-af4d-f574f9de32fc",
+          "now": "2025-06-01T00:00:00Z",
+          "result": {
+            "action": "create",
+            "gap_id": "cg_ea0336cc17b9c71196c9c091",
+            "input_version": 0,
+            "dry_run": true,
+            "activatable": true,
+            "requires_explicit_confirmation": true,
+            "classification": null,
+            "country_tax_meaning": null,
+            "custody_state": null,
+            "new_component_revision": 1,
+            "current_component_revision": null,
+            "review_mode": "manual_weak_hint",
+            "retained_msat": 900,
+            "residual_msat": 100,
+            "fee_msat": 10,
+            "source_count": 1,
+            "destination_count": 1,
+            "warnings": [
+              "manual_review_required",
+              "weak_advisory_evidence",
+              "unresolved_residual"
+            ],
+            "filed_report_impacts": [],
+            "component_plan": {
+              "id": "9b5c70df-3a83-5a88-9cc3-f3e2728164bd",
+              "component_type": "manual_bridge",
+              "conservation_mode": "quantity",
+              "legs": [
+                {
+                  "id": "3fdcfbae-e5ea-59eb-a590-b9d5ab50f3db",
+                  "role": "source",
+                  "rail": "bitcoin",
+                  "asset": "BTC",
+                  "exposure": "bitcoin",
+                  "conservation_unit": "msat",
+                  "amount_msat": 1010,
+                  "valuation_unit": null,
+                  "valuation_amount": null
+                },
+                {
+                  "id": "f46ec143-246f-5c5a-9ee5-b807d04b3cc3",
+                  "role": "destination",
+                  "rail": "bitcoin",
+                  "asset": "BTC",
+                  "exposure": "bitcoin",
+                  "conservation_unit": "msat",
+                  "amount_msat": 900,
+                  "valuation_unit": null,
+                  "valuation_amount": null
+                },
+                {
+                  "id": "e6c5e06b-83e0-568a-8414-4e405a951e96",
+                  "role": "suspense",
+                  "rail": "untracked",
+                  "asset": "BTC",
+                  "exposure": "bitcoin",
+                  "conservation_unit": "msat",
+                  "amount_msat": 100,
+                  "valuation_unit": null,
+                  "valuation_amount": null
+                },
+                {
+                  "id": "6f971baa-d66d-5983-9c6c-f192c3dce0ed",
+                  "role": "fee",
+                  "rail": "bitcoin",
+                  "asset": "BTC",
+                  "exposure": "bitcoin",
+                  "conservation_unit": "msat",
+                  "amount_msat": 10,
+                  "valuation_unit": null,
+                  "valuation_amount": null
+                }
+              ],
+              "allocations": [
+                {
+                  "id": "fff4616a-93b5-5376-b46c-aae89c97ce55",
+                  "source_leg_id": "3fdcfbae-e5ea-59eb-a590-b9d5ab50f3db",
+                  "sink_leg_id": "f46ec143-246f-5c5a-9ee5-b807d04b3cc3",
+                  "source_amount_msat": 900,
+                  "sink_amount_msat": 900
+                },
+                {
+                  "id": "e6211807-6578-59b4-a42c-85bf4cad436b",
+                  "source_leg_id": "3fdcfbae-e5ea-59eb-a590-b9d5ab50f3db",
+                  "sink_leg_id": "e6c5e06b-83e0-568a-8414-4e405a951e96",
+                  "source_amount_msat": 100,
+                  "sink_amount_msat": 100
+                },
+                {
+                  "id": "6c70b697-5d0c-5765-84c8-a6deb1668cdb",
+                  "source_leg_id": "3fdcfbae-e5ea-59eb-a590-b9d5ab50f3db",
+                  "sink_leg_id": "6f971baa-d66d-5983-9c6c-f192c3dce0ed",
+                  "source_amount_msat": 10,
+                  "sink_amount_msat": 10
+                }
+              ],
+              "validation": {
+                "activatable": true,
+                "issues": [],
+                "warnings": []
+              }
+            }
+          },
+          "rows": {
+            "chain_index_clock": "e25e95cb618e67f53a624d333b411b957df53051e82c8433cb122fbdf06e56be",
+            "chain_index_dirty": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "profiles": "0c673988609cc53f962dc3fd34a9c94f6a543e72027923e4815cbd416d976f38",
+            "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_economic_terms": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_transaction_memberships": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_authored_evidence_snapshots": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_evidence_commitments": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_gap_reviews": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_gap_review_relation_sets": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_gap_review_transactions": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_filed_report_impacts": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+          }
+        }
+      ]
+    },
+    {
+      "name": "large-untyped",
+      "sql": [
+        "INSERT INTO workspaces(id,label,created_at) VALUES('w','Main','2025-01-01T00:00:00Z')",
+        "INSERT INTO profiles(id,workspace_id,label,created_at,last_processed_at,last_processed_tx_count,ownership_review_counts_json) VALUES('p','w','Book','2025-01-01T00:00:00Z','2025-01-01T00:00:00Z',42,'{\"owned\":7}')",
+        "INSERT INTO profiles(id,workspace_id,label,created_at) VALUES('other','w','Other','2025-01-01T00:00:00Z')",
+        "INSERT INTO wallets(id,workspace_id,profile_id,label,kind,created_at) VALUES('source','w','p','source','custom','2025-01-01T00:00:00Z')",
+        "INSERT INTO wallets(id,workspace_id,profile_id,label,kind,created_at) VALUES('target','w','p','target','custom','2025-01-01T00:00:00Z')",
+        "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,amount_includes_fee,occurred_at,kind,raw_json,created_at,privacy_boundary) VALUES('out','w','p','source','fp-out','ext-out','BTC','outbound',1000,10,0,'2020-01-01T00:00:00Z','withdrawal','{}','2025-01-01T00:00:00Z','coinjoin')",
+        "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,amount_includes_fee,occurred_at,kind,raw_json,created_at,privacy_boundary) VALUES('in','w','p','target','fp-in','ext-in','BTC','inbound',900,0,0,'2021-01-01T00:00:00Z','withdrawal','{}','2025-01-01T00:00:00Z','coinjoin')",
+        "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,amount_includes_fee,occurred_at,kind,raw_json,created_at,privacy_boundary) VALUES('later','w','p','target','fp-later','ext-later','BTC','outbound',50,0,0,'2023-01-01T00:00:00Z','withdrawal','{}','2025-01-01T00:00:00Z','coinjoin')",
+        "UPDATE transactions SET privacy_boundary=NULL",
+        "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<50000) INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,occurred_at,kind,raw_json,created_at) SELECT 'filler-'||i,'w','p','source','filler-fp-'||i,'filler-ext-'||i,'BTC','neutral',1,0,'2019-01-01T00:00:00Z','fee','{}','2019-01-01T00:00:00Z' FROM n",
+        "DELETE FROM chain_index_dirty"
+      ],
+      "cases": [
+        {
+          "operation": "transfers.gaps.plan",
+          "args": {
+            "gap_id": "cg_ea0336cc17b9c71196c9c091",
+            "authored_source": "cli",
+            "action": "create"
+          },
+          "setup": [],
+          "profile": "p",
+          "id": "98a24283-8452-5669-bdf8-d86ff1df1e97",
+          "now": "2025-06-01T00:00:00Z",
+          "result": {
+            "action": "create",
+            "gap_id": "cg_ea0336cc17b9c71196c9c091",
+            "input_version": 0,
+            "dry_run": true,
+            "activatable": true,
+            "requires_explicit_confirmation": true,
+            "classification": null,
+            "country_tax_meaning": null,
+            "custody_state": null,
+            "new_component_revision": 1,
+            "current_component_revision": null,
+            "review_mode": "manual_weak_hint",
+            "retained_msat": 900,
+            "residual_msat": 100,
+            "fee_msat": 10,
+            "source_count": 1,
+            "destination_count": 1,
+            "warnings": [
+              "manual_review_required",
+              "weak_advisory_evidence",
+              "unresolved_residual"
+            ],
+            "filed_report_impacts": [],
+            "component_plan": {
+              "id": "9b5c70df-3a83-5a88-9cc3-f3e2728164bd",
+              "component_type": "manual_bridge",
+              "conservation_mode": "quantity",
+              "legs": [
+                {
+                  "id": "3fdcfbae-e5ea-59eb-a590-b9d5ab50f3db",
+                  "role": "source",
+                  "rail": "bitcoin",
+                  "asset": "BTC",
+                  "exposure": "bitcoin",
+                  "conservation_unit": "msat",
+                  "amount_msat": 1010,
+                  "valuation_unit": null,
+                  "valuation_amount": null
+                },
+                {
+                  "id": "f46ec143-246f-5c5a-9ee5-b807d04b3cc3",
+                  "role": "destination",
+                  "rail": "bitcoin",
+                  "asset": "BTC",
+                  "exposure": "bitcoin",
+                  "conservation_unit": "msat",
+                  "amount_msat": 900,
+                  "valuation_unit": null,
+                  "valuation_amount": null
+                },
+                {
+                  "id": "e6c5e06b-83e0-568a-8414-4e405a951e96",
+                  "role": "suspense",
+                  "rail": "untracked",
+                  "asset": "BTC",
+                  "exposure": "bitcoin",
+                  "conservation_unit": "msat",
+                  "amount_msat": 100,
+                  "valuation_unit": null,
+                  "valuation_amount": null
+                },
+                {
+                  "id": "6f971baa-d66d-5983-9c6c-f192c3dce0ed",
+                  "role": "fee",
+                  "rail": "bitcoin",
+                  "asset": "BTC",
+                  "exposure": "bitcoin",
+                  "conservation_unit": "msat",
+                  "amount_msat": 10,
+                  "valuation_unit": null,
+                  "valuation_amount": null
+                }
+              ],
+              "allocations": [
+                {
+                  "id": "fff4616a-93b5-5376-b46c-aae89c97ce55",
+                  "source_leg_id": "3fdcfbae-e5ea-59eb-a590-b9d5ab50f3db",
+                  "sink_leg_id": "f46ec143-246f-5c5a-9ee5-b807d04b3cc3",
+                  "source_amount_msat": 900,
+                  "sink_amount_msat": 900
+                },
+                {
+                  "id": "e6211807-6578-59b4-a42c-85bf4cad436b",
+                  "source_leg_id": "3fdcfbae-e5ea-59eb-a590-b9d5ab50f3db",
+                  "sink_leg_id": "e6c5e06b-83e0-568a-8414-4e405a951e96",
+                  "source_amount_msat": 100,
+                  "sink_amount_msat": 100
+                },
+                {
+                  "id": "6c70b697-5d0c-5765-84c8-a6deb1668cdb",
+                  "source_leg_id": "3fdcfbae-e5ea-59eb-a590-b9d5ab50f3db",
+                  "sink_leg_id": "6f971baa-d66d-5983-9c6c-f192c3dce0ed",
+                  "source_amount_msat": 10,
+                  "sink_amount_msat": 10
+                }
+              ],
+              "validation": {
+                "activatable": true,
+                "issues": [],
+                "warnings": []
+              }
+            }
+          },
+          "rows": {
+            "chain_index_clock": "b4055316075e20405d64697080ab632667c8b22d2b86f09fafa9ebed7333515c",
+            "chain_index_dirty": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "profiles": "0c673988609cc53f962dc3fd34a9c94f6a543e72027923e4815cbd416d976f38",
+            "custody_components": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_legs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_allocations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_economic_terms": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_transaction_memberships": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_authored_evidence_snapshots": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_component_evidence_commitments": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_gap_reviews": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_gap_review_relation_sets": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_gap_review_transactions": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "custody_filed_report_impacts": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+          }
+        }
+      ]
+    }
+  ]
+}

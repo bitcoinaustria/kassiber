@@ -1,0 +1,2262 @@
+{
+  "schema": "kassiber.tax-country-vectors/1",
+  "country": "es",
+  "registry_value": "es",
+  "spec": "docs/reference/tax-country-es.md",
+  "status": "preview: not reviewed by a tax professional for this country",
+  "retrieved": "2026-11-07",
+  "currency": "EUR",
+  "timezone": "Europe/Madrid",
+  "tax_year": "calendar year, Europe/Madrid",
+  "conventions": {
+    "amounts": "decimal strings; quantities in asset units (exact multiples of 1e-11, Kassiber's msat); fiat in the country currency",
+    "times": "ISO 8601 with offset; every date rule uses the local date in `timezone`",
+    "expected": "the spec's hand-computed results, which scripts/tax-country-vectors.py check recomputes; `rp2.computed` is RP2's plugin on the same inputs"
+  },
+  "notes": "Quantities are decimal strings in asset units (Kassiber stores msat; every quantity here is an exact multiple of 1e-11). Fiat amounts are EUR decimal strings. `expected` follows the rules of the spec; `rp2.computed` is RP2's ES plugin (FIFO) on the same inputs, written by scripts/tax-country-vectors.py; `rp2.differences` explains every gap.",
+  "vectors": [
+    {
+      "id": "es-01",
+      "title": "AEAT informador example: FIFO partial lot with purchase and sale commissions",
+      "rules": [
+        "ES-R2",
+        "ES-R3",
+        "ES-R5",
+        "ES-R14"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "t1",
+          "time": "2025-06-26T10:00:00+02:00",
+          "type": "buy",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "0.09",
+          "fiat": "3000.00",
+          "fee_fiat": "60.00"
+        },
+        {
+          "id": "t2",
+          "time": "2025-07-19T10:00:00+02:00",
+          "type": "buy",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "0.22",
+          "fiat": "6000.00",
+          "fee_fiat": "120.00"
+        },
+        {
+          "id": "t3",
+          "time": "2025-11-12T10:00:00+01:00",
+          "type": "sell",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "0.22",
+          "fiat": "14046.32",
+          "fee_fiat": "280.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "t3",
+            "asset": "BTC",
+            "qty": "0.22",
+            "kind": "sale",
+            "contraprestacion": "moneda_curso_legal",
+            "valor_transmision": "13766.32",
+            "valor_adquisicion": "6676.36",
+            "ganancia": "7089.96",
+            "computable": true,
+            "lots": [
+              {
+                "lot": "t1",
+                "qty": "0.09",
+                "cost": "3060.00"
+              },
+              {
+                "lot": "t2",
+                "qty": "0.13",
+                "cost": "3616.36"
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "quarantines": [],
+        "flags": [],
+        "years": {
+          "2025": {
+            "casilla_1804": {
+              "ganancias": "7089.96",
+              "perdidas": "0.00",
+              "saldo": "7089.96"
+            },
+            "casilla_0027": "0.00",
+            "rcm_art25_2": "0.00",
+            "casilla_0304": "0.00",
+            "non_computable_losses": "0.00",
+            "ahorro_crypto_only": {
+              "rcm_offset_25pct": "0.00",
+              "prior_losses_applied": "0.00",
+              "base": "7089.96",
+              "carry_forward": {}
+            }
+          }
+        }
+      },
+      "rp2": {
+        "computed": {
+          "status": "ok",
+          "method": "fifo",
+          "gains": [
+            {
+              "event": "t3",
+              "type": "sell",
+              "asset": "BTC",
+              "lot": "t1",
+              "qty": "0.09",
+              "proceeds": "5746.22",
+              "cost_basis": "3060.00",
+              "gain": "2686.22",
+              "year": 2025
+            },
+            {
+              "event": "t3",
+              "type": "sell",
+              "asset": "BTC",
+              "lot": "t2",
+              "qty": "0.13",
+              "proceeds": "8300.10",
+              "cost_basis": "3616.36",
+              "gain": "4683.73",
+              "year": 2025
+            }
+          ],
+          "yearly": [
+            {
+              "year": 2025,
+              "asset": "BTC",
+              "type": "sell",
+              "long_term": false,
+              "proceeds": "14046.32",
+              "cost_basis": "6676.36",
+              "gain": "7369.96"
+            }
+          ],
+          "notes": []
+        },
+        "differences": [
+          "RP2 does not deduct the EUR sale commission (an OutTransaction fiat_fee never reaches proceeds): RP2 gain 7,369.96 against 7,089.96. Art. 35.2 LIRPF deducts it.",
+          "Not an RP2 difference: the AEAT informador prints 6,673.36 and 7,092.96, but 3,060.00 + 3,616.36 = 6,676.36, so the correct gain is 7,089.96."
+        ]
+      }
+    },
+    {
+      "id": "es-02",
+      "title": "FIFO is global across exchanges and wallets",
+      "rules": [
+        "ES-R3"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "t1",
+          "time": "2025-01-15T10:00:00+01:00",
+          "type": "buy",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "40000.00"
+        },
+        {
+          "id": "t2",
+          "time": "2025-03-10T10:00:00+01:00",
+          "type": "buy",
+          "wallet": "Hardware",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "60000.00"
+        },
+        {
+          "id": "t3",
+          "time": "2025-06-10T12:00:00+02:00",
+          "type": "sell",
+          "wallet": "Hardware",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "70000.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "t3",
+            "asset": "BTC",
+            "qty": "1",
+            "kind": "sale",
+            "contraprestacion": "moneda_curso_legal",
+            "valor_transmision": "70000.00",
+            "valor_adquisicion": "40000.00",
+            "ganancia": "30000.00",
+            "computable": true,
+            "lots": [
+              {
+                "lot": "t1",
+                "qty": "1",
+                "cost": "40000.00"
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "quarantines": [],
+        "flags": [],
+        "years": {
+          "2025": {
+            "casilla_1804": {
+              "ganancias": "30000.00",
+              "perdidas": "0.00",
+              "saldo": "30000.00"
+            },
+            "casilla_0027": "0.00",
+            "rcm_art25_2": "0.00",
+            "casilla_0304": "0.00",
+            "non_computable_losses": "0.00",
+            "ahorro_crypto_only": {
+              "rcm_offset_25pct": "0.00",
+              "prior_losses_applied": "0.00",
+              "base": "30000.00",
+              "carry_forward": {}
+            }
+          }
+        }
+      },
+      "rp2": {
+        "computed": {
+          "status": "ok",
+          "method": "fifo",
+          "gains": [
+            {
+              "event": "t3",
+              "type": "sell",
+              "asset": "BTC",
+              "lot": "t1",
+              "qty": "1",
+              "proceeds": "70000.00",
+              "cost_basis": "40000.00",
+              "gain": "30000.00",
+              "year": 2025
+            }
+          ],
+          "yearly": [
+            {
+              "year": 2025,
+              "asset": "BTC",
+              "type": "sell",
+              "long_term": false,
+              "proceeds": "70000.00",
+              "cost_basis": "40000.00",
+              "gain": "30000.00"
+            }
+          ],
+          "notes": []
+        },
+        "differences": [
+          "None. RP2 also pools all of the holder's wallets."
+        ]
+      }
+    },
+    {
+      "id": "es-03",
+      "title": "Permuta: the received coins are worth more than those given (art. 37.1.h)",
+      "rules": [
+        "ES-R1",
+        "ES-R4"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "t1",
+          "time": "2024-05-01T10:00:00+02:00",
+          "type": "buy",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "20000.00"
+        },
+        {
+          "id": "t2",
+          "time": "2025-02-01T10:00:00+01:00",
+          "type": "swap",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "0.5",
+          "fiat": "30000.00",
+          "in_asset": "ETH",
+          "in_quantity": "10",
+          "in_fiat": "30600.00"
+        },
+        {
+          "id": "t3",
+          "time": "2025-04-01T10:00:00+02:00",
+          "type": "sell",
+          "wallet": "Exchange",
+          "asset": "ETH",
+          "quantity": "10",
+          "fiat": "31000.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "t2",
+            "asset": "BTC",
+            "qty": "0.5",
+            "kind": "swap",
+            "contraprestacion": "otra_moneda_virtual",
+            "valor_transmision": "30600.00",
+            "valor_adquisicion": "10000.00",
+            "ganancia": "20600.00",
+            "computable": true,
+            "lots": [
+              {
+                "lot": "t1",
+                "qty": "0.5",
+                "cost": "10000.00"
+              }
+            ]
+          },
+          {
+            "event": "t3",
+            "asset": "ETH",
+            "qty": "10",
+            "kind": "sale",
+            "contraprestacion": "moneda_curso_legal",
+            "valor_transmision": "31000.00",
+            "valor_adquisicion": "30600.00",
+            "ganancia": "400.00",
+            "computable": true,
+            "lots": [
+              {
+                "lot": "t2",
+                "qty": "10",
+                "cost": "30600.00"
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "quarantines": [],
+        "flags": [],
+        "years": {
+          "2025": {
+            "casilla_1804": {
+              "ganancias": "21000.00",
+              "perdidas": "0.00",
+              "saldo": "21000.00"
+            },
+            "casilla_0027": "0.00",
+            "rcm_art25_2": "0.00",
+            "casilla_0304": "0.00",
+            "non_computable_losses": "0.00",
+            "ahorro_crypto_only": {
+              "rcm_offset_25pct": "0.00",
+              "prior_losses_applied": "0.00",
+              "base": "21000.00",
+              "carry_forward": {}
+            }
+          }
+        }
+      },
+      "rp2": {
+        "computed": {
+          "status": "ok",
+          "method": "fifo",
+          "gains": [
+            {
+              "event": "t2",
+              "type": "sell",
+              "asset": "BTC",
+              "lot": "t1",
+              "qty": "0.5",
+              "proceeds": "30000.00",
+              "cost_basis": "10000.00",
+              "gain": "20000.00",
+              "year": 2025
+            },
+            {
+              "event": "t3",
+              "type": "sell",
+              "asset": "ETH",
+              "lot": "t2:in",
+              "qty": "10",
+              "proceeds": "31000.00",
+              "cost_basis": "30600.00",
+              "gain": "400.00",
+              "year": 2025
+            }
+          ],
+          "yearly": [
+            {
+              "year": 2025,
+              "asset": "BTC",
+              "type": "sell",
+              "long_term": false,
+              "proceeds": "30000.00",
+              "cost_basis": "10000.00",
+              "gain": "20000.00"
+            },
+            {
+              "year": 2025,
+              "asset": "ETH",
+              "type": "sell",
+              "long_term": false,
+              "proceeds": "31000.00",
+              "cost_basis": "30600.00",
+              "gain": "400.00"
+            }
+          ],
+          "notes": []
+        },
+        "differences": [
+          "RP2 has no permuta rule: the BTC leg is sold at its own value 30,000 (gain 20,000 against 20,600). The ETH basis is 30,600 in both."
+        ]
+      }
+    },
+    {
+      "id": "es-04",
+      "title": "Permuta: the coins given are worth more; the received coins take that higher value as basis",
+      "rules": [
+        "ES-R4"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "t1",
+          "time": "2025-01-10T10:00:00+01:00",
+          "type": "buy",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "50000.00"
+        },
+        {
+          "id": "t2",
+          "time": "2025-03-05T10:00:00+01:00",
+          "type": "swap",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "50500.00",
+          "in_asset": "SOL",
+          "in_quantity": "2000",
+          "in_fiat": "48000.00"
+        },
+        {
+          "id": "t3",
+          "time": "2025-09-01T10:00:00+02:00",
+          "type": "sell",
+          "wallet": "Exchange",
+          "asset": "SOL",
+          "quantity": "2000",
+          "fiat": "49000.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "t2",
+            "asset": "BTC",
+            "qty": "1",
+            "kind": "swap",
+            "contraprestacion": "otra_moneda_virtual",
+            "valor_transmision": "50500.00",
+            "valor_adquisicion": "50000.00",
+            "ganancia": "500.00",
+            "computable": true,
+            "lots": [
+              {
+                "lot": "t1",
+                "qty": "1",
+                "cost": "50000.00"
+              }
+            ]
+          },
+          {
+            "event": "t3",
+            "asset": "SOL",
+            "qty": "2000",
+            "kind": "sale",
+            "contraprestacion": "moneda_curso_legal",
+            "valor_transmision": "49000.00",
+            "valor_adquisicion": "50500.00",
+            "ganancia": "-1500.00",
+            "computable": true,
+            "lots": [
+              {
+                "lot": "t2",
+                "qty": "2000",
+                "cost": "50500.00"
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "quarantines": [],
+        "flags": [],
+        "years": {
+          "2025": {
+            "casilla_1804": {
+              "ganancias": "500.00",
+              "perdidas": "1500.00",
+              "saldo": "-1000.00"
+            },
+            "casilla_0027": "0.00",
+            "rcm_art25_2": "0.00",
+            "casilla_0304": "0.00",
+            "non_computable_losses": "0.00",
+            "ahorro_crypto_only": {
+              "rcm_offset_25pct": "0.00",
+              "prior_losses_applied": "0.00",
+              "base": "0.00",
+              "carry_forward": {
+                "2025": "1000.00"
+              }
+            }
+          }
+        }
+      },
+      "rp2": {
+        "computed": {
+          "status": "ok",
+          "method": "fifo",
+          "gains": [
+            {
+              "event": "t2",
+              "type": "sell",
+              "asset": "BTC",
+              "lot": "t1",
+              "qty": "1",
+              "proceeds": "50500.00",
+              "cost_basis": "50000.00",
+              "gain": "500.00",
+              "year": 2025
+            },
+            {
+              "event": "t3",
+              "type": "sell",
+              "asset": "SOL",
+              "lot": "t2:in",
+              "qty": "2000",
+              "proceeds": "49000.00",
+              "cost_basis": "48000.00",
+              "gain": "1000.00",
+              "year": 2025
+            }
+          ],
+          "yearly": [
+            {
+              "year": 2025,
+              "asset": "BTC",
+              "type": "sell",
+              "long_term": false,
+              "proceeds": "50500.00",
+              "cost_basis": "50000.00",
+              "gain": "500.00"
+            },
+            {
+              "year": 2025,
+              "asset": "SOL",
+              "type": "sell",
+              "long_term": false,
+              "proceeds": "49000.00",
+              "cost_basis": "48000.00",
+              "gain": "1000.00"
+            }
+          ],
+          "notes": []
+        },
+        "differences": [
+          "RP2 gives SOL its own value 48,000 as basis instead of the permuta transmission value 50,500, so the SOL sale gains 1,000 instead of losing 1,500; the year nets +1,500 instead of -1,000."
+        ]
+      }
+    },
+    {
+      "id": "es-05",
+      "title": "Paying for goods with bitcoin is a permuta at the higher of the goods' and the coins' value",
+      "rules": [
+        "ES-R1",
+        "ES-R4"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "t1",
+          "time": "2024-11-01T10:00:00+01:00",
+          "type": "buy",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "0.1",
+          "fiat": "2000.00"
+        },
+        {
+          "id": "t2",
+          "time": "2025-03-15T10:00:00+01:00",
+          "type": "spend",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "0.05",
+          "fiat": "2500.00",
+          "market_value": "2450.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "t2",
+            "asset": "BTC",
+            "qty": "0.05",
+            "kind": "spend",
+            "contraprestacion": "otro_bien_o_servicio",
+            "valor_transmision": "2500.00",
+            "valor_adquisicion": "1000.00",
+            "ganancia": "1500.00",
+            "computable": true,
+            "lots": [
+              {
+                "lot": "t1",
+                "qty": "0.05",
+                "cost": "1000.00"
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "quarantines": [],
+        "flags": [],
+        "years": {
+          "2025": {
+            "casilla_1804": {
+              "ganancias": "1500.00",
+              "perdidas": "0.00",
+              "saldo": "1500.00"
+            },
+            "casilla_0027": "0.00",
+            "rcm_art25_2": "0.00",
+            "casilla_0304": "0.00",
+            "non_computable_losses": "0.00",
+            "ahorro_crypto_only": {
+              "rcm_offset_25pct": "0.00",
+              "prior_losses_applied": "0.00",
+              "base": "1500.00",
+              "carry_forward": {}
+            }
+          }
+        }
+      },
+      "rp2": {
+        "computed": {
+          "status": "ok",
+          "method": "fifo",
+          "gains": [
+            {
+              "event": "t2",
+              "type": "sell",
+              "asset": "BTC",
+              "lot": "t1",
+              "qty": "0.05",
+              "proceeds": "2450.00",
+              "cost_basis": "1000.00",
+              "gain": "1450.00",
+              "year": 2025
+            }
+          ],
+          "yearly": [
+            {
+              "year": 2025,
+              "asset": "BTC",
+              "type": "sell",
+              "long_term": false,
+              "proceeds": "2450.00",
+              "cost_basis": "1000.00",
+              "gain": "1450.00"
+            }
+          ],
+          "notes": []
+        },
+        "differences": [
+          "RP2 values the payment at the coins' market value 2,450 (gain 1,450 against 1,500); art. 37.1.h takes the higher of the two values."
+        ]
+      }
+    },
+    {
+      "id": "es-06",
+      "title": "Gifts: a gain is taxed at market value, a loss is not computable (arts. 36, 33.5.c)",
+      "rules": [
+        "ES-R1",
+        "ES-R8"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "t1",
+          "time": "2024-01-10T10:00:00+01:00",
+          "type": "buy",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "30000.00"
+        },
+        {
+          "id": "t2",
+          "time": "2024-02-10T10:00:00+01:00",
+          "type": "buy",
+          "wallet": "Exchange",
+          "asset": "ETH",
+          "quantity": "1",
+          "fiat": "3000.00"
+        },
+        {
+          "id": "t3",
+          "time": "2025-05-01T10:00:00+02:00",
+          "type": "gift_out",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "0.5",
+          "fiat": "40000.00"
+        },
+        {
+          "id": "t4",
+          "time": "2025-06-01T10:00:00+02:00",
+          "type": "gift_out",
+          "wallet": "Exchange",
+          "asset": "ETH",
+          "quantity": "1",
+          "fiat": "2000.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "t3",
+            "asset": "BTC",
+            "qty": "0.5",
+            "kind": "gift",
+            "contraprestacion": "sin_contraprestacion",
+            "valor_transmision": "40000.00",
+            "valor_adquisicion": "15000.00",
+            "ganancia": "25000.00",
+            "computable": true,
+            "lots": [
+              {
+                "lot": "t1",
+                "qty": "0.5",
+                "cost": "15000.00"
+              }
+            ]
+          },
+          {
+            "event": "t4",
+            "asset": "ETH",
+            "qty": "1",
+            "kind": "gift",
+            "contraprestacion": "sin_contraprestacion",
+            "valor_transmision": "2000.00",
+            "valor_adquisicion": "3000.00",
+            "ganancia": "-1000.00",
+            "computable": false,
+            "lots": [
+              {
+                "lot": "t2",
+                "qty": "1",
+                "cost": "3000.00"
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "quarantines": [],
+        "flags": [
+          {
+            "event": "t4",
+            "code": "es_gift_loss_not_computable"
+          }
+        ],
+        "years": {
+          "2025": {
+            "casilla_1804": {
+              "ganancias": "25000.00",
+              "perdidas": "0.00",
+              "saldo": "25000.00"
+            },
+            "casilla_0027": "0.00",
+            "rcm_art25_2": "0.00",
+            "casilla_0304": "0.00",
+            "non_computable_losses": "1000.00",
+            "ahorro_crypto_only": {
+              "rcm_offset_25pct": "0.00",
+              "prior_losses_applied": "0.00",
+              "base": "25000.00",
+              "carry_forward": {}
+            }
+          }
+        }
+      },
+      "rp2": {
+        "computed": {
+          "status": "ok",
+          "method": "fifo",
+          "gains": [
+            {
+              "event": "t3",
+              "type": "gift",
+              "asset": "BTC",
+              "lot": "t1",
+              "qty": "0.5",
+              "proceeds": "40000.00",
+              "cost_basis": "15000.00",
+              "gain": "25000.00",
+              "year": 2025
+            },
+            {
+              "event": "t4",
+              "type": "gift",
+              "asset": "ETH",
+              "lot": "t2",
+              "qty": "1",
+              "proceeds": "2000.00",
+              "cost_basis": "3000.00",
+              "gain": "-1000.00",
+              "year": 2025
+            }
+          ],
+          "yearly": [
+            {
+              "year": 2025,
+              "asset": "BTC",
+              "type": "gift",
+              "long_term": true,
+              "proceeds": "40000.00",
+              "cost_basis": "15000.00",
+              "gain": "25000.00"
+            },
+            {
+              "year": 2025,
+              "asset": "ETH",
+              "type": "gift",
+              "long_term": true,
+              "proceeds": "2000.00",
+              "cost_basis": "3000.00",
+              "gain": "-1000.00"
+            }
+          ],
+          "notes": []
+        },
+        "differences": [
+          "RP2 counts the loss on the gifted ETH (-1,000); art. 33.5.c LIRPF does not."
+        ]
+      }
+    },
+    {
+      "id": "es-07",
+      "title": "Staking rewards are capital-mobiliario yields (casilla 0027); a later loss offsets up to 25 % of them",
+      "rules": [
+        "ES-R6",
+        "ES-R7"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "t1",
+          "time": "2025-02-01T10:00:00+01:00",
+          "type": "income",
+          "subkind": "staking",
+          "wallet": "Exchange",
+          "asset": "ETH",
+          "quantity": "0.5",
+          "fiat": "1500.00"
+        },
+        {
+          "id": "t2",
+          "time": "2025-05-01T10:00:00+02:00",
+          "type": "sell",
+          "wallet": "Exchange",
+          "asset": "ETH",
+          "quantity": "0.5",
+          "fiat": "1200.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "t2",
+            "asset": "ETH",
+            "qty": "0.5",
+            "kind": "sale",
+            "contraprestacion": "moneda_curso_legal",
+            "valor_transmision": "1200.00",
+            "valor_adquisicion": "1500.00",
+            "ganancia": "-300.00",
+            "computable": true,
+            "lots": [
+              {
+                "lot": "t1",
+                "qty": "0.5",
+                "cost": "1500.00"
+              }
+            ]
+          }
+        ],
+        "income": [
+          {
+            "event": "t1",
+            "asset": "ETH",
+            "kind": "staking",
+            "casilla": "0027",
+            "base": "ahorro",
+            "value": "1500.00"
+          }
+        ],
+        "quarantines": [],
+        "flags": [],
+        "years": {
+          "2025": {
+            "casilla_1804": {
+              "ganancias": "0.00",
+              "perdidas": "300.00",
+              "saldo": "-300.00"
+            },
+            "casilla_0027": "1500.00",
+            "rcm_art25_2": "0.00",
+            "casilla_0304": "0.00",
+            "non_computable_losses": "0.00",
+            "ahorro_crypto_only": {
+              "rcm_offset_25pct": "300.00",
+              "prior_losses_applied": "0.00",
+              "base": "1200.00",
+              "carry_forward": {}
+            }
+          }
+        }
+      },
+      "rp2": {
+        "computed": {
+          "status": "ok",
+          "method": "fifo",
+          "gains": [
+            {
+              "event": "t1",
+              "type": "staking",
+              "asset": "ETH",
+              "lot": null,
+              "qty": "0.5",
+              "proceeds": "1500.00",
+              "cost_basis": "0.00",
+              "gain": "1500.00",
+              "year": 2025
+            },
+            {
+              "event": "t2",
+              "type": "sell",
+              "asset": "ETH",
+              "lot": "t1",
+              "qty": "0.5",
+              "proceeds": "1200.00",
+              "cost_basis": "1500.00",
+              "gain": "-300.00",
+              "year": 2025
+            }
+          ],
+          "yearly": [
+            {
+              "year": 2025,
+              "asset": "ETH",
+              "type": "staking",
+              "long_term": false,
+              "proceeds": "1500.00",
+              "cost_basis": "0.00",
+              "gain": "1500.00"
+            },
+            {
+              "year": 2025,
+              "asset": "ETH",
+              "type": "sell",
+              "long_term": false,
+              "proceeds": "1200.00",
+              "cost_basis": "1500.00",
+              "gain": "-300.00"
+            }
+          ],
+          "notes": []
+        },
+        "differences": [
+          "Disposal identical. RP2 lists the staking reward as a taxable event (gain 1,500) without the casilla 0027 / ahorro classification or the 25 % offset."
+        ]
+      }
+    },
+    {
+      "id": "es-08",
+      "title": "Airdrop and hobby mining are general-base gains at market value (casilla 0304) and set the basis",
+      "rules": [
+        "ES-R7"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "t1",
+          "time": "2025-01-20T10:00:00+01:00",
+          "type": "income",
+          "subkind": "airdrop",
+          "wallet": "Hot",
+          "asset": "XYZ",
+          "quantity": "100",
+          "fiat": "300.00"
+        },
+        {
+          "id": "t2",
+          "time": "2025-02-15T10:00:00+01:00",
+          "type": "income",
+          "subkind": "mining",
+          "wallet": "Hot",
+          "asset": "BTC",
+          "quantity": "0.001",
+          "fiat": "60.00"
+        },
+        {
+          "id": "t3",
+          "time": "2025-07-01T10:00:00+02:00",
+          "type": "sell",
+          "wallet": "Hot",
+          "asset": "XYZ",
+          "quantity": "100",
+          "fiat": "500.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "t3",
+            "asset": "XYZ",
+            "qty": "100",
+            "kind": "sale",
+            "contraprestacion": "moneda_curso_legal",
+            "valor_transmision": "500.00",
+            "valor_adquisicion": "300.00",
+            "ganancia": "200.00",
+            "computable": true,
+            "lots": [
+              {
+                "lot": "t1",
+                "qty": "100",
+                "cost": "300.00"
+              }
+            ]
+          }
+        ],
+        "income": [
+          {
+            "event": "t1",
+            "asset": "XYZ",
+            "kind": "airdrop",
+            "casilla": "0304",
+            "base": "general",
+            "value": "300.00"
+          },
+          {
+            "event": "t2",
+            "asset": "BTC",
+            "kind": "mining",
+            "casilla": "0304",
+            "base": "general",
+            "value": "60.00"
+          }
+        ],
+        "quarantines": [],
+        "flags": [],
+        "years": {
+          "2025": {
+            "casilla_1804": {
+              "ganancias": "200.00",
+              "perdidas": "0.00",
+              "saldo": "200.00"
+            },
+            "casilla_0027": "0.00",
+            "rcm_art25_2": "0.00",
+            "casilla_0304": "360.00",
+            "non_computable_losses": "0.00",
+            "ahorro_crypto_only": {
+              "rcm_offset_25pct": "0.00",
+              "prior_losses_applied": "0.00",
+              "base": "200.00",
+              "carry_forward": {}
+            }
+          }
+        }
+      },
+      "rp2": {
+        "computed": {
+          "status": "ok",
+          "method": "fifo",
+          "gains": [
+            {
+              "event": "t2",
+              "type": "mining",
+              "asset": "BTC",
+              "lot": null,
+              "qty": "0.001",
+              "proceeds": "60.00",
+              "cost_basis": "0.00",
+              "gain": "60.00",
+              "year": 2025
+            },
+            {
+              "event": "t1",
+              "type": "airdrop",
+              "asset": "XYZ",
+              "lot": null,
+              "qty": "100",
+              "proceeds": "300.00",
+              "cost_basis": "0.00",
+              "gain": "300.00",
+              "year": 2025
+            },
+            {
+              "event": "t3",
+              "type": "sell",
+              "asset": "XYZ",
+              "lot": "t1",
+              "qty": "100",
+              "proceeds": "500.00",
+              "cost_basis": "300.00",
+              "gain": "200.00",
+              "year": 2025
+            }
+          ],
+          "yearly": [
+            {
+              "year": 2025,
+              "asset": "BTC",
+              "type": "mining",
+              "long_term": false,
+              "proceeds": "60.00",
+              "cost_basis": "0.00",
+              "gain": "60.00"
+            },
+            {
+              "year": 2025,
+              "asset": "XYZ",
+              "type": "sell",
+              "long_term": false,
+              "proceeds": "500.00",
+              "cost_basis": "300.00",
+              "gain": "200.00"
+            },
+            {
+              "year": 2025,
+              "asset": "XYZ",
+              "type": "airdrop",
+              "long_term": false,
+              "proceeds": "300.00",
+              "cost_basis": "0.00",
+              "gain": "300.00"
+            }
+          ],
+          "notes": []
+        },
+        "differences": [
+          "Disposal identical. RP2 lists the airdrop and mining receipts as taxable events without the casilla 0304 / base general classification."
+        ]
+      }
+    },
+    {
+      "id": "es-09",
+      "title": "Lending interest is a capital-mobiliario yield (art. 25.2); its casilla is unconfirmed",
+      "rules": [
+        "ES-R7"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "t1",
+          "time": "2025-03-01T10:00:00+01:00",
+          "type": "income",
+          "subkind": "lending_interest",
+          "wallet": "Lender",
+          "asset": "BTC",
+          "quantity": "0.002",
+          "fiat": "120.00"
+        }
+      ],
+      "expected": {
+        "disposals": [],
+        "income": [
+          {
+            "event": "t1",
+            "asset": "BTC",
+            "kind": "lending_interest",
+            "casilla": "rcm_art25_2",
+            "base": "ahorro",
+            "value": "120.00"
+          }
+        ],
+        "quarantines": [],
+        "flags": [
+          {
+            "event": "t1",
+            "code": "es_lending_casilla_unconfirmed"
+          }
+        ],
+        "years": {
+          "2025": {
+            "casilla_1804": {
+              "ganancias": "0.00",
+              "perdidas": "0.00",
+              "saldo": "0.00"
+            },
+            "casilla_0027": "0.00",
+            "rcm_art25_2": "120.00",
+            "casilla_0304": "0.00",
+            "non_computable_losses": "0.00",
+            "ahorro_crypto_only": {
+              "rcm_offset_25pct": "0.00",
+              "prior_losses_applied": "0.00",
+              "base": "120.00",
+              "carry_forward": {}
+            }
+          }
+        }
+      },
+      "rp2": {
+        "computed": {
+          "status": "ok",
+          "method": "fifo",
+          "gains": [
+            {
+              "event": "t1",
+              "type": "interest",
+              "asset": "BTC",
+              "lot": null,
+              "qty": "0.002",
+              "proceeds": "120.00",
+              "cost_basis": "0.00",
+              "gain": "120.00",
+              "year": 2025
+            }
+          ],
+          "yearly": [
+            {
+              "year": 2025,
+              "asset": "BTC",
+              "type": "interest",
+              "long_term": false,
+              "proceeds": "120.00",
+              "cost_basis": "0.00",
+              "gain": "120.00"
+            }
+          ],
+          "notes": []
+        },
+        "differences": [
+          "RP2 lists the interest as a taxable event; it has no casilla."
+        ]
+      }
+    },
+    {
+      "id": "es-10",
+      "title": "A network fee on a move between own wallets disposes of the fee coins; the move itself is not taxable",
+      "rules": [
+        "ES-R1",
+        "ES-R12"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "t1",
+          "time": "2025-01-05T10:00:00+01:00",
+          "type": "buy",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "30000.00"
+        },
+        {
+          "id": "t2",
+          "time": "2025-04-10T10:00:00+02:00",
+          "type": "transfer",
+          "wallet": "Exchange",
+          "to_wallet": "Hardware",
+          "asset": "BTC",
+          "quantity": "0.5",
+          "fee_quantity": "0.0001",
+          "fee_fiat_value": "6.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "t2",
+            "asset": "BTC",
+            "qty": "0.0001",
+            "kind": "network_fee",
+            "contraprestacion": "otro_bien_o_servicio",
+            "valor_transmision": "6.00",
+            "valor_adquisicion": "3.00",
+            "ganancia": "3.00",
+            "computable": true,
+            "lots": [
+              {
+                "lot": "t1",
+                "qty": "0.0001",
+                "cost": "3.00"
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "quarantines": [],
+        "flags": [],
+        "years": {
+          "2025": {
+            "casilla_1804": {
+              "ganancias": "3.00",
+              "perdidas": "0.00",
+              "saldo": "3.00"
+            },
+            "casilla_0027": "0.00",
+            "rcm_art25_2": "0.00",
+            "casilla_0304": "0.00",
+            "non_computable_losses": "0.00",
+            "ahorro_crypto_only": {
+              "rcm_offset_25pct": "0.00",
+              "prior_losses_applied": "0.00",
+              "base": "3.00",
+              "carry_forward": {}
+            }
+          }
+        }
+      },
+      "rp2": {
+        "computed": {
+          "status": "ok",
+          "method": "fifo",
+          "gains": [
+            {
+              "event": "t2",
+              "type": "move",
+              "asset": "BTC",
+              "lot": "t1",
+              "qty": "0.0001",
+              "proceeds": "6.00",
+              "cost_basis": "3.00",
+              "gain": "3.00",
+              "year": 2025
+            }
+          ],
+          "yearly": [
+            {
+              "year": 2025,
+              "asset": "BTC",
+              "type": "move",
+              "long_term": false,
+              "proceeds": "6.00",
+              "cost_basis": "3.00",
+              "gain": "3.00"
+            }
+          ],
+          "notes": []
+        },
+        "differences": [
+          "None. RP2 treats the move's fee as a taxable event: 6.00 - 3.00 = 3.00."
+        ]
+      }
+    },
+    {
+      "id": "es-11",
+      "title": "A fee paid in bitcoin on a sale: one row disposing of the sold and the fee coins",
+      "rules": [
+        "ES-R2",
+        "ES-R12"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "t1",
+          "time": "2023-03-01T10:00:00+01:00",
+          "type": "buy",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "20000.00"
+        },
+        {
+          "id": "t2",
+          "time": "2024-03-01T10:00:00+01:00",
+          "type": "buy",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "40000.00"
+        },
+        {
+          "id": "t3",
+          "time": "2025-06-01T10:00:00+02:00",
+          "type": "sell",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "60000.00",
+          "fee_quantity": "0.001",
+          "fee_fiat_value": "60.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "t3",
+            "asset": "BTC",
+            "qty": "1.001",
+            "kind": "sale",
+            "contraprestacion": "moneda_curso_legal",
+            "valor_transmision": "60000.00",
+            "valor_adquisicion": "20040.00",
+            "ganancia": "39960.00",
+            "computable": true,
+            "lots": [
+              {
+                "lot": "t1",
+                "qty": "1",
+                "cost": "20000.00"
+              },
+              {
+                "lot": "t2",
+                "qty": "0.001",
+                "cost": "40.00"
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "quarantines": [],
+        "flags": [],
+        "years": {
+          "2025": {
+            "casilla_1804": {
+              "ganancias": "39960.00",
+              "perdidas": "0.00",
+              "saldo": "39960.00"
+            },
+            "casilla_0027": "0.00",
+            "rcm_art25_2": "0.00",
+            "casilla_0304": "0.00",
+            "non_computable_losses": "0.00",
+            "ahorro_crypto_only": {
+              "rcm_offset_25pct": "0.00",
+              "prior_losses_applied": "0.00",
+              "base": "39960.00",
+              "carry_forward": {}
+            }
+          }
+        }
+      },
+      "rp2": {
+        "computed": {
+          "status": "ok",
+          "method": "fifo",
+          "gains": [
+            {
+              "event": "t3",
+              "type": "sell",
+              "asset": "BTC",
+              "lot": "t1",
+              "qty": "1",
+              "proceeds": "59940.06",
+              "cost_basis": "20000.00",
+              "gain": "39940.06",
+              "year": 2025
+            },
+            {
+              "event": "t3",
+              "type": "sell",
+              "asset": "BTC",
+              "lot": "t2",
+              "qty": "0.001",
+              "proceeds": "59.94",
+              "cost_basis": "40.00",
+              "gain": "19.94",
+              "year": 2025
+            }
+          ],
+          "yearly": [
+            {
+              "year": 2025,
+              "asset": "BTC",
+              "type": "sell",
+              "long_term": true,
+              "proceeds": "60000.00",
+              "cost_basis": "20040.00",
+              "gain": "39960.00"
+            }
+          ],
+          "notes": []
+        },
+        "differences": [
+          "Same gain (39,960.00). RP2 reports two lot fragments and spreads the proceeds pro rata (59,940.06 + 59.94) instead of one row with transmission value 60,000."
+        ]
+      }
+    },
+    {
+      "id": "es-12",
+      "title": "A sale below market value is taxed at market value (art. 35.2)",
+      "rules": [
+        "ES-R2"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "t1",
+          "time": "2025-01-10T10:00:00+01:00",
+          "type": "buy",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "0.1",
+          "fiat": "2000.00"
+        },
+        {
+          "id": "t2",
+          "time": "2025-08-01T10:00:00+02:00",
+          "type": "sell",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "0.1",
+          "fiat": "3000.00",
+          "market_value": "6000.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "t2",
+            "asset": "BTC",
+            "qty": "0.1",
+            "kind": "sale",
+            "contraprestacion": "moneda_curso_legal",
+            "valor_transmision": "6000.00",
+            "valor_adquisicion": "2000.00",
+            "ganancia": "4000.00",
+            "computable": true,
+            "lots": [
+              {
+                "lot": "t1",
+                "qty": "0.1",
+                "cost": "2000.00"
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "quarantines": [],
+        "flags": [
+          {
+            "event": "t2",
+            "code": "es_price_below_market"
+          }
+        ],
+        "years": {
+          "2025": {
+            "casilla_1804": {
+              "ganancias": "4000.00",
+              "perdidas": "0.00",
+              "saldo": "4000.00"
+            },
+            "casilla_0027": "0.00",
+            "rcm_art25_2": "0.00",
+            "casilla_0304": "0.00",
+            "non_computable_losses": "0.00",
+            "ahorro_crypto_only": {
+              "rcm_offset_25pct": "0.00",
+              "prior_losses_applied": "0.00",
+              "base": "4000.00",
+              "carry_forward": {}
+            }
+          }
+        }
+      },
+      "rp2": {
+        "computed": {
+          "status": "ok",
+          "method": "fifo",
+          "gains": [
+            {
+              "event": "t2",
+              "type": "sell",
+              "asset": "BTC",
+              "lot": "t1",
+              "qty": "0.1",
+              "proceeds": "3000.00",
+              "cost_basis": "2000.00",
+              "gain": "1000.00",
+              "year": 2025
+            }
+          ],
+          "yearly": [
+            {
+              "year": 2025,
+              "asset": "BTC",
+              "type": "sell",
+              "long_term": false,
+              "proceeds": "3000.00",
+              "cost_basis": "2000.00",
+              "gain": "1000.00"
+            }
+          ],
+          "notes": []
+        },
+        "differences": [
+          "RP2 takes the agreed price 3,000 (gain 1,000 against 4,000); art. 35.2 substitutes the higher market value."
+        ]
+      }
+    },
+    {
+      "id": "es-13",
+      "title": "A loss followed by a repurchase within a year: computed by default, flagged for art. 33.5.e review",
+      "rules": [
+        "ES-R9",
+        "ES-R6"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "t1",
+          "time": "2025-01-10T10:00:00+01:00",
+          "type": "buy",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "60000.00"
+        },
+        {
+          "id": "t2",
+          "time": "2025-03-10T10:00:00+01:00",
+          "type": "sell",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "40000.00"
+        },
+        {
+          "id": "t3",
+          "time": "2025-04-10T10:00:00+02:00",
+          "type": "buy",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "41000.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "t2",
+            "asset": "BTC",
+            "qty": "1",
+            "kind": "sale",
+            "contraprestacion": "moneda_curso_legal",
+            "valor_transmision": "40000.00",
+            "valor_adquisicion": "60000.00",
+            "ganancia": "-20000.00",
+            "computable": true,
+            "lots": [
+              {
+                "lot": "t1",
+                "qty": "1",
+                "cost": "60000.00"
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "quarantines": [],
+        "flags": [
+          {
+            "event": "t2",
+            "code": "es_33_5_e_reacquisition_review"
+          }
+        ],
+        "years": {
+          "2025": {
+            "casilla_1804": {
+              "ganancias": "0.00",
+              "perdidas": "20000.00",
+              "saldo": "-20000.00"
+            },
+            "casilla_0027": "0.00",
+            "rcm_art25_2": "0.00",
+            "casilla_0304": "0.00",
+            "non_computable_losses": "0.00",
+            "ahorro_crypto_only": {
+              "rcm_offset_25pct": "0.00",
+              "prior_losses_applied": "0.00",
+              "base": "0.00",
+              "carry_forward": {
+                "2025": "20000.00"
+              }
+            }
+          }
+        }
+      },
+      "rp2": {
+        "computed": {
+          "status": "ok",
+          "method": "fifo",
+          "gains": [
+            {
+              "event": "t2",
+              "type": "sell",
+              "asset": "BTC",
+              "lot": "t1",
+              "qty": "1",
+              "proceeds": "40000.00",
+              "cost_basis": "60000.00",
+              "gain": "-20000.00",
+              "year": 2025
+            }
+          ],
+          "yearly": [
+            {
+              "year": 2025,
+              "asset": "BTC",
+              "type": "sell",
+              "long_term": false,
+              "proceeds": "40000.00",
+              "cost_basis": "60000.00",
+              "gain": "-20000.00"
+            }
+          ],
+          "notes": []
+        },
+        "differences": [
+          "None in the numbers. Neither applies art. 33.5.e; Kassiber adds the review flag."
+        ]
+      }
+    },
+    {
+      "id": "es-14",
+      "title": "A sale at 00:30 Madrid time on 1 January belongs to the new tax year even though it is 31 December in UTC",
+      "rules": [
+        "ES-R11"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "t1",
+          "time": "2025-03-01T10:00:00+01:00",
+          "type": "buy",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "0.2",
+          "fiat": "10000.00"
+        },
+        {
+          "id": "t2",
+          "time": "2025-12-31T23:30:00Z",
+          "type": "sell",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "0.2",
+          "fiat": "18000.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "t2",
+            "asset": "BTC",
+            "qty": "0.2",
+            "kind": "sale",
+            "contraprestacion": "moneda_curso_legal",
+            "valor_transmision": "18000.00",
+            "valor_adquisicion": "10000.00",
+            "ganancia": "8000.00",
+            "computable": true,
+            "lots": [
+              {
+                "lot": "t1",
+                "qty": "0.2",
+                "cost": "10000.00"
+              }
+            ]
+          }
+        ],
+        "income": [],
+        "quarantines": [],
+        "flags": [],
+        "years": {
+          "2026": {
+            "casilla_1804": {
+              "ganancias": "8000.00",
+              "perdidas": "0.00",
+              "saldo": "8000.00"
+            },
+            "casilla_0027": "0.00",
+            "rcm_art25_2": "0.00",
+            "casilla_0304": "0.00",
+            "non_computable_losses": "0.00",
+            "ahorro_crypto_only": {
+              "rcm_offset_25pct": "0.00",
+              "prior_losses_applied": "0.00",
+              "base": "8000.00",
+              "carry_forward": {}
+            }
+          }
+        }
+      },
+      "rp2": {
+        "computed": {
+          "status": "ok",
+          "method": "fifo",
+          "gains": [
+            {
+              "event": "t2",
+              "type": "sell",
+              "asset": "BTC",
+              "lot": "t1",
+              "qty": "0.2",
+              "proceeds": "18000.00",
+              "cost_basis": "10000.00",
+              "gain": "8000.00",
+              "year": 2025
+            }
+          ],
+          "yearly": [
+            {
+              "year": 2025,
+              "asset": "BTC",
+              "type": "sell",
+              "long_term": false,
+              "proceeds": "18000.00",
+              "cost_basis": "10000.00",
+              "gain": "8000.00"
+            }
+          ],
+          "notes": []
+        },
+        "differences": [
+          "RP2 dates the sale 2025 (it reads the year in the timestamp's own offset, here UTC); Kassiber uses Europe/Madrid, so the sale is 2026."
+        ]
+      }
+    },
+    {
+      "id": "es-15",
+      "title": "Crypto-only ahorro integration over two years: 25 % offset against staking, then four-year carry-forward",
+      "rules": [
+        "ES-R6",
+        "ES-R7"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "t1",
+          "time": "2024-01-10T10:00:00+01:00",
+          "type": "buy",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "60000.00"
+        },
+        {
+          "id": "t2",
+          "time": "2024-03-01T10:00:00+01:00",
+          "type": "income",
+          "subkind": "staking",
+          "wallet": "Exchange",
+          "asset": "ETH",
+          "quantity": "0.4",
+          "fiat": "1000.00"
+        },
+        {
+          "id": "t3",
+          "time": "2024-06-01T10:00:00+02:00",
+          "type": "sell",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "0.5",
+          "fiat": "25000.00"
+        },
+        {
+          "id": "t4",
+          "time": "2025-05-01T10:00:00+02:00",
+          "type": "sell",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "0.5",
+          "fiat": "45000.00"
+        }
+      ],
+      "expected": {
+        "disposals": [
+          {
+            "event": "t3",
+            "asset": "BTC",
+            "qty": "0.5",
+            "kind": "sale",
+            "contraprestacion": "moneda_curso_legal",
+            "valor_transmision": "25000.00",
+            "valor_adquisicion": "30000.00",
+            "ganancia": "-5000.00",
+            "computable": true,
+            "lots": [
+              {
+                "lot": "t1",
+                "qty": "0.5",
+                "cost": "30000.00"
+              }
+            ]
+          },
+          {
+            "event": "t4",
+            "asset": "BTC",
+            "qty": "0.5",
+            "kind": "sale",
+            "contraprestacion": "moneda_curso_legal",
+            "valor_transmision": "45000.00",
+            "valor_adquisicion": "30000.00",
+            "ganancia": "15000.00",
+            "computable": true,
+            "lots": [
+              {
+                "lot": "t1",
+                "qty": "0.5",
+                "cost": "30000.00"
+              }
+            ]
+          }
+        ],
+        "income": [
+          {
+            "event": "t2",
+            "asset": "ETH",
+            "kind": "staking",
+            "casilla": "0027",
+            "base": "ahorro",
+            "value": "1000.00"
+          }
+        ],
+        "quarantines": [],
+        "flags": [],
+        "years": {
+          "2024": {
+            "casilla_1804": {
+              "ganancias": "0.00",
+              "perdidas": "5000.00",
+              "saldo": "-5000.00"
+            },
+            "casilla_0027": "1000.00",
+            "rcm_art25_2": "0.00",
+            "casilla_0304": "0.00",
+            "non_computable_losses": "0.00",
+            "ahorro_crypto_only": {
+              "rcm_offset_25pct": "250.00",
+              "prior_losses_applied": "0.00",
+              "base": "750.00",
+              "carry_forward": {
+                "2024": "4750.00"
+              }
+            }
+          },
+          "2025": {
+            "casilla_1804": {
+              "ganancias": "15000.00",
+              "perdidas": "0.00",
+              "saldo": "15000.00"
+            },
+            "casilla_0027": "0.00",
+            "rcm_art25_2": "0.00",
+            "casilla_0304": "0.00",
+            "non_computable_losses": "0.00",
+            "ahorro_crypto_only": {
+              "rcm_offset_25pct": "0.00",
+              "prior_losses_applied": "4750.00",
+              "base": "10250.00",
+              "carry_forward": {}
+            }
+          }
+        }
+      },
+      "rp2": {
+        "computed": {
+          "status": "ok",
+          "method": "fifo",
+          "gains": [
+            {
+              "event": "t3",
+              "type": "sell",
+              "asset": "BTC",
+              "lot": "t1",
+              "qty": "0.5",
+              "proceeds": "25000.00",
+              "cost_basis": "30000.00",
+              "gain": "-5000.00",
+              "year": 2024
+            },
+            {
+              "event": "t4",
+              "type": "sell",
+              "asset": "BTC",
+              "lot": "t1",
+              "qty": "0.5",
+              "proceeds": "45000.00",
+              "cost_basis": "30000.00",
+              "gain": "15000.00",
+              "year": 2025
+            },
+            {
+              "event": "t2",
+              "type": "staking",
+              "asset": "ETH",
+              "lot": null,
+              "qty": "0.4",
+              "proceeds": "1000.00",
+              "cost_basis": "0.00",
+              "gain": "1000.00",
+              "year": 2024
+            }
+          ],
+          "yearly": [
+            {
+              "year": 2025,
+              "asset": "BTC",
+              "type": "sell",
+              "long_term": true,
+              "proceeds": "45000.00",
+              "cost_basis": "30000.00",
+              "gain": "15000.00"
+            },
+            {
+              "year": 2024,
+              "asset": "BTC",
+              "type": "sell",
+              "long_term": false,
+              "proceeds": "25000.00",
+              "cost_basis": "30000.00",
+              "gain": "-5000.00"
+            },
+            {
+              "year": 2024,
+              "asset": "ETH",
+              "type": "staking",
+              "long_term": false,
+              "proceeds": "1000.00",
+              "cost_basis": "0.00",
+              "gain": "1000.00"
+            }
+          ],
+          "notes": []
+        },
+        "differences": [
+          "Gains identical. RP2 has no ahorro integration (25 % offset, four-year carry-forward)."
+        ]
+      }
+    },
+    {
+      "id": "es-16",
+      "title": "Lost or stolen coins are not booked as a loss; Kassiber quarantines them for review (arts. 33.5.a, 14.2.k)",
+      "rules": [
+        "ES-R10"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "t1",
+          "time": "2025-01-10T10:00:00+01:00",
+          "type": "buy",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "0.5",
+          "fiat": "20000.00"
+        },
+        {
+          "id": "t2",
+          "time": "2025-06-01T10:00:00+02:00",
+          "type": "lost",
+          "wallet": "Exchange",
+          "asset": "BTC",
+          "quantity": "0.1"
+        }
+      ],
+      "expected": {
+        "disposals": [],
+        "income": [],
+        "quarantines": [
+          {
+            "event": "t2",
+            "reason": "es_lost_requires_review"
+          }
+        ],
+        "flags": [],
+        "years": {}
+      },
+      "rp2": {
+        "computed": {
+          "status": "ok",
+          "method": "fifo",
+          "gains": [
+            {
+              "event": "t2",
+              "type": "lost",
+              "asset": "BTC",
+              "lot": "t1",
+              "qty": "0.1",
+              "proceeds": "0.00",
+              "cost_basis": "4000.00",
+              "gain": "-4000.00",
+              "year": 2025
+            }
+          ],
+          "yearly": [
+            {
+              "year": 2025,
+              "asset": "BTC",
+              "type": "lost",
+              "long_term": false,
+              "proceeds": "0.00",
+              "cost_basis": "4000.00",
+              "gain": "-4000.00"
+            }
+          ],
+          "notes": []
+        },
+        "differences": [
+          "RP2 books LOST as a full capital loss (-4,000.00); Kassiber quarantines (arts. 33.5.a, 14.2.k LIRPF)."
+        ]
+      }
+    },
+    {
+      "id": "es-17",
+      "title": "A hard fork has no published AEAT treatment; Kassiber quarantines the new coins",
+      "rules": [
+        "ES-R7"
+      ],
+      "policy": {
+        "method": "fifo",
+        "pool_scope": "global"
+      },
+      "events": [
+        {
+          "id": "t1",
+          "time": "2017-01-02T10:00:00+01:00",
+          "type": "buy",
+          "wallet": "Hardware",
+          "asset": "BTC",
+          "quantity": "1",
+          "fiat": "900.00"
+        },
+        {
+          "id": "t2",
+          "time": "2017-08-01T15:00:00+02:00",
+          "type": "income",
+          "subkind": "hardfork",
+          "wallet": "Hardware",
+          "asset": "BCH",
+          "quantity": "1",
+          "fiat": "300.00"
+        }
+      ],
+      "expected": {
+        "disposals": [],
+        "income": [],
+        "quarantines": [
+          {
+            "event": "t2",
+            "reason": "es_hardfork_requires_review"
+          }
+        ],
+        "flags": [],
+        "years": {}
+      },
+      "rp2": {
+        "computed": {
+          "status": "ok",
+          "method": "fifo",
+          "gains": [
+            {
+              "event": "t2",
+              "type": "hardfork",
+              "asset": "BCH",
+              "lot": null,
+              "qty": "1",
+              "proceeds": "300.00",
+              "cost_basis": "0.00",
+              "gain": "300.00",
+              "year": 2017
+            }
+          ],
+          "yearly": [
+            {
+              "year": 2017,
+              "asset": "BCH",
+              "type": "hardfork",
+              "long_term": false,
+              "proceeds": "300.00",
+              "cost_basis": "0.00",
+              "gain": "300.00"
+            }
+          ],
+          "notes": []
+        },
+        "differences": [
+          "RP2 books the fork as HARDFORK income of 300 with basis 300; Kassiber quarantines because AEAT publishes no treatment."
+        ]
+      }
+    }
+  ]
+}

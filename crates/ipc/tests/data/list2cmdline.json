@@ -1,0 +1,99 @@
+[
+ {
+  "argv": [
+   "a b c",
+   "d",
+   "e"
+  ],
+  "command_line": "\"a b c\" d e"
+ },
+ {
+  "argv": [
+   "ab\"c",
+   "\\",
+   "d"
+  ],
+  "command_line": "ab\\\"c \\ d"
+ },
+ {
+  "argv": [
+   "ab\"c",
+   " \\",
+   "d"
+  ],
+  "command_line": "ab\\\"c \" \\\\\" d"
+ },
+ {
+  "argv": [
+   "a\\\\\\b",
+   "de fg",
+   "h"
+  ],
+  "command_line": "a\\\\\\b \"de fg\" h"
+ },
+ {
+  "argv": [
+   "a\\\"b",
+   "c",
+   "d"
+  ],
+  "command_line": "a\\\\\\\"b c d"
+ },
+ {
+  "argv": [
+   "a\\\\b c",
+   "d",
+   "e"
+  ],
+  "command_line": "\"a\\\\b c\" d e"
+ },
+ {
+  "argv": [
+   "a\\\\b\\ c",
+   "d",
+   "e"
+  ],
+  "command_line": "\"a\\\\b\\ c\" d e"
+ },
+ {
+  "argv": [
+   "ab",
+   ""
+  ],
+  "command_line": "ab \"\""
+ },
+ {
+  "argv": [
+   "C:\\Program Files\\Kassiber\\kassiber.exe",
+   "--operator-broker-server"
+  ],
+  "command_line": "\"C:\\Program Files\\Kassiber\\kassiber.exe\" --operator-broker-server"
+ },
+ {
+  "argv": [
+   "tab\there",
+   "trail\\"
+  ],
+  "command_line": "\"tab\there\" trail\\"
+ },
+ {
+  "argv": [
+   "q\\\\\"x"
+  ],
+  "command_line": "q\\\\\\\\\\\"x"
+ },
+ {
+  "argv": [
+   "sp ace\\"
+  ],
+  "command_line": "\"sp ace\\\\\""
+ },
+ {
+  "argv": [
+   "\u00e4\u20ac\ud83d\udd11",
+   "--data-root",
+   "C:\\B\u00fccher\\"
+  ],
+  "command_line": "\u00e4\u20ac\ud83d\udd11 --data-root C:\\B\u00fccher\\"
+ }
+]

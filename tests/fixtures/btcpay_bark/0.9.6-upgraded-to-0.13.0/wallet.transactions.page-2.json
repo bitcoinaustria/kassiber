@@ -1,0 +1,65 @@
+{
+  "body": [
+    {
+      "amount": "-0.00025175",
+      "blockHash": null,
+      "blockHeight": null,
+      "comment": "",
+      "confirmations": 1,
+      "fee": "0.00000175",
+      "id": "8-639297555011120527",
+      "kind": "lightning-send",
+      "labels": {},
+      "movementId": 8,
+      "outpoint": null,
+      "paymentHash": "ac06877a02765f7df83f1a9012dbe34cfc9c193da2d10823268f169ca620fc62",
+      "status": "Confirmed",
+      "timestamp": 1794158701,
+      "transactionHash": null
+    },
+    {
+      "amount": "-0.0004",
+      "blockHash": null,
+      "blockHeight": null,
+      "comment": "",
+      "confirmations": 1,
+      "fee": "0",
+      "id": "7-639297555005228415",
+      "kind": "ark-send",
+      "labels": {},
+      "movementId": 7,
+      "outpoint": null,
+      "paymentHash": null,
+      "status": "Confirmed",
+      "timestamp": 1794158700,
+      "transactionHash": null
+    },
+    {
+      "amount": "0.0002984",
+      "blockHash": null,
+      "blockHeight": null,
+      "comment": "",
+      "confirmations": 1,
+      "fee": "0.0000016",
+      "id": "6-639297554798984797",
+      "kind": "lightning-receive",
+      "labels": {},
+      "movementId": 6,
+      "outpoint": null,
+      "paymentHash": "72c8d435f467e241747879259f17632f4ea3cb65870d19ad6f09b83b8bb0029c",
+      "status": "Confirmed",
+      "timestamp": 1794158679,
+      "transactionHash": null
+    }
+  ],
+  "request": {
+    "key": "read_only",
+    "method": "GET",
+    "path": "/api/v1/stores/{storeId}/payment-methods/BTC-ARK/wallet/transactions?skip=3&limit=3",
+    "permissions": [
+      "btcpay.store.canviewstoresettings",
+      "btcpay.store.canviewwallet"
+    ]
+  },
+  "status": 200
+}

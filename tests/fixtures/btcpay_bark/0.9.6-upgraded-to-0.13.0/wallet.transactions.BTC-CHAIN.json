@@ -1,0 +1,16 @@
+{
+  "body": {
+    "code": "not-available",
+    "message": "BTC doesn't have any derivation scheme set"
+  },
+  "request": {
+    "key": "read_only",
+    "method": "GET",
+    "path": "/api/v1/stores/{storeId}/payment-methods/BTC-CHAIN/wallet/transactions",
+    "permissions": [
+      "btcpay.store.canviewstoresettings",
+      "btcpay.store.canviewwallet"
+    ]
+  },
+  "status": 503
+}

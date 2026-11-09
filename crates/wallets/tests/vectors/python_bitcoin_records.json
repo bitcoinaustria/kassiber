@@ -1,0 +1,3980 @@
+[
+  {
+    "name": "owned-withdrawal",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [
+          {
+            "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "vout": 0,
+            "prevout": {
+              "value": 100000,
+              "scriptpubkey": "0014abababababababababababababababababababab"
+            }
+          }
+        ],
+        "vout": [
+          {
+            "value": 60000,
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+          },
+          {
+            "value": 39000,
+            "scriptpubkey": "0014abababababababababababababababababababab"
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 1700000000
+        }
+      },
+      "scripts": [
+        "0014abababababababababababababababababababab"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "2023-11-14T22:13:20Z",
+        "confirmed_at": "2023-11-14T22:13:20Z",
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": "0.0006",
+        "fee": "0.00001",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "withdrawal",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"fee\": 1000, \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+      }
+    }
+  },
+  {
+    "name": "receive",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [
+          {
+            "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "vout": 0,
+            "prevout": {
+              "value": 100000,
+              "scriptpubkey": "0014abababababababababababababababababababab"
+            }
+          }
+        ],
+        "vout": [
+          {
+            "value": 60000,
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+          },
+          {
+            "value": 39000,
+            "scriptpubkey": "0014abababababababababababababababababababab"
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 1700000000
+        }
+      },
+      "scripts": [
+        "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "2023-11-14T22:13:20Z",
+        "confirmed_at": "2023-11-14T22:13:20Z",
+        "direction": "inbound",
+        "asset": "BTC",
+        "amount": "0.0006",
+        "fee": "0",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "deposit",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"fee\": 1000, \"observer_owned_scripts\": [\"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+      }
+    }
+  },
+  {
+    "name": "cross-family-consolidation",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [
+          {
+            "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "vout": 0,
+            "prevout": {
+              "value": 100000,
+              "scriptpubkey": "0014abababababababababababababababababababab"
+            }
+          }
+        ],
+        "vout": [
+          {
+            "value": 60000,
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+          },
+          {
+            "value": 39000,
+            "scriptpubkey": "0014abababababababababababababababababababab"
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 1700000000
+        }
+      },
+      "scripts": [
+        "0014abababababababababababababababababababab",
+        "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "2023-11-14T22:13:20Z",
+        "confirmed_at": "2023-11-14T22:13:20Z",
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": "0",
+        "fee": "0.00001",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "fee",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"fee\": 1000, \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\", \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+      }
+    }
+  },
+  {
+    "name": "graph-scoped-owned-scripts",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [
+          {
+            "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "vout": 0,
+            "prevout": {
+              "value": 100000,
+              "scriptpubkey": "0014abababababababababababababababababababab"
+            }
+          }
+        ],
+        "vout": [
+          {
+            "value": 60000,
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+          },
+          {
+            "value": 39000,
+            "scriptpubkey": "0014abababababababababababababababababababab"
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 1700000000
+        }
+      },
+      "scripts": [
+        "0014abababababababababababababababababababab",
+        "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+        "51"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "2023-11-14T22:13:20Z",
+        "confirmed_at": "2023-11-14T22:13:20Z",
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": "0",
+        "fee": "0.00001",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "fee",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"fee\": 1000, \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\", \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+      }
+    }
+  },
+  {
+    "name": "untracked",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [
+          {
+            "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "vout": 0,
+            "prevout": {
+              "value": 100000,
+              "scriptpubkey": "0014abababababababababababababababababababab"
+            }
+          }
+        ],
+        "vout": [
+          {
+            "value": 60000,
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+          },
+          {
+            "value": 39000,
+            "scriptpubkey": "0014abababababababababababababababababababab"
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 1700000000
+        }
+      },
+      "scripts": [
+        "51"
+      ]
+    },
+    "expected": {
+      "result": null
+    }
+  },
+  {
+    "name": "script-normalization",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [
+          {
+            "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "vout": 0,
+            "prevout": {
+              "value": 100000,
+              "scriptpubkey": "0014abababababababababababababababababababab"
+            }
+          }
+        ],
+        "vout": [
+          {
+            "value": 60000,
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+          },
+          {
+            "value": 39000,
+            "scriptpubkey": "0014abababababababababababababababababababab"
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 1700000000
+        }
+      },
+      "scripts": [
+        " \t0014ABABABABABABABABABABABABABABABABABABABAB\u001c"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "2023-11-14T22:13:20Z",
+        "confirmed_at": "2023-11-14T22:13:20Z",
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": "0.0006",
+        "fee": "0.00001",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "withdrawal",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"fee\": 1000, \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+      }
+    }
+  },
+  {
+    "name": "explicit-fee",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [
+          {
+            "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "vout": 0,
+            "prevout": {
+              "value": 100000,
+              "scriptpubkey": "0014abababababababababababababababababababab"
+            }
+          }
+        ],
+        "vout": [
+          {
+            "value": 60000,
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+          },
+          {
+            "value": 39000,
+            "scriptpubkey": "0014abababababababababababababababababababab"
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 1700000000
+        },
+        "fee": 800
+      },
+      "scripts": [
+        "0014abababababababababababababababababababab"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "2023-11-14T22:13:20Z",
+        "confirmed_at": "2023-11-14T22:13:20Z",
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": "0.000602",
+        "fee": "0.000008",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "withdrawal",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"fee\": 800, \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+      }
+    }
+  },
+  {
+    "name": "negative-fee-clamp",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [
+          {
+            "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "vout": 0,
+            "prevout": {
+              "value": 100000,
+              "scriptpubkey": "0014abababababababababababababababababababab"
+            }
+          }
+        ],
+        "vout": [
+          {
+            "value": 60000,
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+          },
+          {
+            "value": 39000,
+            "scriptpubkey": "0014abababababababababababababababababababab"
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 1700000000
+        },
+        "fee": -1
+      },
+      "scripts": [
+        "0014abababababababababababababababababababab"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "2023-11-14T22:13:20Z",
+        "confirmed_at": "2023-11-14T22:13:20Z",
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": "0.00061",
+        "fee": "0",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "withdrawal",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"fee\": 0, \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+      }
+    }
+  },
+  {
+    "name": "mempool",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [
+          {
+            "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "vout": 0,
+            "prevout": {
+              "value": 100000,
+              "scriptpubkey": "0014abababababababababababababababababababab"
+            }
+          }
+        ],
+        "vout": [
+          {
+            "value": 60000,
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+          },
+          {
+            "value": 39000,
+            "scriptpubkey": "0014abababababababababababababababababababab"
+          }
+        ],
+        "status": {
+          "confirmed": false
+        }
+      },
+      "scripts": [
+        "0014abababababababababababababababababababab"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "1970-01-01T00:00:00Z",
+        "confirmed_at": null,
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": "0.0006",
+        "fee": "0.00001",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "withdrawal",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"fee\": 1000, \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"], \"status\": {\"confirmed\": false}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+      }
+    }
+  },
+  {
+    "name": "observed-mempool",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [
+          {
+            "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "vout": 0,
+            "prevout": {
+              "value": 100000,
+              "scriptpubkey": "0014abababababababababababababababababababab"
+            }
+          }
+        ],
+        "vout": [
+          {
+            "value": 60000,
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+          },
+          {
+            "value": 39000,
+            "scriptpubkey": "0014abababababababababababababababababababab"
+          }
+        ],
+        "status": {
+          "confirmed": false
+        },
+        "observed_at": 1700000010
+      },
+      "scripts": [
+        "0014abababababababababababababababababababab"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "2023-11-14T22:13:30Z",
+        "confirmed_at": null,
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": "0.0006",
+        "fee": "0.00001",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "withdrawal",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"fee\": 1000, \"observed_at\": 1700000010, \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"], \"status\": {\"confirmed\": false}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+      }
+    }
+  },
+  {
+    "name": "zero-time",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [
+          {
+            "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "vout": 0,
+            "prevout": {
+              "value": 100000,
+              "scriptpubkey": "0014abababababababababababababababababababab"
+            }
+          }
+        ],
+        "vout": [
+          {
+            "value": 60000,
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+          },
+          {
+            "value": 39000,
+            "scriptpubkey": "0014abababababababababababababababababababab"
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 0
+        }
+      },
+      "scripts": [
+        "0014abababababababababababababababababababab"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "1970-01-01T00:00:00Z",
+        "confirmed_at": null,
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": "0.0006",
+        "fee": "0.00001",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "withdrawal",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"fee\": 1000, \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"], \"status\": {\"block_time\": 0, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+      }
+    }
+  },
+  {
+    "name": "block-time-without-confirmed-flag",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [
+          {
+            "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "vout": 0,
+            "prevout": {
+              "value": 100000,
+              "scriptpubkey": "0014abababababababababababababababababababab"
+            }
+          }
+        ],
+        "vout": [
+          {
+            "value": 60000,
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+          },
+          {
+            "value": 39000,
+            "scriptpubkey": "0014abababababababababababababababababababab"
+          }
+        ],
+        "status": {
+          "confirmed": false,
+          "block_time": 1700000000
+        }
+      },
+      "scripts": [
+        "0014abababababababababababababababababababab"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "2023-11-14T22:13:20Z",
+        "confirmed_at": "2023-11-14T22:13:20Z",
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": "0.0006",
+        "fee": "0.00001",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "withdrawal",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"fee\": 1000, \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": false}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+      }
+    }
+  },
+  {
+    "name": "negative-time",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [
+          {
+            "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "vout": 0,
+            "prevout": {
+              "value": 100000,
+              "scriptpubkey": "0014abababababababababababababababababababab"
+            }
+          }
+        ],
+        "vout": [
+          {
+            "value": 60000,
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+          },
+          {
+            "value": 39000,
+            "scriptpubkey": "0014abababababababababababababababababababab"
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": -1
+        }
+      },
+      "scripts": [
+        "0014abababababababababababababababababababab"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "1969-12-31T23:59:59Z",
+        "confirmed_at": "1969-12-31T23:59:59Z",
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": "0.0006",
+        "fee": "0.00001",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "withdrawal",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"fee\": 1000, \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"], \"status\": {\"block_time\": -1, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+      }
+    }
+  },
+  {
+    "name": "early-time",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [
+          {
+            "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "vout": 0,
+            "prevout": {
+              "value": 100000,
+              "scriptpubkey": "0014abababababababababababababababababababab"
+            }
+          }
+        ],
+        "vout": [
+          {
+            "value": 60000,
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+          },
+          {
+            "value": 39000,
+            "scriptpubkey": "0014abababababababababababababababababababab"
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": -62135596800
+        }
+      },
+      "scripts": [
+        "0014abababababababababababababababababababab"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "0001-01-01T00:00:00Z",
+        "confirmed_at": "0001-01-01T00:00:00Z",
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": "0.0006",
+        "fee": "0.00001",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "withdrawal",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"fee\": 1000, \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"], \"status\": {\"block_time\": -62135596800, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+      }
+    }
+  },
+  {
+    "name": "late-time",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [
+          {
+            "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "vout": 0,
+            "prevout": {
+              "value": 100000,
+              "scriptpubkey": "0014abababababababababababababababababababab"
+            }
+          }
+        ],
+        "vout": [
+          {
+            "value": 60000,
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+          },
+          {
+            "value": 39000,
+            "scriptpubkey": "0014abababababababababababababababababababab"
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 253402300799
+        }
+      },
+      "scripts": [
+        "0014abababababababababababababababababababab"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "9999-12-31T23:59:59Z",
+        "confirmed_at": "9999-12-31T23:59:59Z",
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": "0.0006",
+        "fee": "0.00001",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "withdrawal",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"fee\": 1000, \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"], \"status\": {\"block_time\": 253402300799, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+      }
+    }
+  },
+  {
+    "name": "collaborative-withdrawal",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [
+          {
+            "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "vout": 0,
+            "prevout": {
+              "value": 100000,
+              "scriptpubkey": "0014abababababababababababababababababababab"
+            }
+          },
+          {
+            "txid": "efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
+            "vout": 1,
+            "prevout": {
+              "value": 3000,
+              "scriptpubkey": "51"
+            }
+          }
+        ],
+        "vout": [
+          {
+            "value": 60000,
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+          },
+          {
+            "value": 39000,
+            "scriptpubkey": "0014abababababababababababababababababababab"
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 1700000000
+        }
+      },
+      "scripts": [
+        "0014abababababababababababababababababababab"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "2023-11-14T22:13:20Z",
+        "confirmed_at": "2023-11-14T22:13:20Z",
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": "0.00061",
+        "fee": "0",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "withdrawal",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"component\": {\"fee_attribution\": \"implicit_wallet_delta\"}, \"fee\": 4000, \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"], \"privacy_boundary\": \"collaborative\", \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}, {\"prevout\": {\"scriptpubkey\": \"51\", \"value\": 3000}, \"txid\": \"efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef\", \"vout\": 1}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}",
+        "privacy_boundary": "collaborative"
+      }
+    }
+  },
+  {
+    "name": "collaborative-receive",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [
+          {
+            "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "vout": 0,
+            "prevout": {
+              "value": 100000,
+              "scriptpubkey": "0014abababababababababababababababababababab"
+            }
+          },
+          {
+            "txid": "efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
+            "vout": 1,
+            "prevout": {
+              "value": 3000,
+              "scriptpubkey": "51"
+            }
+          }
+        ],
+        "vout": [
+          {
+            "value": 70000,
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+          },
+          {
+            "value": 39000,
+            "scriptpubkey": "0014abababababababababababababababababababab"
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 1700000000
+        }
+      },
+      "scripts": [
+        "0014abababababababababababababababababababab",
+        "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "2023-11-14T22:13:20Z",
+        "confirmed_at": "2023-11-14T22:13:20Z",
+        "direction": "inbound",
+        "asset": "BTC",
+        "amount": "0.00009",
+        "fee": "0",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "deposit",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"component\": {\"fee_attribution\": \"implicit_wallet_delta\"}, \"fee\": 0, \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\", \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\"], \"privacy_boundary\": \"collaborative\", \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}, {\"prevout\": {\"scriptpubkey\": \"51\", \"value\": 3000}, \"txid\": \"efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef\", \"vout\": 1}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 70000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}",
+        "privacy_boundary": "collaborative"
+      }
+    }
+  },
+  {
+    "name": "equal-collaborative",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [
+          {
+            "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "vout": 0,
+            "prevout": {
+              "value": 100000,
+              "scriptpubkey": "0014abababababababababababababababababababab"
+            }
+          },
+          {
+            "txid": "efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
+            "vout": 1
+          }
+        ],
+        "vout": [
+          {
+            "value": 60000,
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+          },
+          {
+            "value": 100000,
+            "scriptpubkey": "0014abababababababababababababababababababab"
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 1700000000
+        }
+      },
+      "scripts": [
+        "0014abababababababababababababababababababab"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "2023-11-14T22:13:20Z",
+        "confirmed_at": "2023-11-14T22:13:20Z",
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": "0",
+        "fee": "0",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "fee",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"component\": {\"fee_attribution\": \"implicit_wallet_delta\"}, \"fee\": 0, \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}, {\"txid\": \"efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef\", \"vout\": 1}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}]}"
+      }
+    }
+  },
+  {
+    "name": "incomplete-graph",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [
+          {
+            "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "vout": 0,
+            "prevout": {
+              "value": 100000,
+              "scriptpubkey": "0014abababababababababababababababababababab"
+            }
+          },
+          {
+            "txid": "efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
+            "vout": 1
+          }
+        ],
+        "vout": [
+          {
+            "value": 60000,
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+          },
+          {
+            "value": 39000,
+            "scriptpubkey": "0014abababababababababababababababababababab"
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 1700000000
+        }
+      },
+      "scripts": [
+        "0014abababababababababababababababababababab",
+        "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+        "51"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "2023-11-14T22:13:20Z",
+        "confirmed_at": "2023-11-14T22:13:20Z",
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": "0.00001",
+        "fee": "0",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "withdrawal",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"component\": {\"fee_attribution\": \"implicit_wallet_delta\"}, \"fee\": 1000, \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\", \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"51\"], \"privacy_boundary\": \"collaborative\", \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}, {\"txid\": \"efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef\", \"vout\": 1}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}",
+        "privacy_boundary": "collaborative"
+      }
+    }
+  },
+  {
+    "name": "coinbase",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [
+          {
+            "txid": "0000000000000000000000000000000000000000000000000000000000000000",
+            "vout": 4294967295
+          }
+        ],
+        "vout": [
+          {
+            "value": 60000,
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+          },
+          {
+            "value": 39000,
+            "scriptpubkey": "0014abababababababababababababababababababab"
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 1700000000
+        }
+      },
+      "scripts": [
+        "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "2023-11-14T22:13:20Z",
+        "confirmed_at": "2023-11-14T22:13:20Z",
+        "direction": "inbound",
+        "asset": "BTC",
+        "amount": "0.0006",
+        "fee": "0",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "deposit",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"fee\": 0, \"observer_owned_scripts\": [\"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"txid\": \"0000000000000000000000000000000000000000000000000000000000000000\", \"vout\": 4294967295}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+      }
+    }
+  },
+  {
+    "name": "no-inputs",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [],
+        "vout": [
+          {
+            "value": 60000,
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+          },
+          {
+            "value": 39000,
+            "scriptpubkey": "0014abababababababababababababababababababab"
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 1700000000
+        }
+      },
+      "scripts": [
+        "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "2023-11-14T22:13:20Z",
+        "confirmed_at": "2023-11-14T22:13:20Z",
+        "direction": "inbound",
+        "asset": "BTC",
+        "amount": "0.0006",
+        "fee": "0",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "deposit",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"fee\": 0, \"observer_owned_scripts\": [\"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+      }
+    }
+  },
+  {
+    "name": "exact-receive-0",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [],
+        "vout": [
+          {
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "value": 0
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 1700000000
+        }
+      },
+      "scripts": [
+        "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+      ]
+    },
+    "expected": {
+      "result": null
+    }
+  },
+  {
+    "name": "exact-receive-1",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [],
+        "vout": [
+          {
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "value": 1
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 1700000000
+        }
+      },
+      "scripts": [
+        "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "2023-11-14T22:13:20Z",
+        "confirmed_at": "2023-11-14T22:13:20Z",
+        "direction": "inbound",
+        "asset": "BTC",
+        "amount": "1E-8",
+        "fee": "0",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "deposit",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"fee\": 0, \"observer_owned_scripts\": [\"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 1}]}"
+      }
+    }
+  },
+  {
+    "name": "exact-receive-10",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [],
+        "vout": [
+          {
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "value": 10
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 1700000000
+        }
+      },
+      "scripts": [
+        "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "2023-11-14T22:13:20Z",
+        "confirmed_at": "2023-11-14T22:13:20Z",
+        "direction": "inbound",
+        "asset": "BTC",
+        "amount": "1E-7",
+        "fee": "0",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "deposit",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"fee\": 0, \"observer_owned_scripts\": [\"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 10}]}"
+      }
+    }
+  },
+  {
+    "name": "exact-receive-99",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [],
+        "vout": [
+          {
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "value": 99
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 1700000000
+        }
+      },
+      "scripts": [
+        "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "2023-11-14T22:13:20Z",
+        "confirmed_at": "2023-11-14T22:13:20Z",
+        "direction": "inbound",
+        "asset": "BTC",
+        "amount": "9.9E-7",
+        "fee": "0",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "deposit",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"fee\": 0, \"observer_owned_scripts\": [\"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 99}]}"
+      }
+    }
+  },
+  {
+    "name": "exact-receive-100",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [],
+        "vout": [
+          {
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "value": 100
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 1700000000
+        }
+      },
+      "scripts": [
+        "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "2023-11-14T22:13:20Z",
+        "confirmed_at": "2023-11-14T22:13:20Z",
+        "direction": "inbound",
+        "asset": "BTC",
+        "amount": "0.000001",
+        "fee": "0",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "deposit",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"fee\": 0, \"observer_owned_scripts\": [\"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 100}]}"
+      }
+    }
+  },
+  {
+    "name": "exact-receive-101",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [],
+        "vout": [
+          {
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "value": 101
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 1700000000
+        }
+      },
+      "scripts": [
+        "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "2023-11-14T22:13:20Z",
+        "confirmed_at": "2023-11-14T22:13:20Z",
+        "direction": "inbound",
+        "asset": "BTC",
+        "amount": "0.00000101",
+        "fee": "0",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "deposit",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"fee\": 0, \"observer_owned_scripts\": [\"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 101}]}"
+      }
+    }
+  },
+  {
+    "name": "exact-receive-1000",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [],
+        "vout": [
+          {
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "value": 1000
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 1700000000
+        }
+      },
+      "scripts": [
+        "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "2023-11-14T22:13:20Z",
+        "confirmed_at": "2023-11-14T22:13:20Z",
+        "direction": "inbound",
+        "asset": "BTC",
+        "amount": "0.00001",
+        "fee": "0",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "deposit",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"fee\": 0, \"observer_owned_scripts\": [\"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 1000}]}"
+      }
+    }
+  },
+  {
+    "name": "exact-receive-100000000",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [],
+        "vout": [
+          {
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "value": 100000000
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 1700000000
+        }
+      },
+      "scripts": [
+        "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "2023-11-14T22:13:20Z",
+        "confirmed_at": "2023-11-14T22:13:20Z",
+        "direction": "inbound",
+        "asset": "BTC",
+        "amount": "1",
+        "fee": "0",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "deposit",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"fee\": 0, \"observer_owned_scripts\": [\"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 100000000}]}"
+      }
+    }
+  },
+  {
+    "name": "exact-receive-9007199254740993",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [],
+        "vout": [
+          {
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "value": 9007199254740993
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 1700000000
+        }
+      },
+      "scripts": [
+        "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "2023-11-14T22:13:20Z",
+        "confirmed_at": "2023-11-14T22:13:20Z",
+        "direction": "inbound",
+        "asset": "BTC",
+        "amount": "90071992.54740993",
+        "fee": "0",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "deposit",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"fee\": 0, \"observer_owned_scripts\": [\"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 9007199254740993}]}"
+      }
+    }
+  },
+  {
+    "name": "legacy-sats-btc-graph",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [
+          {
+            "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "vout": 0,
+            "prevout": {
+              "scriptPubKey": {
+                "hex": "0014abababababababababababababababababababab"
+              },
+              "value_sats": "100_000"
+            }
+          }
+        ],
+        "vout": [
+          {
+            "script_hex": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "value": "0.0006"
+          },
+          {
+            "scriptPubKey": "0014abababababababababababababababababababab",
+            "value": "0.000390005"
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 1700000000
+        }
+      },
+      "scripts": [
+        "0014abababababababababababababababababababab"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "2023-11-14T22:13:20Z",
+        "confirmed_at": "2023-11-14T22:13:20Z",
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": "0.0006",
+        "fee": "0.00001",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "withdrawal",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"fee\": 1000, \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptPubKey\": {\"hex\": \"0014abababababababababababababababababababab\"}, \"value_sats\": \"100_000\"}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"script_hex\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": \"0.0006\"}, {\"scriptPubKey\": \"0014abababababababababababababababababababab\", \"value\": \"0.000390005\"}]}"
+      }
+    }
+  },
+  {
+    "name": "privacy-privacy_boundary-payjoin",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [
+          {
+            "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "vout": 0,
+            "prevout": {
+              "value": 100000,
+              "scriptpubkey": "0014abababababababababababababababababababab"
+            }
+          }
+        ],
+        "vout": [
+          {
+            "value": 60000,
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+          },
+          {
+            "value": 39000,
+            "scriptpubkey": "0014abababababababababababababababababababab"
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 1700000000
+        },
+        "privacy_boundary": "payjoin"
+      },
+      "scripts": [
+        "0014abababababababababababababababababababab"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "2023-11-14T22:13:20Z",
+        "confirmed_at": "2023-11-14T22:13:20Z",
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": "0.0006",
+        "fee": "0.00001",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "withdrawal",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"fee\": 1000, \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"], \"privacy_boundary\": \"payjoin\", \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}",
+        "privacy_boundary": "payjoin"
+      }
+    }
+  },
+  {
+    "name": "privacy-privacyHopKind-payment-in-coinjoin",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [
+          {
+            "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "vout": 0,
+            "prevout": {
+              "value": 100000,
+              "scriptpubkey": "0014abababababababababababababababababababab"
+            }
+          }
+        ],
+        "vout": [
+          {
+            "value": 60000,
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+          },
+          {
+            "value": 39000,
+            "scriptpubkey": "0014abababababababababababababababababababab"
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 1700000000
+        },
+        "privacyHopKind": "payment-in-coinjoin"
+      },
+      "scripts": [
+        "0014abababababababababababababababababababab"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "2023-11-14T22:13:20Z",
+        "confirmed_at": "2023-11-14T22:13:20Z",
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": "0.0006",
+        "fee": "0.00001",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "withdrawal",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"fee\": 1000, \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"], \"privacyHopKind\": \"payment-in-coinjoin\", \"privacy_boundary\": \"payment_in_coinjoin\", \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}",
+        "privacy_boundary": "payment_in_coinjoin"
+      }
+    }
+  },
+  {
+    "name": "privacy-likelyCoinJoin-True",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [
+          {
+            "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "vout": 0,
+            "prevout": {
+              "value": 100000,
+              "scriptpubkey": "0014abababababababababababababababababababab"
+            }
+          }
+        ],
+        "vout": [
+          {
+            "value": 60000,
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+          },
+          {
+            "value": 39000,
+            "scriptpubkey": "0014abababababababababababababababababababab"
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 1700000000
+        },
+        "likelyCoinJoin": true
+      },
+      "scripts": [
+        "0014abababababababababababababababababababab"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "2023-11-14T22:13:20Z",
+        "confirmed_at": "2023-11-14T22:13:20Z",
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": "0.0006",
+        "fee": "0.00001",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "withdrawal",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"fee\": 1000, \"likelyCoinJoin\": true, \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"], \"privacy_boundary\": \"coinjoin\", \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}",
+        "privacy_boundary": "coinjoin"
+      }
+    }
+  },
+  {
+    "name": "privacy-raw_json-{'privacy_hop': 'sweep'}",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [
+          {
+            "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "vout": 0,
+            "prevout": {
+              "value": 100000,
+              "scriptpubkey": "0014abababababababababababababababababababab"
+            }
+          }
+        ],
+        "vout": [
+          {
+            "value": 60000,
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+          },
+          {
+            "value": 39000,
+            "scriptpubkey": "0014abababababababababababababababababababab"
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 1700000000
+        },
+        "raw_json": {
+          "privacy_hop": "sweep"
+        }
+      },
+      "scripts": [
+        "0014abababababababababababababababababababab"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "2023-11-14T22:13:20Z",
+        "confirmed_at": "2023-11-14T22:13:20Z",
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": "0.0006",
+        "fee": "0.00001",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "withdrawal",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"fee\": 1000, \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"], \"privacy_boundary\": \"sweep\", \"raw_json\": {\"privacy_hop\": \"sweep\"}, \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}",
+        "privacy_boundary": "sweep"
+      }
+    }
+  },
+  {
+    "name": "privacy-raw_json-{\"isLikelyCoinJoin\": \"YES\"}",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [
+          {
+            "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "vout": 0,
+            "prevout": {
+              "value": 100000,
+              "scriptpubkey": "0014abababababababababababababababababababab"
+            }
+          }
+        ],
+        "vout": [
+          {
+            "value": 60000,
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+          },
+          {
+            "value": 39000,
+            "scriptpubkey": "0014abababababababababababababababababababab"
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 1700000000
+        },
+        "raw_json": "{\"isLikelyCoinJoin\": \"YES\"}"
+      },
+      "scripts": [
+        "0014abababababababababababababababababababab"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "2023-11-14T22:13:20Z",
+        "confirmed_at": "2023-11-14T22:13:20Z",
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": "0.0006",
+        "fee": "0.00001",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "withdrawal",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"fee\": 1000, \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"], \"privacy_boundary\": \"coinjoin\", \"raw_json\": \"{\\\"isLikelyCoinJoin\\\": \\\"YES\\\"}\", \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}",
+        "privacy_boundary": "coinjoin"
+      }
+    }
+  },
+  {
+    "name": "privacy-privacy_boundary-invalid",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [
+          {
+            "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "vout": 0,
+            "prevout": {
+              "value": 100000,
+              "scriptpubkey": "0014abababababababababababababababababababab"
+            }
+          }
+        ],
+        "vout": [
+          {
+            "value": 60000,
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+          },
+          {
+            "value": 39000,
+            "scriptpubkey": "0014abababababababababababababababababababab"
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 1700000000
+        },
+        "privacy_boundary": "invalid"
+      },
+      "scripts": [
+        "0014abababababababababababababababababababab"
+      ]
+    },
+    "expected": {
+      "error": {
+        "code": "validation",
+        "message": "Unsupported privacy boundary 'invalid'",
+        "details": null,
+        "hint": "Supported privacy boundaries: coinjoin, collaborative, payjoin, payment_in_coinjoin, sweep."
+      }
+    }
+  },
+  {
+    "name": "claim",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [
+          {
+            "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "vout": 0,
+            "prevout": {
+              "value": 100000,
+              "scriptpubkey": "0014abababababababababababababababababababab"
+            },
+            "witness": [
+              "aa",
+              "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+              "a914ea4beb47def8492389a1e16634795441e1b872458763210202020202020202020202020202020202020202020202020202020202020202026703010203b1752103030303030303030303030303030303030303030303030303030303030303030368ac"
+            ]
+          }
+        ],
+        "vout": [
+          {
+            "value": 60000,
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+          },
+          {
+            "value": 39000,
+            "scriptpubkey": "0014abababababababababababababababababababab"
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 1700000000
+        }
+      },
+      "scripts": [
+        "0014abababababababababababababababababababab"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "2023-11-14T22:13:20Z",
+        "confirmed_at": "2023-11-14T22:13:20Z",
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": "0.0006",
+        "fee": "0.00001",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "withdrawal",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"fee\": 1000, \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0, \"witness\": [\"aa\", \"000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f\", \"a914ea4beb47def8492389a1e16634795441e1b872458763210202020202020202020202020202020202020202020202020202020202020202026703010203b1752103030303030303030303030303030303030303030303030303030303030303030368ac\"]}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}",
+        "payment_hash": "630dcd2966c4336691125448bbb25b4ff412a49c732db2c8abc1b8581bd710dd",
+        "payment_hash_source": "chain_script_unique_outpoint"
+      }
+    }
+  },
+  {
+    "name": "claim-unrecognized-witness-field",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [
+          {
+            "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "vout": 0,
+            "prevout": {
+              "value": 100000,
+              "scriptpubkey": "0014abababababababababababababababababababab"
+            },
+            "txinwitness": [
+              "aa",
+              "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+              "a914ea4beb47def8492389a1e16634795441e1b872458763210202020202020202020202020202020202020202020202020202020202020202026703010203b1752103030303030303030303030303030303030303030303030303030303030303030368ac"
+            ]
+          }
+        ],
+        "vout": [
+          {
+            "value": 60000,
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+          },
+          {
+            "value": 39000,
+            "scriptpubkey": "0014abababababababababababababababababababab"
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 1700000000
+        }
+      },
+      "scripts": [
+        "0014abababababababababababababababababababab"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "2023-11-14T22:13:20Z",
+        "confirmed_at": "2023-11-14T22:13:20Z",
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": "0.0006",
+        "fee": "0.00001",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "withdrawal",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"fee\": 1000, \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"txinwitness\": [\"aa\", \"000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f\", \"a914ea4beb47def8492389a1e16634795441e1b872458763210202020202020202020202020202020202020202020202020202020202020202026703010203b1752103030303030303030303030303030303030303030303030303030303030303030368ac\"], \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+      }
+    }
+  },
+  {
+    "name": "claim-mixed",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [
+          {
+            "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "vout": 0,
+            "prevout": {
+              "value": 100000,
+              "scriptpubkey": "0014abababababababababababababababababababab"
+            },
+            "witness": [
+              "aa",
+              "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+              "a914ea4beb47def8492389a1e16634795441e1b872458763210202020202020202020202020202020202020202020202020202020202020202026703010203b1752103030303030303030303030303030303030303030303030303030303030303030368ac"
+            ]
+          },
+          {
+            "txid": "efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
+            "vout": 0
+          }
+        ],
+        "vout": [
+          {
+            "value": 60000,
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+          },
+          {
+            "value": 39000,
+            "scriptpubkey": "0014abababababababababababababababababababab"
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 1700000000
+        }
+      },
+      "scripts": [
+        "0014abababababababababababababababababababab"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "2023-11-14T22:13:20Z",
+        "confirmed_at": "2023-11-14T22:13:20Z",
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": "0.00061",
+        "fee": "0",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "withdrawal",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"component\": {\"fee_attribution\": \"implicit_wallet_delta\"}, \"fee\": 1000, \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"], \"privacy_boundary\": \"collaborative\", \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0, \"witness\": [\"aa\", \"000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f\", \"a914ea4beb47def8492389a1e16634795441e1b872458763210202020202020202020202020202020202020202020202020202020202020202026703010203b1752103030303030303030303030303030303030303030303030303030303030303030368ac\"]}, {\"txid\": \"efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}",
+        "privacy_boundary": "collaborative"
+      }
+    }
+  },
+  {
+    "name": "claim-batched",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [
+          {
+            "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "vout": 0,
+            "prevout": {
+              "value": 100000,
+              "scriptpubkey": "0014abababababababababababababababababababab"
+            },
+            "witness": [
+              "aa",
+              "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+              "a914ea4beb47def8492389a1e16634795441e1b872458763210202020202020202020202020202020202020202020202020202020202020202026703010203b1752103030303030303030303030303030303030303030303030303030303030303030368ac"
+            ]
+          },
+          {
+            "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "vout": 0,
+            "prevout": {
+              "value": 100000,
+              "scriptpubkey": "0014abababababababababababababababababababab"
+            },
+            "witness": [
+              "aa",
+              "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+              "a914ea4beb47def8492389a1e16634795441e1b872458763210202020202020202020202020202020202020202020202020202020202020202026703010203b1752103030303030303030303030303030303030303030303030303030303030303030368ac"
+            ]
+          }
+        ],
+        "vout": [
+          {
+            "value": 60000,
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+          },
+          {
+            "value": 39000,
+            "scriptpubkey": "0014abababababababababababababababababababab"
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 1700000000
+        }
+      },
+      "scripts": [
+        "0014abababababababababababababababababababab"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "2023-11-14T22:13:20Z",
+        "confirmed_at": "2023-11-14T22:13:20Z",
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": "0.0006",
+        "fee": "0.00101",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "withdrawal",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"fee\": 101000, \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0, \"witness\": [\"aa\", \"000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f\", \"a914ea4beb47def8492389a1e16634795441e1b872458763210202020202020202020202020202020202020202020202020202020202020202026703010203b1752103030303030303030303030303030303030303030303030303030303030303030368ac\"]}, {\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0, \"witness\": [\"aa\", \"000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f\", \"a914ea4beb47def8492389a1e16634795441e1b872458763210202020202020202020202020202020202020202020202020202020202020202026703010203b1752103030303030303030303030303030303030303030303030303030303030303030368ac\"]}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+      }
+    }
+  },
+  {
+    "name": "claim-invalid-outpoint",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [
+          {
+            "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "vout": true,
+            "prevout": {
+              "value": 100000,
+              "scriptpubkey": "0014abababababababababababababababababababab"
+            },
+            "witness": [
+              "aa",
+              "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+              "a914ea4beb47def8492389a1e16634795441e1b872458763210202020202020202020202020202020202020202020202020202020202020202026703010203b1752103030303030303030303030303030303030303030303030303030303030303030368ac"
+            ]
+          }
+        ],
+        "vout": [
+          {
+            "value": 60000,
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+          },
+          {
+            "value": 39000,
+            "scriptpubkey": "0014abababababababababababababababababababab"
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 1700000000
+        }
+      },
+      "scripts": [
+        "0014abababababababababababababababababababab"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "2023-11-14T22:13:20Z",
+        "confirmed_at": "2023-11-14T22:13:20Z",
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": "0.0006",
+        "fee": "0.00001",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "withdrawal",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"fee\": 1000, \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": true, \"witness\": [\"aa\", \"000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f\", \"a914ea4beb47def8492389a1e16634795441e1b872458763210202020202020202020202020202020202020202020202020202020202020202026703010203b1752103030303030303030303030303030303030303030303030303030303030303030368ac\"]}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+      }
+    }
+  },
+  {
+    "name": "claim-reverse",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [
+          {
+            "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "vout": 0,
+            "prevout": {
+              "value": 100000,
+              "scriptpubkey": "0014abababababababababababababababababababab"
+            },
+            "witness": [
+              "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+              "82012088a914ea4beb47def8492389a1e16634795441e1b872458763210202020202020202020202020202020202020202020202020202020202020202026703010203b1752103030303030303030303030303030303030303030303030303030303030303030368ac"
+            ]
+          }
+        ],
+        "vout": [
+          {
+            "value": 60000,
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+          },
+          {
+            "value": 39000,
+            "scriptpubkey": "0014abababababababababababababababababababab"
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 1700000000
+        }
+      },
+      "scripts": [
+        "0014abababababababababababababababababababab"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "2023-11-14T22:13:20Z",
+        "confirmed_at": "2023-11-14T22:13:20Z",
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": "0.0006",
+        "fee": "0.00001",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "withdrawal",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"fee\": 1000, \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0, \"witness\": [\"000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f\", \"82012088a914ea4beb47def8492389a1e16634795441e1b872458763210202020202020202020202020202020202020202020202020202020202020202026703010203b1752103030303030303030303030303030303030303030303030303030303030303030368ac\"]}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}",
+        "payment_hash": "630dcd2966c4336691125448bbb25b4ff412a49c732db2c8abc1b8581bd710dd",
+        "payment_hash_source": "chain_script_unique_outpoint"
+      }
+    }
+  },
+  {
+    "name": "refund",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [
+          {
+            "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "vout": 0,
+            "prevout": {
+              "value": 100000,
+              "scriptpubkey": "0014abababababababababababababababababababab"
+            },
+            "witness": [
+              "aa",
+              "",
+              "a914ea4beb47def8492389a1e16634795441e1b872458763210202020202020202020202020202020202020202020202020202020202020202026703010203b1752103030303030303030303030303030303030303030303030303030303030303030368ac"
+            ]
+          }
+        ],
+        "vout": [
+          {
+            "value": 60000,
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+          },
+          {
+            "value": 39000,
+            "scriptpubkey": "0014abababababababababababababababababababab"
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 1700000000
+        }
+      },
+      "scripts": [
+        "0014abababababababababababababababababababab"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "2023-11-14T22:13:20Z",
+        "confirmed_at": "2023-11-14T22:13:20Z",
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": "0.0006",
+        "fee": "0.00001",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "withdrawal",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"fee\": 1000, \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0, \"witness\": [\"aa\", \"\", \"a914ea4beb47def8492389a1e16634795441e1b872458763210202020202020202020202020202020202020202020202020202020202020202026703010203b1752103030303030303030303030303030303030303030303030303030303030303030368ac\"]}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}",
+        "swap_refund_funding_txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+        "swap_refund_funding_vout": 0
+      }
+    }
+  },
+  {
+    "name": "refund-malformed-witness-items",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [
+          {
+            "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "vout": 0,
+            "prevout": {
+              "value": 100000,
+              "scriptpubkey": "0014abababababababababababababababababababab"
+            },
+            "witness": [
+              "not hex",
+              "a914ea4beb47def8492389a1e16634795441e1b872458763210202020202020202020202020202020202020202020202020202020202020202026703010203b1752103030303030303030303030303030303030303030303030303030303030303030368ac"
+            ]
+          }
+        ],
+        "vout": [
+          {
+            "value": 60000,
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+          },
+          {
+            "value": 39000,
+            "scriptpubkey": "0014abababababababababababababababababababab"
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 1700000000
+        }
+      },
+      "scripts": [
+        "0014abababababababababababababababababababab"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "2023-11-14T22:13:20Z",
+        "confirmed_at": "2023-11-14T22:13:20Z",
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": "0.0006",
+        "fee": "0.00001",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "withdrawal",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"fee\": 1000, \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0, \"witness\": [\"not hex\", \"a914ea4beb47def8492389a1e16634795441e1b872458763210202020202020202020202020202020202020202020202020202020202020202026703010203b1752103030303030303030303030303030303030303030303030303030303030303030368ac\"]}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+      }
+    }
+  },
+  {
+    "name": "refund-batched",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [
+          {
+            "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "vout": 0,
+            "prevout": {
+              "value": 100000,
+              "scriptpubkey": "0014abababababababababababababababababababab"
+            },
+            "witness": [
+              "aa",
+              "",
+              "a914ea4beb47def8492389a1e16634795441e1b872458763210202020202020202020202020202020202020202020202020202020202020202026703010203b1752103030303030303030303030303030303030303030303030303030303030303030368ac"
+            ]
+          },
+          {
+            "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "vout": 1,
+            "prevout": {
+              "value": 100000,
+              "scriptpubkey": "0014abababababababababababababababababababab"
+            },
+            "witness": [
+              "aa",
+              "",
+              "a914ea4beb47def8492389a1e16634795441e1b872458763210202020202020202020202020202020202020202020202020202020202020202026703010203b1752103030303030303030303030303030303030303030303030303030303030303030368ac"
+            ]
+          }
+        ],
+        "vout": [
+          {
+            "value": 60000,
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+          },
+          {
+            "value": 39000,
+            "scriptpubkey": "0014abababababababababababababababababababab"
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 1700000000
+        }
+      },
+      "scripts": [
+        "0014abababababababababababababababababababab"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "2023-11-14T22:13:20Z",
+        "confirmed_at": "2023-11-14T22:13:20Z",
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": "0.0006",
+        "fee": "0.00101",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "withdrawal",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"fee\": 101000, \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0, \"witness\": [\"aa\", \"\", \"a914ea4beb47def8492389a1e16634795441e1b872458763210202020202020202020202020202020202020202020202020202020202020202026703010203b1752103030303030303030303030303030303030303030303030303030303030303030368ac\"]}, {\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 1, \"witness\": [\"aa\", \"\", \"a914ea4beb47def8492389a1e16634795441e1b872458763210202020202020202020202020202020202020202020202020202020202020202026703010203b1752103030303030303030303030303030303030303030303030303030303030303030368ac\"]}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+      }
+    }
+  },
+  {
+    "name": "refund-duplicate",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [
+          {
+            "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "vout": 0,
+            "prevout": {
+              "value": 100000,
+              "scriptpubkey": "0014abababababababababababababababababababab"
+            },
+            "witness": [
+              "aa",
+              "",
+              "a914ea4beb47def8492389a1e16634795441e1b872458763210202020202020202020202020202020202020202020202020202020202020202026703010203b1752103030303030303030303030303030303030303030303030303030303030303030368ac"
+            ]
+          },
+          {
+            "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "vout": 0,
+            "prevout": {
+              "value": 100000,
+              "scriptpubkey": "0014abababababababababababababababababababab"
+            },
+            "witness": [
+              "aa",
+              "",
+              "a914ea4beb47def8492389a1e16634795441e1b872458763210202020202020202020202020202020202020202020202020202020202020202026703010203b1752103030303030303030303030303030303030303030303030303030303030303030368ac"
+            ]
+          }
+        ],
+        "vout": [
+          {
+            "value": 60000,
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+          },
+          {
+            "value": 39000,
+            "scriptpubkey": "0014abababababababababababababababababababab"
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 1700000000
+        }
+      },
+      "scripts": [
+        "0014abababababababababababababababababababab"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "2023-11-14T22:13:20Z",
+        "confirmed_at": "2023-11-14T22:13:20Z",
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": "0.0006",
+        "fee": "0.00101",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "withdrawal",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"fee\": 101000, \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0, \"witness\": [\"aa\", \"\", \"a914ea4beb47def8492389a1e16634795441e1b872458763210202020202020202020202020202020202020202020202020202020202020202026703010203b1752103030303030303030303030303030303030303030303030303030303030303030368ac\"]}, {\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0, \"witness\": [\"aa\", \"\", \"a914ea4beb47def8492389a1e16634795441e1b872458763210202020202020202020202020202020202020202020202020202020202020202026703010203b1752103030303030303030303030303030303030303030303030303030303030303030368ac\"]}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}",
+        "swap_refund_funding_txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+        "swap_refund_funding_vout": 0
+      }
+    }
+  },
+  {
+    "name": "bad-template",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [
+          {
+            "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "vout": 0,
+            "prevout": {
+              "value": 100000,
+              "scriptpubkey": "0014abababababababababababababababababababab"
+            },
+            "witness": [
+              "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+              "a914ea4beb47def8492389a1e16634795441e1b872458763210202020202020202020202020202020202020202020202020202020202020202026703010203b1752103030303030303030303030303030303030303030303030303030303030303030368ac00"
+            ]
+          }
+        ],
+        "vout": [
+          {
+            "value": 60000,
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+          },
+          {
+            "value": 39000,
+            "scriptpubkey": "0014abababababababababababababababababababab"
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 1700000000
+        }
+      },
+      "scripts": [
+        "0014abababababababababababababababababababab"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "2023-11-14T22:13:20Z",
+        "confirmed_at": "2023-11-14T22:13:20Z",
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": "0.0006",
+        "fee": "0.00001",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "withdrawal",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"fee\": 1000, \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0, \"witness\": [\"000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f\", \"a914ea4beb47def8492389a1e16634795441e1b872458763210202020202020202020202020202020202020202020202020202020202020202026703010203b1752103030303030303030303030303030303030303030303030303030303030303030368ac00\"]}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+      }
+    }
+  },
+  {
+    "name": "wrong-preimage",
+    "operation": "esplora",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [
+          {
+            "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "vout": 0,
+            "prevout": {
+              "value": 100000,
+              "scriptpubkey": "0014abababababababababababababababababababab"
+            },
+            "witness": [
+              "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "a914ea4beb47def8492389a1e16634795441e1b872458763210202020202020202020202020202020202020202020202020202020202020202026703010203b1752103030303030303030303030303030303030303030303030303030303030303030368ac"
+            ]
+          }
+        ],
+        "vout": [
+          {
+            "value": 60000,
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+          },
+          {
+            "value": 39000,
+            "scriptpubkey": "0014abababababababababababababababababababab"
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 1700000000
+        }
+      },
+      "scripts": [
+        "0014abababababababababababababababababababab"
+      ]
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "2023-11-14T22:13:20Z",
+        "confirmed_at": "2023-11-14T22:13:20Z",
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": "0.0006",
+        "fee": "0.00001",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "withdrawal",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"fee\": 1000, \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0, \"witness\": [\"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\", \"a914ea4beb47def8492389a1e16634795441e1b872458763210202020202020202020202020202020202020202020202020202020202020202026703010203b1752103030303030303030303030303030303030303030303030303030303030303030368ac\"]}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}",
+        "swap_refund_funding_txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+        "swap_refund_funding_vout": 0
+      }
+    }
+  },
+  {
+    "name": "electrum-1970-01-01T00:00:00Z",
+    "operation": "electrum",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [
+          {
+            "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "vout": 0,
+            "prevout": {
+              "value": 100000,
+              "scriptpubkey": "0014abababababababababababababababababababab"
+            }
+          }
+        ],
+        "vout": [
+          {
+            "value": 60000,
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+          },
+          {
+            "value": 39000,
+            "scriptpubkey": "0014abababababababababababababababababababab"
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 1700000000
+        },
+        "_kassiber_electrum_graph": {
+          "kind": "bitcoin_electrum",
+          "version": 1
+        }
+      },
+      "scripts": [
+        "0014abababababababababababababababababababab"
+      ],
+      "txid": "abababababababababababababababababababababababababababababababab",
+      "occurred_at": "1970-01-01T00:00:00Z"
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "1970-01-01T00:00:00Z",
+        "confirmed_at": null,
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": "0.0006",
+        "fee": "0.00001",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "withdrawal",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"_kassiber_electrum_graph\": {\"kind\": \"bitcoin_electrum\", \"version\": 2}, \"fee\": 1000, \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"], \"status\": {\"confirmed\": false}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+      }
+    }
+  },
+  {
+    "name": "electrum-2023-11-14T22:13:20Z",
+    "operation": "electrum",
+    "input": {
+      "tx": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "vin": [
+          {
+            "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "vout": 0,
+            "prevout": {
+              "value": 100000,
+              "scriptpubkey": "0014abababababababababababababababababababab"
+            }
+          }
+        ],
+        "vout": [
+          {
+            "value": 60000,
+            "scriptpubkey": "0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+          },
+          {
+            "value": 39000,
+            "scriptpubkey": "0014abababababababababababababababababababab"
+          }
+        ],
+        "status": {
+          "confirmed": true,
+          "block_time": 1700000000
+        },
+        "_kassiber_electrum_graph": {
+          "kind": "bitcoin_electrum",
+          "version": 1
+        }
+      },
+      "scripts": [
+        "0014abababababababababababababababababababab"
+      ],
+      "txid": "abababababababababababababababababababababababababababababababab",
+      "occurred_at": "2023-11-14T22:13:20Z"
+    },
+    "expected": {
+      "result": {
+        "txid": "abababababababababababababababababababababababababababababababab",
+        "occurred_at": "2023-11-14T22:13:20Z",
+        "confirmed_at": "2023-11-14T22:13:20Z",
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": "0.0006",
+        "fee": "0.00001",
+        "fiat_rate": null,
+        "fiat_value": null,
+        "kind": "withdrawal",
+        "description": "Synced from fixture",
+        "counterparty": null,
+        "raw_json": "{\"_kassiber_electrum_graph\": {\"kind\": \"bitcoin_electrum\", \"version\": 2}, \"fee\": 1000, \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"], \"status\": {\"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+      }
+    }
+  },
+  {
+    "name": "cross-family-union",
+    "operation": "compose",
+    "input": {
+      "observers": [
+        {
+          "observer_id": "a",
+          "observer_kind": "bdk",
+          "records": [
+            {
+              "txid": "abababababababababababababababababababababababababababababababab",
+              "occurred_at": "2023-11-14T22:13:20Z",
+              "confirmed_at": "2023-11-14T22:13:20Z",
+              "direction": "outbound",
+              "asset": "BTC",
+              "amount": "0.0006",
+              "fee": "0.00001",
+              "fiat_rate": null,
+              "fiat_value": null,
+              "kind": "withdrawal",
+              "description": "Synced from fixture",
+              "counterparty": null,
+              "raw_json": "{\"fee\": 1000, \"observer\": \"bdk\", \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+            }
+          ]
+        },
+        {
+          "observer_id": "b",
+          "observer_kind": "bdk",
+          "records": [
+            {
+              "txid": "abababababababababababababababababababababababababababababababab",
+              "occurred_at": "2023-11-14T22:13:20Z",
+              "confirmed_at": "2023-11-14T22:13:20Z",
+              "direction": "inbound",
+              "asset": "BTC",
+              "amount": "0.0006",
+              "fee": "0",
+              "fiat_rate": null,
+              "fiat_value": null,
+              "kind": "deposit",
+              "description": "Synced from fixture",
+              "counterparty": null,
+              "raw_json": "{\"fee\": 1000, \"observer\": \"bdk\", \"observer_owned_scripts\": [\"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+            }
+          ]
+        }
+      ]
+    },
+    "expected": {
+      "result": {
+        "records": [
+          {
+            "txid": "abababababababababababababababababababababababababababababababab",
+            "occurred_at": "2023-11-14T22:13:20Z",
+            "confirmed_at": "2023-11-14T22:13:20Z",
+            "direction": "outbound",
+            "asset": "BTC",
+            "amount": "0",
+            "fee": "0.00001",
+            "fiat_rate": null,
+            "fiat_value": null,
+            "kind": "fee",
+            "description": "Synced from fixture",
+            "counterparty": null,
+            "raw_json": "{\"fee\": 1000, \"observer\": \"bdk\", \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\", \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+          }
+        ],
+        "metadata": {
+          "utxos": [],
+          "freshness_checkpoint": {
+            "observer_instances": {
+              "a": {},
+              "b": {}
+            }
+          }
+        },
+        "provenance_entries": [
+          {
+            "external_id": "abababababababababababababababababababababababababababababababab",
+            "asset": "BTC",
+            "direction": "outbound",
+            "observer_ids": [
+              "a"
+            ],
+            "observer_kinds": [
+              "bdk"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "complementary-prevouts-and-first-tie",
+    "operation": "compose",
+    "input": {
+      "observers": [
+        {
+          "observer_id": "a",
+          "observer_kind": "bdk",
+          "records": [
+            {
+              "txid": "abababababababababababababababababababababababababababababababab",
+              "occurred_at": "2023-11-14T22:13:20Z",
+              "confirmed_at": "2023-11-14T22:13:20Z",
+              "direction": "outbound",
+              "asset": "BTC",
+              "amount": "0.0006",
+              "fee": "0.00001",
+              "fiat_rate": null,
+              "fiat_value": null,
+              "kind": "withdrawal",
+              "description": "Synced from fixture",
+              "counterparty": null,
+              "raw_json": "{\"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0, \"prevout\": {\"value\": 100000, \"scriptpubkey\": \"0014abababababababababababababababababababab\"}}, {\"txid\": \"efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef\", \"vout\": 1, \"prevout\": null}], \"vout\": [{\"value\": 60000, \"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\"}, {\"value\": 39000, \"scriptpubkey\": \"0014abababababababababababababababababababab\"}], \"status\": {\"confirmed\": true, \"block_time\": 1700000000}, \"observer\": \"bdk\", \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"]}"
+            }
+          ]
+        },
+        {
+          "observer_id": "b",
+          "observer_kind": "bdk",
+          "records": [
+            {
+              "txid": "abababababababababababababababababababababababababababababababab",
+              "occurred_at": "2023-11-14T22:13:20Z",
+              "confirmed_at": "2023-11-14T22:13:20Z",
+              "direction": "inbound",
+              "asset": "BTC",
+              "amount": "0.0006",
+              "fee": "0",
+              "fiat_rate": null,
+              "fiat_value": null,
+              "kind": "deposit",
+              "description": "Synced from fixture",
+              "counterparty": null,
+              "raw_json": "{\"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0, \"prevout\": null}, {\"txid\": \"efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef\", \"vout\": 1, \"prevout\": {\"value\": 2000, \"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\"}}], \"vout\": [{\"value\": 60000, \"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\"}, {\"value\": 39000, \"scriptpubkey\": \"0014abababababababababababababababababababab\"}], \"status\": {\"confirmed\": true, \"block_time\": 1700000000}, \"observer\": \"bdk\", \"observer_owned_scripts\": [\"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\"], \"distinct_metadata\": \"second\"}"
+            }
+          ]
+        }
+      ]
+    },
+    "expected": {
+      "result": {
+        "records": [
+          {
+            "txid": "abababababababababababababababababababababababababababababababab",
+            "occurred_at": "2023-11-14T22:13:20Z",
+            "confirmed_at": "2023-11-14T22:13:20Z",
+            "direction": "outbound",
+            "asset": "BTC",
+            "amount": "0",
+            "fee": "0.00003",
+            "fiat_rate": null,
+            "fiat_value": null,
+            "kind": "fee",
+            "description": "Synced from fixture",
+            "counterparty": null,
+            "raw_json": "{\"fee\": 3000, \"observer\": \"bdk\", \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\", \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}, {\"prevout\": {\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 2000}, \"txid\": \"efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef\", \"vout\": 1}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+          }
+        ],
+        "metadata": {
+          "utxos": [],
+          "freshness_checkpoint": {
+            "observer_instances": {
+              "a": {},
+              "b": {}
+            }
+          }
+        },
+        "provenance_entries": [
+          {
+            "external_id": "abababababababababababababababababababababababababababababababab",
+            "asset": "BTC",
+            "direction": "outbound",
+            "observer_ids": [
+              "a"
+            ],
+            "observer_kinds": [
+              "bdk"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "richest-graph-precedes-sparse",
+    "operation": "compose",
+    "input": {
+      "observers": [
+        {
+          "observer_id": "a",
+          "observer_kind": "bdk",
+          "records": [
+            {
+              "txid": "abababababababababababababababababababababababababababababababab",
+              "occurred_at": "2023-11-14T22:13:20Z",
+              "confirmed_at": "2023-11-14T22:13:20Z",
+              "direction": "outbound",
+              "asset": "BTC",
+              "amount": "0.0006",
+              "fee": "0.00001",
+              "fiat_rate": null,
+              "fiat_value": null,
+              "kind": "withdrawal",
+              "description": "Synced from fixture",
+              "counterparty": null,
+              "raw_json": "{\"fee\": 1000, \"observer\": \"bdk\", \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": null, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}], \"distinct_metadata\": \"sparse\"}"
+            }
+          ]
+        },
+        {
+          "observer_id": "b",
+          "observer_kind": "bdk",
+          "records": [
+            {
+              "txid": "abababababababababababababababababababababababababababababababab",
+              "occurred_at": "2023-11-14T22:13:20Z",
+              "confirmed_at": "2023-11-14T22:13:20Z",
+              "direction": "inbound",
+              "asset": "BTC",
+              "amount": "0.0006",
+              "fee": "0",
+              "fiat_rate": null,
+              "fiat_value": null,
+              "kind": "deposit",
+              "description": "Synced from fixture",
+              "counterparty": null,
+              "raw_json": "{\"fee\": 1000, \"observer\": \"bdk\", \"observer_owned_scripts\": [\"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+            }
+          ]
+        }
+      ]
+    },
+    "expected": {
+      "result": {
+        "records": [
+          {
+            "txid": "abababababababababababababababababababababababababababababababab",
+            "occurred_at": "2023-11-14T22:13:20Z",
+            "confirmed_at": "2023-11-14T22:13:20Z",
+            "direction": "outbound",
+            "asset": "BTC",
+            "amount": "0",
+            "fee": "0.00001",
+            "fiat_rate": null,
+            "fiat_value": null,
+            "kind": "fee",
+            "description": "Synced from fixture",
+            "counterparty": null,
+            "raw_json": "{\"fee\": 1000, \"observer\": \"bdk\", \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\", \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+          }
+        ],
+        "metadata": {
+          "utxos": [],
+          "freshness_checkpoint": {
+            "observer_instances": {
+              "a": {},
+              "b": {}
+            }
+          }
+        },
+        "provenance_entries": [
+          {
+            "external_id": "abababababababababababababababababababababababababababababababab",
+            "asset": "BTC",
+            "direction": "outbound",
+            "observer_ids": [
+              "a"
+            ],
+            "observer_kinds": [
+              "bdk"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "provenance-txid-fallback",
+    "operation": "compose",
+    "input": {
+      "observers": [
+        {
+          "observer_id": "b",
+          "observer_kind": "bdk",
+          "records": [
+            {
+              "txid": "abababababababababababababababababababababababababababababababab",
+              "occurred_at": "2023-11-14T22:13:20Z",
+              "confirmed_at": "2023-11-14T22:13:20Z",
+              "direction": "other",
+              "asset": "BTC",
+              "amount": "0.0006",
+              "fee": "0",
+              "fiat_rate": null,
+              "fiat_value": null,
+              "kind": "deposit",
+              "description": "Synced from fixture",
+              "counterparty": null,
+              "raw_json": "{\"fee\": 1000, \"observer\": \"bdk\", \"observer_owned_scripts\": [\"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+            }
+          ]
+        },
+        {
+          "observer_id": "a",
+          "observer_kind": "bdk",
+          "records": [
+            {
+              "txid": "abababababababababababababababababababababababababababababababab",
+              "occurred_at": "2023-11-14T22:13:20Z",
+              "confirmed_at": "2023-11-14T22:13:20Z",
+              "direction": "other",
+              "asset": "BTC",
+              "amount": "0.0006",
+              "fee": "0.00001",
+              "fiat_rate": null,
+              "fiat_value": null,
+              "kind": "withdrawal",
+              "description": "Synced from fixture",
+              "counterparty": null,
+              "raw_json": "{\"fee\": 1000, \"observer\": \"bdk\", \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+            }
+          ]
+        }
+      ]
+    },
+    "expected": {
+      "result": {
+        "records": [
+          {
+            "txid": "abababababababababababababababababababababababababababababababab",
+            "occurred_at": "2023-11-14T22:13:20Z",
+            "confirmed_at": "2023-11-14T22:13:20Z",
+            "direction": "outbound",
+            "asset": "BTC",
+            "amount": "0",
+            "fee": "0.00001",
+            "fiat_rate": null,
+            "fiat_value": null,
+            "kind": "fee",
+            "description": "Synced from fixture",
+            "counterparty": null,
+            "raw_json": "{\"fee\": 1000, \"observer\": \"bdk\", \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\", \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+          }
+        ],
+        "metadata": {
+          "utxos": [],
+          "freshness_checkpoint": {
+            "observer_instances": {
+              "a": {},
+              "b": {}
+            }
+          }
+        },
+        "provenance_entries": [
+          {
+            "external_id": "abababababababababababababababababababababababababababababababab",
+            "asset": "BTC",
+            "direction": "outbound",
+            "observer_ids": [
+              "a",
+              "b"
+            ],
+            "observer_kinds": [
+              "bdk"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "cross-observer-veto",
+    "operation": "compose",
+    "input": {
+      "observers": [
+        {
+          "observer_id": "a",
+          "observer_kind": "bdk",
+          "records": [],
+          "retracted_external_ids": [
+            " ABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABAB ",
+            "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+          ]
+        },
+        {
+          "observer_id": "b",
+          "observer_kind": "bdk",
+          "records": [
+            {
+              "txid": "abababababababababababababababababababababababababababababababab",
+              "occurred_at": "2023-11-14T22:13:20Z",
+              "confirmed_at": "2023-11-14T22:13:20Z",
+              "direction": "inbound",
+              "asset": "BTC",
+              "amount": "0.0006",
+              "fee": "0",
+              "fiat_rate": null,
+              "fiat_value": null,
+              "kind": "deposit",
+              "description": "Synced from fixture",
+              "counterparty": null,
+              "raw_json": "{\"fee\": 1000, \"observer\": \"bdk\", \"observer_owned_scripts\": [\"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+            }
+          ]
+        }
+      ]
+    },
+    "expected": {
+      "result": {
+        "records": [
+          {
+            "txid": "abababababababababababababababababababababababababababababababab",
+            "occurred_at": "2023-11-14T22:13:20Z",
+            "confirmed_at": "2023-11-14T22:13:20Z",
+            "direction": "inbound",
+            "asset": "BTC",
+            "amount": "0.0006",
+            "fee": "0",
+            "fiat_rate": null,
+            "fiat_value": null,
+            "kind": "deposit",
+            "description": "Synced from fixture",
+            "counterparty": null,
+            "raw_json": "{\"fee\": 1000, \"observer\": \"bdk\", \"observer_owned_scripts\": [\"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+          }
+        ],
+        "metadata": {
+          "utxos": [],
+          "observer_retracted_external_ids": [
+            "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+          ],
+          "freshness_checkpoint": {
+            "observer_instances": {
+              "a": {},
+              "b": {}
+            }
+          }
+        },
+        "provenance_entries": [
+          {
+            "external_id": "abababababababababababababababababababababababababababababababab",
+            "asset": "BTC",
+            "direction": "inbound",
+            "observer_ids": [
+              "b"
+            ],
+            "observer_kinds": [
+              "bdk"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "empty-output-snapshot",
+    "operation": "compose",
+    "input": {
+      "observers": [
+        {
+          "observer_id": "a",
+          "observer_kind": "bdk",
+          "records": []
+        }
+      ]
+    },
+    "expected": {
+      "result": {
+        "records": [],
+        "metadata": {
+          "utxos": [],
+          "freshness_checkpoint": {
+            "observer_instances": {
+              "a": {}
+            }
+          }
+        },
+        "provenance_entries": []
+      }
+    }
+  },
+  {
+    "name": "mixed-records-refused",
+    "operation": "compose",
+    "input": {
+      "observers": [
+        {
+          "observer_id": "a",
+          "observer_kind": "bdk",
+          "records": []
+        }
+      ],
+      "adapter_records": [
+        {
+          "txid": "abababababababababababababababababababababababababababababababab",
+          "occurred_at": "2023-11-14T22:13:20Z",
+          "confirmed_at": "2023-11-14T22:13:20Z",
+          "direction": "outbound",
+          "asset": "BTC",
+          "amount": "0.0006",
+          "fee": "0.00001",
+          "fiat_rate": null,
+          "fiat_value": null,
+          "kind": "withdrawal",
+          "description": "Synced from fixture",
+          "counterparty": null,
+          "raw_json": "{\"fee\": 1000, \"observer\": \"bdk\", \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+        }
+      ]
+    },
+    "expected": {
+      "error": {
+        "code": "observer_projection_conflict",
+        "message": "A wallet refresh cannot apply dependency and compatibility projections together",
+        "details": {
+          "conflict_kind": "mixed_observer_routes"
+        },
+        "hint": "Select exactly one observer route before contacting the backend."
+      }
+    }
+  },
+  {
+    "name": "mixed-empty-inventory-refused",
+    "operation": "compose",
+    "input": {
+      "observers": [
+        {
+          "observer_id": "a",
+          "observer_kind": "bdk",
+          "records": []
+        }
+      ],
+      "adapter_metadata": {
+        "utxos": []
+      }
+    },
+    "expected": {
+      "error": {
+        "code": "observer_projection_conflict",
+        "message": "A wallet refresh cannot apply dependency and compatibility projections together",
+        "details": {
+          "conflict_kind": "mixed_observer_routes"
+        },
+        "hint": "Select exactly one observer route before contacting the backend."
+      }
+    }
+  },
+  {
+    "name": "adapter-only",
+    "operation": "compose",
+    "input": {
+      "observers": [],
+      "adapter_records": [
+        {
+          "txid": "abababababababababababababababababababababababababababababababab",
+          "occurred_at": "2023-11-14T22:13:20Z",
+          "confirmed_at": "2023-11-14T22:13:20Z",
+          "direction": "outbound",
+          "asset": "BTC",
+          "amount": "0.0006",
+          "fee": "0.00001",
+          "fiat_rate": null,
+          "fiat_value": null,
+          "kind": "withdrawal",
+          "description": "Synced from fixture",
+          "counterparty": null,
+          "raw_json": "{\"fee\": 1000, \"observer\": \"bdk\", \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+        }
+      ],
+      "adapter_metadata": {
+        "utxos": []
+      }
+    },
+    "expected": {
+      "result": {
+        "records": [
+          {
+            "txid": "abababababababababababababababababababababababababababababababab",
+            "occurred_at": "2023-11-14T22:13:20Z",
+            "confirmed_at": "2023-11-14T22:13:20Z",
+            "direction": "outbound",
+            "asset": "BTC",
+            "amount": "0.0006",
+            "fee": "0.00001",
+            "fiat_rate": null,
+            "fiat_value": null,
+            "kind": "withdrawal",
+            "description": "Synced from fixture",
+            "counterparty": null,
+            "raw_json": "{\"fee\": 1000, \"observer\": \"bdk\", \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+          }
+        ],
+        "metadata": {
+          "utxos": []
+        },
+        "provenance_entries": []
+      }
+    }
+  },
+  {
+    "name": "checkpoints-outputs-reuse",
+    "operation": "compose",
+    "input": {
+      "observers": [
+        {
+          "observer_id": "b",
+          "observer_kind": "bdk",
+          "records": [
+            {
+              "txid": "abababababababababababababababababababababababababababababababab",
+              "occurred_at": "2023-11-14T22:13:20Z",
+              "confirmed_at": "2023-11-14T22:13:20Z",
+              "direction": "inbound",
+              "asset": "BTC",
+              "amount": "0.0006",
+              "fee": "0",
+              "fiat_rate": null,
+              "fiat_value": null,
+              "kind": "deposit",
+              "description": "Synced from fixture",
+              "counterparty": null,
+              "raw_json": "{\"fee\": 1000, \"observer\": \"bdk\", \"observer_owned_scripts\": [\"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+            }
+          ],
+          "outputs": [
+            {
+              "txid": "abababababababababababababababababababababababababababababababab",
+              "vout": 1,
+              "value": 3
+            }
+          ],
+          "checkpoint": {
+            "highest_used": {
+              "0": 3,
+              "1": "bad"
+            }
+          },
+          "reused_records": 2
+        },
+        {
+          "observer_id": "a",
+          "observer_kind": "bdk",
+          "records": [
+            {
+              "txid": "abababababababababababababababababababababababababababababababab",
+              "occurred_at": "2023-11-14T22:13:20Z",
+              "confirmed_at": "2023-11-14T22:13:20Z",
+              "direction": "inbound",
+              "asset": "BTC",
+              "amount": "0.0006",
+              "fee": "0",
+              "fiat_rate": null,
+              "fiat_value": null,
+              "kind": "deposit",
+              "description": "Synced from fixture",
+              "counterparty": null,
+              "raw_json": "{\"fee\": 1000, \"observer\": \"bdk\", \"observer_owned_scripts\": [\"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+            }
+          ],
+          "outputs": [
+            {
+              "txid": "abababababababababababababababababababababababababababababababab",
+              "vout": 1,
+              "value": 4
+            },
+            {
+              "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+              "vout": 0
+            }
+          ],
+          "checkpoint": {
+            "highest_used": {
+              "0": 1,
+              "2": "5"
+            }
+          },
+          "reused_records": 1
+        }
+      ],
+      "adapter_metadata": {
+        "freshness_checkpoint": {
+          "existing": true,
+          "highest_used": {
+            "9": 10
+          }
+        }
+      }
+    },
+    "expected": {
+      "result": {
+        "records": [
+          {
+            "txid": "abababababababababababababababababababababababababababababababab",
+            "occurred_at": "2023-11-14T22:13:20Z",
+            "confirmed_at": "2023-11-14T22:13:20Z",
+            "direction": "inbound",
+            "asset": "BTC",
+            "amount": "0.0006",
+            "fee": "0",
+            "fiat_rate": null,
+            "fiat_value": null,
+            "kind": "deposit",
+            "description": "Synced from fixture",
+            "counterparty": null,
+            "raw_json": "{\"fee\": 1000, \"observer\": \"bdk\", \"observer_owned_scripts\": [\"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+          }
+        ],
+        "metadata": {
+          "freshness_checkpoint": {
+            "existing": true,
+            "highest_used": {
+              "0": 3,
+              "2": 5
+            },
+            "observer_instances": {
+              "a": {
+                "highest_used": {
+                  "0": 1,
+                  "2": "5"
+                }
+              },
+              "b": {
+                "highest_used": {
+                  "0": 3,
+                  "1": "bad"
+                }
+              }
+            }
+          },
+          "utxos": [
+            {
+              "txid": "abababababababababababababababababababababababababababababababab",
+              "vout": 1,
+              "value": 4
+            },
+            {
+              "txid": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+              "vout": 0
+            }
+          ],
+          "observer_records_reused": 3
+        },
+        "provenance_entries": [
+          {
+            "external_id": "abababababababababababababababababababababababababababababababab",
+            "asset": "BTC",
+            "direction": "inbound",
+            "observer_ids": [
+              "a",
+              "b"
+            ],
+            "observer_kinds": [
+              "bdk"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "opaque-first-record-wins",
+    "operation": "compose",
+    "input": {
+      "observers": [
+        {
+          "observer_id": "a",
+          "observer_kind": "bdk",
+          "records": [
+            {
+              "txid": "abababababababababababababababababababababababababababababababab",
+              "occurred_at": "2023-11-14T22:13:20Z",
+              "confirmed_at": "2023-11-14T22:13:20Z",
+              "direction": "outbound",
+              "asset": "BTC",
+              "amount": "0.0006",
+              "fee": "0.00001",
+              "fiat_rate": null,
+              "fiat_value": null,
+              "kind": "withdrawal",
+              "description": "Synced from fixture",
+              "counterparty": null,
+              "raw_json": "opaque importer text"
+            }
+          ]
+        },
+        {
+          "observer_id": "b",
+          "observer_kind": "bdk",
+          "records": [
+            {
+              "txid": "abababababababababababababababababababababababababababababababab",
+              "occurred_at": "2023-11-14T22:13:20Z",
+              "confirmed_at": "2023-11-14T22:13:20Z",
+              "direction": "outbound",
+              "asset": "BTC",
+              "amount": "999",
+              "fee": "0.00001",
+              "fiat_rate": null,
+              "fiat_value": null,
+              "kind": "withdrawal",
+              "description": "Synced from fixture",
+              "counterparty": null,
+              "raw_json": "opaque importer text"
+            }
+          ]
+        }
+      ]
+    },
+    "expected": {
+      "result": {
+        "records": [
+          {
+            "txid": "abababababababababababababababababababababababababababababababab",
+            "occurred_at": "2023-11-14T22:13:20Z",
+            "confirmed_at": "2023-11-14T22:13:20Z",
+            "direction": "outbound",
+            "asset": "BTC",
+            "amount": "0.0006",
+            "fee": "0.00001",
+            "fiat_rate": null,
+            "fiat_value": null,
+            "kind": "withdrawal",
+            "description": "Synced from fixture",
+            "counterparty": null,
+            "raw_json": "opaque importer text"
+          }
+        ],
+        "metadata": {
+          "utxos": [],
+          "freshness_checkpoint": {
+            "observer_instances": {
+              "a": {},
+              "b": {}
+            }
+          }
+        },
+        "provenance_entries": [
+          {
+            "external_id": "abababababababababababababababababababababababababababababababab",
+            "asset": "BTC",
+            "direction": "outbound",
+            "observer_ids": [
+              "a",
+              "b"
+            ],
+            "observer_kinds": [
+              "bdk"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "external-id-key",
+    "operation": "compose",
+    "input": {
+      "observers": [
+        {
+          "observer_id": "a",
+          "observer_kind": "bdk",
+          "records": [
+            {
+              "occurred_at": "2023-11-14T22:13:20Z",
+              "confirmed_at": "2023-11-14T22:13:20Z",
+              "direction": "outbound",
+              "asset": "BTC",
+              "amount": "0.0006",
+              "fee": "0.00001",
+              "fiat_rate": null,
+              "fiat_value": null,
+              "kind": "withdrawal",
+              "description": "Synced from fixture",
+              "counterparty": null,
+              "raw_json": "opaque importer text",
+              "external_id": "abababababababababababababababababababababababababababababababab"
+            }
+          ],
+          "retracted_external_ids": [
+            "abababababababababababababababababababababababababababababababab",
+            "literal",
+            "literal",
+            "Literal"
+          ]
+        },
+        {
+          "observer_id": "b",
+          "observer_kind": "bdk",
+          "records": [
+            {
+              "txid": "literal",
+              "occurred_at": "2023-11-14T22:13:20Z",
+              "confirmed_at": "2023-11-14T22:13:20Z",
+              "direction": "outbound",
+              "asset": "BTC",
+              "amount": "0.0006",
+              "fee": "0.00001",
+              "fiat_rate": null,
+              "fiat_value": null,
+              "kind": "withdrawal",
+              "description": "Synced from fixture",
+              "counterparty": null,
+              "raw_json": "opaque importer text"
+            }
+          ]
+        }
+      ]
+    },
+    "expected": {
+      "result": {
+        "records": [
+          {
+            "occurred_at": "2023-11-14T22:13:20Z",
+            "confirmed_at": "2023-11-14T22:13:20Z",
+            "direction": "outbound",
+            "asset": "BTC",
+            "amount": "0.0006",
+            "fee": "0.00001",
+            "fiat_rate": null,
+            "fiat_value": null,
+            "kind": "withdrawal",
+            "description": "Synced from fixture",
+            "counterparty": null,
+            "raw_json": "opaque importer text",
+            "external_id": "abababababababababababababababababababababababababababababababab"
+          },
+          {
+            "txid": "literal",
+            "occurred_at": "2023-11-14T22:13:20Z",
+            "confirmed_at": "2023-11-14T22:13:20Z",
+            "direction": "outbound",
+            "asset": "BTC",
+            "amount": "0.0006",
+            "fee": "0.00001",
+            "fiat_rate": null,
+            "fiat_value": null,
+            "kind": "withdrawal",
+            "description": "Synced from fixture",
+            "counterparty": null,
+            "raw_json": "opaque importer text"
+          }
+        ],
+        "metadata": {
+          "utxos": [],
+          "observer_retracted_external_ids": [
+            "Literal"
+          ],
+          "freshness_checkpoint": {
+            "observer_instances": {
+              "a": {},
+              "b": {}
+            }
+          }
+        },
+        "provenance_entries": [
+          {
+            "external_id": "abababababababababababababababababababababababababababababababab",
+            "asset": "BTC",
+            "direction": "outbound",
+            "observer_ids": [
+              "a"
+            ],
+            "observer_kinds": [
+              "bdk"
+            ]
+          },
+          {
+            "external_id": "literal",
+            "asset": "BTC",
+            "direction": "outbound",
+            "observer_ids": [
+              "b"
+            ],
+            "observer_kinds": [
+              "bdk"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "non-btc-observer-stays-distinct",
+    "operation": "compose",
+    "input": {
+      "observers": [
+        {
+          "observer_id": "a",
+          "observer_kind": "bdk",
+          "records": [
+            {
+              "txid": "abababababababababababababababababababababababababababababababab",
+              "occurred_at": "2023-11-14T22:13:20Z",
+              "confirmed_at": "2023-11-14T22:13:20Z",
+              "direction": "outbound",
+              "asset": "LBTC",
+              "amount": "0.0006",
+              "fee": "0.00001",
+              "fiat_rate": null,
+              "fiat_value": null,
+              "kind": "withdrawal",
+              "description": "Synced from fixture",
+              "counterparty": null,
+              "raw_json": "{\"fee\": 1000, \"observer\": \"bdk\", \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+            }
+          ]
+        }
+      ]
+    },
+    "expected": {
+      "result": {
+        "records": [
+          {
+            "txid": "abababababababababababababababababababababababababababababababab",
+            "occurred_at": "2023-11-14T22:13:20Z",
+            "confirmed_at": "2023-11-14T22:13:20Z",
+            "direction": "outbound",
+            "asset": "LBTC",
+            "amount": "0.0006",
+            "fee": "0.00001",
+            "fiat_rate": null,
+            "fiat_value": null,
+            "kind": "withdrawal",
+            "description": "Synced from fixture",
+            "counterparty": null,
+            "raw_json": "{\"fee\": 1000, \"observer\": \"bdk\", \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+          }
+        ],
+        "metadata": {
+          "utxos": [],
+          "freshness_checkpoint": {
+            "observer_instances": {
+              "a": {}
+            }
+          }
+        },
+        "provenance_entries": [
+          {
+            "external_id": "abababababababababababababababababababababababababababababababab",
+            "asset": "LBTC",
+            "direction": "outbound",
+            "observer_ids": [
+              "a"
+            ],
+            "observer_kinds": [
+              "bdk"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "inconsistent-inputs-refused",
+    "operation": "compose",
+    "input": {
+      "observers": [
+        {
+          "observer_id": "a",
+          "observer_kind": "bdk",
+          "records": [
+            {
+              "txid": "abababababababababababababababababababababababababababababababab",
+              "occurred_at": "2023-11-14T22:13:20Z",
+              "confirmed_at": "2023-11-14T22:13:20Z",
+              "direction": "outbound",
+              "asset": "BTC",
+              "amount": "0.0006",
+              "fee": "0.00001",
+              "fiat_rate": null,
+              "fiat_value": null,
+              "kind": "withdrawal",
+              "description": "Synced from fixture",
+              "counterparty": null,
+              "raw_json": "{\"fee\": 1000, \"observer\": \"bdk\", \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+            }
+          ]
+        },
+        {
+          "observer_id": "b",
+          "observer_kind": "bdk",
+          "records": [
+            {
+              "txid": "abababababababababababababababababababababababababababababababab",
+              "occurred_at": "2023-11-14T22:13:20Z",
+              "confirmed_at": "2023-11-14T22:13:20Z",
+              "direction": "inbound",
+              "asset": "BTC",
+              "amount": "0.0006",
+              "fee": "0",
+              "fiat_rate": null,
+              "fiat_value": null,
+              "kind": "deposit",
+              "description": "Synced from fixture",
+              "counterparty": null,
+              "raw_json": "{\"fee\": 1000, \"observer\": \"bdk\", \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+            }
+          ]
+        }
+      ]
+    },
+    "expected": {
+      "error": {
+        "code": "observer_projection_conflict",
+        "message": "BDK observers returned inconsistent inputs for one transaction",
+        "details": {
+          "conflict_kind": "bdk_inconsistent_inputs",
+          "txid": "abababababababababababababababababababababababababababababababab"
+        },
+        "hint": null
+      }
+    }
+  },
+  {
+    "name": "conflicting-prevouts-refused",
+    "operation": "compose",
+    "input": {
+      "observers": [
+        {
+          "observer_id": "a",
+          "observer_kind": "bdk",
+          "records": [
+            {
+              "txid": "abababababababababababababababababababababababababababababababab",
+              "occurred_at": "2023-11-14T22:13:20Z",
+              "confirmed_at": "2023-11-14T22:13:20Z",
+              "direction": "outbound",
+              "asset": "BTC",
+              "amount": "0.0006",
+              "fee": "0.00001",
+              "fiat_rate": null,
+              "fiat_value": null,
+              "kind": "withdrawal",
+              "description": "Synced from fixture",
+              "counterparty": null,
+              "raw_json": "{\"fee\": 1000, \"observer\": \"bdk\", \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+            }
+          ]
+        },
+        {
+          "observer_id": "b",
+          "observer_kind": "bdk",
+          "records": [
+            {
+              "txid": "abababababababababababababababababababababababababababababababab",
+              "occurred_at": "2023-11-14T22:13:20Z",
+              "confirmed_at": "2023-11-14T22:13:20Z",
+              "direction": "inbound",
+              "asset": "BTC",
+              "amount": "0.0006",
+              "fee": "0",
+              "fiat_rate": null,
+              "fiat_value": null,
+              "kind": "deposit",
+              "description": "Synced from fixture",
+              "counterparty": null,
+              "raw_json": "{\"fee\": 1000, \"observer\": \"bdk\", \"observer_owned_scripts\": [\"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100001}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+            }
+          ]
+        }
+      ]
+    },
+    "expected": {
+      "error": {
+        "code": "observer_projection_conflict",
+        "message": "BDK observers returned conflicting prevouts for one transaction",
+        "details": {
+          "conflict_kind": "bdk_conflicting_prevouts",
+          "txid": "abababababababababababababababababababababababababababababababab"
+        },
+        "hint": null
+      }
+    }
+  },
+  {
+    "name": "provenance-key-precedence",
+    "operation": "compose",
+    "input": {
+      "observers": [
+        {
+          "observer_id": "b",
+          "observer_kind": "bdk",
+          "records": [
+            {
+              "txid": "abababababababababababababababababababababababababababababababab",
+              "occurred_at": "2023-11-14T22:13:20Z",
+              "confirmed_at": "2023-11-14T22:13:20Z",
+              "direction": "inbound",
+              "asset": "BTC",
+              "amount": "0.0006",
+              "fee": "0",
+              "fiat_rate": null,
+              "fiat_value": null,
+              "kind": "deposit",
+              "description": "Synced from fixture",
+              "counterparty": null,
+              "raw_json": "{\"fee\": 1000, \"observer\": \"bdk\", \"observer_owned_scripts\": [\"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+            }
+          ]
+        },
+        {
+          "observer_id": "a",
+          "observer_kind": "bdk",
+          "records": [
+            {
+              "txid": "abababababababababababababababababababababababababababababababab",
+              "occurred_at": "2023-11-14T22:13:20Z",
+              "confirmed_at": "2023-11-14T22:13:20Z",
+              "direction": "outbound",
+              "asset": "BTC",
+              "amount": "0.0006",
+              "fee": "0.00001",
+              "fiat_rate": null,
+              "fiat_value": null,
+              "kind": "withdrawal",
+              "description": "Synced from fixture",
+              "counterparty": null,
+              "raw_json": "{\"fee\": 1000, \"observer\": \"bdk\", \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+            }
+          ]
+        }
+      ]
+    },
+    "expected": {
+      "result": {
+        "records": [
+          {
+            "txid": "abababababababababababababababababababababababababababababababab",
+            "occurred_at": "2023-11-14T22:13:20Z",
+            "confirmed_at": "2023-11-14T22:13:20Z",
+            "direction": "outbound",
+            "asset": "BTC",
+            "amount": "0",
+            "fee": "0.00001",
+            "fiat_rate": null,
+            "fiat_value": null,
+            "kind": "fee",
+            "description": "Synced from fixture",
+            "counterparty": null,
+            "raw_json": "{\"fee\": 1000, \"observer\": \"bdk\", \"observer_owned_scripts\": [\"0014abababababababababababababababababababab\", \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\"], \"status\": {\"block_time\": 1700000000, \"confirmed\": true}, \"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"prevout\": {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 100000}, \"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 0}], \"vout\": [{\"scriptpubkey\": \"0014cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"value\": 60000}, {\"scriptpubkey\": \"0014abababababababababababababababababababab\", \"value\": 39000}]}"
+          }
+        ],
+        "metadata": {
+          "utxos": [],
+          "freshness_checkpoint": {
+            "observer_instances": {
+              "a": {},
+              "b": {}
+            }
+          }
+        },
+        "provenance_entries": [
+          {
+            "external_id": "abababababababababababababababababababababababababababababababab",
+            "asset": "BTC",
+            "direction": "outbound",
+            "observer_ids": [
+              "a"
+            ],
+            "observer_kinds": [
+              "bdk"
+            ]
+          }
+        ]
+      }
+    }
+  }
+]

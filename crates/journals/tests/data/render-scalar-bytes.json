@@ -1,0 +1,47 @@
+[
+  {
+    "hex": "",
+    "kind": "bytes",
+    "truth": false,
+    "text": "b''",
+    "representation": "b''",
+    "encoding_error": "Object of type bytes is not JSON serializable",
+    "snapshot": "{\"$bytes\":\"\"}"
+  },
+  {
+    "hex": "30",
+    "kind": "bytes",
+    "truth": true,
+    "text": "b'0'",
+    "representation": "b'0'",
+    "encoding_error": "Object of type bytes is not JSON serializable",
+    "snapshot": "{\"$bytes\":\"30\"}"
+  },
+  {
+    "hex": "312e35",
+    "kind": "bytes",
+    "truth": true,
+    "text": "b'1.5'",
+    "representation": "b'1.5'",
+    "encoding_error": "Object of type bytes is not JSON serializable",
+    "snapshot": "{\"$bytes\":\"312e35\"}"
+  },
+  {
+    "hex": "00ff",
+    "kind": "bytes",
+    "truth": true,
+    "text": "b'\\x00\\xff'",
+    "representation": "b'\\x00\\xff'",
+    "encoding_error": "Object of type bytes is not JSON serializable",
+    "snapshot": "{\"$bytes\":\"00ff\"}"
+  },
+  {
+    "hex": "27225c0a",
+    "kind": "bytes",
+    "truth": true,
+    "text": "b'\\'\"\\\\\\n'",
+    "representation": "b'\\'\"\\\\\\n'",
+    "encoding_error": "Object of type bytes is not JSON serializable",
+    "snapshot": "{\"$bytes\":\"27225c0a\"}"
+  }
+]

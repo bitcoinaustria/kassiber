@@ -1,0 +1,65 @@
+{
+  "body": [
+    {
+      "amount": "-0.0000013",
+      "blockHash": "749326998ec1da8d0313c1044d65881283aa50697dd70b22bf77375a595580ba",
+      "blockHeight": 278,
+      "comment": "",
+      "confirmations": 3,
+      "fee": "0.0000013",
+      "id": "16-639297549175577978:842ac72f2fe110cca52bba7847316e399b8789dc28c89202d635c6bade65184f",
+      "kind": "exit-claim",
+      "labels": {},
+      "movementId": 16,
+      "outpoint": null,
+      "paymentHash": null,
+      "status": "Confirmed",
+      "timestamp": 1794158253,
+      "transactionHash": "842ac72f2fe110cca52bba7847316e399b8789dc28c89202d635c6bade65184f"
+    },
+    {
+      "amount": "-0.00000317",
+      "blockHash": "602e8b0f3184d7572fb497080483a7b2f769a2a492a5183091cf3038183bfac4",
+      "blockHeight": 131,
+      "comment": "",
+      "confirmations": 150,
+      "fee": "0.00000317",
+      "id": "16-639297549175577978:d1887807c9793930fdaaa87bce36423dda876bdf25e668a98244d0f77e4c24a0",
+      "kind": "exit-fee",
+      "labels": {},
+      "movementId": 16,
+      "outpoint": null,
+      "paymentHash": null,
+      "status": "Confirmed",
+      "timestamp": 1794158128,
+      "transactionHash": "d1887807c9793930fdaaa87bce36423dda876bdf25e668a98244d0f77e4c24a0"
+    },
+    {
+      "amount": "-0.0000032",
+      "blockHash": "3e50cbb7d957b50178f914eaf1e065c617a57acc31720062ffe841082d4acca3",
+      "blockHeight": 125,
+      "comment": "",
+      "confirmations": 156,
+      "fee": "0.0000032",
+      "id": "16-639297549175577978:e5249c5a23ea7c5e16569b740761860e699851c0c64f57938d29a794cc7a3be5",
+      "kind": "exit-fee",
+      "labels": {},
+      "movementId": 16,
+      "outpoint": null,
+      "paymentHash": null,
+      "status": "Confirmed",
+      "timestamp": 1794158118,
+      "transactionHash": "e5249c5a23ea7c5e16569b740761860e699851c0c64f57938d29a794cc7a3be5"
+    }
+  ],
+  "request": {
+    "key": "read_only",
+    "method": "GET",
+    "path": "/api/v1/stores/{storeId}/payment-methods/BTC-ARK/wallet/transactions?skip=0&limit=3",
+    "permissions": [
+      "btcpay.store.canviewstoresettings",
+      "btcpay.store.canviewwallet"
+    ]
+  },
+  "status": 200
+}

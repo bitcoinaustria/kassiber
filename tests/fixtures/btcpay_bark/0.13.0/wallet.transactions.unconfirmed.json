@@ -1,0 +1,31 @@
+{
+  "body": [
+    {
+      "amount": "0",
+      "blockHash": null,
+      "blockHeight": null,
+      "comment": "",
+      "confirmations": 0,
+      "fee": "0",
+      "id": "16-639297549175577978",
+      "kind": "exit",
+      "labels": {},
+      "movementId": 16,
+      "outpoint": null,
+      "paymentHash": null,
+      "status": "Unconfirmed",
+      "timestamp": 1794158117,
+      "transactionHash": "906962e9ce662e2f4684984a06ee54a09e06af716909b889aa6ac2f453a7af8e"
+    }
+  ],
+  "request": {
+    "key": "read_only",
+    "method": "GET",
+    "path": "/api/v1/stores/{storeId}/payment-methods/BTC-ARK/wallet/transactions?statusFilter=Unconfirmed",
+    "permissions": [
+      "btcpay.store.canviewstoresettings",
+      "btcpay.store.canviewwallet"
+    ]
+  },
+  "status": 200
+}

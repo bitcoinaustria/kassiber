@@ -1,0 +1,21 @@
+{
+  "body": {
+    "offchain": {
+      "closing": null,
+      "local": "1832425000",
+      "opening": null,
+      "remote": null
+    },
+    "onchain": null
+  },
+  "request": {
+    "key": "lightning",
+    "method": "GET",
+    "path": "/api/v1/stores/{storeId}/lightning/BTC/balance",
+    "permissions": [
+      "btcpay.store.canviewlightninginvoice",
+      "btcpay.store.canuselightningnode"
+    ]
+  },
+  "status": 200
+}

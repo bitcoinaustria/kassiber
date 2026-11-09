@@ -1,0 +1,7084 @@
+[
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": null
+    },
+    "models": [],
+    "requested": null,
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "No local vision model is installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "installed_models": [],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": null
+    },
+    "models": [],
+    "requested": "glm-ocr",
+    "result": [
+      "glm-ocr",
+      []
+    ]
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": null
+    },
+    "models": [],
+    "requested": " GLM-OCR ",
+    "result": [
+      "GLM-OCR",
+      []
+    ]
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": null
+    },
+    "models": [],
+    "requested": "text-only",
+    "error": {
+      "code": "document_import_model_not_vision",
+      "message": "Model 'text-only' does not look like a vision/OCR model",
+      "hint": "Choose an installed model with vision/OCR capabilities.",
+      "details": {
+        "requested_model": "text-only",
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": null
+    },
+    "models": [],
+    "requested": "missing-vision",
+    "result": [
+      "missing-vision",
+      []
+    ]
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": null
+    },
+    "models": [],
+    "requested": " ",
+    "error": {
+      "code": "document_import_model_not_vision",
+      "message": "Model '' does not look like a vision/OCR model",
+      "hint": "Choose an installed model with vision/OCR capabilities.",
+      "details": {
+        "requested_model": "",
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": null
+    },
+    "models": [
+      {
+        "id": "text-only"
+      },
+      {
+        "id": "GLM-OCR"
+      },
+      {
+        "id": "qwen3-vl:8b"
+      }
+    ],
+    "requested": null,
+    "result": [
+      "GLM-OCR",
+      [
+        "text-only",
+        "GLM-OCR",
+        "qwen3-vl:8b"
+      ]
+    ]
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": null
+    },
+    "models": [
+      {
+        "id": "text-only"
+      },
+      {
+        "id": "GLM-OCR"
+      },
+      {
+        "id": "qwen3-vl:8b"
+      }
+    ],
+    "requested": "glm-ocr",
+    "result": [
+      "GLM-OCR",
+      [
+        "text-only",
+        "GLM-OCR",
+        "qwen3-vl:8b"
+      ]
+    ]
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": null
+    },
+    "models": [
+      {
+        "id": "text-only"
+      },
+      {
+        "id": "GLM-OCR"
+      },
+      {
+        "id": "qwen3-vl:8b"
+      }
+    ],
+    "requested": " GLM-OCR ",
+    "result": [
+      "GLM-OCR",
+      [
+        "text-only",
+        "GLM-OCR",
+        "qwen3-vl:8b"
+      ]
+    ]
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": null
+    },
+    "models": [
+      {
+        "id": "text-only"
+      },
+      {
+        "id": "GLM-OCR"
+      },
+      {
+        "id": "qwen3-vl:8b"
+      }
+    ],
+    "requested": "text-only",
+    "error": {
+      "code": "document_import_model_not_vision",
+      "message": "Model 'text-only' does not look like a vision/OCR model",
+      "hint": "Choose an installed model with vision/OCR capabilities.",
+      "details": {
+        "requested_model": "text-only",
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": null
+    },
+    "models": [
+      {
+        "id": "text-only"
+      },
+      {
+        "id": "GLM-OCR"
+      },
+      {
+        "id": "qwen3-vl:8b"
+      }
+    ],
+    "requested": "missing-vision",
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "Local vision model 'missing-vision' is not installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "requested_model": "missing-vision",
+        "installed_models": [
+          "text-only",
+          "GLM-OCR",
+          "qwen3-vl:8b"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": null
+    },
+    "models": [
+      {
+        "id": "text-only"
+      },
+      {
+        "id": "GLM-OCR"
+      },
+      {
+        "id": "qwen3-vl:8b"
+      }
+    ],
+    "requested": " ",
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "Local vision model '' is not installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "requested_model": "",
+        "installed_models": [
+          "text-only",
+          "GLM-OCR",
+          "qwen3-vl:8b"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": null
+    },
+    "models": [
+      {
+        "id": "llava:latest"
+      }
+    ],
+    "requested": null,
+    "result": [
+      "llava:latest",
+      [
+        "llava:latest"
+      ]
+    ]
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": null
+    },
+    "models": [
+      {
+        "id": "llava:latest"
+      }
+    ],
+    "requested": "glm-ocr",
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "Local vision model 'glm-ocr' is not installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "requested_model": "glm-ocr",
+        "installed_models": [
+          "llava:latest"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": null
+    },
+    "models": [
+      {
+        "id": "llava:latest"
+      }
+    ],
+    "requested": " GLM-OCR ",
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "Local vision model 'GLM-OCR' is not installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "requested_model": "GLM-OCR",
+        "installed_models": [
+          "llava:latest"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": null
+    },
+    "models": [
+      {
+        "id": "llava:latest"
+      }
+    ],
+    "requested": "text-only",
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "Local vision model 'text-only' is not installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "requested_model": "text-only",
+        "installed_models": [
+          "llava:latest"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": null
+    },
+    "models": [
+      {
+        "id": "llava:latest"
+      }
+    ],
+    "requested": "missing-vision",
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "Local vision model 'missing-vision' is not installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "requested_model": "missing-vision",
+        "installed_models": [
+          "llava:latest"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": null
+    },
+    "models": [
+      {
+        "id": "llava:latest"
+      }
+    ],
+    "requested": " ",
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "Local vision model '' is not installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "requested_model": "",
+        "installed_models": [
+          "llava:latest"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": null
+    },
+    "models": [
+      {
+        "id": "text-only"
+      }
+    ],
+    "requested": null,
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "No local vision model is installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "installed_models": [
+          "text-only"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": null
+    },
+    "models": [
+      {
+        "id": "text-only"
+      }
+    ],
+    "requested": "glm-ocr",
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "Local vision model 'glm-ocr' is not installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "requested_model": "glm-ocr",
+        "installed_models": [
+          "text-only"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": null
+    },
+    "models": [
+      {
+        "id": "text-only"
+      }
+    ],
+    "requested": " GLM-OCR ",
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "Local vision model 'GLM-OCR' is not installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "requested_model": "GLM-OCR",
+        "installed_models": [
+          "text-only"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": null
+    },
+    "models": [
+      {
+        "id": "text-only"
+      }
+    ],
+    "requested": "text-only",
+    "error": {
+      "code": "document_import_model_not_vision",
+      "message": "Model 'text-only' does not look like a vision/OCR model",
+      "hint": "Choose an installed model with vision/OCR capabilities.",
+      "details": {
+        "requested_model": "text-only",
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": null
+    },
+    "models": [
+      {
+        "id": "text-only"
+      }
+    ],
+    "requested": "missing-vision",
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "Local vision model 'missing-vision' is not installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "requested_model": "missing-vision",
+        "installed_models": [
+          "text-only"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": null
+    },
+    "models": [
+      {
+        "id": "text-only"
+      }
+    ],
+    "requested": " ",
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "Local vision model '' is not installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "requested_model": "",
+        "installed_models": [
+          "text-only"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "text-only"
+    },
+    "models": [],
+    "requested": null,
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "No local vision model is installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "installed_models": [],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "text-only"
+    },
+    "models": [],
+    "requested": "glm-ocr",
+    "result": [
+      "glm-ocr",
+      []
+    ]
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "text-only"
+    },
+    "models": [],
+    "requested": " GLM-OCR ",
+    "result": [
+      "GLM-OCR",
+      []
+    ]
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "text-only"
+    },
+    "models": [],
+    "requested": "text-only",
+    "error": {
+      "code": "document_import_model_not_vision",
+      "message": "Model 'text-only' does not look like a vision/OCR model",
+      "hint": "Choose an installed model with vision/OCR capabilities.",
+      "details": {
+        "requested_model": "text-only",
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "text-only"
+    },
+    "models": [],
+    "requested": "missing-vision",
+    "result": [
+      "missing-vision",
+      []
+    ]
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "text-only"
+    },
+    "models": [],
+    "requested": " ",
+    "error": {
+      "code": "document_import_model_not_vision",
+      "message": "Model '' does not look like a vision/OCR model",
+      "hint": "Choose an installed model with vision/OCR capabilities.",
+      "details": {
+        "requested_model": "",
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "text-only"
+    },
+    "models": [
+      {
+        "id": "text-only"
+      },
+      {
+        "id": "GLM-OCR"
+      },
+      {
+        "id": "qwen3-vl:8b"
+      }
+    ],
+    "requested": null,
+    "result": [
+      "GLM-OCR",
+      [
+        "text-only",
+        "GLM-OCR",
+        "qwen3-vl:8b"
+      ]
+    ]
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "text-only"
+    },
+    "models": [
+      {
+        "id": "text-only"
+      },
+      {
+        "id": "GLM-OCR"
+      },
+      {
+        "id": "qwen3-vl:8b"
+      }
+    ],
+    "requested": "glm-ocr",
+    "result": [
+      "GLM-OCR",
+      [
+        "text-only",
+        "GLM-OCR",
+        "qwen3-vl:8b"
+      ]
+    ]
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "text-only"
+    },
+    "models": [
+      {
+        "id": "text-only"
+      },
+      {
+        "id": "GLM-OCR"
+      },
+      {
+        "id": "qwen3-vl:8b"
+      }
+    ],
+    "requested": " GLM-OCR ",
+    "result": [
+      "GLM-OCR",
+      [
+        "text-only",
+        "GLM-OCR",
+        "qwen3-vl:8b"
+      ]
+    ]
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "text-only"
+    },
+    "models": [
+      {
+        "id": "text-only"
+      },
+      {
+        "id": "GLM-OCR"
+      },
+      {
+        "id": "qwen3-vl:8b"
+      }
+    ],
+    "requested": "text-only",
+    "error": {
+      "code": "document_import_model_not_vision",
+      "message": "Model 'text-only' does not look like a vision/OCR model",
+      "hint": "Choose an installed model with vision/OCR capabilities.",
+      "details": {
+        "requested_model": "text-only",
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "text-only"
+    },
+    "models": [
+      {
+        "id": "text-only"
+      },
+      {
+        "id": "GLM-OCR"
+      },
+      {
+        "id": "qwen3-vl:8b"
+      }
+    ],
+    "requested": "missing-vision",
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "Local vision model 'missing-vision' is not installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "requested_model": "missing-vision",
+        "installed_models": [
+          "text-only",
+          "GLM-OCR",
+          "qwen3-vl:8b"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "text-only"
+    },
+    "models": [
+      {
+        "id": "text-only"
+      },
+      {
+        "id": "GLM-OCR"
+      },
+      {
+        "id": "qwen3-vl:8b"
+      }
+    ],
+    "requested": " ",
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "Local vision model '' is not installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "requested_model": "",
+        "installed_models": [
+          "text-only",
+          "GLM-OCR",
+          "qwen3-vl:8b"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "text-only"
+    },
+    "models": [
+      {
+        "id": "llava:latest"
+      }
+    ],
+    "requested": null,
+    "result": [
+      "llava:latest",
+      [
+        "llava:latest"
+      ]
+    ]
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "text-only"
+    },
+    "models": [
+      {
+        "id": "llava:latest"
+      }
+    ],
+    "requested": "glm-ocr",
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "Local vision model 'glm-ocr' is not installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "requested_model": "glm-ocr",
+        "installed_models": [
+          "llava:latest"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "text-only"
+    },
+    "models": [
+      {
+        "id": "llava:latest"
+      }
+    ],
+    "requested": " GLM-OCR ",
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "Local vision model 'GLM-OCR' is not installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "requested_model": "GLM-OCR",
+        "installed_models": [
+          "llava:latest"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "text-only"
+    },
+    "models": [
+      {
+        "id": "llava:latest"
+      }
+    ],
+    "requested": "text-only",
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "Local vision model 'text-only' is not installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "requested_model": "text-only",
+        "installed_models": [
+          "llava:latest"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "text-only"
+    },
+    "models": [
+      {
+        "id": "llava:latest"
+      }
+    ],
+    "requested": "missing-vision",
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "Local vision model 'missing-vision' is not installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "requested_model": "missing-vision",
+        "installed_models": [
+          "llava:latest"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "text-only"
+    },
+    "models": [
+      {
+        "id": "llava:latest"
+      }
+    ],
+    "requested": " ",
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "Local vision model '' is not installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "requested_model": "",
+        "installed_models": [
+          "llava:latest"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "text-only"
+    },
+    "models": [
+      {
+        "id": "text-only"
+      }
+    ],
+    "requested": null,
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "No local vision model is installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "installed_models": [
+          "text-only"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "text-only"
+    },
+    "models": [
+      {
+        "id": "text-only"
+      }
+    ],
+    "requested": "glm-ocr",
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "Local vision model 'glm-ocr' is not installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "requested_model": "glm-ocr",
+        "installed_models": [
+          "text-only"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "text-only"
+    },
+    "models": [
+      {
+        "id": "text-only"
+      }
+    ],
+    "requested": " GLM-OCR ",
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "Local vision model 'GLM-OCR' is not installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "requested_model": "GLM-OCR",
+        "installed_models": [
+          "text-only"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "text-only"
+    },
+    "models": [
+      {
+        "id": "text-only"
+      }
+    ],
+    "requested": "text-only",
+    "error": {
+      "code": "document_import_model_not_vision",
+      "message": "Model 'text-only' does not look like a vision/OCR model",
+      "hint": "Choose an installed model with vision/OCR capabilities.",
+      "details": {
+        "requested_model": "text-only",
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "text-only"
+    },
+    "models": [
+      {
+        "id": "text-only"
+      }
+    ],
+    "requested": "missing-vision",
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "Local vision model 'missing-vision' is not installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "requested_model": "missing-vision",
+        "installed_models": [
+          "text-only"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "text-only"
+    },
+    "models": [
+      {
+        "id": "text-only"
+      }
+    ],
+    "requested": " ",
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "Local vision model '' is not installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "requested_model": "",
+        "installed_models": [
+          "text-only"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "qwen3-vl:8b"
+    },
+    "models": [],
+    "requested": null,
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "No local vision model is installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "installed_models": [],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "qwen3-vl:8b"
+    },
+    "models": [],
+    "requested": "glm-ocr",
+    "result": [
+      "glm-ocr",
+      []
+    ]
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "qwen3-vl:8b"
+    },
+    "models": [],
+    "requested": " GLM-OCR ",
+    "result": [
+      "GLM-OCR",
+      []
+    ]
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "qwen3-vl:8b"
+    },
+    "models": [],
+    "requested": "text-only",
+    "error": {
+      "code": "document_import_model_not_vision",
+      "message": "Model 'text-only' does not look like a vision/OCR model",
+      "hint": "Choose an installed model with vision/OCR capabilities.",
+      "details": {
+        "requested_model": "text-only",
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "qwen3-vl:8b"
+    },
+    "models": [],
+    "requested": "missing-vision",
+    "result": [
+      "missing-vision",
+      []
+    ]
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "qwen3-vl:8b"
+    },
+    "models": [],
+    "requested": " ",
+    "error": {
+      "code": "document_import_model_not_vision",
+      "message": "Model '' does not look like a vision/OCR model",
+      "hint": "Choose an installed model with vision/OCR capabilities.",
+      "details": {
+        "requested_model": "",
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "qwen3-vl:8b"
+    },
+    "models": [
+      {
+        "id": "text-only"
+      },
+      {
+        "id": "GLM-OCR"
+      },
+      {
+        "id": "qwen3-vl:8b"
+      }
+    ],
+    "requested": null,
+    "result": [
+      "qwen3-vl:8b",
+      [
+        "text-only",
+        "GLM-OCR",
+        "qwen3-vl:8b"
+      ]
+    ]
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "qwen3-vl:8b"
+    },
+    "models": [
+      {
+        "id": "text-only"
+      },
+      {
+        "id": "GLM-OCR"
+      },
+      {
+        "id": "qwen3-vl:8b"
+      }
+    ],
+    "requested": "glm-ocr",
+    "result": [
+      "GLM-OCR",
+      [
+        "text-only",
+        "GLM-OCR",
+        "qwen3-vl:8b"
+      ]
+    ]
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "qwen3-vl:8b"
+    },
+    "models": [
+      {
+        "id": "text-only"
+      },
+      {
+        "id": "GLM-OCR"
+      },
+      {
+        "id": "qwen3-vl:8b"
+      }
+    ],
+    "requested": " GLM-OCR ",
+    "result": [
+      "GLM-OCR",
+      [
+        "text-only",
+        "GLM-OCR",
+        "qwen3-vl:8b"
+      ]
+    ]
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "qwen3-vl:8b"
+    },
+    "models": [
+      {
+        "id": "text-only"
+      },
+      {
+        "id": "GLM-OCR"
+      },
+      {
+        "id": "qwen3-vl:8b"
+      }
+    ],
+    "requested": "text-only",
+    "error": {
+      "code": "document_import_model_not_vision",
+      "message": "Model 'text-only' does not look like a vision/OCR model",
+      "hint": "Choose an installed model with vision/OCR capabilities.",
+      "details": {
+        "requested_model": "text-only",
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "qwen3-vl:8b"
+    },
+    "models": [
+      {
+        "id": "text-only"
+      },
+      {
+        "id": "GLM-OCR"
+      },
+      {
+        "id": "qwen3-vl:8b"
+      }
+    ],
+    "requested": "missing-vision",
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "Local vision model 'missing-vision' is not installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "requested_model": "missing-vision",
+        "installed_models": [
+          "text-only",
+          "GLM-OCR",
+          "qwen3-vl:8b"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "qwen3-vl:8b"
+    },
+    "models": [
+      {
+        "id": "text-only"
+      },
+      {
+        "id": "GLM-OCR"
+      },
+      {
+        "id": "qwen3-vl:8b"
+      }
+    ],
+    "requested": " ",
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "Local vision model '' is not installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "requested_model": "",
+        "installed_models": [
+          "text-only",
+          "GLM-OCR",
+          "qwen3-vl:8b"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "qwen3-vl:8b"
+    },
+    "models": [
+      {
+        "id": "llava:latest"
+      }
+    ],
+    "requested": null,
+    "result": [
+      "llava:latest",
+      [
+        "llava:latest"
+      ]
+    ]
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "qwen3-vl:8b"
+    },
+    "models": [
+      {
+        "id": "llava:latest"
+      }
+    ],
+    "requested": "glm-ocr",
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "Local vision model 'glm-ocr' is not installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "requested_model": "glm-ocr",
+        "installed_models": [
+          "llava:latest"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "qwen3-vl:8b"
+    },
+    "models": [
+      {
+        "id": "llava:latest"
+      }
+    ],
+    "requested": " GLM-OCR ",
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "Local vision model 'GLM-OCR' is not installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "requested_model": "GLM-OCR",
+        "installed_models": [
+          "llava:latest"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "qwen3-vl:8b"
+    },
+    "models": [
+      {
+        "id": "llava:latest"
+      }
+    ],
+    "requested": "text-only",
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "Local vision model 'text-only' is not installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "requested_model": "text-only",
+        "installed_models": [
+          "llava:latest"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "qwen3-vl:8b"
+    },
+    "models": [
+      {
+        "id": "llava:latest"
+      }
+    ],
+    "requested": "missing-vision",
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "Local vision model 'missing-vision' is not installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "requested_model": "missing-vision",
+        "installed_models": [
+          "llava:latest"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "qwen3-vl:8b"
+    },
+    "models": [
+      {
+        "id": "llava:latest"
+      }
+    ],
+    "requested": " ",
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "Local vision model '' is not installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "requested_model": "",
+        "installed_models": [
+          "llava:latest"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "qwen3-vl:8b"
+    },
+    "models": [
+      {
+        "id": "text-only"
+      }
+    ],
+    "requested": null,
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "No local vision model is installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "installed_models": [
+          "text-only"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "qwen3-vl:8b"
+    },
+    "models": [
+      {
+        "id": "text-only"
+      }
+    ],
+    "requested": "glm-ocr",
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "Local vision model 'glm-ocr' is not installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "requested_model": "glm-ocr",
+        "installed_models": [
+          "text-only"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "qwen3-vl:8b"
+    },
+    "models": [
+      {
+        "id": "text-only"
+      }
+    ],
+    "requested": " GLM-OCR ",
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "Local vision model 'GLM-OCR' is not installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "requested_model": "GLM-OCR",
+        "installed_models": [
+          "text-only"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "qwen3-vl:8b"
+    },
+    "models": [
+      {
+        "id": "text-only"
+      }
+    ],
+    "requested": "text-only",
+    "error": {
+      "code": "document_import_model_not_vision",
+      "message": "Model 'text-only' does not look like a vision/OCR model",
+      "hint": "Choose an installed model with vision/OCR capabilities.",
+      "details": {
+        "requested_model": "text-only",
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "qwen3-vl:8b"
+    },
+    "models": [
+      {
+        "id": "text-only"
+      }
+    ],
+    "requested": "missing-vision",
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "Local vision model 'missing-vision' is not installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "requested_model": "missing-vision",
+        "installed_models": [
+          "text-only"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "qwen3-vl:8b"
+    },
+    "models": [
+      {
+        "id": "text-only"
+      }
+    ],
+    "requested": " ",
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "Local vision model '' is not installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "requested_model": "",
+        "installed_models": [
+          "text-only"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "missing-vision"
+    },
+    "models": [],
+    "requested": null,
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "No local vision model is installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "installed_models": [],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "missing-vision"
+    },
+    "models": [],
+    "requested": "glm-ocr",
+    "result": [
+      "glm-ocr",
+      []
+    ]
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "missing-vision"
+    },
+    "models": [],
+    "requested": " GLM-OCR ",
+    "result": [
+      "GLM-OCR",
+      []
+    ]
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "missing-vision"
+    },
+    "models": [],
+    "requested": "text-only",
+    "error": {
+      "code": "document_import_model_not_vision",
+      "message": "Model 'text-only' does not look like a vision/OCR model",
+      "hint": "Choose an installed model with vision/OCR capabilities.",
+      "details": {
+        "requested_model": "text-only",
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "missing-vision"
+    },
+    "models": [],
+    "requested": "missing-vision",
+    "result": [
+      "missing-vision",
+      []
+    ]
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "missing-vision"
+    },
+    "models": [],
+    "requested": " ",
+    "error": {
+      "code": "document_import_model_not_vision",
+      "message": "Model '' does not look like a vision/OCR model",
+      "hint": "Choose an installed model with vision/OCR capabilities.",
+      "details": {
+        "requested_model": "",
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "missing-vision"
+    },
+    "models": [
+      {
+        "id": "text-only"
+      },
+      {
+        "id": "GLM-OCR"
+      },
+      {
+        "id": "qwen3-vl:8b"
+      }
+    ],
+    "requested": null,
+    "result": [
+      "GLM-OCR",
+      [
+        "text-only",
+        "GLM-OCR",
+        "qwen3-vl:8b"
+      ]
+    ]
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "missing-vision"
+    },
+    "models": [
+      {
+        "id": "text-only"
+      },
+      {
+        "id": "GLM-OCR"
+      },
+      {
+        "id": "qwen3-vl:8b"
+      }
+    ],
+    "requested": "glm-ocr",
+    "result": [
+      "GLM-OCR",
+      [
+        "text-only",
+        "GLM-OCR",
+        "qwen3-vl:8b"
+      ]
+    ]
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "missing-vision"
+    },
+    "models": [
+      {
+        "id": "text-only"
+      },
+      {
+        "id": "GLM-OCR"
+      },
+      {
+        "id": "qwen3-vl:8b"
+      }
+    ],
+    "requested": " GLM-OCR ",
+    "result": [
+      "GLM-OCR",
+      [
+        "text-only",
+        "GLM-OCR",
+        "qwen3-vl:8b"
+      ]
+    ]
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "missing-vision"
+    },
+    "models": [
+      {
+        "id": "text-only"
+      },
+      {
+        "id": "GLM-OCR"
+      },
+      {
+        "id": "qwen3-vl:8b"
+      }
+    ],
+    "requested": "text-only",
+    "error": {
+      "code": "document_import_model_not_vision",
+      "message": "Model 'text-only' does not look like a vision/OCR model",
+      "hint": "Choose an installed model with vision/OCR capabilities.",
+      "details": {
+        "requested_model": "text-only",
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "missing-vision"
+    },
+    "models": [
+      {
+        "id": "text-only"
+      },
+      {
+        "id": "GLM-OCR"
+      },
+      {
+        "id": "qwen3-vl:8b"
+      }
+    ],
+    "requested": "missing-vision",
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "Local vision model 'missing-vision' is not installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "requested_model": "missing-vision",
+        "installed_models": [
+          "text-only",
+          "GLM-OCR",
+          "qwen3-vl:8b"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "missing-vision"
+    },
+    "models": [
+      {
+        "id": "text-only"
+      },
+      {
+        "id": "GLM-OCR"
+      },
+      {
+        "id": "qwen3-vl:8b"
+      }
+    ],
+    "requested": " ",
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "Local vision model '' is not installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "requested_model": "",
+        "installed_models": [
+          "text-only",
+          "GLM-OCR",
+          "qwen3-vl:8b"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "missing-vision"
+    },
+    "models": [
+      {
+        "id": "llava:latest"
+      }
+    ],
+    "requested": null,
+    "result": [
+      "llava:latest",
+      [
+        "llava:latest"
+      ]
+    ]
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "missing-vision"
+    },
+    "models": [
+      {
+        "id": "llava:latest"
+      }
+    ],
+    "requested": "glm-ocr",
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "Local vision model 'glm-ocr' is not installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "requested_model": "glm-ocr",
+        "installed_models": [
+          "llava:latest"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "missing-vision"
+    },
+    "models": [
+      {
+        "id": "llava:latest"
+      }
+    ],
+    "requested": " GLM-OCR ",
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "Local vision model 'GLM-OCR' is not installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "requested_model": "GLM-OCR",
+        "installed_models": [
+          "llava:latest"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "missing-vision"
+    },
+    "models": [
+      {
+        "id": "llava:latest"
+      }
+    ],
+    "requested": "text-only",
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "Local vision model 'text-only' is not installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "requested_model": "text-only",
+        "installed_models": [
+          "llava:latest"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "missing-vision"
+    },
+    "models": [
+      {
+        "id": "llava:latest"
+      }
+    ],
+    "requested": "missing-vision",
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "Local vision model 'missing-vision' is not installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "requested_model": "missing-vision",
+        "installed_models": [
+          "llava:latest"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "missing-vision"
+    },
+    "models": [
+      {
+        "id": "llava:latest"
+      }
+    ],
+    "requested": " ",
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "Local vision model '' is not installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "requested_model": "",
+        "installed_models": [
+          "llava:latest"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "missing-vision"
+    },
+    "models": [
+      {
+        "id": "text-only"
+      }
+    ],
+    "requested": null,
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "No local vision model is installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "installed_models": [
+          "text-only"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "missing-vision"
+    },
+    "models": [
+      {
+        "id": "text-only"
+      }
+    ],
+    "requested": "glm-ocr",
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "Local vision model 'glm-ocr' is not installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "requested_model": "glm-ocr",
+        "installed_models": [
+          "text-only"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "missing-vision"
+    },
+    "models": [
+      {
+        "id": "text-only"
+      }
+    ],
+    "requested": " GLM-OCR ",
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "Local vision model 'GLM-OCR' is not installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "requested_model": "GLM-OCR",
+        "installed_models": [
+          "text-only"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "missing-vision"
+    },
+    "models": [
+      {
+        "id": "text-only"
+      }
+    ],
+    "requested": "text-only",
+    "error": {
+      "code": "document_import_model_not_vision",
+      "message": "Model 'text-only' does not look like a vision/OCR model",
+      "hint": "Choose an installed model with vision/OCR capabilities.",
+      "details": {
+        "requested_model": "text-only",
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "missing-vision"
+    },
+    "models": [
+      {
+        "id": "text-only"
+      }
+    ],
+    "requested": "missing-vision",
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "Local vision model 'missing-vision' is not installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "requested_model": "missing-vision",
+        "installed_models": [
+          "text-only"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "choose",
+    "provider": {
+      "default_model": "missing-vision"
+    },
+    "models": [
+      {
+        "id": "text-only"
+      }
+    ],
+    "requested": " ",
+    "error": {
+      "code": "document_import_model_missing",
+      "message": "Local vision model '' is not installed",
+      "hint": "Install a local vision model with Ollama, for example: ollama pull glm-ocr, ollama pull qwen3-vl:8b, ollama pull qwen3-vl:4b.",
+      "details": {
+        "requested_model": "",
+        "installed_models": [
+          "text-only"
+        ],
+        "recommendations": [
+          {
+            "id": "glm-ocr",
+            "command": "ollama pull glm-ocr",
+            "use": "Fast document OCR and table extraction on modest hardware."
+          },
+          {
+            "id": "qwen3-vl:8b",
+            "command": "ollama pull qwen3-vl:8b",
+            "use": "Best default for OCR plus table reasoning when memory allows it."
+          },
+          {
+            "id": "qwen3-vl:4b",
+            "command": "ollama pull qwen3-vl:4b",
+            "use": "Smaller Qwen3-VL option for laptops."
+          },
+          {
+            "id": "llama3.2-vision:11b",
+            "command": "ollama pull llama3.2-vision:11b",
+            "use": "General image reasoning fallback with broad Ollama availability."
+          },
+          {
+            "id": "minicpm-v:8b",
+            "command": "ollama pull minicpm-v:8b",
+            "use": "Compact multimodal fallback for receipts and screenshots."
+          }
+        ]
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "extract",
+    "text": "",
+    "error": {
+      "code": "document_import_ai_response_invalid",
+      "message": "Local AI returned an empty OCR response",
+      "hint": null,
+      "details": null,
+      "retryable": true
+    }
+  },
+  {
+    "operation": "extract",
+    "text": " ",
+    "error": {
+      "code": "document_import_ai_response_invalid",
+      "message": "Local AI returned an empty OCR response",
+      "hint": null,
+      "details": null,
+      "retryable": true
+    }
+  },
+  {
+    "operation": "extract",
+    "text": "{}",
+    "result": {}
+  },
+  {
+    "operation": "extract",
+    "text": "{\"rows\": []}",
+    "result": {
+      "rows": []
+    }
+  },
+  {
+    "operation": "extract",
+    "text": "```json\n{\"rows\":[]}\n```",
+    "result": {
+      "rows": []
+    }
+  },
+  {
+    "operation": "extract",
+    "text": "before {\"rows\":[]} after",
+    "result": {
+      "rows": []
+    }
+  },
+  {
+    "operation": "extract",
+    "text": "```\n{}\n```",
+    "result": {}
+  },
+  {
+    "operation": "extract",
+    "text": "[]",
+    "error": {
+      "code": "document_import_ai_response_invalid",
+      "message": "Local AI OCR output must be a JSON object",
+      "hint": null,
+      "details": null,
+      "retryable": true
+    }
+  },
+  {
+    "operation": "extract",
+    "text": "null",
+    "error": {
+      "code": "document_import_ai_response_invalid",
+      "message": "Local AI OCR output must be a JSON object",
+      "hint": null,
+      "details": null,
+      "retryable": true
+    }
+  },
+  {
+    "operation": "extract",
+    "text": "[1]",
+    "error": {
+      "code": "document_import_ai_response_invalid",
+      "message": "Local AI OCR output must be a JSON object",
+      "hint": null,
+      "details": null,
+      "retryable": true
+    }
+  },
+  {
+    "operation": "extract",
+    "text": "{bad}",
+    "error": {
+      "code": "document_import_ai_response_invalid",
+      "message": "Local AI returned non-JSON OCR output",
+      "hint": "Try a stronger local vision model or a clearer image.",
+      "details": {
+        "reason": "Expecting property name enclosed in double quotes: line 1 column 2 (char 1)",
+        "response_length": 5
+      },
+      "retryable": true
+    }
+  },
+  {
+    "operation": "extract",
+    "text": "{\"x\":}",
+    "error": {
+      "code": "document_import_ai_response_invalid",
+      "message": "Local AI returned non-JSON OCR output",
+      "hint": "Try a stronger local vision model or a clearer image.",
+      "details": {
+        "reason": "Expecting value: line 1 column 6 (char 5)",
+        "response_length": 6
+      },
+      "retryable": true
+    }
+  },
+  {
+    "operation": "extract",
+    "text": "{\"rows\":[]} {}",
+    "error": {
+      "code": "document_import_ai_response_invalid",
+      "message": "Local AI returned non-JSON OCR output",
+      "hint": "Try a stronger local vision model or a clearer image.",
+      "details": {
+        "reason": "Extra data: line 1 column 13 (char 12)",
+        "response_length": 14
+      },
+      "retryable": true
+    }
+  },
+  {
+    "operation": "extract",
+    "text": "```JSON\n{}\n```",
+    "result": {}
+  },
+  {
+    "operation": "extract",
+    "text": "\u00fc {\"rows\":[]}",
+    "result": {
+      "rows": []
+    }
+  },
+  {
+    "operation": "body",
+    "wire": "responses",
+    "omit": false,
+    "result": {
+      "temperature": 0,
+      "text": {
+        "format": {
+          "type": "json_object"
+        }
+      },
+      "model": "glm-ocr",
+      "input": [
+        {
+          "type": "message",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_text",
+              "text": "Extract a draft Kassiber transaction table from this local document. Return JSON only and include per-cell confidence plus source regions."
+            },
+            {
+              "type": "input_image",
+              "image_url": "data:image/png;base64,ZmFrZQ=="
+            }
+          ]
+        }
+      ],
+      "stream": false,
+      "store": false,
+      "instructions": "You are Kassiber's local document transaction importer.\nExtract Bitcoin accounting transactions from the supplied image or PDF page text.\nReturn JSON only. Do not include markdown.\n\nSchema:\n{\n  \"rows\": [\n    {\n      \"occurred_at\": \"YYYY-MM-DD or RFC3339 or null\",\n      \"direction\": \"inbound|outbound|null\",\n      \"asset\": \"BTC|LBTC|... or null\",\n      \"amount_btc\": \"decimal BTC amount or null\",\n      \"fee_btc\": \"decimal BTC fee or null\",\n      \"fiat_currency\": \"EUR|USD|... or null\",\n      \"fiat_value\": \"decimal fiat value or null\",\n      \"fiat_rate\": \"decimal fiat per BTC or null\",\n      \"counterparty\": \"string or null\",\n      \"description\": \"short evidence-backed string or null\",\n      \"confidence\": 0.0,\n      \"cell_confidences\": {\n        \"occurred_at\": 0.0,\n        \"direction\": 0.0,\n        \"asset\": 0.0,\n        \"amount_btc\": 0.0,\n        \"fee_btc\": 0.0,\n        \"fiat_currency\": 0.0,\n        \"fiat_value\": 0.0,\n        \"fiat_rate\": 0.0,\n        \"counterparty\": 0.0,\n        \"description\": 0.0\n      },\n      \"source_region\": {\n        \"page\": 1,\n        \"x\": 0.0,\n        \"y\": 0.0,\n        \"width\": 0.0,\n        \"height\": 0.0,\n        \"unit\": \"relative\"\n      },\n      \"evidence_text\": \"exact visible words/numbers supporting the row\"\n    }\n  ]\n}\n\nRules:\n- Extract only rows that appear to be Bitcoin, Lightning, Liquid, or fiat-to-Bitcoin activity.\n- Never invent missing values. Use null and low confidence when unsure.\n- Include a cell_confidences entry for every non-null accounting field.\n- Use positive amount_btc and direction to express side.\n- Fiat values and rates must be positive and must include their visible ISO currency.\n- If a row is a fiat-only bank movement without a Bitcoin amount, omit it.\n- If there are no transaction rows, return {\"rows\":[]}.\n"
+    }
+  },
+  {
+    "operation": "body",
+    "wire": "responses",
+    "omit": true,
+    "result": {
+      "temperature": 0,
+      "text": {
+        "format": {
+          "type": "json_object"
+        }
+      },
+      "model": "glm-ocr",
+      "input": [
+        {
+          "type": "message",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_text",
+              "text": "Extract a draft Kassiber transaction table from this local document. Return JSON only and include per-cell confidence plus source regions."
+            },
+            {
+              "type": "input_image",
+              "image_url": "data:image/png;base64,ZmFrZQ=="
+            }
+          ]
+        }
+      ],
+      "stream": false,
+      "store": false,
+      "instructions": "You are Kassiber's local document transaction importer.\nExtract Bitcoin accounting transactions from the supplied image or PDF page text.\nReturn JSON only. Do not include markdown.\n\nSchema:\n{\n  \"rows\": [\n    {\n      \"occurred_at\": \"YYYY-MM-DD or RFC3339 or null\",\n      \"direction\": \"inbound|outbound|null\",\n      \"asset\": \"BTC|LBTC|... or null\",\n      \"amount_btc\": \"decimal BTC amount or null\",\n      \"fee_btc\": \"decimal BTC fee or null\",\n      \"fiat_currency\": \"EUR|USD|... or null\",\n      \"fiat_value\": \"decimal fiat value or null\",\n      \"fiat_rate\": \"decimal fiat per BTC or null\",\n      \"counterparty\": \"string or null\",\n      \"description\": \"short evidence-backed string or null\",\n      \"confidence\": 0.0,\n      \"cell_confidences\": {\n        \"occurred_at\": 0.0,\n        \"direction\": 0.0,\n        \"asset\": 0.0,\n        \"amount_btc\": 0.0,\n        \"fee_btc\": 0.0,\n        \"fiat_currency\": 0.0,\n        \"fiat_value\": 0.0,\n        \"fiat_rate\": 0.0,\n        \"counterparty\": 0.0,\n        \"description\": 0.0\n      },\n      \"source_region\": {\n        \"page\": 1,\n        \"x\": 0.0,\n        \"y\": 0.0,\n        \"width\": 0.0,\n        \"height\": 0.0,\n        \"unit\": \"relative\"\n      },\n      \"evidence_text\": \"exact visible words/numbers supporting the row\"\n    }\n  ]\n}\n\nRules:\n- Extract only rows that appear to be Bitcoin, Lightning, Liquid, or fiat-to-Bitcoin activity.\n- Never invent missing values. Use null and low confidence when unsure.\n- Include a cell_confidences entry for every non-null accounting field.\n- Use positive amount_btc and direction to express side.\n- Fiat values and rates must be positive and must include their visible ISO currency.\n- If a row is a fiat-only bank movement without a Bitcoin amount, omit it.\n- If there are no transaction rows, return {\"rows\":[]}.\n"
+    }
+  },
+  {
+    "operation": "body",
+    "wire": "chat_completions",
+    "omit": false,
+    "result": {
+      "model": "glm-ocr",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are Kassiber's local document transaction importer.\nExtract Bitcoin accounting transactions from the supplied image or PDF page text.\nReturn JSON only. Do not include markdown.\n\nSchema:\n{\n  \"rows\": [\n    {\n      \"occurred_at\": \"YYYY-MM-DD or RFC3339 or null\",\n      \"direction\": \"inbound|outbound|null\",\n      \"asset\": \"BTC|LBTC|... or null\",\n      \"amount_btc\": \"decimal BTC amount or null\",\n      \"fee_btc\": \"decimal BTC fee or null\",\n      \"fiat_currency\": \"EUR|USD|... or null\",\n      \"fiat_value\": \"decimal fiat value or null\",\n      \"fiat_rate\": \"decimal fiat per BTC or null\",\n      \"counterparty\": \"string or null\",\n      \"description\": \"short evidence-backed string or null\",\n      \"confidence\": 0.0,\n      \"cell_confidences\": {\n        \"occurred_at\": 0.0,\n        \"direction\": 0.0,\n        \"asset\": 0.0,\n        \"amount_btc\": 0.0,\n        \"fee_btc\": 0.0,\n        \"fiat_currency\": 0.0,\n        \"fiat_value\": 0.0,\n        \"fiat_rate\": 0.0,\n        \"counterparty\": 0.0,\n        \"description\": 0.0\n      },\n      \"source_region\": {\n        \"page\": 1,\n        \"x\": 0.0,\n        \"y\": 0.0,\n        \"width\": 0.0,\n        \"height\": 0.0,\n        \"unit\": \"relative\"\n      },\n      \"evidence_text\": \"exact visible words/numbers supporting the row\"\n    }\n  ]\n}\n\nRules:\n- Extract only rows that appear to be Bitcoin, Lightning, Liquid, or fiat-to-Bitcoin activity.\n- Never invent missing values. Use null and low confidence when unsure.\n- Include a cell_confidences entry for every non-null accounting field.\n- Use positive amount_btc and direction to express side.\n- Fiat values and rates must be positive and must include their visible ISO currency.\n- If a row is a fiat-only bank movement without a Bitcoin amount, omit it.\n- If there are no transaction rows, return {\"rows\":[]}.\n"
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Extract a draft Kassiber transaction table from this local document. Return JSON only and include per-cell confidence plus source regions."
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "data:image/png;base64,ZmFrZQ=="
+              }
+            }
+          ]
+        }
+      ],
+      "stream": false,
+      "store": false,
+      "temperature": 0,
+      "response_format": {
+        "type": "json_object"
+      }
+    }
+  },
+  {
+    "operation": "body",
+    "wire": "chat_completions",
+    "omit": true,
+    "result": {
+      "model": "glm-ocr",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are Kassiber's local document transaction importer.\nExtract Bitcoin accounting transactions from the supplied image or PDF page text.\nReturn JSON only. Do not include markdown.\n\nSchema:\n{\n  \"rows\": [\n    {\n      \"occurred_at\": \"YYYY-MM-DD or RFC3339 or null\",\n      \"direction\": \"inbound|outbound|null\",\n      \"asset\": \"BTC|LBTC|... or null\",\n      \"amount_btc\": \"decimal BTC amount or null\",\n      \"fee_btc\": \"decimal BTC fee or null\",\n      \"fiat_currency\": \"EUR|USD|... or null\",\n      \"fiat_value\": \"decimal fiat value or null\",\n      \"fiat_rate\": \"decimal fiat per BTC or null\",\n      \"counterparty\": \"string or null\",\n      \"description\": \"short evidence-backed string or null\",\n      \"confidence\": 0.0,\n      \"cell_confidences\": {\n        \"occurred_at\": 0.0,\n        \"direction\": 0.0,\n        \"asset\": 0.0,\n        \"amount_btc\": 0.0,\n        \"fee_btc\": 0.0,\n        \"fiat_currency\": 0.0,\n        \"fiat_value\": 0.0,\n        \"fiat_rate\": 0.0,\n        \"counterparty\": 0.0,\n        \"description\": 0.0\n      },\n      \"source_region\": {\n        \"page\": 1,\n        \"x\": 0.0,\n        \"y\": 0.0,\n        \"width\": 0.0,\n        \"height\": 0.0,\n        \"unit\": \"relative\"\n      },\n      \"evidence_text\": \"exact visible words/numbers supporting the row\"\n    }\n  ]\n}\n\nRules:\n- Extract only rows that appear to be Bitcoin, Lightning, Liquid, or fiat-to-Bitcoin activity.\n- Never invent missing values. Use null and low confidence when unsure.\n- Include a cell_confidences entry for every non-null accounting field.\n- Use positive amount_btc and direction to express side.\n- Fiat values and rates must be positive and must include their visible ISO currency.\n- If a row is a fiat-only bank movement without a Bitcoin amount, omit it.\n- If there are no transaction rows, return {\"rows\":[]}.\n"
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Extract a draft Kassiber transaction table from this local document. Return JSON only and include per-cell confidence plus source regions."
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "data:image/png;base64,ZmFrZQ=="
+              }
+            }
+          ]
+        }
+      ],
+      "stream": false,
+      "temperature": 0,
+      "response_format": {
+        "type": "json_object"
+      }
+    }
+  },
+  {
+    "operation": "content",
+    "wire": "responses",
+    "payload": null,
+    "error": {
+      "code": "ai_request_invalid",
+      "message": "AI provider returned an invalid response payload",
+      "hint": null,
+      "details": null,
+      "retryable": false
+    }
+  },
+  {
+    "operation": "content",
+    "wire": "responses",
+    "payload": [],
+    "error": {
+      "code": "ai_request_invalid",
+      "message": "AI provider returned an invalid response payload",
+      "hint": null,
+      "details": null,
+      "retryable": false
+    }
+  },
+  {
+    "operation": "content",
+    "wire": "responses",
+    "payload": {},
+    "result": ""
+  },
+  {
+    "operation": "content",
+    "wire": "responses",
+    "payload": {
+      "error": {}
+    },
+    "error": {
+      "code": "ai_unavailable",
+      "message": "AI provider failed while generating a response",
+      "hint": null,
+      "details": {
+        "provider_code": null,
+        "body": "{}",
+        "body_truncated": false,
+        "in_stream": true
+      },
+      "retryable": true
+    }
+  },
+  {
+    "operation": "content",
+    "wire": "responses",
+    "payload": {
+      "error": "invalid request"
+    },
+    "result": ""
+  },
+  {
+    "operation": "content",
+    "wire": "responses",
+    "payload": {
+      "error": {
+        "code": 400,
+        "message": "bad prompt"
+      }
+    },
+    "error": {
+      "code": "ai_request_invalid",
+      "message": "AI provider rejected the Responses request",
+      "hint": null,
+      "details": {
+        "provider_code": "400",
+        "body": "{\"code\": 400, \"message\": \"bad prompt\"}",
+        "body_truncated": false,
+        "in_stream": true,
+        "status": 400
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "content",
+    "wire": "responses",
+    "payload": {
+      "error": {
+        "code": 429,
+        "message": "limited"
+      }
+    },
+    "error": {
+      "code": "ai_rate_limited",
+      "message": "AI provider is rate-limiting requests",
+      "hint": null,
+      "details": {
+        "provider_code": "429",
+        "body": "{\"code\": 429, \"message\": \"limited\"}",
+        "body_truncated": false,
+        "in_stream": true,
+        "status": 429
+      },
+      "retryable": true
+    }
+  },
+  {
+    "operation": "content",
+    "wire": "responses",
+    "payload": {
+      "error": {
+        "code": "invalid_api_key"
+      }
+    },
+    "error": {
+      "code": "ai_auth_failed",
+      "message": "AI provider rejected the request as unauthorized",
+      "hint": null,
+      "details": {
+        "provider_code": "invalid_api_key",
+        "body": "{\"code\": \"invalid_api_key\"}",
+        "body_truncated": false,
+        "in_stream": true
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "content",
+    "wire": "responses",
+    "payload": {
+      "object": "error",
+      "code": 400,
+      "message": "invalid"
+    },
+    "result": ""
+  },
+  {
+    "operation": "content",
+    "wire": "responses",
+    "payload": {
+      "choices": [
+        {
+          "message": {
+            "content": [
+              {
+                "type": "text",
+                "text": "{}"
+              }
+            ],
+            "refusal": ""
+          }
+        }
+      ]
+    },
+    "result": ""
+  },
+  {
+    "operation": "content",
+    "wire": "responses",
+    "payload": {
+      "output": [
+        {
+          "type": "message",
+          "content": [
+            {
+              "type": "output_text",
+              "text": "{}"
+            }
+          ]
+        }
+      ]
+    },
+    "result": "{}"
+  },
+  {
+    "operation": "content",
+    "wire": "chat_completions",
+    "payload": null,
+    "error": {
+      "code": "ai_request_invalid",
+      "message": "AI provider returned an invalid response payload",
+      "hint": null,
+      "details": null,
+      "retryable": false
+    }
+  },
+  {
+    "operation": "content",
+    "wire": "chat_completions",
+    "payload": [],
+    "error": {
+      "code": "ai_request_invalid",
+      "message": "AI provider returned an invalid response payload",
+      "hint": null,
+      "details": null,
+      "retryable": false
+    }
+  },
+  {
+    "operation": "content",
+    "wire": "chat_completions",
+    "payload": {},
+    "error": {
+      "code": "ai_request_invalid",
+      "message": "AI provider returned a Chat Completions payload without choices",
+      "hint": null,
+      "details": null,
+      "retryable": false
+    }
+  },
+  {
+    "operation": "content",
+    "wire": "chat_completions",
+    "payload": {
+      "error": {}
+    },
+    "error": {
+      "code": "ai_request_invalid",
+      "message": "AI provider returned a Chat Completions payload without choices",
+      "hint": null,
+      "details": null,
+      "retryable": false
+    }
+  },
+  {
+    "operation": "content",
+    "wire": "chat_completions",
+    "payload": {
+      "error": "invalid request"
+    },
+    "error": {
+      "code": "ai_unavailable",
+      "message": "AI provider failed while generating a response",
+      "hint": null,
+      "details": {
+        "provider_code": null,
+        "body": "{\"message\": \"invalid request\"}",
+        "body_truncated": false,
+        "in_stream": true
+      },
+      "retryable": true
+    }
+  },
+  {
+    "operation": "content",
+    "wire": "chat_completions",
+    "payload": {
+      "error": {
+        "code": 400,
+        "message": "bad prompt"
+      }
+    },
+    "error": {
+      "code": "ai_request_invalid",
+      "message": "AI provider rejected the request",
+      "hint": null,
+      "details": {
+        "provider_code": "400",
+        "body": "{\"code\": 400, \"message\": \"bad prompt\"}",
+        "body_truncated": false,
+        "in_stream": true,
+        "status": 400
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "content",
+    "wire": "chat_completions",
+    "payload": {
+      "error": {
+        "code": 429,
+        "message": "limited"
+      }
+    },
+    "error": {
+      "code": "ai_rate_limited",
+      "message": "AI provider is rate-limiting requests",
+      "hint": null,
+      "details": {
+        "provider_code": "429",
+        "body": "{\"code\": 429, \"message\": \"limited\"}",
+        "body_truncated": false,
+        "in_stream": true,
+        "status": 429
+      },
+      "retryable": true
+    }
+  },
+  {
+    "operation": "content",
+    "wire": "chat_completions",
+    "payload": {
+      "error": {
+        "code": "invalid_api_key"
+      }
+    },
+    "error": {
+      "code": "ai_auth_failed",
+      "message": "AI provider rejected the request as unauthorized",
+      "hint": null,
+      "details": {
+        "provider_code": "invalid_api_key",
+        "body": "{\"code\": \"invalid_api_key\"}",
+        "body_truncated": false,
+        "in_stream": true
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "content",
+    "wire": "chat_completions",
+    "payload": {
+      "object": "error",
+      "code": 400,
+      "message": "invalid"
+    },
+    "error": {
+      "code": "ai_request_invalid",
+      "message": "AI provider rejected the request",
+      "hint": null,
+      "details": {
+        "provider_code": "400",
+        "body": "{\"code\": 400, \"message\": \"invalid\"}",
+        "body_truncated": false,
+        "in_stream": true,
+        "status": 400
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "content",
+    "wire": "chat_completions",
+    "payload": {
+      "choices": [
+        {
+          "message": {
+            "content": [
+              {
+                "type": "text",
+                "text": "{}"
+              }
+            ],
+            "refusal": ""
+          }
+        }
+      ]
+    },
+    "result": "{}"
+  },
+  {
+    "operation": "content",
+    "wire": "chat_completions",
+    "payload": {
+      "output": [
+        {
+          "type": "message",
+          "content": [
+            {
+              "type": "output_text",
+              "text": "{}"
+            }
+          ]
+        }
+      ]
+    },
+    "error": {
+      "code": "ai_request_invalid",
+      "message": "AI provider returned a Chat Completions payload without choices",
+      "hint": null,
+      "details": null,
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 1,
+    "maximum": 1,
+    "pages": null,
+    "result": [
+      [
+        1
+      ],
+      false
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 1,
+    "maximum": 1,
+    "pages": "",
+    "result": [
+      [
+        1
+      ],
+      false
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 1,
+    "maximum": 1,
+    "pages": "1",
+    "result": [
+      [
+        1
+      ],
+      true
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 1,
+    "maximum": 1,
+    "pages": "2-6",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range is outside the document",
+      "hint": null,
+      "details": {
+        "pages": "2-6",
+        "total_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 1,
+    "maximum": 1,
+    "pages": "9-16",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range is outside the document",
+      "hint": null,
+      "details": {
+        "pages": "9-16",
+        "total_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 1,
+    "maximum": 1,
+    "pages": "0",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range is outside the document",
+      "hint": null,
+      "details": {
+        "pages": "0",
+        "total_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 1,
+    "maximum": 1,
+    "pages": "2-1",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range is outside the document",
+      "hint": null,
+      "details": {
+        "pages": "2-1",
+        "total_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 1,
+    "maximum": 1,
+    "pages": "1,2",
+    "error": {
+      "code": "validation",
+      "message": "PDF pages must be one page or a contiguous range such as 2-6",
+      "hint": null,
+      "details": {
+        "pages": "1,2",
+        "total_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 1,
+    "maximum": 1,
+    "pages": "\u0661-\u0662",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range is outside the document",
+      "hint": null,
+      "details": {
+        "pages": "\u0661-\u0662",
+        "total_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 1,
+    "maximum": 1,
+    "pages": " 2 - 3 ",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range is outside the document",
+      "hint": null,
+      "details": {
+        "pages": "2 - 3",
+        "total_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 1,
+    "maximum": 1,
+    "pages": " ",
+    "result": [
+      [
+        1
+      ],
+      false
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 1,
+    "maximum": 1,
+    "pages": "1\u001c-\u001d2",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range is outside the document",
+      "hint": null,
+      "details": {
+        "pages": "1\u001c-\u001d2",
+        "total_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 1,
+    "maximum": 1,
+    "pages": false,
+    "result": [
+      [
+        1
+      ],
+      false
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 1,
+    "maximum": 1,
+    "pages": 2,
+    "error": {
+      "code": "validation",
+      "message": "PDF page range is outside the document",
+      "hint": null,
+      "details": {
+        "pages": "2",
+        "total_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 1,
+    "maximum": 8,
+    "pages": null,
+    "result": [
+      [
+        1
+      ],
+      false
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 1,
+    "maximum": 8,
+    "pages": "",
+    "result": [
+      [
+        1
+      ],
+      false
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 1,
+    "maximum": 8,
+    "pages": "1",
+    "result": [
+      [
+        1
+      ],
+      true
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 1,
+    "maximum": 8,
+    "pages": "2-6",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range is outside the document",
+      "hint": null,
+      "details": {
+        "pages": "2-6",
+        "total_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 1,
+    "maximum": 8,
+    "pages": "9-16",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range is outside the document",
+      "hint": null,
+      "details": {
+        "pages": "9-16",
+        "total_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 1,
+    "maximum": 8,
+    "pages": "0",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range is outside the document",
+      "hint": null,
+      "details": {
+        "pages": "0",
+        "total_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 1,
+    "maximum": 8,
+    "pages": "2-1",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range is outside the document",
+      "hint": null,
+      "details": {
+        "pages": "2-1",
+        "total_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 1,
+    "maximum": 8,
+    "pages": "1,2",
+    "error": {
+      "code": "validation",
+      "message": "PDF pages must be one page or a contiguous range such as 2-6",
+      "hint": null,
+      "details": {
+        "pages": "1,2",
+        "total_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 1,
+    "maximum": 8,
+    "pages": "\u0661-\u0662",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range is outside the document",
+      "hint": null,
+      "details": {
+        "pages": "\u0661-\u0662",
+        "total_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 1,
+    "maximum": 8,
+    "pages": " 2 - 3 ",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range is outside the document",
+      "hint": null,
+      "details": {
+        "pages": "2 - 3",
+        "total_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 1,
+    "maximum": 8,
+    "pages": " ",
+    "result": [
+      [
+        1
+      ],
+      false
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 1,
+    "maximum": 8,
+    "pages": "1\u001c-\u001d2",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range is outside the document",
+      "hint": null,
+      "details": {
+        "pages": "1\u001c-\u001d2",
+        "total_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 1,
+    "maximum": 8,
+    "pages": false,
+    "result": [
+      [
+        1
+      ],
+      false
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 1,
+    "maximum": 8,
+    "pages": 2,
+    "error": {
+      "code": "validation",
+      "message": "PDF page range is outside the document",
+      "hint": null,
+      "details": {
+        "pages": "2",
+        "total_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 8,
+    "maximum": 1,
+    "pages": null,
+    "error": {
+      "code": "document_import_pdf_page_selection_required",
+      "message": "This PDF needs an explicit page range before OCR",
+      "hint": "Choose a contiguous range of at most 1 pages, for example 1-1, or split the statement into smaller PDFs.",
+      "details": {
+        "total_pages": 8,
+        "max_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 8,
+    "maximum": 1,
+    "pages": "",
+    "error": {
+      "code": "document_import_pdf_page_selection_required",
+      "message": "This PDF needs an explicit page range before OCR",
+      "hint": "Choose a contiguous range of at most 1 pages, for example 1-1, or split the statement into smaller PDFs.",
+      "details": {
+        "total_pages": 8,
+        "max_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 8,
+    "maximum": 1,
+    "pages": "1",
+    "result": [
+      [
+        1
+      ],
+      true
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 8,
+    "maximum": 1,
+    "pages": "2-6",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range may contain at most 1 pages",
+      "hint": null,
+      "details": {
+        "pages": "2-6",
+        "selected_pages": 5,
+        "max_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 8,
+    "maximum": 1,
+    "pages": "9-16",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range is outside the document",
+      "hint": null,
+      "details": {
+        "pages": "9-16",
+        "total_pages": 8
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 8,
+    "maximum": 1,
+    "pages": "0",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range is outside the document",
+      "hint": null,
+      "details": {
+        "pages": "0",
+        "total_pages": 8
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 8,
+    "maximum": 1,
+    "pages": "2-1",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range is outside the document",
+      "hint": null,
+      "details": {
+        "pages": "2-1",
+        "total_pages": 8
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 8,
+    "maximum": 1,
+    "pages": "1,2",
+    "error": {
+      "code": "validation",
+      "message": "PDF pages must be one page or a contiguous range such as 2-6",
+      "hint": null,
+      "details": {
+        "pages": "1,2",
+        "total_pages": 8
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 8,
+    "maximum": 1,
+    "pages": "\u0661-\u0662",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range may contain at most 1 pages",
+      "hint": null,
+      "details": {
+        "pages": "\u0661-\u0662",
+        "selected_pages": 2,
+        "max_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 8,
+    "maximum": 1,
+    "pages": " 2 - 3 ",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range may contain at most 1 pages",
+      "hint": null,
+      "details": {
+        "pages": "2 - 3",
+        "selected_pages": 2,
+        "max_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 8,
+    "maximum": 1,
+    "pages": " ",
+    "error": {
+      "code": "document_import_pdf_page_selection_required",
+      "message": "This PDF needs an explicit page range before OCR",
+      "hint": "Choose a contiguous range of at most 1 pages, for example 1-1, or split the statement into smaller PDFs.",
+      "details": {
+        "total_pages": 8,
+        "max_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 8,
+    "maximum": 1,
+    "pages": "1\u001c-\u001d2",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range may contain at most 1 pages",
+      "hint": null,
+      "details": {
+        "pages": "1\u001c-\u001d2",
+        "selected_pages": 2,
+        "max_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 8,
+    "maximum": 1,
+    "pages": false,
+    "error": {
+      "code": "document_import_pdf_page_selection_required",
+      "message": "This PDF needs an explicit page range before OCR",
+      "hint": "Choose a contiguous range of at most 1 pages, for example 1-1, or split the statement into smaller PDFs.",
+      "details": {
+        "total_pages": 8,
+        "max_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 8,
+    "maximum": 1,
+    "pages": 2,
+    "result": [
+      [
+        2
+      ],
+      true
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 8,
+    "maximum": 8,
+    "pages": null,
+    "result": [
+      [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      false
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 8,
+    "maximum": 8,
+    "pages": "",
+    "result": [
+      [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      false
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 8,
+    "maximum": 8,
+    "pages": "1",
+    "result": [
+      [
+        1
+      ],
+      true
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 8,
+    "maximum": 8,
+    "pages": "2-6",
+    "result": [
+      [
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      true
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 8,
+    "maximum": 8,
+    "pages": "9-16",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range is outside the document",
+      "hint": null,
+      "details": {
+        "pages": "9-16",
+        "total_pages": 8
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 8,
+    "maximum": 8,
+    "pages": "0",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range is outside the document",
+      "hint": null,
+      "details": {
+        "pages": "0",
+        "total_pages": 8
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 8,
+    "maximum": 8,
+    "pages": "2-1",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range is outside the document",
+      "hint": null,
+      "details": {
+        "pages": "2-1",
+        "total_pages": 8
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 8,
+    "maximum": 8,
+    "pages": "1,2",
+    "error": {
+      "code": "validation",
+      "message": "PDF pages must be one page or a contiguous range such as 2-6",
+      "hint": null,
+      "details": {
+        "pages": "1,2",
+        "total_pages": 8
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 8,
+    "maximum": 8,
+    "pages": "\u0661-\u0662",
+    "result": [
+      [
+        1,
+        2
+      ],
+      true
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 8,
+    "maximum": 8,
+    "pages": " 2 - 3 ",
+    "result": [
+      [
+        2,
+        3
+      ],
+      true
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 8,
+    "maximum": 8,
+    "pages": " ",
+    "result": [
+      [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      false
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 8,
+    "maximum": 8,
+    "pages": "1\u001c-\u001d2",
+    "result": [
+      [
+        1,
+        2
+      ],
+      true
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 8,
+    "maximum": 8,
+    "pages": false,
+    "result": [
+      [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      false
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 8,
+    "maximum": 8,
+    "pages": 2,
+    "result": [
+      [
+        2
+      ],
+      true
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 9,
+    "maximum": 1,
+    "pages": null,
+    "error": {
+      "code": "document_import_pdf_page_selection_required",
+      "message": "This PDF needs an explicit page range before OCR",
+      "hint": "Choose a contiguous range of at most 1 pages, for example 1-1, or split the statement into smaller PDFs.",
+      "details": {
+        "total_pages": 9,
+        "max_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 9,
+    "maximum": 1,
+    "pages": "",
+    "error": {
+      "code": "document_import_pdf_page_selection_required",
+      "message": "This PDF needs an explicit page range before OCR",
+      "hint": "Choose a contiguous range of at most 1 pages, for example 1-1, or split the statement into smaller PDFs.",
+      "details": {
+        "total_pages": 9,
+        "max_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 9,
+    "maximum": 1,
+    "pages": "1",
+    "result": [
+      [
+        1
+      ],
+      true
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 9,
+    "maximum": 1,
+    "pages": "2-6",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range may contain at most 1 pages",
+      "hint": null,
+      "details": {
+        "pages": "2-6",
+        "selected_pages": 5,
+        "max_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 9,
+    "maximum": 1,
+    "pages": "9-16",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range is outside the document",
+      "hint": null,
+      "details": {
+        "pages": "9-16",
+        "total_pages": 9
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 9,
+    "maximum": 1,
+    "pages": "0",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range is outside the document",
+      "hint": null,
+      "details": {
+        "pages": "0",
+        "total_pages": 9
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 9,
+    "maximum": 1,
+    "pages": "2-1",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range is outside the document",
+      "hint": null,
+      "details": {
+        "pages": "2-1",
+        "total_pages": 9
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 9,
+    "maximum": 1,
+    "pages": "1,2",
+    "error": {
+      "code": "validation",
+      "message": "PDF pages must be one page or a contiguous range such as 2-6",
+      "hint": null,
+      "details": {
+        "pages": "1,2",
+        "total_pages": 9
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 9,
+    "maximum": 1,
+    "pages": "\u0661-\u0662",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range may contain at most 1 pages",
+      "hint": null,
+      "details": {
+        "pages": "\u0661-\u0662",
+        "selected_pages": 2,
+        "max_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 9,
+    "maximum": 1,
+    "pages": " 2 - 3 ",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range may contain at most 1 pages",
+      "hint": null,
+      "details": {
+        "pages": "2 - 3",
+        "selected_pages": 2,
+        "max_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 9,
+    "maximum": 1,
+    "pages": " ",
+    "error": {
+      "code": "document_import_pdf_page_selection_required",
+      "message": "This PDF needs an explicit page range before OCR",
+      "hint": "Choose a contiguous range of at most 1 pages, for example 1-1, or split the statement into smaller PDFs.",
+      "details": {
+        "total_pages": 9,
+        "max_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 9,
+    "maximum": 1,
+    "pages": "1\u001c-\u001d2",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range may contain at most 1 pages",
+      "hint": null,
+      "details": {
+        "pages": "1\u001c-\u001d2",
+        "selected_pages": 2,
+        "max_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 9,
+    "maximum": 1,
+    "pages": false,
+    "error": {
+      "code": "document_import_pdf_page_selection_required",
+      "message": "This PDF needs an explicit page range before OCR",
+      "hint": "Choose a contiguous range of at most 1 pages, for example 1-1, or split the statement into smaller PDFs.",
+      "details": {
+        "total_pages": 9,
+        "max_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 9,
+    "maximum": 1,
+    "pages": 2,
+    "result": [
+      [
+        2
+      ],
+      true
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 9,
+    "maximum": 8,
+    "pages": null,
+    "error": {
+      "code": "document_import_pdf_page_selection_required",
+      "message": "This PDF needs an explicit page range before OCR",
+      "hint": "Choose a contiguous range of at most 8 pages, for example 1-8, or split the statement into smaller PDFs.",
+      "details": {
+        "total_pages": 9,
+        "max_pages": 8
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 9,
+    "maximum": 8,
+    "pages": "",
+    "error": {
+      "code": "document_import_pdf_page_selection_required",
+      "message": "This PDF needs an explicit page range before OCR",
+      "hint": "Choose a contiguous range of at most 8 pages, for example 1-8, or split the statement into smaller PDFs.",
+      "details": {
+        "total_pages": 9,
+        "max_pages": 8
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 9,
+    "maximum": 8,
+    "pages": "1",
+    "result": [
+      [
+        1
+      ],
+      true
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 9,
+    "maximum": 8,
+    "pages": "2-6",
+    "result": [
+      [
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      true
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 9,
+    "maximum": 8,
+    "pages": "9-16",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range is outside the document",
+      "hint": null,
+      "details": {
+        "pages": "9-16",
+        "total_pages": 9
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 9,
+    "maximum": 8,
+    "pages": "0",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range is outside the document",
+      "hint": null,
+      "details": {
+        "pages": "0",
+        "total_pages": 9
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 9,
+    "maximum": 8,
+    "pages": "2-1",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range is outside the document",
+      "hint": null,
+      "details": {
+        "pages": "2-1",
+        "total_pages": 9
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 9,
+    "maximum": 8,
+    "pages": "1,2",
+    "error": {
+      "code": "validation",
+      "message": "PDF pages must be one page or a contiguous range such as 2-6",
+      "hint": null,
+      "details": {
+        "pages": "1,2",
+        "total_pages": 9
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 9,
+    "maximum": 8,
+    "pages": "\u0661-\u0662",
+    "result": [
+      [
+        1,
+        2
+      ],
+      true
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 9,
+    "maximum": 8,
+    "pages": " 2 - 3 ",
+    "result": [
+      [
+        2,
+        3
+      ],
+      true
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 9,
+    "maximum": 8,
+    "pages": " ",
+    "error": {
+      "code": "document_import_pdf_page_selection_required",
+      "message": "This PDF needs an explicit page range before OCR",
+      "hint": "Choose a contiguous range of at most 8 pages, for example 1-8, or split the statement into smaller PDFs.",
+      "details": {
+        "total_pages": 9,
+        "max_pages": 8
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 9,
+    "maximum": 8,
+    "pages": "1\u001c-\u001d2",
+    "result": [
+      [
+        1,
+        2
+      ],
+      true
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 9,
+    "maximum": 8,
+    "pages": false,
+    "error": {
+      "code": "document_import_pdf_page_selection_required",
+      "message": "This PDF needs an explicit page range before OCR",
+      "hint": "Choose a contiguous range of at most 8 pages, for example 1-8, or split the statement into smaller PDFs.",
+      "details": {
+        "total_pages": 9,
+        "max_pages": 8
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 9,
+    "maximum": 8,
+    "pages": 2,
+    "result": [
+      [
+        2
+      ],
+      true
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 20,
+    "maximum": 1,
+    "pages": null,
+    "error": {
+      "code": "document_import_pdf_page_selection_required",
+      "message": "This PDF needs an explicit page range before OCR",
+      "hint": "Choose a contiguous range of at most 1 pages, for example 1-1, or split the statement into smaller PDFs.",
+      "details": {
+        "total_pages": 20,
+        "max_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 20,
+    "maximum": 1,
+    "pages": "",
+    "error": {
+      "code": "document_import_pdf_page_selection_required",
+      "message": "This PDF needs an explicit page range before OCR",
+      "hint": "Choose a contiguous range of at most 1 pages, for example 1-1, or split the statement into smaller PDFs.",
+      "details": {
+        "total_pages": 20,
+        "max_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 20,
+    "maximum": 1,
+    "pages": "1",
+    "result": [
+      [
+        1
+      ],
+      true
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 20,
+    "maximum": 1,
+    "pages": "2-6",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range may contain at most 1 pages",
+      "hint": null,
+      "details": {
+        "pages": "2-6",
+        "selected_pages": 5,
+        "max_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 20,
+    "maximum": 1,
+    "pages": "9-16",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range may contain at most 1 pages",
+      "hint": null,
+      "details": {
+        "pages": "9-16",
+        "selected_pages": 8,
+        "max_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 20,
+    "maximum": 1,
+    "pages": "0",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range is outside the document",
+      "hint": null,
+      "details": {
+        "pages": "0",
+        "total_pages": 20
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 20,
+    "maximum": 1,
+    "pages": "2-1",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range is outside the document",
+      "hint": null,
+      "details": {
+        "pages": "2-1",
+        "total_pages": 20
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 20,
+    "maximum": 1,
+    "pages": "1,2",
+    "error": {
+      "code": "validation",
+      "message": "PDF pages must be one page or a contiguous range such as 2-6",
+      "hint": null,
+      "details": {
+        "pages": "1,2",
+        "total_pages": 20
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 20,
+    "maximum": 1,
+    "pages": "\u0661-\u0662",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range may contain at most 1 pages",
+      "hint": null,
+      "details": {
+        "pages": "\u0661-\u0662",
+        "selected_pages": 2,
+        "max_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 20,
+    "maximum": 1,
+    "pages": " 2 - 3 ",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range may contain at most 1 pages",
+      "hint": null,
+      "details": {
+        "pages": "2 - 3",
+        "selected_pages": 2,
+        "max_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 20,
+    "maximum": 1,
+    "pages": " ",
+    "error": {
+      "code": "document_import_pdf_page_selection_required",
+      "message": "This PDF needs an explicit page range before OCR",
+      "hint": "Choose a contiguous range of at most 1 pages, for example 1-1, or split the statement into smaller PDFs.",
+      "details": {
+        "total_pages": 20,
+        "max_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 20,
+    "maximum": 1,
+    "pages": "1\u001c-\u001d2",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range may contain at most 1 pages",
+      "hint": null,
+      "details": {
+        "pages": "1\u001c-\u001d2",
+        "selected_pages": 2,
+        "max_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 20,
+    "maximum": 1,
+    "pages": false,
+    "error": {
+      "code": "document_import_pdf_page_selection_required",
+      "message": "This PDF needs an explicit page range before OCR",
+      "hint": "Choose a contiguous range of at most 1 pages, for example 1-1, or split the statement into smaller PDFs.",
+      "details": {
+        "total_pages": 20,
+        "max_pages": 1
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 20,
+    "maximum": 1,
+    "pages": 2,
+    "result": [
+      [
+        2
+      ],
+      true
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 20,
+    "maximum": 8,
+    "pages": null,
+    "error": {
+      "code": "document_import_pdf_page_selection_required",
+      "message": "This PDF needs an explicit page range before OCR",
+      "hint": "Choose a contiguous range of at most 8 pages, for example 1-8, or split the statement into smaller PDFs.",
+      "details": {
+        "total_pages": 20,
+        "max_pages": 8
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 20,
+    "maximum": 8,
+    "pages": "",
+    "error": {
+      "code": "document_import_pdf_page_selection_required",
+      "message": "This PDF needs an explicit page range before OCR",
+      "hint": "Choose a contiguous range of at most 8 pages, for example 1-8, or split the statement into smaller PDFs.",
+      "details": {
+        "total_pages": 20,
+        "max_pages": 8
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 20,
+    "maximum": 8,
+    "pages": "1",
+    "result": [
+      [
+        1
+      ],
+      true
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 20,
+    "maximum": 8,
+    "pages": "2-6",
+    "result": [
+      [
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      true
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 20,
+    "maximum": 8,
+    "pages": "9-16",
+    "result": [
+      [
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16
+      ],
+      true
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 20,
+    "maximum": 8,
+    "pages": "0",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range is outside the document",
+      "hint": null,
+      "details": {
+        "pages": "0",
+        "total_pages": 20
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 20,
+    "maximum": 8,
+    "pages": "2-1",
+    "error": {
+      "code": "validation",
+      "message": "PDF page range is outside the document",
+      "hint": null,
+      "details": {
+        "pages": "2-1",
+        "total_pages": 20
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 20,
+    "maximum": 8,
+    "pages": "1,2",
+    "error": {
+      "code": "validation",
+      "message": "PDF pages must be one page or a contiguous range such as 2-6",
+      "hint": null,
+      "details": {
+        "pages": "1,2",
+        "total_pages": 20
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 20,
+    "maximum": 8,
+    "pages": "\u0661-\u0662",
+    "result": [
+      [
+        1,
+        2
+      ],
+      true
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 20,
+    "maximum": 8,
+    "pages": " 2 - 3 ",
+    "result": [
+      [
+        2,
+        3
+      ],
+      true
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 20,
+    "maximum": 8,
+    "pages": " ",
+    "error": {
+      "code": "document_import_pdf_page_selection_required",
+      "message": "This PDF needs an explicit page range before OCR",
+      "hint": "Choose a contiguous range of at most 8 pages, for example 1-8, or split the statement into smaller PDFs.",
+      "details": {
+        "total_pages": 20,
+        "max_pages": 8
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 20,
+    "maximum": 8,
+    "pages": "1\u001c-\u001d2",
+    "result": [
+      [
+        1,
+        2
+      ],
+      true
+    ]
+  },
+  {
+    "operation": "pages",
+    "total": 20,
+    "maximum": 8,
+    "pages": false,
+    "error": {
+      "code": "document_import_pdf_page_selection_required",
+      "message": "This PDF needs an explicit page range before OCR",
+      "hint": "Choose a contiguous range of at most 8 pages, for example 1-8, or split the statement into smaller PDFs.",
+      "details": {
+        "total_pages": 20,
+        "max_pages": 8
+      },
+      "retryable": false
+    }
+  },
+  {
+    "operation": "pages",
+    "total": 20,
+    "maximum": 8,
+    "pages": 2,
+    "result": [
+      [
+        2
+      ],
+      true
+    ]
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 400,
+      "body": "store",
+      "body_truncated": false
+    },
+    "result": true
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 400,
+      "body": "store",
+      "body_truncated": true
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 400,
+      "body": "store2",
+      "body_truncated": false
+    },
+    "result": true
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 400,
+      "body": "store2",
+      "body_truncated": true
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 400,
+      "body": "2store",
+      "body_truncated": false
+    },
+    "result": true
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 400,
+      "body": "2store",
+      "body_truncated": true
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 400,
+      "body": "restore",
+      "body_truncated": false
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 400,
+      "body": "restore",
+      "body_truncated": true
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 400,
+      "body": "_store",
+      "body_truncated": false
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 400,
+      "body": "_store",
+      "body_truncated": true
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 400,
+      "body": "store_foo",
+      "body_truncated": false
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 400,
+      "body": "store_foo",
+      "body_truncated": true
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 400,
+      "body": "STORE",
+      "body_truncated": false
+    },
+    "result": true
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 400,
+      "body": "STORE",
+      "body_truncated": true
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 400,
+      "body": "{\"error\":{\"param\":\"model\",\"message\":\"store unsupported\"}}",
+      "body_truncated": false
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 400,
+      "body": "{\"error\":{\"param\":\"model\",\"message\":\"store unsupported\"}}",
+      "body_truncated": true
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 400,
+      "body": "{\"error\":{\"param\":\"body.store\",\"message\":\"unsupported\"}}",
+      "body_truncated": false
+    },
+    "result": true
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 400,
+      "body": "{\"error\":{\"param\":\"body.store\",\"message\":\"unsupported\"}}",
+      "body_truncated": true
+    },
+    "result": true
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 400,
+      "body": "{\"error\":{\"param\":\"body.options.store\",\"message\":\"unsupported\"}}",
+      "body_truncated": false
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 400,
+      "body": "{\"error\":{\"param\":\"body.options.store\",\"message\":\"unsupported\"}}",
+      "body_truncated": true
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 400,
+      "body": "{\"error\":{\"loc\":[\"body\",\"store\"],\"input\":{\"store\":false}}}",
+      "body_truncated": false
+    },
+    "result": true
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 400,
+      "body": "{\"error\":{\"loc\":[\"body\",\"store\"],\"input\":{\"store\":false}}}",
+      "body_truncated": true
+    },
+    "result": true
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 400,
+      "body": "{\"error\":{\"input\":{\"store\":false},\"message\":\"unsupported\"}}",
+      "body_truncated": false
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 400,
+      "body": "{\"error\":{\"input\":{\"store\":false},\"message\":\"unsupported\"}}",
+      "body_truncated": true
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 400,
+      "body": "{\"error\":{\"message\":\"store2 unsupported\"}}",
+      "body_truncated": false
+    },
+    "result": true
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 400,
+      "body": "{\"error\":{\"message\":\"store2 unsupported\"}}",
+      "body_truncated": true
+    },
+    "result": true
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 400,
+      "body": "{\"bad\":",
+      "body_truncated": false
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 400,
+      "body": "{\"bad\":",
+      "body_truncated": true
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 422,
+      "body": "store",
+      "body_truncated": false
+    },
+    "result": true
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 422,
+      "body": "store",
+      "body_truncated": true
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 422,
+      "body": "store2",
+      "body_truncated": false
+    },
+    "result": true
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 422,
+      "body": "store2",
+      "body_truncated": true
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 422,
+      "body": "2store",
+      "body_truncated": false
+    },
+    "result": true
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 422,
+      "body": "2store",
+      "body_truncated": true
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 422,
+      "body": "restore",
+      "body_truncated": false
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 422,
+      "body": "restore",
+      "body_truncated": true
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 422,
+      "body": "_store",
+      "body_truncated": false
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 422,
+      "body": "_store",
+      "body_truncated": true
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 422,
+      "body": "store_foo",
+      "body_truncated": false
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 422,
+      "body": "store_foo",
+      "body_truncated": true
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 422,
+      "body": "STORE",
+      "body_truncated": false
+    },
+    "result": true
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 422,
+      "body": "STORE",
+      "body_truncated": true
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 422,
+      "body": "{\"error\":{\"param\":\"model\",\"message\":\"store unsupported\"}}",
+      "body_truncated": false
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 422,
+      "body": "{\"error\":{\"param\":\"model\",\"message\":\"store unsupported\"}}",
+      "body_truncated": true
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 422,
+      "body": "{\"error\":{\"param\":\"body.store\",\"message\":\"unsupported\"}}",
+      "body_truncated": false
+    },
+    "result": true
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 422,
+      "body": "{\"error\":{\"param\":\"body.store\",\"message\":\"unsupported\"}}",
+      "body_truncated": true
+    },
+    "result": true
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 422,
+      "body": "{\"error\":{\"param\":\"body.options.store\",\"message\":\"unsupported\"}}",
+      "body_truncated": false
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 422,
+      "body": "{\"error\":{\"param\":\"body.options.store\",\"message\":\"unsupported\"}}",
+      "body_truncated": true
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 422,
+      "body": "{\"error\":{\"loc\":[\"body\",\"store\"],\"input\":{\"store\":false}}}",
+      "body_truncated": false
+    },
+    "result": true
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 422,
+      "body": "{\"error\":{\"loc\":[\"body\",\"store\"],\"input\":{\"store\":false}}}",
+      "body_truncated": true
+    },
+    "result": true
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 422,
+      "body": "{\"error\":{\"input\":{\"store\":false},\"message\":\"unsupported\"}}",
+      "body_truncated": false
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 422,
+      "body": "{\"error\":{\"input\":{\"store\":false},\"message\":\"unsupported\"}}",
+      "body_truncated": true
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 422,
+      "body": "{\"error\":{\"message\":\"store2 unsupported\"}}",
+      "body_truncated": false
+    },
+    "result": true
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 422,
+      "body": "{\"error\":{\"message\":\"store2 unsupported\"}}",
+      "body_truncated": true
+    },
+    "result": true
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 422,
+      "body": "{\"bad\":",
+      "body_truncated": false
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 422,
+      "body": "{\"bad\":",
+      "body_truncated": true
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 500,
+      "body": "store",
+      "body_truncated": false
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 500,
+      "body": "store",
+      "body_truncated": true
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 500,
+      "body": "store2",
+      "body_truncated": false
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 500,
+      "body": "store2",
+      "body_truncated": true
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 500,
+      "body": "2store",
+      "body_truncated": false
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 500,
+      "body": "2store",
+      "body_truncated": true
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 500,
+      "body": "restore",
+      "body_truncated": false
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 500,
+      "body": "restore",
+      "body_truncated": true
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 500,
+      "body": "_store",
+      "body_truncated": false
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 500,
+      "body": "_store",
+      "body_truncated": true
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 500,
+      "body": "store_foo",
+      "body_truncated": false
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 500,
+      "body": "store_foo",
+      "body_truncated": true
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 500,
+      "body": "STORE",
+      "body_truncated": false
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 500,
+      "body": "STORE",
+      "body_truncated": true
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 500,
+      "body": "{\"error\":{\"param\":\"model\",\"message\":\"store unsupported\"}}",
+      "body_truncated": false
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 500,
+      "body": "{\"error\":{\"param\":\"model\",\"message\":\"store unsupported\"}}",
+      "body_truncated": true
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 500,
+      "body": "{\"error\":{\"param\":\"body.store\",\"message\":\"unsupported\"}}",
+      "body_truncated": false
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 500,
+      "body": "{\"error\":{\"param\":\"body.store\",\"message\":\"unsupported\"}}",
+      "body_truncated": true
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 500,
+      "body": "{\"error\":{\"param\":\"body.options.store\",\"message\":\"unsupported\"}}",
+      "body_truncated": false
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 500,
+      "body": "{\"error\":{\"param\":\"body.options.store\",\"message\":\"unsupported\"}}",
+      "body_truncated": true
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 500,
+      "body": "{\"error\":{\"loc\":[\"body\",\"store\"],\"input\":{\"store\":false}}}",
+      "body_truncated": false
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 500,
+      "body": "{\"error\":{\"loc\":[\"body\",\"store\"],\"input\":{\"store\":false}}}",
+      "body_truncated": true
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 500,
+      "body": "{\"error\":{\"input\":{\"store\":false},\"message\":\"unsupported\"}}",
+      "body_truncated": false
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 500,
+      "body": "{\"error\":{\"input\":{\"store\":false},\"message\":\"unsupported\"}}",
+      "body_truncated": true
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 500,
+      "body": "{\"error\":{\"message\":\"store2 unsupported\"}}",
+      "body_truncated": false
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 500,
+      "body": "{\"error\":{\"message\":\"store2 unsupported\"}}",
+      "body_truncated": true
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 500,
+      "body": "{\"bad\":",
+      "body_truncated": false
+    },
+    "result": false
+  },
+  {
+    "operation": "store",
+    "details": {
+      "status": 500,
+      "body": "{\"bad\":",
+      "body_truncated": true
+    },
+    "result": false
+  }
+]

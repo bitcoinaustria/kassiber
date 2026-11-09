@@ -1,0 +1,9 @@
+{
+  "body": {
+    "code": "unknown-paymentMethodId",
+    "message": "This payment method doesn't exists or doesn't offer wallet services"
+  },
+  "height": 112,
+  "label": "board broadcast, unconfirmed",
+  "status": 404
+}

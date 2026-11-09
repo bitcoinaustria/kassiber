@@ -1,0 +1,24 @@
+{
+  "body": [
+    {
+      "BOLT11": "lnbcrt250u1p40pvrvsp547gu5ef43m680ujsukzpzlzxw6qehqge9p3f6utfwlupxug8v6hspp54srgw7szwe0hm7plr2gp9klrfn7fcxfa5tgssgex3utfef3ql33qdp9ddshxumfvfjhygrvd9nksarwd9hxwgrnv4hxgxqyjw5qcqp29qxpqysgqkcslv9umu5mcx4zgvdfzq4zgdlj5zlzvxp57yu75wufmnpgc8xq4pgy0u92gz9xnl9xqcxwj0y4tm760xh6yw80ld2cqy4dtxa0q7wsqt04p65",
+      "createdAt": 1794158701,
+      "feeAmount": "175000",
+      "id": "ac06877a02765f7df83f1a9012dbe34cfc9c193da2d10823268f169ca620fc62",
+      "paymentHash": "ac06877a02765f7df83f1a9012dbe34cfc9c193da2d10823268f169ca620fc62",
+      "preimage": "bb650a66711bed4a4ecd3f8c0d2ad18ad099182c7b6c6b2bfdde5e8ef1bc0ba3",
+      "status": "Complete",
+      "totalAmount": "25175000"
+    }
+  ],
+  "request": {
+    "key": "lightning",
+    "method": "GET",
+    "path": "/api/v1/stores/{storeId}/lightning/BTC/payments?includePending=true",
+    "permissions": [
+      "btcpay.store.canviewlightninginvoice",
+      "btcpay.store.canuselightningnode"
+    ]
+  },
+  "status": 200
+}

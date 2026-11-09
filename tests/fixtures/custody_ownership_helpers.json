@@ -1,0 +1,3329 @@
+[
+  {
+    "case": "asset_empty",
+    "expected": [
+      null,
+      "BTC"
+    ],
+    "graph_json": "{\"txid\": \"abababababababababababababababababababababababababababababababab\", \"chain\": \"bitcoin\", \"network\": \"main\", \"component\": {}, \"evidence_conflicts\": [], \"inputs\": [{\"outpoint\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd:7\", \"script\": \"00141212121212121212121212121212121212121212\", \"value_sats\": 123456, \"asset_id\": \"BTC\", \"asset\": \"BTC\"}], \"outputs\": [{\"n\": 0, \"script\": \"51\", \"value_sats\": 123453, \"asset_id\": \"BTC\", \"asset\": \"BTC\", \"role\": null}]}",
+    "op": "asset",
+    "row": {
+      "asset": "BTC"
+    }
+  },
+  {
+    "case": "asset_id",
+    "expected": [
+      "ab",
+      "LBTC"
+    ],
+    "graph_json": "{\"txid\": \"abababababababababababababababababababababababababababababababab\", \"chain\": \"bitcoin\", \"network\": \"main\", \"component\": {\"asset_id\": \" AB \", \"asset\": \" lbtc \"}, \"evidence_conflicts\": [], \"inputs\": [{\"outpoint\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd:7\", \"script\": \"00141212121212121212121212121212121212121212\", \"value_sats\": 123456, \"asset_id\": \"BTC\", \"asset\": \"BTC\"}], \"outputs\": [{\"n\": 0, \"script\": \"51\", \"value_sats\": 123453, \"asset_id\": \"BTC\", \"asset\": \"BTC\", \"role\": null}]}",
+    "op": "asset",
+    "row": {
+      "asset": "BTC"
+    }
+  },
+  {
+    "case": "asset_falsy",
+    "expected": [
+      null,
+      "BTC"
+    ],
+    "graph_json": "{\"txid\": \"abababababababababababababababababababababababababababababababab\", \"chain\": \"bitcoin\", \"network\": \"main\", \"component\": {\"asset_id\": false, \"asset\": 0}, \"evidence_conflicts\": [], \"inputs\": [{\"outpoint\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd:7\", \"script\": \"00141212121212121212121212121212121212121212\", \"value_sats\": 123456, \"asset_id\": \"BTC\", \"asset\": \"BTC\"}], \"outputs\": [{\"n\": 0, \"script\": \"51\", \"value_sats\": 123453, \"asset_id\": \"BTC\", \"asset\": \"BTC\", \"role\": null}]}",
+    "op": "asset",
+    "row": {
+      "asset": "BTC"
+    }
+  },
+  {
+    "case": "asset_nonfinite",
+    "expected": [
+      "inf",
+      "NAN"
+    ],
+    "graph_json": "{\"txid\": \"abababababababababababababababababababababababababababababababab\", \"chain\": \"bitcoin\", \"network\": \"main\", \"component\": {\"asset_id\": Infinity, \"asset\": NaN}, \"evidence_conflicts\": [], \"inputs\": [{\"outpoint\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd:7\", \"script\": \"00141212121212121212121212121212121212121212\", \"value_sats\": 123456, \"asset_id\": \"BTC\", \"asset\": \"BTC\"}], \"outputs\": [{\"n\": 0, \"script\": \"51\", \"value_sats\": 123453, \"asset_id\": \"BTC\", \"asset\": \"BTC\", \"role\": null}]}",
+    "op": "asset",
+    "row": {
+      "asset": "BTC"
+    }
+  },
+  {
+    "case": "asset_literal",
+    "expected": [
+      "{'$float': 'inf'}",
+      "[TRUE]"
+    ],
+    "graph_json": "{\"txid\": \"abababababababababababababababababababababababababababababababab\", \"chain\": \"bitcoin\", \"network\": \"main\", \"component\": {\"asset_id\": {\"$float\": \"inf\"}, \"asset\": [true]}, \"evidence_conflicts\": [], \"inputs\": [{\"outpoint\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd:7\", \"script\": \"00141212121212121212121212121212121212121212\", \"value_sats\": 123456, \"asset_id\": \"BTC\", \"asset\": \"BTC\"}], \"outputs\": [{\"n\": 0, \"script\": \"51\", \"value_sats\": 123453, \"asset_id\": \"BTC\", \"asset\": \"BTC\", \"role\": null}]}",
+    "op": "asset",
+    "row": {
+      "asset": "BTC"
+    }
+  },
+  {
+    "case": "relation_id",
+    "expected": [
+      "same",
+      "different",
+      "unknown"
+    ],
+    "graph_json": "{\"txid\": \"abababababababababababababababababababababababababababababababab\", \"chain\": \"liquid\", \"network\": \"main\", \"component\": {\"asset_id\": \"ab\", \"asset\": \"LBTC\"}, \"evidence_conflicts\": [], \"inputs\": [{\"asset_id\": \"ab\", \"asset\": \"LBTC\", \"value_sats\": 1}, {\"asset_id\": \"cd\", \"asset\": \"OTHER\", \"value_sats\": 1}, {\"asset_id\": null, \"asset\": null, \"value_sats\": 1}], \"outputs\": []}",
+    "op": "relation",
+    "row": {
+      "asset": ""
+    }
+  },
+  {
+    "case": "inputs_id",
+    "expected": [
+      [
+        {
+          "asset": "LBTC",
+          "asset_id": "ab",
+          "value_sats": 1
+        }
+      ],
+      false
+    ],
+    "graph_json": "{\"txid\": \"abababababababababababababababababababababababababababababababab\", \"chain\": \"liquid\", \"network\": \"main\", \"component\": {\"asset_id\": \"ab\", \"asset\": \"LBTC\"}, \"evidence_conflicts\": [], \"inputs\": [{\"asset_id\": \"ab\", \"asset\": \"LBTC\", \"value_sats\": 1}, {\"asset_id\": \"cd\", \"asset\": \"OTHER\", \"value_sats\": 1}, {\"asset_id\": null, \"asset\": null, \"value_sats\": 1}], \"outputs\": []}",
+    "op": "inputs",
+    "row": {
+      "asset": ""
+    }
+  },
+  {
+    "case": "relation_display",
+    "expected": [
+      "same",
+      "different",
+      "unknown"
+    ],
+    "graph_json": "{\"txid\": \"abababababababababababababababababababababababababababababababab\", \"chain\": \"liquid\", \"network\": \"main\", \"component\": {\"asset\": \"LBTC\"}, \"evidence_conflicts\": [], \"inputs\": [{\"asset_id\": \"ab\", \"asset\": \"LBTC\", \"value_sats\": 1}, {\"asset_id\": \"cd\", \"asset\": \"OTHER\", \"value_sats\": 1}, {\"asset_id\": null, \"asset\": null, \"value_sats\": 1}], \"outputs\": []}",
+    "op": "relation",
+    "row": {
+      "asset": ""
+    }
+  },
+  {
+    "case": "inputs_display",
+    "expected": [
+      [
+        {
+          "asset": "LBTC",
+          "asset_id": "ab",
+          "value_sats": 1
+        }
+      ],
+      false
+    ],
+    "graph_json": "{\"txid\": \"abababababababababababababababababababababababababababababababab\", \"chain\": \"liquid\", \"network\": \"main\", \"component\": {\"asset\": \"LBTC\"}, \"evidence_conflicts\": [], \"inputs\": [{\"asset_id\": \"ab\", \"asset\": \"LBTC\", \"value_sats\": 1}, {\"asset_id\": \"cd\", \"asset\": \"OTHER\", \"value_sats\": 1}, {\"asset_id\": null, \"asset\": null, \"value_sats\": 1}], \"outputs\": []}",
+    "op": "inputs",
+    "row": {
+      "asset": ""
+    }
+  },
+  {
+    "case": "relation_unknown",
+    "expected": [
+      "unknown"
+    ],
+    "graph_json": "{\"txid\": \"abababababababababababababababababababababababababababababababab\", \"chain\": \"liquid\", \"network\": \"main\", \"component\": {}, \"evidence_conflicts\": [], \"inputs\": [{\"value_sats\": 1}], \"outputs\": []}",
+    "op": "relation",
+    "row": {
+      "asset": ""
+    }
+  },
+  {
+    "case": "inputs_unknown",
+    "expected": [
+      [],
+      false
+    ],
+    "graph_json": "{\"txid\": \"abababababababababababababababababababababababababababababababab\", \"chain\": \"liquid\", \"network\": \"main\", \"component\": {}, \"evidence_conflicts\": [], \"inputs\": [{\"value_sats\": 1}], \"outputs\": []}",
+    "op": "inputs",
+    "row": {
+      "asset": ""
+    }
+  },
+  {
+    "case": "relation_id_unknown",
+    "expected": [
+      "unknown"
+    ],
+    "graph_json": "{\"txid\": \"abababababababababababababababababababababababababababababababab\", \"chain\": \"liquid\", \"network\": \"main\", \"component\": {\"asset_id\": \"ab\", \"asset\": \"LBTC\"}, \"evidence_conflicts\": [], \"inputs\": [{\"asset\": \"LBTC\", \"value_sats\": 1}], \"outputs\": []}",
+    "op": "relation",
+    "row": {
+      "asset": ""
+    }
+  },
+  {
+    "case": "inputs_id_unknown",
+    "expected": [
+      [],
+      false
+    ],
+    "graph_json": "{\"txid\": \"abababababababababababababababababababababababababababababababab\", \"chain\": \"liquid\", \"network\": \"main\", \"component\": {\"asset_id\": \"ab\", \"asset\": \"LBTC\"}, \"evidence_conflicts\": [], \"inputs\": [{\"asset\": \"LBTC\", \"value_sats\": 1}], \"outputs\": []}",
+    "op": "inputs",
+    "row": {
+      "asset": ""
+    }
+  },
+  {
+    "case": "relation_bitcoin",
+    "expected": [
+      "same",
+      "same",
+      "same"
+    ],
+    "graph_json": "{\"txid\": \"abababababababababababababababababababababababababababababababab\", \"chain\": \"bitcoin\", \"network\": \"main\", \"component\": {}, \"evidence_conflicts\": [], \"inputs\": [{\"asset_id\": \"ab\", \"asset\": \"LBTC\", \"value_sats\": 1}, {\"asset_id\": \"cd\", \"asset\": \"OTHER\", \"value_sats\": 1}, {\"asset_id\": null, \"asset\": null, \"value_sats\": 1}], \"outputs\": []}",
+    "op": "relation",
+    "row": {
+      "asset": ""
+    }
+  },
+  {
+    "case": "inputs_bitcoin",
+    "expected": [
+      [
+        {
+          "asset": "LBTC",
+          "asset_id": "ab",
+          "value_sats": 1
+        },
+        {
+          "asset": "OTHER",
+          "asset_id": "cd",
+          "value_sats": 1
+        },
+        {
+          "asset": null,
+          "asset_id": null,
+          "value_sats": 1
+        }
+      ],
+      true
+    ],
+    "graph_json": "{\"txid\": \"abababababababababababababababababababababababababababababababab\", \"chain\": \"bitcoin\", \"network\": \"main\", \"component\": {}, \"evidence_conflicts\": [], \"inputs\": [{\"asset_id\": \"ab\", \"asset\": \"LBTC\", \"value_sats\": 1}, {\"asset_id\": \"cd\", \"asset\": \"OTHER\", \"value_sats\": 1}, {\"asset_id\": null, \"asset\": null, \"value_sats\": 1}], \"outputs\": []}",
+    "op": "inputs",
+    "row": {
+      "asset": ""
+    }
+  },
+  {
+    "case": "relation_bitcoin_empty",
+    "expected": [],
+    "graph_json": "{\"txid\": \"abababababababababababababababababababababababababababababababab\", \"chain\": \"bitcoin\", \"network\": \"main\", \"component\": {}, \"evidence_conflicts\": [], \"inputs\": [], \"outputs\": []}",
+    "op": "relation",
+    "row": {
+      "asset": ""
+    }
+  },
+  {
+    "case": "inputs_bitcoin_empty",
+    "expected": [
+      [],
+      true
+    ],
+    "graph_json": "{\"txid\": \"abababababababababababababababababababababababababababababababab\", \"chain\": \"bitcoin\", \"network\": \"main\", \"component\": {}, \"evidence_conflicts\": [], \"inputs\": [], \"outputs\": []}",
+    "op": "inputs",
+    "row": {
+      "asset": ""
+    }
+  },
+  {
+    "case": "relation_id_empty",
+    "expected": [],
+    "graph_json": "{\"txid\": \"abababababababababababababababababababababababababababababababab\", \"chain\": \"liquid\", \"network\": \"main\", \"component\": {\"asset_id\": \"ab\", \"asset\": \"LBTC\"}, \"evidence_conflicts\": [], \"inputs\": [], \"outputs\": []}",
+    "op": "relation",
+    "row": {
+      "asset": ""
+    }
+  },
+  {
+    "case": "inputs_id_empty",
+    "expected": [
+      [],
+      false
+    ],
+    "graph_json": "{\"txid\": \"abababababababababababababababababababababababababababababababab\", \"chain\": \"liquid\", \"network\": \"main\", \"component\": {\"asset_id\": \"ab\", \"asset\": \"LBTC\"}, \"evidence_conflicts\": [], \"inputs\": [], \"outputs\": []}",
+    "op": "inputs",
+    "row": {
+      "asset": ""
+    }
+  },
+  {
+    "case": "relation_id_other_only",
+    "expected": [
+      "different"
+    ],
+    "graph_json": "{\"txid\": \"abababababababababababababababababababababababababababababababab\", \"chain\": \"liquid\", \"network\": \"main\", \"component\": {\"asset_id\": \"ab\", \"asset\": \"LBTC\"}, \"evidence_conflicts\": [], \"inputs\": [{\"asset_id\": \"cd\", \"asset\": \"OTHER\", \"value_sats\": 1}], \"outputs\": []}",
+    "op": "relation",
+    "row": {
+      "asset": ""
+    }
+  },
+  {
+    "case": "inputs_id_other_only",
+    "expected": [
+      [],
+      false
+    ],
+    "graph_json": "{\"txid\": \"abababababababababababababababababababababababababababababababab\", \"chain\": \"liquid\", \"network\": \"main\", \"component\": {\"asset_id\": \"ab\", \"asset\": \"LBTC\"}, \"evidence_conflicts\": [], \"inputs\": [{\"asset_id\": \"cd\", \"asset\": \"OTHER\", \"value_sats\": 1}], \"outputs\": []}",
+    "op": "inputs",
+    "row": {
+      "asset": ""
+    }
+  },
+  {
+    "case": "fee_bitcoin",
+    "expected": 3000,
+    "graph_json": "{\"txid\": \"abababababababababababababababababababababababababababababababab\", \"chain\": \"bitcoin\", \"network\": \"main\", \"component\": {}, \"evidence_conflicts\": [], \"inputs\": [{\"outpoint\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd:7\", \"script\": \"00141212121212121212121212121212121212121212\", \"value_sats\": 123456, \"asset_id\": \"BTC\", \"asset\": \"BTC\"}], \"outputs\": [{\"n\": 0, \"script\": \"51\", \"value_sats\": 123453, \"asset_id\": \"BTC\", \"asset\": \"BTC\", \"role\": null}]}",
+    "op": "fee",
+    "row": {
+      "asset": "LBTC"
+    }
+  },
+  {
+    "case": "fee_conflicts",
+    "expected": null,
+    "graph_json": "{\"txid\": \"abababababababababababababababababababababababababababababababab\", \"chain\": \"bitcoin\", \"network\": \"main\", \"component\": {}, \"evidence_conflicts\": [\"x\"], \"inputs\": [{\"outpoint\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd:7\", \"script\": \"00141212121212121212121212121212121212121212\", \"value_sats\": 123456, \"asset_id\": \"BTC\", \"asset\": \"BTC\"}], \"outputs\": [{\"n\": 0, \"script\": \"51\", \"value_sats\": 123453, \"asset_id\": \"BTC\", \"asset\": \"BTC\", \"role\": null}]}",
+    "op": "fee",
+    "row": {
+      "asset": "LBTC"
+    }
+  },
+  {
+    "case": "fee_empty_inputs",
+    "expected": null,
+    "graph_json": "{\"txid\": \"abababababababababababababababababababababababababababababababab\", \"chain\": \"bitcoin\", \"network\": \"main\", \"component\": {}, \"evidence_conflicts\": [], \"inputs\": [], \"outputs\": [{\"n\": 0, \"script\": \"51\", \"value_sats\": 123453, \"asset_id\": \"BTC\", \"asset\": \"BTC\", \"role\": null}]}",
+    "op": "fee",
+    "row": {
+      "asset": "LBTC"
+    }
+  },
+  {
+    "case": "fee_empty_outputs",
+    "expected": null,
+    "graph_json": "{\"txid\": \"abababababababababababababababababababababababababababababababab\", \"chain\": \"bitcoin\", \"network\": \"main\", \"component\": {}, \"evidence_conflicts\": [], \"inputs\": [{\"outpoint\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd:7\", \"script\": \"00141212121212121212121212121212121212121212\", \"value_sats\": 123456, \"asset_id\": \"BTC\", \"asset\": \"BTC\"}], \"outputs\": []}",
+    "op": "fee",
+    "row": {
+      "asset": "LBTC"
+    }
+  },
+  {
+    "case": "fee_missing_input",
+    "expected": null,
+    "graph_json": "{\"txid\": \"abababababababababababababababababababababababababababababababab\", \"chain\": \"bitcoin\", \"network\": \"main\", \"component\": {}, \"evidence_conflicts\": [], \"inputs\": [{\"outpoint\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd:7\", \"script\": \"00141212121212121212121212121212121212121212\", \"value_sats\": null, \"asset_id\": \"BTC\", \"asset\": \"BTC\"}], \"outputs\": [{\"n\": 0, \"script\": \"51\", \"value_sats\": 123453, \"asset_id\": \"BTC\", \"asset\": \"BTC\", \"role\": null}]}",
+    "op": "fee",
+    "row": {
+      "asset": "LBTC"
+    }
+  },
+  {
+    "case": "fee_missing_output",
+    "expected": null,
+    "graph_json": "{\"txid\": \"abababababababababababababababababababababababababababababababab\", \"chain\": \"bitcoin\", \"network\": \"main\", \"component\": {}, \"evidence_conflicts\": [], \"inputs\": [{\"outpoint\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd:7\", \"script\": \"00141212121212121212121212121212121212121212\", \"value_sats\": 123456, \"asset_id\": \"BTC\", \"asset\": \"BTC\"}], \"outputs\": [{\"n\": 0, \"script\": \"51\", \"value_sats\": null, \"asset_id\": \"BTC\", \"asset\": \"BTC\", \"role\": null}]}",
+    "op": "fee",
+    "row": {
+      "asset": "LBTC"
+    }
+  },
+  {
+    "case": "fee_negative",
+    "expected": null,
+    "graph_json": "{\"txid\": \"abababababababababababababababababababababababababababababababab\", \"chain\": \"bitcoin\", \"network\": \"main\", \"component\": {}, \"evidence_conflicts\": [], \"inputs\": [{\"outpoint\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd:7\", \"script\": \"00141212121212121212121212121212121212121212\", \"value_sats\": 0, \"asset_id\": \"BTC\", \"asset\": \"BTC\"}], \"outputs\": [{\"n\": 0, \"script\": \"51\", \"value_sats\": 123453, \"asset_id\": \"BTC\", \"asset\": \"BTC\", \"role\": null}]}",
+    "op": "fee",
+    "row": {
+      "asset": "LBTC"
+    }
+  },
+  {
+    "case": "fee_huge",
+    "expected": 100000000000000000000000000000000000000000000000000000000000000000000000000000003000,
+    "graph_json": "{\"txid\": \"abababababababababababababababababababababababababababababababab\", \"chain\": \"bitcoin\", \"network\": \"main\", \"component\": {}, \"evidence_conflicts\": [], \"inputs\": [{\"outpoint\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd:7\", \"script\": \"00141212121212121212121212121212121212121212\", \"value_sats\": 100000000000000000000000000000000000000000000000000000000000000000000000000123456, \"asset_id\": \"BTC\", \"asset\": \"BTC\"}], \"outputs\": [{\"n\": 0, \"script\": \"51\", \"value_sats\": 123453, \"asset_id\": \"BTC\", \"asset\": \"BTC\", \"role\": null}]}",
+    "op": "fee",
+    "row": {
+      "asset": "LBTC"
+    }
+  },
+  {
+    "case": "fee_unknown_chain",
+    "expected": null,
+    "graph_json": "{\"txid\": \"abababababababababababababababababababababababababababababababab\", \"chain\": \"other\", \"network\": \"main\", \"component\": {}, \"evidence_conflicts\": [], \"inputs\": [{\"outpoint\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd:7\", \"script\": \"00141212121212121212121212121212121212121212\", \"value_sats\": 123456, \"asset_id\": \"BTC\", \"asset\": \"BTC\"}], \"outputs\": [{\"n\": 0, \"script\": \"51\", \"value_sats\": 123453, \"asset_id\": \"BTC\", \"asset\": \"BTC\", \"role\": null}]}",
+    "op": "fee",
+    "row": {
+      "asset": "LBTC"
+    }
+  },
+  {
+    "case": "fee_liquid_id",
+    "expected": 3000,
+    "graph_json": "{\"chain\": \"liquid\", \"component\": {\"asset_id\": \"ab\", \"asset\": \"LBTC\"}, \"inputs\": [], \"outputs\": [{\"role\": \"fee\", \"asset_id\": \"ab\", \"asset\": \"LBTC\", \"value_sats\": 3}]}",
+    "op": "fee",
+    "row": {
+      "asset": "LBTC"
+    }
+  },
+  {
+    "case": "fee_liquid_other_id",
+    "expected": null,
+    "graph_json": "{\"chain\": \"liquid\", \"component\": {\"asset_id\": \"ab\", \"asset\": \"LBTC\"}, \"inputs\": [], \"outputs\": [{\"role\": \"fee\", \"asset_id\": \"cd\", \"asset\": \"LBTC\", \"value_sats\": 3}]}",
+    "op": "fee",
+    "row": {
+      "asset": "LBTC"
+    }
+  },
+  {
+    "case": "fee_liquid_display",
+    "expected": 3000,
+    "graph_json": "{\"chain\": \"liquid\", \"component\": {\"asset_id\": \"ab\", \"asset\": \"LBTC\"}, \"inputs\": [], \"outputs\": [{\"role\": \"fee\", \"asset_id\": null, \"asset\": \"LBTC\", \"value_sats\": 3}]}",
+    "op": "fee",
+    "row": {
+      "asset": "LBTC"
+    }
+  },
+  {
+    "case": "fee_liquid_other_display",
+    "expected": null,
+    "graph_json": "{\"chain\": \"liquid\", \"component\": {\"asset_id\": \"ab\", \"asset\": \"LBTC\"}, \"inputs\": [], \"outputs\": [{\"role\": \"fee\", \"asset_id\": null, \"asset\": \"OTHER\", \"value_sats\": 3}]}",
+    "op": "fee",
+    "row": {
+      "asset": "LBTC"
+    }
+  },
+  {
+    "case": "fee_liquid_display_fallback",
+    "expected": 3000,
+    "graph_json": "{\"chain\": \"liquid\", \"component\": {\"asset_id\": \"ab\", \"asset\": null}, \"inputs\": [], \"outputs\": [{\"role\": \"fee\", \"asset_id\": null, \"asset\": \"LBTC\", \"value_sats\": 3}]}",
+    "op": "fee",
+    "row": {
+      "asset": "LBTC"
+    }
+  },
+  {
+    "case": "fee_liquid_two",
+    "expected": null,
+    "graph_json": "{\"chain\": \"liquid\", \"component\": {\"asset_id\": \"ab\", \"asset\": \"LBTC\"}, \"inputs\": [], \"outputs\": [{\"role\": \"fee\", \"asset_id\": \"ab\", \"asset\": \"LBTC\", \"value_sats\": 3}, {\"role\": \"fee\", \"asset_id\": \"ab\", \"asset\": \"LBTC\", \"value_sats\": 3}]}",
+    "op": "fee",
+    "row": {
+      "asset": "LBTC"
+    }
+  },
+  {
+    "case": "fee_liquid_none",
+    "expected": null,
+    "graph_json": "{\"chain\": \"liquid\", \"component\": {\"asset_id\": \"ab\", \"asset\": \"LBTC\"}, \"inputs\": [], \"outputs\": []}",
+    "op": "fee",
+    "row": {
+      "asset": "LBTC"
+    }
+  },
+  {
+    "case": "fee_liquid_missing",
+    "expected": null,
+    "graph_json": "{\"chain\": \"liquid\", \"component\": {\"asset_id\": \"ab\", \"asset\": \"LBTC\"}, \"inputs\": [], \"outputs\": [{\"role\": \"fee\", \"asset_id\": \"ab\", \"asset\": \"LBTC\", \"value_sats\": null}]}",
+    "op": "fee",
+    "row": {
+      "asset": "LBTC"
+    }
+  },
+  {
+    "case": "fee_liquid_missing_other",
+    "expected": null,
+    "graph_json": "{\"chain\": \"liquid\", \"component\": {\"asset_id\": \"ab\", \"asset\": \"LBTC\"}, \"inputs\": [], \"outputs\": [{\"role\": \"fee\", \"asset_id\": \"ab\", \"asset\": \"LBTC\", \"value_sats\": 3}, {\"role\": \"fee\", \"asset_id\": \"cd\", \"asset\": \"LBTC\", \"value_sats\": null}]}",
+    "op": "fee",
+    "row": {
+      "asset": "LBTC"
+    }
+  },
+  {
+    "case": "fee_liquid_negative",
+    "expected": null,
+    "graph_json": "{\"chain\": \"liquid\", \"component\": {\"asset_id\": \"ab\", \"asset\": \"LBTC\"}, \"inputs\": [], \"outputs\": [{\"role\": \"fee\", \"asset_id\": \"ab\", \"asset\": \"LBTC\", \"value_sats\": -1}]}",
+    "op": "fee",
+    "row": {
+      "asset": "LBTC"
+    }
+  },
+  {
+    "case": "fee_liquid_nonfinite",
+    "expected": 3000,
+    "graph_json": "{\"chain\": \"liquid\", \"component\": {\"asset_id\": Infinity, \"asset\": \"LBTC\"}, \"inputs\": [], \"outputs\": [{\"role\": \"fee\", \"asset_id\": Infinity, \"asset\": \"LBTC\", \"value_sats\": 3}]}",
+    "op": "fee",
+    "row": {
+      "asset": "LBTC"
+    }
+  },
+  {
+    "case": "fee_liquid_literal",
+    "expected": 3000,
+    "graph_json": "{\"chain\": \"liquid\", \"component\": {\"asset_id\": {\"$float\": \"inf\"}, \"asset\": \"LBTC\"}, \"inputs\": [], \"outputs\": [{\"role\": \"fee\", \"asset_id\": {\"$float\": \"inf\"}, \"asset\": \"LBTC\", \"value_sats\": 3}]}",
+    "op": "fee",
+    "row": {
+      "asset": "LBTC"
+    }
+  },
+  {
+    "case": "row_liquid_chain",
+    "expected": true,
+    "graph_json": "{}",
+    "op": "row_liquid",
+    "row": {
+      "asset": "OTHER",
+      "raw_json": "{\"chain\":\" LIQUID \"}"
+    }
+  },
+  {
+    "case": "row_liquid_component",
+    "expected": true,
+    "graph_json": "{}",
+    "op": "row_liquid",
+    "row": {
+      "asset": "OTHER",
+      "raw_json": "{\"component\":{\"asset_id\":\"ab\"}}"
+    }
+  },
+  {
+    "case": "row_liquid_symbol",
+    "expected": true,
+    "graph_json": "{}",
+    "op": "row_liquid",
+    "row": {
+      "asset": " l-btc ",
+      "raw_json": "{}"
+    }
+  },
+  {
+    "case": "row_liquid_absent",
+    "expected": false,
+    "graph_json": "{}",
+    "op": "row_liquid",
+    "row": {
+      "asset": "BTC",
+      "raw_json": "{}"
+    }
+  },
+  {
+    "case": "row_liquid_nonfinite",
+    "expected": false,
+    "graph_json": "{}",
+    "op": "row_liquid",
+    "row": {
+      "asset": "BTC",
+      "raw_json": "{\"chain\":NaN}"
+    }
+  },
+  {
+    "case": "conserves_exact",
+    "expected": [
+      true,
+      {
+        "change_sats": 0,
+        "expected_outflow_msat": 581814000,
+        "input_sats": 581814,
+        "row_total_outflow_msat": 581814000
+      }
+    ],
+    "graph_json": "{\"txid\": \"0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e\", \"chain\": \"liquid\", \"network\": \"elementsregtest\", \"inputs\": [{\"outpoint\": \"4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8:0\", \"script\": \"001429ae9410db86b93b88a43ef90f187e9571b3266d\", \"value_sats\": 581814, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}], \"outputs\": [{\"n\": 0, \"script\": \"001460690c1be076a41f028a106a1c29a1e259d52b67\", \"value_sats\": 581811, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\", \"role\": null}, {\"n\": 1, \"script\": \"\", \"value_sats\": 3, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\", \"role\": \"fee\"}], \"component\": {\"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}, \"evidence_conflicts\": []}",
+    "op": "conserves",
+    "row": {
+      "account_code": "treasury",
+      "account_label": "Treasury",
+      "amount": 581811000,
+      "amount_includes_fee": 0,
+      "asset": "LBTC",
+      "at_category_override": null,
+      "at_regime_override": null,
+      "commercial_applied_link_id": null,
+      "config_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\"}",
+      "config_text_mentions_samourai": false,
+      "confirmed_at": null,
+      "counterparty": null,
+      "created_at": "2026-01-01T00:00:00Z",
+      "description": null,
+      "direction": "outbound",
+      "excluded": 0,
+      "external_id": "0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e",
+      "external_id_kind": "txid",
+      "fee": 3000,
+      "fiat_currency": "USD",
+      "fiat_price_source": null,
+      "fiat_rate": null,
+      "fiat_rate_exact": null,
+      "fiat_value": null,
+      "fiat_value_exact": null,
+      "fingerprint": "generated-5-out",
+      "id": "source-a",
+      "journal_transaction_id": null,
+      "kind": null,
+      "kind_override": null,
+      "note": null,
+      "observation_application_revision": "generated",
+      "observation_authority_version": 1,
+      "observation_fee_attribution": "exact",
+      "observation_graph_hash": "b9401188d3731500f86e1f43b7d6c63f080b0dd4093211f083f36581bcedac5f",
+      "observation_observed_at": null,
+      "observation_observer_kinds_json": null,
+      "observation_quantity_hash": "7f6ff06b93d22a4d58b4ea093b41cf21f20dc09c202b86794b9792e4401e8cc4",
+      "occurred_at": "2026-01-06T00:00:00Z",
+      "payment_hash": null,
+      "payment_hash_source": null,
+      "pricing_external_ref": null,
+      "pricing_fetched_at": null,
+      "pricing_granularity": null,
+      "pricing_method": null,
+      "pricing_pair": null,
+      "pricing_provider": null,
+      "pricing_quality": null,
+      "pricing_review_accepted_price": null,
+      "pricing_source_kind": null,
+      "pricing_timestamp": null,
+      "privacy_boundary": null,
+      "profile_id": "profile-1",
+      "raw_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\", \"txid\": \"0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e\", \"vin\": [{\"txid\": \"4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8\", \"vout\": 0, \"prevout\": {\"scriptpubkey\": \"001429ae9410db86b93b88a43ef90f187e9571b3266d\", \"value_sats\": 581814, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}}], \"vout\": [{\"n\": 0, \"scriptpubkey\": \"001460690c1be076a41f028a106a1c29a1e259d52b67\", \"value_sats\": 581811, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}, {\"n\": 1, \"scriptpubkey\": \"\", \"value_sats\": 3, \"role\": \"fee\", \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}], \"component\": {\"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}}",
+      "review_status": null,
+      "swap_refund_funding_txid": null,
+      "swap_refund_funding_vout": null,
+      "taxability_override": null,
+      "wallet_account_id": "acct-1",
+      "wallet_id": "wallet-a",
+      "wallet_kind": "liquid",
+      "wallet_label": "Cold",
+      "workspace_id": "ws-1"
+    },
+    "scope": [
+      "liquid",
+      "elementsregtest"
+    ],
+    "snapshot": {
+      "anchor_wallets": [],
+      "anchors": {},
+      "as_of": "2026-10-27T12:00:00Z",
+      "book_network": null,
+      "channel_records": [],
+      "components": [],
+      "evidence_snapshots": [],
+      "gap_reviews": [],
+      "gap_worklist": {
+        "large_book": false,
+        "rows": [
+          {
+            "account_code": "treasury",
+            "account_label": "Treasury",
+            "amount": 581811000,
+            "amount_includes_fee": 0,
+            "asset": "LBTC",
+            "at_category_override": null,
+            "at_regime_override": null,
+            "commercial_applied_link_id": null,
+            "config_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\"}",
+            "config_text_mentions_samourai": false,
+            "confirmed_at": null,
+            "counterparty": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "description": null,
+            "direction": "outbound",
+            "excluded": 0,
+            "external_id": "0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e",
+            "external_id_kind": "txid",
+            "fee": 3000,
+            "fiat_currency": "USD",
+            "fiat_price_source": null,
+            "fiat_rate": null,
+            "fiat_rate_exact": null,
+            "fiat_value": null,
+            "fiat_value_exact": null,
+            "fingerprint": "generated-5-out",
+            "id": "source-a",
+            "journal_transaction_id": null,
+            "kind": null,
+            "kind_override": null,
+            "note": null,
+            "observation_application_revision": "generated",
+            "observation_authority_version": 1,
+            "observation_fee_attribution": "exact",
+            "observation_graph_hash": "b9401188d3731500f86e1f43b7d6c63f080b0dd4093211f083f36581bcedac5f",
+            "observation_observed_at": null,
+            "observation_observer_kinds_json": null,
+            "observation_quantity_hash": "7f6ff06b93d22a4d58b4ea093b41cf21f20dc09c202b86794b9792e4401e8cc4",
+            "occurred_at": "2026-01-06T00:00:00Z",
+            "payment_hash": null,
+            "payment_hash_source": null,
+            "pricing_external_ref": null,
+            "pricing_fetched_at": null,
+            "pricing_granularity": null,
+            "pricing_method": null,
+            "pricing_pair": null,
+            "pricing_provider": null,
+            "pricing_quality": null,
+            "pricing_review_accepted_price": null,
+            "pricing_source_kind": null,
+            "pricing_timestamp": null,
+            "privacy_boundary": null,
+            "profile_id": "profile-1",
+            "raw_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\", \"txid\": \"0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e\", \"vin\": [{\"txid\": \"4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8\", \"vout\": 0, \"prevout\": {\"scriptpubkey\": \"001429ae9410db86b93b88a43ef90f187e9571b3266d\", \"value_sats\": 581814, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}}], \"vout\": [{\"n\": 0, \"scriptpubkey\": \"001460690c1be076a41f028a106a1c29a1e259d52b67\", \"value_sats\": 581811, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}, {\"n\": 1, \"scriptpubkey\": \"\", \"value_sats\": 3, \"role\": \"fee\", \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}], \"component\": {\"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}}",
+            "review_status": null,
+            "swap_refund_funding_txid": null,
+            "swap_refund_funding_vout": null,
+            "taxability_override": null,
+            "wallet_account_id": "acct-1",
+            "wallet_id": "wallet-a",
+            "wallet_kind": "liquid",
+            "wallet_label": "Cold",
+            "workspace_id": "ws-1"
+          }
+        ]
+      },
+      "import_duplicate_quarantines": [],
+      "loan_legs": [],
+      "migration_issues": [],
+      "operation": "custody",
+      "owned_index": {
+        "by_outpoint": {
+          "4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8:0": [
+            {
+              "account": "Assets:Bitcoin",
+              "chain": "liquid",
+              "network": "elementsregtest",
+              "source": "inventory",
+              "wallet_id": "wallet-a",
+              "wallet_kind": "descriptor",
+              "wallet_label": "wallet-a"
+            }
+          ]
+        },
+        "by_scoped_outpoint": [
+          {
+            "key": [
+              "liquid",
+              "elementsregtest",
+              "4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8:0"
+            ],
+            "matches": [
+              {
+                "account": "Assets:Bitcoin",
+                "chain": "liquid",
+                "network": "elementsregtest",
+                "source": "inventory",
+                "wallet_id": "wallet-a",
+                "wallet_kind": "descriptor",
+                "wallet_label": "wallet-a"
+              }
+            ]
+          }
+        ],
+        "by_script": {
+          "001429ae9410db86b93b88a43ef90f187e9571b3266d": [
+            {
+              "account": "Assets:Bitcoin",
+              "chain": "liquid",
+              "network": "elementsregtest",
+              "source": "inventory",
+              "wallet_id": "wallet-a",
+              "wallet_kind": "descriptor",
+              "wallet_label": "wallet-a"
+            }
+          ],
+          "001460690c1be076a41f028a106a1c29a1e259d52b67": [
+            {
+              "account": "Assets:Bitcoin",
+              "chain": "liquid",
+              "network": "elementsregtest",
+              "source": "inventory",
+              "wallet_id": "wallet-c",
+              "wallet_kind": "descriptor",
+              "wallet_label": "wallet-c"
+            }
+          ],
+          "0014cdf2e41a3cc6a41e80e2d33be3b947b123e7caa9": [
+            {
+              "account": "Assets:Bitcoin",
+              "chain": "liquid",
+              "network": "elementsregtest",
+              "source": "inventory",
+              "wallet_id": "wallet-b",
+              "wallet_kind": "descriptor",
+              "wallet_label": "wallet-b"
+            }
+          ]
+        },
+        "txid_wallets": {
+          "4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8": [
+            [
+              "wallet-a",
+              "wallet-a"
+            ]
+          ]
+        },
+        "txid_wallets_by_scope": [
+          {
+            "key": [
+              "liquid",
+              "elementsregtest",
+              "4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8"
+            ],
+            "matches": [
+              [
+                "wallet-a",
+                "wallet-a"
+              ]
+            ]
+          }
+        ]
+      },
+      "ownership_warnings": [],
+      "pair_dismissals": [],
+      "profile": {
+        "bitcoin_rail_carrying_value": 1,
+        "cost_basis_pool_scope": "global",
+        "created_at": "2026-01-01T00:00:00Z",
+        "fiat_currency": "USD",
+        "gains_algorithm": "FIFO",
+        "id": "profile-1",
+        "journal_input_version": 0,
+        "journal_semantics_version": 0,
+        "label": "Default",
+        "last_processed_at": null,
+        "last_processed_input_version": 0,
+        "last_processed_tx_count": 0,
+        "ownership_review_counts_json": null,
+        "require_coarse_review": 0,
+        "required_journal_semantics_version": 0,
+        "swap_candidate_count": null,
+        "tax_country": "generic",
+        "tax_long_term_days": 365,
+        "workspace_id": "ws-1"
+      },
+      "rate_rows": [
+        {
+          "amount": 2926153305000,
+          "asset": "BTC",
+          "fiat_rate": 40000.0,
+          "fiat_rate_exact": null,
+          "fiat_value": null,
+          "fiat_value_exact": null
+        },
+        {
+          "amount": 2926153305000,
+          "asset": "BTC",
+          "fiat_rate": 40000.0,
+          "fiat_rate_exact": null,
+          "fiat_value": null,
+          "fiat_value_exact": null
+        }
+      ],
+      "receipt_sources": [],
+      "revision_headers": [],
+      "schema_version": 1,
+      "transactions": [
+        {
+          "account_code": "treasury",
+          "account_label": "Treasury",
+          "amount": 581811000,
+          "amount_includes_fee": 0,
+          "asset": "LBTC",
+          "at_category_override": null,
+          "at_regime_override": null,
+          "commercial_applied_link_id": null,
+          "config_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\"}",
+          "config_text_mentions_samourai": false,
+          "confirmed_at": null,
+          "counterparty": null,
+          "created_at": "2026-01-01T00:00:00Z",
+          "description": null,
+          "direction": "outbound",
+          "excluded": 0,
+          "external_id": "0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e",
+          "external_id_kind": "txid",
+          "fee": 3000,
+          "fiat_currency": "USD",
+          "fiat_price_source": null,
+          "fiat_rate": null,
+          "fiat_rate_exact": null,
+          "fiat_value": null,
+          "fiat_value_exact": null,
+          "fingerprint": "generated-5-out",
+          "id": "source-a",
+          "journal_transaction_id": null,
+          "kind": null,
+          "kind_override": null,
+          "note": null,
+          "observation_application_revision": "generated",
+          "observation_authority_version": 1,
+          "observation_fee_attribution": "exact",
+          "observation_graph_hash": "b9401188d3731500f86e1f43b7d6c63f080b0dd4093211f083f36581bcedac5f",
+          "observation_observed_at": null,
+          "observation_observer_kinds_json": null,
+          "observation_quantity_hash": "7f6ff06b93d22a4d58b4ea093b41cf21f20dc09c202b86794b9792e4401e8cc4",
+          "occurred_at": "2026-01-06T00:00:00Z",
+          "payment_hash": null,
+          "payment_hash_source": null,
+          "pricing_external_ref": null,
+          "pricing_fetched_at": null,
+          "pricing_granularity": null,
+          "pricing_method": null,
+          "pricing_pair": null,
+          "pricing_provider": null,
+          "pricing_quality": null,
+          "pricing_review_accepted_price": null,
+          "pricing_source_kind": null,
+          "pricing_timestamp": null,
+          "privacy_boundary": null,
+          "profile_id": "profile-1",
+          "raw_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\", \"txid\": \"0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e\", \"vin\": [{\"txid\": \"4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8\", \"vout\": 0, \"prevout\": {\"scriptpubkey\": \"001429ae9410db86b93b88a43ef90f187e9571b3266d\", \"value_sats\": 581814, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}}], \"vout\": [{\"n\": 0, \"scriptpubkey\": \"001460690c1be076a41f028a106a1c29a1e259d52b67\", \"value_sats\": 581811, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}, {\"n\": 1, \"scriptpubkey\": \"\", \"value_sats\": 3, \"role\": \"fee\", \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}], \"component\": {\"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}}",
+          "review_status": null,
+          "swap_refund_funding_txid": null,
+          "swap_refund_funding_vout": null,
+          "taxability_override": null,
+          "wallet_account_id": "acct-1",
+          "wallet_id": "wallet-a",
+          "wallet_kind": "liquid",
+          "wallet_label": "Cold",
+          "workspace_id": "ws-1"
+        }
+      ],
+      "wallets": [
+        {
+          "account_code": "treasury",
+          "account_label": "Treasury",
+          "config_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\"}",
+          "config_text_mentions_samourai": true,
+          "id": "wallet-a",
+          "kind": "descriptor",
+          "label": "Cold",
+          "wallet_account_id": "acct-1"
+        },
+        {
+          "account_code": "treasury",
+          "account_label": "Treasury",
+          "config_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\"}",
+          "config_text_mentions_samourai": true,
+          "id": "wallet-b",
+          "kind": "descriptor",
+          "label": "Hot",
+          "wallet_account_id": "acct-1"
+        },
+        {
+          "account_code": "treasury",
+          "account_label": "Treasury",
+          "config_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\"}",
+          "config_text_mentions_samourai": true,
+          "id": "wallet-c",
+          "kind": "descriptor",
+          "label": "Savings",
+          "wallet_account_id": "acct-1"
+        }
+      ]
+    },
+    "total": 581814000
+  },
+  {
+    "case": "conserves_mismatch",
+    "expected": [
+      false,
+      {
+        "change_sats": 0,
+        "expected_outflow_msat": 581814000,
+        "input_sats": 581814,
+        "row_total_outflow_msat": 581814001
+      }
+    ],
+    "graph_json": "{\"txid\": \"0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e\", \"chain\": \"liquid\", \"network\": \"elementsregtest\", \"inputs\": [{\"outpoint\": \"4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8:0\", \"script\": \"001429ae9410db86b93b88a43ef90f187e9571b3266d\", \"value_sats\": 581814, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}], \"outputs\": [{\"n\": 0, \"script\": \"001460690c1be076a41f028a106a1c29a1e259d52b67\", \"value_sats\": 581811, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\", \"role\": null}, {\"n\": 1, \"script\": \"\", \"value_sats\": 3, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\", \"role\": \"fee\"}], \"component\": {\"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}, \"evidence_conflicts\": []}",
+    "op": "conserves",
+    "row": {
+      "account_code": "treasury",
+      "account_label": "Treasury",
+      "amount": 581811000,
+      "amount_includes_fee": 0,
+      "asset": "LBTC",
+      "at_category_override": null,
+      "at_regime_override": null,
+      "commercial_applied_link_id": null,
+      "config_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\"}",
+      "config_text_mentions_samourai": false,
+      "confirmed_at": null,
+      "counterparty": null,
+      "created_at": "2026-01-01T00:00:00Z",
+      "description": null,
+      "direction": "outbound",
+      "excluded": 0,
+      "external_id": "0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e",
+      "external_id_kind": "txid",
+      "fee": 3000,
+      "fiat_currency": "USD",
+      "fiat_price_source": null,
+      "fiat_rate": null,
+      "fiat_rate_exact": null,
+      "fiat_value": null,
+      "fiat_value_exact": null,
+      "fingerprint": "generated-5-out",
+      "id": "source-a",
+      "journal_transaction_id": null,
+      "kind": null,
+      "kind_override": null,
+      "note": null,
+      "observation_application_revision": "generated",
+      "observation_authority_version": 1,
+      "observation_fee_attribution": "exact",
+      "observation_graph_hash": "b9401188d3731500f86e1f43b7d6c63f080b0dd4093211f083f36581bcedac5f",
+      "observation_observed_at": null,
+      "observation_observer_kinds_json": null,
+      "observation_quantity_hash": "7f6ff06b93d22a4d58b4ea093b41cf21f20dc09c202b86794b9792e4401e8cc4",
+      "occurred_at": "2026-01-06T00:00:00Z",
+      "payment_hash": null,
+      "payment_hash_source": null,
+      "pricing_external_ref": null,
+      "pricing_fetched_at": null,
+      "pricing_granularity": null,
+      "pricing_method": null,
+      "pricing_pair": null,
+      "pricing_provider": null,
+      "pricing_quality": null,
+      "pricing_review_accepted_price": null,
+      "pricing_source_kind": null,
+      "pricing_timestamp": null,
+      "privacy_boundary": null,
+      "profile_id": "profile-1",
+      "raw_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\", \"txid\": \"0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e\", \"vin\": [{\"txid\": \"4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8\", \"vout\": 0, \"prevout\": {\"scriptpubkey\": \"001429ae9410db86b93b88a43ef90f187e9571b3266d\", \"value_sats\": 581814, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}}], \"vout\": [{\"n\": 0, \"scriptpubkey\": \"001460690c1be076a41f028a106a1c29a1e259d52b67\", \"value_sats\": 581811, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}, {\"n\": 1, \"scriptpubkey\": \"\", \"value_sats\": 3, \"role\": \"fee\", \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}], \"component\": {\"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}}",
+      "review_status": null,
+      "swap_refund_funding_txid": null,
+      "swap_refund_funding_vout": null,
+      "taxability_override": null,
+      "wallet_account_id": "acct-1",
+      "wallet_id": "wallet-a",
+      "wallet_kind": "liquid",
+      "wallet_label": "Cold",
+      "workspace_id": "ws-1"
+    },
+    "scope": [
+      "liquid",
+      "elementsregtest"
+    ],
+    "snapshot": {
+      "anchor_wallets": [],
+      "anchors": {},
+      "as_of": "2026-10-27T12:00:00Z",
+      "book_network": null,
+      "channel_records": [],
+      "components": [],
+      "evidence_snapshots": [],
+      "gap_reviews": [],
+      "gap_worklist": {
+        "large_book": false,
+        "rows": [
+          {
+            "account_code": "treasury",
+            "account_label": "Treasury",
+            "amount": 581811000,
+            "amount_includes_fee": 0,
+            "asset": "LBTC",
+            "at_category_override": null,
+            "at_regime_override": null,
+            "commercial_applied_link_id": null,
+            "config_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\"}",
+            "config_text_mentions_samourai": false,
+            "confirmed_at": null,
+            "counterparty": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "description": null,
+            "direction": "outbound",
+            "excluded": 0,
+            "external_id": "0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e",
+            "external_id_kind": "txid",
+            "fee": 3000,
+            "fiat_currency": "USD",
+            "fiat_price_source": null,
+            "fiat_rate": null,
+            "fiat_rate_exact": null,
+            "fiat_value": null,
+            "fiat_value_exact": null,
+            "fingerprint": "generated-5-out",
+            "id": "source-a",
+            "journal_transaction_id": null,
+            "kind": null,
+            "kind_override": null,
+            "note": null,
+            "observation_application_revision": "generated",
+            "observation_authority_version": 1,
+            "observation_fee_attribution": "exact",
+            "observation_graph_hash": "b9401188d3731500f86e1f43b7d6c63f080b0dd4093211f083f36581bcedac5f",
+            "observation_observed_at": null,
+            "observation_observer_kinds_json": null,
+            "observation_quantity_hash": "7f6ff06b93d22a4d58b4ea093b41cf21f20dc09c202b86794b9792e4401e8cc4",
+            "occurred_at": "2026-01-06T00:00:00Z",
+            "payment_hash": null,
+            "payment_hash_source": null,
+            "pricing_external_ref": null,
+            "pricing_fetched_at": null,
+            "pricing_granularity": null,
+            "pricing_method": null,
+            "pricing_pair": null,
+            "pricing_provider": null,
+            "pricing_quality": null,
+            "pricing_review_accepted_price": null,
+            "pricing_source_kind": null,
+            "pricing_timestamp": null,
+            "privacy_boundary": null,
+            "profile_id": "profile-1",
+            "raw_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\", \"txid\": \"0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e\", \"vin\": [{\"txid\": \"4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8\", \"vout\": 0, \"prevout\": {\"scriptpubkey\": \"001429ae9410db86b93b88a43ef90f187e9571b3266d\", \"value_sats\": 581814, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}}], \"vout\": [{\"n\": 0, \"scriptpubkey\": \"001460690c1be076a41f028a106a1c29a1e259d52b67\", \"value_sats\": 581811, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}, {\"n\": 1, \"scriptpubkey\": \"\", \"value_sats\": 3, \"role\": \"fee\", \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}], \"component\": {\"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}}",
+            "review_status": null,
+            "swap_refund_funding_txid": null,
+            "swap_refund_funding_vout": null,
+            "taxability_override": null,
+            "wallet_account_id": "acct-1",
+            "wallet_id": "wallet-a",
+            "wallet_kind": "liquid",
+            "wallet_label": "Cold",
+            "workspace_id": "ws-1"
+          }
+        ]
+      },
+      "import_duplicate_quarantines": [],
+      "loan_legs": [],
+      "migration_issues": [],
+      "operation": "custody",
+      "owned_index": {
+        "by_outpoint": {
+          "4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8:0": [
+            {
+              "account": "Assets:Bitcoin",
+              "chain": "liquid",
+              "network": "elementsregtest",
+              "source": "inventory",
+              "wallet_id": "wallet-a",
+              "wallet_kind": "descriptor",
+              "wallet_label": "wallet-a"
+            }
+          ]
+        },
+        "by_scoped_outpoint": [
+          {
+            "key": [
+              "liquid",
+              "elementsregtest",
+              "4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8:0"
+            ],
+            "matches": [
+              {
+                "account": "Assets:Bitcoin",
+                "chain": "liquid",
+                "network": "elementsregtest",
+                "source": "inventory",
+                "wallet_id": "wallet-a",
+                "wallet_kind": "descriptor",
+                "wallet_label": "wallet-a"
+              }
+            ]
+          }
+        ],
+        "by_script": {
+          "001429ae9410db86b93b88a43ef90f187e9571b3266d": [
+            {
+              "account": "Assets:Bitcoin",
+              "chain": "liquid",
+              "network": "elementsregtest",
+              "source": "inventory",
+              "wallet_id": "wallet-a",
+              "wallet_kind": "descriptor",
+              "wallet_label": "wallet-a"
+            }
+          ],
+          "001460690c1be076a41f028a106a1c29a1e259d52b67": [
+            {
+              "account": "Assets:Bitcoin",
+              "chain": "liquid",
+              "network": "elementsregtest",
+              "source": "inventory",
+              "wallet_id": "wallet-c",
+              "wallet_kind": "descriptor",
+              "wallet_label": "wallet-c"
+            }
+          ],
+          "0014cdf2e41a3cc6a41e80e2d33be3b947b123e7caa9": [
+            {
+              "account": "Assets:Bitcoin",
+              "chain": "liquid",
+              "network": "elementsregtest",
+              "source": "inventory",
+              "wallet_id": "wallet-b",
+              "wallet_kind": "descriptor",
+              "wallet_label": "wallet-b"
+            }
+          ]
+        },
+        "txid_wallets": {
+          "4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8": [
+            [
+              "wallet-a",
+              "wallet-a"
+            ]
+          ]
+        },
+        "txid_wallets_by_scope": [
+          {
+            "key": [
+              "liquid",
+              "elementsregtest",
+              "4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8"
+            ],
+            "matches": [
+              [
+                "wallet-a",
+                "wallet-a"
+              ]
+            ]
+          }
+        ]
+      },
+      "ownership_warnings": [],
+      "pair_dismissals": [],
+      "profile": {
+        "bitcoin_rail_carrying_value": 1,
+        "cost_basis_pool_scope": "global",
+        "created_at": "2026-01-01T00:00:00Z",
+        "fiat_currency": "USD",
+        "gains_algorithm": "FIFO",
+        "id": "profile-1",
+        "journal_input_version": 0,
+        "journal_semantics_version": 0,
+        "label": "Default",
+        "last_processed_at": null,
+        "last_processed_input_version": 0,
+        "last_processed_tx_count": 0,
+        "ownership_review_counts_json": null,
+        "require_coarse_review": 0,
+        "required_journal_semantics_version": 0,
+        "swap_candidate_count": null,
+        "tax_country": "generic",
+        "tax_long_term_days": 365,
+        "workspace_id": "ws-1"
+      },
+      "rate_rows": [
+        {
+          "amount": 2926153305000,
+          "asset": "BTC",
+          "fiat_rate": 40000.0,
+          "fiat_rate_exact": null,
+          "fiat_value": null,
+          "fiat_value_exact": null
+        },
+        {
+          "amount": 2926153305000,
+          "asset": "BTC",
+          "fiat_rate": 40000.0,
+          "fiat_rate_exact": null,
+          "fiat_value": null,
+          "fiat_value_exact": null
+        }
+      ],
+      "receipt_sources": [],
+      "revision_headers": [],
+      "schema_version": 1,
+      "transactions": [
+        {
+          "account_code": "treasury",
+          "account_label": "Treasury",
+          "amount": 581811000,
+          "amount_includes_fee": 0,
+          "asset": "LBTC",
+          "at_category_override": null,
+          "at_regime_override": null,
+          "commercial_applied_link_id": null,
+          "config_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\"}",
+          "config_text_mentions_samourai": false,
+          "confirmed_at": null,
+          "counterparty": null,
+          "created_at": "2026-01-01T00:00:00Z",
+          "description": null,
+          "direction": "outbound",
+          "excluded": 0,
+          "external_id": "0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e",
+          "external_id_kind": "txid",
+          "fee": 3000,
+          "fiat_currency": "USD",
+          "fiat_price_source": null,
+          "fiat_rate": null,
+          "fiat_rate_exact": null,
+          "fiat_value": null,
+          "fiat_value_exact": null,
+          "fingerprint": "generated-5-out",
+          "id": "source-a",
+          "journal_transaction_id": null,
+          "kind": null,
+          "kind_override": null,
+          "note": null,
+          "observation_application_revision": "generated",
+          "observation_authority_version": 1,
+          "observation_fee_attribution": "exact",
+          "observation_graph_hash": "b9401188d3731500f86e1f43b7d6c63f080b0dd4093211f083f36581bcedac5f",
+          "observation_observed_at": null,
+          "observation_observer_kinds_json": null,
+          "observation_quantity_hash": "7f6ff06b93d22a4d58b4ea093b41cf21f20dc09c202b86794b9792e4401e8cc4",
+          "occurred_at": "2026-01-06T00:00:00Z",
+          "payment_hash": null,
+          "payment_hash_source": null,
+          "pricing_external_ref": null,
+          "pricing_fetched_at": null,
+          "pricing_granularity": null,
+          "pricing_method": null,
+          "pricing_pair": null,
+          "pricing_provider": null,
+          "pricing_quality": null,
+          "pricing_review_accepted_price": null,
+          "pricing_source_kind": null,
+          "pricing_timestamp": null,
+          "privacy_boundary": null,
+          "profile_id": "profile-1",
+          "raw_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\", \"txid\": \"0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e\", \"vin\": [{\"txid\": \"4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8\", \"vout\": 0, \"prevout\": {\"scriptpubkey\": \"001429ae9410db86b93b88a43ef90f187e9571b3266d\", \"value_sats\": 581814, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}}], \"vout\": [{\"n\": 0, \"scriptpubkey\": \"001460690c1be076a41f028a106a1c29a1e259d52b67\", \"value_sats\": 581811, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}, {\"n\": 1, \"scriptpubkey\": \"\", \"value_sats\": 3, \"role\": \"fee\", \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}], \"component\": {\"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}}",
+          "review_status": null,
+          "swap_refund_funding_txid": null,
+          "swap_refund_funding_vout": null,
+          "taxability_override": null,
+          "wallet_account_id": "acct-1",
+          "wallet_id": "wallet-a",
+          "wallet_kind": "liquid",
+          "wallet_label": "Cold",
+          "workspace_id": "ws-1"
+        }
+      ],
+      "wallets": [
+        {
+          "account_code": "treasury",
+          "account_label": "Treasury",
+          "config_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\"}",
+          "config_text_mentions_samourai": true,
+          "id": "wallet-a",
+          "kind": "descriptor",
+          "label": "Cold",
+          "wallet_account_id": "acct-1"
+        },
+        {
+          "account_code": "treasury",
+          "account_label": "Treasury",
+          "config_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\"}",
+          "config_text_mentions_samourai": true,
+          "id": "wallet-b",
+          "kind": "descriptor",
+          "label": "Hot",
+          "wallet_account_id": "acct-1"
+        },
+        {
+          "account_code": "treasury",
+          "account_label": "Treasury",
+          "config_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\"}",
+          "config_text_mentions_samourai": true,
+          "id": "wallet-c",
+          "kind": "descriptor",
+          "label": "Savings",
+          "wallet_account_id": "acct-1"
+        }
+      ]
+    },
+    "total": 581814001
+  },
+  {
+    "case": "conserves_unknown_input",
+    "expected": [
+      false,
+      {
+        "missing": "input_value_or_asset"
+      }
+    ],
+    "graph_json": "{\"txid\": \"0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e\", \"chain\": \"liquid\", \"network\": \"elementsregtest\", \"inputs\": [{\"outpoint\": \"4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8:0\", \"script\": \"001429ae9410db86b93b88a43ef90f187e9571b3266d\", \"value_sats\": null, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}], \"outputs\": [{\"n\": 0, \"script\": \"001460690c1be076a41f028a106a1c29a1e259d52b67\", \"value_sats\": 581811, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\", \"role\": null}, {\"n\": 1, \"script\": \"\", \"value_sats\": 3, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\", \"role\": \"fee\"}], \"component\": {\"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}, \"evidence_conflicts\": []}",
+    "op": "conserves",
+    "row": {
+      "account_code": "treasury",
+      "account_label": "Treasury",
+      "amount": 581811000,
+      "amount_includes_fee": 0,
+      "asset": "LBTC",
+      "at_category_override": null,
+      "at_regime_override": null,
+      "commercial_applied_link_id": null,
+      "config_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\"}",
+      "config_text_mentions_samourai": false,
+      "confirmed_at": null,
+      "counterparty": null,
+      "created_at": "2026-01-01T00:00:00Z",
+      "description": null,
+      "direction": "outbound",
+      "excluded": 0,
+      "external_id": "0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e",
+      "external_id_kind": "txid",
+      "fee": 3000,
+      "fiat_currency": "USD",
+      "fiat_price_source": null,
+      "fiat_rate": null,
+      "fiat_rate_exact": null,
+      "fiat_value": null,
+      "fiat_value_exact": null,
+      "fingerprint": "generated-5-out",
+      "id": "source-a",
+      "journal_transaction_id": null,
+      "kind": null,
+      "kind_override": null,
+      "note": null,
+      "observation_application_revision": "generated",
+      "observation_authority_version": 1,
+      "observation_fee_attribution": "exact",
+      "observation_graph_hash": "b9401188d3731500f86e1f43b7d6c63f080b0dd4093211f083f36581bcedac5f",
+      "observation_observed_at": null,
+      "observation_observer_kinds_json": null,
+      "observation_quantity_hash": "7f6ff06b93d22a4d58b4ea093b41cf21f20dc09c202b86794b9792e4401e8cc4",
+      "occurred_at": "2026-01-06T00:00:00Z",
+      "payment_hash": null,
+      "payment_hash_source": null,
+      "pricing_external_ref": null,
+      "pricing_fetched_at": null,
+      "pricing_granularity": null,
+      "pricing_method": null,
+      "pricing_pair": null,
+      "pricing_provider": null,
+      "pricing_quality": null,
+      "pricing_review_accepted_price": null,
+      "pricing_source_kind": null,
+      "pricing_timestamp": null,
+      "privacy_boundary": null,
+      "profile_id": "profile-1",
+      "raw_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\", \"txid\": \"0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e\", \"vin\": [{\"txid\": \"4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8\", \"vout\": 0, \"prevout\": {\"scriptpubkey\": \"001429ae9410db86b93b88a43ef90f187e9571b3266d\", \"value_sats\": 581814, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}}], \"vout\": [{\"n\": 0, \"scriptpubkey\": \"001460690c1be076a41f028a106a1c29a1e259d52b67\", \"value_sats\": 581811, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}, {\"n\": 1, \"scriptpubkey\": \"\", \"value_sats\": 3, \"role\": \"fee\", \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}], \"component\": {\"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}}",
+      "review_status": null,
+      "swap_refund_funding_txid": null,
+      "swap_refund_funding_vout": null,
+      "taxability_override": null,
+      "wallet_account_id": "acct-1",
+      "wallet_id": "wallet-a",
+      "wallet_kind": "liquid",
+      "wallet_label": "Cold",
+      "workspace_id": "ws-1"
+    },
+    "scope": [
+      "liquid",
+      "elementsregtest"
+    ],
+    "snapshot": {
+      "anchor_wallets": [],
+      "anchors": {},
+      "as_of": "2026-10-27T12:00:00Z",
+      "book_network": null,
+      "channel_records": [],
+      "components": [],
+      "evidence_snapshots": [],
+      "gap_reviews": [],
+      "gap_worklist": {
+        "large_book": false,
+        "rows": [
+          {
+            "account_code": "treasury",
+            "account_label": "Treasury",
+            "amount": 581811000,
+            "amount_includes_fee": 0,
+            "asset": "LBTC",
+            "at_category_override": null,
+            "at_regime_override": null,
+            "commercial_applied_link_id": null,
+            "config_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\"}",
+            "config_text_mentions_samourai": false,
+            "confirmed_at": null,
+            "counterparty": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "description": null,
+            "direction": "outbound",
+            "excluded": 0,
+            "external_id": "0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e",
+            "external_id_kind": "txid",
+            "fee": 3000,
+            "fiat_currency": "USD",
+            "fiat_price_source": null,
+            "fiat_rate": null,
+            "fiat_rate_exact": null,
+            "fiat_value": null,
+            "fiat_value_exact": null,
+            "fingerprint": "generated-5-out",
+            "id": "source-a",
+            "journal_transaction_id": null,
+            "kind": null,
+            "kind_override": null,
+            "note": null,
+            "observation_application_revision": "generated",
+            "observation_authority_version": 1,
+            "observation_fee_attribution": "exact",
+            "observation_graph_hash": "b9401188d3731500f86e1f43b7d6c63f080b0dd4093211f083f36581bcedac5f",
+            "observation_observed_at": null,
+            "observation_observer_kinds_json": null,
+            "observation_quantity_hash": "7f6ff06b93d22a4d58b4ea093b41cf21f20dc09c202b86794b9792e4401e8cc4",
+            "occurred_at": "2026-01-06T00:00:00Z",
+            "payment_hash": null,
+            "payment_hash_source": null,
+            "pricing_external_ref": null,
+            "pricing_fetched_at": null,
+            "pricing_granularity": null,
+            "pricing_method": null,
+            "pricing_pair": null,
+            "pricing_provider": null,
+            "pricing_quality": null,
+            "pricing_review_accepted_price": null,
+            "pricing_source_kind": null,
+            "pricing_timestamp": null,
+            "privacy_boundary": null,
+            "profile_id": "profile-1",
+            "raw_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\", \"txid\": \"0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e\", \"vin\": [{\"txid\": \"4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8\", \"vout\": 0, \"prevout\": {\"scriptpubkey\": \"001429ae9410db86b93b88a43ef90f187e9571b3266d\", \"value_sats\": 581814, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}}], \"vout\": [{\"n\": 0, \"scriptpubkey\": \"001460690c1be076a41f028a106a1c29a1e259d52b67\", \"value_sats\": 581811, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}, {\"n\": 1, \"scriptpubkey\": \"\", \"value_sats\": 3, \"role\": \"fee\", \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}], \"component\": {\"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}}",
+            "review_status": null,
+            "swap_refund_funding_txid": null,
+            "swap_refund_funding_vout": null,
+            "taxability_override": null,
+            "wallet_account_id": "acct-1",
+            "wallet_id": "wallet-a",
+            "wallet_kind": "liquid",
+            "wallet_label": "Cold",
+            "workspace_id": "ws-1"
+          }
+        ]
+      },
+      "import_duplicate_quarantines": [],
+      "loan_legs": [],
+      "migration_issues": [],
+      "operation": "custody",
+      "owned_index": {
+        "by_outpoint": {
+          "4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8:0": [
+            {
+              "account": "Assets:Bitcoin",
+              "chain": "liquid",
+              "network": "elementsregtest",
+              "source": "inventory",
+              "wallet_id": "wallet-a",
+              "wallet_kind": "descriptor",
+              "wallet_label": "wallet-a"
+            }
+          ]
+        },
+        "by_scoped_outpoint": [
+          {
+            "key": [
+              "liquid",
+              "elementsregtest",
+              "4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8:0"
+            ],
+            "matches": [
+              {
+                "account": "Assets:Bitcoin",
+                "chain": "liquid",
+                "network": "elementsregtest",
+                "source": "inventory",
+                "wallet_id": "wallet-a",
+                "wallet_kind": "descriptor",
+                "wallet_label": "wallet-a"
+              }
+            ]
+          }
+        ],
+        "by_script": {
+          "001429ae9410db86b93b88a43ef90f187e9571b3266d": [
+            {
+              "account": "Assets:Bitcoin",
+              "chain": "liquid",
+              "network": "elementsregtest",
+              "source": "inventory",
+              "wallet_id": "wallet-a",
+              "wallet_kind": "descriptor",
+              "wallet_label": "wallet-a"
+            }
+          ],
+          "001460690c1be076a41f028a106a1c29a1e259d52b67": [
+            {
+              "account": "Assets:Bitcoin",
+              "chain": "liquid",
+              "network": "elementsregtest",
+              "source": "inventory",
+              "wallet_id": "wallet-c",
+              "wallet_kind": "descriptor",
+              "wallet_label": "wallet-c"
+            }
+          ],
+          "0014cdf2e41a3cc6a41e80e2d33be3b947b123e7caa9": [
+            {
+              "account": "Assets:Bitcoin",
+              "chain": "liquid",
+              "network": "elementsregtest",
+              "source": "inventory",
+              "wallet_id": "wallet-b",
+              "wallet_kind": "descriptor",
+              "wallet_label": "wallet-b"
+            }
+          ]
+        },
+        "txid_wallets": {
+          "4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8": [
+            [
+              "wallet-a",
+              "wallet-a"
+            ]
+          ]
+        },
+        "txid_wallets_by_scope": [
+          {
+            "key": [
+              "liquid",
+              "elementsregtest",
+              "4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8"
+            ],
+            "matches": [
+              [
+                "wallet-a",
+                "wallet-a"
+              ]
+            ]
+          }
+        ]
+      },
+      "ownership_warnings": [],
+      "pair_dismissals": [],
+      "profile": {
+        "bitcoin_rail_carrying_value": 1,
+        "cost_basis_pool_scope": "global",
+        "created_at": "2026-01-01T00:00:00Z",
+        "fiat_currency": "USD",
+        "gains_algorithm": "FIFO",
+        "id": "profile-1",
+        "journal_input_version": 0,
+        "journal_semantics_version": 0,
+        "label": "Default",
+        "last_processed_at": null,
+        "last_processed_input_version": 0,
+        "last_processed_tx_count": 0,
+        "ownership_review_counts_json": null,
+        "require_coarse_review": 0,
+        "required_journal_semantics_version": 0,
+        "swap_candidate_count": null,
+        "tax_country": "generic",
+        "tax_long_term_days": 365,
+        "workspace_id": "ws-1"
+      },
+      "rate_rows": [
+        {
+          "amount": 2926153305000,
+          "asset": "BTC",
+          "fiat_rate": 40000.0,
+          "fiat_rate_exact": null,
+          "fiat_value": null,
+          "fiat_value_exact": null
+        },
+        {
+          "amount": 2926153305000,
+          "asset": "BTC",
+          "fiat_rate": 40000.0,
+          "fiat_rate_exact": null,
+          "fiat_value": null,
+          "fiat_value_exact": null
+        }
+      ],
+      "receipt_sources": [],
+      "revision_headers": [],
+      "schema_version": 1,
+      "transactions": [
+        {
+          "account_code": "treasury",
+          "account_label": "Treasury",
+          "amount": 581811000,
+          "amount_includes_fee": 0,
+          "asset": "LBTC",
+          "at_category_override": null,
+          "at_regime_override": null,
+          "commercial_applied_link_id": null,
+          "config_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\"}",
+          "config_text_mentions_samourai": false,
+          "confirmed_at": null,
+          "counterparty": null,
+          "created_at": "2026-01-01T00:00:00Z",
+          "description": null,
+          "direction": "outbound",
+          "excluded": 0,
+          "external_id": "0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e",
+          "external_id_kind": "txid",
+          "fee": 3000,
+          "fiat_currency": "USD",
+          "fiat_price_source": null,
+          "fiat_rate": null,
+          "fiat_rate_exact": null,
+          "fiat_value": null,
+          "fiat_value_exact": null,
+          "fingerprint": "generated-5-out",
+          "id": "source-a",
+          "journal_transaction_id": null,
+          "kind": null,
+          "kind_override": null,
+          "note": null,
+          "observation_application_revision": "generated",
+          "observation_authority_version": 1,
+          "observation_fee_attribution": "exact",
+          "observation_graph_hash": "b9401188d3731500f86e1f43b7d6c63f080b0dd4093211f083f36581bcedac5f",
+          "observation_observed_at": null,
+          "observation_observer_kinds_json": null,
+          "observation_quantity_hash": "7f6ff06b93d22a4d58b4ea093b41cf21f20dc09c202b86794b9792e4401e8cc4",
+          "occurred_at": "2026-01-06T00:00:00Z",
+          "payment_hash": null,
+          "payment_hash_source": null,
+          "pricing_external_ref": null,
+          "pricing_fetched_at": null,
+          "pricing_granularity": null,
+          "pricing_method": null,
+          "pricing_pair": null,
+          "pricing_provider": null,
+          "pricing_quality": null,
+          "pricing_review_accepted_price": null,
+          "pricing_source_kind": null,
+          "pricing_timestamp": null,
+          "privacy_boundary": null,
+          "profile_id": "profile-1",
+          "raw_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\", \"txid\": \"0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e\", \"vin\": [{\"txid\": \"4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8\", \"vout\": 0, \"prevout\": {\"scriptpubkey\": \"001429ae9410db86b93b88a43ef90f187e9571b3266d\", \"value_sats\": 581814, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}}], \"vout\": [{\"n\": 0, \"scriptpubkey\": \"001460690c1be076a41f028a106a1c29a1e259d52b67\", \"value_sats\": 581811, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}, {\"n\": 1, \"scriptpubkey\": \"\", \"value_sats\": 3, \"role\": \"fee\", \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}], \"component\": {\"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}}",
+          "review_status": null,
+          "swap_refund_funding_txid": null,
+          "swap_refund_funding_vout": null,
+          "taxability_override": null,
+          "wallet_account_id": "acct-1",
+          "wallet_id": "wallet-a",
+          "wallet_kind": "liquid",
+          "wallet_label": "Cold",
+          "workspace_id": "ws-1"
+        }
+      ],
+      "wallets": [
+        {
+          "account_code": "treasury",
+          "account_label": "Treasury",
+          "config_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\"}",
+          "config_text_mentions_samourai": true,
+          "id": "wallet-a",
+          "kind": "descriptor",
+          "label": "Cold",
+          "wallet_account_id": "acct-1"
+        },
+        {
+          "account_code": "treasury",
+          "account_label": "Treasury",
+          "config_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\"}",
+          "config_text_mentions_samourai": true,
+          "id": "wallet-b",
+          "kind": "descriptor",
+          "label": "Hot",
+          "wallet_account_id": "acct-1"
+        },
+        {
+          "account_code": "treasury",
+          "account_label": "Treasury",
+          "config_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\"}",
+          "config_text_mentions_samourai": true,
+          "id": "wallet-c",
+          "kind": "descriptor",
+          "label": "Savings",
+          "wallet_account_id": "acct-1"
+        }
+      ]
+    },
+    "total": 581814000
+  },
+  {
+    "case": "conserves_unknown_change",
+    "expected": [
+      false,
+      {
+        "missing": "owned_change_value_or_asset"
+      }
+    ],
+    "graph_json": "{\"txid\": \"0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e\", \"chain\": \"liquid\", \"network\": \"elementsregtest\", \"inputs\": [{\"outpoint\": \"4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8:0\", \"script\": \"001429ae9410db86b93b88a43ef90f187e9571b3266d\", \"value_sats\": 581814, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}], \"outputs\": [{\"n\": 0, \"script\": \"001460690c1be076a41f028a106a1c29a1e259d52b67\", \"value_sats\": 581811, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\", \"role\": null}, {\"n\": 1, \"script\": \"\", \"value_sats\": 3, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\", \"role\": \"fee\"}, {\"outpoint\": \"4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8:0\", \"script\": \"001429ae9410db86b93b88a43ef90f187e9571b3266d\", \"value_sats\": null, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\", \"n\": 2}], \"component\": {\"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}, \"evidence_conflicts\": []}",
+    "op": "conserves",
+    "row": {
+      "account_code": "treasury",
+      "account_label": "Treasury",
+      "amount": 581811000,
+      "amount_includes_fee": 0,
+      "asset": "LBTC",
+      "at_category_override": null,
+      "at_regime_override": null,
+      "commercial_applied_link_id": null,
+      "config_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\"}",
+      "config_text_mentions_samourai": false,
+      "confirmed_at": null,
+      "counterparty": null,
+      "created_at": "2026-01-01T00:00:00Z",
+      "description": null,
+      "direction": "outbound",
+      "excluded": 0,
+      "external_id": "0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e",
+      "external_id_kind": "txid",
+      "fee": 3000,
+      "fiat_currency": "USD",
+      "fiat_price_source": null,
+      "fiat_rate": null,
+      "fiat_rate_exact": null,
+      "fiat_value": null,
+      "fiat_value_exact": null,
+      "fingerprint": "generated-5-out",
+      "id": "source-a",
+      "journal_transaction_id": null,
+      "kind": null,
+      "kind_override": null,
+      "note": null,
+      "observation_application_revision": "generated",
+      "observation_authority_version": 1,
+      "observation_fee_attribution": "exact",
+      "observation_graph_hash": "b9401188d3731500f86e1f43b7d6c63f080b0dd4093211f083f36581bcedac5f",
+      "observation_observed_at": null,
+      "observation_observer_kinds_json": null,
+      "observation_quantity_hash": "7f6ff06b93d22a4d58b4ea093b41cf21f20dc09c202b86794b9792e4401e8cc4",
+      "occurred_at": "2026-01-06T00:00:00Z",
+      "payment_hash": null,
+      "payment_hash_source": null,
+      "pricing_external_ref": null,
+      "pricing_fetched_at": null,
+      "pricing_granularity": null,
+      "pricing_method": null,
+      "pricing_pair": null,
+      "pricing_provider": null,
+      "pricing_quality": null,
+      "pricing_review_accepted_price": null,
+      "pricing_source_kind": null,
+      "pricing_timestamp": null,
+      "privacy_boundary": null,
+      "profile_id": "profile-1",
+      "raw_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\", \"txid\": \"0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e\", \"vin\": [{\"txid\": \"4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8\", \"vout\": 0, \"prevout\": {\"scriptpubkey\": \"001429ae9410db86b93b88a43ef90f187e9571b3266d\", \"value_sats\": 581814, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}}], \"vout\": [{\"n\": 0, \"scriptpubkey\": \"001460690c1be076a41f028a106a1c29a1e259d52b67\", \"value_sats\": 581811, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}, {\"n\": 1, \"scriptpubkey\": \"\", \"value_sats\": 3, \"role\": \"fee\", \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}], \"component\": {\"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}}",
+      "review_status": null,
+      "swap_refund_funding_txid": null,
+      "swap_refund_funding_vout": null,
+      "taxability_override": null,
+      "wallet_account_id": "acct-1",
+      "wallet_id": "wallet-a",
+      "wallet_kind": "liquid",
+      "wallet_label": "Cold",
+      "workspace_id": "ws-1"
+    },
+    "scope": [
+      "liquid",
+      "elementsregtest"
+    ],
+    "snapshot": {
+      "anchor_wallets": [],
+      "anchors": {},
+      "as_of": "2026-10-27T12:00:00Z",
+      "book_network": null,
+      "channel_records": [],
+      "components": [],
+      "evidence_snapshots": [],
+      "gap_reviews": [],
+      "gap_worklist": {
+        "large_book": false,
+        "rows": [
+          {
+            "account_code": "treasury",
+            "account_label": "Treasury",
+            "amount": 581811000,
+            "amount_includes_fee": 0,
+            "asset": "LBTC",
+            "at_category_override": null,
+            "at_regime_override": null,
+            "commercial_applied_link_id": null,
+            "config_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\"}",
+            "config_text_mentions_samourai": false,
+            "confirmed_at": null,
+            "counterparty": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "description": null,
+            "direction": "outbound",
+            "excluded": 0,
+            "external_id": "0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e",
+            "external_id_kind": "txid",
+            "fee": 3000,
+            "fiat_currency": "USD",
+            "fiat_price_source": null,
+            "fiat_rate": null,
+            "fiat_rate_exact": null,
+            "fiat_value": null,
+            "fiat_value_exact": null,
+            "fingerprint": "generated-5-out",
+            "id": "source-a",
+            "journal_transaction_id": null,
+            "kind": null,
+            "kind_override": null,
+            "note": null,
+            "observation_application_revision": "generated",
+            "observation_authority_version": 1,
+            "observation_fee_attribution": "exact",
+            "observation_graph_hash": "b9401188d3731500f86e1f43b7d6c63f080b0dd4093211f083f36581bcedac5f",
+            "observation_observed_at": null,
+            "observation_observer_kinds_json": null,
+            "observation_quantity_hash": "7f6ff06b93d22a4d58b4ea093b41cf21f20dc09c202b86794b9792e4401e8cc4",
+            "occurred_at": "2026-01-06T00:00:00Z",
+            "payment_hash": null,
+            "payment_hash_source": null,
+            "pricing_external_ref": null,
+            "pricing_fetched_at": null,
+            "pricing_granularity": null,
+            "pricing_method": null,
+            "pricing_pair": null,
+            "pricing_provider": null,
+            "pricing_quality": null,
+            "pricing_review_accepted_price": null,
+            "pricing_source_kind": null,
+            "pricing_timestamp": null,
+            "privacy_boundary": null,
+            "profile_id": "profile-1",
+            "raw_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\", \"txid\": \"0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e\", \"vin\": [{\"txid\": \"4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8\", \"vout\": 0, \"prevout\": {\"scriptpubkey\": \"001429ae9410db86b93b88a43ef90f187e9571b3266d\", \"value_sats\": 581814, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}}], \"vout\": [{\"n\": 0, \"scriptpubkey\": \"001460690c1be076a41f028a106a1c29a1e259d52b67\", \"value_sats\": 581811, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}, {\"n\": 1, \"scriptpubkey\": \"\", \"value_sats\": 3, \"role\": \"fee\", \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}], \"component\": {\"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}}",
+            "review_status": null,
+            "swap_refund_funding_txid": null,
+            "swap_refund_funding_vout": null,
+            "taxability_override": null,
+            "wallet_account_id": "acct-1",
+            "wallet_id": "wallet-a",
+            "wallet_kind": "liquid",
+            "wallet_label": "Cold",
+            "workspace_id": "ws-1"
+          }
+        ]
+      },
+      "import_duplicate_quarantines": [],
+      "loan_legs": [],
+      "migration_issues": [],
+      "operation": "custody",
+      "owned_index": {
+        "by_outpoint": {
+          "4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8:0": [
+            {
+              "account": "Assets:Bitcoin",
+              "chain": "liquid",
+              "network": "elementsregtest",
+              "source": "inventory",
+              "wallet_id": "wallet-a",
+              "wallet_kind": "descriptor",
+              "wallet_label": "wallet-a"
+            }
+          ]
+        },
+        "by_scoped_outpoint": [
+          {
+            "key": [
+              "liquid",
+              "elementsregtest",
+              "4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8:0"
+            ],
+            "matches": [
+              {
+                "account": "Assets:Bitcoin",
+                "chain": "liquid",
+                "network": "elementsregtest",
+                "source": "inventory",
+                "wallet_id": "wallet-a",
+                "wallet_kind": "descriptor",
+                "wallet_label": "wallet-a"
+              }
+            ]
+          }
+        ],
+        "by_script": {
+          "001429ae9410db86b93b88a43ef90f187e9571b3266d": [
+            {
+              "account": "Assets:Bitcoin",
+              "chain": "liquid",
+              "network": "elementsregtest",
+              "source": "inventory",
+              "wallet_id": "wallet-a",
+              "wallet_kind": "descriptor",
+              "wallet_label": "wallet-a"
+            }
+          ],
+          "001460690c1be076a41f028a106a1c29a1e259d52b67": [
+            {
+              "account": "Assets:Bitcoin",
+              "chain": "liquid",
+              "network": "elementsregtest",
+              "source": "inventory",
+              "wallet_id": "wallet-c",
+              "wallet_kind": "descriptor",
+              "wallet_label": "wallet-c"
+            }
+          ],
+          "0014cdf2e41a3cc6a41e80e2d33be3b947b123e7caa9": [
+            {
+              "account": "Assets:Bitcoin",
+              "chain": "liquid",
+              "network": "elementsregtest",
+              "source": "inventory",
+              "wallet_id": "wallet-b",
+              "wallet_kind": "descriptor",
+              "wallet_label": "wallet-b"
+            }
+          ]
+        },
+        "txid_wallets": {
+          "4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8": [
+            [
+              "wallet-a",
+              "wallet-a"
+            ]
+          ]
+        },
+        "txid_wallets_by_scope": [
+          {
+            "key": [
+              "liquid",
+              "elementsregtest",
+              "4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8"
+            ],
+            "matches": [
+              [
+                "wallet-a",
+                "wallet-a"
+              ]
+            ]
+          }
+        ]
+      },
+      "ownership_warnings": [],
+      "pair_dismissals": [],
+      "profile": {
+        "bitcoin_rail_carrying_value": 1,
+        "cost_basis_pool_scope": "global",
+        "created_at": "2026-01-01T00:00:00Z",
+        "fiat_currency": "USD",
+        "gains_algorithm": "FIFO",
+        "id": "profile-1",
+        "journal_input_version": 0,
+        "journal_semantics_version": 0,
+        "label": "Default",
+        "last_processed_at": null,
+        "last_processed_input_version": 0,
+        "last_processed_tx_count": 0,
+        "ownership_review_counts_json": null,
+        "require_coarse_review": 0,
+        "required_journal_semantics_version": 0,
+        "swap_candidate_count": null,
+        "tax_country": "generic",
+        "tax_long_term_days": 365,
+        "workspace_id": "ws-1"
+      },
+      "rate_rows": [
+        {
+          "amount": 2926153305000,
+          "asset": "BTC",
+          "fiat_rate": 40000.0,
+          "fiat_rate_exact": null,
+          "fiat_value": null,
+          "fiat_value_exact": null
+        },
+        {
+          "amount": 2926153305000,
+          "asset": "BTC",
+          "fiat_rate": 40000.0,
+          "fiat_rate_exact": null,
+          "fiat_value": null,
+          "fiat_value_exact": null
+        }
+      ],
+      "receipt_sources": [],
+      "revision_headers": [],
+      "schema_version": 1,
+      "transactions": [
+        {
+          "account_code": "treasury",
+          "account_label": "Treasury",
+          "amount": 581811000,
+          "amount_includes_fee": 0,
+          "asset": "LBTC",
+          "at_category_override": null,
+          "at_regime_override": null,
+          "commercial_applied_link_id": null,
+          "config_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\"}",
+          "config_text_mentions_samourai": false,
+          "confirmed_at": null,
+          "counterparty": null,
+          "created_at": "2026-01-01T00:00:00Z",
+          "description": null,
+          "direction": "outbound",
+          "excluded": 0,
+          "external_id": "0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e",
+          "external_id_kind": "txid",
+          "fee": 3000,
+          "fiat_currency": "USD",
+          "fiat_price_source": null,
+          "fiat_rate": null,
+          "fiat_rate_exact": null,
+          "fiat_value": null,
+          "fiat_value_exact": null,
+          "fingerprint": "generated-5-out",
+          "id": "source-a",
+          "journal_transaction_id": null,
+          "kind": null,
+          "kind_override": null,
+          "note": null,
+          "observation_application_revision": "generated",
+          "observation_authority_version": 1,
+          "observation_fee_attribution": "exact",
+          "observation_graph_hash": "b9401188d3731500f86e1f43b7d6c63f080b0dd4093211f083f36581bcedac5f",
+          "observation_observed_at": null,
+          "observation_observer_kinds_json": null,
+          "observation_quantity_hash": "7f6ff06b93d22a4d58b4ea093b41cf21f20dc09c202b86794b9792e4401e8cc4",
+          "occurred_at": "2026-01-06T00:00:00Z",
+          "payment_hash": null,
+          "payment_hash_source": null,
+          "pricing_external_ref": null,
+          "pricing_fetched_at": null,
+          "pricing_granularity": null,
+          "pricing_method": null,
+          "pricing_pair": null,
+          "pricing_provider": null,
+          "pricing_quality": null,
+          "pricing_review_accepted_price": null,
+          "pricing_source_kind": null,
+          "pricing_timestamp": null,
+          "privacy_boundary": null,
+          "profile_id": "profile-1",
+          "raw_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\", \"txid\": \"0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e\", \"vin\": [{\"txid\": \"4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8\", \"vout\": 0, \"prevout\": {\"scriptpubkey\": \"001429ae9410db86b93b88a43ef90f187e9571b3266d\", \"value_sats\": 581814, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}}], \"vout\": [{\"n\": 0, \"scriptpubkey\": \"001460690c1be076a41f028a106a1c29a1e259d52b67\", \"value_sats\": 581811, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}, {\"n\": 1, \"scriptpubkey\": \"\", \"value_sats\": 3, \"role\": \"fee\", \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}], \"component\": {\"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}}",
+          "review_status": null,
+          "swap_refund_funding_txid": null,
+          "swap_refund_funding_vout": null,
+          "taxability_override": null,
+          "wallet_account_id": "acct-1",
+          "wallet_id": "wallet-a",
+          "wallet_kind": "liquid",
+          "wallet_label": "Cold",
+          "workspace_id": "ws-1"
+        }
+      ],
+      "wallets": [
+        {
+          "account_code": "treasury",
+          "account_label": "Treasury",
+          "config_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\"}",
+          "config_text_mentions_samourai": true,
+          "id": "wallet-a",
+          "kind": "descriptor",
+          "label": "Cold",
+          "wallet_account_id": "acct-1"
+        },
+        {
+          "account_code": "treasury",
+          "account_label": "Treasury",
+          "config_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\"}",
+          "config_text_mentions_samourai": true,
+          "id": "wallet-b",
+          "kind": "descriptor",
+          "label": "Hot",
+          "wallet_account_id": "acct-1"
+        },
+        {
+          "account_code": "treasury",
+          "account_label": "Treasury",
+          "config_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\"}",
+          "config_text_mentions_samourai": true,
+          "id": "wallet-c",
+          "kind": "descriptor",
+          "label": "Savings",
+          "wallet_account_id": "acct-1"
+        }
+      ]
+    },
+    "total": 581814000
+  },
+  {
+    "case": "conserves_unknown_change_asset",
+    "expected": [
+      false,
+      {
+        "missing": "owned_change_value_or_asset"
+      }
+    ],
+    "graph_json": "{\"txid\": \"0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e\", \"chain\": \"liquid\", \"network\": \"elementsregtest\", \"inputs\": [{\"outpoint\": \"4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8:0\", \"script\": \"001429ae9410db86b93b88a43ef90f187e9571b3266d\", \"value_sats\": 581814, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}], \"outputs\": [{\"n\": 0, \"script\": \"001460690c1be076a41f028a106a1c29a1e259d52b67\", \"value_sats\": 581811, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\", \"role\": null}, {\"n\": 1, \"script\": \"\", \"value_sats\": 3, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\", \"role\": \"fee\"}, {\"outpoint\": \"4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8:0\", \"script\": \"001429ae9410db86b93b88a43ef90f187e9571b3266d\", \"value_sats\": 5, \"asset_id\": null, \"asset\": null, \"n\": 2}], \"component\": {\"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}, \"evidence_conflicts\": []}",
+    "op": "conserves",
+    "row": {
+      "account_code": "treasury",
+      "account_label": "Treasury",
+      "amount": 581811000,
+      "amount_includes_fee": 0,
+      "asset": "LBTC",
+      "at_category_override": null,
+      "at_regime_override": null,
+      "commercial_applied_link_id": null,
+      "config_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\"}",
+      "config_text_mentions_samourai": false,
+      "confirmed_at": null,
+      "counterparty": null,
+      "created_at": "2026-01-01T00:00:00Z",
+      "description": null,
+      "direction": "outbound",
+      "excluded": 0,
+      "external_id": "0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e",
+      "external_id_kind": "txid",
+      "fee": 3000,
+      "fiat_currency": "USD",
+      "fiat_price_source": null,
+      "fiat_rate": null,
+      "fiat_rate_exact": null,
+      "fiat_value": null,
+      "fiat_value_exact": null,
+      "fingerprint": "generated-5-out",
+      "id": "source-a",
+      "journal_transaction_id": null,
+      "kind": null,
+      "kind_override": null,
+      "note": null,
+      "observation_application_revision": "generated",
+      "observation_authority_version": 1,
+      "observation_fee_attribution": "exact",
+      "observation_graph_hash": "b9401188d3731500f86e1f43b7d6c63f080b0dd4093211f083f36581bcedac5f",
+      "observation_observed_at": null,
+      "observation_observer_kinds_json": null,
+      "observation_quantity_hash": "7f6ff06b93d22a4d58b4ea093b41cf21f20dc09c202b86794b9792e4401e8cc4",
+      "occurred_at": "2026-01-06T00:00:00Z",
+      "payment_hash": null,
+      "payment_hash_source": null,
+      "pricing_external_ref": null,
+      "pricing_fetched_at": null,
+      "pricing_granularity": null,
+      "pricing_method": null,
+      "pricing_pair": null,
+      "pricing_provider": null,
+      "pricing_quality": null,
+      "pricing_review_accepted_price": null,
+      "pricing_source_kind": null,
+      "pricing_timestamp": null,
+      "privacy_boundary": null,
+      "profile_id": "profile-1",
+      "raw_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\", \"txid\": \"0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e\", \"vin\": [{\"txid\": \"4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8\", \"vout\": 0, \"prevout\": {\"scriptpubkey\": \"001429ae9410db86b93b88a43ef90f187e9571b3266d\", \"value_sats\": 581814, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}}], \"vout\": [{\"n\": 0, \"scriptpubkey\": \"001460690c1be076a41f028a106a1c29a1e259d52b67\", \"value_sats\": 581811, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}, {\"n\": 1, \"scriptpubkey\": \"\", \"value_sats\": 3, \"role\": \"fee\", \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}], \"component\": {\"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}}",
+      "review_status": null,
+      "swap_refund_funding_txid": null,
+      "swap_refund_funding_vout": null,
+      "taxability_override": null,
+      "wallet_account_id": "acct-1",
+      "wallet_id": "wallet-a",
+      "wallet_kind": "liquid",
+      "wallet_label": "Cold",
+      "workspace_id": "ws-1"
+    },
+    "scope": [
+      "liquid",
+      "elementsregtest"
+    ],
+    "snapshot": {
+      "anchor_wallets": [],
+      "anchors": {},
+      "as_of": "2026-10-27T12:00:00Z",
+      "book_network": null,
+      "channel_records": [],
+      "components": [],
+      "evidence_snapshots": [],
+      "gap_reviews": [],
+      "gap_worklist": {
+        "large_book": false,
+        "rows": [
+          {
+            "account_code": "treasury",
+            "account_label": "Treasury",
+            "amount": 581811000,
+            "amount_includes_fee": 0,
+            "asset": "LBTC",
+            "at_category_override": null,
+            "at_regime_override": null,
+            "commercial_applied_link_id": null,
+            "config_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\"}",
+            "config_text_mentions_samourai": false,
+            "confirmed_at": null,
+            "counterparty": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "description": null,
+            "direction": "outbound",
+            "excluded": 0,
+            "external_id": "0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e",
+            "external_id_kind": "txid",
+            "fee": 3000,
+            "fiat_currency": "USD",
+            "fiat_price_source": null,
+            "fiat_rate": null,
+            "fiat_rate_exact": null,
+            "fiat_value": null,
+            "fiat_value_exact": null,
+            "fingerprint": "generated-5-out",
+            "id": "source-a",
+            "journal_transaction_id": null,
+            "kind": null,
+            "kind_override": null,
+            "note": null,
+            "observation_application_revision": "generated",
+            "observation_authority_version": 1,
+            "observation_fee_attribution": "exact",
+            "observation_graph_hash": "b9401188d3731500f86e1f43b7d6c63f080b0dd4093211f083f36581bcedac5f",
+            "observation_observed_at": null,
+            "observation_observer_kinds_json": null,
+            "observation_quantity_hash": "7f6ff06b93d22a4d58b4ea093b41cf21f20dc09c202b86794b9792e4401e8cc4",
+            "occurred_at": "2026-01-06T00:00:00Z",
+            "payment_hash": null,
+            "payment_hash_source": null,
+            "pricing_external_ref": null,
+            "pricing_fetched_at": null,
+            "pricing_granularity": null,
+            "pricing_method": null,
+            "pricing_pair": null,
+            "pricing_provider": null,
+            "pricing_quality": null,
+            "pricing_review_accepted_price": null,
+            "pricing_source_kind": null,
+            "pricing_timestamp": null,
+            "privacy_boundary": null,
+            "profile_id": "profile-1",
+            "raw_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\", \"txid\": \"0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e\", \"vin\": [{\"txid\": \"4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8\", \"vout\": 0, \"prevout\": {\"scriptpubkey\": \"001429ae9410db86b93b88a43ef90f187e9571b3266d\", \"value_sats\": 581814, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}}], \"vout\": [{\"n\": 0, \"scriptpubkey\": \"001460690c1be076a41f028a106a1c29a1e259d52b67\", \"value_sats\": 581811, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}, {\"n\": 1, \"scriptpubkey\": \"\", \"value_sats\": 3, \"role\": \"fee\", \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}], \"component\": {\"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}}",
+            "review_status": null,
+            "swap_refund_funding_txid": null,
+            "swap_refund_funding_vout": null,
+            "taxability_override": null,
+            "wallet_account_id": "acct-1",
+            "wallet_id": "wallet-a",
+            "wallet_kind": "liquid",
+            "wallet_label": "Cold",
+            "workspace_id": "ws-1"
+          }
+        ]
+      },
+      "import_duplicate_quarantines": [],
+      "loan_legs": [],
+      "migration_issues": [],
+      "operation": "custody",
+      "owned_index": {
+        "by_outpoint": {
+          "4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8:0": [
+            {
+              "account": "Assets:Bitcoin",
+              "chain": "liquid",
+              "network": "elementsregtest",
+              "source": "inventory",
+              "wallet_id": "wallet-a",
+              "wallet_kind": "descriptor",
+              "wallet_label": "wallet-a"
+            }
+          ]
+        },
+        "by_scoped_outpoint": [
+          {
+            "key": [
+              "liquid",
+              "elementsregtest",
+              "4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8:0"
+            ],
+            "matches": [
+              {
+                "account": "Assets:Bitcoin",
+                "chain": "liquid",
+                "network": "elementsregtest",
+                "source": "inventory",
+                "wallet_id": "wallet-a",
+                "wallet_kind": "descriptor",
+                "wallet_label": "wallet-a"
+              }
+            ]
+          }
+        ],
+        "by_script": {
+          "001429ae9410db86b93b88a43ef90f187e9571b3266d": [
+            {
+              "account": "Assets:Bitcoin",
+              "chain": "liquid",
+              "network": "elementsregtest",
+              "source": "inventory",
+              "wallet_id": "wallet-a",
+              "wallet_kind": "descriptor",
+              "wallet_label": "wallet-a"
+            }
+          ],
+          "001460690c1be076a41f028a106a1c29a1e259d52b67": [
+            {
+              "account": "Assets:Bitcoin",
+              "chain": "liquid",
+              "network": "elementsregtest",
+              "source": "inventory",
+              "wallet_id": "wallet-c",
+              "wallet_kind": "descriptor",
+              "wallet_label": "wallet-c"
+            }
+          ],
+          "0014cdf2e41a3cc6a41e80e2d33be3b947b123e7caa9": [
+            {
+              "account": "Assets:Bitcoin",
+              "chain": "liquid",
+              "network": "elementsregtest",
+              "source": "inventory",
+              "wallet_id": "wallet-b",
+              "wallet_kind": "descriptor",
+              "wallet_label": "wallet-b"
+            }
+          ]
+        },
+        "txid_wallets": {
+          "4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8": [
+            [
+              "wallet-a",
+              "wallet-a"
+            ]
+          ]
+        },
+        "txid_wallets_by_scope": [
+          {
+            "key": [
+              "liquid",
+              "elementsregtest",
+              "4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8"
+            ],
+            "matches": [
+              [
+                "wallet-a",
+                "wallet-a"
+              ]
+            ]
+          }
+        ]
+      },
+      "ownership_warnings": [],
+      "pair_dismissals": [],
+      "profile": {
+        "bitcoin_rail_carrying_value": 1,
+        "cost_basis_pool_scope": "global",
+        "created_at": "2026-01-01T00:00:00Z",
+        "fiat_currency": "USD",
+        "gains_algorithm": "FIFO",
+        "id": "profile-1",
+        "journal_input_version": 0,
+        "journal_semantics_version": 0,
+        "label": "Default",
+        "last_processed_at": null,
+        "last_processed_input_version": 0,
+        "last_processed_tx_count": 0,
+        "ownership_review_counts_json": null,
+        "require_coarse_review": 0,
+        "required_journal_semantics_version": 0,
+        "swap_candidate_count": null,
+        "tax_country": "generic",
+        "tax_long_term_days": 365,
+        "workspace_id": "ws-1"
+      },
+      "rate_rows": [
+        {
+          "amount": 2926153305000,
+          "asset": "BTC",
+          "fiat_rate": 40000.0,
+          "fiat_rate_exact": null,
+          "fiat_value": null,
+          "fiat_value_exact": null
+        },
+        {
+          "amount": 2926153305000,
+          "asset": "BTC",
+          "fiat_rate": 40000.0,
+          "fiat_rate_exact": null,
+          "fiat_value": null,
+          "fiat_value_exact": null
+        }
+      ],
+      "receipt_sources": [],
+      "revision_headers": [],
+      "schema_version": 1,
+      "transactions": [
+        {
+          "account_code": "treasury",
+          "account_label": "Treasury",
+          "amount": 581811000,
+          "amount_includes_fee": 0,
+          "asset": "LBTC",
+          "at_category_override": null,
+          "at_regime_override": null,
+          "commercial_applied_link_id": null,
+          "config_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\"}",
+          "config_text_mentions_samourai": false,
+          "confirmed_at": null,
+          "counterparty": null,
+          "created_at": "2026-01-01T00:00:00Z",
+          "description": null,
+          "direction": "outbound",
+          "excluded": 0,
+          "external_id": "0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e",
+          "external_id_kind": "txid",
+          "fee": 3000,
+          "fiat_currency": "USD",
+          "fiat_price_source": null,
+          "fiat_rate": null,
+          "fiat_rate_exact": null,
+          "fiat_value": null,
+          "fiat_value_exact": null,
+          "fingerprint": "generated-5-out",
+          "id": "source-a",
+          "journal_transaction_id": null,
+          "kind": null,
+          "kind_override": null,
+          "note": null,
+          "observation_application_revision": "generated",
+          "observation_authority_version": 1,
+          "observation_fee_attribution": "exact",
+          "observation_graph_hash": "b9401188d3731500f86e1f43b7d6c63f080b0dd4093211f083f36581bcedac5f",
+          "observation_observed_at": null,
+          "observation_observer_kinds_json": null,
+          "observation_quantity_hash": "7f6ff06b93d22a4d58b4ea093b41cf21f20dc09c202b86794b9792e4401e8cc4",
+          "occurred_at": "2026-01-06T00:00:00Z",
+          "payment_hash": null,
+          "payment_hash_source": null,
+          "pricing_external_ref": null,
+          "pricing_fetched_at": null,
+          "pricing_granularity": null,
+          "pricing_method": null,
+          "pricing_pair": null,
+          "pricing_provider": null,
+          "pricing_quality": null,
+          "pricing_review_accepted_price": null,
+          "pricing_source_kind": null,
+          "pricing_timestamp": null,
+          "privacy_boundary": null,
+          "profile_id": "profile-1",
+          "raw_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\", \"txid\": \"0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e\", \"vin\": [{\"txid\": \"4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8\", \"vout\": 0, \"prevout\": {\"scriptpubkey\": \"001429ae9410db86b93b88a43ef90f187e9571b3266d\", \"value_sats\": 581814, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}}], \"vout\": [{\"n\": 0, \"scriptpubkey\": \"001460690c1be076a41f028a106a1c29a1e259d52b67\", \"value_sats\": 581811, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}, {\"n\": 1, \"scriptpubkey\": \"\", \"value_sats\": 3, \"role\": \"fee\", \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}], \"component\": {\"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}}",
+          "review_status": null,
+          "swap_refund_funding_txid": null,
+          "swap_refund_funding_vout": null,
+          "taxability_override": null,
+          "wallet_account_id": "acct-1",
+          "wallet_id": "wallet-a",
+          "wallet_kind": "liquid",
+          "wallet_label": "Cold",
+          "workspace_id": "ws-1"
+        }
+      ],
+      "wallets": [
+        {
+          "account_code": "treasury",
+          "account_label": "Treasury",
+          "config_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\"}",
+          "config_text_mentions_samourai": true,
+          "id": "wallet-a",
+          "kind": "descriptor",
+          "label": "Cold",
+          "wallet_account_id": "acct-1"
+        },
+        {
+          "account_code": "treasury",
+          "account_label": "Treasury",
+          "config_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\"}",
+          "config_text_mentions_samourai": true,
+          "id": "wallet-b",
+          "kind": "descriptor",
+          "label": "Hot",
+          "wallet_account_id": "acct-1"
+        },
+        {
+          "account_code": "treasury",
+          "account_label": "Treasury",
+          "config_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\"}",
+          "config_text_mentions_samourai": true,
+          "id": "wallet-c",
+          "kind": "descriptor",
+          "label": "Savings",
+          "wallet_account_id": "acct-1"
+        }
+      ]
+    },
+    "total": 581814000
+  },
+  {
+    "case": "conserves_other_change",
+    "expected": [
+      true,
+      {
+        "change_sats": 0,
+        "expected_outflow_msat": 581814000,
+        "input_sats": 581814,
+        "row_total_outflow_msat": 581814000
+      }
+    ],
+    "graph_json": "{\"txid\": \"0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e\", \"chain\": \"liquid\", \"network\": \"elementsregtest\", \"inputs\": [{\"outpoint\": \"4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8:0\", \"script\": \"001429ae9410db86b93b88a43ef90f187e9571b3266d\", \"value_sats\": 581814, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}], \"outputs\": [{\"n\": 0, \"script\": \"001460690c1be076a41f028a106a1c29a1e259d52b67\", \"value_sats\": 581811, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\", \"role\": null}, {\"n\": 1, \"script\": \"\", \"value_sats\": 3, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\", \"role\": \"fee\"}, {\"outpoint\": \"4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8:0\", \"script\": \"001429ae9410db86b93b88a43ef90f187e9571b3266d\", \"value_sats\": 5, \"asset_id\": \"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\", \"asset\": \"LBTC\", \"n\": 2}], \"component\": {\"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}, \"evidence_conflicts\": []}",
+    "op": "conserves",
+    "row": {
+      "account_code": "treasury",
+      "account_label": "Treasury",
+      "amount": 581811000,
+      "amount_includes_fee": 0,
+      "asset": "LBTC",
+      "at_category_override": null,
+      "at_regime_override": null,
+      "commercial_applied_link_id": null,
+      "config_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\"}",
+      "config_text_mentions_samourai": false,
+      "confirmed_at": null,
+      "counterparty": null,
+      "created_at": "2026-01-01T00:00:00Z",
+      "description": null,
+      "direction": "outbound",
+      "excluded": 0,
+      "external_id": "0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e",
+      "external_id_kind": "txid",
+      "fee": 3000,
+      "fiat_currency": "USD",
+      "fiat_price_source": null,
+      "fiat_rate": null,
+      "fiat_rate_exact": null,
+      "fiat_value": null,
+      "fiat_value_exact": null,
+      "fingerprint": "generated-5-out",
+      "id": "source-a",
+      "journal_transaction_id": null,
+      "kind": null,
+      "kind_override": null,
+      "note": null,
+      "observation_application_revision": "generated",
+      "observation_authority_version": 1,
+      "observation_fee_attribution": "exact",
+      "observation_graph_hash": "b9401188d3731500f86e1f43b7d6c63f080b0dd4093211f083f36581bcedac5f",
+      "observation_observed_at": null,
+      "observation_observer_kinds_json": null,
+      "observation_quantity_hash": "7f6ff06b93d22a4d58b4ea093b41cf21f20dc09c202b86794b9792e4401e8cc4",
+      "occurred_at": "2026-01-06T00:00:00Z",
+      "payment_hash": null,
+      "payment_hash_source": null,
+      "pricing_external_ref": null,
+      "pricing_fetched_at": null,
+      "pricing_granularity": null,
+      "pricing_method": null,
+      "pricing_pair": null,
+      "pricing_provider": null,
+      "pricing_quality": null,
+      "pricing_review_accepted_price": null,
+      "pricing_source_kind": null,
+      "pricing_timestamp": null,
+      "privacy_boundary": null,
+      "profile_id": "profile-1",
+      "raw_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\", \"txid\": \"0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e\", \"vin\": [{\"txid\": \"4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8\", \"vout\": 0, \"prevout\": {\"scriptpubkey\": \"001429ae9410db86b93b88a43ef90f187e9571b3266d\", \"value_sats\": 581814, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}}], \"vout\": [{\"n\": 0, \"scriptpubkey\": \"001460690c1be076a41f028a106a1c29a1e259d52b67\", \"value_sats\": 581811, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}, {\"n\": 1, \"scriptpubkey\": \"\", \"value_sats\": 3, \"role\": \"fee\", \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}], \"component\": {\"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}}",
+      "review_status": null,
+      "swap_refund_funding_txid": null,
+      "swap_refund_funding_vout": null,
+      "taxability_override": null,
+      "wallet_account_id": "acct-1",
+      "wallet_id": "wallet-a",
+      "wallet_kind": "liquid",
+      "wallet_label": "Cold",
+      "workspace_id": "ws-1"
+    },
+    "scope": [
+      "liquid",
+      "elementsregtest"
+    ],
+    "snapshot": {
+      "anchor_wallets": [],
+      "anchors": {},
+      "as_of": "2026-10-27T12:00:00Z",
+      "book_network": null,
+      "channel_records": [],
+      "components": [],
+      "evidence_snapshots": [],
+      "gap_reviews": [],
+      "gap_worklist": {
+        "large_book": false,
+        "rows": [
+          {
+            "account_code": "treasury",
+            "account_label": "Treasury",
+            "amount": 581811000,
+            "amount_includes_fee": 0,
+            "asset": "LBTC",
+            "at_category_override": null,
+            "at_regime_override": null,
+            "commercial_applied_link_id": null,
+            "config_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\"}",
+            "config_text_mentions_samourai": false,
+            "confirmed_at": null,
+            "counterparty": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "description": null,
+            "direction": "outbound",
+            "excluded": 0,
+            "external_id": "0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e",
+            "external_id_kind": "txid",
+            "fee": 3000,
+            "fiat_currency": "USD",
+            "fiat_price_source": null,
+            "fiat_rate": null,
+            "fiat_rate_exact": null,
+            "fiat_value": null,
+            "fiat_value_exact": null,
+            "fingerprint": "generated-5-out",
+            "id": "source-a",
+            "journal_transaction_id": null,
+            "kind": null,
+            "kind_override": null,
+            "note": null,
+            "observation_application_revision": "generated",
+            "observation_authority_version": 1,
+            "observation_fee_attribution": "exact",
+            "observation_graph_hash": "b9401188d3731500f86e1f43b7d6c63f080b0dd4093211f083f36581bcedac5f",
+            "observation_observed_at": null,
+            "observation_observer_kinds_json": null,
+            "observation_quantity_hash": "7f6ff06b93d22a4d58b4ea093b41cf21f20dc09c202b86794b9792e4401e8cc4",
+            "occurred_at": "2026-01-06T00:00:00Z",
+            "payment_hash": null,
+            "payment_hash_source": null,
+            "pricing_external_ref": null,
+            "pricing_fetched_at": null,
+            "pricing_granularity": null,
+            "pricing_method": null,
+            "pricing_pair": null,
+            "pricing_provider": null,
+            "pricing_quality": null,
+            "pricing_review_accepted_price": null,
+            "pricing_source_kind": null,
+            "pricing_timestamp": null,
+            "privacy_boundary": null,
+            "profile_id": "profile-1",
+            "raw_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\", \"txid\": \"0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e\", \"vin\": [{\"txid\": \"4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8\", \"vout\": 0, \"prevout\": {\"scriptpubkey\": \"001429ae9410db86b93b88a43ef90f187e9571b3266d\", \"value_sats\": 581814, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}}], \"vout\": [{\"n\": 0, \"scriptpubkey\": \"001460690c1be076a41f028a106a1c29a1e259d52b67\", \"value_sats\": 581811, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}, {\"n\": 1, \"scriptpubkey\": \"\", \"value_sats\": 3, \"role\": \"fee\", \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}], \"component\": {\"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}}",
+            "review_status": null,
+            "swap_refund_funding_txid": null,
+            "swap_refund_funding_vout": null,
+            "taxability_override": null,
+            "wallet_account_id": "acct-1",
+            "wallet_id": "wallet-a",
+            "wallet_kind": "liquid",
+            "wallet_label": "Cold",
+            "workspace_id": "ws-1"
+          }
+        ]
+      },
+      "import_duplicate_quarantines": [],
+      "loan_legs": [],
+      "migration_issues": [],
+      "operation": "custody",
+      "owned_index": {
+        "by_outpoint": {
+          "4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8:0": [
+            {
+              "account": "Assets:Bitcoin",
+              "chain": "liquid",
+              "network": "elementsregtest",
+              "source": "inventory",
+              "wallet_id": "wallet-a",
+              "wallet_kind": "descriptor",
+              "wallet_label": "wallet-a"
+            }
+          ]
+        },
+        "by_scoped_outpoint": [
+          {
+            "key": [
+              "liquid",
+              "elementsregtest",
+              "4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8:0"
+            ],
+            "matches": [
+              {
+                "account": "Assets:Bitcoin",
+                "chain": "liquid",
+                "network": "elementsregtest",
+                "source": "inventory",
+                "wallet_id": "wallet-a",
+                "wallet_kind": "descriptor",
+                "wallet_label": "wallet-a"
+              }
+            ]
+          }
+        ],
+        "by_script": {
+          "001429ae9410db86b93b88a43ef90f187e9571b3266d": [
+            {
+              "account": "Assets:Bitcoin",
+              "chain": "liquid",
+              "network": "elementsregtest",
+              "source": "inventory",
+              "wallet_id": "wallet-a",
+              "wallet_kind": "descriptor",
+              "wallet_label": "wallet-a"
+            }
+          ],
+          "001460690c1be076a41f028a106a1c29a1e259d52b67": [
+            {
+              "account": "Assets:Bitcoin",
+              "chain": "liquid",
+              "network": "elementsregtest",
+              "source": "inventory",
+              "wallet_id": "wallet-c",
+              "wallet_kind": "descriptor",
+              "wallet_label": "wallet-c"
+            }
+          ],
+          "0014cdf2e41a3cc6a41e80e2d33be3b947b123e7caa9": [
+            {
+              "account": "Assets:Bitcoin",
+              "chain": "liquid",
+              "network": "elementsregtest",
+              "source": "inventory",
+              "wallet_id": "wallet-b",
+              "wallet_kind": "descriptor",
+              "wallet_label": "wallet-b"
+            }
+          ]
+        },
+        "txid_wallets": {
+          "4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8": [
+            [
+              "wallet-a",
+              "wallet-a"
+            ]
+          ]
+        },
+        "txid_wallets_by_scope": [
+          {
+            "key": [
+              "liquid",
+              "elementsregtest",
+              "4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8"
+            ],
+            "matches": [
+              [
+                "wallet-a",
+                "wallet-a"
+              ]
+            ]
+          }
+        ]
+      },
+      "ownership_warnings": [],
+      "pair_dismissals": [],
+      "profile": {
+        "bitcoin_rail_carrying_value": 1,
+        "cost_basis_pool_scope": "global",
+        "created_at": "2026-01-01T00:00:00Z",
+        "fiat_currency": "USD",
+        "gains_algorithm": "FIFO",
+        "id": "profile-1",
+        "journal_input_version": 0,
+        "journal_semantics_version": 0,
+        "label": "Default",
+        "last_processed_at": null,
+        "last_processed_input_version": 0,
+        "last_processed_tx_count": 0,
+        "ownership_review_counts_json": null,
+        "require_coarse_review": 0,
+        "required_journal_semantics_version": 0,
+        "swap_candidate_count": null,
+        "tax_country": "generic",
+        "tax_long_term_days": 365,
+        "workspace_id": "ws-1"
+      },
+      "rate_rows": [
+        {
+          "amount": 2926153305000,
+          "asset": "BTC",
+          "fiat_rate": 40000.0,
+          "fiat_rate_exact": null,
+          "fiat_value": null,
+          "fiat_value_exact": null
+        },
+        {
+          "amount": 2926153305000,
+          "asset": "BTC",
+          "fiat_rate": 40000.0,
+          "fiat_rate_exact": null,
+          "fiat_value": null,
+          "fiat_value_exact": null
+        }
+      ],
+      "receipt_sources": [],
+      "revision_headers": [],
+      "schema_version": 1,
+      "transactions": [
+        {
+          "account_code": "treasury",
+          "account_label": "Treasury",
+          "amount": 581811000,
+          "amount_includes_fee": 0,
+          "asset": "LBTC",
+          "at_category_override": null,
+          "at_regime_override": null,
+          "commercial_applied_link_id": null,
+          "config_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\"}",
+          "config_text_mentions_samourai": false,
+          "confirmed_at": null,
+          "counterparty": null,
+          "created_at": "2026-01-01T00:00:00Z",
+          "description": null,
+          "direction": "outbound",
+          "excluded": 0,
+          "external_id": "0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e",
+          "external_id_kind": "txid",
+          "fee": 3000,
+          "fiat_currency": "USD",
+          "fiat_price_source": null,
+          "fiat_rate": null,
+          "fiat_rate_exact": null,
+          "fiat_value": null,
+          "fiat_value_exact": null,
+          "fingerprint": "generated-5-out",
+          "id": "source-a",
+          "journal_transaction_id": null,
+          "kind": null,
+          "kind_override": null,
+          "note": null,
+          "observation_application_revision": "generated",
+          "observation_authority_version": 1,
+          "observation_fee_attribution": "exact",
+          "observation_graph_hash": "b9401188d3731500f86e1f43b7d6c63f080b0dd4093211f083f36581bcedac5f",
+          "observation_observed_at": null,
+          "observation_observer_kinds_json": null,
+          "observation_quantity_hash": "7f6ff06b93d22a4d58b4ea093b41cf21f20dc09c202b86794b9792e4401e8cc4",
+          "occurred_at": "2026-01-06T00:00:00Z",
+          "payment_hash": null,
+          "payment_hash_source": null,
+          "pricing_external_ref": null,
+          "pricing_fetched_at": null,
+          "pricing_granularity": null,
+          "pricing_method": null,
+          "pricing_pair": null,
+          "pricing_provider": null,
+          "pricing_quality": null,
+          "pricing_review_accepted_price": null,
+          "pricing_source_kind": null,
+          "pricing_timestamp": null,
+          "privacy_boundary": null,
+          "profile_id": "profile-1",
+          "raw_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\", \"txid\": \"0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e\", \"vin\": [{\"txid\": \"4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8\", \"vout\": 0, \"prevout\": {\"scriptpubkey\": \"001429ae9410db86b93b88a43ef90f187e9571b3266d\", \"value_sats\": 581814, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}}], \"vout\": [{\"n\": 0, \"scriptpubkey\": \"001460690c1be076a41f028a106a1c29a1e259d52b67\", \"value_sats\": 581811, \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}, {\"n\": 1, \"scriptpubkey\": \"\", \"value_sats\": 3, \"role\": \"fee\", \"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}], \"component\": {\"asset_id\": \"b0041ab4b527426b0e5c912f3b016d1e5a33c1b2a6e1f92b250d89aa2b720904\", \"asset\": \"LBTC\"}}",
+          "review_status": null,
+          "swap_refund_funding_txid": null,
+          "swap_refund_funding_vout": null,
+          "taxability_override": null,
+          "wallet_account_id": "acct-1",
+          "wallet_id": "wallet-a",
+          "wallet_kind": "liquid",
+          "wallet_label": "Cold",
+          "workspace_id": "ws-1"
+        }
+      ],
+      "wallets": [
+        {
+          "account_code": "treasury",
+          "account_label": "Treasury",
+          "config_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\"}",
+          "config_text_mentions_samourai": true,
+          "id": "wallet-a",
+          "kind": "descriptor",
+          "label": "Cold",
+          "wallet_account_id": "acct-1"
+        },
+        {
+          "account_code": "treasury",
+          "account_label": "Treasury",
+          "config_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\"}",
+          "config_text_mentions_samourai": true,
+          "id": "wallet-b",
+          "kind": "descriptor",
+          "label": "Hot",
+          "wallet_account_id": "acct-1"
+        },
+        {
+          "account_code": "treasury",
+          "account_label": "Treasury",
+          "config_json": "{\"chain\": \"liquid\", \"network\": \"elementsregtest\"}",
+          "config_text_mentions_samourai": true,
+          "id": "wallet-c",
+          "kind": "descriptor",
+          "label": "Savings",
+          "wallet_account_id": "acct-1"
+        }
+      ]
+    },
+    "total": 581814000
+  },
+  {
+    "case": "conserves_bitcoin",
+    "expected": [
+      true,
+      {}
+    ],
+    "graph_json": "{\"txid\": \"0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e\", \"chain\": \"bitcoin\", \"network\": \"main\", \"inputs\": [{\"outpoint\": \"4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8:0\", \"script\": \"001429ae9410db86b93b88a43ef90f187e9571b3266d\", \"value_sats\": 581814, \"asset_id\": \"BTC\", \"asset\": \"BTC\"}], \"outputs\": [{\"n\": 0, \"script\": \"001460690c1be076a41f028a106a1c29a1e259d52b67\", \"value_sats\": 581811, \"asset_id\": \"BTC\", \"asset\": \"BTC\", \"role\": null}], \"component\": {}, \"evidence_conflicts\": []}",
+    "op": "conserves",
+    "row": {
+      "account_code": "treasury",
+      "account_label": "Treasury",
+      "amount": 581811000,
+      "amount_includes_fee": 0,
+      "asset": "BTC",
+      "at_category_override": null,
+      "at_regime_override": null,
+      "commercial_applied_link_id": null,
+      "config_json": "{\"chain\": \"bitcoin\", \"network\": \"main\"}",
+      "config_text_mentions_samourai": false,
+      "confirmed_at": null,
+      "counterparty": null,
+      "created_at": "2026-01-01T00:00:00Z",
+      "description": null,
+      "direction": "outbound",
+      "excluded": 0,
+      "external_id": "0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e",
+      "external_id_kind": "txid",
+      "fee": 3000,
+      "fiat_currency": "USD",
+      "fiat_price_source": null,
+      "fiat_rate": null,
+      "fiat_rate_exact": null,
+      "fiat_value": null,
+      "fiat_value_exact": null,
+      "fingerprint": "generated-5-out",
+      "id": "source-a",
+      "journal_transaction_id": null,
+      "kind": null,
+      "kind_override": null,
+      "note": null,
+      "observation_application_revision": "generated",
+      "observation_authority_version": 1,
+      "observation_fee_attribution": "exact",
+      "observation_graph_hash": "eff7a3e5b65a8497315bfb5c0d88fe7c19060b47258860035e9b2a14f40acde8",
+      "observation_observed_at": null,
+      "observation_observer_kinds_json": null,
+      "observation_quantity_hash": "2e8a41c0aa7a3c1b4f52d8277beeefdeb53671f6d8847d9ac4f09add57b5b506",
+      "occurred_at": "2026-01-06T00:00:00Z",
+      "payment_hash": null,
+      "payment_hash_source": null,
+      "pricing_external_ref": null,
+      "pricing_fetched_at": null,
+      "pricing_granularity": null,
+      "pricing_method": null,
+      "pricing_pair": null,
+      "pricing_provider": null,
+      "pricing_quality": null,
+      "pricing_review_accepted_price": null,
+      "pricing_source_kind": null,
+      "pricing_timestamp": null,
+      "privacy_boundary": null,
+      "profile_id": "profile-1",
+      "raw_json": "{\"chain\": \"bitcoin\", \"network\": \"main\", \"txid\": \"0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e\", \"vin\": [{\"txid\": \"4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8\", \"vout\": 0, \"prevout\": {\"scriptpubkey\": \"001429ae9410db86b93b88a43ef90f187e9571b3266d\", \"value_sats\": 581814}}], \"vout\": [{\"n\": 0, \"scriptpubkey\": \"001460690c1be076a41f028a106a1c29a1e259d52b67\", \"value_sats\": 581811}]}",
+      "review_status": null,
+      "swap_refund_funding_txid": null,
+      "swap_refund_funding_vout": null,
+      "taxability_override": null,
+      "wallet_account_id": "acct-1",
+      "wallet_id": "wallet-a",
+      "wallet_kind": "descriptor",
+      "wallet_label": "Cold",
+      "workspace_id": "ws-1"
+    },
+    "scope": [
+      "bitcoin",
+      "main"
+    ],
+    "snapshot": {
+      "anchor_wallets": [],
+      "anchors": {},
+      "as_of": "2026-10-27T12:00:00Z",
+      "book_network": null,
+      "channel_records": [],
+      "components": [],
+      "evidence_snapshots": [],
+      "gap_reviews": [],
+      "gap_worklist": {
+        "large_book": false,
+        "rows": [
+          {
+            "account_code": "treasury",
+            "account_label": "Treasury",
+            "amount": 581811000,
+            "amount_includes_fee": 0,
+            "asset": "BTC",
+            "at_category_override": null,
+            "at_regime_override": null,
+            "commercial_applied_link_id": null,
+            "config_json": "{\"chain\": \"bitcoin\", \"network\": \"main\"}",
+            "config_text_mentions_samourai": false,
+            "confirmed_at": null,
+            "counterparty": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "description": null,
+            "direction": "outbound",
+            "excluded": 0,
+            "external_id": "0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e",
+            "external_id_kind": "txid",
+            "fee": 3000,
+            "fiat_currency": "USD",
+            "fiat_price_source": null,
+            "fiat_rate": null,
+            "fiat_rate_exact": null,
+            "fiat_value": null,
+            "fiat_value_exact": null,
+            "fingerprint": "generated-5-out",
+            "id": "source-a",
+            "journal_transaction_id": null,
+            "kind": null,
+            "kind_override": null,
+            "note": null,
+            "observation_application_revision": "generated",
+            "observation_authority_version": 1,
+            "observation_fee_attribution": "exact",
+            "observation_graph_hash": "eff7a3e5b65a8497315bfb5c0d88fe7c19060b47258860035e9b2a14f40acde8",
+            "observation_observed_at": null,
+            "observation_observer_kinds_json": null,
+            "observation_quantity_hash": "2e8a41c0aa7a3c1b4f52d8277beeefdeb53671f6d8847d9ac4f09add57b5b506",
+            "occurred_at": "2026-01-06T00:00:00Z",
+            "payment_hash": null,
+            "payment_hash_source": null,
+            "pricing_external_ref": null,
+            "pricing_fetched_at": null,
+            "pricing_granularity": null,
+            "pricing_method": null,
+            "pricing_pair": null,
+            "pricing_provider": null,
+            "pricing_quality": null,
+            "pricing_review_accepted_price": null,
+            "pricing_source_kind": null,
+            "pricing_timestamp": null,
+            "privacy_boundary": null,
+            "profile_id": "profile-1",
+            "raw_json": "{\"chain\": \"bitcoin\", \"network\": \"main\", \"txid\": \"0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e\", \"vin\": [{\"txid\": \"4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8\", \"vout\": 0, \"prevout\": {\"scriptpubkey\": \"001429ae9410db86b93b88a43ef90f187e9571b3266d\", \"value_sats\": 581814}}], \"vout\": [{\"n\": 0, \"scriptpubkey\": \"001460690c1be076a41f028a106a1c29a1e259d52b67\", \"value_sats\": 581811}]}",
+            "review_status": null,
+            "swap_refund_funding_txid": null,
+            "swap_refund_funding_vout": null,
+            "taxability_override": null,
+            "wallet_account_id": "acct-1",
+            "wallet_id": "wallet-a",
+            "wallet_kind": "descriptor",
+            "wallet_label": "Cold",
+            "workspace_id": "ws-1"
+          }
+        ]
+      },
+      "import_duplicate_quarantines": [],
+      "loan_legs": [],
+      "migration_issues": [],
+      "operation": "custody",
+      "owned_index": {
+        "by_outpoint": {
+          "4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8:0": [
+            {
+              "account": "Assets:Bitcoin",
+              "chain": "bitcoin",
+              "network": "main",
+              "source": "inventory",
+              "wallet_id": "wallet-a",
+              "wallet_kind": "descriptor",
+              "wallet_label": "wallet-a"
+            }
+          ]
+        },
+        "by_scoped_outpoint": [
+          {
+            "key": [
+              "bitcoin",
+              "main",
+              "4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8:0"
+            ],
+            "matches": [
+              {
+                "account": "Assets:Bitcoin",
+                "chain": "bitcoin",
+                "network": "main",
+                "source": "inventory",
+                "wallet_id": "wallet-a",
+                "wallet_kind": "descriptor",
+                "wallet_label": "wallet-a"
+              }
+            ]
+          }
+        ],
+        "by_script": {
+          "001429ae9410db86b93b88a43ef90f187e9571b3266d": [
+            {
+              "account": "Assets:Bitcoin",
+              "chain": "bitcoin",
+              "network": "main",
+              "source": "inventory",
+              "wallet_id": "wallet-a",
+              "wallet_kind": "descriptor",
+              "wallet_label": "wallet-a"
+            }
+          ],
+          "001460690c1be076a41f028a106a1c29a1e259d52b67": [
+            {
+              "account": "Assets:Bitcoin",
+              "chain": "bitcoin",
+              "network": "main",
+              "source": "inventory",
+              "wallet_id": "wallet-c",
+              "wallet_kind": "descriptor",
+              "wallet_label": "wallet-c"
+            }
+          ],
+          "0014cdf2e41a3cc6a41e80e2d33be3b947b123e7caa9": [
+            {
+              "account": "Assets:Bitcoin",
+              "chain": "bitcoin",
+              "network": "main",
+              "source": "inventory",
+              "wallet_id": "wallet-b",
+              "wallet_kind": "descriptor",
+              "wallet_label": "wallet-b"
+            }
+          ]
+        },
+        "txid_wallets": {
+          "4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8": [
+            [
+              "wallet-a",
+              "wallet-a"
+            ]
+          ]
+        },
+        "txid_wallets_by_scope": [
+          {
+            "key": [
+              "bitcoin",
+              "main",
+              "4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8"
+            ],
+            "matches": [
+              [
+                "wallet-a",
+                "wallet-a"
+              ]
+            ]
+          }
+        ]
+      },
+      "ownership_warnings": [],
+      "pair_dismissals": [],
+      "profile": {
+        "bitcoin_rail_carrying_value": 1,
+        "cost_basis_pool_scope": "global",
+        "created_at": "2026-01-01T00:00:00Z",
+        "fiat_currency": "USD",
+        "gains_algorithm": "FIFO",
+        "id": "profile-1",
+        "journal_input_version": 0,
+        "journal_semantics_version": 0,
+        "label": "Default",
+        "last_processed_at": null,
+        "last_processed_input_version": 0,
+        "last_processed_tx_count": 0,
+        "ownership_review_counts_json": null,
+        "require_coarse_review": 0,
+        "required_journal_semantics_version": 0,
+        "swap_candidate_count": null,
+        "tax_country": "generic",
+        "tax_long_term_days": 365,
+        "workspace_id": "ws-1"
+      },
+      "rate_rows": [
+        {
+          "amount": 2926153305000,
+          "asset": "BTC",
+          "fiat_rate": 40000.0,
+          "fiat_rate_exact": null,
+          "fiat_value": null,
+          "fiat_value_exact": null
+        },
+        {
+          "amount": 2926153305000,
+          "asset": "BTC",
+          "fiat_rate": 40000.0,
+          "fiat_rate_exact": null,
+          "fiat_value": null,
+          "fiat_value_exact": null
+        }
+      ],
+      "receipt_sources": [],
+      "revision_headers": [],
+      "schema_version": 1,
+      "transactions": [
+        {
+          "account_code": "treasury",
+          "account_label": "Treasury",
+          "amount": 581811000,
+          "amount_includes_fee": 0,
+          "asset": "BTC",
+          "at_category_override": null,
+          "at_regime_override": null,
+          "commercial_applied_link_id": null,
+          "config_json": "{\"chain\": \"bitcoin\", \"network\": \"main\"}",
+          "config_text_mentions_samourai": false,
+          "confirmed_at": null,
+          "counterparty": null,
+          "created_at": "2026-01-01T00:00:00Z",
+          "description": null,
+          "direction": "outbound",
+          "excluded": 0,
+          "external_id": "0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e",
+          "external_id_kind": "txid",
+          "fee": 3000,
+          "fiat_currency": "USD",
+          "fiat_price_source": null,
+          "fiat_rate": null,
+          "fiat_rate_exact": null,
+          "fiat_value": null,
+          "fiat_value_exact": null,
+          "fingerprint": "generated-5-out",
+          "id": "source-a",
+          "journal_transaction_id": null,
+          "kind": null,
+          "kind_override": null,
+          "note": null,
+          "observation_application_revision": "generated",
+          "observation_authority_version": 1,
+          "observation_fee_attribution": "exact",
+          "observation_graph_hash": "eff7a3e5b65a8497315bfb5c0d88fe7c19060b47258860035e9b2a14f40acde8",
+          "observation_observed_at": null,
+          "observation_observer_kinds_json": null,
+          "observation_quantity_hash": "2e8a41c0aa7a3c1b4f52d8277beeefdeb53671f6d8847d9ac4f09add57b5b506",
+          "occurred_at": "2026-01-06T00:00:00Z",
+          "payment_hash": null,
+          "payment_hash_source": null,
+          "pricing_external_ref": null,
+          "pricing_fetched_at": null,
+          "pricing_granularity": null,
+          "pricing_method": null,
+          "pricing_pair": null,
+          "pricing_provider": null,
+          "pricing_quality": null,
+          "pricing_review_accepted_price": null,
+          "pricing_source_kind": null,
+          "pricing_timestamp": null,
+          "privacy_boundary": null,
+          "profile_id": "profile-1",
+          "raw_json": "{\"chain\": \"bitcoin\", \"network\": \"main\", \"txid\": \"0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e\", \"vin\": [{\"txid\": \"4afed99344fa035aa2ff6e7347e562525128563d990f04a36711be28adebbce8\", \"vout\": 0, \"prevout\": {\"scriptpubkey\": \"001429ae9410db86b93b88a43ef90f187e9571b3266d\", \"value_sats\": 581814}}], \"vout\": [{\"n\": 0, \"scriptpubkey\": \"001460690c1be076a41f028a106a1c29a1e259d52b67\", \"value_sats\": 581811}]}",
+          "review_status": null,
+          "swap_refund_funding_txid": null,
+          "swap_refund_funding_vout": null,
+          "taxability_override": null,
+          "wallet_account_id": "acct-1",
+          "wallet_id": "wallet-a",
+          "wallet_kind": "descriptor",
+          "wallet_label": "Cold",
+          "workspace_id": "ws-1"
+        }
+      ],
+      "wallets": [
+        {
+          "account_code": "treasury",
+          "account_label": "Treasury",
+          "config_json": "{\"chain\": \"bitcoin\", \"network\": \"main\"}",
+          "config_text_mentions_samourai": true,
+          "id": "wallet-a",
+          "kind": "descriptor",
+          "label": "Cold",
+          "wallet_account_id": "acct-1"
+        },
+        {
+          "account_code": "treasury",
+          "account_label": "Treasury",
+          "config_json": "{\"chain\": \"bitcoin\", \"network\": \"main\"}",
+          "config_text_mentions_samourai": true,
+          "id": "wallet-b",
+          "kind": "descriptor",
+          "label": "Hot",
+          "wallet_account_id": "acct-1"
+        },
+        {
+          "account_code": "treasury",
+          "account_label": "Treasury",
+          "config_json": "{\"chain\": \"bitcoin\", \"network\": \"main\"}",
+          "config_text_mentions_samourai": true,
+          "id": "wallet-c",
+          "kind": "descriptor",
+          "label": "Savings",
+          "wallet_account_id": "acct-1"
+        }
+      ]
+    },
+    "total": 581814000
+  }
+]

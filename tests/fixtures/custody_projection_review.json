@@ -1,0 +1,3352 @@
+[
+  {
+    "op": "finalize",
+    "observations": [
+      {
+        "$type": "QuantityObservation",
+        "transaction_id": "source",
+        "anchor_transaction_id": "source",
+        "quantity_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+        "evidence_detail_hash": "1463e203c119f1dff5b7f7aa6227950091d6775f66780034c4e219a791565bef",
+        "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:source\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"outbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:source\",\"native_namespace\":\"source\",\"network\":\"main\"},\"fee_msat\":7,\"schema_version\":1,\"wallet_id\":\"source\"},\"raw_json\":{\"txid\":\"native:source\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+        "event_key": {
+          "$type": "CanonicalEventKey",
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "source",
+          "native_event_id": "native:source"
+        },
+        "profile_id": "",
+        "authoritative_chain_observation": false,
+        "observation_authority_reason": "provenance_missing",
+        "fee_attribution": "unknown",
+        "wallet_id": "source",
+        "asset": "BTC",
+        "direction": "outbound",
+        "amount_msat": 100,
+        "fee_msat": 7,
+        "amount_includes_fee": false,
+        "occurred_at": "2026-01-01T00:00:00Z"
+      },
+      {
+        "$type": "QuantityObservation",
+        "transaction_id": "target",
+        "anchor_transaction_id": "target",
+        "quantity_hash": "14baedfaec74f03bd84420234e3496743b33a7dc18b196f58092349a26fc0ec8",
+        "evidence_detail_hash": "c05870b3dab76f6c220ae9e54aa0c41b6353490c9df1841c096a414c6e1f894d",
+        "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:target\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"inbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:target\",\"native_namespace\":\"target\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"target\"},\"raw_json\":{\"txid\":\"native:target\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+        "event_key": {
+          "$type": "CanonicalEventKey",
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "target",
+          "native_event_id": "native:target"
+        },
+        "profile_id": "",
+        "authoritative_chain_observation": false,
+        "observation_authority_reason": "provenance_missing",
+        "fee_attribution": "unknown",
+        "wallet_id": "target",
+        "asset": "BTC",
+        "direction": "inbound",
+        "amount_msat": 100,
+        "fee_msat": 0,
+        "amount_includes_fee": false,
+        "occurred_at": "2026-01-01T00:00:00Z"
+      },
+      {
+        "$type": "QuantityObservation",
+        "transaction_id": "other",
+        "anchor_transaction_id": "other",
+        "quantity_hash": "9f53da3afaaba8149223a217273187b2441699e35b3944c56171ab08eb017a02",
+        "evidence_detail_hash": "2fe2f70a606ca642c9f967565e6b1ea14670a18bd719ecdf6de9171ebdd15f6d",
+        "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:other\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"inbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:other\",\"native_namespace\":\"other\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"other\"},\"raw_json\":{\"txid\":\"native:other\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+        "event_key": {
+          "$type": "CanonicalEventKey",
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "other",
+          "native_event_id": "native:other"
+        },
+        "profile_id": "",
+        "authoritative_chain_observation": false,
+        "observation_authority_reason": "provenance_missing",
+        "fee_attribution": "unknown",
+        "wallet_id": "other",
+        "asset": "BTC",
+        "direction": "inbound",
+        "amount_msat": 100,
+        "fee_msat": 0,
+        "amount_includes_fee": false,
+        "occurred_at": "2026-01-01T00:00:00Z"
+      }
+    ],
+    "rows": {
+      "source": {
+        "id": "source",
+        "wallet_id": "source",
+        "fingerprint": "fingerprint:source",
+        "external_id": "native:source",
+        "occurred_at": "2026-01-01T00:00:00Z",
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": 100,
+        "fee": 7,
+        "amount_includes_fee": 0,
+        "chain": "bitcoin",
+        "network": "main",
+        "raw_json": {
+          "txid": "native:source"
+        }
+      },
+      "target": {
+        "id": "target",
+        "wallet_id": "target",
+        "fingerprint": "fingerprint:target",
+        "external_id": "native:target",
+        "occurred_at": "2026-01-01T00:00:00Z",
+        "direction": "inbound",
+        "asset": "BTC",
+        "amount": 100,
+        "fee": 0,
+        "amount_includes_fee": 0,
+        "chain": "bitcoin",
+        "network": "main",
+        "raw_json": {
+          "txid": "native:target"
+        }
+      },
+      "other": {
+        "id": "other",
+        "wallet_id": "other",
+        "fingerprint": "fingerprint:other",
+        "external_id": "native:other",
+        "occurred_at": "2026-01-01T00:00:00Z",
+        "direction": "inbound",
+        "asset": "BTC",
+        "amount": 100,
+        "fee": 0,
+        "amount_includes_fee": 0,
+        "chain": "bitcoin",
+        "network": "main",
+        "raw_json": {
+          "txid": "native:other"
+        }
+      }
+    },
+    "decisions": [
+      {
+        "source": {
+          "observation_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+          "start_msat": 0,
+          "end_msat": 100
+        },
+        "target": {
+          "observation_hash": "14baedfaec74f03bd84420234e3496743b33a7dc18b196f58092349a26fc0ec8",
+          "start_msat": 0,
+          "end_msat": 100
+        },
+        "state": "external_confirmed",
+        "reason": "native",
+        "selected_claim_id": "pair:durable:edge",
+        "atomic_bundle_id": null,
+        "component_id": null,
+        "transfer_policy": null,
+        "transfer_kind": null,
+        "destination_kind": null,
+        "external_economic_subtype": null
+      }
+    ],
+    "eligible": [
+      {
+        "observation_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+        "start_msat": 0,
+        "end_msat": 100
+      }
+    ],
+    "events": [
+      {
+        "event_key": {
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "source",
+          "native_event_id": "native:source"
+        },
+        "legs": [
+          {
+            "$type": "QuantityObservation",
+            "transaction_id": "source",
+            "anchor_transaction_id": "source",
+            "quantity_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+            "evidence_detail_hash": "1463e203c119f1dff5b7f7aa6227950091d6775f66780034c4e219a791565bef",
+            "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:source\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"outbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:source\",\"native_namespace\":\"source\",\"network\":\"main\"},\"fee_msat\":7,\"schema_version\":1,\"wallet_id\":\"source\"},\"raw_json\":{\"txid\":\"native:source\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+            "event_key": {
+              "$type": "CanonicalEventKey",
+              "chain": "bitcoin",
+              "network": "main",
+              "native_namespace": "source",
+              "native_event_id": "native:source"
+            },
+            "profile_id": "",
+            "authoritative_chain_observation": false,
+            "observation_authority_reason": "provenance_missing",
+            "fee_attribution": "unknown",
+            "wallet_id": "source",
+            "asset": "BTC",
+            "direction": "outbound",
+            "amount_msat": 100,
+            "fee_msat": 7,
+            "amount_includes_fee": false,
+            "occurred_at": "2026-01-01T00:00:00Z"
+          }
+        ]
+      },
+      {
+        "event_key": {
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "target",
+          "native_event_id": "native:target"
+        },
+        "legs": [
+          {
+            "$type": "QuantityObservation",
+            "transaction_id": "target",
+            "anchor_transaction_id": "target",
+            "quantity_hash": "14baedfaec74f03bd84420234e3496743b33a7dc18b196f58092349a26fc0ec8",
+            "evidence_detail_hash": "c05870b3dab76f6c220ae9e54aa0c41b6353490c9df1841c096a414c6e1f894d",
+            "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:target\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"inbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:target\",\"native_namespace\":\"target\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"target\"},\"raw_json\":{\"txid\":\"native:target\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+            "event_key": {
+              "$type": "CanonicalEventKey",
+              "chain": "bitcoin",
+              "network": "main",
+              "native_namespace": "target",
+              "native_event_id": "native:target"
+            },
+            "profile_id": "",
+            "authoritative_chain_observation": false,
+            "observation_authority_reason": "provenance_missing",
+            "fee_attribution": "unknown",
+            "wallet_id": "target",
+            "asset": "BTC",
+            "direction": "inbound",
+            "amount_msat": 100,
+            "fee_msat": 0,
+            "amount_includes_fee": false,
+            "occurred_at": "2026-01-01T00:00:00Z"
+          }
+        ]
+      },
+      {
+        "event_key": {
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "other",
+          "native_event_id": "native:other"
+        },
+        "legs": [
+          {
+            "$type": "QuantityObservation",
+            "transaction_id": "other",
+            "anchor_transaction_id": "other",
+            "quantity_hash": "9f53da3afaaba8149223a217273187b2441699e35b3944c56171ab08eb017a02",
+            "evidence_detail_hash": "2fe2f70a606ca642c9f967565e6b1ea14670a18bd719ecdf6de9171ebdd15f6d",
+            "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:other\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"inbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:other\",\"native_namespace\":\"other\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"other\"},\"raw_json\":{\"txid\":\"native:other\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+            "event_key": {
+              "$type": "CanonicalEventKey",
+              "chain": "bitcoin",
+              "network": "main",
+              "native_namespace": "other",
+              "native_event_id": "native:other"
+            },
+            "profile_id": "",
+            "authoritative_chain_observation": false,
+            "observation_authority_reason": "provenance_missing",
+            "fee_attribution": "unknown",
+            "wallet_id": "other",
+            "asset": "BTC",
+            "direction": "inbound",
+            "amount_msat": 100,
+            "fee_msat": 0,
+            "amount_includes_fee": false,
+            "occurred_at": "2026-01-01T00:00:00Z"
+          }
+        ]
+      }
+    ],
+    "pool_barriers": [],
+    "blocked_transaction_ids": [
+      "target"
+    ],
+    "blocked_anchor_ids": [],
+    "non_event_transaction_ids": [],
+    "payouts": [],
+    "profile": {
+      "id": "p",
+      "workspace_id": "w",
+      "tax_country": "generic"
+    },
+    "issues": [],
+    "pool_barrier_roots": [],
+    "interpreter_quarantines": [],
+    "reviewed": [],
+    "case": "projection_target_blocked",
+    "expected": {
+      "$type": "FinalizedTaxProjection",
+      "rows": [
+        {
+          "id": "custody-tax:9f53da3afaaba8149223a217273187b2441699e35b3944c56171ab08eb017a02:0:100:inbound",
+          "wallet_id": "other",
+          "fingerprint": "fingerprint:other",
+          "external_id": "native:other",
+          "occurred_at": "2026-01-01T00:00:00Z",
+          "direction": "inbound",
+          "asset": "BTC",
+          "amount": 100,
+          "fee": 0,
+          "amount_includes_fee": false,
+          "chain": "bitcoin",
+          "network": "main",
+          "raw_json": {
+            "txid": "native:other"
+          },
+          "pricing_review_price": null,
+          "custody_chain_order": null,
+          "fiat_value": null,
+          "fiat_value_exact": null,
+          "journal_transaction_id": "other",
+          "custody_finalized_tax_projection": true,
+          "custody_quantity_hash": "9f53da3afaaba8149223a217273187b2441699e35b3944c56171ab08eb017a02",
+          "custody_slice_start_msat": 0,
+          "custody_slice_end_msat": 100
+        },
+        {
+          "id": "custody-tax:ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604:fee-only:7",
+          "wallet_id": "source",
+          "fingerprint": "fingerprint:source",
+          "external_id": "native:source",
+          "occurred_at": "2026-01-01T00:00:00Z",
+          "direction": "outbound",
+          "asset": "BTC",
+          "amount": 0,
+          "fee": 7,
+          "amount_includes_fee": false,
+          "chain": "bitcoin",
+          "network": "main",
+          "raw_json": {
+            "txid": "native:source"
+          },
+          "pricing_review_price": null,
+          "custody_chain_order": null,
+          "journal_transaction_id": "source",
+          "fiat_value": null,
+          "fiat_value_exact": null,
+          "custody_finalized_tax_projection": true,
+          "custody_quantity_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+          "custody_slice_start_msat": 0,
+          "custody_slice_end_msat": 0
+        }
+      ],
+      "intra_pairs": [],
+      "cross_asset_pairs": [],
+      "quarantines": [],
+      "selected_move_ids": []
+    }
+  },
+  {
+    "op": "finalize",
+    "observations": [
+      {
+        "$type": "QuantityObservation",
+        "transaction_id": "source",
+        "anchor_transaction_id": "source",
+        "quantity_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+        "evidence_detail_hash": "1463e203c119f1dff5b7f7aa6227950091d6775f66780034c4e219a791565bef",
+        "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:source\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"outbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:source\",\"native_namespace\":\"source\",\"network\":\"main\"},\"fee_msat\":7,\"schema_version\":1,\"wallet_id\":\"source\"},\"raw_json\":{\"txid\":\"native:source\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+        "event_key": {
+          "$type": "CanonicalEventKey",
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "source",
+          "native_event_id": "native:source"
+        },
+        "profile_id": "",
+        "authoritative_chain_observation": false,
+        "observation_authority_reason": "provenance_missing",
+        "fee_attribution": "unknown",
+        "wallet_id": "source",
+        "asset": "BTC",
+        "direction": "outbound",
+        "amount_msat": 100,
+        "fee_msat": 7,
+        "amount_includes_fee": false,
+        "occurred_at": "2026-01-01T00:00:00Z"
+      },
+      {
+        "$type": "QuantityObservation",
+        "transaction_id": "target",
+        "anchor_transaction_id": "target",
+        "quantity_hash": "14baedfaec74f03bd84420234e3496743b33a7dc18b196f58092349a26fc0ec8",
+        "evidence_detail_hash": "c05870b3dab76f6c220ae9e54aa0c41b6353490c9df1841c096a414c6e1f894d",
+        "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:target\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"inbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:target\",\"native_namespace\":\"target\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"target\"},\"raw_json\":{\"txid\":\"native:target\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+        "event_key": {
+          "$type": "CanonicalEventKey",
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "target",
+          "native_event_id": "native:target"
+        },
+        "profile_id": "",
+        "authoritative_chain_observation": false,
+        "observation_authority_reason": "provenance_missing",
+        "fee_attribution": "unknown",
+        "wallet_id": "target",
+        "asset": "BTC",
+        "direction": "inbound",
+        "amount_msat": 100,
+        "fee_msat": 0,
+        "amount_includes_fee": false,
+        "occurred_at": "2026-01-01T00:00:00Z"
+      },
+      {
+        "$type": "QuantityObservation",
+        "transaction_id": "other",
+        "anchor_transaction_id": "other",
+        "quantity_hash": "9f53da3afaaba8149223a217273187b2441699e35b3944c56171ab08eb017a02",
+        "evidence_detail_hash": "2fe2f70a606ca642c9f967565e6b1ea14670a18bd719ecdf6de9171ebdd15f6d",
+        "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:other\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"inbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:other\",\"native_namespace\":\"other\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"other\"},\"raw_json\":{\"txid\":\"native:other\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+        "event_key": {
+          "$type": "CanonicalEventKey",
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "other",
+          "native_event_id": "native:other"
+        },
+        "profile_id": "",
+        "authoritative_chain_observation": false,
+        "observation_authority_reason": "provenance_missing",
+        "fee_attribution": "unknown",
+        "wallet_id": "other",
+        "asset": "BTC",
+        "direction": "inbound",
+        "amount_msat": 100,
+        "fee_msat": 0,
+        "amount_includes_fee": false,
+        "occurred_at": "2026-01-01T00:00:00Z"
+      }
+    ],
+    "rows": {
+      "source": {
+        "id": "source",
+        "wallet_id": "source",
+        "fingerprint": "fingerprint:source",
+        "external_id": "native:source",
+        "occurred_at": "2026-01-01T00:00:00Z",
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": 100,
+        "fee": 7,
+        "amount_includes_fee": 0,
+        "chain": "bitcoin",
+        "network": "main",
+        "raw_json": {
+          "txid": "native:source"
+        }
+      },
+      "target": {
+        "id": "target",
+        "wallet_id": "target",
+        "fingerprint": "fingerprint:target",
+        "external_id": "native:target",
+        "occurred_at": "2026-01-01T00:00:00Z",
+        "direction": "inbound",
+        "asset": "BTC",
+        "amount": 100,
+        "fee": 0,
+        "amount_includes_fee": 0,
+        "chain": "bitcoin",
+        "network": "main",
+        "raw_json": {
+          "txid": "native:target"
+        }
+      },
+      "other": {
+        "id": "other",
+        "wallet_id": "other",
+        "fingerprint": "fingerprint:other",
+        "external_id": "native:other",
+        "occurred_at": "2026-01-01T00:00:00Z",
+        "direction": "inbound",
+        "asset": "BTC",
+        "amount": 100,
+        "fee": 0,
+        "amount_includes_fee": 0,
+        "chain": "bitcoin",
+        "network": "main",
+        "raw_json": {
+          "txid": "native:other"
+        }
+      }
+    },
+    "decisions": [
+      {
+        "source": {
+          "observation_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+          "start_msat": 0,
+          "end_msat": 50
+        },
+        "target": {
+          "observation_hash": "14baedfaec74f03bd84420234e3496743b33a7dc18b196f58092349a26fc0ec8",
+          "start_msat": 0,
+          "end_msat": 50
+        },
+        "state": "internal_verified",
+        "reason": "native",
+        "selected_claim_id": "z-first",
+        "atomic_bundle_id": null,
+        "component_id": null,
+        "transfer_policy": null,
+        "transfer_kind": null,
+        "destination_kind": null,
+        "external_economic_subtype": null
+      },
+      {
+        "source": {
+          "observation_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+          "start_msat": 50,
+          "end_msat": 100
+        },
+        "target": {
+          "observation_hash": "14baedfaec74f03bd84420234e3496743b33a7dc18b196f58092349a26fc0ec8",
+          "start_msat": 50,
+          "end_msat": 100
+        },
+        "state": "internal_verified",
+        "reason": "native",
+        "selected_claim_id": "a-second",
+        "atomic_bundle_id": null,
+        "component_id": null,
+        "transfer_policy": null,
+        "transfer_kind": null,
+        "destination_kind": null,
+        "external_economic_subtype": null
+      }
+    ],
+    "eligible": [
+      {
+        "observation_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+        "start_msat": 0,
+        "end_msat": 50
+      },
+      {
+        "observation_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+        "start_msat": 50,
+        "end_msat": 100
+      }
+    ],
+    "events": [
+      {
+        "event_key": {
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "source",
+          "native_event_id": "native:source"
+        },
+        "legs": [
+          {
+            "$type": "QuantityObservation",
+            "transaction_id": "source",
+            "anchor_transaction_id": "source",
+            "quantity_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+            "evidence_detail_hash": "1463e203c119f1dff5b7f7aa6227950091d6775f66780034c4e219a791565bef",
+            "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:source\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"outbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:source\",\"native_namespace\":\"source\",\"network\":\"main\"},\"fee_msat\":7,\"schema_version\":1,\"wallet_id\":\"source\"},\"raw_json\":{\"txid\":\"native:source\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+            "event_key": {
+              "$type": "CanonicalEventKey",
+              "chain": "bitcoin",
+              "network": "main",
+              "native_namespace": "source",
+              "native_event_id": "native:source"
+            },
+            "profile_id": "",
+            "authoritative_chain_observation": false,
+            "observation_authority_reason": "provenance_missing",
+            "fee_attribution": "unknown",
+            "wallet_id": "source",
+            "asset": "BTC",
+            "direction": "outbound",
+            "amount_msat": 100,
+            "fee_msat": 7,
+            "amount_includes_fee": false,
+            "occurred_at": "2026-01-01T00:00:00Z"
+          }
+        ]
+      },
+      {
+        "event_key": {
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "target",
+          "native_event_id": "native:target"
+        },
+        "legs": [
+          {
+            "$type": "QuantityObservation",
+            "transaction_id": "target",
+            "anchor_transaction_id": "target",
+            "quantity_hash": "14baedfaec74f03bd84420234e3496743b33a7dc18b196f58092349a26fc0ec8",
+            "evidence_detail_hash": "c05870b3dab76f6c220ae9e54aa0c41b6353490c9df1841c096a414c6e1f894d",
+            "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:target\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"inbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:target\",\"native_namespace\":\"target\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"target\"},\"raw_json\":{\"txid\":\"native:target\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+            "event_key": {
+              "$type": "CanonicalEventKey",
+              "chain": "bitcoin",
+              "network": "main",
+              "native_namespace": "target",
+              "native_event_id": "native:target"
+            },
+            "profile_id": "",
+            "authoritative_chain_observation": false,
+            "observation_authority_reason": "provenance_missing",
+            "fee_attribution": "unknown",
+            "wallet_id": "target",
+            "asset": "BTC",
+            "direction": "inbound",
+            "amount_msat": 100,
+            "fee_msat": 0,
+            "amount_includes_fee": false,
+            "occurred_at": "2026-01-01T00:00:00Z"
+          }
+        ]
+      },
+      {
+        "event_key": {
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "other",
+          "native_event_id": "native:other"
+        },
+        "legs": [
+          {
+            "$type": "QuantityObservation",
+            "transaction_id": "other",
+            "anchor_transaction_id": "other",
+            "quantity_hash": "9f53da3afaaba8149223a217273187b2441699e35b3944c56171ab08eb017a02",
+            "evidence_detail_hash": "2fe2f70a606ca642c9f967565e6b1ea14670a18bd719ecdf6de9171ebdd15f6d",
+            "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:other\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"inbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:other\",\"native_namespace\":\"other\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"other\"},\"raw_json\":{\"txid\":\"native:other\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+            "event_key": {
+              "$type": "CanonicalEventKey",
+              "chain": "bitcoin",
+              "network": "main",
+              "native_namespace": "other",
+              "native_event_id": "native:other"
+            },
+            "profile_id": "",
+            "authoritative_chain_observation": false,
+            "observation_authority_reason": "provenance_missing",
+            "fee_attribution": "unknown",
+            "wallet_id": "other",
+            "asset": "BTC",
+            "direction": "inbound",
+            "amount_msat": 100,
+            "fee_msat": 0,
+            "amount_includes_fee": false,
+            "occurred_at": "2026-01-01T00:00:00Z"
+          }
+        ]
+      }
+    ],
+    "pool_barriers": [],
+    "blocked_transaction_ids": [],
+    "blocked_anchor_ids": [],
+    "non_event_transaction_ids": [],
+    "payouts": [],
+    "profile": {
+      "id": "p",
+      "workspace_id": "w",
+      "tax_country": "generic"
+    },
+    "issues": [],
+    "pool_barrier_roots": [],
+    "interpreter_quarantines": [],
+    "reviewed": [],
+    "case": "projection_moves_sorted",
+    "expected": {
+      "$type": "FinalizedTaxProjection",
+      "rows": [
+        {
+          "id": "custody-tax:9f53da3afaaba8149223a217273187b2441699e35b3944c56171ab08eb017a02:0:100:inbound",
+          "wallet_id": "other",
+          "fingerprint": "fingerprint:other",
+          "external_id": "native:other",
+          "occurred_at": "2026-01-01T00:00:00Z",
+          "direction": "inbound",
+          "asset": "BTC",
+          "amount": 100,
+          "fee": 0,
+          "amount_includes_fee": false,
+          "chain": "bitcoin",
+          "network": "main",
+          "raw_json": {
+            "txid": "native:other"
+          },
+          "pricing_review_price": null,
+          "custody_chain_order": null,
+          "fiat_value": null,
+          "fiat_value_exact": null,
+          "journal_transaction_id": "other",
+          "custody_finalized_tax_projection": true,
+          "custody_quantity_hash": "9f53da3afaaba8149223a217273187b2441699e35b3944c56171ab08eb017a02",
+          "custody_slice_start_msat": 0,
+          "custody_slice_end_msat": 100
+        },
+        {
+          "id": "custody-tax:ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604:0:50:move-out",
+          "wallet_id": "source",
+          "fingerprint": "fingerprint:source",
+          "external_id": "native:source",
+          "occurred_at": "2026-01-01T00:00:00Z",
+          "direction": "outbound",
+          "asset": "BTC",
+          "amount": 50,
+          "fee": 7,
+          "amount_includes_fee": false,
+          "chain": "bitcoin",
+          "network": "main",
+          "raw_json": {
+            "txid": "native:source"
+          },
+          "pricing_review_price": null,
+          "custody_chain_order": null,
+          "fiat_value": null,
+          "fiat_value_exact": null,
+          "journal_transaction_id": "source",
+          "custody_finalized_tax_projection": true,
+          "custody_quantity_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+          "custody_slice_start_msat": 0,
+          "custody_slice_end_msat": 50
+        },
+        {
+          "id": "custody-tax:ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604:50:100:move-out",
+          "wallet_id": "source",
+          "fingerprint": "fingerprint:source",
+          "external_id": "native:source",
+          "occurred_at": "2026-01-01T00:00:00Z",
+          "direction": "outbound",
+          "asset": "BTC",
+          "amount": 50,
+          "fee": 0,
+          "amount_includes_fee": false,
+          "chain": "bitcoin",
+          "network": "main",
+          "raw_json": {
+            "txid": "native:source"
+          },
+          "pricing_review_price": null,
+          "custody_chain_order": null,
+          "fiat_value": null,
+          "fiat_value_exact": null,
+          "journal_transaction_id": "source",
+          "custody_finalized_tax_projection": true,
+          "custody_quantity_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+          "custody_slice_start_msat": 50,
+          "custody_slice_end_msat": 100
+        },
+        {
+          "id": "custody-tax:14baedfaec74f03bd84420234e3496743b33a7dc18b196f58092349a26fc0ec8:0:50:move-in",
+          "wallet_id": "target",
+          "fingerprint": "fingerprint:target",
+          "external_id": "native:target",
+          "occurred_at": "2026-01-01T00:00:00Z",
+          "direction": "inbound",
+          "asset": "BTC",
+          "amount": 50,
+          "fee": 0,
+          "amount_includes_fee": false,
+          "chain": "bitcoin",
+          "network": "main",
+          "raw_json": {
+            "txid": "native:target"
+          },
+          "pricing_review_price": null,
+          "custody_chain_order": null,
+          "fiat_value": null,
+          "fiat_value_exact": null,
+          "journal_transaction_id": "target",
+          "custody_finalized_tax_projection": true,
+          "custody_quantity_hash": "14baedfaec74f03bd84420234e3496743b33a7dc18b196f58092349a26fc0ec8",
+          "custody_slice_start_msat": 0,
+          "custody_slice_end_msat": 50
+        },
+        {
+          "id": "custody-tax:14baedfaec74f03bd84420234e3496743b33a7dc18b196f58092349a26fc0ec8:50:100:move-in",
+          "wallet_id": "target",
+          "fingerprint": "fingerprint:target",
+          "external_id": "native:target",
+          "occurred_at": "2026-01-01T00:00:00Z",
+          "direction": "inbound",
+          "asset": "BTC",
+          "amount": 50,
+          "fee": 0,
+          "amount_includes_fee": false,
+          "chain": "bitcoin",
+          "network": "main",
+          "raw_json": {
+            "txid": "native:target"
+          },
+          "pricing_review_price": null,
+          "custody_chain_order": null,
+          "fiat_value": null,
+          "fiat_value_exact": null,
+          "journal_transaction_id": "target",
+          "custody_finalized_tax_projection": true,
+          "custody_quantity_hash": "14baedfaec74f03bd84420234e3496743b33a7dc18b196f58092349a26fc0ec8",
+          "custody_slice_start_msat": 50,
+          "custody_slice_end_msat": 100
+        }
+      ],
+      "intra_pairs": [
+        {
+          "out": {
+            "id": "custody-tax:ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604:0:50:move-out",
+            "wallet_id": "source",
+            "fingerprint": "fingerprint:source",
+            "external_id": "native:source",
+            "occurred_at": "2026-01-01T00:00:00Z",
+            "direction": "outbound",
+            "asset": "BTC",
+            "amount": 50,
+            "fee": 7,
+            "amount_includes_fee": false,
+            "chain": "bitcoin",
+            "network": "main",
+            "raw_json": {
+              "txid": "native:source"
+            },
+            "pricing_review_price": null,
+            "custody_chain_order": null,
+            "fiat_value": null,
+            "fiat_value_exact": null,
+            "journal_transaction_id": "source",
+            "custody_finalized_tax_projection": true,
+            "custody_quantity_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+            "custody_slice_start_msat": 0,
+            "custody_slice_end_msat": 50
+          },
+          "in": {
+            "id": "custody-tax:14baedfaec74f03bd84420234e3496743b33a7dc18b196f58092349a26fc0ec8:0:50:move-in",
+            "wallet_id": "target",
+            "fingerprint": "fingerprint:target",
+            "external_id": "native:target",
+            "occurred_at": "2026-01-01T00:00:00Z",
+            "direction": "inbound",
+            "asset": "BTC",
+            "amount": 50,
+            "fee": 0,
+            "amount_includes_fee": false,
+            "chain": "bitcoin",
+            "network": "main",
+            "raw_json": {
+              "txid": "native:target"
+            },
+            "pricing_review_price": null,
+            "custody_chain_order": null,
+            "fiat_value": null,
+            "fiat_value_exact": null,
+            "journal_transaction_id": "target",
+            "custody_finalized_tax_projection": true,
+            "custody_quantity_hash": "14baedfaec74f03bd84420234e3496743b33a7dc18b196f58092349a26fc0ec8",
+            "custody_slice_start_msat": 0,
+            "custody_slice_end_msat": 50
+          },
+          "pair_id": "z-first",
+          "source": "native",
+          "policy": "carrying-value",
+          "group_id": null
+        },
+        {
+          "out": {
+            "id": "custody-tax:ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604:50:100:move-out",
+            "wallet_id": "source",
+            "fingerprint": "fingerprint:source",
+            "external_id": "native:source",
+            "occurred_at": "2026-01-01T00:00:00Z",
+            "direction": "outbound",
+            "asset": "BTC",
+            "amount": 50,
+            "fee": 0,
+            "amount_includes_fee": false,
+            "chain": "bitcoin",
+            "network": "main",
+            "raw_json": {
+              "txid": "native:source"
+            },
+            "pricing_review_price": null,
+            "custody_chain_order": null,
+            "fiat_value": null,
+            "fiat_value_exact": null,
+            "journal_transaction_id": "source",
+            "custody_finalized_tax_projection": true,
+            "custody_quantity_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+            "custody_slice_start_msat": 50,
+            "custody_slice_end_msat": 100
+          },
+          "in": {
+            "id": "custody-tax:14baedfaec74f03bd84420234e3496743b33a7dc18b196f58092349a26fc0ec8:50:100:move-in",
+            "wallet_id": "target",
+            "fingerprint": "fingerprint:target",
+            "external_id": "native:target",
+            "occurred_at": "2026-01-01T00:00:00Z",
+            "direction": "inbound",
+            "asset": "BTC",
+            "amount": 50,
+            "fee": 0,
+            "amount_includes_fee": false,
+            "chain": "bitcoin",
+            "network": "main",
+            "raw_json": {
+              "txid": "native:target"
+            },
+            "pricing_review_price": null,
+            "custody_chain_order": null,
+            "fiat_value": null,
+            "fiat_value_exact": null,
+            "journal_transaction_id": "target",
+            "custody_finalized_tax_projection": true,
+            "custody_quantity_hash": "14baedfaec74f03bd84420234e3496743b33a7dc18b196f58092349a26fc0ec8",
+            "custody_slice_start_msat": 50,
+            "custody_slice_end_msat": 100
+          },
+          "pair_id": "a-second",
+          "source": "native",
+          "policy": "carrying-value",
+          "group_id": null
+        }
+      ],
+      "cross_asset_pairs": [],
+      "quarantines": [],
+      "selected_move_ids": [
+        "a-second",
+        "z-first"
+      ]
+    }
+  },
+  {
+    "op": "finalize",
+    "observations": [
+      {
+        "$type": "QuantityObservation",
+        "transaction_id": "source",
+        "anchor_transaction_id": "source",
+        "quantity_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+        "evidence_detail_hash": "1463e203c119f1dff5b7f7aa6227950091d6775f66780034c4e219a791565bef",
+        "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:source\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"outbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:source\",\"native_namespace\":\"source\",\"network\":\"main\"},\"fee_msat\":7,\"schema_version\":1,\"wallet_id\":\"source\"},\"raw_json\":{\"txid\":\"native:source\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+        "event_key": {
+          "$type": "CanonicalEventKey",
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "source",
+          "native_event_id": "native:source"
+        },
+        "profile_id": "",
+        "authoritative_chain_observation": false,
+        "observation_authority_reason": "provenance_missing",
+        "fee_attribution": "unknown",
+        "wallet_id": "source",
+        "asset": "BTC",
+        "direction": "outbound",
+        "amount_msat": 100,
+        "fee_msat": 7,
+        "amount_includes_fee": false,
+        "occurred_at": "2026-01-01T00:00:00Z"
+      },
+      {
+        "$type": "QuantityObservation",
+        "transaction_id": "target",
+        "anchor_transaction_id": "target",
+        "quantity_hash": "14baedfaec74f03bd84420234e3496743b33a7dc18b196f58092349a26fc0ec8",
+        "evidence_detail_hash": "c05870b3dab76f6c220ae9e54aa0c41b6353490c9df1841c096a414c6e1f894d",
+        "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:target\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"inbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:target\",\"native_namespace\":\"target\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"target\"},\"raw_json\":{\"txid\":\"native:target\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+        "event_key": {
+          "$type": "CanonicalEventKey",
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "target",
+          "native_event_id": "native:target"
+        },
+        "profile_id": "",
+        "authoritative_chain_observation": false,
+        "observation_authority_reason": "provenance_missing",
+        "fee_attribution": "unknown",
+        "wallet_id": "target",
+        "asset": "BTC",
+        "direction": "inbound",
+        "amount_msat": 100,
+        "fee_msat": 0,
+        "amount_includes_fee": false,
+        "occurred_at": "2026-01-01T00:00:00Z"
+      },
+      {
+        "$type": "QuantityObservation",
+        "transaction_id": "other",
+        "anchor_transaction_id": "other",
+        "quantity_hash": "9f53da3afaaba8149223a217273187b2441699e35b3944c56171ab08eb017a02",
+        "evidence_detail_hash": "2fe2f70a606ca642c9f967565e6b1ea14670a18bd719ecdf6de9171ebdd15f6d",
+        "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:other\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"inbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:other\",\"native_namespace\":\"other\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"other\"},\"raw_json\":{\"txid\":\"native:other\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+        "event_key": {
+          "$type": "CanonicalEventKey",
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "other",
+          "native_event_id": "native:other"
+        },
+        "profile_id": "",
+        "authoritative_chain_observation": false,
+        "observation_authority_reason": "provenance_missing",
+        "fee_attribution": "unknown",
+        "wallet_id": "other",
+        "asset": "BTC",
+        "direction": "inbound",
+        "amount_msat": 100,
+        "fee_msat": 0,
+        "amount_includes_fee": false,
+        "occurred_at": "2026-01-01T00:00:00Z"
+      }
+    ],
+    "rows": {
+      "source": {
+        "id": "source",
+        "wallet_id": "source",
+        "fingerprint": "fingerprint:source",
+        "external_id": "native:source",
+        "occurred_at": "2026-01-01T00:00:00Z",
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": 100,
+        "fee": 7,
+        "amount_includes_fee": 0,
+        "chain": "bitcoin",
+        "network": "main",
+        "raw_json": {
+          "txid": "native:source"
+        }
+      },
+      "target": {
+        "id": "target",
+        "wallet_id": "target",
+        "fingerprint": "fingerprint:target",
+        "external_id": "native:target",
+        "occurred_at": "2026-01-01T00:00:00Z",
+        "direction": "inbound",
+        "asset": "BTC",
+        "amount": 100,
+        "fee": 0,
+        "amount_includes_fee": 0,
+        "chain": "bitcoin",
+        "network": "main",
+        "raw_json": {
+          "txid": "native:target"
+        }
+      },
+      "other": {
+        "id": "other",
+        "wallet_id": "other",
+        "fingerprint": "fingerprint:other",
+        "external_id": "native:other",
+        "occurred_at": "2026-01-01T00:00:00Z",
+        "direction": "inbound",
+        "asset": "BTC",
+        "amount": 100,
+        "fee": 0,
+        "amount_includes_fee": 0,
+        "chain": "bitcoin",
+        "network": "main",
+        "raw_json": {
+          "txid": "native:other"
+        }
+      }
+    },
+    "decisions": [
+      {
+        "source": {
+          "observation_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+          "start_msat": 0,
+          "end_msat": 100
+        },
+        "target": null,
+        "state": "external_confirmed",
+        "reason": "reviewed_direct_payout_source",
+        "selected_claim_id": "pair:durable:edge",
+        "atomic_bundle_id": null,
+        "component_id": null,
+        "transfer_policy": null,
+        "transfer_kind": null,
+        "destination_kind": null,
+        "external_economic_subtype": null
+      }
+    ],
+    "eligible": [
+      {
+        "observation_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+        "start_msat": 0,
+        "end_msat": 100
+      }
+    ],
+    "events": [
+      {
+        "event_key": {
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "source",
+          "native_event_id": "native:source"
+        },
+        "legs": [
+          {
+            "$type": "QuantityObservation",
+            "transaction_id": "source",
+            "anchor_transaction_id": "source",
+            "quantity_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+            "evidence_detail_hash": "1463e203c119f1dff5b7f7aa6227950091d6775f66780034c4e219a791565bef",
+            "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:source\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"outbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:source\",\"native_namespace\":\"source\",\"network\":\"main\"},\"fee_msat\":7,\"schema_version\":1,\"wallet_id\":\"source\"},\"raw_json\":{\"txid\":\"native:source\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+            "event_key": {
+              "$type": "CanonicalEventKey",
+              "chain": "bitcoin",
+              "network": "main",
+              "native_namespace": "source",
+              "native_event_id": "native:source"
+            },
+            "profile_id": "",
+            "authoritative_chain_observation": false,
+            "observation_authority_reason": "provenance_missing",
+            "fee_attribution": "unknown",
+            "wallet_id": "source",
+            "asset": "BTC",
+            "direction": "outbound",
+            "amount_msat": 100,
+            "fee_msat": 7,
+            "amount_includes_fee": false,
+            "occurred_at": "2026-01-01T00:00:00Z"
+          }
+        ]
+      },
+      {
+        "event_key": {
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "target",
+          "native_event_id": "native:target"
+        },
+        "legs": [
+          {
+            "$type": "QuantityObservation",
+            "transaction_id": "target",
+            "anchor_transaction_id": "target",
+            "quantity_hash": "14baedfaec74f03bd84420234e3496743b33a7dc18b196f58092349a26fc0ec8",
+            "evidence_detail_hash": "c05870b3dab76f6c220ae9e54aa0c41b6353490c9df1841c096a414c6e1f894d",
+            "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:target\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"inbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:target\",\"native_namespace\":\"target\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"target\"},\"raw_json\":{\"txid\":\"native:target\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+            "event_key": {
+              "$type": "CanonicalEventKey",
+              "chain": "bitcoin",
+              "network": "main",
+              "native_namespace": "target",
+              "native_event_id": "native:target"
+            },
+            "profile_id": "",
+            "authoritative_chain_observation": false,
+            "observation_authority_reason": "provenance_missing",
+            "fee_attribution": "unknown",
+            "wallet_id": "target",
+            "asset": "BTC",
+            "direction": "inbound",
+            "amount_msat": 100,
+            "fee_msat": 0,
+            "amount_includes_fee": false,
+            "occurred_at": "2026-01-01T00:00:00Z"
+          }
+        ]
+      },
+      {
+        "event_key": {
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "other",
+          "native_event_id": "native:other"
+        },
+        "legs": [
+          {
+            "$type": "QuantityObservation",
+            "transaction_id": "other",
+            "anchor_transaction_id": "other",
+            "quantity_hash": "9f53da3afaaba8149223a217273187b2441699e35b3944c56171ab08eb017a02",
+            "evidence_detail_hash": "2fe2f70a606ca642c9f967565e6b1ea14670a18bd719ecdf6de9171ebdd15f6d",
+            "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:other\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"inbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:other\",\"native_namespace\":\"other\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"other\"},\"raw_json\":{\"txid\":\"native:other\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+            "event_key": {
+              "$type": "CanonicalEventKey",
+              "chain": "bitcoin",
+              "network": "main",
+              "native_namespace": "other",
+              "native_event_id": "native:other"
+            },
+            "profile_id": "",
+            "authoritative_chain_observation": false,
+            "observation_authority_reason": "provenance_missing",
+            "fee_attribution": "unknown",
+            "wallet_id": "other",
+            "asset": "BTC",
+            "direction": "inbound",
+            "amount_msat": 100,
+            "fee_msat": 0,
+            "amount_includes_fee": false,
+            "occurred_at": "2026-01-01T00:00:00Z"
+          }
+        ]
+      }
+    ],
+    "pool_barriers": [],
+    "blocked_transaction_ids": [],
+    "blocked_anchor_ids": [],
+    "non_event_transaction_ids": [],
+    "payouts": [
+      {
+        "id": "paid",
+        "out_transaction_id": "source",
+        "payout_amount": 50,
+        "payout_asset": "BTC",
+        "payout_fiat_value": "2.50",
+        "policy": "carrying-value"
+      }
+    ],
+    "profile": {
+      "id": "p",
+      "workspace_id": "w",
+      "tax_country": "at"
+    },
+    "issues": [],
+    "pool_barrier_roots": [],
+    "interpreter_quarantines": [],
+    "reviewed": [],
+    "case": "projection_same_asset_not_carry",
+    "expected": {
+      "$type": "FinalizedTaxProjection",
+      "rows": [
+        {
+          "id": "custody-tax:9f53da3afaaba8149223a217273187b2441699e35b3944c56171ab08eb017a02:0:100:inbound",
+          "wallet_id": "other",
+          "fingerprint": "fingerprint:other",
+          "external_id": "native:other",
+          "occurred_at": "2026-01-01T00:00:00Z",
+          "direction": "inbound",
+          "asset": "BTC",
+          "amount": 100,
+          "fee": 0,
+          "amount_includes_fee": false,
+          "chain": "bitcoin",
+          "network": "main",
+          "raw_json": {
+            "txid": "native:other"
+          },
+          "pricing_review_price": null,
+          "custody_chain_order": null,
+          "fiat_value": null,
+          "fiat_value_exact": null,
+          "journal_transaction_id": "other",
+          "custody_finalized_tax_projection": true,
+          "custody_quantity_hash": "9f53da3afaaba8149223a217273187b2441699e35b3944c56171ab08eb017a02",
+          "custody_slice_start_msat": 0,
+          "custody_slice_end_msat": 100
+        },
+        {
+          "id": "custody-tax:ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604:0:100:external",
+          "wallet_id": "source",
+          "fingerprint": "fingerprint:source",
+          "external_id": "native:source",
+          "occurred_at": "2026-01-01T00:00:00Z",
+          "direction": "outbound",
+          "asset": "BTC",
+          "amount": 100,
+          "fee": 7,
+          "amount_includes_fee": false,
+          "chain": "bitcoin",
+          "network": "main",
+          "raw_json": {
+            "txid": "native:source"
+          },
+          "pricing_review_price": null,
+          "custody_chain_order": null,
+          "fiat_value": 2.5,
+          "fiat_value_exact": "2.50",
+          "journal_transaction_id": "source",
+          "custody_finalized_tax_projection": true,
+          "custody_quantity_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+          "custody_slice_start_msat": 0,
+          "custody_slice_end_msat": 100,
+          "fiat_rate": 2500000000.0,
+          "fiat_rate_exact": "2500000000",
+          "pricing_method": "direct_payout_review"
+        },
+        {
+          "id": "custody-tax:14baedfaec74f03bd84420234e3496743b33a7dc18b196f58092349a26fc0ec8:0:100:inbound",
+          "wallet_id": "target",
+          "fingerprint": "fingerprint:target",
+          "external_id": "native:target",
+          "occurred_at": "2026-01-01T00:00:00Z",
+          "direction": "inbound",
+          "asset": "BTC",
+          "amount": 100,
+          "fee": 0,
+          "amount_includes_fee": false,
+          "chain": "bitcoin",
+          "network": "main",
+          "raw_json": {
+            "txid": "native:target"
+          },
+          "pricing_review_price": null,
+          "custody_chain_order": null,
+          "fiat_value": null,
+          "fiat_value_exact": null,
+          "journal_transaction_id": "target",
+          "custody_finalized_tax_projection": true,
+          "custody_quantity_hash": "14baedfaec74f03bd84420234e3496743b33a7dc18b196f58092349a26fc0ec8",
+          "custody_slice_start_msat": 0,
+          "custody_slice_end_msat": 100
+        }
+      ],
+      "intra_pairs": [],
+      "cross_asset_pairs": [],
+      "quarantines": [],
+      "selected_move_ids": []
+    }
+  },
+  {
+    "op": "finalize",
+    "observations": [
+      {
+        "$type": "QuantityObservation",
+        "transaction_id": "source",
+        "anchor_transaction_id": "source",
+        "quantity_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+        "evidence_detail_hash": "1463e203c119f1dff5b7f7aa6227950091d6775f66780034c4e219a791565bef",
+        "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:source\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"outbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:source\",\"native_namespace\":\"source\",\"network\":\"main\"},\"fee_msat\":7,\"schema_version\":1,\"wallet_id\":\"source\"},\"raw_json\":{\"txid\":\"native:source\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+        "event_key": {
+          "$type": "CanonicalEventKey",
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "source",
+          "native_event_id": "native:source"
+        },
+        "profile_id": "",
+        "authoritative_chain_observation": false,
+        "observation_authority_reason": "provenance_missing",
+        "fee_attribution": "unknown",
+        "wallet_id": "source",
+        "asset": "BTC",
+        "direction": "outbound",
+        "amount_msat": 100,
+        "fee_msat": 7,
+        "amount_includes_fee": false,
+        "occurred_at": "2026-01-01T00:00:00Z"
+      },
+      {
+        "$type": "QuantityObservation",
+        "transaction_id": "target",
+        "anchor_transaction_id": "target",
+        "quantity_hash": "14baedfaec74f03bd84420234e3496743b33a7dc18b196f58092349a26fc0ec8",
+        "evidence_detail_hash": "c05870b3dab76f6c220ae9e54aa0c41b6353490c9df1841c096a414c6e1f894d",
+        "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:target\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"inbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:target\",\"native_namespace\":\"target\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"target\"},\"raw_json\":{\"txid\":\"native:target\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+        "event_key": {
+          "$type": "CanonicalEventKey",
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "target",
+          "native_event_id": "native:target"
+        },
+        "profile_id": "",
+        "authoritative_chain_observation": false,
+        "observation_authority_reason": "provenance_missing",
+        "fee_attribution": "unknown",
+        "wallet_id": "target",
+        "asset": "BTC",
+        "direction": "inbound",
+        "amount_msat": 100,
+        "fee_msat": 0,
+        "amount_includes_fee": false,
+        "occurred_at": "2026-01-01T00:00:00Z"
+      },
+      {
+        "$type": "QuantityObservation",
+        "transaction_id": "other",
+        "anchor_transaction_id": "other",
+        "quantity_hash": "9f53da3afaaba8149223a217273187b2441699e35b3944c56171ab08eb017a02",
+        "evidence_detail_hash": "2fe2f70a606ca642c9f967565e6b1ea14670a18bd719ecdf6de9171ebdd15f6d",
+        "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:other\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"inbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:other\",\"native_namespace\":\"other\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"other\"},\"raw_json\":{\"txid\":\"native:other\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+        "event_key": {
+          "$type": "CanonicalEventKey",
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "other",
+          "native_event_id": "native:other"
+        },
+        "profile_id": "",
+        "authoritative_chain_observation": false,
+        "observation_authority_reason": "provenance_missing",
+        "fee_attribution": "unknown",
+        "wallet_id": "other",
+        "asset": "BTC",
+        "direction": "inbound",
+        "amount_msat": 100,
+        "fee_msat": 0,
+        "amount_includes_fee": false,
+        "occurred_at": "2026-01-01T00:00:00Z"
+      }
+    ],
+    "rows": {
+      "source": {
+        "id": "source",
+        "wallet_id": "source",
+        "fingerprint": "fingerprint:source",
+        "external_id": "native:source",
+        "occurred_at": "2026-01-01T00:00:00Z",
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": 100,
+        "fee": 7,
+        "amount_includes_fee": 0,
+        "chain": "bitcoin",
+        "network": "main",
+        "raw_json": {
+          "txid": "native:source"
+        }
+      },
+      "target": {
+        "id": "target",
+        "wallet_id": "target",
+        "fingerprint": "fingerprint:target",
+        "external_id": "native:target",
+        "occurred_at": "2026-01-01T00:00:00Z",
+        "direction": "inbound",
+        "asset": "BTC",
+        "amount": 100,
+        "fee": 0,
+        "amount_includes_fee": 0,
+        "chain": "bitcoin",
+        "network": "main",
+        "raw_json": {
+          "txid": "native:target"
+        }
+      },
+      "other": {
+        "id": "other",
+        "wallet_id": "other",
+        "fingerprint": "fingerprint:other",
+        "external_id": "native:other",
+        "occurred_at": "2026-01-01T00:00:00Z",
+        "direction": "inbound",
+        "asset": "BTC",
+        "amount": 100,
+        "fee": 0,
+        "amount_includes_fee": 0,
+        "chain": "bitcoin",
+        "network": "main",
+        "raw_json": {
+          "txid": "native:other"
+        }
+      }
+    },
+    "decisions": [
+      {
+        "source": {
+          "observation_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+          "start_msat": 40,
+          "end_msat": 100
+        },
+        "target": null,
+        "state": "external_confirmed",
+        "reason": "reviewed_direct_payout_source",
+        "selected_claim_id": "pair:durable:edge",
+        "atomic_bundle_id": null,
+        "component_id": null,
+        "transfer_policy": null,
+        "transfer_kind": null,
+        "destination_kind": null,
+        "external_economic_subtype": null
+      }
+    ],
+    "eligible": [
+      {
+        "observation_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+        "start_msat": 40,
+        "end_msat": 100
+      }
+    ],
+    "events": [
+      {
+        "event_key": {
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "source",
+          "native_event_id": "native:source"
+        },
+        "legs": [
+          {
+            "$type": "QuantityObservation",
+            "transaction_id": "source",
+            "anchor_transaction_id": "source",
+            "quantity_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+            "evidence_detail_hash": "1463e203c119f1dff5b7f7aa6227950091d6775f66780034c4e219a791565bef",
+            "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:source\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"outbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:source\",\"native_namespace\":\"source\",\"network\":\"main\"},\"fee_msat\":7,\"schema_version\":1,\"wallet_id\":\"source\"},\"raw_json\":{\"txid\":\"native:source\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+            "event_key": {
+              "$type": "CanonicalEventKey",
+              "chain": "bitcoin",
+              "network": "main",
+              "native_namespace": "source",
+              "native_event_id": "native:source"
+            },
+            "profile_id": "",
+            "authoritative_chain_observation": false,
+            "observation_authority_reason": "provenance_missing",
+            "fee_attribution": "unknown",
+            "wallet_id": "source",
+            "asset": "BTC",
+            "direction": "outbound",
+            "amount_msat": 100,
+            "fee_msat": 7,
+            "amount_includes_fee": false,
+            "occurred_at": "2026-01-01T00:00:00Z"
+          }
+        ]
+      },
+      {
+        "event_key": {
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "target",
+          "native_event_id": "native:target"
+        },
+        "legs": [
+          {
+            "$type": "QuantityObservation",
+            "transaction_id": "target",
+            "anchor_transaction_id": "target",
+            "quantity_hash": "14baedfaec74f03bd84420234e3496743b33a7dc18b196f58092349a26fc0ec8",
+            "evidence_detail_hash": "c05870b3dab76f6c220ae9e54aa0c41b6353490c9df1841c096a414c6e1f894d",
+            "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:target\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"inbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:target\",\"native_namespace\":\"target\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"target\"},\"raw_json\":{\"txid\":\"native:target\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+            "event_key": {
+              "$type": "CanonicalEventKey",
+              "chain": "bitcoin",
+              "network": "main",
+              "native_namespace": "target",
+              "native_event_id": "native:target"
+            },
+            "profile_id": "",
+            "authoritative_chain_observation": false,
+            "observation_authority_reason": "provenance_missing",
+            "fee_attribution": "unknown",
+            "wallet_id": "target",
+            "asset": "BTC",
+            "direction": "inbound",
+            "amount_msat": 100,
+            "fee_msat": 0,
+            "amount_includes_fee": false,
+            "occurred_at": "2026-01-01T00:00:00Z"
+          }
+        ]
+      },
+      {
+        "event_key": {
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "other",
+          "native_event_id": "native:other"
+        },
+        "legs": [
+          {
+            "$type": "QuantityObservation",
+            "transaction_id": "other",
+            "anchor_transaction_id": "other",
+            "quantity_hash": "9f53da3afaaba8149223a217273187b2441699e35b3944c56171ab08eb017a02",
+            "evidence_detail_hash": "2fe2f70a606ca642c9f967565e6b1ea14670a18bd719ecdf6de9171ebdd15f6d",
+            "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:other\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"inbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:other\",\"native_namespace\":\"other\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"other\"},\"raw_json\":{\"txid\":\"native:other\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+            "event_key": {
+              "$type": "CanonicalEventKey",
+              "chain": "bitcoin",
+              "network": "main",
+              "native_namespace": "other",
+              "native_event_id": "native:other"
+            },
+            "profile_id": "",
+            "authoritative_chain_observation": false,
+            "observation_authority_reason": "provenance_missing",
+            "fee_attribution": "unknown",
+            "wallet_id": "other",
+            "asset": "BTC",
+            "direction": "inbound",
+            "amount_msat": 100,
+            "fee_msat": 0,
+            "amount_includes_fee": false,
+            "occurred_at": "2026-01-01T00:00:00Z"
+          }
+        ]
+      }
+    ],
+    "pool_barriers": [],
+    "blocked_transaction_ids": [],
+    "blocked_anchor_ids": [],
+    "non_event_transaction_ids": [],
+    "payouts": [
+      {
+        "id": "paid",
+        "out_transaction_id": "source",
+        "payout_amount": 50,
+        "payout_asset": "EUR",
+        "payout_fiat_value": "100",
+        "policy": "taxable",
+        "out_amount": 60
+      }
+    ],
+    "profile": {
+      "id": "p",
+      "workspace_id": "w",
+      "tax_country": "generic"
+    },
+    "issues": [],
+    "pool_barrier_roots": [],
+    "interpreter_quarantines": [],
+    "reviewed": [],
+    "case": "projection_nonzero_slice_pricing",
+    "expected": {
+      "$type": "FinalizedTaxProjection",
+      "rows": [
+        {
+          "id": "custody-tax:9f53da3afaaba8149223a217273187b2441699e35b3944c56171ab08eb017a02:0:100:inbound",
+          "wallet_id": "other",
+          "fingerprint": "fingerprint:other",
+          "external_id": "native:other",
+          "occurred_at": "2026-01-01T00:00:00Z",
+          "direction": "inbound",
+          "asset": "BTC",
+          "amount": 100,
+          "fee": 0,
+          "amount_includes_fee": false,
+          "chain": "bitcoin",
+          "network": "main",
+          "raw_json": {
+            "txid": "native:other"
+          },
+          "pricing_review_price": null,
+          "custody_chain_order": null,
+          "fiat_value": null,
+          "fiat_value_exact": null,
+          "journal_transaction_id": "other",
+          "custody_finalized_tax_projection": true,
+          "custody_quantity_hash": "9f53da3afaaba8149223a217273187b2441699e35b3944c56171ab08eb017a02",
+          "custody_slice_start_msat": 0,
+          "custody_slice_end_msat": 100
+        },
+        {
+          "id": "custody-tax:ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604:40:100:external",
+          "wallet_id": "source",
+          "fingerprint": "fingerprint:source",
+          "external_id": "native:source",
+          "occurred_at": "2026-01-01T00:00:00Z",
+          "direction": "outbound",
+          "asset": "BTC",
+          "amount": 60,
+          "fee": 7,
+          "amount_includes_fee": false,
+          "chain": "bitcoin",
+          "network": "main",
+          "raw_json": {
+            "txid": "native:source"
+          },
+          "pricing_review_price": null,
+          "custody_chain_order": null,
+          "fiat_value": 100.0,
+          "fiat_value_exact": "100",
+          "journal_transaction_id": "source",
+          "custody_finalized_tax_projection": true,
+          "custody_quantity_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+          "custody_slice_start_msat": 40,
+          "custody_slice_end_msat": 100,
+          "fiat_rate": 166666666666.66666,
+          "fiat_rate_exact": "166666666666.66666666666666666667",
+          "pricing_method": "direct_payout_review"
+        },
+        {
+          "id": "custody-tax:14baedfaec74f03bd84420234e3496743b33a7dc18b196f58092349a26fc0ec8:0:100:inbound",
+          "wallet_id": "target",
+          "fingerprint": "fingerprint:target",
+          "external_id": "native:target",
+          "occurred_at": "2026-01-01T00:00:00Z",
+          "direction": "inbound",
+          "asset": "BTC",
+          "amount": 100,
+          "fee": 0,
+          "amount_includes_fee": false,
+          "chain": "bitcoin",
+          "network": "main",
+          "raw_json": {
+            "txid": "native:target"
+          },
+          "pricing_review_price": null,
+          "custody_chain_order": null,
+          "fiat_value": null,
+          "fiat_value_exact": null,
+          "journal_transaction_id": "target",
+          "custody_finalized_tax_projection": true,
+          "custody_quantity_hash": "14baedfaec74f03bd84420234e3496743b33a7dc18b196f58092349a26fc0ec8",
+          "custody_slice_start_msat": 0,
+          "custody_slice_end_msat": 100
+        }
+      ],
+      "intra_pairs": [],
+      "cross_asset_pairs": [],
+      "quarantines": [],
+      "selected_move_ids": []
+    },
+    "reference_scope": "The payout owns exactly the 40..100 slice. No residual external slice is supplied; this does not freeze reference bug R1."
+  },
+  {
+    "op": "finalize",
+    "observations": [
+      {
+        "$type": "QuantityObservation",
+        "transaction_id": "source",
+        "anchor_transaction_id": "source",
+        "quantity_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+        "evidence_detail_hash": "1463e203c119f1dff5b7f7aa6227950091d6775f66780034c4e219a791565bef",
+        "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:source\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"outbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:source\",\"native_namespace\":\"source\",\"network\":\"main\"},\"fee_msat\":7,\"schema_version\":1,\"wallet_id\":\"source\"},\"raw_json\":{\"txid\":\"native:source\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+        "event_key": {
+          "$type": "CanonicalEventKey",
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "source",
+          "native_event_id": "native:source"
+        },
+        "profile_id": "",
+        "authoritative_chain_observation": false,
+        "observation_authority_reason": "provenance_missing",
+        "fee_attribution": "unknown",
+        "wallet_id": "source",
+        "asset": "BTC",
+        "direction": "outbound",
+        "amount_msat": 100,
+        "fee_msat": 7,
+        "amount_includes_fee": false,
+        "occurred_at": "2026-01-01T00:00:00Z"
+      },
+      {
+        "$type": "QuantityObservation",
+        "transaction_id": "target",
+        "anchor_transaction_id": "target",
+        "quantity_hash": "14baedfaec74f03bd84420234e3496743b33a7dc18b196f58092349a26fc0ec8",
+        "evidence_detail_hash": "c05870b3dab76f6c220ae9e54aa0c41b6353490c9df1841c096a414c6e1f894d",
+        "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:target\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"inbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:target\",\"native_namespace\":\"target\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"target\"},\"raw_json\":{\"txid\":\"native:target\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+        "event_key": {
+          "$type": "CanonicalEventKey",
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "target",
+          "native_event_id": "native:target"
+        },
+        "profile_id": "",
+        "authoritative_chain_observation": false,
+        "observation_authority_reason": "provenance_missing",
+        "fee_attribution": "unknown",
+        "wallet_id": "target",
+        "asset": "BTC",
+        "direction": "inbound",
+        "amount_msat": 100,
+        "fee_msat": 0,
+        "amount_includes_fee": false,
+        "occurred_at": "2026-01-01T00:00:00Z"
+      },
+      {
+        "$type": "QuantityObservation",
+        "transaction_id": "other",
+        "anchor_transaction_id": "other",
+        "quantity_hash": "9f53da3afaaba8149223a217273187b2441699e35b3944c56171ab08eb017a02",
+        "evidence_detail_hash": "2fe2f70a606ca642c9f967565e6b1ea14670a18bd719ecdf6de9171ebdd15f6d",
+        "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:other\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"inbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:other\",\"native_namespace\":\"other\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"other\"},\"raw_json\":{\"txid\":\"native:other\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+        "event_key": {
+          "$type": "CanonicalEventKey",
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "other",
+          "native_event_id": "native:other"
+        },
+        "profile_id": "",
+        "authoritative_chain_observation": false,
+        "observation_authority_reason": "provenance_missing",
+        "fee_attribution": "unknown",
+        "wallet_id": "other",
+        "asset": "BTC",
+        "direction": "inbound",
+        "amount_msat": 100,
+        "fee_msat": 5,
+        "amount_includes_fee": false,
+        "occurred_at": "2026-01-01T00:00:00Z"
+      }
+    ],
+    "rows": {
+      "source": {
+        "id": "source",
+        "wallet_id": "source",
+        "fingerprint": "fingerprint:source",
+        "external_id": "native:source",
+        "occurred_at": "2026-01-01T00:00:00Z",
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": 100,
+        "fee": 7,
+        "amount_includes_fee": 0,
+        "chain": "bitcoin",
+        "network": "main",
+        "raw_json": {
+          "txid": "native:source"
+        }
+      },
+      "target": {
+        "id": "target",
+        "wallet_id": "target",
+        "fingerprint": "fingerprint:target",
+        "external_id": "native:target",
+        "occurred_at": "2026-01-01T00:00:00Z",
+        "direction": "inbound",
+        "asset": "BTC",
+        "amount": 100,
+        "fee": 0,
+        "amount_includes_fee": 0,
+        "chain": "bitcoin",
+        "network": "main",
+        "raw_json": {
+          "txid": "native:target"
+        }
+      },
+      "other": {
+        "id": "other",
+        "wallet_id": "other",
+        "fingerprint": "fingerprint:other",
+        "external_id": "native:other",
+        "occurred_at": "2026-01-01T00:00:00Z",
+        "direction": "inbound",
+        "asset": "BTC",
+        "amount": 100,
+        "fee": 5,
+        "amount_includes_fee": 0,
+        "chain": "bitcoin",
+        "network": "main",
+        "raw_json": {
+          "txid": "native:other"
+        }
+      }
+    },
+    "decisions": [
+      {
+        "source": {
+          "observation_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+          "start_msat": 0,
+          "end_msat": 100
+        },
+        "target": {
+          "observation_hash": "14baedfaec74f03bd84420234e3496743b33a7dc18b196f58092349a26fc0ec8",
+          "start_msat": 0,
+          "end_msat": 100
+        },
+        "state": "internal_verified",
+        "reason": "native",
+        "selected_claim_id": "pair:durable:edge",
+        "atomic_bundle_id": null,
+        "component_id": null,
+        "transfer_policy": null,
+        "transfer_kind": null,
+        "destination_kind": null,
+        "external_economic_subtype": null
+      }
+    ],
+    "eligible": [
+      {
+        "observation_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+        "start_msat": 0,
+        "end_msat": 100
+      }
+    ],
+    "events": [
+      {
+        "event_key": {
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "source",
+          "native_event_id": "native:source"
+        },
+        "legs": [
+          {
+            "$type": "QuantityObservation",
+            "transaction_id": "source",
+            "anchor_transaction_id": "source",
+            "quantity_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+            "evidence_detail_hash": "1463e203c119f1dff5b7f7aa6227950091d6775f66780034c4e219a791565bef",
+            "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:source\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"outbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:source\",\"native_namespace\":\"source\",\"network\":\"main\"},\"fee_msat\":7,\"schema_version\":1,\"wallet_id\":\"source\"},\"raw_json\":{\"txid\":\"native:source\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+            "event_key": {
+              "$type": "CanonicalEventKey",
+              "chain": "bitcoin",
+              "network": "main",
+              "native_namespace": "source",
+              "native_event_id": "native:source"
+            },
+            "profile_id": "",
+            "authoritative_chain_observation": false,
+            "observation_authority_reason": "provenance_missing",
+            "fee_attribution": "unknown",
+            "wallet_id": "source",
+            "asset": "BTC",
+            "direction": "outbound",
+            "amount_msat": 100,
+            "fee_msat": 7,
+            "amount_includes_fee": false,
+            "occurred_at": "2026-01-01T00:00:00Z"
+          }
+        ]
+      },
+      {
+        "event_key": {
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "target",
+          "native_event_id": "native:target"
+        },
+        "legs": [
+          {
+            "$type": "QuantityObservation",
+            "transaction_id": "target",
+            "anchor_transaction_id": "target",
+            "quantity_hash": "14baedfaec74f03bd84420234e3496743b33a7dc18b196f58092349a26fc0ec8",
+            "evidence_detail_hash": "c05870b3dab76f6c220ae9e54aa0c41b6353490c9df1841c096a414c6e1f894d",
+            "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:target\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"inbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:target\",\"native_namespace\":\"target\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"target\"},\"raw_json\":{\"txid\":\"native:target\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+            "event_key": {
+              "$type": "CanonicalEventKey",
+              "chain": "bitcoin",
+              "network": "main",
+              "native_namespace": "target",
+              "native_event_id": "native:target"
+            },
+            "profile_id": "",
+            "authoritative_chain_observation": false,
+            "observation_authority_reason": "provenance_missing",
+            "fee_attribution": "unknown",
+            "wallet_id": "target",
+            "asset": "BTC",
+            "direction": "inbound",
+            "amount_msat": 100,
+            "fee_msat": 0,
+            "amount_includes_fee": false,
+            "occurred_at": "2026-01-01T00:00:00Z"
+          }
+        ]
+      },
+      {
+        "event_key": {
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "other",
+          "native_event_id": "native:other"
+        },
+        "legs": [
+          {
+            "$type": "QuantityObservation",
+            "transaction_id": "other",
+            "anchor_transaction_id": "other",
+            "quantity_hash": "9f53da3afaaba8149223a217273187b2441699e35b3944c56171ab08eb017a02",
+            "evidence_detail_hash": "2fe2f70a606ca642c9f967565e6b1ea14670a18bd719ecdf6de9171ebdd15f6d",
+            "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:other\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"inbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:other\",\"native_namespace\":\"other\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"other\"},\"raw_json\":{\"txid\":\"native:other\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+            "event_key": {
+              "$type": "CanonicalEventKey",
+              "chain": "bitcoin",
+              "network": "main",
+              "native_namespace": "other",
+              "native_event_id": "native:other"
+            },
+            "profile_id": "",
+            "authoritative_chain_observation": false,
+            "observation_authority_reason": "provenance_missing",
+            "fee_attribution": "unknown",
+            "wallet_id": "other",
+            "asset": "BTC",
+            "direction": "inbound",
+            "amount_msat": 100,
+            "fee_msat": 5,
+            "amount_includes_fee": false,
+            "occurred_at": "2026-01-01T00:00:00Z"
+          }
+        ]
+      }
+    ],
+    "pool_barriers": [],
+    "blocked_transaction_ids": [],
+    "blocked_anchor_ids": [],
+    "non_event_transaction_ids": [],
+    "payouts": [],
+    "profile": {
+      "id": "p",
+      "workspace_id": "w",
+      "tax_country": "generic"
+    },
+    "issues": [
+      {
+        "reason": "custody_component_incomplete",
+        "issue_id": "c",
+        "transaction_ids": [
+          "other"
+        ],
+        "issue_type": "quantity",
+        "details": {}
+      }
+    ],
+    "pool_barrier_roots": [],
+    "interpreter_quarantines": [],
+    "reviewed": [],
+    "case": "projection_inbound_fee_not_taxable",
+    "expected": {
+      "$type": "FinalizedTaxProjection",
+      "rows": [
+        {
+          "id": "custody-tax:ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604:0:100:move-out",
+          "wallet_id": "source",
+          "fingerprint": "fingerprint:source",
+          "external_id": "native:source",
+          "occurred_at": "2026-01-01T00:00:00Z",
+          "direction": "outbound",
+          "asset": "BTC",
+          "amount": 100,
+          "fee": 7,
+          "amount_includes_fee": false,
+          "chain": "bitcoin",
+          "network": "main",
+          "raw_json": {
+            "txid": "native:source"
+          },
+          "pricing_review_price": null,
+          "custody_chain_order": null,
+          "fiat_value": null,
+          "fiat_value_exact": null,
+          "journal_transaction_id": "source",
+          "custody_finalized_tax_projection": true,
+          "custody_quantity_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+          "custody_slice_start_msat": 0,
+          "custody_slice_end_msat": 100
+        },
+        {
+          "id": "custody-tax:14baedfaec74f03bd84420234e3496743b33a7dc18b196f58092349a26fc0ec8:0:100:move-in",
+          "wallet_id": "target",
+          "fingerprint": "fingerprint:target",
+          "external_id": "native:target",
+          "occurred_at": "2026-01-01T00:00:00Z",
+          "direction": "inbound",
+          "asset": "BTC",
+          "amount": 100,
+          "fee": 0,
+          "amount_includes_fee": false,
+          "chain": "bitcoin",
+          "network": "main",
+          "raw_json": {
+            "txid": "native:target"
+          },
+          "pricing_review_price": null,
+          "custody_chain_order": null,
+          "fiat_value": null,
+          "fiat_value_exact": null,
+          "journal_transaction_id": "target",
+          "custody_finalized_tax_projection": true,
+          "custody_quantity_hash": "14baedfaec74f03bd84420234e3496743b33a7dc18b196f58092349a26fc0ec8",
+          "custody_slice_start_msat": 0,
+          "custody_slice_end_msat": 100
+        }
+      ],
+      "intra_pairs": [
+        {
+          "out": {
+            "id": "custody-tax:ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604:0:100:move-out",
+            "wallet_id": "source",
+            "fingerprint": "fingerprint:source",
+            "external_id": "native:source",
+            "occurred_at": "2026-01-01T00:00:00Z",
+            "direction": "outbound",
+            "asset": "BTC",
+            "amount": 100,
+            "fee": 7,
+            "amount_includes_fee": false,
+            "chain": "bitcoin",
+            "network": "main",
+            "raw_json": {
+              "txid": "native:source"
+            },
+            "pricing_review_price": null,
+            "custody_chain_order": null,
+            "fiat_value": null,
+            "fiat_value_exact": null,
+            "journal_transaction_id": "source",
+            "custody_finalized_tax_projection": true,
+            "custody_quantity_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+            "custody_slice_start_msat": 0,
+            "custody_slice_end_msat": 100
+          },
+          "in": {
+            "id": "custody-tax:14baedfaec74f03bd84420234e3496743b33a7dc18b196f58092349a26fc0ec8:0:100:move-in",
+            "wallet_id": "target",
+            "fingerprint": "fingerprint:target",
+            "external_id": "native:target",
+            "occurred_at": "2026-01-01T00:00:00Z",
+            "direction": "inbound",
+            "asset": "BTC",
+            "amount": 100,
+            "fee": 0,
+            "amount_includes_fee": false,
+            "chain": "bitcoin",
+            "network": "main",
+            "raw_json": {
+              "txid": "native:target"
+            },
+            "pricing_review_price": null,
+            "custody_chain_order": null,
+            "fiat_value": null,
+            "fiat_value_exact": null,
+            "journal_transaction_id": "target",
+            "custody_finalized_tax_projection": true,
+            "custody_quantity_hash": "14baedfaec74f03bd84420234e3496743b33a7dc18b196f58092349a26fc0ec8",
+            "custody_slice_start_msat": 0,
+            "custody_slice_end_msat": 100
+          },
+          "pair_id": "pair:durable:edge",
+          "source": "native",
+          "policy": "carrying-value",
+          "group_id": null
+        }
+      ],
+      "cross_asset_pairs": [],
+      "quarantines": [
+        {
+          "transaction_id": "other",
+          "workspace_id": "w",
+          "profile_id": "p",
+          "reason": "custody_quantity_unresolved",
+          "detail_json": "{\"blocker_code\": \"custody_component_incomplete\", \"issue_id\": \"c\", \"required_for\": \"finalized_custody_tax_projection\", \"resolution\": \"review the authored component evidence and create or supersede the revision\"}"
+        }
+      ],
+      "selected_move_ids": [
+        "pair:durable:edge"
+      ]
+    }
+  },
+  {
+    "op": "finalize",
+    "observations": [
+      {
+        "$type": "QuantityObservation",
+        "transaction_id": "source",
+        "anchor_transaction_id": "source",
+        "quantity_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+        "evidence_detail_hash": "1463e203c119f1dff5b7f7aa6227950091d6775f66780034c4e219a791565bef",
+        "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:source\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"outbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:source\",\"native_namespace\":\"source\",\"network\":\"main\"},\"fee_msat\":7,\"schema_version\":1,\"wallet_id\":\"source\"},\"raw_json\":{\"txid\":\"native:source\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+        "event_key": {
+          "$type": "CanonicalEventKey",
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "source",
+          "native_event_id": "native:source"
+        },
+        "profile_id": "",
+        "authoritative_chain_observation": false,
+        "observation_authority_reason": "provenance_missing",
+        "fee_attribution": "unknown",
+        "wallet_id": "source",
+        "asset": "BTC",
+        "direction": "outbound",
+        "amount_msat": 100,
+        "fee_msat": 7,
+        "amount_includes_fee": false,
+        "occurred_at": "2026-01-01T00:00:00Z"
+      },
+      {
+        "$type": "QuantityObservation",
+        "transaction_id": "target",
+        "anchor_transaction_id": "target",
+        "quantity_hash": "14baedfaec74f03bd84420234e3496743b33a7dc18b196f58092349a26fc0ec8",
+        "evidence_detail_hash": "c05870b3dab76f6c220ae9e54aa0c41b6353490c9df1841c096a414c6e1f894d",
+        "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:target\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"inbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:target\",\"native_namespace\":\"target\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"target\"},\"raw_json\":{\"txid\":\"native:target\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+        "event_key": {
+          "$type": "CanonicalEventKey",
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "target",
+          "native_event_id": "native:target"
+        },
+        "profile_id": "",
+        "authoritative_chain_observation": false,
+        "observation_authority_reason": "provenance_missing",
+        "fee_attribution": "unknown",
+        "wallet_id": "target",
+        "asset": "BTC",
+        "direction": "inbound",
+        "amount_msat": 100,
+        "fee_msat": 0,
+        "amount_includes_fee": false,
+        "occurred_at": "2026-01-01T00:00:00Z"
+      },
+      {
+        "$type": "QuantityObservation",
+        "transaction_id": "other",
+        "anchor_transaction_id": "other",
+        "quantity_hash": "9f53da3afaaba8149223a217273187b2441699e35b3944c56171ab08eb017a02",
+        "evidence_detail_hash": "2fe2f70a606ca642c9f967565e6b1ea14670a18bd719ecdf6de9171ebdd15f6d",
+        "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:other\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"inbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:other\",\"native_namespace\":\"other\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"other\"},\"raw_json\":{\"txid\":\"native:other\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+        "event_key": {
+          "$type": "CanonicalEventKey",
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "other",
+          "native_event_id": "native:other"
+        },
+        "profile_id": "",
+        "authoritative_chain_observation": false,
+        "observation_authority_reason": "provenance_missing",
+        "fee_attribution": "unknown",
+        "wallet_id": "other",
+        "asset": "BTC",
+        "direction": "inbound",
+        "amount_msat": 100,
+        "fee_msat": 0,
+        "amount_includes_fee": false,
+        "occurred_at": "2026-01-01T00:00:00Z"
+      }
+    ],
+    "rows": {
+      "source": {
+        "id": "source",
+        "wallet_id": "source",
+        "fingerprint": "fingerprint:source",
+        "external_id": "native:source",
+        "occurred_at": "2026-01-01T00:00:00Z",
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": 100,
+        "fee": 7,
+        "amount_includes_fee": 0,
+        "chain": "bitcoin",
+        "network": "main",
+        "raw_json": {
+          "txid": "native:source"
+        }
+      },
+      "target": {
+        "id": "target",
+        "wallet_id": "target",
+        "fingerprint": "fingerprint:target",
+        "external_id": "native:target",
+        "occurred_at": "2026-01-01T00:00:00Z",
+        "direction": "inbound",
+        "asset": "BTC",
+        "amount": 100,
+        "fee": 0,
+        "amount_includes_fee": 0,
+        "chain": "bitcoin",
+        "network": "main",
+        "raw_json": {
+          "txid": "native:target"
+        },
+        "privacy_boundary": "sweep"
+      },
+      "other": {
+        "id": "other",
+        "wallet_id": "other",
+        "fingerprint": "fingerprint:other",
+        "external_id": "native:other",
+        "occurred_at": "2026-01-01T00:00:00Z",
+        "direction": "inbound",
+        "asset": "BTC",
+        "amount": 100,
+        "fee": 0,
+        "amount_includes_fee": 0,
+        "chain": "bitcoin",
+        "network": "main",
+        "raw_json": {
+          "txid": "native:other"
+        }
+      }
+    },
+    "decisions": [
+      {
+        "source": {
+          "observation_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+          "start_msat": 0,
+          "end_msat": 100
+        },
+        "target": {
+          "observation_hash": "14baedfaec74f03bd84420234e3496743b33a7dc18b196f58092349a26fc0ec8",
+          "start_msat": 0,
+          "end_msat": 100
+        },
+        "state": "internal_verified",
+        "reason": "native",
+        "selected_claim_id": "pair:durable:edge",
+        "atomic_bundle_id": null,
+        "component_id": null,
+        "transfer_policy": null,
+        "transfer_kind": null,
+        "destination_kind": null,
+        "external_economic_subtype": null
+      }
+    ],
+    "eligible": [
+      {
+        "observation_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+        "start_msat": 0,
+        "end_msat": 100
+      }
+    ],
+    "events": [
+      {
+        "event_key": {
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "source",
+          "native_event_id": "native:source"
+        },
+        "legs": [
+          {
+            "$type": "QuantityObservation",
+            "transaction_id": "source",
+            "anchor_transaction_id": "source",
+            "quantity_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+            "evidence_detail_hash": "1463e203c119f1dff5b7f7aa6227950091d6775f66780034c4e219a791565bef",
+            "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:source\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"outbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:source\",\"native_namespace\":\"source\",\"network\":\"main\"},\"fee_msat\":7,\"schema_version\":1,\"wallet_id\":\"source\"},\"raw_json\":{\"txid\":\"native:source\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+            "event_key": {
+              "$type": "CanonicalEventKey",
+              "chain": "bitcoin",
+              "network": "main",
+              "native_namespace": "source",
+              "native_event_id": "native:source"
+            },
+            "profile_id": "",
+            "authoritative_chain_observation": false,
+            "observation_authority_reason": "provenance_missing",
+            "fee_attribution": "unknown",
+            "wallet_id": "source",
+            "asset": "BTC",
+            "direction": "outbound",
+            "amount_msat": 100,
+            "fee_msat": 7,
+            "amount_includes_fee": false,
+            "occurred_at": "2026-01-01T00:00:00Z"
+          }
+        ]
+      },
+      {
+        "event_key": {
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "target",
+          "native_event_id": "native:target"
+        },
+        "legs": [
+          {
+            "$type": "QuantityObservation",
+            "transaction_id": "target",
+            "anchor_transaction_id": "target",
+            "quantity_hash": "14baedfaec74f03bd84420234e3496743b33a7dc18b196f58092349a26fc0ec8",
+            "evidence_detail_hash": "c05870b3dab76f6c220ae9e54aa0c41b6353490c9df1841c096a414c6e1f894d",
+            "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:target\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"inbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:target\",\"native_namespace\":\"target\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"target\"},\"raw_json\":{\"txid\":\"native:target\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+            "event_key": {
+              "$type": "CanonicalEventKey",
+              "chain": "bitcoin",
+              "network": "main",
+              "native_namespace": "target",
+              "native_event_id": "native:target"
+            },
+            "profile_id": "",
+            "authoritative_chain_observation": false,
+            "observation_authority_reason": "provenance_missing",
+            "fee_attribution": "unknown",
+            "wallet_id": "target",
+            "asset": "BTC",
+            "direction": "inbound",
+            "amount_msat": 100,
+            "fee_msat": 0,
+            "amount_includes_fee": false,
+            "occurred_at": "2026-01-01T00:00:00Z"
+          }
+        ]
+      },
+      {
+        "event_key": {
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "other",
+          "native_event_id": "native:other"
+        },
+        "legs": [
+          {
+            "$type": "QuantityObservation",
+            "transaction_id": "other",
+            "anchor_transaction_id": "other",
+            "quantity_hash": "9f53da3afaaba8149223a217273187b2441699e35b3944c56171ab08eb017a02",
+            "evidence_detail_hash": "2fe2f70a606ca642c9f967565e6b1ea14670a18bd719ecdf6de9171ebdd15f6d",
+            "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:other\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"inbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:other\",\"native_namespace\":\"other\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"other\"},\"raw_json\":{\"txid\":\"native:other\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+            "event_key": {
+              "$type": "CanonicalEventKey",
+              "chain": "bitcoin",
+              "network": "main",
+              "native_namespace": "other",
+              "native_event_id": "native:other"
+            },
+            "profile_id": "",
+            "authoritative_chain_observation": false,
+            "observation_authority_reason": "provenance_missing",
+            "fee_attribution": "unknown",
+            "wallet_id": "other",
+            "asset": "BTC",
+            "direction": "inbound",
+            "amount_msat": 100,
+            "fee_msat": 0,
+            "amount_includes_fee": false,
+            "occurred_at": "2026-01-01T00:00:00Z"
+          }
+        ]
+      }
+    ],
+    "pool_barriers": [],
+    "blocked_transaction_ids": [],
+    "blocked_anchor_ids": [],
+    "non_event_transaction_ids": [],
+    "payouts": [],
+    "profile": {
+      "id": "p",
+      "workspace_id": "w",
+      "tax_country": "generic"
+    },
+    "issues": [],
+    "pool_barrier_roots": [],
+    "interpreter_quarantines": [],
+    "reviewed": [],
+    "case": "projection_sweep_privacy",
+    "expected": {
+      "$type": "FinalizedTaxProjection",
+      "rows": [
+        {
+          "id": "custody-tax:9f53da3afaaba8149223a217273187b2441699e35b3944c56171ab08eb017a02:0:100:inbound",
+          "wallet_id": "other",
+          "fingerprint": "fingerprint:other",
+          "external_id": "native:other",
+          "occurred_at": "2026-01-01T00:00:00Z",
+          "direction": "inbound",
+          "asset": "BTC",
+          "amount": 100,
+          "fee": 0,
+          "amount_includes_fee": false,
+          "chain": "bitcoin",
+          "network": "main",
+          "raw_json": {
+            "txid": "native:other"
+          },
+          "pricing_review_price": null,
+          "custody_chain_order": null,
+          "fiat_value": null,
+          "fiat_value_exact": null,
+          "journal_transaction_id": "other",
+          "custody_finalized_tax_projection": true,
+          "custody_quantity_hash": "9f53da3afaaba8149223a217273187b2441699e35b3944c56171ab08eb017a02",
+          "custody_slice_start_msat": 0,
+          "custody_slice_end_msat": 100
+        },
+        {
+          "id": "custody-tax:ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604:0:100:move-out",
+          "wallet_id": "source",
+          "fingerprint": "fingerprint:source",
+          "external_id": "native:source",
+          "occurred_at": "2026-01-01T00:00:00Z",
+          "direction": "outbound",
+          "asset": "BTC",
+          "amount": 100,
+          "fee": 7,
+          "amount_includes_fee": false,
+          "chain": "bitcoin",
+          "network": "main",
+          "raw_json": {
+            "txid": "native:source"
+          },
+          "pricing_review_price": null,
+          "custody_chain_order": null,
+          "fiat_value": null,
+          "fiat_value_exact": null,
+          "journal_transaction_id": "source",
+          "custody_finalized_tax_projection": true,
+          "custody_quantity_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+          "custody_slice_start_msat": 0,
+          "custody_slice_end_msat": 100
+        },
+        {
+          "id": "custody-tax:14baedfaec74f03bd84420234e3496743b33a7dc18b196f58092349a26fc0ec8:0:100:move-in",
+          "wallet_id": "target",
+          "fingerprint": "fingerprint:target",
+          "external_id": "native:target",
+          "occurred_at": "2026-01-01T00:00:00Z",
+          "direction": "inbound",
+          "asset": "BTC",
+          "amount": 100,
+          "fee": 0,
+          "amount_includes_fee": false,
+          "chain": "bitcoin",
+          "network": "main",
+          "raw_json": {
+            "txid": "native:target"
+          },
+          "privacy_boundary": "sweep",
+          "pricing_review_price": null,
+          "custody_chain_order": null,
+          "fiat_value": null,
+          "fiat_value_exact": null,
+          "journal_transaction_id": "target",
+          "custody_finalized_tax_projection": true,
+          "custody_quantity_hash": "14baedfaec74f03bd84420234e3496743b33a7dc18b196f58092349a26fc0ec8",
+          "custody_slice_start_msat": 0,
+          "custody_slice_end_msat": 100
+        }
+      ],
+      "intra_pairs": [
+        {
+          "out": {
+            "id": "custody-tax:ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604:0:100:move-out",
+            "wallet_id": "source",
+            "fingerprint": "fingerprint:source",
+            "external_id": "native:source",
+            "occurred_at": "2026-01-01T00:00:00Z",
+            "direction": "outbound",
+            "asset": "BTC",
+            "amount": 100,
+            "fee": 7,
+            "amount_includes_fee": false,
+            "chain": "bitcoin",
+            "network": "main",
+            "raw_json": {
+              "txid": "native:source"
+            },
+            "pricing_review_price": null,
+            "custody_chain_order": null,
+            "fiat_value": null,
+            "fiat_value_exact": null,
+            "journal_transaction_id": "source",
+            "custody_finalized_tax_projection": true,
+            "custody_quantity_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+            "custody_slice_start_msat": 0,
+            "custody_slice_end_msat": 100
+          },
+          "in": {
+            "id": "custody-tax:14baedfaec74f03bd84420234e3496743b33a7dc18b196f58092349a26fc0ec8:0:100:move-in",
+            "wallet_id": "target",
+            "fingerprint": "fingerprint:target",
+            "external_id": "native:target",
+            "occurred_at": "2026-01-01T00:00:00Z",
+            "direction": "inbound",
+            "asset": "BTC",
+            "amount": 100,
+            "fee": 0,
+            "amount_includes_fee": false,
+            "chain": "bitcoin",
+            "network": "main",
+            "raw_json": {
+              "txid": "native:target"
+            },
+            "privacy_boundary": "sweep",
+            "pricing_review_price": null,
+            "custody_chain_order": null,
+            "fiat_value": null,
+            "fiat_value_exact": null,
+            "journal_transaction_id": "target",
+            "custody_finalized_tax_projection": true,
+            "custody_quantity_hash": "14baedfaec74f03bd84420234e3496743b33a7dc18b196f58092349a26fc0ec8",
+            "custody_slice_start_msat": 0,
+            "custody_slice_end_msat": 100
+          },
+          "pair_id": "pair:durable:edge",
+          "source": "native",
+          "policy": "carrying-value",
+          "group_id": null,
+          "kind": "custody-reviewed-coinjoin"
+        }
+      ],
+      "cross_asset_pairs": [],
+      "quarantines": [],
+      "selected_move_ids": [
+        "pair:durable:edge"
+      ]
+    }
+  },
+  {
+    "op": "finalize",
+    "observations": [
+      {
+        "$type": "QuantityObservation",
+        "transaction_id": "source",
+        "anchor_transaction_id": "source",
+        "quantity_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+        "evidence_detail_hash": "1463e203c119f1dff5b7f7aa6227950091d6775f66780034c4e219a791565bef",
+        "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:source\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"outbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:source\",\"native_namespace\":\"source\",\"network\":\"main\"},\"fee_msat\":7,\"schema_version\":1,\"wallet_id\":\"source\"},\"raw_json\":{\"txid\":\"native:source\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+        "event_key": {
+          "$type": "CanonicalEventKey",
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "source",
+          "native_event_id": "native:source"
+        },
+        "profile_id": "",
+        "authoritative_chain_observation": false,
+        "observation_authority_reason": "provenance_missing",
+        "fee_attribution": "unknown",
+        "wallet_id": "source",
+        "asset": "BTC",
+        "direction": "outbound",
+        "amount_msat": 100,
+        "fee_msat": 7,
+        "amount_includes_fee": false,
+        "occurred_at": "2026-01-01T00:00:00Z"
+      },
+      {
+        "$type": "QuantityObservation",
+        "transaction_id": "target",
+        "anchor_transaction_id": "target",
+        "quantity_hash": "14baedfaec74f03bd84420234e3496743b33a7dc18b196f58092349a26fc0ec8",
+        "evidence_detail_hash": "c05870b3dab76f6c220ae9e54aa0c41b6353490c9df1841c096a414c6e1f894d",
+        "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:target\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"inbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:target\",\"native_namespace\":\"target\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"target\"},\"raw_json\":{\"txid\":\"native:target\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+        "event_key": {
+          "$type": "CanonicalEventKey",
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "target",
+          "native_event_id": "native:target"
+        },
+        "profile_id": "",
+        "authoritative_chain_observation": false,
+        "observation_authority_reason": "provenance_missing",
+        "fee_attribution": "unknown",
+        "wallet_id": "target",
+        "asset": "BTC",
+        "direction": "inbound",
+        "amount_msat": 100,
+        "fee_msat": 0,
+        "amount_includes_fee": false,
+        "occurred_at": "2026-01-01T00:00:00Z"
+      },
+      {
+        "$type": "QuantityObservation",
+        "transaction_id": "other",
+        "anchor_transaction_id": "other",
+        "quantity_hash": "9f53da3afaaba8149223a217273187b2441699e35b3944c56171ab08eb017a02",
+        "evidence_detail_hash": "2fe2f70a606ca642c9f967565e6b1ea14670a18bd719ecdf6de9171ebdd15f6d",
+        "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:other\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"inbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:other\",\"native_namespace\":\"other\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"other\"},\"raw_json\":{\"txid\":\"native:other\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+        "event_key": {
+          "$type": "CanonicalEventKey",
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "other",
+          "native_event_id": "native:other"
+        },
+        "profile_id": "",
+        "authoritative_chain_observation": false,
+        "observation_authority_reason": "provenance_missing",
+        "fee_attribution": "unknown",
+        "wallet_id": "other",
+        "asset": "BTC",
+        "direction": "inbound",
+        "amount_msat": 100,
+        "fee_msat": 0,
+        "amount_includes_fee": false,
+        "occurred_at": "2026-01-01T00:00:00Z"
+      }
+    ],
+    "rows": {
+      "source": {
+        "id": "source",
+        "wallet_id": "source",
+        "fingerprint": "fingerprint:source",
+        "external_id": "native:source",
+        "occurred_at": "2026-01-01T00:00:00Z",
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": 100,
+        "fee": 7,
+        "amount_includes_fee": 0,
+        "chain": "bitcoin",
+        "network": "main",
+        "raw_json": {
+          "txid": "native:source"
+        }
+      },
+      "target": {
+        "id": "target",
+        "wallet_id": "target",
+        "fingerprint": "fingerprint:target",
+        "external_id": "native:target",
+        "occurred_at": "2026-01-01T00:00:00Z",
+        "direction": "inbound",
+        "asset": "BTC",
+        "amount": 100,
+        "fee": 0,
+        "amount_includes_fee": 0,
+        "chain": "bitcoin",
+        "network": "main",
+        "raw_json": {
+          "txid": "native:target"
+        }
+      },
+      "other": {
+        "id": "other",
+        "wallet_id": "other",
+        "fingerprint": "fingerprint:other",
+        "external_id": "native:other",
+        "occurred_at": "2026-01-01T00:00:00Z",
+        "direction": "inbound",
+        "asset": "BTC",
+        "amount": 100,
+        "fee": 0,
+        "amount_includes_fee": 0,
+        "chain": "bitcoin",
+        "network": "main",
+        "raw_json": {
+          "txid": "native:other"
+        }
+      }
+    },
+    "decisions": [
+      {
+        "source": {
+          "observation_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+          "start_msat": 40,
+          "end_msat": 100
+        },
+        "target": null,
+        "state": "external_confirmed",
+        "reason": "external",
+        "selected_claim_id": "pair:durable:edge",
+        "atomic_bundle_id": null,
+        "component_id": "reviewed",
+        "transfer_policy": null,
+        "transfer_kind": null,
+        "destination_kind": null,
+        "external_economic_subtype": null
+      }
+    ],
+    "eligible": [
+      {
+        "observation_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+        "start_msat": 40,
+        "end_msat": 100
+      }
+    ],
+    "events": [
+      {
+        "event_key": {
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "source",
+          "native_event_id": "native:source"
+        },
+        "legs": [
+          {
+            "$type": "QuantityObservation",
+            "transaction_id": "source",
+            "anchor_transaction_id": "source",
+            "quantity_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+            "evidence_detail_hash": "1463e203c119f1dff5b7f7aa6227950091d6775f66780034c4e219a791565bef",
+            "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:source\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"outbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:source\",\"native_namespace\":\"source\",\"network\":\"main\"},\"fee_msat\":7,\"schema_version\":1,\"wallet_id\":\"source\"},\"raw_json\":{\"txid\":\"native:source\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+            "event_key": {
+              "$type": "CanonicalEventKey",
+              "chain": "bitcoin",
+              "network": "main",
+              "native_namespace": "source",
+              "native_event_id": "native:source"
+            },
+            "profile_id": "",
+            "authoritative_chain_observation": false,
+            "observation_authority_reason": "provenance_missing",
+            "fee_attribution": "unknown",
+            "wallet_id": "source",
+            "asset": "BTC",
+            "direction": "outbound",
+            "amount_msat": 100,
+            "fee_msat": 7,
+            "amount_includes_fee": false,
+            "occurred_at": "2026-01-01T00:00:00Z"
+          }
+        ]
+      },
+      {
+        "event_key": {
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "target",
+          "native_event_id": "native:target"
+        },
+        "legs": [
+          {
+            "$type": "QuantityObservation",
+            "transaction_id": "target",
+            "anchor_transaction_id": "target",
+            "quantity_hash": "14baedfaec74f03bd84420234e3496743b33a7dc18b196f58092349a26fc0ec8",
+            "evidence_detail_hash": "c05870b3dab76f6c220ae9e54aa0c41b6353490c9df1841c096a414c6e1f894d",
+            "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:target\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"inbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:target\",\"native_namespace\":\"target\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"target\"},\"raw_json\":{\"txid\":\"native:target\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+            "event_key": {
+              "$type": "CanonicalEventKey",
+              "chain": "bitcoin",
+              "network": "main",
+              "native_namespace": "target",
+              "native_event_id": "native:target"
+            },
+            "profile_id": "",
+            "authoritative_chain_observation": false,
+            "observation_authority_reason": "provenance_missing",
+            "fee_attribution": "unknown",
+            "wallet_id": "target",
+            "asset": "BTC",
+            "direction": "inbound",
+            "amount_msat": 100,
+            "fee_msat": 0,
+            "amount_includes_fee": false,
+            "occurred_at": "2026-01-01T00:00:00Z"
+          }
+        ]
+      },
+      {
+        "event_key": {
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "other",
+          "native_event_id": "native:other"
+        },
+        "legs": [
+          {
+            "$type": "QuantityObservation",
+            "transaction_id": "other",
+            "anchor_transaction_id": "other",
+            "quantity_hash": "9f53da3afaaba8149223a217273187b2441699e35b3944c56171ab08eb017a02",
+            "evidence_detail_hash": "2fe2f70a606ca642c9f967565e6b1ea14670a18bd719ecdf6de9171ebdd15f6d",
+            "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:other\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"inbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:other\",\"native_namespace\":\"other\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"other\"},\"raw_json\":{\"txid\":\"native:other\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+            "event_key": {
+              "$type": "CanonicalEventKey",
+              "chain": "bitcoin",
+              "network": "main",
+              "native_namespace": "other",
+              "native_event_id": "native:other"
+            },
+            "profile_id": "",
+            "authoritative_chain_observation": false,
+            "observation_authority_reason": "provenance_missing",
+            "fee_attribution": "unknown",
+            "wallet_id": "other",
+            "asset": "BTC",
+            "direction": "inbound",
+            "amount_msat": 100,
+            "fee_msat": 0,
+            "amount_includes_fee": false,
+            "occurred_at": "2026-01-01T00:00:00Z"
+          }
+        ]
+      }
+    ],
+    "pool_barriers": [],
+    "blocked_transaction_ids": [],
+    "blocked_anchor_ids": [],
+    "non_event_transaction_ids": [],
+    "payouts": [
+      {
+        "component_id": "reviewed",
+        "id": "paid",
+        "out_amount": 60,
+        "out_transaction_id": "source",
+        "payout_amount": 50,
+        "payout_asset": "EUR",
+        "payout_fiat_value": "100",
+        "policy": "taxable"
+      }
+    ],
+    "profile": {
+      "id": "p",
+      "workspace_id": "w",
+      "tax_country": "generic"
+    },
+    "issues": [],
+    "pool_barrier_roots": [],
+    "interpreter_quarantines": [],
+    "reviewed": [],
+    "case": "projection_unreviewed_payout_slice",
+    "expected": {
+      "$type": "FinalizedTaxProjection",
+      "rows": [
+        {
+          "id": "custody-tax:9f53da3afaaba8149223a217273187b2441699e35b3944c56171ab08eb017a02:0:100:inbound",
+          "wallet_id": "other",
+          "fingerprint": "fingerprint:other",
+          "external_id": "native:other",
+          "occurred_at": "2026-01-01T00:00:00Z",
+          "direction": "inbound",
+          "asset": "BTC",
+          "amount": 100,
+          "fee": 0,
+          "amount_includes_fee": false,
+          "chain": "bitcoin",
+          "network": "main",
+          "raw_json": {
+            "txid": "native:other"
+          },
+          "pricing_review_price": null,
+          "custody_chain_order": null,
+          "fiat_value": null,
+          "fiat_value_exact": null,
+          "journal_transaction_id": "other",
+          "custody_finalized_tax_projection": true,
+          "custody_quantity_hash": "9f53da3afaaba8149223a217273187b2441699e35b3944c56171ab08eb017a02",
+          "custody_slice_start_msat": 0,
+          "custody_slice_end_msat": 100
+        },
+        {
+          "id": "custody-tax:ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604:40:100:external",
+          "wallet_id": "source",
+          "fingerprint": "fingerprint:source",
+          "external_id": "native:source",
+          "occurred_at": "2026-01-01T00:00:00Z",
+          "direction": "outbound",
+          "asset": "BTC",
+          "amount": 60,
+          "fee": 7,
+          "amount_includes_fee": false,
+          "chain": "bitcoin",
+          "network": "main",
+          "raw_json": {
+            "txid": "native:source"
+          },
+          "pricing_review_price": null,
+          "custody_chain_order": null,
+          "fiat_value": null,
+          "fiat_value_exact": null,
+          "journal_transaction_id": "source",
+          "custody_finalized_tax_projection": true,
+          "custody_quantity_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+          "custody_slice_start_msat": 40,
+          "custody_slice_end_msat": 100
+        },
+        {
+          "id": "custody-tax:14baedfaec74f03bd84420234e3496743b33a7dc18b196f58092349a26fc0ec8:0:100:inbound",
+          "wallet_id": "target",
+          "fingerprint": "fingerprint:target",
+          "external_id": "native:target",
+          "occurred_at": "2026-01-01T00:00:00Z",
+          "direction": "inbound",
+          "asset": "BTC",
+          "amount": 100,
+          "fee": 0,
+          "amount_includes_fee": false,
+          "chain": "bitcoin",
+          "network": "main",
+          "raw_json": {
+            "txid": "native:target"
+          },
+          "pricing_review_price": null,
+          "custody_chain_order": null,
+          "fiat_value": null,
+          "fiat_value_exact": null,
+          "journal_transaction_id": "target",
+          "custody_finalized_tax_projection": true,
+          "custody_quantity_hash": "14baedfaec74f03bd84420234e3496743b33a7dc18b196f58092349a26fc0ec8",
+          "custody_slice_start_msat": 0,
+          "custody_slice_end_msat": 100
+        }
+      ],
+      "intra_pairs": [],
+      "cross_asset_pairs": [],
+      "quarantines": [],
+      "selected_move_ids": []
+    },
+    "reference_scope": "The payout owns exactly the 40..100 slice. No residual external slice is supplied; this does not freeze reference bug R1."
+  },
+  {
+    "op": "finalize",
+    "observations": [
+      {
+        "$type": "QuantityObservation",
+        "transaction_id": "source",
+        "anchor_transaction_id": "source",
+        "quantity_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+        "evidence_detail_hash": "1463e203c119f1dff5b7f7aa6227950091d6775f66780034c4e219a791565bef",
+        "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:source\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"outbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:source\",\"native_namespace\":\"source\",\"network\":\"main\"},\"fee_msat\":7,\"schema_version\":1,\"wallet_id\":\"source\"},\"raw_json\":{\"txid\":\"native:source\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+        "event_key": {
+          "$type": "CanonicalEventKey",
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "source",
+          "native_event_id": "native:source"
+        },
+        "profile_id": "",
+        "authoritative_chain_observation": false,
+        "observation_authority_reason": "provenance_missing",
+        "fee_attribution": "unknown",
+        "wallet_id": "source",
+        "asset": "BTC",
+        "direction": "outbound",
+        "amount_msat": 100,
+        "fee_msat": 7,
+        "amount_includes_fee": false,
+        "occurred_at": "2026-01-01T00:00:00Z"
+      },
+      {
+        "$type": "QuantityObservation",
+        "transaction_id": "target",
+        "anchor_transaction_id": "target",
+        "quantity_hash": "14baedfaec74f03bd84420234e3496743b33a7dc18b196f58092349a26fc0ec8",
+        "evidence_detail_hash": "c05870b3dab76f6c220ae9e54aa0c41b6353490c9df1841c096a414c6e1f894d",
+        "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:target\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"inbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:target\",\"native_namespace\":\"target\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"target\"},\"raw_json\":{\"txid\":\"native:target\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+        "event_key": {
+          "$type": "CanonicalEventKey",
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "target",
+          "native_event_id": "native:target"
+        },
+        "profile_id": "",
+        "authoritative_chain_observation": false,
+        "observation_authority_reason": "provenance_missing",
+        "fee_attribution": "unknown",
+        "wallet_id": "target",
+        "asset": "BTC",
+        "direction": "inbound",
+        "amount_msat": 100,
+        "fee_msat": 0,
+        "amount_includes_fee": false,
+        "occurred_at": "2026-01-01T00:00:00Z"
+      },
+      {
+        "$type": "QuantityObservation",
+        "transaction_id": "other",
+        "anchor_transaction_id": "other",
+        "quantity_hash": "9f53da3afaaba8149223a217273187b2441699e35b3944c56171ab08eb017a02",
+        "evidence_detail_hash": "2fe2f70a606ca642c9f967565e6b1ea14670a18bd719ecdf6de9171ebdd15f6d",
+        "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:other\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"inbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:other\",\"native_namespace\":\"other\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"other\"},\"raw_json\":{\"txid\":\"native:other\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+        "event_key": {
+          "$type": "CanonicalEventKey",
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "other",
+          "native_event_id": "native:other"
+        },
+        "profile_id": "",
+        "authoritative_chain_observation": false,
+        "observation_authority_reason": "provenance_missing",
+        "fee_attribution": "unknown",
+        "wallet_id": "other",
+        "asset": "BTC",
+        "direction": "inbound",
+        "amount_msat": 100,
+        "fee_msat": 0,
+        "amount_includes_fee": false,
+        "occurred_at": "2026-01-01T00:00:00Z"
+      }
+    ],
+    "rows": {
+      "source": {
+        "id": "source",
+        "wallet_id": "source",
+        "fingerprint": "fingerprint:source",
+        "external_id": "native:source",
+        "occurred_at": "2026-01-01T00:00:00Z",
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": 100,
+        "fee": 7,
+        "amount_includes_fee": 0,
+        "chain": "bitcoin",
+        "network": "main",
+        "raw_json": {
+          "txid": "native:source"
+        }
+      },
+      "target": {
+        "id": "target",
+        "wallet_id": "target",
+        "fingerprint": "fingerprint:target",
+        "external_id": "native:target",
+        "occurred_at": "2026-01-01T00:00:00Z",
+        "direction": "inbound",
+        "asset": "BTC",
+        "amount": 100,
+        "fee": 0,
+        "amount_includes_fee": 0,
+        "chain": "bitcoin",
+        "network": "main",
+        "raw_json": {
+          "txid": "native:target"
+        }
+      },
+      "other": {
+        "id": "other",
+        "wallet_id": "other",
+        "fingerprint": "fingerprint:other",
+        "external_id": "native:other",
+        "occurred_at": "2026-01-01T00:00:00Z",
+        "direction": "inbound",
+        "asset": "BTC",
+        "amount": 100,
+        "fee": 0,
+        "amount_includes_fee": 0,
+        "chain": "bitcoin",
+        "network": "main",
+        "raw_json": {
+          "txid": "native:other"
+        }
+      }
+    },
+    "decisions": [
+      {
+        "source": {
+          "observation_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+          "start_msat": 40,
+          "end_msat": 100
+        },
+        "target": null,
+        "state": "external_confirmed",
+        "reason": "reviewed_direct_payout_source",
+        "selected_claim_id": "pair:durable:edge",
+        "atomic_bundle_id": null,
+        "component_id": "different",
+        "transfer_policy": null,
+        "transfer_kind": null,
+        "destination_kind": null,
+        "external_economic_subtype": null
+      }
+    ],
+    "eligible": [
+      {
+        "observation_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+        "start_msat": 40,
+        "end_msat": 100
+      }
+    ],
+    "events": [
+      {
+        "event_key": {
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "source",
+          "native_event_id": "native:source"
+        },
+        "legs": [
+          {
+            "$type": "QuantityObservation",
+            "transaction_id": "source",
+            "anchor_transaction_id": "source",
+            "quantity_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+            "evidence_detail_hash": "1463e203c119f1dff5b7f7aa6227950091d6775f66780034c4e219a791565bef",
+            "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:source\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"outbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:source\",\"native_namespace\":\"source\",\"network\":\"main\"},\"fee_msat\":7,\"schema_version\":1,\"wallet_id\":\"source\"},\"raw_json\":{\"txid\":\"native:source\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+            "event_key": {
+              "$type": "CanonicalEventKey",
+              "chain": "bitcoin",
+              "network": "main",
+              "native_namespace": "source",
+              "native_event_id": "native:source"
+            },
+            "profile_id": "",
+            "authoritative_chain_observation": false,
+            "observation_authority_reason": "provenance_missing",
+            "fee_attribution": "unknown",
+            "wallet_id": "source",
+            "asset": "BTC",
+            "direction": "outbound",
+            "amount_msat": 100,
+            "fee_msat": 7,
+            "amount_includes_fee": false,
+            "occurred_at": "2026-01-01T00:00:00Z"
+          }
+        ]
+      },
+      {
+        "event_key": {
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "target",
+          "native_event_id": "native:target"
+        },
+        "legs": [
+          {
+            "$type": "QuantityObservation",
+            "transaction_id": "target",
+            "anchor_transaction_id": "target",
+            "quantity_hash": "14baedfaec74f03bd84420234e3496743b33a7dc18b196f58092349a26fc0ec8",
+            "evidence_detail_hash": "c05870b3dab76f6c220ae9e54aa0c41b6353490c9df1841c096a414c6e1f894d",
+            "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:target\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"inbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:target\",\"native_namespace\":\"target\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"target\"},\"raw_json\":{\"txid\":\"native:target\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+            "event_key": {
+              "$type": "CanonicalEventKey",
+              "chain": "bitcoin",
+              "network": "main",
+              "native_namespace": "target",
+              "native_event_id": "native:target"
+            },
+            "profile_id": "",
+            "authoritative_chain_observation": false,
+            "observation_authority_reason": "provenance_missing",
+            "fee_attribution": "unknown",
+            "wallet_id": "target",
+            "asset": "BTC",
+            "direction": "inbound",
+            "amount_msat": 100,
+            "fee_msat": 0,
+            "amount_includes_fee": false,
+            "occurred_at": "2026-01-01T00:00:00Z"
+          }
+        ]
+      },
+      {
+        "event_key": {
+          "chain": "bitcoin",
+          "network": "main",
+          "native_namespace": "other",
+          "native_event_id": "native:other"
+        },
+        "legs": [
+          {
+            "$type": "QuantityObservation",
+            "transaction_id": "other",
+            "anchor_transaction_id": "other",
+            "quantity_hash": "9f53da3afaaba8149223a217273187b2441699e35b3944c56171ab08eb017a02",
+            "evidence_detail_hash": "2fe2f70a606ca642c9f967565e6b1ea14670a18bd719ecdf6de9171ebdd15f6d",
+            "evidence_payload_json": "{\"confirmed_at\":\"\",\"fingerprint\":\"fingerprint:other\",\"kind\":\"\",\"occurred_at\":\"2026-01-01T00:00:00Z\",\"payment_hash\":\"\",\"payment_hash_source\":\"\",\"quantity\":{\"amount_includes_fee\":false,\"amount_msat\":100,\"asset\":\"BTC\",\"direction\":\"inbound\",\"event\":{\"chain\":\"bitcoin\",\"native_event_id\":\"native:other\",\"native_namespace\":\"other\",\"network\":\"main\"},\"fee_msat\":0,\"schema_version\":1,\"wallet_id\":\"other\"},\"raw_json\":{\"txid\":\"native:other\"},\"schema_version\":1,\"swap_refund_funding_txid\":\"\",\"swap_refund_funding_vout\":null}",
+            "event_key": {
+              "$type": "CanonicalEventKey",
+              "chain": "bitcoin",
+              "network": "main",
+              "native_namespace": "other",
+              "native_event_id": "native:other"
+            },
+            "profile_id": "",
+            "authoritative_chain_observation": false,
+            "observation_authority_reason": "provenance_missing",
+            "fee_attribution": "unknown",
+            "wallet_id": "other",
+            "asset": "BTC",
+            "direction": "inbound",
+            "amount_msat": 100,
+            "fee_msat": 0,
+            "amount_includes_fee": false,
+            "occurred_at": "2026-01-01T00:00:00Z"
+          }
+        ]
+      }
+    ],
+    "pool_barriers": [],
+    "blocked_transaction_ids": [],
+    "blocked_anchor_ids": [],
+    "non_event_transaction_ids": [],
+    "payouts": [
+      {
+        "component_id": "reviewed",
+        "id": "paid",
+        "out_amount": 60,
+        "out_transaction_id": "source",
+        "payout_amount": 50,
+        "payout_asset": "EUR",
+        "payout_fiat_value": "100",
+        "policy": "taxable"
+      }
+    ],
+    "profile": {
+      "id": "p",
+      "workspace_id": "w",
+      "tax_country": "generic"
+    },
+    "issues": [],
+    "pool_barrier_roots": [],
+    "interpreter_quarantines": [],
+    "reviewed": [],
+    "case": "projection_payout_component_binding",
+    "expected": {
+      "$type": "FinalizedTaxProjection",
+      "rows": [
+        {
+          "id": "custody-tax:9f53da3afaaba8149223a217273187b2441699e35b3944c56171ab08eb017a02:0:100:inbound",
+          "wallet_id": "other",
+          "fingerprint": "fingerprint:other",
+          "external_id": "native:other",
+          "occurred_at": "2026-01-01T00:00:00Z",
+          "direction": "inbound",
+          "asset": "BTC",
+          "amount": 100,
+          "fee": 0,
+          "amount_includes_fee": false,
+          "chain": "bitcoin",
+          "network": "main",
+          "raw_json": {
+            "txid": "native:other"
+          },
+          "pricing_review_price": null,
+          "custody_chain_order": null,
+          "fiat_value": null,
+          "fiat_value_exact": null,
+          "journal_transaction_id": "other",
+          "custody_finalized_tax_projection": true,
+          "custody_quantity_hash": "9f53da3afaaba8149223a217273187b2441699e35b3944c56171ab08eb017a02",
+          "custody_slice_start_msat": 0,
+          "custody_slice_end_msat": 100
+        },
+        {
+          "id": "custody-tax:ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604:40:100:external",
+          "wallet_id": "source",
+          "fingerprint": "fingerprint:source",
+          "external_id": "native:source",
+          "occurred_at": "2026-01-01T00:00:00Z",
+          "direction": "outbound",
+          "asset": "BTC",
+          "amount": 60,
+          "fee": 7,
+          "amount_includes_fee": false,
+          "chain": "bitcoin",
+          "network": "main",
+          "raw_json": {
+            "txid": "native:source"
+          },
+          "pricing_review_price": null,
+          "custody_chain_order": null,
+          "fiat_value": null,
+          "fiat_value_exact": null,
+          "journal_transaction_id": "source",
+          "custody_finalized_tax_projection": true,
+          "custody_quantity_hash": "ca4f708c868fb5361f51abdcc050cd5ae234a088da80daac65fc1593adc22604",
+          "custody_slice_start_msat": 40,
+          "custody_slice_end_msat": 100
+        },
+        {
+          "id": "custody-tax:14baedfaec74f03bd84420234e3496743b33a7dc18b196f58092349a26fc0ec8:0:100:inbound",
+          "wallet_id": "target",
+          "fingerprint": "fingerprint:target",
+          "external_id": "native:target",
+          "occurred_at": "2026-01-01T00:00:00Z",
+          "direction": "inbound",
+          "asset": "BTC",
+          "amount": 100,
+          "fee": 0,
+          "amount_includes_fee": false,
+          "chain": "bitcoin",
+          "network": "main",
+          "raw_json": {
+            "txid": "native:target"
+          },
+          "pricing_review_price": null,
+          "custody_chain_order": null,
+          "fiat_value": null,
+          "fiat_value_exact": null,
+          "journal_transaction_id": "target",
+          "custody_finalized_tax_projection": true,
+          "custody_quantity_hash": "14baedfaec74f03bd84420234e3496743b33a7dc18b196f58092349a26fc0ec8",
+          "custody_slice_start_msat": 0,
+          "custody_slice_end_msat": 100
+        }
+      ],
+      "intra_pairs": [],
+      "cross_asset_pairs": [],
+      "quarantines": [],
+      "selected_move_ids": []
+    },
+    "reference_scope": "The payout owns exactly the 40..100 slice. No residual external slice is supplied; this does not freeze reference bug R1."
+  }
+]

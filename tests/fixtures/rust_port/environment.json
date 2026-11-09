@@ -1,0 +1,456 @@
+{
+  "note": "Literal occurrences include docs/comments and writes; reads separately index actual environment access. The reference document explains precedence, dynamic families and implicit library inputs.",
+  "reads": [
+    {
+      "at": "kassiber/agent_access.py:69",
+      "default": null,
+      "name": "KASSIBER_AGENT_ACCESS_FILE"
+    },
+    {
+      "at": "kassiber/ai/broker_client.py:143",
+      "default": null,
+      "name": "KASSIBER_AI_BROKER_NODE"
+    },
+    {
+      "at": "kassiber/ai/broker_client.py:159",
+      "default": null,
+      "name": "KASSIBER_AI_PROVIDER_BROKER"
+    },
+    {
+      "at": "kassiber/ai/broker_client.py:212",
+      "default": null,
+      "name": "XDG_RUNTIME_DIR"
+    },
+    {
+      "at": "kassiber/ai/providers.py:205",
+      "default": null,
+      "name": {
+        "expression": "specific_env_name"
+      }
+    },
+    {
+      "at": "kassiber/ai/providers.py:207",
+      "default": null,
+      "name": "KASSIBER_DEFAULT_AI_BASE_URL"
+    },
+    {
+      "at": "kassiber/ai/providers.py:206",
+      "default": null,
+      "name": {
+        "expression": "specific_env_name"
+      }
+    },
+    {
+      "at": "kassiber/ai/providers.py:208",
+      "default": null,
+      "name": "KASSIBER_DEFAULT_AI_BASE_URL"
+    },
+    {
+      "at": "kassiber/ai/providers.py:191",
+      "default": null,
+      "name": "KASSIBER_DEFAULT_AI_PROVIDER"
+    },
+    {
+      "at": "kassiber/backends.py:380",
+      "default": null,
+      "name": "KASSIBER_DEFAULT_BACKEND"
+    },
+    {
+      "at": "kassiber/backends.py:381",
+      "default": null,
+      "name": "SATBOOKS_DEFAULT_BACKEND"
+    },
+    {
+      "at": "kassiber/cli/banner.py:54",
+      "default": null,
+      "name": "TERM"
+    },
+    {
+      "at": "kassiber/cli/main.py:7015",
+      "default": null,
+      "name": "KASSIBER_OPERATOR_WORKING_DIRECTORY"
+    },
+    {
+      "at": "kassiber/cli/main.py:7041",
+      "default": null,
+      "name": "KASSIBER_OPERATOR_EXPECTED_PROJECT_IDENTITY"
+    },
+    {
+      "at": "kassiber/cli/main.py:7076",
+      "default": null,
+      "name": "KASSIBER_OPERATOR_EXPECTED_DATABASE_IDENTITY"
+    },
+    {
+      "at": "kassiber/cli/main.py:7104",
+      "default": null,
+      "name": "KASSIBER_OPERATOR_EXPECTED_DATABASE_IDENTITY"
+    },
+    {
+      "at": "kassiber/cli/main.py:7018",
+      "default": null,
+      "name": "KASSIBER_OPERATOR_CHILD"
+    },
+    {
+      "at": "kassiber/cli/main.py:7040",
+      "default": null,
+      "name": "KASSIBER_OPERATOR_CHILD"
+    },
+    {
+      "at": "kassiber/cli/main.py:6873",
+      "default": null,
+      "name": "KASSIBER_OPERATOR_CHILD"
+    },
+    {
+      "at": "kassiber/cli/main.py:7078",
+      "default": null,
+      "name": "KASSIBER_OPERATOR_CHILD"
+    },
+    {
+      "at": "kassiber/core/chain_observer/host_trust.py:28",
+      "default": null,
+      "name": "KASSIBER_HOST_CA_BUNDLE"
+    },
+    {
+      "at": "kassiber/core/runtime.py:384",
+      "default": null,
+      "name": "KASSIBER_OPERATOR_EXPECTED_DATABASE_IDENTITY"
+    },
+    {
+      "at": "kassiber/core/runtime.py:385",
+      "default": null,
+      "name": "KASSIBER_OPERATOR_CHILD"
+    },
+    {
+      "at": "kassiber/db.py:78",
+      "default": null,
+      "name": "XDG_DATA_HOME"
+    },
+    {
+      "at": "kassiber/db.py:74",
+      "default": null,
+      "name": "LOCALAPPDATA"
+    },
+    {
+      "at": "kassiber/egress_policy.py:41",
+      "default": null,
+      "name": "KASSIBER_OFFLINE_PREFERENCE_FILE"
+    },
+    {
+      "at": "kassiber/egress_policy.py:85",
+      "default": null,
+      "name": "KASSIBER_NO_EGRESS"
+    },
+    {
+      "at": "kassiber/mcp/cli.py:153",
+      "default": null,
+      "name": "KASSIBER_OPERATOR_CHILD"
+    },
+    {
+      "at": "kassiber/operator/build.py:54",
+      "default": null,
+      "name": "APPIMAGE"
+    },
+    {
+      "at": "kassiber/operator/build.py:55",
+      "default": null,
+      "name": "APPDIR"
+    },
+    {
+      "at": "kassiber/operator/cli.py:188",
+      "default": null,
+      "name": "KASSIBER_OPERATOR_DIRECT"
+    },
+    {
+      "at": "kassiber/operator/client.py:163",
+      "default": null,
+      "name": "KASSIBER_NATIVE_AUTH_HELPER"
+    },
+    {
+      "at": "kassiber/operator/client.py:863",
+      "default": null,
+      "name": "KASSIBER_NO_EGRESS"
+    },
+    {
+      "at": "kassiber/operator/native_auth.py:289",
+      "default": null,
+      "name": "KASSIBER_NATIVE_AUTH_HELPER"
+    },
+    {
+      "at": "kassiber/operator/protocol.py:219",
+      "default": null,
+      "name": "KASSIBER_OPERATOR_RUNTIME_DIR"
+    },
+    {
+      "at": "kassiber/operator/protocol.py:225",
+      "default": null,
+      "name": "KASSIBER_OPERATOR_ALLOW_TEST_RUNTIME_DIR"
+    },
+    {
+      "at": "kassiber/operator/server.py:731",
+      "default": null,
+      "name": "XDG_RUNTIME_DIR"
+    },
+    {
+      "at": "kassiber/secrets/cli.py:80",
+      "default": null,
+      "name": "KASSIBER_OPERATOR_EXPECTED_DATABASE_IDENTITY"
+    },
+    {
+      "at": "kassiber/secrets/cli.py:78",
+      "default": null,
+      "name": "KASSIBER_OPERATOR_CHILD"
+    },
+    {
+      "at": "kassiber/secrets/cli.py:186",
+      "default": null,
+      "name": "KASSIBER_OPERATOR_CHILD"
+    },
+    {
+      "at": "kassiber/secrets/cli.py:266",
+      "default": null,
+      "name": "KASSIBER_OPERATOR_CHILD"
+    },
+    {
+      "at": "kassiber/secrets/prompt.py:61",
+      "default": null,
+      "name": "KASSIBER_OPERATOR_CHILD"
+    },
+    {
+      "at": "kassiber/secrets/sqlcipher.py:264",
+      "default": null,
+      "name": "KASSIBER_OPERATOR_EXPECTED_DATABASE_IDENTITY"
+    },
+    {
+      "at": "kassiber/secrets/sqlcipher.py:262",
+      "default": null,
+      "name": "KASSIBER_OPERATOR_CHILD"
+    },
+    {
+      "at": "kassiber/update_check.py:168",
+      "default": null,
+      "name": "KASSIBER_UPDATE_CACHE_FILE"
+    },
+    {
+      "at": "kassiber/update_check.py:175",
+      "default": null,
+      "name": "KASSIBER_UPDATE_PREFERENCE_FILE"
+    },
+    {
+      "at": "kassiber/update_check.py:552",
+      "default": null,
+      "name": "KASSIBER_OPERATOR_CHILD"
+    },
+    {
+      "at": "kassiber/update_check.py:508",
+      "default": "",
+      "name": "TERM"
+    },
+    {
+      "at": "kassiber/update_check.py:510",
+      "default": null,
+      "name": "CLICOLOR"
+    },
+    {
+      "at": "kassiber/update_check.py:473",
+      "default": null,
+      "name": "KASSIBER_HOMEBREW_PACKAGE"
+    },
+    {
+      "at": "kassiber/update_check.py:185",
+      "default": null,
+      "name": "KASSIBER_DISABLE_UPDATE_CHECK"
+    },
+    {
+      "at": "scripts/kassiber_pyinstaller_entry.py:29",
+      "default": null,
+      "name": "SSL_CERT_FILE"
+    }
+  ],
+  "schema_version": 1,
+  "variables": {
+    "APPDIR": [
+      "kassiber/operator/build.py:53",
+      "kassiber/operator/build.py:55"
+    ],
+    "APPIMAGE": [
+      "kassiber/operator/build.py:52",
+      "kassiber/operator/build.py:54"
+    ],
+    "CLICOLOR": [
+      "kassiber/update_check.py:510"
+    ],
+    "HOME": [
+      "kassiber/operator/project.py:588"
+    ],
+    "KASSIBER_AGENT_ACCESS_FILE": [
+      "kassiber/agent_access.py:41"
+    ],
+    "KASSIBER_AI_BROKER_NODE": [
+      "kassiber/ai/broker_client.py:143"
+    ],
+    "KASSIBER_AI_BROKER_TMPDIR": [
+      "kassiber/ai/broker_client.py:248"
+    ],
+    "KASSIBER_AI_PROVIDER_BROKER": [
+      "kassiber/ai/broker_client.py:159"
+    ],
+    "KASSIBER_BACKEND_": [
+      "kassiber/backends.py:10",
+      "kassiber/backends.py:301",
+      "kassiber/backends.py:335",
+      "kassiber/backends.py:355",
+      "kassiber/backends.py:388",
+      "kassiber/backends.py:1483",
+      "kassiber/backends.py:1490",
+      "kassiber/secrets/credentials.py:32",
+      "kassiber/secrets/credentials.py:50"
+    ],
+    "KASSIBER_DEFAULT_AI_BASE_URL": [
+      "kassiber/ai/providers.py:207",
+      "kassiber/ai/providers.py:208"
+    ],
+    "KASSIBER_DEFAULT_AI_PROVIDER": [
+      "kassiber/ai/providers.py:191"
+    ],
+    "KASSIBER_DEFAULT_BACKEND": [
+      "kassiber/backends.py:370",
+      "kassiber/backends.py:376",
+      "kassiber/backends.py:378",
+      "kassiber/backends.py:380",
+      "kassiber/backends.py:1500",
+      "kassiber/secrets/credentials.py:59"
+    ],
+    "KASSIBER_DISABLE_UPDATE_CHECK": [
+      "kassiber/update_check.py:49"
+    ],
+    "KASSIBER_HOMEBREW_PACKAGE": [
+      "kassiber/update_check.py:48"
+    ],
+    "KASSIBER_HOST_CA_BUNDLE": [
+      "kassiber/core/chain_observer/host_trust.py:4",
+      "kassiber/core/chain_observer/host_trust.py:28",
+      "scripts/kassiber_pyinstaller_entry.py:28",
+      "scripts/kassiber_pyinstaller_entry.py:32",
+      "scripts/kassiber_pyinstaller_entry.py:49"
+    ],
+    "KASSIBER_NATIVE_AUTH_HELPER": [
+      "kassiber/operator/client.py:164",
+      "kassiber/operator/native_auth.py:289"
+    ],
+    "KASSIBER_NO_EGRESS": [
+      "kassiber/egress_policy.py:5",
+      "kassiber/egress_policy.py:29",
+      "kassiber/egress_policy.py:101",
+      "kassiber/egress_policy.py:159",
+      "kassiber/operator/client.py:835",
+      "kassiber/operator/client.py:863",
+      "kassiber/operator/runner.py:66"
+    ],
+    "KASSIBER_OFFLINE_PREFERENCE_FILE": [
+      "kassiber/egress_policy.py:30"
+    ],
+    "KASSIBER_OPERATOR_ALLOW_TEST_RUNTIME_DIR": [
+      "kassiber/operator/protocol.py:35"
+    ],
+    "KASSIBER_OPERATOR_CHILD": [
+      "kassiber/cli/main.py:6873",
+      "kassiber/cli/main.py:7018",
+      "kassiber/cli/main.py:7040",
+      "kassiber/cli/main.py:7078",
+      "kassiber/core/runtime.py:385",
+      "kassiber/mcp/cli.py:153",
+      "kassiber/operator/runner.py:57",
+      "kassiber/secrets/cli.py:78",
+      "kassiber/secrets/cli.py:186",
+      "kassiber/secrets/cli.py:266",
+      "kassiber/secrets/prompt.py:61",
+      "kassiber/secrets/sqlcipher.py:262",
+      "kassiber/update_check.py:552"
+    ],
+    "KASSIBER_OPERATOR_DIRECT": [
+      "kassiber/operator/cli.py:188",
+      "kassiber/operator/client.py:114",
+      "kassiber/operator/runner.py:56"
+    ],
+    "KASSIBER_OPERATOR_EXPECTED_DATABASE_IDENTITY": [
+      "kassiber/cli/main.py:7076",
+      "kassiber/cli/main.py:7104",
+      "kassiber/core/runtime.py:384",
+      "kassiber/operator/runner.py:61",
+      "kassiber/secrets/cli.py:80",
+      "kassiber/secrets/sqlcipher.py:264"
+    ],
+    "KASSIBER_OPERATOR_EXPECTED_PROJECT_IDENTITY": [
+      "kassiber/cli/main.py:7041",
+      "kassiber/operator/runner.py:58"
+    ],
+    "KASSIBER_OPERATOR_RUNTIME_DIR": [
+      "kassiber/operator/protocol.py:219"
+    ],
+    "KASSIBER_OPERATOR_WORKING_DIRECTORY": [
+      "kassiber/cli/main.py:7015",
+      "kassiber/operator/runner.py:18"
+    ],
+    "KASSIBER_SYSTEM_PROMPT": [
+      "kassiber/ai/prompt.py:66",
+      "kassiber/ai/prompt.py:104"
+    ],
+    "KASSIBER_TEST_CUSTODY_SNAPSHOT_DIR": [
+      "kassiber/core/custody_journal.py:542"
+    ],
+    "KASSIBER_TEST_NO_EGRESS": [
+      "kassiber/egress_ledger.py:17"
+    ],
+    "KASSIBER_UPDATE_CACHE_FILE": [
+      "kassiber/update_check.py:46"
+    ],
+    "KASSIBER_UPDATE_PREFERENCE_FILE": [
+      "kassiber/update_check.py:47"
+    ],
+    "KASSIBER_VERSION": [
+      "kassiber/core/chain_observer/bdk.py:12",
+      "kassiber/core/chain_observer/bdk.py:34"
+    ],
+    "LOCALAPPDATA": [
+      "kassiber/db.py:74"
+    ],
+    "NO_COLOR": [
+      "kassiber/update_check.py:509"
+    ],
+    "PYINSTALLER_RESET_ENVIRONMENT": [
+      "kassiber/operator/launcher.py:43"
+    ],
+    "SATBOOKS_BACKEND_": [
+      "kassiber/backends.py:301",
+      "kassiber/backends.py:335",
+      "kassiber/backends.py:355",
+      "kassiber/secrets/credentials.py:51"
+    ],
+    "SATBOOKS_DEFAULT_BACKEND": [
+      "kassiber/backends.py:371",
+      "kassiber/backends.py:376",
+      "kassiber/backends.py:378",
+      "kassiber/backends.py:381"
+    ],
+    "SSL_CERT_FILE": [
+      "kassiber/core/chain_observer/bdk.py:140",
+      "kassiber/core/chain_observer/host_trust.py:5",
+      "kassiber/core/chain_observer/host_trust.py:9",
+      "kassiber/core/chain_observer/lwk.py:55",
+      "scripts/kassiber_pyinstaller_entry.py:29",
+      "scripts/kassiber_pyinstaller_entry.py:47"
+    ],
+    "TERM": [
+      "kassiber/cli/banner.py:54",
+      "kassiber/update_check.py:508"
+    ],
+    "XDG_DATA_HOME": [
+      "kassiber/db.py:78"
+    ],
+    "XDG_RUNTIME_DIR": [
+      "kassiber/ai/broker_client.py:201",
+      "kassiber/ai/broker_client.py:212",
+      "kassiber/operator/server.py:731"
+    ]
+  }
+}
