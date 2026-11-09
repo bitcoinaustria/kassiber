@@ -55,7 +55,7 @@ def test_base_code_pair_is_blocked_and_audited_once_without_rewriting_economics(
             assert profile["journal_input_version"] == 8
             assert profile["last_processed_input_version"] == 7
             assert profile["last_processed_at"] is None
-            assert profile["required_journal_semantics_version"] == 3
+            assert profile["required_journal_semantics_version"] == 7
             audits = conn.execute("SELECT impact_json FROM schema_migration_audits WHERE migration_name=?", (MIGRATION,)).fetchall()
             assert len(audits) == 1
             impact = json.loads(audits[0][0])
@@ -93,7 +93,7 @@ def test_older_binary_rebuild_cannot_clear_pair_fee_review_requirement(tmp_path)
         assert not projection_freshness(conn, "profile")["is_current"]
         profile = conn.execute("SELECT * FROM profiles WHERE id='profile'").fetchone()
         assert profile["journal_input_version"] == 8
-        assert profile["required_journal_semantics_version"] == 3
+        assert profile["required_journal_semantics_version"] == 7
         assert conn.execute("SELECT COUNT(*) FROM schema_migration_audits WHERE migration_name=?", (MIGRATION,)).fetchone()[0] == 1
     finally:
         conn.close()

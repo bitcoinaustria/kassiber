@@ -50,7 +50,8 @@ def mark_legacy_pair_fee_reviews(conn: sqlite3.Connection) -> bool:
     """Invalidate old pair journals once; retain immutable economics for review.
 
     The validation blocker remains reproducible from the authored legs and
-    observed debit. The audit and journal invalidation share a savepoint, so
+    observed debit. It requires semantics version 7: the Austrian outflow
+    migration's version 2 predates the blocker. The audit and journal invalidation share a savepoint, so
     interruption cannot leave a completed audit over a still-current journal.
     """
     with _savepoint(conn, "legacy_pair_fee_review"):
@@ -83,7 +84,7 @@ def mark_legacy_pair_fee_reviews(conn: sqlite3.Connection) -> bool:
                 "migration": LEGACY_PAIR_FEE_REVIEW_MIGRATION,
                 "affected_component_count": len(affected),
                 "affected_profile_count": len(profiles),
-                "required_journal_semantics_version": 3,
+                "required_journal_semantics_version": 7,
                 "explanation": "Legacy pair fee allocations require review; authored economics and retained journals are unchanged.",
             }, sort_keys=True), now_iso(),
         ))
@@ -92,7 +93,7 @@ def mark_legacy_pair_fee_reviews(conn: sqlite3.Connection) -> bool:
                 last_processed_tx_count = 0,
                 journal_input_version = journal_input_version + 1,
                 ownership_review_counts_json = NULL,
-                required_journal_semantics_version = MAX(required_journal_semantics_version, 3)
+                required_journal_semantics_version = MAX(required_journal_semantics_version, 7)
             WHERE id = ?
         """, [(profile_id,) for profile_id in profiles])
     return True
