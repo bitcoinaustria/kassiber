@@ -42,6 +42,7 @@ from ..time_utils import UNKNOWN_OCCURRED_AT, now_iso, parse_timestamp
 from ..transfers import canonical_txid
 from ..util import str_or_none
 from ..wallet_descriptors import normalize_asset_code, normalize_network
+from . import book_reset
 from . import import_batches
 from . import output_inventory as core_output_inventory
 from . import wallets as core_wallets
@@ -1837,6 +1838,8 @@ def insert_wallet_records(
             total=total,
         )
     from .book_network import guard_observations
+    reset_active = book_reset.has_state(conn, profile["id"])
+    reset_rebound = 0
     scoped_wallet = conn.execute("SELECT kind,config_json FROM wallets WHERE id=? AND profile_id=?", (wallet["id"], profile["id"])).fetchone()
     if scoped_wallet is None:
         raise AppError("Import wallet does not belong to the selected book", code="not_found")
@@ -2033,7 +2036,22 @@ def insert_wallet_records(
                 )
             continue
         _validate_import_price_currency(profile, normalized)
-        tx_id = str(uuid.uuid4())
+        # After "Reset book data" the re-observed row takes its old id back,
+        # so every decision keyed by it binds again.
+        reclaimed_id = (
+            book_reset.claim_transaction_id(
+                conn,
+                profile["id"],
+                wallet["id"],
+                fingerprint,
+                normalized["external_id"] or None,
+                normalized["asset"],
+                normalized["direction"],
+            )
+            if reset_active
+            else None
+        )
+        tx_id = reclaimed_id or str(uuid.uuid4())
         conn.execute(
             """
             INSERT INTO transactions(
@@ -2102,6 +2120,9 @@ def insert_wallet_records(
                     "direction": str(normalized["direction"]),
                 }
             )
+        if reclaimed_id is not None:
+            if book_reset.settle_claim(conn, reclaimed_id) == "bound_with_metadata":
+                reset_rebound += 1
         imported += 1
         inserted_records.append(
             _import_change_record(
@@ -2124,6 +2145,8 @@ def insert_wallet_records(
                 imported=imported,
                 skipped=skipped,
             )
+    if reset_active:
+        reset_rebound += book_reset.rebind_parked(conn, profile["id"])
     journal_invalidated = bool(imported or updated or superseded)
     if journal_invalidated:
         hooks.invalidate_journals(conn, profile["id"])
@@ -2139,6 +2162,11 @@ def insert_wallet_records(
         "inserted_records": inserted_records,
         "updated_records": updated_records,
     }
+    if reset_active:
+        outcome["reset_decisions"] = {
+            "rebound": reset_rebound,
+            **book_reset.counts(conn, profile["id"]),
+        }
     if authoritative_chain_observer:
         outcome["_observer_resolved_records"] = observer_resolved_records
         if rescoped:

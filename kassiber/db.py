@@ -3081,6 +3081,50 @@ CREATE TABLE IF NOT EXISTS ai_provider_secret_refs (
     created_at TEXT NOT NULL,
     rotated_at TEXT
 );
+
+-- "Reset book data" keeps the user's decisions (core/book_reset.py). Each
+-- transaction it deletes leaves its stable identity here, so the resync can
+-- give the re-observed row its old id back; `pending` until then, `changed`
+-- when it came back with different facts.
+CREATE TABLE IF NOT EXISTS book_reset_transactions (
+    transaction_id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    wallet_id TEXT NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
+    fingerprint TEXT NOT NULL,
+    external_id TEXT,
+    occurred_at TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    asset TEXT NOT NULL,
+    amount INTEGER NOT NULL,
+    fee INTEGER NOT NULL,
+    amount_includes_fee INTEGER NOT NULL,
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    state TEXT NOT NULL DEFAULT 'pending' CHECK(state IN ('pending', 'changed')),
+    changed_fields_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_book_reset_transactions_fingerprint
+    ON book_reset_transactions(profile_id, fingerprint);
+
+CREATE INDEX IF NOT EXISTS idx_book_reset_transactions_identity
+    ON book_reset_transactions(wallet_id, external_id, asset, direction);
+
+-- Decision rows that referenced a reset transaction, verbatim, in the order
+-- they are restored (parents first).
+CREATE TABLE IF NOT EXISTS book_reset_parked_rows (
+    seq INTEGER PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    table_name TEXT NOT NULL,
+    row_json TEXT NOT NULL,
+    transaction_ids_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_book_reset_parked_rows_profile
+    ON book_reset_parked_rows(profile_id, seq);
 """
 
 

@@ -267,7 +267,10 @@ class ChainAnalysisDatasetTests(unittest.TestCase):
         self.assertEqual({row["id"] for row in page1["items"] + page2["items"]}, ids)
         with self.assertRaises(AppError):
             datasets.list_datasets(self.conn, "other", {"cursor": page1["next_cursor"]})
-        result = reset_current_profile_data(self.conn, self.book._tmp.name)
+        kept = reset_current_profile_data(self.conn, self.book._tmp.name)
+        self.assertEqual(kept["decisions"]["kept_in_place"]["chain_analysis_datasets"], 3)
+        self.assertEqual(len(datasets.list_datasets(self.conn, "pf")["items"]), 3)
+        result = reset_current_profile_data(self.conn, self.book._tmp.name, wipe_everything=True)
         self.assertEqual(result["removed"]["chain_analysis_datasets"], 3)
         self.assertEqual(result["removed"]["chain_analysis_dataset_claims"], 3)
         self.assertEqual(datasets.list_datasets(self.conn, "pf")["items"], [])

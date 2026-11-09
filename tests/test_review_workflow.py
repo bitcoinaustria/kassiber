@@ -221,7 +221,12 @@ class ReviewWorkflowTest(unittest.TestCase):
         self.conn.execute("INSERT INTO settings(key,value) VALUES('context_workspace','w')")
         self.conn.execute("INSERT INTO settings(key,value) VALUES('context_profile','p')")
         self.conn.commit()
-        result=maintenance.reset_current_profile_data(self.conn,self.tmp.name)
+        # "Reset book data" keeps receipts with the book's other decisions;
+        # only the wipe-everything reset deletes them.
+        kept=maintenance.reset_current_profile_data(self.conn,self.tmp.name)
+        self.assertEqual(kept['decisions']['kept_in_place']['review_workflow_receipts'],1)
+        self.assertEqual(self.conn.execute('SELECT count(*) FROM review_workflow_receipts').fetchone()[0],1)
+        result=maintenance.reset_current_profile_data(self.conn,self.tmp.name,wipe_everything=True)
         self.assertEqual(self.conn.execute('SELECT count(*) FROM review_workflow_receipts').fetchone()[0],0)
         self.assertEqual(result['removed']['review_workflow_receipts'],1)
 

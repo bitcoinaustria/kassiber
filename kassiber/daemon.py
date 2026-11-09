@@ -19701,6 +19701,18 @@ def handle_request(
                 hint="Send clear_shared_rates as true only when the shared fiat-rate cache should be cleared.",
                 details={"field": "clear_shared_rates"},
             )
+        wipe_everything_arg = args.get("wipe_everything")
+        if wipe_everything_arg is None:
+            wipe_everything = False
+        elif isinstance(wipe_everything_arg, bool):
+            wipe_everything = wipe_everything_arg
+        else:
+            raise AppError(
+                "Wipe-everything flag must be a boolean.",
+                code="validation",
+                hint="Send wipe_everything as true only when the user chose to delete the book's decisions and documents too.",
+                details={"field": "wipe_everything"},
+            )
         auth_result = _require_sensitive_local_auth(
             ctx,
             args=args,
@@ -19720,6 +19732,7 @@ def handle_request(
                         ctx.conn,
                         ctx.data_root,
                         clear_shared_rates=clear_shared_rates,
+                        wipe_everything=wipe_everything,
                     ),
                 ),
                 request_id,

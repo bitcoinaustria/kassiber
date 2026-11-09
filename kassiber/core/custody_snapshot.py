@@ -164,7 +164,7 @@ def load_custody_snapshot(conn, profile, *, as_of: str):
     repairs, writes, clock reads or external I/O happen here.
     """
     from .custody_journal import CustodyJournalBuilder, transaction_rate_rows
-    from . import custody_gap_reviews, custody_gaps, source_overlap
+    from . import book_reset, custody_gap_reviews, custody_gaps, source_overlap
     from .import_identity import duplicate_review_quarantines
     builder = CustodyJournalBuilder(conn, profile, as_of=as_of)
     profile_id = str(profile["id"])
@@ -226,6 +226,9 @@ def load_custody_snapshot(conn, profile, *, as_of: str):
         # Held ID-less import duplicates, read from transactions and batches
         # like the gap worklist; compute treats them as migration holds.
         "import_duplicate_quarantines": list(duplicate_review_quarantines(conn, profile_id)),
+        # Kept decisions a reset could not bind, shaped as quarantines;
+        # compute treats them as migration holds.
+        "reset_hold_quarantines": list(book_reset.held_quarantines(conn, profile_id)),
         "gap_reviews": custody_gap_reviews.latest_review_rows(conn, profile_id),
         "pair_dismissals": [dict(row) for row in conn.execute("SELECT * FROM transaction_pair_dismissals WHERE profile_id=?", (profile_id,))],
         "gap_worklist": {"large_book": large_book, "rows": [_safe_row(row) for row in worklist]},
