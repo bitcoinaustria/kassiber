@@ -57,6 +57,7 @@ establish an external origin.
 | Situation | Result |
 | --- | --- |
 | Same scoped transaction observed by both own wallets, exact quantities | Automatic MOVE; no manual pairing required. |
+| A Strike or River withdrawal names the txid of an owned wallet's observed receipt, and its amount is exactly that receipt's one owned output | Automatic MOVE with the `exchange_txid_exact` evidence; see [exchange withdrawals](#exchange-withdrawals-that-name-their-txid). Anything less exact keeps today's hold or candidate. |
 | The recipient synced first and its native inputs imply a missing debit from another connected wallet | `ownership_transfer_source_missing` holds the receipt until the sender's history is available. It does not invent a new acquisition or an absent debit. |
 | A collaborative transaction returns a wallet's entire contribution while another participant funds the recipient or pays the fee | Complete native wallet-net evidence rules out a missing debit. A proven zero-movement observer row is non-economic; foreign-paid fees are not attributed to the owner. |
 | An address list and a later descriptor overlap on some receipt outputs | Complete current native evidence and canonical script ownership apportion the receipt once per output. Imported rows remain unchanged. Incomplete or conflicting evidence produces a targeted quantity hold. |
@@ -87,6 +88,53 @@ An unchanged sync still invalidates journals if its newly published observer
 authority or effective confirmation changes the accounting inputs. Refreshes
 with the same facts keep journals current; timestamp updates alone do not
 trigger a rebuild.
+
+## Exchange withdrawals that name their txid
+
+A custodial platform's withdrawal row is the platform's statement, not an
+observation, so on its own it never carries basis: a same-txid pair of that
+row and an observed receipt is held as `recorded_transfer_authority_conflict`.
+The owner decided (D2, 2026-11-09) that one statement is exact enough to
+book without review. The journal books a transfer between the owner's own
+accounts when all of these hold:
+
+- the platform wallet is a Strike or River wallet (`EXCHANGE_TXID_WALLET_KINDS`);
+- its outbound row names a typed txid, and exactly one outbound and one
+  inbound row in the book share that canonical `(chain, network, txid,
+  asset)` scope, in two different wallets;
+- the receipt has current observer authority and a fully valued graph with
+  that txid, no input owned by the book, and exactly one output owned in that
+  network, by the receiving wallet alone;
+- the platform row's principal equals that output's value in msat, by the
+  source's convention below;
+- neither row is anchored by an authored custody component, and the pair has
+  no active "not one movement" dismissal.
+
+The decision is `internal_verified` with the reason `exchange_txid_exact`; it
+is never presented as a reviewed (`internal_reviewed`) transfer. Its transient
+pair id `exchange-txid:<txid>:<vout>` names the matched output, the decision
+names the platform row and the receipt, and the platform's withdrawal fee
+books as a transfer fee. Nothing is stored beyond the journal's own decision,
+so the next rebuild re-derives it from the rows. Dismissing the pair (`transfers
+dismiss --tx-out <withdrawal> --tx-in <receipt>`, or `ui.transfers.dismiss`)
+undoes it like a native HTLC transition: the rows return to today's hold until
+the dismissal expires or is deleted.
+
+| Source | Withdrawal txid | Amount and fee convention |
+| --- | --- | --- |
+| Strike CSV | `Transaction Hash` | `Amount BTC` is what leaves on chain; `Fee BTC` is Strike's charge on top. |
+| River CSV | `Transaction ID` (Account Activity) | `Sent Amount` is what leaves on chain; `Fee Amount` is River's charge, and `Total Amount` is their sum. |
+| Coinbase API | `network.hash` | Not matched: the raw `network` object keeps the row unscoped, and the API's fee is not imported, so its convention is unverified. |
+| Binance API | `txId` | Not matched: whether `amount` excludes `transactionFee` is unverified. Rows that name the coin network are refused at import (a known reference bug). |
+| Kraken API, Bitpanda API | none | The ledger exports carry no txid. |
+| 21bitcoin, Pocket Bitcoin | none | Provider references only. |
+| Bull Bitcoin, Coinfinity orders | order payout txid | Order evidence that enriches the owned receipt; full-mode rows are excluded from accounting. |
+
+A gross amount (the platform's debit including its fee), a missing txid, a
+receipt whose output another wallet owns or that has an owned input, two owned
+outputs, two receiving wallets and two platform rows for one txid all keep
+their previous treatment. Deposits from an owned wallet to a platform are not
+covered and still need a review.
 
 ## CoinJoin, Payjoin and intermediate wallets
 

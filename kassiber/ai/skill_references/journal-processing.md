@@ -126,7 +126,11 @@ covers everything the user agreed to:
   `policy`, `out_amount_msat` (cross-asset only), and a reason.
 - `undismiss_pair`: the two legs and a reason; removes that dismissal.
 - `dismiss_pair`: the two legs, a reason, `expires_in_days` 1 to 3650
-  (default 90). Permanent dismissals stay on `transfers dismiss`.
+  (default 90). Permanent dismissals stay on `transfers dismiss`. It also
+  undoes an automatic exchange withdrawal transfer, which the lineage tool
+  shows with the evidence reason `exchange_txid_exact` (an exchange row named
+  the receipt's txid and exact amount; it is not a user review). Propose it
+  only when the user says the two rows are not one movement.
 - `custody_gap`: `action` (`create`, `dismiss`, `revise`, `reopen`,
   `classify_residual` with `classification`), `gap_id`, and a reason.
 - `kind_override`: an inbound kind (or null) for a non-quarantined inbound

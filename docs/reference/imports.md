@@ -1281,6 +1281,11 @@ Behavior:
 - USD/EUR/etc. fees on buys are included in cost basis; fiat fees on sells
   reduce proceeds
 - BTC fees become Kassiber BTC fees
+- an Account Activity withdrawal keeps `Transaction ID` as its txid; `Sent
+  Amount` is the amount sent on chain and `Fee Amount` River's charge, so in a
+  `river` wallet it books as an
+  [automatic own-account transfer](custody-resolution.md#exchange-withdrawals-that-name-their-txid)
+  when it is exactly an owned wallet's observed output
 - `Transaction Type` / `Tag` becomes the transaction kind and a `river:*` tag
 - `Method`, `Source`, and `Destination` are preserved in the description/note
 - machine output includes inserted/updated transaction summaries so desktop
@@ -1635,6 +1640,10 @@ Behavior:
   preserve the exported 64-character hash as `payment_hash` when present
 - on-chain rows use `Transaction Hash` as the transaction id when Strike
   provides one
+- `Amount BTC` is the amount sent on chain and `Fee BTC` Strike's charge on
+  top; a withdrawal whose amount is exactly an owned wallet's observed output
+  in that transaction books as an
+  [automatic own-account transfer](custody-resolution.md#exchange-withdrawals-that-name-their-txid)
 - `BTC Price` is used as the exact CSV rate when present; fiat amount columns
   and buy-row cost basis can fill pricing when Strike does not export a price
 - fiat-only deposit and reversal rows are ignored by the importer
