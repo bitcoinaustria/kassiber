@@ -394,24 +394,27 @@ wallet deletes, encrypted databases require `args.auth_response.passphrase_secre
 and plaintext databases require `DELETE LOCAL DATA`.
 
 `ui.profiles.reset_data` accepts
-`{"confirm":"RESET","confirm_profile":"...","clear_shared_rates":false}` for
-the current book. It keeps the current book set, book, bucket/account
-rows, wallet connection rows, and configured backends, then clears
-imported/synced transactions, journals, quarantines, swap pairs/dismissals/rules,
-saved views, BIP329 labels, transaction tags, attachment metadata/files, and
-source-of-funds review state so testing can redo sync, journal processing, and
-swap review from the preserved wallet connections. It also empties every
-wallet source's sync checkpoint (keeping its pause and report-blocking flags,
-marked stale with `book_data_reset`) and each wallet's last sync time, so the
-next sync re-imports every wallet's history in full, retired wallets
-included (see [backends](backends.md)). Authored decisions such as pairs,
-custody components and loan marks are deleted with their transactions and
-are not re-created by the sync. The global local fiat-rate
-cache is shared across books in the data root and is only cleared when
-`clear_shared_rates` is the boolean value `true`; string values such as
-`"false"` are rejected. Like other sensitive local-data changes, encrypted
-databases require `args.auth_response.passphrase_secret` and plaintext databases
-require `DELETE LOCAL DATA`.
+`{"confirm":"RESET","confirm_profile":"...","clear_shared_rates":false,"wipe_everything":false}`
+for the current book. It keeps the current book set, book, bucket/account
+rows, wallet connection rows, configured backends and every decision and
+document, then deletes synced transactions, journals and observer state. It
+also empties every wallet source's sync checkpoint (keeping its pause and
+report-blocking flags, marked stale with `book_data_reset`) and each wallet's
+last sync time, so the next sync re-imports every wallet's history in full,
+retired wallets included (see [backends](backends.md)). Kept decisions bind
+again as the resync brings their transactions back; one whose transactions
+are missing or changed is held with the quarantine reason
+`book_reset_decision_held`. The response reports `mode`, `removed`, and
+`decisions` (kept counts); see [book reset](book-reset.md) for the table
+inventory, the stable binding and the envelopes. `wipe_everything` set to
+the boolean `true` is the separate blank-book action: it also deletes
+decisions, documents, attachment files and any decisions an earlier reset
+still keeps. The global local fiat-rate cache is shared across books in the
+data root and is only cleared when `clear_shared_rates` is the boolean value
+`true`; string values such as `"false"` are rejected for either flag. Like
+other sensitive local-data changes, encrypted databases require
+`args.auth_response.passphrase_secret` and plaintext databases require
+`DELETE LOCAL DATA`.
 
 `ui.backends.options` returns safe backend setup choices for desktop forms. It
 lists configured backend names, kinds, chain/network metadata, presence flags,

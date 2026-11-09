@@ -189,7 +189,8 @@ forced-full refresh is the same path).
 Syncing all wallets (`wallets sync --all`, the desktop's Sync) skips retired
 (`deprecated`) wallets only for ongoing syncs. A retired wallet whose history
 the book has not imported, because it never synced or "Reset book data"
-cleared its last sync time, is included until it syncs once; `--all
+cleared its last sync time, is included until it syncs once (that sync also
+re-binds the decisions the reset kept, see [book reset](book-reset.md)); `--all
 --force-full` always includes retired wallets. A single wallet named with
 `--wallet` always syncs.
 
