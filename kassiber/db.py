@@ -23,6 +23,7 @@ DDL — add it to `SCHEMA` or `ensure_schema_compat` here instead.
 import contextvars
 import errno
 import hashlib
+import itertools
 import json
 import os
 import sqlite3
@@ -7951,6 +7952,24 @@ def _backfilled_transaction_fingerprint(row, asset_code):
     )
 
 
+def _observed_liquid_graph(raw, expected, observed_graph_hash):
+    """Return ``raw`` without the backfilled identity fields its provenance lacks.
+
+    Only fields holding exactly the backfilled value are candidates, smallest
+    removal first, and only a payload whose canonical hash equals the
+    observer's committed hash is returned. Anything else stays as it is.
+    """
+    from .core.chain_observer.provenance import canonical_graph_hash
+
+    candidates = [key for key, value in expected.items() if key in raw and raw[key] == value]
+    for size in range(1, len(candidates) + 1):
+        for removed in itertools.combinations(candidates, size):
+            restored = {key: value for key, value in raw.items() if key not in removed}
+            if canonical_graph_hash(restored) == observed_graph_hash:
+                return restored
+    return None
+
+
 def _backfill_liquid_asset_codes(conn):
     """Heal Liquid transactions whose asset was stored as a raw policy-asset hex.
 
@@ -7991,9 +8010,11 @@ def _backfill_liquid_asset_codes(conn):
     legacy_rows = conn.execute(
         f"""
         SELECT t.id, t.profile_id, t.external_id, t.asset, t.raw_json,
-               w.config_json
+               w.config_json, observation.graph_hash AS observation_graph_hash
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id
+        LEFT JOIN chain_observation_provenance observation
+          ON observation.transaction_id = t.id
         WHERE upper(replace(t.asset, '-', '')) = 'LBTC'
            OR lower(t.asset) IN ({placeholders})
         """,
@@ -8033,6 +8054,25 @@ def _backfill_liquid_asset_codes(conn):
             "asset_id": asset_id,
             "asset": "LBTC",
         }
+        observed_graph_hash = row["observation_graph_hash"]
+        if observed_graph_hash:
+            # A current observer graph is not a legacy observation: its
+            # provenance commits to the exact payload, so filling identity
+            # fields here would silently revoke its authority. Rows an earlier
+            # run of this backfill already rewrote are restored when the
+            # committed hash proves which added fields to drop.
+            from .core.chain_observer.provenance import canonical_graph_hash
+
+            if canonical_graph_hash(row["raw_json"]) == observed_graph_hash:
+                continue
+            restored_raw = _observed_liquid_graph(raw, expected, observed_graph_hash)
+            if restored_raw is not None:
+                conn.execute(
+                    "UPDATE transactions SET raw_json = ? WHERE id = ?",
+                    (json.dumps(restored_raw, sort_keys=True), row["id"]),
+                )
+                affected_profile_ids.add(row["profile_id"])
+                continue
         existing_txid = str(raw.get("txid") or "").strip().lower()
         existing_chain = str(raw.get("chain") or "").strip()
         existing_network = str(raw.get("network") or "").strip()

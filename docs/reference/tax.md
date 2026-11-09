@@ -140,7 +140,12 @@ tagged `ownership_derived` in the transfer audit (its journal entry reads
    flagged for review** — never mis-booked. Bitcoin rows usually provide the
    whole graph. Liquid sync persists and merges only the non-secret input/output
    values each connected wallet can locally unblind; unknown/conflicting
-   confidential value blocks the component instead of being guessed.
+   confidential value blocks the component instead of being guessed. Opening
+   a book never rewrites a Liquid graph its observer committed to. Earlier
+   versions added `asset`/`asset_id` to those graphs on every open, which
+   revoked their authority and booked owned Liquid moves as disposals; such
+   rows are restored on open when the committed hash proves the original,
+   and the book's journals are marked for reprocessing.
 
 2. **Multi-source consolidation deriver.** A conservative N→1 Bitcoin
    consolidation is decomposed when every input is owned, the graph has exactly
