@@ -381,6 +381,71 @@ class _SourceCases:
             any(item["reason"] == "exchange_txid_exact" for item in self.book.decisions())
         )
 
+    def test_export_in_another_wallet_kind_stays_held(self):
+        self.book.platform("custom", self.format, self.records(), label="Imported ledger")
+        self.book.receipt(self.book.cold())
+        self.book.process()
+        [withdrawal] = self.book.withdrawal_ids()
+        self.assert_held(withdrawal)
+
+    def test_output_another_wallet_owns_stays_held(self):
+        self.import_platform()
+        self.book.cold()
+        self.book.receipt(self.book.cold("Savings", SECOND_ADDRESS))
+        self.book.process()
+        [withdrawal] = self.book.withdrawal_ids()
+        self.assert_held(withdrawal)
+
+    def test_receipt_short_of_its_owned_output_stays_held(self):
+        self.import_platform()
+        self.book.receipt(
+            self.book.cold(),
+            outputs=[(OWNED_SCRIPT, PRINCIPAL_SATS + FEE_SATS), (SECOND_SCRIPT, 3_000_000)],
+        )
+        self.book.process()
+        [withdrawal] = self.book.withdrawal_ids()
+        self.assert_held(withdrawal)
+
+    def test_reviewed_component_keeps_its_authored_move(self):
+        self.import_platform()
+        receipt = self.book.receipt(self.book.cold())
+        [withdrawal] = self.book.withdrawal_ids()
+        rows = {
+            row["id"]: row
+            for row in self.book.conn.execute(
+                "SELECT id, wallet_id, occurred_at FROM transactions WHERE id IN (?, ?)",
+                (withdrawal, receipt),
+            )
+        }
+
+        def leg(role, amount, transaction_id):
+            row = rows[transaction_id]
+            return {
+                "id": f"exchange-{role}", "role": role, "rail": "bitcoin",
+                "chain": "bitcoin", "network": "main", "asset": "BTC",
+                "exposure": "bitcoin", "conservation_unit": "msat",
+                "amount_msat": amount, "transaction_id": transaction_id,
+                "wallet_id": row["wallet_id"], "occurred_at": row["occurred_at"],
+            }
+
+        component = create_component(
+            self.book.conn, workspace_id=self.book.workspace_id,
+            profile_id=self.book.profile_id, component_type="manual_bridge",
+            evidence_kind="manual_claim", evidence_grade="reviewed",
+            legs=[
+                leg("source", (PRINCIPAL_SATS + FEE_SATS) * MSAT, withdrawal),
+                leg("destination", PRINCIPAL_SATS * MSAT, receipt),
+                leg("fee", FEE_SATS * MSAT, withdrawal),
+            ],
+        )
+        activate_component(self.book.conn, component["id"])
+        self.book.process()
+        self.assertEqual(self.book.quarantines(), {})
+        self.assertEqual(
+            [(item["state"], item["amount_msat"]) for item in self.book.decisions()],
+            [("internal_reviewed", PRINCIPAL_SATS * MSAT)],
+        )
+
     def test_dismissal_undoes_the_automatic_transfer(self):
         self.import_platform()
         receipt = self.book.receipt(self.book.cold())
