@@ -69,7 +69,7 @@ def _evidence(row):
         # not a main/test/regtest declaration. Other explicit scope stays live.
         raw.pop("network", None)
         row = {**row, "raw_json": raw}
-    if row.get("wallet_kind") == "binance" and raw.get("network") == "BTC":
+    if row.get("wallet_kind") == "binance" and row.get("asset") == "BTC" and raw.get("network") == "BTC":
         # Binance's deposit/withdraw history names the coin's transfer
         # network, and "BTC" is Bitcoin on chain; Binance runs on mainnet
         # only. Other rails (LIGHTNING, BSC, ...) stay unsupported evidence.

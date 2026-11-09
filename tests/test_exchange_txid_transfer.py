@@ -516,6 +516,12 @@ class BinanceNetworkAdmissionTest(unittest.TestCase):
                 error = self.refused(binance_records(network=network), label=repr(network))
                 self.assertEqual(error.code, "book_network_mismatch")
 
+    def test_the_btc_code_is_not_liquid_evidence(self):
+        [record] = binance_records(network="BTC")
+        record = {**record, "asset": "LBTC"}
+        error = self.refused([record])
+        self.assertEqual(str(error), "Observation contradicts its configured network")
+
     def test_the_btc_code_is_only_read_for_binance_wallets(self):
         error = self.refused(binance_records(network="BTC"), kind="custom")
         self.assertEqual(str(error), "Observation contradicts its configured network")

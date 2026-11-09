@@ -37,8 +37,8 @@ instance provenance before a regtest book can reuse them.
 Some importers store a provider `network` field that names a payment rail, not
 an environment. The check reads three of them by source: Bull Bitcoin wallet
 CSV `bitcoin`/`liquid`/`lightning` and Coinbase's `network` object are no
-evidence, and Binance's `"BTC"` rail is mainnet evidence. Any other unknown
-value contradicts the row's network. See [imports](imports.md#binance-api-and-supplemental-csv).
+evidence, and Binance's `"BTC"` rail on a BTC row is mainnet evidence. Any
+other unknown value contradicts the row's network. See [imports](imports.md#binance-api-and-supplemental-csv).
 
 Bindings are authored immutable scope. Backend credentials and observer
 ownership authority remain local.

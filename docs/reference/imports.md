@@ -1741,12 +1741,12 @@ subaccounts that require an extra username are intentionally deferred because
 they are either altcoin-heavy or need additional provider-specific controls.
 
 Binance deposit and withdraw history rows name the coin's transfer rail in
-`network`. In a Binance wallet, `"BTC"` (exact case) is Bitcoin on chain and
-counts as mainnet evidence, since Binance runs on mainnet only: it imports into
-a mainnet or unbound book and is refused in a test, signet or regtest book.
-Any other rail, such as `LIGHTNING` or a token network like `BSC`, is refused
-as a contradicting network rather than guessed, and refuses the whole batch.
-The stored raw row keeps Binance's own value.
+`network`. On a BTC row in a Binance wallet, `"BTC"` (exact case) is Bitcoin on
+chain and counts as mainnet evidence, since Binance runs on mainnet only: it
+imports into a mainnet or unbound book and is refused in a test, signet or
+regtest book. Any other rail, such as `LIGHTNING` or a token network like
+`BSC`, is refused as a contradicting network rather than guessed, and refuses
+the whole batch. The stored raw row keeps Binance's own value.
 
 Supplemental Binance CSV import currently supports:
 
