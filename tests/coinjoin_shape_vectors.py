@@ -62,6 +62,8 @@ def vectors() -> list[dict]:
         old = EQUAL if len(outputs) <= 12 else None
         add(f"joinmarket_{parties}_party", tx(next(number), distinct(inputs, 2_700_000), outputs),
             EQUAL, old, f"JoinMarket, {parties} equal outputs and {parties - 1} changes")
+    add("joinmarket_many_inputs", tx(next(number), distinct(22, 2_700_000), [2_500_000] * 9 + distinct(8, 3_100_000)),
+        EQUAL, None, "22 inputs but 17 outputs: not the large rule")
     add("joinmarket_4_party", tx(next(number), distinct(6, 2_700_000), [2_500_000] * 4 + distinct(3, 3_100_000)),
         None, None, "four equal outputs: below the shape threshold, a known miss")
     # The gap: five or more inputs and 13 to 19 outputs.
