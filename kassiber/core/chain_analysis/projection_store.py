@@ -15,7 +15,7 @@ from ..onchain import stored_tx_mapping
 from .index import _Builder, canonical_txid, digest, observer_index, thaw
 
 
-VERSION = 3
+VERSION = 4
 PHYSICAL = ("transactions", "transaction_graph_cache", "wallet_utxos", "chain_analysis_observations", "chain_analysis_reference_assertions")
 OVERLAYS = ("wallets", "profiles", "journal_custody_decisions", "journal_custody_economic_relations", "chain_analysis_labels", "chain_analysis_datasets", "chain_analysis_dataset_claims", "book_network_bindings", "chain_analysis_acquisition_grants")
 SOURCE_TABLES = PHYSICAL + OVERLAYS

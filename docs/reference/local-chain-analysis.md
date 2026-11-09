@@ -166,12 +166,80 @@ are exact decimal msat strings. Asset and network domains remain distinct.
   compete with a live replacement. Unresolved current competitors block value
   inference, including exact conditional entropy counts.
 
-Known collaborative metadata and observed equal-output shapes constrain
+Known collaborative metadata and the CoinJoin shapes below constrain
 heuristics. A shape detector cannot prove that every CoinJoin or Payjoin was
 recognized. Having intermediate wallets improves private ownership and custody
 evidence; it does not reveal other participants' private allocation. Cooperative
 Taproot swaps and private Lightning routing still need the corresponding local
 or reviewed economic evidence.
+
+## CoinJoin shape rules
+
+Without a reviewed or imported marker, a transaction gets a heuristic
+`coinjoin` boundary from its public shape alone. The boundary suppresses
+common-input, change and peel hypotheses, the round-fee tell and legacy hygiene's
+ownership findings for that transaction. It never creates ownership, custody,
+an entity label or a cluster, and a reviewed or imported marker always wins.
+A missed CoinJoin lets those hypotheses join unrelated participants; a false
+positive only withholds guesses, so the thresholds lean towards marking.
+
+Counts use the transaction's legs: every input, and every output except
+OP_RETURN outputs. One rule applies, in this order:
+
+| Source | Shape |
+| --- | --- |
+| `large_equal_output_coinjoin` | at least 20 inputs and 20 outputs, and at least 5 outputs of one positive value |
+| `equal_output_coinjoin` | at least 5 inputs and 5 outputs, fewer than 5 times as many outputs as inputs, and at least 5 outputs of one positive value |
+| `distinct_value_coinjoin` | at least 5 inputs and 5 outputs, fewer than 5 times as many legs on either side as on the other, some output value occurring at least twice, every input and output value and script available, no script used twice, and twice the number of distinct input values plus distinct output values at most the number of legs |
+
+- **Five equal outputs** is the smallest round of the common coordinators
+  (Whirlpool 5x5) and the usual detection threshold for JoinMarket, whose takers
+  and makers each receive one equal output plus change ([Möser and Böhme,
+  "Anonymous Alone?", 2017](https://doi.org/10.1109/EuroSPW.2017.48)).
+  Smaller joins are a known miss.
+- **Balance.** Five or more times as many outputs as inputs is a batch payout
+  shape, five or more times as many inputs as outputs a consolidation. The
+  same 1:5 limits separate those flags from CoinJoin in mempool.space. Below
+  25 outputs a five-input transaction is always balanced, so the limit only
+  matters for larger, input-poor batches such as an exchange paying many
+  equal withdrawals.
+- **Distinct values** follow the CoinJoin flag of the mempool.space backend
+  (`getTransactionFlags` in `backend/src/api/common.ts`, described there as a
+  fast but imperfect heuristic): few distinct amounts across many legs. It
+  catches WabiSabi (Wasabi 2.x) rounds whose standard denominations, such as
+  powers of two and three and 1-2-5 values ([Ficsór et al., "WabiSabi",
+  2021](https://eprint.iacr.org/2021/206)), repeat fewer than five times each.
+  Kassiber reimplements the idea and departs from it on purpose: an
+  unavailable value or script makes the rule unavailable instead of counting
+  as a distinct amount; repetition only on the input side does not count,
+  because equal inputs paying distinct outputs hide no payment; scripts are
+  compared exactly rather than as addresses; legacy hygiene uses only the
+  values the transaction carries, never wallet inventory amounts, so its
+  finding and the suppression agree.
+- **Large rounds** (Wasabi 1.x around a 0.1 BTC denomination; [ZeroLink,
+  2017](https://github.com/nopara73/ZeroLink)) keep no balance limit, so no
+  transaction the earlier rules recognized loses its boundary.
+
+Until projection version 4 the equal-output rule stopped at 12 outputs and the
+large rule started at 20 inputs and 20 outputs, so a transaction with at least
+5 inputs and 13 to 19 outputs, or 5 to 19 inputs and 20 or more outputs, was
+never marked. JoinMarket rounds with 7 to 9 makers fall exactly there.
+Opening a book rebuilds its stored graph once with these rules (`VERSION` in
+`core/chain_analysis/projection_store.py`). Users see new `collaborative_boundary`
+findings, also in Privacy Mirror, and fewer common-input clusters
+and change or peel hypotheses, on transactions that were previously unmarked;
+legacy hygiene scores of those transactions rise accordingly, and the
+transaction graph shows their owned outputs as owned returns rather than change. Saved
+investigations keep their stored results, watches compare the new findings
+against their last observation, and reviewed decisions, labels and custody are
+unchanged.
+
+The shapes do not recognize WabiSabi rounds with many distinct values,
+JoinMarket rounds with fewer than five participants, Payjoin or other joint
+payments without metadata. Ordinary batches that pay one amount five or more
+times from at least a fifth as many inputs are marked; that only withholds
+ownership guesses. `tests/coinjoin_shape_vectors.py` lists the reviewed shapes
+and look-alikes.
 
 ## Conditional CoinJoin computation
 
@@ -507,3 +575,15 @@ Native wallet refreshes retain validated block-hash/height changes even when
 confirmation time is unchanged. Such changes generate report-evidence review
 items without discarding timestamp-based pricing or replacing unrelated stored
 transaction evidence. Generic imports do not gain this observation authority.
+
+## Legacy hygiene compatibility
+
+`ui.privacy_hygiene.snapshot` remains the separate Phase-1 compatibility scorer
+over stored transaction JSON and durable wallet inventory. Its native port
+preserves advisory tells, collaboration exclusions, inbound attribution and
+explicit missing-data states. It performs no acquisition or graph-index write.
+Its `coinjoin_pattern` finding uses the [CoinJoin shape rules](#coinjoin-shape-rules)
+with impacts 20 (large), 18 (equal output) and 16 (distinct value).
+The CLI-launched daemon serves the existing kind; no new CLI command is added.
+`reports privacy-hygiene` continues to return the configuration report. See the
+[native acceptance checkpoint](rust-shell.md#legacy-hygiene-daemon-acceptance-r5-privacy-legacy).

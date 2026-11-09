@@ -21,7 +21,7 @@ from ..onchain import (
     input_outpoint, normalized_script_hex,
     output_address, output_script, output_value_sats, stored_tx_mapping,
 )
-from ..privacy_hygiene import collaborative_transaction_evidence
+from ..privacy_hygiene import COINJOIN_SHAPE_SOURCES, collaborative_transaction_evidence
 from .ownership import branch_evidence
 
 
@@ -157,7 +157,7 @@ def observer_index(index: AnalysisIndex, observer: str) -> AnalysisIndex:
         if nodes[ident]["chain"] == "liquid":
             public["fee_msat"] = None
         marker = public.get("collaboration")
-        if marker and marker.get("source") not in {"equal_output_coinjoin", "large_equal_output_coinjoin"}:
+        if marker and marker.get("source") not in COINJOIN_SHAPE_SOURCES:
             public["collaboration"] = {"kind": "unknown", "source": "observer_exclusion", "evidence_level": "unavailable"}
         facts[ident] = public
     subjects = defaultdict(set)
