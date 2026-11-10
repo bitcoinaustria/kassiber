@@ -63,10 +63,15 @@ def render_flake(
         }};
         sourceRoot = "kassiber-cli-linux-x64";
         nativeBuildInputs = [ pkgs.autoPatchelfHook ];
-        buildInputs = [ pkgs.stdenv.cc.cc.lib pkgs.zlib ];
+        buildInputs = [ pkgs.stdenv.cc.cc.lib ];
         installPhase = ''
           runHook preInstall
-          install -Dpm755 kassiber "$out/bin/kassiber"
+          # The binary finds the AI provider broker beside its executable.
+          install -Dpm755 kassiber "$out/libexec/kassiber-cli/kassiber"
+          install -Dpm644 provider_broker/index.mjs \
+            "$out/libexec/kassiber-cli/provider_broker/index.mjs"
+          mkdir -p "$out/bin"
+          ln -s "$out/libexec/kassiber-cli/kassiber" "$out/bin/kassiber"
           install -Dpm644 ${{./LICENSE}} \
             "$out/share/licenses/kassiber-cli/LICENSE"
           runHook postInstall

@@ -89,7 +89,7 @@ changing their subsystem.
 | Daemon, AI tools, and external agents | [Daemon](docs/reference/daemon.md), [AI](docs/reference/ai.md), [operator broker](docs/reference/operator-broker.md), [MCP](docs/reference/mcp.md) |
 | Database changes | [Database compatibility](docs/reference/database-compatibility.md) |
 | Lightning adapters | [Lightning discard policy](docs/reference/lightning-opsec.md) |
-| Release artifacts and signing | [Prerelease binaries](docs/reference/prerelease-binaries.md), [macOS release](docs/reference/macos-release.md), [Linux packaging](docs/reference/linux-packaging.md) |
+| Release artifacts and signing | [Prerelease binaries](docs/reference/prerelease-binaries.md), [Rust packaging](docs/reference/rust-packaging.md), [macOS release](docs/reference/macos-release.md), [Linux packaging](docs/reference/linux-packaging.md) |
 
 ## Agent tools
 

@@ -3,8 +3,12 @@ set -euo pipefail
 export LC_ALL=C
 
 usage() {
-  echo "Usage: $0 --binary PATH --version VERSION --output PATH [--architecture ARCH] [--release RELEASE]" >&2
+  echo "Usage: $0 --binary PATH --version VERSION --output PATH [--architecture ARCH] [--release RELEASE] [--broker PATH]" >&2
 }
+
+# With --broker, the executable lives in /usr/lib/kassiber-cli beside
+# provider_broker/index.mjs (where the Rust binary looks for the AI provider
+# broker) and /usr/bin/kassiber is a symlink to it.
 
 die() {
   echo "$*" >&2
@@ -16,6 +20,7 @@ version=""
 output=""
 architecture=""
 release="1"
+broker=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --binary) binary="${2:-}"; shift 2 ;;
@@ -23,6 +28,7 @@ while [ "$#" -gt 0 ]; do
     --output) output="${2:-}"; shift 2 ;;
     --architecture) architecture="${2:-}"; shift 2 ;;
     --release) release="${2:-}"; shift 2 ;;
+    --broker) broker="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) die "Unknown argument: $1" ;;
   esac
@@ -33,6 +39,7 @@ done
 [ -n "$version" ] || die "--version is required"
 [ -n "$output" ] || die "--output is required"
 [ ! -e "$output" ] || die "Output path already exists: $output"
+[ -z "$broker" ] || [ -s "$broker" ] || die "Provider broker bundle is missing: $broker"
 case "$version" in
   *[!0-9A-Za-z.+_~^-]*|""|-*|*-) die "Invalid RPM version: $version" ;;
 esac
@@ -79,8 +86,14 @@ mkdir -p "$topdir/BUILD" "$topdir/BUILDROOT" "$topdir/RPMS" \
   "$topdir/SOURCES" "$topdir/SPECS" "$topdir/SRPMS"
 install -m 0755 "$binary" "$topdir/SOURCES/kassiber"
 install -m 0644 "$license" "$topdir/SOURCES/LICENSE"
+with_broker=0
+if [ -n "$broker" ]; then
+  install -m 0644 "$broker" "$topdir/SOURCES/index.mjs"
+  with_broker=1
+fi
 rendered_spec="$topdir/SPECS/kassiber-cli.spec"
 {
+  printf '%%global kassiber_with_broker %s\n' "$with_broker"
   printf '%%global kassiber_version %s\n' "$rpm_version"
   printf '%%global kassiber_release %s\n' "$release"
   printf '%%global kassiber_arch %s\n' "$architecture"

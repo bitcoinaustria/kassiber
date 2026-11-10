@@ -12,6 +12,7 @@ on:
       - "packaging/release/**"
       - "scripts/build-apt-repository.sh"
       - "scripts/build-rpm-repository.sh"
+      - "scripts/check-linux-glibc-floor.sh"
       - "scripts/package-cli-deb.sh"
       - "scripts/package-cli-rpm.sh"
       - "scripts/package-desktop-rpm.sh"

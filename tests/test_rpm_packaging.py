@@ -403,7 +403,7 @@ class RpmPackagingTest(unittest.TestCase):
                 ["rpm", "-qp", "--requires", str(desktop_rpm)], text=True
             )
             self.assertIn("glibc", cli_requires)
-            self.assertIn("zlib", cli_requires)
+            self.assertNotIn("zlib", cli_requires)
             self.assertIn("gtk3", desktop_requires)
             self.assertIn("webkit2gtk4.1", desktop_requires)
 
