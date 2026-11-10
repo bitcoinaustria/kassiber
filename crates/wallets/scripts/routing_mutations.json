@@ -195,7 +195,8 @@
     "expect_failing": [
       "tests/test_rust_electrum_compatibility.py::test_dependency_discovery_overlap_matches_python",
       "tests/test_rust_liquid_compatibility.py::test_liquid_dependency_discovery_overlap_matches_python",
-      "test_dependency_discovery_overlap_matches_python"
+      "test_dependency_discovery_overlap_matches_python",
+      "test_liquid_dependency_discovery_overlap_matches_python"
     ],
     "rule": "An owned script discovered past the horizon that a better wallet owns discards the dependency updates for the compatibility route."
   },
@@ -403,7 +404,8 @@
     "find": "                if self.compatibility.is_none() {",
     "replace": "                if true {",
     "expect_failing": [
-      "tests/test_rust_liquid_compatibility.py::test_liquid_dependency_discovery_overlap_matches_python"
+      "tests/test_rust_liquid_compatibility.py::test_liquid_dependency_discovery_overlap_matches_python",
+      "test_liquid_dependency_discovery_overlap_matches_python"
     ],
     "rule": "An overlap LWK discovers moves the wallet to the compatibility observer."
   },

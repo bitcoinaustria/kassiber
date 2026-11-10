@@ -1091,7 +1091,7 @@ fn run_process(
     if let Some(tape) = tape {
         command.env(
             "KASSIBER_TEST_NET_TAPE",
-            format!("replay:{}", tape.display()),
+            format!("replay-strict:{}", tape.display()),
         );
     }
     let mut child = command.spawn().expect("the binary starts");
