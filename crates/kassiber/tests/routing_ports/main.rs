@@ -8,7 +8,7 @@
 
 mod replay;
 
-use replay::{clock_numbers, replay, replay_with};
+use replay::{clock_numbers, replay, replay_served, replay_with};
 
 /// `tests/test_rust_backend_kind_aliases.py::test_liquid_esplora_kind_matches_python`
 #[test]
@@ -166,9 +166,8 @@ fn test_liquid_compatibility_books_match_python_esplora_extra1_http_route_policy
 
 /// `tests/test_rust_liquid_compatibility.py::test_liquid_dependency_discovery_overlap_matches_python`
 #[test]
-#[ignore = "LWK opens Electrum connections whose first writes match; the tape binds them by order"]
 fn test_liquid_dependency_discovery_overlap_matches_python() {
-    replay("liquid_compatibility/test_liquid_dependency_discovery_overlap_matches_python");
+    replay_served("liquid_compatibility/test_liquid_dependency_discovery_overlap_matches_python");
 }
 
 /// `tests/test_rust_liquid_view_keys.py::test_legacy_set_view_key_matches_python[esplora]`
