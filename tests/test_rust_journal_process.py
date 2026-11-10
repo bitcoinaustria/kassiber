@@ -175,6 +175,9 @@ def _native_replay(root, case, cipher, **options):
     return json.loads(result.stdout)
 
 
+# The oracle's capture() replaces build_ledger_state and feeds recorded ids and
+# clocks, so the tax shadow runs these two uncompared (stubs_tax_engine).
+@pytest.mark.stubs_tax_engine
 def test_real_prebuild_process_vectors_rebuild_from_python():
     from tests.rust_port.journal_native_process_oracle import PATH, packed_vectors
     assert json.loads(PATH.read_text()) == packed_vectors()
@@ -208,6 +211,7 @@ def test_native_real_prebuild_replays_complete_books_and_clock_uuid_tapes(prepar
     assert actual['build_clock_reads'] == int({'phase': 'building'} in case['phases']), case['name']
 
 
+@pytest.mark.stubs_tax_engine
 @pytest.mark.parametrize('cipher', [False, True])
 @pytest.mark.parametrize('table,column,payload', [
     ('transactions', 'note', b'\xff\0'),
