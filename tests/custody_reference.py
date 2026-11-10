@@ -229,9 +229,14 @@ class CustodyJournalBuilder:
             self.conn,
             profile_id=self.profile_id,
         )
+        from kassiber.core.book_reset import held_quarantines
         from kassiber.core.import_identity import duplicate_review_quarantines
+        # The snapshot loader reads the same two hold sources as migration
+        # holds: held ID-less import duplicates and the decisions a book reset
+        # could not bind (custody_snapshot.load_custody_snapshot).
         migration_quarantines = (*migration_quarantines,
-                                *duplicate_review_quarantines(self.conn, self.profile_id))
+                                *duplicate_review_quarantines(self.conn, self.profile_id),
+                                *held_quarantines(self.conn, self.profile_id))
         component_blockers = component_integrity_blockers(
             self.conn,
             self.profile_id,
