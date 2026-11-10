@@ -6,8 +6,11 @@
 //! fingerprint, checks the OpenSSH signature the way `ssh-keygen -Y verify`
 //! does with one canonical allowed-signers entry, and then checks the
 //! artifact against the authenticated SHA-256 manifest.
+pub mod publish;
+#[cfg(feature = "update")]
 pub mod update;
 pub mod verify;
+pub mod version;
 
 use kassiber_envelope::AppError;
 

@@ -10,13 +10,13 @@ use sha2::{Digest, Sha256};
 
 use crate::{splitlines, strip, Result};
 
-const MAX_MANIFEST_BYTES: u64 = 1024 * 1024;
-const MAX_SIGNATURE_BYTES: u64 = 16 * 1024;
-const MAX_PUBLIC_KEY_BYTES: u64 = 16 * 1024;
-const NAMESPACE: &str = "kassiber-release";
-const PRINCIPAL: &str = "release@kassiber";
-const MANIFEST_HEADER: &str = "# Kassiber release manifest v1";
-const MANIFEST_VERSION_PREFIX: &str = "# Version: ";
+pub(crate) const MAX_MANIFEST_BYTES: u64 = 1024 * 1024;
+pub(crate) const MAX_SIGNATURE_BYTES: u64 = 16 * 1024;
+pub(crate) const MAX_PUBLIC_KEY_BYTES: u64 = 16 * 1024;
+pub(crate) const NAMESPACE: &str = "kassiber-release";
+pub(crate) const PRINCIPAL: &str = "release@kassiber";
+pub(crate) const MANIFEST_HEADER: &str = "# Kassiber release manifest v1";
+pub(crate) const MANIFEST_VERSION_PREFIX: &str = "# Version: ";
 const SIGNATURE_HEADER: &[u8] = b"-----BEGIN SSH SIGNATURE-----";
 
 fn file_error(message: String, path: &Path, label: &str) -> AppError {
@@ -27,7 +27,7 @@ fn file_error(message: String, path: &Path, label: &str) -> AppError {
 }
 
 /// `_open_regular_file`: no final symlink, regular files only.
-fn open_regular(path: &Path, label: &str) -> Result<(std::fs::File, u64)> {
+pub(crate) fn open_regular(path: &Path, label: &str) -> Result<(std::fs::File, u64)> {
     let mut options = std::fs::OpenOptions::new();
     options.read(true);
     #[cfg(unix)]
@@ -61,7 +61,7 @@ fn open_regular(path: &Path, label: &str) -> Result<(std::fs::File, u64)> {
     Ok((file, metadata.len()))
 }
 /// `str.capitalize()` for the ASCII labels used here.
-fn capitalize(label: &str) -> String {
+pub(crate) fn capitalize(label: &str) -> String {
     let mut chars = label.chars();
     match chars.next() {
         Some(first) => {
@@ -72,7 +72,7 @@ fn capitalize(label: &str) -> String {
 }
 
 /// `_require_small_regular_file(path, limit, label)`.
-fn small_file(path: &Path, limit: u64, label: &str) -> Result<Vec<u8>> {
+pub(crate) fn small_file(path: &Path, limit: u64, label: &str) -> Result<Vec<u8>> {
     let too_large = || {
         AppError::new(
             "release_verification_file_error",
@@ -104,7 +104,7 @@ fn small_file(path: &Path, limit: u64, label: &str) -> Result<Vec<u8>> {
 }
 
 /// `Path(value).expanduser()`.
-fn expand(value: &str) -> PathBuf {
+pub(crate) fn expand(value: &str) -> PathBuf {
     kassiber_paths::Context::from_env()
         .ok()
         .and_then(|context| context.expand_user(Path::new(value)).ok())
@@ -112,7 +112,7 @@ fn expand(value: &str) -> PathBuf {
 }
 
 /// `normalize_fingerprint(value)`: a complete `SHA256:` + 43 base64 chars.
-fn normalize_fingerprint(value: &str) -> Result<String> {
+pub(crate) fn normalize_fingerprint(value: &str) -> Result<String> {
     let normalized = strip(value);
     let valid = normalized.strip_prefix("SHA256:").is_some_and(|rest| {
         rest.len() == 43
@@ -166,7 +166,7 @@ fn b64decode(text: &str) -> Option<Vec<u8>> {
 }
 
 /// `_parse_key_fields(key_type, encoded)`: one Ed25519 or Ed25519-SK key blob.
-fn key_fields(key_type: &str, encoded: &str) -> Option<Vec<u8>> {
+pub(crate) fn key_fields(key_type: &str, encoded: &str) -> Option<Vec<u8>> {
     if !["ssh-ed25519", "sk-ssh-ed25519@openssh.com"].contains(&key_type) {
         return None;
     }
@@ -189,7 +189,7 @@ fn key_fields(key_type: &str, encoded: &str) -> Option<Vec<u8>> {
 }
 
 /// `_single_key_line(raw, label, code)`.
-fn single_key_line(raw: &[u8], label: &str, code: &str) -> Result<String> {
+pub(crate) fn single_key_line(raw: &[u8], label: &str, code: &str) -> Result<String> {
     let text = std::str::from_utf8(raw)
         .ok()
         .filter(|text| text.is_ascii())
@@ -214,7 +214,7 @@ fn single_key_line(raw: &[u8], label: &str, code: &str) -> Result<String> {
 }
 
 /// `parse_ssh_public_key(raw)`.
-fn parse_public_key(raw: &[u8]) -> Result<(String, Vec<u8>)> {
+pub(crate) fn parse_public_key(raw: &[u8]) -> Result<(String, Vec<u8>)> {
     let code = "invalid_release_public_key";
     let line = single_key_line(raw, "release public key", code)?;
     let tokens: Vec<&str> = line
@@ -464,11 +464,11 @@ pub fn verify_signature(
 }
 
 /// `_normalize_release_version(version)`.
-fn release_version(version: &str) -> Result<String> {
+pub(crate) fn release_version(version: &str) -> Result<String> {
     let normalized = version.strip_prefix('v').unwrap_or(version);
     if normalized != strip(normalized)
         || normalized.starts_with('v')
-        || crate::update::parse_version(normalized).is_none()
+        || crate::version::parse_version(normalized).is_none()
     {
         return Err(AppError::new(
             "invalid_release_version",
@@ -479,7 +479,7 @@ fn release_version(version: &str) -> Result<String> {
 }
 
 /// `_release_version_from_manifest_name(name)`.
-fn manifest_version(name: &str) -> Result<String> {
+pub(crate) fn manifest_version(name: &str) -> Result<String> {
     match name
         .strip_prefix("kassiber-")
         .and_then(|rest| rest.strip_suffix("-manifest.txt"))
@@ -493,7 +493,7 @@ fn manifest_version(name: &str) -> Result<String> {
 }
 
 /// `_MANIFEST_LINE.fullmatch(line)`: `(sha256, filename)`.
-fn manifest_line(line: &str) -> Option<(&str, &str)> {
+pub(crate) fn manifest_line(line: &str) -> Option<(&str, &str)> {
     let (digest, filename) = (line.get(..64)?, line.get(64..)?.strip_prefix("  ")?);
     let digest_ok = digest
         .bytes()
@@ -508,7 +508,11 @@ fn manifest_line(line: &str) -> Option<(&str, &str)> {
 }
 
 /// `_parse_release_manifest_bytes(raw, source, expected_version)`.
-fn manifest_entries(raw: &[u8], source: &str, expected: &str) -> Result<Vec<(String, String)>> {
+pub(crate) fn manifest_entries(
+    raw: &[u8],
+    source: &str,
+    expected: &str,
+) -> Result<Vec<(String, String)>> {
     let path = || dict([("path", s(source))]);
     let text = std::str::from_utf8(raw).map_err(|_| {
         AppError::new(
@@ -567,7 +571,7 @@ fn manifest_entries(raw: &[u8], source: &str, expected: &str) -> Result<Vec<(Str
 }
 
 /// `sha256_file(path)`.
-fn sha256_file(path: &Path) -> Result<String> {
+pub(crate) fn sha256_file(path: &Path) -> Result<String> {
     let label = "release artifact";
     let (mut file, _) = open_regular(path, label)?;
     let mut digest = Sha256::new();
@@ -593,7 +597,7 @@ fn sha256_file(path: &Path) -> Result<String> {
 }
 
 /// `pathlib.PurePath.name`.
-fn name(path: &Path) -> String {
+pub(crate) fn name(path: &Path) -> String {
     path.file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default()

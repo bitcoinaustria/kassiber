@@ -2855,6 +2855,7 @@ name = "kassiber-release"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "flate2",
  "kassiber-envelope",
  "kassiber-net",
  "kassiber-paths",
@@ -2863,9 +2864,12 @@ dependencies = [
  "kassiber-setup",
  "kassiber-store",
  "nix 0.30.1",
+ "plist",
  "sha2 0.11.1",
  "signature",
  "ssh-key",
+ "tar",
+ "zip",
 ]
 
 [[package]]
