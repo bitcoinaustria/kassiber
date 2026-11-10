@@ -10,12 +10,8 @@ import time
 from pathlib import Path
 from typing import Any
 
-from kassiber.backends import (
-    load_runtime_config,
-    merge_db_backends,
-    resolve_effective_env_file,
-)
-from kassiber.db import open_db, resolve_database_path
+from tests.integration.book import database_path as resolve_database_path
+from tests.integration.book import open_book as open_db
 from tests import cli_runner
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -46,24 +42,6 @@ BACKUP_LND_MACAROON_HEX = (
     or "00"
 )
 LN_KINDS = ("coreln", "lnd", "nwc")
-
-FORBIDDEN_AI_KEYS = {
-    "peerPubkey",
-    "fundingOutpoint",
-    "shortChannelId",
-    "inPeerAlias",
-    "outPeerAlias",
-    "inShortChannelId",
-    "outShortChannelId",
-    "payment_preimage",
-    "payment_secret",
-    "failure_source_pubkey",
-    "erring_node",
-    "bolt11",
-    "routes",
-    "route",
-}
-
 
 def _default_home() -> Path:
     project = os.environ.get("KASSIBER_REGTEST_COMPOSE_PROJECT", "kassiber-regtest")
@@ -429,29 +407,6 @@ def _daemon_snapshot(data_root: Path, connection_label: str = CONNECTION_LABEL) 
         _shutdown_daemon_process(proc)
 
 
-def _all_keys(value: Any) -> set[str]:
-    keys: set[str] = set()
-    if isinstance(value, dict):
-        for key, item in value.items():
-            keys.add(str(key))
-            keys.update(_all_keys(item))
-    elif isinstance(value, list):
-        for item in value:
-            keys.update(_all_keys(item))
-    return keys
-
-
-def _runtime_config_for(data_root: Path) -> dict[str, object]:
-    env_file = resolve_effective_env_file(data_root=str(data_root))
-    runtime_config = load_runtime_config(env_file)
-    conn = open_db(data_root)
-    try:
-        merge_db_backends(conn, runtime_config)
-    finally:
-        conn.close()
-    return runtime_config
-
-
 def _assert_db_state(data_root: Path) -> dict[str, int]:
     conn = open_db(data_root)
     try:
@@ -640,38 +595,6 @@ def _assert_profitability(report: dict[str, Any], csv_file: Path) -> None:
             raise AssertionError(f"CSV export missing {needle!r}: {csv_file}")
 
 
-def _assert_ai_opsec(data_root: Path) -> None:
-    from kassiber.daemon import (
-        _lightning_node_snapshot_payload_for_ai,
-        _lightning_profitability_payload_for_ai,
-    )
-
-    runtime_config = _runtime_config_for(data_root)
-    conn = open_db(data_root)
-    try:
-        snapshot = _lightning_node_snapshot_payload_for_ai(
-            conn,
-            runtime_config,
-            {"connection": CONNECTION_LABEL, "window_days": 30},
-        )
-        profitability = _lightning_profitability_payload_for_ai(
-            conn,
-            runtime_config,
-            {"connection": CONNECTION_LABEL, "window_days": 30},
-        )
-    finally:
-        conn.close()
-
-    keys = _all_keys(snapshot) | _all_keys(profitability)
-    leaked = sorted(FORBIDDEN_AI_KEYS & keys)
-    if leaked:
-        raise AssertionError(f"AI-safe Lightning payload leaked forbidden keys: {leaked}")
-    if snapshot.get("pubkey") is not None:
-        raise AssertionError("AI-safe snapshot exposed the operator node pubkey")
-    if "channels" in profitability:
-        raise AssertionError("AI-safe profitability exposed per-channel rows")
-
-
 def run() -> dict[str, Any]:
     home = Path(os.environ.get("KASSIBER_LIGHTNING_BUSINESS_HOME") or _default_home())
     data_root = Path(
@@ -737,7 +660,10 @@ def run() -> dict[str, Any]:
     _assert_lnd_snapshot(lnd_snapshot)
     _assert_profitability(report, csv_file)
     counts = _assert_db_state(data_root)
-    _assert_ai_opsec(data_root)
+    # The AI-safe Lightning projections (no pubkey, no per-channel peer rows)
+    # are pinned by the Rust AI crate: crates/ai/tests/fences.rs and the
+    # projections in crates/ai/src/projections.rs. They used to be checked
+    # here by calling the Python daemon's projection in process.
 
     return {
         "data_root": str(data_root),

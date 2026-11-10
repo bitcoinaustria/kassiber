@@ -13,7 +13,8 @@ from pathlib import Path
 import uuid
 from typing import Any, Callable, Mapping
 
-from kassiber.db import open_db
+from tests.integration.book import bitcoinrpc_wallet_name, daemon_call
+from tests.integration.book import open_book as open_db
 
 D = Decimal
 HEADERS = ["Reference", "Date & Time (UTC)", "Transaction Type", "Amount EUR", "Fee EUR",
@@ -130,26 +131,28 @@ def price_native_fixture_rows(
     profile: Mapping[str, Any],
     native_wallet: Mapping[str, Any],
 ) -> None:
-    """Audit row-specific synthetic valuations without touching shared rate cache."""
-    from kassiber.cli.handlers import _metadata_hooks
-    from kassiber.core import metadata, pricing
+    """Audit row-specific synthetic valuations without touching shared rate cache.
 
-    conn = open_db(str(data_root))
+    The product's metadata update (`ui.transactions.metadata.update`) records
+    each price as an exact manual override with this reason.
+    """
+    conn = open_db(str(data_root), readonly=True)
     try:
         rows = conn.execute("SELECT id FROM transactions WHERE profile_id=? AND wallet_id=?",
                             (profile["id"], native_wallet["id"])).fetchall()
-        if len(rows) != 2:
-            raise RuntimeError("Exchange native wallet must contain exactly two observed movements")
-        for row in rows:
-            metadata.update_transaction_metadata(
-                conn, profile["workspace_id"], profile["id"], row["id"], _metadata_hooks(),
-                pricing_update={"fiat_rate": "100100", "source_kind": pricing.SOURCE_MANUAL_OVERRIDE,
-                                "quality": pricing.QUALITY_EXACT, "method": "regtest_exchange_oracle"},
-                source="cli",
-                reason="Synthetic exchange fixture valuation; independent of historical market data",
-            )
     finally:
         conn.close()
+    if len(rows) != 2:
+        raise RuntimeError("Exchange native wallet must contain exactly two observed movements")
+    for row in rows:
+        daemon_call(data_root, "ui.transactions.metadata.update", {
+            "transaction": row["id"],
+            "fiat_rate": "100100",
+            "pricing_source_kind": "manual_override",
+            "pricing_quality": "exact",
+            "source": "cli",
+            "reason": "Synthetic exchange fixture valuation; independent of historical market data",
+        })
 
 
 def reconcile_exports(
@@ -422,8 +425,6 @@ def run_exchange_cases(
         "--chain", "bitcoin", "--network", "regtest",
         "--birthday", times["buy_time"], *address_args,
     )["data"]
-    from kassiber.core.sync_backends import bitcoinrpc_wallet_name
-
     observer_wallet = bitcoinrpc_wallet_name(
         {"wallet_prefix": config.get("wallet_prefix", "kassiber")}, native_record,
     )

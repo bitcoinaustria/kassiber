@@ -19,12 +19,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
-from kassiber import backends
-from kassiber.cli.handlers import import_exchange_api
-from kassiber.core import accounts
-from kassiber.db import get_setting, open_db, set_setting
-from kassiber.msat import MSAT_PER_BTC
-from tests.integration.env import no_egress_guard
+from tests import cli_runner
+from tests.integration.book import MSAT_PER_BTC
+from tests.integration.book import open_book as open_db
 
 
 class CoinbaseApiFixture:
@@ -149,69 +146,72 @@ def run_exchange_api_case(
          "amount": {"amount": "-0.001", "currency": "BTC"},
          "native_amount": {"amount": "149", "currency": "EUR"}},
     ]
-    conn = open_db(data_root)
-    prior_context = {key: get_setting(conn, key) for key in ("context_workspace", "context_profile")}
-    try:
-        workspace = conn.execute("SELECT * FROM workspaces WHERE label = ?", (workspace_label,)).fetchone()
-        if workspace is None:
-            workspace = accounts.create_workspace(conn, workspace_label)
-        profile = accounts.create_profile(
-            conn, workspace["id"], "Coinbase API protocol fixture (stopped)", "EUR", "FIFO", "generic", 365,
+    def cli(*args, secret: bool = False) -> dict:
+        result = cli_runner.run(
+            ["--data-root", str(data_root), "--machine", *args],
+            capture_output=True, text=True, check=False, secret_input=secret,
         )
-        backend_name = "coinbase-protocol-" + profile["id"][:8]
-        with no_egress_guard(enabled=True), CoinbaseApiFixture(transactions) as provider:
-            accounts.create_backend(
-                conn, backend_name, "coinbase", provider.url,
-                token=provider.api_key, auth_header=provider.api_secret, timeout=3,
-                notes="Synthetic loopback protocol validation fixture. Server stops after validation; not a live exchange connection.",
-            )
-            runtime = backends.merge_db_backends(conn, {
-                "env_file": str(data_root / "unused.env"), "backends": {},
-                "bootstrap_backends": {}, "dotenv_backends": [],
-                "process_env_overrides": {"backends": {}, "default_backend": False},
-            })
-            outcomes = [import_exchange_api(
-                conn, runtime, workspace["id"], profile["id"], backend_name,
-                expected_backend_kind="coinbase",
-            ) for _ in range(2)]
-            requests = list(provider.requests)
+        if result.returncode != 0:
+            raise RuntimeError(f"kassiber {args[:2]} failed\nstdout={result.stdout}\nstderr={result.stderr}")
+        return json.loads(result.stdout)["data"]
+
+    cli("init")
+    workspaces = cli("workspaces", "list")
+    if not any(workspace.get("label") == workspace_label for workspace in workspaces):
+        cli("workspaces", "create", workspace_label)
+    profile = cli(
+        "profiles", "create", "Coinbase API protocol fixture (stopped)", "--workspace", workspace_label,
+        "--fiat-currency", "EUR", "--gains-algorithm", "FIFO", "--tax-country", "generic",
+        "--tax-long-term-days", "365",
+    )
+    backend_name = "coinbase-protocol-" + profile["id"][:8]
+    scope = ("--workspace", workspace_label, "--profile", profile["id"])
+    with CoinbaseApiFixture(transactions) as provider:
+        # The disposable credentials reach the product over descriptors,
+        # never the command line.
+        cli(
+            "backends", "create", backend_name, "--kind", "coinbase", "--url", provider.url,
+            "--timeout", "3",
+            "--notes", "Synthetic loopback protocol validation fixture. Server stops after validation; not a live exchange connection.",
+            "--token-fd", cli_runner.InputFd(provider.api_key.encode()),
+            "--auth-header-fd", cli_runner.InputFd(provider.api_secret.encode()),
+            secret=True,
+        )
+        outcomes = [cli("wallets", "sync-coinbase", *scope, "--backend", backend_name) for _ in range(2)]
+        requests = list(provider.requests)
+    conn = open_db(data_root, readonly=True)
+    try:
         rows = conn.execute(
             "SELECT id, wallet_id, external_id, direction, amount, fee FROM transactions WHERE profile_id = ? ORDER BY occurred_at",
             (profile["id"],),
         ).fetchall()
-        balance_msat = sum(row["amount"] if row["direction"] == "inbound" else -row["amount"] - row["fee"] for row in rows)
-        expected = Decimal("0.01") - withdrawal + deposit - Decimal("0.001")
-        actual = Decimal(balance_msat) / MSAT_PER_BTC
-        if len(rows) != 4 or outcomes[1]["imported"] != 0 or actual != expected:
-            raise AssertionError("Synthetic exchange refresh did not preserve the expected source ledger")
-        if len(requests) != 12 or any(item["status"] != 200 for item in requests):
-            raise AssertionError("Synthetic exchange pagination/authentication coverage incomplete")
-        return {
-            "id": "coinbase-api-protocol", "evidence_kind": "synthetic_coinbase_api_protocol",
-            "book_scope": "separate_disposable_protocol_book", "interactive_demo_profile": False,
-            "title": "Coinbase API protocol validation (local fixture, stopped)",
-            "profile_id": profile["id"], "profile": profile["label"], "wallet_id": rows[0]["wallet_id"],
-            "transaction_ids": [row["id"] for row in rows],
-            "txids": {"withdrawal": withdrawal_txid, "deposit": deposit_txid},
-            "transaction_count": len(rows), "first_imported": outcomes[0]["imported"],
-            "refresh_added": outcomes[1]["imported"], "authenticated_requests": len(requests),
-            "pages_per_refresh": 6, "source_ledger_balance_btc": format(actual, "f"),
-            "withdrawal_btc": str(withdrawal), "deposit_btc": str(deposit), "provider_running": False,
-            "limitations": [
-                "Synthetic provider validates the repository adapter protocol, not live Coinbase compatibility.",
-                "Separate alternate protocol profile; do not add this ledger to the main demo book.",
-                "Profile and transaction IDs are validation references, not links to the interactive demo; the caller discards this temporary book.",
-                "API transaction references do not establish native blockchain authority.",
-                "Movement fees are zero in this fixture; no exchange withdrawal fee coverage is claimed.",
-                "No native wallet is connected in this profile; source-ledger balance is not a custody or tax report.",
-                "The local API server has stopped; this fixture connection cannot perform ongoing refreshes.",
-            ],
-        }
     finally:
-        for key, value in prior_context.items():
-            if value is None:
-                conn.execute("DELETE FROM settings WHERE key = ?", (key,))
-            else:
-                set_setting(conn, key, value)
-        conn.commit()
         conn.close()
+    balance_msat = sum(row["amount"] if row["direction"] == "inbound" else -row["amount"] - row["fee"] for row in rows)
+    expected = Decimal("0.01") - withdrawal + deposit - Decimal("0.001")
+    actual = Decimal(balance_msat) / MSAT_PER_BTC
+    if len(rows) != 4 or outcomes[1]["imported"] != 0 or actual != expected:
+        raise AssertionError("Synthetic exchange refresh did not preserve the expected source ledger")
+    if len(requests) != 12 or any(item["status"] != 200 for item in requests):
+        raise AssertionError("Synthetic exchange pagination/authentication coverage incomplete")
+    return {
+        "id": "coinbase-api-protocol", "evidence_kind": "synthetic_coinbase_api_protocol",
+        "book_scope": "separate_disposable_protocol_book", "interactive_demo_profile": False,
+        "title": "Coinbase API protocol validation (local fixture, stopped)",
+        "profile_id": profile["id"], "profile": profile["label"], "wallet_id": rows[0]["wallet_id"],
+        "transaction_ids": [row["id"] for row in rows],
+        "txids": {"withdrawal": withdrawal_txid, "deposit": deposit_txid},
+        "transaction_count": len(rows), "first_imported": outcomes[0]["imported"],
+        "refresh_added": outcomes[1]["imported"], "authenticated_requests": len(requests),
+        "pages_per_refresh": 6, "source_ledger_balance_btc": format(actual, "f"),
+        "withdrawal_btc": str(withdrawal), "deposit_btc": str(deposit), "provider_running": False,
+        "limitations": [
+            "Synthetic provider validates the repository adapter protocol, not live Coinbase compatibility.",
+            "Separate alternate protocol profile; do not add this ledger to the main demo book.",
+            "Profile and transaction IDs are validation references, not links to the interactive demo; the caller discards this temporary book.",
+            "API transaction references do not establish native blockchain authority.",
+            "Movement fees are zero in this fixture; no exchange withdrawal fee coverage is claimed.",
+            "No native wallet is connected in this profile; source-ledger balance is not a custody or tax report.",
+            "The local API server has stopped; this fixture connection cannot perform ongoing refreshes.",
+        ],
+    }
