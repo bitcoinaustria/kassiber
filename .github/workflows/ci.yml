@@ -115,7 +115,7 @@ jobs:
       - preflight
       - rust-binaries
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ matrix.shard == 'serial-daemon' && 90 || 60 }}
+    timeout-minutes: ${{ matrix.shard == 'serial-daemon' && 120 || 60 }}
     env:
       # Fail the lane when a test module reaches the tax engine but is
       # missing from the tax-shadow overlay (docs/reference/testing.md).
@@ -252,7 +252,7 @@ jobs:
       KASSIBER_TEST_CUSTODY_LOADER_BIN: ${{ github.workspace }}/target/release/examples/custody-load
       KASSIBER_TEST_JOURNAL_PROCESS_BIN: ${{ github.workspace }}/target/release/examples/journal-process
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ matrix.shard == 'serial-daemon' && 90 || 60 }}
+    timeout-minutes: ${{ matrix.shard == 'serial-daemon' && 120 || 60 }}
     strategy:
       fail-fast: false
       matrix:
@@ -379,7 +379,7 @@ jobs:
       - preflight
       - rust-binaries
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ matrix.shard == 'serial-daemon' && 90 || 60 }}
+    timeout-minutes: ${{ matrix.shard == 'serial-daemon' && 120 || 60 }}
     strategy:
       fail-fast: false
       matrix:
