@@ -527,6 +527,17 @@ def _run_shadow(lane: str | None, *, ci: bool, pytest_args: Sequence[str]) -> in
     return _run_pytest(paths, distribution=distribution, pytest_args=pytest_args, tax_mode=SHADOW_MODE)
 
 
+PART_ENV = "KASSIBER_TEST_PART"
+
+
+def _part(value: str) -> str:
+    """`K/N` with 1 <= K <= N; tests/conftest.py keeps that part's tests."""
+    index, slash, count = value.partition("/")
+    if not (slash and index.isdigit() and count.isdigit() and 1 <= int(index) <= int(count)):
+        raise argparse.ArgumentTypeError(f"--part must be K/N with 1 <= K <= N, not {value!r}")
+    return f"{int(index)}/{int(count)}"
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -546,6 +557,7 @@ def _parser() -> argparse.ArgumentParser:
         choices=("loadscope", "load", "worksteal"),
         help="Override a per-test-safe parallel shard's distribution with --ci (local runs; CI keeps its policy)",
     )
+    run_parser.add_argument("--part", type=_part, help="Run part K of N (K/N): tests split by a stable hash of their node id, for CI lanes too long for one job")
 
     list_shadow_parser = subparsers.add_parser(
         "list-shadow", help="List the tax-shadow overlay, or its part in one shard"
@@ -555,6 +567,7 @@ def _parser() -> argparse.ArgumentParser:
     custody_shadow_parser = subparsers.add_parser("run-custody-shadow", help="Audit the frozen SQL flow against the pure production stages")
     custody_shadow_parser.add_argument("shard", nargs="?", choices=ALL_SHARDS)
     custody_shadow_parser.add_argument("--ci", action="store_true", help="Apply the existing per-shard distribution policy")
+    custody_shadow_parser.add_argument("--part", type=_part, help="Run part K of N (K/N): tests split by a stable hash of their node id, for CI lanes too long for one job")
 
     run_shadow_parser = subparsers.add_parser(
         "run-shadow",
@@ -564,6 +577,7 @@ def _parser() -> argparse.ArgumentParser:
     run_shadow_parser.add_argument(
         "--ci", action="store_true", help="Enable the shard's safe xdist workers"
     )
+    run_shadow_parser.add_argument("--part", type=_part, help="Run part K of N (K/N): tests split by a stable hash of their node id, for CI lanes too long for one job")
     return parser
 
 
@@ -579,6 +593,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     args, pytest_args = parser.parse_known_args(argv)
     pytest_args = [*pytest_args, *passthrough]
     manifest = validate_manifest()
+    if getattr(args, "part", None):
+        os.environ[PART_ENV] = args.part
+        print(f"{PART_ENV}={args.part}", flush=True)
     if args.command == "validate":
         if pytest_args:
             parser.error(f"unrecognized arguments: {' '.join(pytest_args)}")

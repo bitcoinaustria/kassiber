@@ -19,6 +19,7 @@ import os
 import re
 import tempfile
 import time
+import zlib
 from pathlib import Path
 
 import pytest
@@ -247,6 +248,28 @@ def pytest_configure(config: pytest.Config) -> None:
     os.environ["KASSIBER_TEST_NO_EGRESS"] = "1"
     _EGRESS_STACK = contextlib.ExitStack()
     _EGRESS_STACK.enter_context(no_egress_guard(enabled=True))
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """Keep one part of a lane split across CI jobs (`KASSIBER_TEST_PART=K/N`).
+
+    A test belongs to the part its node id's CRC-32 picks, so every xdist
+    worker and every job agrees without coordination, and each test runs in
+    exactly one part (scripts/python_test_shards.py `--part`).
+    """
+    part = os.environ.get("KASSIBER_TEST_PART", "").strip()
+    if not part:
+        return
+    index, _, count = part.partition("/")
+    index, count = int(index), int(count)
+    if not 1 <= index <= count:
+        raise pytest.UsageError(f"KASSIBER_TEST_PART must be K/N with 1 <= K <= N, not {part!r}")
+    keep, drop = [], []
+    for item in items:
+        (keep if zlib.crc32(item.nodeid.encode("utf-8")) % count == index - 1 else drop).append(item)
+    if drop:
+        config.hook.pytest_deselected(items=drop)
+        items[:] = keep
 
 
 def _test_module(item: pytest.Item) -> str:
