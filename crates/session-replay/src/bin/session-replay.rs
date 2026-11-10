@@ -311,7 +311,9 @@ fn main() -> ExitCode {
                     .to_string_lossy()
                     .trim_end_matches(".gz")
                     .to_owned();
-                let scratch = scratch_root.join(format!("w{worker}-{index}"));
+                // Per run, so two runs side by side never share a directory.
+                let scratch =
+                    scratch_root.join(format!("{}-w{worker}-{index}", std::process::id()));
                 let _ = fs::remove_dir_all(&scratch);
                 let _ = fs::create_dir_all(&scratch);
                 let result = read_session(file).and_then(|session| {

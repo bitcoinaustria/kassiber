@@ -496,8 +496,9 @@ pub fn keeps_env(name: &str) -> bool {
     ];
     let product = name.starts_with("KASSIBER_") || name.starts_with("SATBOOKS_");
     let recorder = name.starts_with("KASSIBER_SESSION_");
-    // Test switches name test fakes (`..._SECRET_STORE`), never secrets.
-    let test_switch = name.starts_with("KASSIBER_TEST_");
+    // Test switches name test fakes (`..._SECRET_STORE`) or pin test
+    // clocks (`KASSIBER_RUST_TEST_SECRETS_TIME`), never secrets.
+    let test_switch = name.starts_with("KASSIBER_TEST_") || name.starts_with("KASSIBER_RUST_TEST_");
     (product && !recorder && (test_switch || !secret_name(name))) || NAMES.contains(&name)
 }
 
@@ -587,6 +588,7 @@ mod tests {
         assert!(!keeps_env("KASSIBER_SESSION_RECORD_DIR"));
         assert!(!keeps_env("GITHUB_TOKEN"));
         assert!(keeps_env("HOME"));
+        assert!(keeps_env("KASSIBER_RUST_TEST_SECRETS_TIME"));
         let dir = tempfile::tempdir().unwrap();
         let list = dir.path().join("allow.txt");
         fs::write(&list, "secret-token\n").unwrap();
