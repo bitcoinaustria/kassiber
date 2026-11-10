@@ -78,7 +78,7 @@ fn root_path() -> &'static Regex {
 fn temporary_name() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
-        Regex::new(r"^(?:[A-Za-z][A-Za-z0-9.]*(?:-[A-Za-z0-9.]+)*[-_]|\.?tmp)([A-Za-z0-9_]{6,8})$")
+        Regex::new(r"^(?:[A-Za-z][A-Za-z0-9.]*(?:-[A-Za-z0-9.]+)*[-_]|\.?tmp)([A-Za-z0-9_-]{6,8})$")
             .unwrap()
     })
 }
@@ -890,7 +890,7 @@ mod tests {
             true,
         );
         let right = b.rewrite(
-            r#"{"path":"/mnt/tmp/kassiber-chat-uploads-Jf78MYwY/tmp0HCb0AO9/paste.csv","root":"/mnt/tmp/kassiber-r5-desktop-od6dr16w/data"}"#,
+            r#"{"path":"/mnt/tmp/kassiber-chat-uploads-ucqErM-f/tmp0HCb0AO9/paste.csv","root":"/mnt/tmp/kassiber-r5-desktop-od6dr16w/data"}"#,
             true,
         );
         assert_eq!(left, right);
