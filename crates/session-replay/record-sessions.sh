@@ -14,7 +14,7 @@
 #   cargo build -p kassiber --features test-harness
 #   cargo build --examples -p kassiber -p kassiber-wallets -p kassiber-journals ...
 #     --features kassiber-store/test-hooks,<each package>/test-harness
-#   cargo build -p kassiber-session-replay
+#   cargo build -p kassiber-session-replay -p kassiber-clock-shim
 # Run it under the fast-io wrapper; recordings never need durable writes.
 # The junit report lands in RECORD_DIR; keep only sessions of passing tests.
 set -euo pipefail
@@ -50,7 +50,8 @@ shims, target, rec, repo, allowlist = sys.argv[1:6]
 # inside the recording namespace.
 config = {"record_dir": rec, "root_prefixes": ["/mnt/bt", "/mnt/tmp"], "repo": repo,
           "examples_dir": f"{target}/debug/examples", "current_dir": "/mnt/current",
-          "passphrase_allowlist": allowlist}
+          "passphrase_allowlist": allowlist,
+          "clock_shim": f"{target}/debug/libkassiber_clock_shim.so"}
 shim = f"{target}/debug/session-shim"
 examples = f"{target}/debug/examples"
 # Hard links, not symlinks: tests resolve KASSIBER_RUST_BIN and look for

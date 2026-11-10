@@ -99,6 +99,8 @@ struct Config {
     current_dir: Option<String>,
     /// Synthetic passphrases: one literal of the test sources per line.
     passphrase_allowlist: Option<String>,
+    /// `libkassiber_clock_shim.so`, preloaded into each recorded process.
+    clock_shim: Option<String>,
 }
 
 /// The test a pytest ancestor of this process is running.
@@ -295,6 +297,21 @@ fn main() {
             .max(1);
         env.insert("KASSIBER_TEST_SQLITE_SEED".into(), seed.to_string());
         command.env("KASSIBER_TEST_SQLITE_SEED", seed.to_string());
+    }
+    // The session's wall clock (crates/session-replay/clock-shim): a short
+    // process reads the same times, and the book the same hashes over them,
+    // when it is replayed. It starts at the whole second the session began.
+    if let (Some(_), Some(clock)) = (&record, config.clock_shim.as_deref()) {
+        if Path::new(clock).is_file() {
+            let base = now_us() / 1_000_000 * 1_000_000;
+            env.insert("KASSIBER_TEST_CLOCK_BASE_US".into(), base.to_string());
+            command.env("KASSIBER_TEST_CLOCK_BASE_US", base.to_string());
+            let preload = match std::env::var("LD_PRELOAD") {
+                Ok(existing) if !existing.is_empty() => format!("{clock}:{existing}"),
+                _ => clock.to_owned(),
+            };
+            command.env("LD_PRELOAD", preload);
+        }
     }
     let prefixes: Vec<PathBuf> = config.root_prefixes.iter().map(PathBuf::from).collect();
     let blobs = record.as_ref().map(|dir| Blobs::new(dir));

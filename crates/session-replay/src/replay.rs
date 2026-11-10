@@ -408,8 +408,33 @@ pub fn replay(
     }
     // The runner's own I/O shim (the tests' fast-io wrapper), never the
     // session's.
-    if let Some(preload) = std::env::var_os("LD_PRELOAD") {
-        command.env("LD_PRELOAD", preload);
+    // A session recorded on the shared clock replays on it: the shim sits
+    // beside the session-replay binary.
+    let clock = session
+        .env
+        .contains_key("KASSIBER_TEST_CLOCK_BASE_US")
+        .then(|| {
+            std::env::current_exe().ok().and_then(|exe| {
+                exe.parent()
+                    .map(|dir| dir.join("libkassiber_clock_shim.so"))
+            })
+        })
+        .flatten();
+    if let Some(clock) = &clock {
+        if !clock.is_file() {
+            return Err(format!(
+                "{} is missing; build kassiber-clock-shim",
+                clock.display()
+            ));
+        }
+    }
+    let preload: Vec<String> = clock
+        .iter()
+        .map(|c| c.to_string_lossy().into_owned())
+        .chain(std::env::var("LD_PRELOAD").ok().filter(|p| !p.is_empty()))
+        .collect();
+    if !preload.is_empty() {
+        command.env("LD_PRELOAD", preload.join(":"));
     }
     command.env("HOME", scratch.join("home"));
     for (key, value) in &session.env {

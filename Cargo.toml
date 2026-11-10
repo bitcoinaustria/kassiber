@@ -34,6 +34,7 @@ members = [
   "crates/transfers",
   "crates/secrets",
   "crates/session-replay",
+  "crates/session-replay/clock-shim",
   "crates/pydecimal",
   "crates/pyjson",
   "crates/pytext",

@@ -2601,6 +2601,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "kassiber-clock-shim"
+version = "0.1.0"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "kassiber-credentials"
 version = "0.1.0"
 dependencies = [
