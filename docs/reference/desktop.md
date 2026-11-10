@@ -111,26 +111,22 @@ Current development modes:
   `KASSIBER_PYTHON` is set. `KASSIBER_REPO_ROOT` can point a dev shell at a
   different checkout.
 
-Prerelease desktop packages bundle a `kassiber-cli-*` sidecar built with
-PyInstaller. macOS ships it one-*dir*, as
-`binaries/kassiber-cli/kassiber-cli-aarch64-apple-darwin` beside its
-`_internal/` payload; Linux and Windows ship the flat one-file build. The
-macOS split is a cold-start fix, not a packaging preference: a one-file
-sidecar unpacks ~170 MB into a fresh temp directory on every launch, and macOS
-re-validates the code signature of every bundled dylib from scratch each time
-because that cache is keyed by inode. That cost 6s of off-CPU work before the
-daemon answered, on every cold start; a stable path inside the bundle brings it
-to 0.19s. Linux and Windows have no equivalent per-inode cost.
+Release desktop packages bundle the Rust `kassiber` binary as a
+`kassiber-cli-<target triple>` sidecar, with the AI provider broker beside it
+([Rust packaging](rust-packaging.md)). macOS keeps it at
+`binaries/kassiber-cli/kassiber-cli-aarch64-apple-darwin`, the location and
+signing identifier of the former Python one-dir sidecar, which the Touch ID
+helper's identity check and existing Keychain items rely on; Linux and Windows
+ship it flat under `binaries/`. A single native executable has no one-file
+extraction and no per-launch dylib re-validation.
 
-Every packaged artifact is built against uv's own managed CPython — the
-prerelease workflow pins `UV_PYTHON`/`UV_PYTHON_PREFERENCE`, and
-`scripts/build-macos-arm64-app.sh` passes `--python`. Keeping both on the same
-interpreter is what makes a locally verified build and the published one the
-same shape; that divergence is why this cold-start bug never reproduced
-locally. `actions/setup-python` ships a macOS *framework* CPython whose stdlib
-extension modules are 58 separate `.so` files, where the managed build links
-them into `libpython3.11.dylib`: 115 bundled dylibs against 57, each validated
-separately, plus symlinks inside the one-dir tree that Tauri cannot copy.
+`scripts/build-macos-arm64-app.sh` still builds the Python-backed
+"Kassiber Dev" app with a PyInstaller one-dir sidecar against uv's managed
+CPython, for side-by-side comparison until Python retires. Its one-dir layout
+is a cold-start fix: a one-file sidecar unpacks ~170 MB into a fresh temp
+directory on every launch, and macOS re-validates every bundled dylib's
+signature each time because that cache is keyed by inode (6s before the daemon
+answered, against 0.19s from a stable path).
 
 At runtime the supervisor prefers `KASSIBER_PYTHON` when it is explicitly set,
 then the bundled sidecar from the app resources (one-dir candidate first), then

@@ -1,6 +1,5 @@
 """Regression coverage for the Python pricing and partial-payout review."""
 import json
-from contextlib import ExitStack
 from dataclasses import replace
 from decimal import Decimal
 from types import SimpleNamespace

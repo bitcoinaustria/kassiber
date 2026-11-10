@@ -55,6 +55,15 @@ attested, and the report carries a matching `unknown_origin` warning naming the
 unattributed amount. Cases saved before source assets and gross demand were
 recorded are not re-exported; re-run the report and save the case again.
 
+The current Python reference has a known discrepancy in the fee explanation:
+its transaction-node projection omits the privacy-boundary flag that the fee
+guard checks, and the guard does not inspect privacy link types. A reviewed
+CoinJoin route can therefore retain its privacy warning while its difference
+is still named as network fees. The synthetic
+[reproduction](../../crates/reports/scripts/repro_python_source_funds_fee_privacy.py)
+pins this behavior without changing it. Resolving it is separate from the Rust
+read port; the privacy restriction above remains the intended contract.
+
 Reviewing a link is not editing it. The editor is built from exact stored
 millisatoshis rather than an 8-decimal projection, only fields the reviewer
 deliberately changed are sent, a rejection may not carry an allocation edit, and
@@ -136,3 +145,121 @@ report's canonical `simplified_flow` nodes and explicit edges; adjacent levels
 never imply a connection. CoinJoin/PayJoin boundaries remain marked boundaries.
 The printable SVG/PDF stays server-rendered from that same frozen report, so
 interactive selection and zoom cannot alter disclosure or evidence authority.
+
+The partial Rust R5 port serves the stored source, link, case and recipient
+listings through the CLI and daemon, plus the daemon's paginated evidence
+listing. These editor reads retain full attachment metadata without opening
+evidence files. Case listings use their frozen recipient fields and do not
+load or validate the saved report payload. They do not rebuild journals or
+establish provenance, ownership or tax facts. Native source creation and managed
+evidence association, link creation/review and managed-id attachment, plus
+recipient creation, updates and soft deletion, are
+available through the CLI and daemon. They retain the provenance boundary and
+roll back failed writes. AI tool execution, consent and once-only admission
+remain Python-owned under R6. The native report producer also
+serves `reports source-funds` and `ui.source_funds.preview`, including
+disclosure, current stored custody and
+structural-lineage checks, recipients, explorer references, findings, text and
+SVG diagrams. These reads hold a database snapshot and open no evidence file
+or network connection. Native tied-flow order is deterministic; its complete
+bytes match a measured Python hash-seed variant. The known Python fee-attribution
+bug is retained for parity; see the [producer checkpoint](rust-shell.md#source-funds-report-producer-checkpoint-r5-partial).
+Case saving through `reports source-funds --save-case` and
+`ui.source_funds.cases.save` freezes the complete report, SVG, recipient fields
+and target external reference. Report generation and both snapshot rows share
+writer admission. The native daemon
+`ui.source_funds.review_context` supplies the fingerprint used by reviewed saves;
+those saves reject stale or truncated inspections under the same write lock.
+CLI review-context, input handoffs and coverage share this producer.
+Persisted suggest and assemble also use the native service; see the
+[persisted-pass checkpoint](rust-shell.md#source-funds-persisted-pass-checkpoint-r5).
+Native batch review revalidates the target's
+suggested links against current stored custody or authoritative, wallet-scoped
+structural lineage under the same write lock as approval. An explicit empty
+selection approves nothing; CLI dry runs return the proposed result and roll
+back every write. Neither path establishes ownership or tax facts.
+PDF rendering and PDF-containing
+bundles remain in Python by the owner's decision; their routes are not
+registered natively.
+
+Native `source-funds review-context` / `request-input` and the corresponding
+daemon kinds bind the recipe, reachable editor records, evidence metadata and
+input version to the same review fingerprint. The 200-record inspection caps,
+truncation refusals and advisory input handoffs retain the Python contract.
+Current deterministic bulk eligibility is computed outside that fingerprint.
+Only an explicitly selected, bounded CLI recipe file is read; evidence files
+remain unopened. See the [review checkpoint](rust-shell.md#source-funds-review-and-input-checkpoint-r5-partial).
+Native CLI and daemon coverage classify historical inbound observations through
+those report gates. Totals retain each inbound hop and already-spent inflows;
+they are not a current-holdings calculation. The six buckets remain exhaustive,
+and capped rows stay visible as `not_classified`. Shared report inputs live
+only for that request. The Python truncated text currently includes skipped
+rows in its claimed "classified" count; the
+[reproduction](../../crates/reports/scripts/repro_python_source_funds_coverage.py)
+records that display bug and Rust retains its text for parity. See the
+[coverage checkpoint](rust-shell.md#source-funds-coverage-checkpoint-r5-partial).
+Native `source-funds suggest --dry-run` previews local privacy-boundary,
+current stored custody, structural-input and provider-hint candidates. It
+retains the reference ordering, reviewed/rejected-link vetoes, confidence
+supersession, target frontier and 500-row ceiling. Its preview savepoint
+rolls back every temporary edit before returning the preview, including on
+failure. Suggestions remain heuristic provenance requiring review; they grant
+no ownership or tax authority. Evidence files and backends are not opened.
+Persisted suggestions and assembly run natively through CLI and daemon.
+Assembly loads inputs once, then commits each suggestion pass and each review
+pass separately, retaining completed stages if a later stage fails. It defaults
+to eight passes and caps requests at sixteen. There is no assembly dry-run
+contract. See the
+[suggestion checkpoint](rust-shell.md#source-funds-suggestion-preview-checkpoint-r5-partial).
+PDF rendering and PDF-containing bundles remain in Python by the owner's
+decision; their routes are not registered natively.
+
+Uncaught failures on the native source-funds daemon reads include an empty
+native debug string; typed refusals retain null. Python-only traceback frames
+and stderr are not fabricated. Non-debug response fields retain exact parity.
+
+The AI tool executor calls Python's connection-scoped source-funds service
+directly. It does not invoke the native CLI or daemon transport. Its advertised
+schemas, explicit consent, duplicate-call suppression, frozen book/input
+binding and redacted projections remain Python-owned under R6, including source
+admission and case saving. Direct CLI and desktop requests retain their own
+validation and case-review fingerprint barriers; they do not enter the AI
+consent loop.
+
+Recipient mutations preserve exact, profile-scoped references and frozen case
+recipient fields. Python currently translates duplicate-recipient constraint
+errors to validation errors on SQLite but leaves SQLCipher's distinct exception
+untranslated. The Rust service preserves that envelope difference. The local
+[reproduction](../../crates/reports/scripts/repro_python_source_funds_recipient_constraints.py)
+records the discrepancy without changing Python product behavior. No recipient
+mutation tools are exposed to the in-product AI.
+
+Native CLI and daemon source-funds failures preserve non-debug response bytes.
+Under plan 21's honest-native contract, requested native debug text is empty:
+CLI debug is null without `--debug`, while daemon debug is null for typed
+refusals and an empty string for unhandled service failures. Python tracebacks
+are not synthesized. Daemon errors retain the existing secret redaction floor.
+
+The Python reference commits source/link evidence associations before response
+projection. A malformed stored amount can therefore make the request fail after
+the association has committed. Rust keeps the write and projection in one
+transaction and rolls that failure back. The synthetic
+[reproduction](../../crates/reports/scripts/repro_python_source_funds_projection_commit.py)
+records this discrepancy and the reference CLI's unredacted error message;
+Python product behavior is unchanged. This corrupt-record path is excluded
+from process parity acceptance and is tested separately for native rollback.
+
+Batch review has the same Python post-commit response-projection discrepancy.
+The synthetic [batch reproduction](../../crates/reports/scripts/repro_python_source_funds_batch_projection_commit.py)
+records it on both database bindings. Native batch admission retains all updates
+and response projection in one transaction and rolls back the entire batch on
+failure; Python product behavior is unchanged.
+
+Persisted suggestions can likewise release their outermost savepoint before
+projecting the response, and assembly's bulk-review stage commits before its
+projection. The [pass reproduction](../../crates/reports/scripts/repro_python_source_funds_pass_projection.py)
+records corrupt-allocation failures after those commits on both bindings.
+Native passes keep their own write and response projection atomic while
+retaining earlier committed assembly stages. These injected corrupt-record
+paths have separate native rollback tests and are excluded from parity claims;
+Python product behavior is unchanged.

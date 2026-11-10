@@ -1,20 +1,9 @@
 import type { ComponentType } from "react";
 
-export type TaxCountry = "at" | "generic";
-export type FiatCurrency = "EUR" | "USD" | "CHF" | "GBP";
+import type { GainsAlgorithm, TaxCountry } from "@/lib/taxCountries";
 
-// Algorithm tokens match `kassiber.tax_policy` / rp2 plugins.
-// Generic country exposes the lot methods (FIFO/LIFO/HIFO/LOFO) plus the plain
-// moving-average / average-cost method. Austrian books default to the Austrian
-// moving-average variant but may also use the lot methods.
-export type GenericGainsAlgorithm =
-  | "FIFO"
-  | "LIFO"
-  | "HIFO"
-  | "LOFO"
-  | "MOVING_AVERAGE";
-export type AustrianGainsAlgorithm = "MOVING_AVERAGE_AT";
-export type GainsAlgorithm = GenericGainsAlgorithm | AustrianGainsAlgorithm;
+export type { GainsAlgorithm, TaxCountry };
+export type FiatCurrency = "EUR" | "USD" | "CHF" | "GBP";
 
 export type DatabaseMode = "sqlcipher" | "plaintext";
 export type BackendSetupMode = "default" | "custom" | "skip";

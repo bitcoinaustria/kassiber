@@ -5,8 +5,10 @@ import {
   ArrowRight,
   CheckCircle2,
   Clock3,
+  RotateCcw,
   ShieldCheck,
   TriangleAlert,
+  Undo2,
   WalletCards,
 } from "lucide-react";
 
@@ -21,6 +23,15 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   useDaemon,
   useDaemonInfinite,
@@ -47,20 +58,25 @@ import {
   type FiledReportImpactPreview,
   type GuidedCorrectionPreview,
   type ResidualClassificationPreview,
+  type UndoneAutomaticPairing,
   bridgeCreateArgs,
   bridgePreviewArgs,
   canShowNoKnownCustodyGaps,
+  canUndoAutomaticPairing,
   collectCustodyGapPages,
   collectCustodyLineagePages,
   custodyGapActionMode,
   formatCustodyMsat,
+  lineagePairKey,
   reopenConfirmArgs,
   reopenPreviewArgs,
   residualConfirmArgs,
   residualPreviewArgs,
+  restoreAutomaticPairingArgs,
   reviseConfirmArgs,
   revisePreviewArgs,
   shouldOfferResidualClassification,
+  undoAutomaticPairingArgs,
 } from "./custodyGapsModel";
 
 function formatDate(value: string | null, language: string): string {
@@ -241,6 +257,7 @@ type LineageEvidenceKey =
   | "lineage.evidence.recordedFanout"
   | "lineage.evidence.rowMatched"
   | "lineage.evidence.nativeTransfer"
+  | "lineage.evidence.exchangeTxid"
   | "lineage.evidence.reviewedTransfer"
   | "lineage.evidence.reviewedGapBridge"
   | "lineage.evidence.channelLifecycle";
@@ -249,6 +266,7 @@ const LINEAGE_EVIDENCE_KEYS: Record<string, LineageEvidenceKey> = {
   recorded_fanout: "lineage.evidence.recordedFanout",
   row_matched: "lineage.evidence.rowMatched",
   verified_native_transfer: "lineage.evidence.nativeTransfer",
+  exchange_txid_exact: "lineage.evidence.exchangeTxid",
   reviewed_transfer_pair: "lineage.evidence.reviewedTransfer",
   reviewed_gap_bridge: "lineage.evidence.reviewedGapBridge",
   manual: "lineage.evidence.reviewedTransfer",
@@ -271,8 +289,13 @@ function lineageEvidenceLabel(
 
 export function CustodyLineageTimeline({
   snapshot,
+  onUndo,
+  undoDisabled = false,
 }: {
   snapshot: CustodyLineageSnapshot;
+  /** Asks to undo an automatic pairing; absent, none is offered. */
+  onUndo?: (item: CustodyLineageItem) => void;
+  undoDisabled?: boolean;
 }) {
   const { t, i18n } = useTranslation("custodyGaps");
   const hideSensitive = useUiStore((state) => state.hideSensitive);
@@ -350,6 +373,20 @@ export function CustodyLineageTimeline({
                     {t("lineage.basisBlocked")}
                   </p>
                 ) : null}
+                {onUndo && canUndoAutomaticPairing(item) ? (
+                  <div className="flex justify-end">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={undoDisabled}
+                      onClick={() => onUndo(item)}
+                    >
+                      <Undo2 className="size-3.5" aria-hidden="true" />
+                      {t("lineage.undo.action")}
+                    </Button>
+                  </div>
+                ) : null}
               </CardContent>
             </Card>
           ))}
@@ -361,6 +398,112 @@ export function CustodyLineageTimeline({
           </CardContent>
         </Card>
       )}
+    </section>
+  );
+}
+
+function lineageRoute(item: CustodyLineageItem, t: TFunction<"custodyGaps">) {
+  return t("lineage.undo.route", {
+    from: item.from_wallet_label,
+    to: item.to_wallet_label,
+  });
+}
+
+/** Confirms undoing one automatic pairing before its dismissal is sent. */
+export function UndoAutomaticPairingDialog({
+  item,
+  pending,
+  error,
+  onConfirm,
+  onCancel,
+}: {
+  item: CustodyLineageItem | null;
+  pending: boolean;
+  error: string | null;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const { t } = useTranslation("custodyGaps");
+  const hideSensitive = useUiStore((state) => state.hideSensitive);
+  return (
+    <Dialog open={item !== null} onOpenChange={(open) => !open && onCancel()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{t("lineage.undo.title")}</DialogTitle>
+          <DialogDescription>{t("lineage.undo.description")}</DialogDescription>
+        </DialogHeader>
+        {item ? (
+          <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
+            <span>{lineageRoute(item, t)}</span>
+            <span className={cn("ml-auto", hideSensitive && "sensitive")}>
+              {formatCustodyMsat(item.amount_msat, item.asset)}
+            </span>
+          </p>
+        ) : null}
+        <p className="text-xs text-muted-foreground">{t("lineage.undo.restoreHint")}</p>
+        {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button type="button" variant="outline" disabled={pending}>
+              {t("lineage.undo.cancel")}
+            </Button>
+          </DialogClose>
+          <Button type="button" disabled={pending} onClick={onConfirm}>
+            {pending ? t("lineage.undo.undoing") : t("lineage.undo.confirm")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Pairings undone in this session, each restorable by removing its dismissal. */
+export function UndoneAutomaticPairings({
+  undone,
+  pending,
+  error,
+  onRestore,
+}: {
+  undone: readonly UndoneAutomaticPairing[];
+  pending: boolean;
+  error: string | null;
+  onRestore: (undone: UndoneAutomaticPairing) => void;
+}) {
+  const { t } = useTranslation("custodyGaps");
+  const hideSensitive = useUiStore((state) => state.hideSensitive);
+  if (!undone.length) return null;
+  return (
+    <section className="space-y-3" aria-labelledby="custody-undone-title">
+      <div>
+        <h2 id="custody-undone-title" className="font-semibold">
+          {t("lineage.undone.title")}
+        </h2>
+        <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+          {t("lineage.undone.description")}
+        </p>
+      </div>
+      {undone.map((entry) => (
+        <Card className="gap-3 py-4" key={lineagePairKey(entry.item)}>
+          <CardContent className="flex flex-wrap items-center gap-2 px-4 text-sm">
+            <span className="font-medium">{lineageRoute(entry.item, t)}</span>
+            <span className={cn("text-muted-foreground", hideSensitive && "sensitive")}>
+              {formatCustodyMsat(entry.item.amount_msat, entry.item.asset)}
+            </span>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="ml-auto"
+              disabled={pending}
+              onClick={() => onRestore(entry)}
+            >
+              <RotateCcw className="size-3.5" aria-hidden="true" />
+              {t("lineage.undone.restore")}
+            </Button>
+          </CardContent>
+        </Card>
+      ))}
+      {error ? <p className="text-sm text-destructive">{error}</p> : null}
     </section>
   );
 }
@@ -1193,10 +1336,49 @@ export function CustodyGapsContent({ focusGapId, onFocusGap }: { focusGapId?: st
     .filter((page): page is CustodyGapSnapshot => Boolean(page));
   const snapshot = pages[0];
   const gaps = collectCustodyGapPages(pages);
+  const dismissPairing = useDaemonMutation<{ id?: string }>("ui.transfers.dismiss");
+  const restorePairing = useDaemonMutation("ui.transfers.dismissals.delete");
+  const [pendingUndo, setPendingUndo] = useState<CustodyLineageItem | null>(null);
+  const [undoError, setUndoError] = useState<string | null>(null);
+  const [undone, setUndone] = useState<UndoneAutomaticPairing[]>([]);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
   const lineagePages = (lineageQuery.data?.pages ?? [])
     .map((page) => page.data)
     .filter((page): page is CustodyLineageSnapshot => Boolean(page));
-  const lineageSnapshot = collectCustodyLineagePages(lineagePages);
+  const collectedLineage = collectCustodyLineagePages(lineagePages);
+  // An undone pairing leaves the list at once; the journals recalculate later.
+  const undoneKeys = new Set(undone.map((entry) => lineagePairKey(entry.item)));
+  const lineageSnapshot = collectedLineage && {
+    ...collectedLineage,
+    items: collectedLineage.items.filter(
+      (item) => !undoneKeys.has(lineagePairKey(item)),
+    ),
+  };
+
+  const confirmUndo = async () => {
+    if (!pendingUndo) return;
+    const item = pendingUndo;
+    setUndoError(null);
+    try {
+      const result = await dismissPairing.mutateAsync(undoAutomaticPairingArgs(item));
+      setUndone((current) => [
+        ...current.filter((entry) => lineagePairKey(entry.item) !== lineagePairKey(item)),
+        { item, dismissalId: result.data?.id ?? null },
+      ]);
+      setPendingUndo(null);
+    } catch (cause) {
+      setUndoError(cause instanceof Error ? cause.message : t("lineage.undo.failed"));
+    }
+  };
+  const restore = async (entry: UndoneAutomaticPairing) => {
+    setRestoreError(null);
+    try {
+      await restorePairing.mutateAsync(restoreAutomaticPairingArgs(entry));
+      setUndone((current) => current.filter((other) => other !== entry));
+    } catch (cause) {
+      setRestoreError(cause instanceof Error ? cause.message : t("lineage.undone.failed"));
+    }
+  };
 
   if (gapsQuery.isLoading) return <ScreenSkeleton titleWidth="w-48" />;
   if (gapsQuery.isError || !snapshot) {
@@ -1350,9 +1532,32 @@ export function CustodyGapsContent({ focusGapId, onFocusGap }: { focusGapId?: st
         </Card>
       )}
 
+      <UndoneAutomaticPairings
+        undone={undone}
+        pending={restorePairing.isPending}
+        error={restoreError}
+        onRestore={(entry) => void restore(entry)}
+      />
+      <UndoAutomaticPairingDialog
+        item={pendingUndo}
+        pending={dismissPairing.isPending}
+        error={undoError}
+        onConfirm={() => void confirmUndo()}
+        onCancel={() => {
+          setPendingUndo(null);
+          setUndoError(null);
+        }}
+      />
       {lineageSnapshot ? (
         <>
-          <CustodyLineageTimeline snapshot={lineageSnapshot} />
+          <CustodyLineageTimeline
+            snapshot={lineageSnapshot}
+            onUndo={(item) => {
+              setUndoError(null);
+              setPendingUndo(item);
+            }}
+            undoDisabled={dismissPairing.isPending}
+          />
           {lineageQuery.hasNextPage ? (
             <div className="flex flex-col items-center gap-2">
               <p className="text-xs text-muted-foreground">

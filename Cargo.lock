@@ -2486,6 +2486,42 @@ dependencies = [
 ]
 
 [[package]]
+name = "kassiber"
+version = "0.22.78"
+dependencies = [
+ "kassiber-ai",
+ "kassiber-backup",
+ "kassiber-chain",
+ "kassiber-cli",
+ "kassiber-daemon",
+ "kassiber-diagnostics",
+ "kassiber-envelope",
+ "kassiber-imports",
+ "kassiber-ipc",
+ "kassiber-journals",
+ "kassiber-net",
+ "kassiber-operator",
+ "kassiber-ownership",
+ "kassiber-paths",
+ "kassiber-pyjson",
+ "kassiber-pytext",
+ "kassiber-rates",
+ "kassiber-release",
+ "kassiber-reports",
+ "kassiber-runtime",
+ "kassiber-secrets",
+ "kassiber-setup",
+ "kassiber-store",
+ "kassiber-transactions",
+ "kassiber-transfers",
+ "kassiber-wallets",
+ "kassiber-workspace",
+ "serde_json",
+ "tempfile",
+ "zeroize",
+]
+
+[[package]]
 name = "kassiber-ai"
 version = "0.1.0"
 dependencies = [
@@ -2534,6 +2570,34 @@ dependencies = [
  "serde_json",
  "sha2 0.11.1",
  "tempfile",
+]
+
+[[package]]
+name = "kassiber-cli"
+version = "0.1.0"
+dependencies = [
+ "fancy-regex 0.20.0",
+ "kassiber-ai",
+ "kassiber-daemon",
+ "kassiber-diagnostics",
+ "kassiber-envelope",
+ "kassiber-imports",
+ "kassiber-ipc",
+ "kassiber-mcp",
+ "kassiber-operator",
+ "kassiber-pyjson",
+ "kassiber-pytext",
+ "kassiber-release",
+ "kassiber-runtime",
+ "kassiber-secrets",
+ "kassiber-setup",
+ "kassiber-store",
+ "kassiber-tax-countries",
+ "kassiber-transactions",
+ "kassiber-wallets",
+ "serde_json",
+ "tempfile",
+ "zeroize",
 ]
 
 [[package]]

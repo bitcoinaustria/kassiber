@@ -24,6 +24,7 @@ import {
 } from "@/daemon/transport";
 import { cn } from "@/lib/utils";
 import { setAppUpdateChecksEnabled } from "@/lib/appUpdate";
+import { taxCountryEntry, usesLongTermDays } from "@/lib/taxCountries";
 import { celebrateBooksCreated } from "@/lib/shellReveal";
 import {
   bookIdentityKey,
@@ -59,6 +60,7 @@ import { ReviewStep } from "./steps/ReviewStep";
 import { SecurityStep } from "./steps/SecurityStep";
 import { SyncStep } from "./steps/SyncStep";
 import { ImportProjectPanel } from "./ImportProjectPanel";
+import { onboardingRegionLabel } from "./regionLabel";
 import { StartChoicePanel } from "./StartChoicePanel";
 import {
   regtestDemoImportedProject,
@@ -264,8 +266,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
     const gainsAlgorithm = allowedAlgorithms.includes(form.gainsAlgorithm)
       ? form.gainsAlgorithm
       : GAINS_ALGORITHM_DEFAULTS[form.taxCountry];
-    const taxLongTermDays =
-      form.taxCountry === "at"
+    const taxLongTermDays = !usesLongTermDays(form.taxCountry)
         ? 0
         : (parseTaxLongTermDays(form.taxLongTermDays) ?? 365);
     // Apply the app-wide network choice before setup creates or mutates any
@@ -406,10 +407,9 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
     const identity: Identity = {
       name: form.profile.trim() || "Private",
       workspace: form.workspace.trim() || "My Books",
-      // Legacy field. Today rp2 only ships `at` + `generic` country plugins,
-      // so all non-AT picks collapse to "Generic". Prefer `taxCountry` for
-      // new callers.
-      country: form.taxCountry === "at" ? "AT" : "Generic",
+      // Legacy field: the country's ISO code, "Generic" for the generic
+      // country. Prefer `taxCountry` for new callers.
+      country: taxCountryEntry(form.taxCountry)?.iso ?? "Generic",
       encrypted: form.databaseMode === "sqlcipher",
       profile: form.profile.trim() || "Private",
       taxCountry: form.taxCountry,
@@ -853,9 +853,7 @@ function stepSummary(
     case "essentials":
       return [
         form.workspace.trim() || "My Books",
-        form.taxCountry === "at"
-          ? t("essentials.jurisdictionAustria")
-          : t("essentials.jurisdictionGeneric"),
+        onboardingRegionLabel(form.taxCountry, t),
         form.fiatCurrency,
       ].join(" · ");
     case "sync":

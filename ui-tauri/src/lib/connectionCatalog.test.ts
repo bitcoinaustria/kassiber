@@ -30,6 +30,7 @@ describe("connection catalog", () => {
       "bip329",
       "backend-settings",
       "samourai",
+      "exchange-api",
     ]);
 
     for (const source of CONNECTION_SOURCES.filter(
@@ -43,6 +44,27 @@ describe("connection catalog", () => {
 
       expect(target?.status).toBe("ready");
       expect(implementedSetupKinds.has(target?.setupKind ?? "")).toBe(true);
+    }
+  });
+
+  it("sets up every exchange API through a read-only key, never a command", () => {
+    const exchanges = CONNECTION_SOURCES.filter(
+      (source) => source.setupKind === "exchange-api",
+    );
+
+    expect(exchanges.map((source) => [source.id, source.exchange])).toEqual([
+      ["bitpanda", "bitpanda"],
+      ["kraken", "kraken"],
+      ["coinbase", "coinbase"],
+      ["binance-api", "binance"],
+    ]);
+    for (const source of exchanges) {
+      expect(source.status).toBe("ready");
+      expect(source.category).toBe("exchanges");
+      // The daemon creates the provider wallet; the card names no wallet kind.
+      expect(source.walletKind).toBeUndefined();
+      expect(source.details.join(" ")).toMatch(/only when you test the key or press Sync now/);
+      expect(JSON.stringify(source)).not.toMatch(/desktop setup is planned|kassiber wallets/i);
     }
   });
 

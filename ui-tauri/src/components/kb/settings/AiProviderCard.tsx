@@ -19,6 +19,7 @@ import { providerDisplayName } from "@/components/ai/providerIdentity";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import {
+  isCliProxyProvider,
   isNativeAiProviderLocator,
   providerEnabled,
   type AiProviderRow,
@@ -368,7 +369,8 @@ export function AiProviderCard({
             aria-label={t("ai.checkProvider", { name })}
             onClick={onCheck}
           >
-            {t("ai.check")}
+            {/* A CLI proxy's check reads the model list its chats use. */}
+            {t(isCliProxyProvider(provider) ? "ai.refreshModels" : "ai.check")}
           </Button>
           {!provider.is_default && enabled ? (
             <Button

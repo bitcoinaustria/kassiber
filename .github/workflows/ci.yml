@@ -43,6 +43,9 @@ jobs:
 
       - name: Set up Rust
         uses: ./.github/actions/setup-rust
+        with:
+          cache-key: python-binding
+          save-cache: "true"
 
       - name: Sync Python dependencies
         run: uv sync --locked
@@ -81,6 +84,9 @@ jobs:
       # Fail the lane when a test module reaches the tax engine but is
       # missing from the tax-shadow overlay (docs/reference/testing.md).
       KASSIBER_TEST_TAX_ENGINE: census
+      KASSIBER_TEST_CUSTODY_ENGINE: census
+      KASSIBER_TEST_CUSTODY_LOADER_BIN: ${{ github.workspace }}/target/release/examples/custody-load
+      KASSIBER_TEST_JOURNAL_PROCESS_BIN: ${{ github.workspace }}/target/release/examples/journal-process
     strategy:
       fail-fast: false
       matrix:
@@ -114,15 +120,45 @@ jobs:
 
       - name: Set up Rust
         uses: ./.github/actions/setup-rust
+        with:
+          cache-key: python-binding
 
       - name: Sync dependencies
         run: uv sync --locked
+
+      - name: Build native journal pipeline probes
+        run: cargo build --release --offline --locked -p kassiber-journals --example custody-load --example journal-process --features test-harness
+
+      - name: Build Rust shell for subprocess parity
+        if: matrix.shard == 'serial-daemon'
+        run: |
+          cargo build -p kassiber --features test-harness --locked
+          cargo build -p kassiber-backup --example kassiber-backup-probe --features test-hooks --offline --locked
+          cargo build -p kassiber-store --example kassiber-storage-probe --features test-hooks --offline --locked
+          cargo build -p kassiber-secrets --example kassiber-secrets-probe --features test-hooks,native-keyring --offline --locked
+          cargo build -p kassiber-chain --example client_fixture --features test-harness --offline --locked
+          cargo build -p kassiber-wallets --example discovery_fixture --features test-harness --offline --locked
+          cargo build -p kassiber-wallets --example acquisition_fixture --features test-harness --offline --locked
+          cargo build -p kassiber-wallets --example observer_state_fixture --features test-harness --offline --locked
+          cargo build -p kassiber-wallets --example bdk_fixture --features test-harness --offline --locked
+          cargo build -p kassiber-wallets --example lwk_fixture --features test-harness --offline --locked
+          cargo build -p kassiber-wallets --example records_fixture --features test-harness --offline --locked
+          cargo build -p kassiber-wallets --example publication_fixture --features test-harness --offline --locked
+          cargo build -p kassiber-wallets --example sync_fixture --features test-harness --offline --locked
+          cargo build -p kassiber-wallets --example freshness_fixture --features test-harness --offline --locked
+          cargo build -p kassiber-wallets --example freshness_sync_fixture --features test-harness --offline --locked
+          cargo build -p kassiber-wallets --example graph_fixture --features test-harness --offline --locked
+          cargo build -p kassiber-wallets --example document_fixture --features test-harness --offline --locked
+          cargo build -p kassiber-wallets --example exchange_fixture --features test-harness --offline --locked
 
       - name: Run Python shard
         shell: bash
         run: |
           mkdir -p test-results
           set -o pipefail
+          if [[ "${{ matrix.shard }}" == "serial-daemon" ]]; then
+            export KASSIBER_RUST_BIN="$PWD/target/debug/kassiber"
+          fi
           uv run --locked python scripts/python_test_shards.py run "${{ matrix.shard }}" --ci -- \
             --junitxml="test-results/${{ matrix.shard }}.xml" \
             --durations=50 \
@@ -192,6 +228,8 @@ jobs:
 
       - name: Set up Rust
         uses: ./.github/actions/setup-rust
+        with:
+          cache-key: python-binding
 
       - name: Sync dependencies
         run: uv sync --locked
@@ -223,6 +261,88 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: pytest-tax-shadow-${{ matrix.shard }}-${{ github.run_attempt }}
+          path: test-results/
+          if-no-files-found: warn
+          retention-days: 7
+
+  custody-shadow:
+    name: Custody shadow (${{ matrix.shard }})
+    env:
+      KASSIBER_TEST_CUSTODY_LOADER_BIN: ${{ github.workspace }}/target/release/examples/custody-load
+      KASSIBER_TEST_JOURNAL_PROCESS_BIN: ${{ github.workspace }}/target/release/examples/journal-process
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # The same complete overlay and ordering policy as the tax-shadow lane.
+        shard:
+          - core-accounting
+          - wallets-sync
+          - daemon-cli
+          - security-replication
+          - reports-contracts
+          - serial-network
+          - serial-daemon
+          - serial-regressions
+          - serial-integration
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Fetch pinned test data
+        shell: bash
+        run: scripts/fetch-test-data.sh
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          cache-key: python-binding
+
+      - name: Sync dependencies
+        run: uv sync --locked
+
+      - name: Build native journal pipeline probes
+        run: cargo build --release --offline --locked -p kassiber-journals --example custody-load --example journal-process --features test-harness
+
+      - name: Compare pure production with frozen SQL composition
+        shell: bash
+        run: |
+          mkdir -p test-results
+          set -o pipefail
+          uv run --locked python scripts/python_test_shards.py run-custody-shadow "${{ matrix.shard }}" --ci -- \
+            --junitxml="test-results/custody-shadow-${{ matrix.shard }}.xml" \
+            --durations=50 \
+            -q 2>&1 | tee "test-results/custody-shadow-${{ matrix.shard }}.log"
+
+      - name: Summarize custody shadow
+        if: always()
+        shell: bash
+        run: |
+          echo "### Custody shadow (${{ matrix.shard }})" >> "$GITHUB_STEP_SUMMARY"
+          echo "Result: **${{ job.status }}**" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f "test-results/custody-shadow-${{ matrix.shard }}.log" ]; then
+            echo '```text' >> "$GITHUB_STEP_SUMMARY"
+            sed -n '/custody engine shadow/,$p' "test-results/custody-shadow-${{ matrix.shard }}.log" | head -30 >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload custody shadow report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pytest-custody-shadow-${{ matrix.shard }}-${{ github.run_attempt }}
           path: test-results/
           if-no-files-found: warn
           retention-days: 7
@@ -296,6 +416,8 @@ jobs:
 
       - name: Set up Rust
         uses: ./.github/actions/setup-rust
+        with:
+          cache-key: python-binding
 
       - name: Sync dependencies
         run: uv sync --locked
@@ -354,15 +476,32 @@ jobs:
       # rust-toolchain.toml pins one toolchain for every crate and workflow.
       - name: Set up Rust
         uses: ./.github/actions/setup-rust
+        with:
+          cache-key: rust-workspace
+          save-cache: "true"
 
       - name: Check formatting
         run: cargo fmt --all --check
 
       - name: Lint
-        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+        run: cargo clippy --workspace --all-targets --features kassiber-journals/test-harness --locked -- -D warnings
 
       - name: Run tests
-        run: cargo test --workspace --locked
+        run: cargo test --workspace --features kassiber-journals/test-harness --locked
+
+      - name: Verify ledger bytes under custody JSON features
+        run: python3 crates/custody/scripts/check_ledger_features.py
+
+      # The egress observer only exists in harness builds; test it there too.
+      - name: Run egress observer tests
+        run: cargo test -p kassiber-net --features test-observer --locked
+
+      # The binary's harness build adds the observer, the in-memory store, and
+      # the daemon's protocol test kinds; the supervisor-rule tests need it.
+      - name: Lint and test the Rust shell harness
+        run: |
+          cargo clippy -p kassiber -p kassiber-daemon -p kassiber-runtime --all-targets --features kassiber/test-harness --locked -- -D warnings
+          cargo test -p kassiber --features test-harness --locked
 
   chain-observers:
     name: Chain observers (Linux Docker)
@@ -425,6 +564,8 @@ jobs:
       - name: Set up Rust
         if: steps.observer_paths.outputs.run == 'true'
         uses: ./.github/actions/setup-rust
+        with:
+          cache-key: python-binding
 
       - name: Sync dependencies
         if: steps.observer_paths.outputs.run == 'true'
@@ -449,6 +590,7 @@ jobs:
       - preflight
       - python-tests
       - tax-shadow
+      - custody-shadow
       - frontend
       - cli-smoke
       - tax-engine
@@ -461,6 +603,7 @@ jobs:
           echo "### Required CI" >> "$GITHUB_STEP_SUMMARY"
           echo "- Preflight: ${{ needs.preflight.result }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Python shards: ${{ needs.python-tests.result }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Custody shadow: ${{ needs.custody-shadow.result }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Tax shadow: ${{ needs.tax-shadow.result }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Frontend: ${{ needs.frontend.result }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- CLI smoke: ${{ needs.cli-smoke.result }}" >> "$GITHUB_STEP_SUMMARY"
@@ -468,5 +611,5 @@ jobs:
           echo "- Chain observers: ${{ needs.chain-observers.result }}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Enforce required checks
-        if: ${{ needs.preflight.result != 'success' || needs.python-tests.result != 'success' || needs.tax-shadow.result != 'success' || needs.frontend.result != 'success' || needs.cli-smoke.result != 'success' || needs.tax-engine.result != 'success' || needs.chain-observers.result != 'success' }}
+        if: ${{ needs.preflight.result != 'success' || needs.python-tests.result != 'success' || needs.tax-shadow.result != 'success' || needs.custody-shadow.result != 'success' || needs.frontend.result != 'success' || needs.cli-smoke.result != 'success' || needs.tax-engine.result != 'success' || needs.chain-observers.result != 'success' }}
         run: exit 1

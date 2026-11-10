@@ -45,6 +45,7 @@ import type { AiPermissionMode } from "@/daemon/stream";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import {
   providerEnabled,
+  providerPosture,
   selectedModelFastMode,
   selectedModelReasoningEfforts,
   type AiProviderKind,
@@ -215,7 +216,9 @@ export function ProviderModelPicker({
     : fallbackProvider;
 
   React.useEffect(() => {
-    onActiveProviderKindChange?.(selectedProvider?.kind ?? null);
+    onActiveProviderKindChange?.(
+      selectedProvider ? providerPosture(selectedProvider.kind) : null,
+    );
   }, [onActiveProviderKindChange, selectedProvider?.kind]);
 
   useRestoreProviderModelChecks(providers, enabled);
@@ -406,7 +409,7 @@ export function ProviderModelPicker({
   const triggerPosture: AiProviderKind | null = currentProvider
     ? selectedModelRow
       ? modelPrivacyPosture(currentProvider, selectedModelRow)
-      : currentProvider.kind
+      : providerPosture(currentProvider.kind)
     : null;
 
   // Only the levels the selected model advertises; none are made up for a

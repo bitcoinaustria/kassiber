@@ -89,10 +89,14 @@
     "method": {
       "MOVING_AVERAGE_AT": "Gleitender Durchschnittspreis (österreichisch)",
       "MOVING_AVERAGE": "Gleitender Durchschnittspreis (Durchschnittskosten)",
+      "MOVING_AVERAGE_FIFO_PERIOD": "Durchschnittsmethode je Wallet, Haltefrist nach FIFO",
       "FIFO": "FIFO (First In, First Out)",
       "LIFO": "LIFO (Last In, First Out)",
       "HIFO": "HIFO (Highest In, First Out)",
-      "LOFO": "LOFO (Lowest In, First Out)"
+      "LOFO": "LOFO (Lowest In, First Out)",
+      "UK_SHARE_MATCHING": "Britische Zuordnung (gleicher Tag, 30 Tage, Pool)",
+      "JP_TOTAL_AVERAGE": "Gesamtdurchschnitt (Japan, 総平均法)",
+      "JP_MOVING_AVERAGE": "Gleitender Durchschnitt (Japan, 移動平均法)"
     },
     "renameWorkspace": {
       "title": "Bücher-Set-Namen bearbeiten",

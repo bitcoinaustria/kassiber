@@ -383,6 +383,52 @@ export function collectCustodyLineagePages(
   };
 }
 
+/**
+ * Automatic pairings a "not one movement" dismissal of their two legs
+ * undoes (docs/reference/custody-resolution.md). Reviewed moves are undone
+ * by unpairing them instead.
+ */
+const UNDOABLE_AUTOMATIC_EVIDENCE = new Set(["exchange_txid_exact"]);
+
+/** The longest dismissal the daemon accepts: an undo should not lapse. */
+export const AUTOMATIC_UNDO_DAYS = 3650;
+export const AUTOMATIC_UNDO_REASON = "Automatic pairing undone from custody lineage";
+
+export function canUndoAutomaticPairing(item: CustodyLineageItem): boolean {
+  return (
+    item.custody_state === "internal_verified" &&
+    UNDOABLE_AUTOMATIC_EVIDENCE.has(item.evidence_reason)
+  );
+}
+
+export function lineagePairKey(item: CustodyLineageItem): string {
+  return `${item.out_transaction_id}\u0000${item.in_transaction_id}`;
+}
+
+export function undoAutomaticPairingArgs(item: CustodyLineageItem) {
+  return {
+    tx_out: item.out_transaction_id,
+    tx_in: item.in_transaction_id,
+    reason: AUTOMATIC_UNDO_REASON,
+    expires_in_days: AUTOMATIC_UNDO_DAYS,
+  };
+}
+
+/** An automatic pairing undone in this session, restorable until reload. */
+export interface UndoneAutomaticPairing {
+  item: CustodyLineageItem;
+  dismissalId: string | null;
+}
+
+export function restoreAutomaticPairingArgs(undone: UndoneAutomaticPairing) {
+  return undone.dismissalId
+    ? { dismissal_id: undone.dismissalId }
+    : {
+        tx_out: undone.item.out_transaction_id,
+        tx_in: undone.item.in_transaction_id,
+      };
+}
+
 export function collectCustodyGapPages(
   pages: readonly CustodyGapSnapshot[],
 ): CustodyGap[] {

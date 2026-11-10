@@ -118,11 +118,13 @@ configurable.
 | `wallets sync` for a `silent-payment` wallet with a local scanner file | local filesystem path configured by you | local file read | no network request by Kassiber; scanner output and detected Taproot outputs stay local; on POSIX the scanner file must be user-owned and `0600` |
 | `wallets sync` for a `silent-payment` wallet in server-assisted mode | your explicitly configured HTTP(S) SP-capable backend URL/path | HTTP(S) POST through that backend's proxy setting, if any | IP, User-Agent, scan request timing, scan birthday/range, the watch-only `sp()` scan material needed by that backend, and scan completeness depends on that backend not omitting candidates |
 | Explicit CLI `rates sync`; desktop **Refresh BTC price** / **Rebuild pricing cache** after **Settings → Market data → Allow live minute-rate lookups** is enabled; or background freshness after that same narrowly scoped setting enables it | configured provider (`mempool` backend, Coinbase Exchange, or CoinGecko) | unauthenticated HTTP(S) GET | IP, User-Agent, which fiat pair and window. Dashboard display, report generation, and cached-rate reads never fetch a rate |
-| Explicit exchange API import/sync after configuring that exchange connection | the configured Kraken, Coinbase, or Binance API | authenticated HTTPS | IP, account/API-key identity, request timing, and the account-history range requested |
+| Explicit exchange API import/sync after configuring that exchange connection: CLI `wallets sync-<kind>`, or desktop **Sync now** (also right after **Create connection** when its import box is ticked; Rust backend) | the configured Kraken, Coinbase, Binance, or Bitpanda API | authenticated HTTPS | IP, account/API-key identity, request timing, and the account-history range requested. Saving the connection, the wallet page, freshness and the assistant send nothing; see [exchange connections in the desktop](exchange-desktop.md) |
+| Desktop **Test connection** in an exchange API setup (Rust backend) | the chosen exchange's API | authenticated HTTPS: Kraken's first `TradesHistory` and `Ledgers` pages, Coinbase's first accounts page, Binance's `apiRestrictions`, or Bitpanda's trading-limits check, currencies and one operations row | IP, the API key, request timing, and that the key was checked; nothing is stored, and offline mode refuses it before any request |
 | Explicit BTCPay, Lightning, or other configured service sync; or background freshness after its matching source class is enabled in Settings | the configured service | its configured HTTP(S), RPC, or proxy transport | IP, request timing, and the service/account identifiers required by that integration |
 | Explicit BTCPay **Check key and stores** during setup, or CLI `btcpay inspect` / `btcpay setup` | the BTCPay server of that instance | Greenfield HTTP(S) GET through the instance's proxy setting | IP, request timing, the API key, and that Kassiber read the server version, the key's own permissions, the store list, each store's enabled payment methods, and the first receive addresses BTCPay previews for on-chain store wallets. Kassiber never requests payment-method configuration (derivation schemes, Lightning connection strings); preview addresses stay in memory for local wallet recognition. BTCPay wallet and payment-ledger syncs also read that store's invoices, payment requests, and payouts. `btcpay key-url` and the desktop key link make no request; the user's browser opens BTCPay |
 | `ai models`, `chat`, or **Check** / **Check all** in Settings → Assistant against a configured remote/TEE provider after setup/settings acknowledgement | your configured provider URL or CLI provider | OpenAI-compatible HTTP(S) (the Responses API or Chat Completions, per the provider's API format) or the configured local CLI's own transport | prompt/tool context (with full agent access, the attached images and PDF text or page images of the chat), model request metadata, IP/provider account context according to that provider. A Settings check sends no prompt; it starts that one provider's CLI (version, sign-in state, models) or lists an HTTP provider's models. An `auto` provider whose server has no `/responses` gets the same turn once at `/chat/completions` of the same base URL. The model picker and Settings do not auto-poll providers or run a timer; opening Settings reads only the daemon's cached results. Remote model discovery and checks fail closed until acknowledgement on both the desktop and the CLI (`kassiber ai providers update <name> --acknowledge`) |
 | Clicking **Test connection** in a Settings provider form (`ai.test_connection`, for the values in the form), or `kassiber ai providers test <name>` for a saved provider after acknowledgement | the base URL being tested, or the CLI provider | the provider's model listing, then, for an HTTP provider with a model to ask, one fixed request to `/responses` and, if the server does not speak that format, `/chat/completions`, each repeated once without the tool if the tool is refused | IP, the API key, request timing, the model listing request, and one fixed prompt, `Reply with OK`, with at most 16 output tokens, one trivial `connection_check` tool definition and no book data, which the provider bills as a tiny generation. A CLI provider gets only its status and model probe. Nothing is sent on its own: the click or command is the trigger, a switched-off saved provider is refused, and offline mode refuses every provider not marked local. A target off this device (anything but a provider marked local at a loopback URL, CLI agents included) is refused before any request until it is acknowledged: the form's checkbox, sent as `acknowledged: true`, or the saved remote or TEE provider's own acknowledgement. A Chat Completions endpoint that refuses `store: false` gets the fixed prompt once more without it, reported as `store_accepted: false`; no chat is sent that way unless the user chooses `omit_store_field` |
+| A CLI proxy provider (`kind: "cli_proxy"`, [CLI proxy providers](ai-cli-proxy.md)): **Test & discover** in its provider form, **Refresh models** on its Settings row, saving a new CLI proxy or one whose address or key changed (one listing as part of that save), `kassiber ai models` or `kassiber ai providers test`, and chats with it, after acknowledgement | the proxy's base URL you entered (no default address; typically loopback or a tailnet host) | `GET /v1/models` with the proxy's optional client key as `Authorization: Bearer`, then, for a chat or a test with a model, `/v1/responses` (Codex models) or `/v1/chat/completions` (every other known family), always with `store: false` | IP, the client key, request timing, the model list request, and, for chats, the prompt and tool context; the proxy forwards prompts to the upstream services of the subscriptions signed in to it (Anthropic, OpenAI, Google, …) under those accounts. Never on launch, display reads, Settings, idle or provider edits that keep the address and key; the management API and its key are never used. A chat reads each model's format from the list saved by the last of these explicit actions and contacts nothing to find it |
 | A Claude chat turn the user sends with **Fast** on (the `opus` alias, Claude Code 2.1.205 or later), in the desktop or with `kassiber chat --fast` | `api.anthropic.com`, Claude Code's own fast-mode availability check, in addition to the CLI's normal inference destination; the check does not follow `ANTHROPIC_BASE_URL`, so it leaves even when inference goes through a gateway | HTTPS from the Claude CLI process, through the CLI's configured HTTP proxy, with the CLI's credential | IP, request timing, the Claude account or key, and that fast mode was requested. Kassiber passes `fastMode: true` only on such a turn; status checks and model listing pass no fast setting, and every other turn passes `fastMode: false`, so none of them turns fast mode on in the CLI |
 | Clicking an external documentation, explorer, release, or evidence link | the selected URL in the system browser | browser HTTP(S) | normal browser IP, cookies, referrer policy, and request metadata; Kassiber never preloads those pages |
 | consented AI tools inside `chat` or the desktop Assistant: those that mutate the book (`ui.wallets.sync`, `ui.rates.rebuild`, `ui.maintenance.run`, `ui.rates.latest`) and those that only read but do so off-machine (`ui.connections.node.snapshot`, `ui.reports.lightning_profitability`) | the backends/rate sources of the rows above | as in those rows | as in those rows — tool consent is also network consent for that row. A tool that leaves the machine always prompts, even when it changes nothing, and is never chosen by the assistant's automatic context reads |
@@ -157,6 +159,60 @@ remain in local source state. Sanitized job results and desktop/AI freshness
 responses omit these containers before projection.
 The same projection covers control results from freshness pause and resume;
 those actions retain the private checkpoint locally for the next sync.
+
+The Rust freshness source/admission prerequisite only reads local state. It
+creates no consent grant, recovers no jobs and contacts no backend, even when
+saved configuration selects a loopback server. Admission rejects the entire
+selection when an enabled source has no native executor. The three native daemon sync/freshness product
+routes also admit default local journal refresh. The guarded
+whole-invocation hybrid selector reads only an already opened book; static
+unsupported shapes and unopened/locked books decline without database open or
+migration. Journal refresh performs no network I/O. Production builds return
+native refusals. The development hybrid launcher alone enables a test-build
+reference job after byte-identical journal rollback; it cannot replay a
+committed stale-first rebuild or a cancelled/revoked request. Refusal census
+records contain phase, exception family and replay eligibility, without book
+operands or error messages. Python retains production authority until R4-16.
+
+The internal Rust freshness executor consumes an admitted plan under its
+foreground slot. Its once-only request grant binds to that exact plan;
+missing, foreign, revoked or cancelled requests refuse before queue writes.
+Enqueue-only execution creates no client. Explicit execution uses the existing
+`kassiber-net` gate for every transport and rechecks scope, cancellation,
+revocation and offline permission around fetch and atomic publication. An
+offline/no-egress refusal records a failed, report-blocking job. The native
+request runner services cancellation, source controls and offline
+changes while fetching; switch, lock, shutdown and EOF cancel/revoke and join
+its connection owner before releasing the book. Used request identities cannot
+create another grant. Source-control results redact private checkpoints,
+including the result container, matching Python pause/resume after the
+cancellation and checkpoint-redaction fixes.
+
+The runner carries private successful-job graph grants separately
+from the response and publishes them into a bounded in-memory mailbox only
+after the terminal record is written and flushed. Request cancellation or
+revocation and book/lock/shutdown/EOF boundaries discard that authority. Grant
+checks bind the successful job, database, active book and network binding,
+wallet configuration and selected backend. Admitted native product requests
+automatically arm the graph worker. It opens and closes its own connection,
+receives one temporary SQLCipher session secret and drops it immediately after
+opening. It rechecks the grant and current offline/no-egress permission between
+Electrum batches, around HTTP retries and before cache writes. Lookup is limited
+to Bitcoin Esplora/Electrum references through `kassiber-net`, with no alternate
+backend fallback. Automatic mailbox consumption retains the terminal-flush
+barrier and cannot recover authority from a saved job or backend configuration.
+Restore and authenticated passphrase rotation also quiesce the workers before
+retirement or replacement.
+Execution test kinds exist only in guarded builds, with no new renderer or AI
+allowlist entry. Disposable-loopback regressions verify empty attempt and egress
+buffers before consent and under pretransport fences. Worker failure events
+expose fixed error categories rather than database or backend error details.
+
+Native Electrum graph decoding also checks the computed transaction ID before
+using a response or caching a parent. A disposable reference repro demonstrates
+that Python currently accepts different transaction bytes under the requested
+ID. That correctness difference remains open; the cancellation and checkpoint
+privacy differences are resolved on both runtimes.
 
 Chat Markdown never loads remote images. Image references stay inert until
 the user explicitly opens the link in the browser, including in Vite preview
@@ -271,6 +327,38 @@ provider base URL for an explicit gateway. Native CLI providers and the
 permission-gated GitHub update checker retain their separately documented
 transport configuration.
 
+The Rust document-provider service uses `kassiber-net` for model
+discovery and OCR. Constructing the service and seeding provider configuration
+contact nothing. Each invocation requires a grant bound to the document,
+options, database instance and selected provider configuration. Disabled,
+unacknowledged, off-device and unavailable-secret providers refuse before any
+request. Only marked-local loopback HTTP(S) is admitted; no CLI provider starts.
+The local-AI exception to offline mode and `KASSIBER_NO_EGRESS` matches Python.
+Requests ignore ambient proxies and permit only same-origin redirects. Both
+wire formats carry `store: false`; only the saved explicit Chat Completions
+opt-out omits it. A refusal never weakens retention. No document bytes,
+credentials or request contents enter the bounded RAM network ledger. Product
+CLI `wallets preview-document` and interactive `wallets import-document`
+grant this exact action after resolving the selected book. Imports resolve the
+wallet and refuse machine, noninteractive or nonterminal input before provider
+discovery or OCR. Daemon registration remains deferred; R6 AI paths stay Python.
+
+Rust OCR PDF preparation launches only local Poppler `pdfinfo` and `pdftoppm`,
+with Python's exact arguments and limits: at most eight contiguous pages,
+180 DPI, 2400 pixels per side, 24 MiB per PNG, 96 MiB in total and 30 seconds per
+process. Private temporary source/page directories honor the selected temporary
+root; verification sets it inside each disposable data root. Child processes
+are killed and reaped on timeout, and pages are removed on success or failure.
+No shell or provider contact is involved in preparation; image disclosure still
+requires the exact OCR action grant. PDF report/export rendering is separate.
+
+Two Rust document-import privacy deviations are deliberate and regression
+tested. Generic database errors use the shared redacted diagnostic rather than
+raw SQLite exceptions that may contain local paths or source values. A managed
+copy that fails source-digest verification is removed after rollback, rather
+than left as untracked evidence as in Python; cleanup is restricted to canonical
+paths under the managed evidence root. Successful accounting is unchanged.
+
 `KASSIBER_NO_EGRESS=1` blocks the shared backend HTTP/SOCKS and Python Electrum
 connect boundaries, native BDK/LWK observer construction, and chain-analysis
 acquisition and Core Lightning client subprocesses, including loopback nodes.
@@ -328,6 +416,17 @@ while it is set and says which connections it already blocks. `kassiber
 offline` runs directly, like `kassiber update`, also in brokered mode: it is a
 preference for this user account, not an access control, so any process
 running as that user, an agent included, can change it.
+
+The [Rust port's HTTPS/HTTP foundation](rust-port-egress.md#rust-gate-and-httpshttp-foundation)
+adds no enabled service or request trigger. Its clients consume exact-route
+consent, ignore ambient proxies, retain policy checks for proxy/TLS writes and
+keep only bounded RAM metadata. Rust retains Python's explicitly local,
+loopback AI offline exception and the AI/update paths outside the process
+`KASSIBER_NO_EGRESS` override. Its optional offline cache requires an authoritative
+cross-process revision and fails closed on missing or racing revisions; absent
+that storage protocol, the preference reader stays fresh. Trust selection and
+redirect behavior are documented in that reference; no failed TLS/proxy route
+falls back to a different route or weaker trust.
 
 ## Local storage
 
@@ -422,6 +521,11 @@ until that process stops. `kassiber status` reports the effective root.
   bootstrap file. It is plaintext. It may contain Bitcoin Core RPC credentials
   and backend tokens until `kassiber secrets migrate-credentials` lifts them
   into the encrypted project DB.
+- Explicit Core detection or backend creation with a `credential_ref` reads
+  current local `~/.bitcoin/bitcoin.conf` and checks candidate cookie paths.
+  The opaque reference excludes passwords; creation re-resolves its candidate
+  and binds the saved endpoint and authentication together. Creation itself
+  makes no connection. These reads do not run on launch or display.
 - `<state-root>/projects/<project>/config/settings.json` — managed state
   manifest for the project path layout. Not secret by itself, but it reveals
   where the rest of that project lives.
@@ -516,6 +620,16 @@ journal mode and durability settings do not change. See the
 - A `.kassiber` backup file does **not** recover a forgotten passphrase.
   The DB inside the backup is encrypted under whatever project passphrase was
   active when the backup was produced.
+  The Rust archive service keeps that SQLCipher payload and Python's age format.
+  Passphrase mode uses the already locked in-process Rust `age` crate (the same
+  format Python's pyrage uses); passphrases enter neither argv nor a child
+  environment. Recipient mode searches PATH for `age`, then `rage`, and runs
+  only the reference's fixed `--recipient` or `--decrypt --identity` command
+  with file-backed stdin/stdout and inherited stderr/environment. This reviewed
+  child starts only for an explicit backup command. There is no shell or
+  Python fallback. Staging-only import leaves the decrypted private temporary
+  workspace to its caller, as Python does; errors remove it. Rust installation
+  and desktop restore remain unavailable pending cross-runtime recovery proof.
 - Kassiber has no device sync. To use a book on another device, restore an
   encrypted `.kassiber` backup there. A file-sync tool such as Syncthing can
   carry backup archives, but never file-sync a live project directory while
@@ -601,6 +715,19 @@ is running with the unlocked DB, it can read every credential. The
 `backends reveal-token` enforces re-prompting for presence; it does not
 add a separate cryptographic tier.
 
+The Rust secrets continuation preserves the separate CLI remembered-unlock
+namespace and authenticated database/enrollment binding. Its explicit `secrets
+status`, enrollment, revocation and post-rotation refresh can access the native
+credential service; startup, route mounts and ordinary display reads do not
+invoke these operations. Native interop tests must launch a disposable bus and
+keyring, never reuse the account's store. Backend credentials remain in the
+encrypted book. `secrets migrate-credentials` retains Python's plaintext
+timestamped dotenv recovery copy, preserves non-secret and skipped lines, and
+publishes sanitized bytes only after backend commits and a flushed snapshot.
+Rust stages complete files before replacement and refuses a conflicting
+same-name recovery copy or an observed source change during migration. These recovery
+copies still require explicit user cleanup; they are not encrypted backups.
+
 ### Terminal operator broker
 
 Brokered unlock keeps a project's passphrase only in a per-user broker process
@@ -654,7 +781,11 @@ safe-to-record contract for secret-bearing config values:
   material, Silent Payments scan material, and unknown wallet config keys are
   suppressed, while callers should rely on state flags such as `descriptor`,
   `change_descriptor`, `descriptor_state`, and `silent_payment` instead
-- backend URLs shown in output drop embedded credentials and query strings
+- backend URLs shown in output drop embedded credentials and query strings;
+  malformed URLs and proxy locations display `<redacted>` so parsing failures
+  cannot echo the original credential-bearing input or an invalid port.
+  Unparsed values remain visible only when they fully match an ASCII bare
+  host or bracketed IPv6 text with an optional numeric port of one to five digits
 - one deliberate exception: the desktop-only `ui.backends.settings.list` kind
   returns the raw `certificate` value for Electrum/Esplora/Liquid Esplora/Core
   RPC backends, because Settings has to round-trip the configured CA bundle
@@ -757,7 +888,10 @@ The desktop app and `kassiber ai` CLI surface use `POST /v1/responses` or
 `POST /v1/chat/completions` against HTTP providers, per each provider's API
 format (see [the AI reference](ai.md#choosing-the-format)). The default seeded
 entry points at local Ollama (`http://localhost:11434/v1`); add remote providers
-through Settings → Assistant or `kassiber ai providers create`. OpenAI
+through Settings → Assistant or `kassiber ai providers create`. A CLI proxy
+(the Rust backend only; see [CLI proxy providers](ai-cli-proxy.md)) is an
+off-device provider whose model list is read only on an explicit test or
+refresh, and whose chats speak each model in its family's format. OpenAI
 stores Responses by default, so Kassiber explicitly sends `store: false` there,
 and asks for encrypted reasoning so a tool round can carry reasoning forward
 without provider storage. OpenAI also stores Chat Completions by default for
@@ -916,3 +1050,269 @@ other processes out of the signed app's memory.
 
 Do not file security-impacting issues in the public tracker. See
 [SECURITY.md](../../SECURITY.md) for the private reporting channel.
+
+## Custody port verification data
+
+Native journal refusal replay compares hashes of the admitted database and its
+durable sidecars in RAM after rollback, and verifies the selected book from
+before bootstrap through connection close. It retains no book copy or hash log.
+The development hybrid launcher buffers the bounded passphrase bytes in RAM
+and supplies a fresh pipe to a possible reference replay. Only the test build
+emits a replay signal, and only after the durable files compare byte-identical.
+Neither path authorizes provider access or adds an AI tool.
+
+The test-only R2 recorder is enabled explicitly with
+`KASSIBER_TEST_CUSTODY_SNAPSHOT_DIR`; ordinary product builds never install it.
+Its [raw request](custody-engine.md) contains local accounting evidence, including
+private component locations, and is not a public diagnostic or AI projection.
+Wallet configuration is reduced to required network/Samourai facts, and private
+policy material never enters the request or Rust response. The recorder rejects
+known wallet key material before writing. Owner-book comparisons remain local
+and ephemeral; repository recordings use synthetic data only. No verification
+path grants network consent or changes observation, ownership or tax authority.
+
+The R4-11 test-only `KASSIBER_TEST_JOURNAL_RENDER_DIR` hook similarly captures
+complete rendering operands, entry UUID mappings and canonical build states.
+These local parity fixtures can contain private book facts and must stay in a
+disposable worktree data root. Nothing is redacted for parity; they are not
+diagnostic exports or AI projections. The checked-in corpus is synthetic.
+
+The explicit pytest plugin `tests.rust_port.journal_prebuild_recorder` likewise
+copies the complete current schema and logical database, including pending
+caller writes, through a guarded native child pipe. With `--prebuild-binary`
+and `--prebuild-recordings`, it also stores complete local parity operands in
+mode-0600 files in the requested disposable worktree `target/` directory.
+Existing recording paths are refused.
+The explicit recorder configuration also propagates to Python children through
+the test-only import hook. Children append private failure markers containing
+only a fixed failure label, so a caught comparison error still fails the parent
+pytest session. Each session requires an empty destination; process IDs and a
+per-process sequence prevent child recording collisions.
+Those files can include private wallet/provider configuration and must remain
+ephemeral; they are neither product logs nor redacted diagnostics. Only synthetic
+scenario operands are checked in. The plugin is never installed by the product,
+daemon or AI, and grants no network consent.
+
+The explicit R4-13 `scripts/check-journal-process-campaign.py` runner likewise
+uses complete stored-book operands through the unregistered native process
+probe. Its incremental comparison records, source/binary manifest and private
+failure operands are written only beneath the worktree's `target/` directory,
+with mode-0700 directories and mode-0600 files. Failure operands can include
+private book facts and must remain ephemeral. They are test fixtures, not
+product logs, diagnostics or AI projections. The runner denies native socket
+syscalls and patches reference network entry points; it grants no egress or
+accounting authority and installs no product hook.
+
+The experimental R4-9 test-only `KASSIBER_TEST_CUSTODY_LOADER_BIN` hook adds a
+native snapshot byte comparison to custody census/shadow runs when explicitly
+set. It sends a complete `iterdump` of the caller's current connection through
+a local child-process pipe, including uncommitted changes. That copy can contain
+unrelated private wallet/provider configuration; it stays in RAM, is never
+written as a fixture or diagnostic, and assertion failures expose only a byte
+offset. The `custody-load` example requires the `test-harness` feature and has no
+product, daemon or AI route. Its root mode opens plaintext/SQLCipher books through
+`crates/store`; SQL-copy mode is solely a disposable verification fixture.
+CI census/shadow jobs and the local quality gate explicitly enable this hook
+on disposable books. Its match counter appends only `equal` to a mode-0600
+disposable records file; no SQL, descriptor, snapshot or refusal payload is
+retained there. Structured reference refusals and their test-only CLI/daemon
+code/message projections are returned only on the local probe pipe for exact
+exceptional-path tests, never as public diagnostics. The scalar audit retains
+only synthetic fixture records under the disposable verification root.
+
+The partial Rust chain-client slice implements explicit HTTP, Electrum, Core,
+BTCPay and local Core-detection tests through the reviewed network gate.
+Its action grant binds the exact daemon kind, form arguments and book; backend
+configuration and display reads grant nothing. Offline refuses these paths,
+including loopback. Core credentials remain bound to the effective probe
+endpoint when form configuration changes. The native Lightning backend test
+(`ui.backends.lightning.test`) reuses the LND/CLN report clients below: one
+explicit request grants one node snapshot for the named backend only, and only
+the alias, network, block height and counts leave the client. Non-Lightning
+and unregistered kinds answer without a request. The current
+implementation/verification boundary is recorded in
+[Rust egress paths](rust-port-egress.md#chain-client-paths-r5-partial).
+
+The Rust Bitcoin acquisition helper also requires a separate
+request-local grant bound to its exact targets, backend and book/source scope.
+Configuration and descriptor discovery do not grant acquisition consent; offline
+mode refuses even empty target lists, and configured proxies never retry
+directly. Its test-only driver fetches observations without creating ownership,
+custody, absence authority or durable wallet state. See the
+[acquisition egress checkpoint](rust-port-egress.md#bitcoin-protocol-acquisition-r5-preparation-only).
+
+The native Bitcoin BDK execution helper links only the pinned
+wallet/chain/core state crates. BDK receives no transport or storage path;
+Kassiber's consent-bound Electrum client fetches all observations. Private cache
+snapshots and book network are bound before granting the exact action. Cached
+reads remain subject to consent and offline checks; proxies never retry directly.
+No product route, AI disclosure or durable write is enabled by this preparation
+checkpoint. See [native execution egress](rust-port-egress.md#native-bitcoin-bdk-execution-and-compatibility-caches-r5-step-1).
+
+The native fetch assembler captures the supported single-wallet
+scope and observer epochs locally before consent. One exact-action grant is
+shared across its discovery, acquisition and BDK stages; revocation reaches
+each transport. Missing or foreign grants, stale scope, cancellation and
+offline mode refuse before traffic. Other source shapes refuse before egress.
+The guarded test driver can publish the completed fetch to a disposable book.
+The CLI wallet-sync service and registered no-refresh daemon paths share this
+assembler. This adds no AI projection. See the
+[native fetch checkpoint](rust-shell.md#bitcoin-native-fetch-assembly-r5).
+
+The Rust compatibility fetch adapters use the same explicit-sync tip anchors:
+Esplora's `/blocks/tip/hash` and Electrum's full header subscription execute
+only inside the existing consent-bound acquisition action. Optional tip failure
+disables reuse and does not bypass the return-time consent/offline/cancellation
+fence. The no-consent HTTP regression includes the tip-hash path, with empty
+attempt and egress buffers. No new connector, background job or AI projection
+is introduced. The CLI `wallets sync` now uses this service for supported
+Bitcoin descriptor wallets; the three daemon sync/freshness routes use the same
+adapters for admitted explicit no-refresh requests.
+
+The wallet-sync service binds one explicit grant to the admitted
+connection, book identity, profile, ordered wallet selection, network scope and
+resolved backends. Constructors and revalidation perform local reads only.
+Preparation rechecks observer epochs and checkpoints before traffic. Publication
+rechecks cancellation, grant revocation and the fresh `kassiber-net` offline
+policy at every savepoint stage, including commit. The CLI/book adapter
+reads the persisted offline preference afresh; `KASSIBER_NO_EGRESS` remains
+enforced by the gate. No saved backend creates a grant. The service adds no
+automatic trigger or AI projection. Registered no-refresh daemon requests use
+their separate exact-action lifecycle and terminal-flush graph handoff described
+above; default journal refresh still requires native R4-13 integration.
+
+The test-only hybrid CLI may open the admitted book to check saved sync
+capabilities. This check constructs and discards an inert action without
+granting consent or creating a network client. Only an explicit silent
+pre-consent handoff permits Python selection. Once native sync starts, errors
+and internal capability refusals never retry through Python. Passphrase-FD and
+interactive hybrid sync invocations select Python before opening either book,
+so unlock input is consumed once. Production builds have no hybrid handoff.
+
+Wallets using the active default retain that selection in their grant. The
+service re-resolves the current stored default before fetch and publication;
+changing it cannot redirect an already authorized sync to another backend.
+
+The native `chain-analysis acquire apply` route (CLI and
+`ui.chain_analysis.acquire.apply`) is the registered Rust form of the same
+explicit acquisition. It recomputes the reviewed plan and mints a request-local
+`kassiber-net` grant for that backend's exact route only after the recomputed
+plan equals the submitted one; planning, listing and all source-grant leaves
+send nothing. Every request first checks `KASSIBER_NO_EGRESS` and the offline
+switch, then the gate rechecks the route; the grant is revoked before the
+local save. Redirects are refused and environment proxies are never read.
+Loopback fakes prove that native and Python send the same request sequence and
+that refused, stale or offline actions send nothing. See the
+[acquisition egress record](rust-port-egress.md#chain-analysis-acquisition-apply-r5).
+The native daemon's background worker runs authorized recurring sources with
+a narrowly scoped grant bound to the saved Bitcoin Core route, only while the
+encrypted book is unlocked and offline mode is off. Each request first
+revalidates the lease, revision, expiry, book, domain and source fingerprint
+and durably reserves quota; revocation, lock, restore, passphrase rotation and
+shutdown stop it at the next request. See the
+[source runner record](rust-port-egress.md#chain-analysis-source-runner-r5).
+
+## Native configuration privacy hygiene
+
+The native configuration privacy hygiene read (`reports privacy-hygiene` and
+`ui.reports.privacy_hygiene`) inspects only stored configuration, local counts
+and the active database header. It performs no DNS lookup, socket connection,
+provider launch or backend probe, including for loopback endpoints. Endpoint
+posture is inferred rather than verified: Python's private-address ranges and
+`.local` names retain the `on_device` label. Counts include configured disabled
+AI providers. Neither classification grants network consent. The output omits
+endpoints, credentials, labels, watch-only material, raw metadata and exact
+amounts. AI dispatch remains Python. The
+[Rust privacy checkpoint](rust-shell.md#privacy-hygiene-checkpoint-r5-reports-privacy-partial)
+records that configuration-only checkpoint; Mirror remains unported.
+
+The native LND profitability acquisition client uses only
+`kassiber-net` HTTP routes. Its caller must provide current consent for the
+book, profile, connection, report window, optional export destination and
+immutable backend configuration, in addition to the endpoint, proxy and TLS
+trust. Construction performs local configuration/certificate reads and no
+probe. The gate checks offline mode, the product no-egress switch and shared
+consent revocation during transport. The shared book service rechecks scope and
+configuration between resources and before publication, and revokes its
+request-local grant on completion or failure. It reads the same fixed
+1000-event/payment/invoice pages as Python, including private-peer alias
+lookups, and never follows redirects or retries directly around a proxy.
+Only report channels and routing totals leave the helper; errors omit raw
+node bodies. Only exact CLI profitability read/CSV and desktop profitability
+requests use it; background and AI routes remain unported. See the
+[Lightning product checkpoint](rust-shell.md#lightning-profitability-product-wiring-r5).
+
+The native CLN profitability client gates `lightning-cli` launch
+through `kassiber-net` for local IPC; commando configurations are refused
+before a request exists, as in Python. Exact-action
+consent covers the executable, options and backend configuration as well as
+the report scope. Missing or revoked consent, offline/unavailable policy and
+`KASSIBER_NO_EGRESS` refuse before launch; policy changes and deadlines stop
+and reap an in-flight child. Only fixed read-only resource methods can be
+called. The child owns its transport; the parent records a redacted process
+marker rather than claiming visibility into child sockets. Raw output and
+command details are excluded from errors. It serves the same exact profitability
+actions through the shared book service; background and AI routes remain
+unported. See the
+[CLN subprocess boundary](rust-port-egress.md#cln-profitability-subprocess-acquisition-r5-preparation).
+
+## Native reduced PSBT privacy reads
+
+`reports psbt-privacy --psbt …` / `--psbt-file …` and
+`ui.reports.psbt_privacy` analyze the supplied proposal against a single local
+book snapshot, including the shared historical observer graph and reviewed
+anchor exposure. File paths are literal local UTF-8 text inputs; the daemon
+accepts only PSBT text and cannot receive a path, scope or graph baseline.
+Neither transport performs DNS, sockets, provider probes, signing or broadcast.
+The read does not persist proposal material or alter historical evidence. Its
+reduced result omits raw proposals, scripts, keys, derivations, wallet
+configuration and anchor contents.
+Exact wire and all-table comparisons run under strict no-egress in both
+offline-switch states. AI dispatch and the separate chain-analysis PSBT
+comparison/Payjoin/entropy routes retain their existing authority boundaries.
+See the [native acceptance checkpoint](rust-shell.md#registered-psbt-privacy-reads-r5-privacy-psbt).
+
+## Native legacy privacy hygiene
+
+The existing `ui.privacy_hygiene.snapshot` compatibility read also runs natively.
+It scores only stored transaction structure and durable local inventory, with
+explicit unknown coverage and advisory findings. It neither acquires missing
+prevouts nor writes graph, wallet, custody or accounting state. Public snapshots
+omit scores, addresses, scripts, raw JSON, wallet configuration and exact
+amounts. There is no new CLI command, AI permission or network trigger;
+`reports privacy-hygiene` remains the separate configuration report. The
+[legacy acceptance checkpoint](rust-shell.md#legacy-hygiene-daemon-acceptance-r5-privacy-legacy)
+records complete-table, exact-wire and strict no-egress checks.
+
+## Native Mirror derived storage
+
+The unregistered native Mirror projection helper updates only the existing
+book-local derived index and source-change feed, inside the caller's transaction.
+Stored wallet configuration and observations supply local evidence; they grant
+no acquisition consent or accounting authority. Installation, synchronization,
+expiry handling and recovery perform no DNS, socket, HTTP, RPC, loopback or
+provider operation. Mirror report routes remain unregistered; AI projections
+stay in Python.
+
+Native Chain Analysis graph and synchronous entropy reads now use this derived
+publication boundary. Saved-case, label and dataset metadata/claim reads use
+only the admitted book. Explicit scope checks, immutable-case commitments,
+public dataset visibility and state-bound cursors remain enforced. These reads
+do not stage sources, acquire observations, probe configured providers or grant
+network permission. See the
+[read checkpoint](rust-shell.md#chain-analysis-local-read-checkpoint-r5-partial).
+
+Native PSBT and dataset-preview reads parse caller-supplied bytes in memory and
+retain neither the bytes nor file paths in results or receipts. Staged grants
+pin a picker-selected regular file to one book and purpose by device, inode,
+size and timestamps. Every read re-checks that identity, and lock, profile
+switch and restore forget the grant. Receipt workers hold no database
+connection and contact no provider. See the
+[completion checkpoint](rust-shell.md#chain-analysis-psbt-preview-and-receipt-completion-r5).
+
+After-statement observation and disk-book drivers exist only in the test harness.
+Their synthetic parity fixtures and SQLite/SQLCipher interruption artifacts stay
+under the disposable worktree data root; they are not product disk logging or
+user diagnostic exports. See the
+[native durability checkpoints](rust-shell.md#mirror-durable-triggers-and-contributions-r5-partial)
+for the boundary and verification evidence.

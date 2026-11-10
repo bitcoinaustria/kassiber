@@ -100,6 +100,14 @@ import {
   type BtcpayWalletOption,
 } from "./btcpay/btcpaySetupModel";
 import { knownWalletImportSource, isHistoryImportSource, sourceForConnectionCategory } from "./connectionImportSource";
+import { ExchangeApiSetupPanel } from "./exchange/ExchangeApiSetupPanel";
+import {
+  EXCHANGE_PROVIDER_NAMES,
+  credentialArgs,
+  type ExchangeCreateResult,
+  type ExchangeSetupDraft,
+  type ExchangeSyncResult,
+} from "./exchange/exchangeApiModel";
 
 interface AddConnectionDialogProps {
   scopeBoundary?: DaemonScopeBoundary;
@@ -646,12 +654,16 @@ const formDefaultsFor = (
   source: ConnectionSource,
   t: TFunction<"connections">,
 ): SetupFormState => {
+  // An exchange connection's wallet takes the provider's name, as the CLI
+  // sync names it.
   const defaultLabel =
     source.id === "csv"
       ? t("add.defaultLabel.importedFile")
       : source.id === "bip329"
         ? ""
-        : source.title;
+        : source.exchange
+          ? EXCHANGE_PROVIDER_NAMES[source.exchange]
+          : source.title;
   return {
     label: defaultLabel,
     reportProvider: "",
@@ -700,6 +712,8 @@ const formDefaultsFor = (
     bip329Wallet: "",
     bip329File: "",
     bip329ExportMode: "stored",
+    // An exchange sync waits for an explicit opt-in: saving alone never
+    // contacts the exchange.
     syncAfterCreate:
       source.setupKind === "descriptor" ||
       source.setupKind === "file-wallet" ||
@@ -935,6 +949,12 @@ function AddConnectionDialogContent({
     wallets?: Array<{ label: string }>;
     routes?: Array<{ wallet: string; network: BullBitcoinWalletNetwork }>;
   }>("ui.connections.bullbitcoin_wallet.create");
+  const createExchange = useDaemonMutation<ExchangeCreateResult>(
+    "ui.connections.exchange.create",
+  );
+  const syncExchange = useDaemonMutation<ExchangeSyncResult>(
+    "ui.connections.exchange.sync",
+  );
   const previewBip329 = useDaemonMutation<Bip329PreviewResult>(
     "ui.metadata.bip329.preview",
   );
@@ -1052,6 +1072,8 @@ function AddConnectionDialogContent({
   const [scannerOpen, setScannerOpen] = React.useState(false);
   const [btcpayDraft, setBtcpayDraft] = React.useState<BtcpaySetupDraft | null>(null);
   const [btcpayShowErrors, setBtcpayShowErrors] = React.useState(false);
+  const [exchangeDraft, setExchangeDraft] = React.useState<ExchangeSetupDraft | null>(null);
+  const [exchangeShowErrors, setExchangeShowErrors] = React.useState(false);
   const [coreDetection, setCoreDetection] =
     React.useState<CoreDetectData | null>(null);
   const [coreTestStatus, setCoreTestStatus] = React.useState<
@@ -1218,7 +1240,7 @@ function AddConnectionDialogContent({
   const submitLabel =
     setupKind === "backend-settings" && selected.id !== "bitcoin-core"
       ? t("add.submit.openBackendSettings")
-      : syncWallet.isPending
+      : syncWallet.isPending || syncExchange.isPending
         ? t("add.submit.refreshing")
         : importSamourai.isPending
           ? t("add.submit.importingSamourai")
@@ -1269,6 +1291,8 @@ function AddConnectionDialogContent({
     setPreviewError(null);
     setBtcpayDraft(null);
     setBtcpayShowErrors(false);
+    setExchangeDraft(null);
+    setExchangeShowErrors(false);
     setCoreDetection(null);
     setCoreTestStatus(null);
     setWalletCoreCoverage({ status: "idle" });
@@ -1652,6 +1676,7 @@ function AddConnectionDialogContent({
         )) ||
       setupKind === "samourai" ||
       setupKind === "btcpay" ||
+      setupKind === "exchange-api" ||
       setupKind === "bullbitcoin-wallet" ||
       setupKind === "prior-report" ||
       (setupKind === "backend-settings" && selected.id === "bitcoin-core")
@@ -1892,6 +1917,14 @@ function AddConnectionDialogContent({
         btcpayDraft.issue
       ) {
         errors.backend = t("add.btcpay.issue.discover_first");
+      }
+    }
+    if (setupKind === "exchange-api") {
+      setExchangeShowErrors(true);
+      if (!exchangeDraft) {
+        errors.backend = t("exchange.issue.test_first");
+      } else if (exchangeDraft.issue) {
+        errors.backend = t(`exchange.issue.${exchangeDraft.issue}`);
       }
     }
     if (setupKind === "bip329" && !form.bip329File.trim()) {
@@ -2384,6 +2417,37 @@ function AddConnectionDialogContent({
                 wallets: createdSources.length,
               }),
           tone: provenanceFailure ? "warning" : "success",
+        });
+      } else if (setupKind === "exchange-api") {
+        if (!exchangeDraft?.tested) {
+          throw new Error(t("exchange.issue.test_first"));
+        }
+        const provider = EXCHANGE_PROVIDER_NAMES[exchangeDraft.credentials.exchange];
+        const envelope = await createExchange.mutateAsync({
+          ...credentialArgs(exchangeDraft.credentials),
+          label,
+        });
+        const wallet = envelope.data?.wallet;
+        let imported: number | null = null;
+        if (form.syncAfterCreate && wallet) {
+          startSyncNotice(t("exchange.sync.startedBody", { provider }));
+          try {
+            const synced = await syncExchange.mutateAsync({ wallet: wallet.id });
+            imported = synced.data?.imported ?? 0;
+          } finally {
+            clearSyncNotice();
+          }
+        }
+        addNotification({
+          title: t("exchange.added.title", { provider }),
+          body:
+            imported === null
+              ? t("exchange.added.body", { label: wallet?.label ?? label })
+              : t("exchange.added.importedBody", {
+                  label: wallet?.label ?? label,
+                  count: imported,
+                }),
+          tone: "success",
         });
       } else if (setupKind === "bip329") {
         if (!bip329Preview) {
@@ -4139,6 +4203,20 @@ function AddConnectionDialogContent({
             </div>
           ) : null}
         </>
+      );
+    }
+
+    if (setupKind === "exchange-api" && selected.exchange) {
+      const provider = EXCHANGE_PROVIDER_NAMES[selected.exchange];
+      return (
+        <ExchangeApiSetupPanel
+          key={selected.exchange}
+          exchange={selected.exchange}
+          labelField={renderConnectionLabelField()}
+          footer={renderSyncAfterCreate(t("exchange.syncAfter", { provider }))}
+          showErrors={exchangeShowErrors}
+          onDraftChange={setExchangeDraft}
+        />
       );
     }
 

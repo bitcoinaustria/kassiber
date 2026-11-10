@@ -694,9 +694,6 @@ class BdkDependencyContractTest(TestCase):
     def test_exact_pin_lock_wheels_and_packager_collection(self):
         pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
         lock = (ROOT / "uv.lock").read_text(encoding="utf-8")
-        workflow = (ROOT / ".github/workflows/prerelease-binaries.yml").read_text(
-            encoding="utf-8"
-        )
         app_packager = (ROOT / "scripts/build-macos-arm64-app.sh").read_text(
             encoding="utf-8"
         )
@@ -715,12 +712,13 @@ class BdkDependencyContractTest(TestCase):
             "win_amd64",
         ):
             self.assertIn(f"bdkpython-3.0.0-cp313-cp313-{platform}.whl", lock)
-        self.assertEqual(workflow.count("--collect-submodules bdkpython"), 1)
+        # Release builds ship the Rust binary since dc9b62a48; the Python app
+        # packager still freezes the observer with its metadata.
+        self.assertEqual(app_packager.count("--collect-submodules bdkpython"), 1)
         self.assertEqual(
-            workflow.count("--collect-submodules bdkpython"),
-            workflow.count("--copy-metadata bdkpython"),
+            app_packager.count("--collect-submodules bdkpython"),
+            app_packager.count("--copy-metadata bdkpython"),
         )
-        self.assertIn("--copy-metadata bdkpython", app_packager)
         self.assertTrue(callable(bdk.Wallet.start_full_scan))
         self.assertTrue(callable(bdk.Persister.custom))
 

@@ -48,7 +48,8 @@ bundles.
   diagnostics bundles, or a child process's argv or environment.
   `lightning-cli` takes a commando rune only in argv, which every local
   user can read, so Core Lightning commando connections are refused before
-  any process starts (`call_core_lightning`); see
+  any process starts (Python `call_core_lightning`, Rust
+  `ClnReportClient::new`); see
   [Core Lightning read-only sync](backends.md#core-lightning-read-only-sync).
 
 ### Evidence vault (future opt-in)
@@ -240,3 +241,41 @@ easier to leak than the GUI.
 
 When in doubt, discard. Adding a Tier-2 record later is a small change;
 revoking it from a leaked DB is impossible.
+
+## Native report acquisition boundary
+
+The `kassiber_chain::lightning::LndReportClient` serves the profitability
+read/CSV routes through the shared book service and returns only
+profitability channels and routing totals. Its public result has no fields for
+credentials, node or peer pubkeys, funding outpoints, invoices, payments,
+forward events, routes or failure strings. Private peer ids are used only
+inside the request to resolve aliases; a missing alias becomes `private peer`.
+Closed channels still participate in the reference's alias lookup but never
+become report rows. All raw response parsing stays inside the client, with no
+persistence or raw-body error previews. Native node-snapshot, AI and backend
+test routes remain deferred; this report projection is not a general snapshot
+adapter. The [service checkpoint](rust-shell.md#lightning-report-service-verification-r5-completion)
+records report-route parity, privacy differences and the remaining deferrals.
+
+The `ClnReportClient` serves the same actions with the same report-only result.
+It curates CLN resource rows before reshaping, validates ancillary fields that Python's
+full snapshot can refuse, and drops unused invoice/payment/account payloads.
+It preserves the reference's optional-resource behavior, except that consent,
+offline and overall request-budget refusals propagate. No node observations
+are persisted. The fixed read-only subprocess API and its consent, cleanup,
+observer and RAM-metadata boundaries are described in
+[CLN acquisition egress](rust-port-egress.md#cln-profitability-subprocess-acquisition-r5-preparation).
+
+## Native profitability reports
+
+The Rust profitability CLI read/CSV export and desktop profitability kind use
+the same discard boundary before rendering: only open-channel report fields
+and routing aggregates leave acquisition. They do not persist snapshots or
+change accounting authority. The explicit operator CSV keeps the reference
+alias/channel-id columns; the full report remains outside AI and diagnostics
+projections. Exact-action grants cover book/profile/connection, window, export
+path and private backend configuration, with fresh checks between resources
+and before publication. Missing/revoked consent, changed scope, offline mode
+and the product no-egress switch refuse even local nodes/subprocesses. Native
+errors omit raw node bodies and CLN command/output details. See the
+[product checkpoint](rust-shell.md#lightning-profitability-product-wiring-r5).

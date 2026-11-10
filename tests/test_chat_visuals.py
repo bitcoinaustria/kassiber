@@ -570,7 +570,8 @@ class DaemonVisualToolTest(unittest.TestCase):
 
         def wants(source):
             return _ai_read_wants_maintenance(
-                ParsedAiToolCall(call_id="c", name="ui.visuals.render", arguments={"source": source})
+                ParsedAiToolCall(call_id="c", name="ui_visuals_render", arguments={"source": source}),
+                "ui.visuals.render",
             )
 
         self.assertTrue(wants("balance_history"))

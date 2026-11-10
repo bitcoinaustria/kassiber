@@ -16,6 +16,7 @@ import type { AiModelRow, AiProviderKind, AiProviderRow } from "@/lib/aiCapabili
 import { cn } from "@/lib/utils";
 import { PostureBadge, ProviderGlyph } from "./ProviderGlyph";
 import { providerDisplayName } from "./providerIdentity";
+import { modelRoutePrefix } from "./providerModelSearch";
 
 export const ModelListRow = React.memo(function ModelListRow({
   id,
@@ -51,11 +52,14 @@ export const ModelListRow = React.memo(function ModelListRow({
   onToggleFavorite: () => void;
 }) {
   const { t } = useTranslation("assistant");
-  const name = model.display_name || model.id;
+  // A CLI proxy's `<prefix>/<model>` reads as the model with its prefix
+  // beside it; the full id stays on the second line.
+  const prefix = modelRoutePrefix(model);
+  const name = model.display_name || (prefix && model.base_model) || model.id;
   const favoriteLabel = isFavorite
     ? t("modelPicker.removeFavorite")
     : t("modelPicker.addFavorite");
-  const showIdLine = Boolean(model.display_name) && model.display_name !== model.id;
+  const showIdLine = name !== model.id;
 
   return (
     <div
@@ -84,6 +88,15 @@ export const ModelListRow = React.memo(function ModelListRow({
           <span className="min-w-0 truncate text-xs font-medium leading-snug">
             {name}
           </span>
+          {prefix ? (
+            <span
+              data-model-prefix={prefix}
+              title={t("modelPicker.prefixTitle", { prefix })}
+              className="shrink-0 rounded-sm bg-muted px-1 font-mono text-2xs leading-4 text-muted-foreground"
+            >
+              {prefix}
+            </span>
+          ) : null}
           <PostureBadge posture={posture} title={model.privacy_reason} />
         </div>
         {showProvider ? (

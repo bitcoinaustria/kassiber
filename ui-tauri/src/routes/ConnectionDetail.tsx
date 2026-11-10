@@ -143,6 +143,9 @@ import {
 import { useUiStore } from "@/store/ui";
 import { useSyncProgressNotice } from "@/hooks/useSyncProgressNotice";
 import { useConnectionRefreshState } from "@/hooks/useConnectionRefreshState";
+import { ExchangeSyncCard } from "@/components/kb/exchange/ExchangeSyncCard";
+import { useExchangeSync } from "@/components/kb/exchange/useExchangeSync";
+import { isExchangeKind } from "@/components/kb/exchange/exchangeApiModel";
 import type {
   Connection,
   NodeSnapshot,
@@ -666,7 +669,17 @@ function ConnectionDetailView({
     connection,
     walletDetail,
   );
+  // Exchange API wallets sync from their exchange on Sync now only.
+  const exchangeKind = isExchangeKind(walletDetail?.kind)
+    ? walletDetail.kind
+    : null;
+  const exchangeSync = useExchangeSync({
+    walletId: connection.id,
+    label: connection.label,
+    exchange: exchangeKind,
+  });
   const backendRequired =
+    !exchangeKind &&
     walletsListQuery.isSuccess &&
     walletSyncNeedsBackend(
       walletDetail?.sync_mode || connection.syncMode,
@@ -897,7 +910,8 @@ function ConnectionDetailView({
     t,
   ]);
   const txCount = connection.transactionCount ?? walletTransactions.length;
-  const isWalletSyncRunning = syncWallet.isPending || connectionRefreshing;
+  const isWalletSyncRunning =
+    syncWallet.isPending || connectionRefreshing || exchangeSync.isPending;
   const refreshButtonLabel = isWalletSyncRunning
     ? t("detail.refreshing")
     : t("detail.refresh");
@@ -907,6 +921,10 @@ function ConnectionDetailView({
     : 0;
 
   const onSync = async (options?: { forceFull?: boolean }) => {
+    if (exchangeKind) {
+      await exchangeSync.sync();
+      return;
+    }
     if (backendRequired) {
       const message = t("detail.sync.backendRequiredBody");
       setSyncErrorMessage(message);
@@ -1539,13 +1557,15 @@ function ConnectionDetailView({
                   {t("detail.reveal.menuItem")}
                 </DropdownMenuItem>
               ) : null}
-              <DropdownMenuItem
-                disabled={isWalletSyncRunning || testCore.isPending}
-                onClick={() => void onSync({ forceFull: true })}
-              >
-                <RotateCcw className="size-4" aria-hidden="true" />
-                {t("detail.fullRescan")}
-              </DropdownMenuItem>
+              {exchangeKind ? null : (
+                <DropdownMenuItem
+                  disabled={isWalletSyncRunning || testCore.isPending}
+                  onClick={() => void onSync({ forceFull: true })}
+                >
+                  <RotateCcw className="size-4" aria-hidden="true" />
+                  {t("detail.fullRescan")}
+                </DropdownMenuItem>
+              )}
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="text-destructive focus:text-destructive"
@@ -1642,6 +1662,14 @@ function ConnectionDetailView({
           ) : null}
         </div>
       </section>
+
+      {exchangeKind ? (
+        <ExchangeSyncCard
+          exchange={exchangeKind}
+          state={exchangeSync}
+          disabled={isWalletSyncRunning && !exchangeSync.isPending}
+        />
+      ) : null}
 
       {backendRequired ? (
         <div

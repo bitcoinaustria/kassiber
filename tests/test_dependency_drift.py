@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import unittest
@@ -162,6 +163,35 @@ class DependencyDriftTests(unittest.TestCase):
                         f"{path.relative_to(_ROOT)}:{line_number}: {line.strip()}"
                     )
         self.assertEqual([], unlocked_uv_commands)
+
+    def test_binding_cache_keys_cover_every_local_crate_it_builds(self):
+        # uv reuses a built binding until a cache key changes, so every local
+        # crate the binding compiles must be listed, or an edit to it keeps
+        # the stale extension installed.
+        binding = _ROOT / "tax-engine" / "python"
+        pyproject = (binding / "pyproject.toml").read_text(encoding="utf-8")
+        keys = set(re.findall(r'\{ file = "([^"]+)" \}', pyproject))
+        pending = [binding]
+        crates: set[Path] = set()
+        while pending:
+            crate = pending.pop().resolve()
+            if crate in crates:
+                continue
+            crates.add(crate)
+            manifest = (crate / "Cargo.toml").read_text(encoding="utf-8")
+            body = _toml_table_body(manifest, "dependencies")
+            pending.extend(
+                crate / path for path in re.findall(r'path = "([^"]+)"', body)
+            )
+        self.assertIn((_ROOT / "crates" / "pydecimal").resolve(), crates)
+        for crate in crates:
+            relative = Path(os.path.relpath(crate, binding.resolve())).as_posix()
+            prefix = "" if relative == "." else f"{relative}/"
+            for key in (f"{prefix}Cargo.toml", f"{prefix}src/**/*.rs"):
+                with self.subTest(crate=crate.name, key=key):
+                    self.assertIn(key, keys)
+        for key in ("../../Cargo.toml", "../../Cargo.lock", "../../rust-toolchain.toml"):
+            self.assertIn(key, keys)
 
     def test_rp2_pin_is_consistent_across_dependency_metadata(self):
         pyproject_pin = _rp2_pin_from_pyproject()

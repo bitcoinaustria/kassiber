@@ -63,6 +63,7 @@ export type SetupKind =
   | "bullbitcoin-wallet"
   | "bip329"
   | "backend-settings"
+  | "exchange-api"
   | "planned";
 
 export type ConnectionSourceFormat =
@@ -102,6 +103,8 @@ export interface ConnectionSource {
   /** Reuses another source's setup flow — the brand only needs its own artwork. */
   forwardTo?: string;
   walletKind?: string;
+  /** Exchange whose history an `exchange-api` setup reads with a read-only key. */
+  exchange?: "kraken" | "coinbase" | "binance" | "bitpanda";
   sourceFormat?: ConnectionSourceFormat;
   chain?: "bitcoin" | "liquid";
   network?: string;
@@ -731,44 +734,82 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
   {
     id: "bitpanda",
     title: "Bitpanda",
-    description: "Bitpanda history export.",
+    description: "Bitpanda history through a read-only API key.",
     category: "exchanges",
     image: bitpandaIcon,
     imageFrameClassName: "bg-[#103e36]",
     imageClassName: "h-9 w-auto",
-    status: "planned",
-    pathLabel: "CSV import",
-    docsHref:
-      "https://support.bitpanda.com/hc/en-us/articles/360000122759-How-can-I-download-the-history-of-my-Bitpanda-account",
-    details: ["Dedicated BTC parser is planned"],
+    status: "ready",
+    pathLabel: "API import",
+    formatLabel: "read-only API key",
+    docsHref: "https://docs.public.bitpanda.com/api-key-generation",
+    setupKind: "exchange-api",
+    exchange: "bitpanda",
+    details: [
+      "Needs a key with only the Transaction and Trade (Read) scopes; a key that can trade is refused",
+      "BTC buys, sells, deposits, withdrawals and rewards import; other assets are skipped",
+      "Kassiber contacts Bitpanda only when you test the key or press Sync now",
+    ],
   },
   {
     id: "kraken",
     title: "Kraken",
-    description: "Kraken private API history.",
+    description: "Kraken trades and ledger through a read-only API key.",
     category: "exchanges",
     image: krakenIcon,
     imageClassName: "size-8",
-    status: "planned",
+    status: "ready",
     pathLabel: "API import",
+    formatLabel: "read-only API key",
     docsHref:
       "https://support.kraken.com/articles/360001169383-how-to-interpret-ledger-history-fields",
-    details: ["CLI API import is available; desktop setup is planned"],
+    setupKind: "exchange-api",
+    exchange: "kraken",
+    details: [
+      "Needs a key that can only query closed orders & trades and ledger entries",
+      "Fiat-quoted BTC trades keep Kraken's exact execution price; deposits and withdrawals import as wallet movement",
+      "Kassiber contacts Kraken only when you test the key or press Sync now",
+    ],
   },
   {
     id: "coinbase",
     title: "Coinbase",
-    description: "Coinbase API history.",
+    description: "Coinbase BTC accounts through a read-only API key.",
     category: "exchanges",
     image: coinbaseIcon,
     imageClassName: "size-8",
-    status: "planned",
+    status: "ready",
     pathLabel: "API import",
-    details: ["CDP API authentication is planned"],
+    formatLabel: "read-only API key",
+    setupKind: "exchange-api",
+    exchange: "coinbase",
+    details: [
+      "Needs an API key and secret with only the wallet:accounts:read and wallet:transactions:read scopes",
+      "Coinbase Developer Platform key files are not supported yet",
+      "Kassiber contacts Coinbase only when you test the key or press Sync now",
+    ],
+  },
+  {
+    id: "binance-api",
+    title: "Binance API",
+    description: "Binance BTC buys, transfers and income through a read-only API key.",
+    category: "exchanges",
+    image: binanceIcon,
+    imageClassName: "size-8",
+    status: "ready",
+    pathLabel: "API import",
+    formatLabel: "read-only API key",
+    setupKind: "exchange-api",
+    exchange: "binance",
+    details: [
+      "Needs a key with only Enable Reading; a key that can trade, transfer or withdraw is refused",
+      "Fiat BTC buys keep their exact execution value; deposits, withdrawals and BTC income import too",
+      "Kassiber contacts Binance only when you test the key or press Sync now",
+    ],
   },
   {
     id: "binance",
-    title: "Binance",
+    title: "Binance CSV",
     description: "BTC supplemental rows from Binance exports.",
     category: "exchanges",
     image: binanceIcon,

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { providerPosture } from "@/lib/aiCapabilities";
 import {
   AI_PROVIDER_PRESETS,
   AI_PROVIDER_ROUTES,
@@ -22,8 +23,17 @@ describe("provider routes", () => {
       expect(preset.kind).toBe("local");
     }
     for (const route of ["app", "api"] as const) {
-      for (const preset of presetsForRoute(route)) expect(preset.kind).toBe("remote");
+      for (const preset of presetsForRoute(route)) {
+        expect(providerPosture(preset.kind)).toBe("remote");
+      }
     }
+    // The CLI proxy sits with the subscription apps it serves, with no
+    // address of its own.
+    const proxy = presetsForRoute("app").find((preset) => preset.id === "cli-proxy");
+    expect(proxy).toMatchObject({ kind: "cli_proxy", base_url: "", default_model: "" });
+    // Its posture is fixed: never moved by an address.
+    expect(autoRemoteReason("cli_proxy", "http://127.0.0.1:8317/v1")).toBeNull();
+    expect(autoRemoteReason("cli_proxy", "https://cli-proxy.example.ts.net/v1")).toBeNull();
     expect(routeForPreset("openai-compatible")).toBe("local");
     expect(routeForPreset("openai-compatible-api")).toBe("api");
     expect(routeForPreset("nope")).toBeNull();

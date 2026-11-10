@@ -12,11 +12,12 @@ time. This test parses the catalog and verifies alignment.
 from __future__ import annotations
 
 import inspect
+import json
 import re
 import unittest
 from pathlib import Path
 
-from kassiber.core.wallets import WALLET_KINDS
+from kassiber.core.wallets import WALLET_KINDS, list_wallet_kinds
 from kassiber.daemon import (
     SUPPORTED_KINDS,
     _UI_WALLET_SOURCE_FORMATS,
@@ -24,6 +25,7 @@ from kassiber.daemon import (
     _create_btcpay_connection_payload,
 )
 from kassiber.errors import AppError
+from tests.rust_port.rust_only import RUST_ONLY_DAEMON_KINDS
 
 
 _CATALOG_PATH = (
@@ -198,6 +200,21 @@ def _invoked_ui_daemon_kinds() -> dict[str, str]:
 
 
 class ConnectionCatalogDriftTests(unittest.TestCase):
+    def test_native_wallet_kind_catalog_matches_the_shared_reference(self):
+        native = _CATALOG_PATH.parents[3] / "crates/wallets/src/connections_catalog.json"
+        catalog = json.loads(native.read_text(encoding="utf-8"))
+        # Bitpanda is a Rust-only wallet kind (docs/reference/bitpanda.md#python),
+        # listed right after Binance; every other row is Python's.
+        rust_only = [row for row in catalog if row["kind"] == "bitpanda"]
+        self.assertEqual(len(rust_only), 1)
+        self.assertEqual(catalog[catalog.index(rust_only[0]) - 1]["kind"], "binance")
+        self.assertEqual([row for row in catalog if row["kind"] != "bitpanda"], list_wallet_kinds())
+
+    def test_native_source_formats_match_the_daemon_reference(self):
+        native = (_CATALOG_PATH.parents[3] / "crates/wallets/src/connections.rs").read_text(encoding="utf-8")
+        block = native.split("pub const SOURCE_FORMATS: &[&str] = &[", 1)[1].split("];", 1)[0]
+        self.assertEqual(sorted(re.findall(r'"([^"]+)"', block)), sorted(_UI_WALLET_SOURCE_FORMATS))
+
     @classmethod
     def setUpClass(cls):
         cls.catalog_text = _CATALOG_PATH.read_text(encoding="utf-8")
@@ -350,7 +367,10 @@ class ConnectionCatalogDriftTests(unittest.TestCase):
         lifecycle commands, and most reveal kinds stay off the desktop surface.
         """
 
-        daemon_kinds = set(SUPPORTED_KINDS)
+        # The desktop's exchange connection kinds are served by the Rust
+        # daemon only (docs/reference/exchange-desktop.md); Python refuses
+        # them with an error envelope the desktop explains.
+        daemon_kinds = set(SUPPORTED_KINDS) | set(RUST_ONLY_DAEMON_KINDS)
         rust_kinds = self._rust_allowlist()
         vite_kinds = self._vite_allowlist()
         self.assertTrue(
@@ -382,6 +402,27 @@ class ConnectionCatalogDriftTests(unittest.TestCase):
             "Tauri and Vite-bridge daemon kind allowlists have drifted. "
             "Update both lists together (see ui-tauri/src-tauri/src/lib.rs "
             "and ui-tauri/vite.config.ts).",
+        )
+
+    def test_rust_only_exchange_kinds_are_native_desktop_kinds(self):
+        """Each Rust-only kind the desktop invokes is in both allowlists and
+        in the Rust daemon's connections kinds, and never a Python kind."""
+        native = (_CATALOG_PATH.parents[3] / "crates/daemon/src/connections.rs").read_text(encoding="utf-8")
+        block = native.split("pub const KINDS: &[&str] = &[", 1)[1].split("];", 1)[0]
+        native_kinds = set(re.findall(r'"([^"]+)"', block))
+        for kind in RUST_ONLY_DAEMON_KINDS:
+            self.assertNotIn(kind, set(SUPPORTED_KINDS))
+            self.assertIn(kind, native_kinds)
+            self.assertIn(kind, self._rust_allowlist())
+            self.assertIn(kind, self._vite_allowlist())
+        exchange_entries = [
+            entry for entry in _split_entries(
+                re.search(r"CONNECTION_SOURCES[^=]*=\s*\[(?P<body>.*?)\];", self.catalog_text, re.DOTALL).group("body"))
+            if _extract_field(entry, "setupKind") == "exchange-api"
+        ]
+        self.assertEqual(
+            sorted(_extract_field(entry, "exchange") for entry in exchange_entries),
+            ["binance", "bitpanda", "coinbase", "kraken"],
         )
 
     def test_document_import_stage_kind_is_privileged(self):
@@ -508,9 +549,10 @@ class ConnectionCatalogDriftTests(unittest.TestCase):
             source_format = _extract_field(entry, "sourceFormat")
             setup_kind = _extract_field(entry, "setupKind")
             entry_id = _extract_field(entry, "id") or "<unknown>"
-            if setup_kind in (None, "backend-settings", "bip329", "btcpay", "prior-report"):
-                # Backend-only / label-import / evidence-archive / BTCPay entries
-                # do not declare a walletKind; the daemon owns their target.
+            if setup_kind in (None, "backend-settings", "bip329", "btcpay", "prior-report", "exchange-api"):
+                # Backend-only / label-import / evidence-archive / BTCPay /
+                # exchange API entries do not declare a walletKind; the daemon
+                # owns their target.
                 continue
             self.assertIsNotNone(
                 wallet_kind,

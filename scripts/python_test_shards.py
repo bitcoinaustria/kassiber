@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import functools
 import os
 import re
 import subprocess
@@ -51,6 +52,9 @@ PARALLEL_SHARD_DISTRIBUTION = {
     "reports-contracts": "loadscope",
 }
 PARALLEL_SHARDS = frozenset(PARALLEL_SHARD_DISTRIBUTION)
+# Shards whose classes must stay on one worker; the rest pass per-test
+# distribution at 16 workers, where `--dist worksteal` keeps every worker busy.
+_GROUPED_SHARDS = frozenset({"daemon-cli"})
 
 _PREFLIGHT_MODULES = frozenset(
     {
@@ -58,6 +62,8 @@ _PREFLIGHT_MODULES = frozenset(
         "test_connection_catalog_drift",
         "test_dependency_drift",
         "test_homebrew_cask",
+        "test_inventory",
+        "test_contracts",
         "test_report_contract_drift",
         "test_test_data_lock",
         "test_workflow_pins",
@@ -72,20 +78,124 @@ _NETWORK_SERIAL_MODULES = frozenset(
     {
         "test_proxy",
         "test_regtest_backend_stack",
+        "test_rust_cln_acquisition",
+        "test_rust_lightning_acquisition",
+        "test_rust_lightning_service",
+        "test_rust_desktop_lightning_test",
+        "test_rust_desktop_settings_egress",
         "test_sync_backends",
         "test_freshness_prefetch_cancellation",
     }
 )
-_DAEMON_SERIAL_MODULES = frozenset({"test_cli_chat", "test_daemon_smoke", "test_mcp_server"})
+_DAEMON_SERIAL_MODULES = frozenset(
+    {
+        "test_cli_chat",
+        "test_daemon_smoke",
+        "test_mcp_server",
+        "test_rust_hybrid_candidate",
+        "test_rust_grouped_metadata_services",
+        "test_rust_transaction_desktop",
+        "test_rust_transaction_resolve",
+        "test_rust_transaction_dashboard",
+        "test_rust_report_capital_gains",
+        "test_rust_rates_rebuild",
+        "test_rust_audit_projections",
+        "test_rust_custody_projections",
+        "test_rust_transfer_review_context",
+        "test_rust_export_preview",
+        "test_rust_desktop_settings",
+        "test_rust_desktop_backends",
+        "test_rust_desktop_utxos",
+        "test_rust_project_desktop",
+        "test_rust_workspace_shell",
+        "test_rust_daemon_diagnostics",
+        "test_rust_release_cli",
+        "test_rust_review_workflow",
+        "test_rust_report_blockers",
+        "test_rust_maintenance_run",
+        "test_rust_report_read_sync",
+        "test_rust_evidence_summary",
+        "test_rust_transaction_graph",
+        "test_rust_transaction_review_context",
+        "test_rust_desktop_projections_egress",
+        "test_rust_desktop_settings",
+        "test_rust_document_services",
+        "test_rust_wallet_onboarding",
+        "test_rust_wallet_identify_onchain",
+        "test_rust_wallet_import_desktop",
+        "test_rust_wallet_document_import",
+        "test_rust_wallet_reveal",
+        "test_rust_document_ingestion",
+        "test_rust_document_cli",
+        "test_rust_chain_analysis_reads",
+        "test_rust_chain_analysis_psbt_reads",
+        "test_rust_chain_analysis_dataset_preview",
+        "test_rust_reports",
+        "test_rust_report_exports",
+        "test_rust_xlsx_exports",
+        "test_rust_austrian_xlsx",
+        "test_rust_full_xlsx",
+        "test_rust_exit_tax",
+        "test_rust_gain_reads",
+        "test_rust_cross_check",
+        "test_rust_year_handoff",
+        "test_rust_platform_csv",
+        "test_rust_source_funds_reads",
+        "test_rust_source_funds_case_writes",
+        "test_rust_source_funds_mutations",
+        "test_rust_source_funds_recipients",
+        "test_rust_source_funds_links",
+        "test_rust_source_funds_diagnostics",
+        "test_rust_source_funds_batch",
+        "test_rust_source_funds_saves",
+        "test_rust_source_funds_report",
+        "test_rust_shell_parity",
+        "test_rust_wallet_discovery",
+        "test_rust_wallet_acquisition",
+        "test_rust_observer_state",
+        "test_rust_bdk_execution",
+        "test_rust_lwk_execution",
+        "test_rust_lwk_sync_service",
+        "test_rust_bitcoin_records",
+        "test_rust_wallet_publication",
+        "test_rust_wallet_fetch",
+        "test_rust_wallet_sync_service",
+        "test_rust_wallet_sync_cli",
+        "test_rust_wallet_sync_gaps",
+        "test_rust_freshness_queue",
+        "test_rust_freshness_admission",
+        "test_rust_freshness_execution",
+        "test_rust_freshness_native",
+        "test_rust_freshness_lifecycle",
+        "test_rust_freshness_graph",
+        "test_rust_freshness_product",
+        "test_rust_connections",
+        "test_rust_wallet_sync_sources",
+        "test_rust_wallet_sync_btcpay",
+        "test_rust_freshness_journals",
+        "test_rust_source_funds_review",
+        "test_rust_source_funds_coverage",
+        "test_rust_source_funds_suggest",
+        "test_rust_source_funds_passes",
+        "test_rust_source_funds_routes",
+        "test_rust_journal_desktop",
+    }
+)
 _REGRESSION_SERIAL_MODULES = frozenset({"test_review_regressions"})
 _PROCESS_SERIAL_MODULES = frozenset(
     {
+        "test_backup_recovery",
+        "test_rust_backup_install",
+        "test_rust_backup_desktop",
         "test_custody_component_surfaces",
         "test_daemon_swap_matching",
         "test_integration_harness_safety",
         "test_lightning_business_plan",
         "test_lightning_business_regtest_helpers",
         "test_remembered_unlock",
+        "test_rust_store_interop",
+        "test_rust_store_migrations",
+        "test_rust_store_partition_reference",
         "test_repo_resolution",
         "test_transaction_edit_history",
         "test_wasabi_import",
@@ -202,6 +312,10 @@ _SHADOW_EXTRA_MODULES = frozenset(
         # Their AI read tools reach the auto-maintained journals below.
         "test_chat_visuals",
         "test_mcp_server",
+        # Its Rust vector exporters call the Python review service in children.
+        "test_rust_review_cases",
+        # It plans and applies through Python's review service for its references.
+        "test_rust_review_workflow",
         # The daemon processes stale journals before its AI read tools and
         # its `_DIRECT_AUTO_JOURNAL_REFRESH_KINDS` reads
         # (`daemon_freshness._auto_maintain_for_read`).
@@ -272,8 +386,23 @@ def validate_manifest(root: Path = ROOT) -> dict[str, tuple[Path, ...]]:
 
 def _imported_test_modules(path: Path, root: Path) -> frozenset[Path]:
     """The `tests` modules that ``path`` imports, as paths relative to ``root``."""
-    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     package = path.relative_to(root).with_suffix("").parts[:-1]
+    names = _imported_names(path.read_text(encoding="utf-8"), package, str(path))
+    found = set()
+    for name in names:
+        parts = name.split(".")
+        if parts[0] != "tests":
+            continue
+        for candidate in (root.joinpath(*parts[:-1], f"{parts[-1]}.py"), root.joinpath(*parts, "__init__.py")):
+            if candidate.is_file():
+                found.add(candidate.relative_to(root))
+    return frozenset(found)
+
+
+@functools.lru_cache(maxsize=None)
+def _imported_names(source: str, package: tuple[str, ...], filename: str) -> tuple[str, ...]:
+    """Every module name ``source`` imports; keyed by content, so an edit misses."""
+    tree = ast.parse(source, filename=filename)
     names: list[str] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
@@ -286,15 +415,7 @@ def _imported_test_modules(path: Path, root: Path) -> frozenset[Path]:
                 module = node.module or ""
             names.append(module)
             names.extend(f"{module}.{alias.name}" for alias in node.names)
-    found = set()
-    for name in names:
-        parts = name.split(".")
-        if parts[0] != "tests":
-            continue
-        for candidate in (root.joinpath(*parts[:-1], f"{parts[-1]}.py"), root.joinpath(*parts, "__init__.py")):
-            if candidate.is_file():
-                found.add(candidate.relative_to(root))
-    return frozenset(found)
+    return tuple(names)
 
 
 def shadow_overlay(root: Path = ROOT) -> tuple[Path, ...]:
@@ -351,10 +472,12 @@ def _run_pytest(
     distribution: str | None,
     pytest_args: Sequence[str],
     tax_mode: str | None = None,
+    custody_mode: str | None = None,
+    workers: int = 2,
 ) -> int:
     args = [str(ROOT / path) for path in paths]
     if distribution is not None:
-        args.extend(("-n", "2", "--dist", distribution, "--max-worker-restart=0"))
+        args.extend(("-n", str(workers), "--dist", distribution, "--max-worker-restart=0"))
     args.extend(pytest_args)
     command = [sys.executable, "-m", "pytest", *args]
     env = None
@@ -362,14 +485,36 @@ def _run_pytest(
     if tax_mode is not None:
         env = {**os.environ, "KASSIBER_TEST_TAX_ENGINE": tax_mode}
         prefix = f"KASSIBER_TEST_TAX_ENGINE={tax_mode} "
+    if custody_mode is not None:
+        env = {**(env or os.environ), "KASSIBER_TEST_CUSTODY_ENGINE": custody_mode}
+        prefix += f"KASSIBER_TEST_CUSTODY_ENGINE={custody_mode} "
     print(">", prefix + " ".join(command), flush=True)
     return subprocess.call(command, cwd=ROOT, env=env)
 
 
-def _run_shard(shard: str, *, ci: bool, pytest_args: Sequence[str]) -> int:
+def _run_shard(
+    shard: str,
+    *,
+    ci: bool,
+    pytest_args: Sequence[str],
+    workers: int | None = None,
+    dist: str | None = None,
+) -> int:
     manifest = validate_manifest()
-    distribution = PARALLEL_SHARD_DISTRIBUTION[shard] if ci and shard in PARALLEL_SHARDS else None
-    return _run_pytest(manifest[shard], distribution=distribution, pytest_args=pytest_args)
+    if (workers is not None or dist is not None) and shard not in PARALLEL_SHARDS:
+        raise SystemExit(f"{shard} runs without xdist; --workers and --dist apply to parallel shards")
+    if not ci or shard not in PARALLEL_SHARDS:
+        return _run_pytest(manifest[shard], distribution=None, pytest_args=pytest_args)
+    if workers is None and dist is None:
+        return _run_pytest(manifest[shard], distribution=PARALLEL_SHARD_DISTRIBUTION[shard], pytest_args=pytest_args)
+    if dist is not None and shard in _GROUPED_SHARDS:
+        raise SystemExit(f"{shard} keeps unittest classes together; run it without --dist")
+    return _run_pytest(
+        manifest[shard],
+        distribution=dist or PARALLEL_SHARD_DISTRIBUTION[shard],
+        pytest_args=pytest_args,
+        workers=workers or 2,
+    )
 
 
 def _run_shadow(lane: str | None, *, ci: bool, pytest_args: Sequence[str]) -> int:
@@ -393,11 +538,23 @@ def _parser() -> argparse.ArgumentParser:
     run_parser = subparsers.add_parser("run", help="Run one shard with pytest")
     run_parser.add_argument("shard", choices=ALL_SHARDS)
     run_parser.add_argument("--ci", action="store_true", help="Enable safe xdist workers")
+    run_parser.add_argument(
+        "--workers", type=int, help="xdist workers for a parallel shard with --ci (default 2, as in CI)"
+    )
+    run_parser.add_argument(
+        "--dist",
+        choices=("loadscope", "load", "worksteal"),
+        help="Override a per-test-safe parallel shard's distribution with --ci (local runs; CI keeps its policy)",
+    )
 
     list_shadow_parser = subparsers.add_parser(
         "list-shadow", help="List the tax-shadow overlay, or its part in one shard"
     )
     list_shadow_parser.add_argument("shard", nargs="?", choices=ALL_SHARDS)
+
+    custody_shadow_parser = subparsers.add_parser("run-custody-shadow", help="Audit the frozen SQL flow against the pure production stages")
+    custody_shadow_parser.add_argument("shard", nargs="?", choices=ALL_SHARDS)
+    custody_shadow_parser.add_argument("--ci", action="store_true", help="Apply the existing per-shard distribution policy")
 
     run_shadow_parser = subparsers.add_parser(
         "run-shadow",
@@ -436,9 +593,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         for path in paths:
             print(path.as_posix())
         return 0
+    if args.command == "run-custody-shadow":
+        # The census lane owns single-build read budgets. Shadow intentionally
+        # performs a second frozen SQL build; exclude the exact budget test.
+        budget = "tests/test_custody_native_reconciliation.py::test_disjoint_reviewed_routes_limit_observation_reads"
+        paths = _shadow_paths(args.shard)
+        if not paths:
+            print(f"{args.shard}: no custody shadow overlay modules", flush=True)
+            return 0
+        distribution = PARALLEL_SHARD_DISTRIBUTION.get(args.shard) if args.ci and args.shard is not None else None
+        return _run_pytest(paths, distribution=distribution, pytest_args=["--deselect", budget, *pytest_args], custody_mode="shadow")
     if args.command == "run-shadow":
         return _run_shadow(args.shard, ci=args.ci, pytest_args=pytest_args)
-    return _run_shard(args.shard, ci=args.ci, pytest_args=pytest_args)
+    if (args.workers is not None or args.dist is not None) and not args.ci:
+        parser.error("--workers and --dist apply with --ci")
+    return _run_shard(args.shard, ci=args.ci, pytest_args=pytest_args, workers=args.workers, dist=args.dist)
 
 
 if __name__ == "__main__":

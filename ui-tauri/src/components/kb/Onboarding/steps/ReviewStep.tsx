@@ -1,5 +1,7 @@
 import { useTranslation } from "react-i18next";
-import type { TFunction } from "i18next";
+import i18next, { type TFunction } from "i18next";
+
+import { isPreviewTaxCountry, usesLongTermDays } from "@/lib/taxCountries";
 
 import { Button } from "@/components/ui/button";
 
@@ -17,6 +19,7 @@ import {
 } from "../frame";
 import { NetworkStatus } from "../network";
 import { endpointReach, type NetworkSummary } from "../networkReach";
+import { onboardingRegionLabel } from "../regionLabel";
 import type { OnboardingForm, StepComponentProps } from "../types";
 
 const STEP_INDEX = {
@@ -200,10 +203,7 @@ function reviewRows(
       // The values actually chosen, not the jurisdiction's defaults: an
       // Austrian book can still be set to another currency or method.
       value: t("review.tax.value", {
-        region:
-          form.taxCountry === "at"
-            ? t("essentials.jurisdictionAustria")
-            : t("essentials.jurisdictionGeneric"),
+        region: onboardingRegionLabel(form.taxCountry, t),
         currency: form.fiatCurrency,
         method: t(`books.method.${form.gainsAlgorithm}`),
       }),
@@ -213,9 +213,13 @@ function reviewRows(
             form.gainsAlgorithm === GAINS_ALGORITHM_DEFAULTS.at
             ? undefined
             : t("review.tax.noteAtCustom")
-          : t("review.tax.noteGeneric", {
-              days: form.taxLongTermDays || "365",
-            }),
+          : isPreviewTaxCountry(form.taxCountry)
+            ? i18next.t("common:taxCountry.previewNotice")
+            : usesLongTermDays(form.taxCountry)
+              ? t("review.tax.noteGeneric", {
+                  days: form.taxLongTermDays || "365",
+                })
+              : undefined,
       step: "books",
     },
     {

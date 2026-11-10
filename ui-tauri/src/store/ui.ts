@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 import type { LanguageCode } from "@/i18n/config";
+import type { GainsAlgorithm, TaxCountry } from "@/lib/taxCountries";
 import {
   DEFAULT_EXPLORER_SETTINGS,
   type ExplorerSettings,
@@ -110,21 +111,17 @@ export interface Identity {
   country: string;
   encrypted: boolean;
   profile?: string;
-  taxCountry?: "at" | "generic";
+  taxCountry?: TaxCountry;
   fiatCurrency?: string;
   taxLongTermDays?: number;
   /**
-   * Token matches `kassiber.tax_policy` / rp2 plugin tokens. Generic supports
-   * FIFO/LIFO/HIFO/LOFO + plain MOVING_AVERAGE; AT defaults to MOVING_AVERAGE_AT
-   * but also accepts the lot methods.
+   * A method token the registry lists for some country: generic supports
+   * FIFO/LIFO/HIFO/LOFO + plain MOVING_AVERAGE; AT defaults to
+   * MOVING_AVERAGE_AT but also accepts the lot methods; Germany offers FIFO
+   * and MOVING_AVERAGE_FIFO_PERIOD; the United Kingdom has only
+   * UK_SHARE_MATCHING; Japan has its two averages.
    */
-  gainsAlgorithm?:
-    | "FIFO"
-    | "LIFO"
-    | "HIFO"
-    | "LOFO"
-    | "MOVING_AVERAGE"
-    | "MOVING_AVERAGE_AT";
+  gainsAlgorithm?: GainsAlgorithm;
   databaseMode?: "sqlcipher" | "plaintext";
   migrateCredentials?: boolean;
   backendSetupMode?: "default" | "custom" | "skip";

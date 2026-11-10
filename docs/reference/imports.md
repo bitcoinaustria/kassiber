@@ -441,6 +441,17 @@ template is the header row with example rows. The importer reads `.xlsx` (via
 the `openpyxl` dependency) and CSV/TSV (delimiter sniffed). Legacy binary `.xls`
 is not read — save as `.xlsx` or CSV first.
 
+The native Rust importer reads stored and DEFLATE-compressed XLSX members in
+memory, without extracting files or resolving external XML entities. It limits
+archives to 4,096 entries, 32 MiB per decompressed member, 128 MiB for the input
+archive and total decompressed members, and a 200:1 compression ratio.
+Rectangular cell ranges total at most 1,000,000 cells across the workbook; XML is limited
+to 64 nested elements and 4,000,000 nodes per part. A shared 512 MiB
+materialization budget accounts for XML nodes, namespace and attribute copies,
+shared strings and worksheet allocations before making them. Overlapping ZIP
+members, mismatched local headers and CRC failures are refused. Files exceeding
+these limits return validation errors before importing observations.
+
 `--dry-run` previews what would import (also a no-DB read): it returns
 `{rows_read, mapped, errors, problems[], preview[], confident, detected[]}` and
 persists nothing, collecting a row-numbered problem for every rejected row at
@@ -655,6 +666,16 @@ split the statement. The preview reports the total and rendered page set, and
 source regions outside that set are quarantined. Rendered page dimensions and
 encoded byte totals are capped before raster data reaches the local model.
 
+The Rust CLI uses Python's `pdfinfo` and `pdftoppm` OCR preparation
+with the same arguments, limits, timeouts, missing-tool refusals and temporary
+page cleanup. PDF report/export rendering remains outside that port. The native
+core also deliberately redacts generic database failures and removes a managed
+copy after a source-digest mismatch; these
+[privacy deviations](privacy-and-security.md) avoid disclosing source values or
+retaining untracked sensitive evidence. Both document CLI commands run natively;
+daemon registration remains deferred until native `journals process` is
+registered. R6 AI paths and the desktop document sessions remain in Python.
+
 The preview returns draft rows with `ready` / `quarantined` status, per-row and
 per-populated-field confidence, every financial field, evidence text, source
 regions when the model provides them, and a normalized `import_record`.
@@ -678,8 +699,10 @@ remain authoritative in the daemon session; import sends only the token and
 selected ready-row ids. Neither renderer-supplied drafts nor hidden import
 records are trusted on the write path. Fiat-only/generic amounts and
 unparseable dates stay quarantined instead of being guessed as Bitcoin
-transactions. Stable source-and-row identities keep reordered OCR retries
-idempotent, while desktop success payloads omit source and managed-storage paths.
+transactions. Stable source-and-row identities preserve the same transaction
+identity across reordered OCR retries. A priced reimport can still count as an
+update and add another evidence copy, even when the supplied price is identical.
+Desktop success payloads omit source and managed-storage paths.
 
 Off-device AI providers are hard-disabled for this path even if they are
 configured for chat. URLs are also rejected: open Google Drive/Docs links in
@@ -750,8 +773,15 @@ wallets you own that the book does not know about.
 
 ## Import runs and rolling one back
 
-Every file import is recorded as a run (`import_batches`), so an import that
-mapped columns wrongly can be undone without deleting the connection:
+File imports normally record a run (`import_batches`), so an import that
+mapped columns wrongly can be undone without deleting the connection.
+Wasabi bundle and document OCR imports currently return before recording a run
+and therefore have no batch rollback token; the
+[Rust parity checkpoint](rust-shell.md#wasabi-core-and-cli-ingestion-r5-continuation)
+and [document checkpoint](rust-shell.md#reviewed-document-core-r5-partial)
+record these retained reference behaviors.
+
+For importers that record a run:
 
 ```bash
 kassiber imports list --workspace W --profile P
@@ -989,11 +1019,15 @@ The desktop Add Connection flow asks for the four primary public account inputs
 directly: Deposit, Badbank / Toxic Change, Premix, and Postmix descriptors or
 account xpub-family keys. Internally those fields are converted into the same
 source-set structure accepted by the CLI and daemon.
-Explicit descriptor source-set imports must cover both Samourai descriptor
+Explicit descriptor source-set imports validate a plan covering both Samourai
 branches for each scanned section: branch `0` receive and branch `1` change.
 Provide a separate `change_descriptor` or a descriptor expression that expands
-to both branches; single-branch descriptors are rejected because they can miss
-change history and understate balances, reports, and source-of-funds evidence.
+to both branches. The Python reference and Rust compatibility importer also
+accept ranged receive-only descriptors when the shared parser synthesizes a
+change branch; that synthesized branch is not added to the stored source
+configuration. Fixed single-branch sources are rejected. This reference quirk
+is pinned by the [Rust Samourai checkpoint](rust-shell.md#samourai-core-and-cli-ingestion-r5-continuation)
+and its offline reproduction.
 
 Accounting behavior is intentionally conservative:
 
@@ -1692,6 +1726,11 @@ Kassiber ports the useful BTC-focused DALI/RP2 row taxonomy natively instead of
 depending on DALI at runtime. Exchange/order evidence stays separate from later
 self-custody wallet sync evidence.
 
+In the desktop (Rust backend), Add connection → Exchanges sets up Kraken,
+Coinbase, Binance and Bitpanda with a read-only key, a Test connection and
+Sync now, storing the same backend and wallet the commands below do; see
+[exchange connections in the desktop](exchange-desktop.md).
+
 ### Kraken API
 
 Create a backend with `kind=kraken`; store the API key in `token` and the
@@ -1740,6 +1779,28 @@ pricing. Unsupported BTC row types raise validation errors rather than guessing.
 A send's `network` is an object (`hash`, `status`, and fee/link fields), not a
 network declaration, so the book-network check ignores it for Coinbase wallets
 and the row stays unscoped.
+
+### Bitpanda API
+
+Rust backend only. Create a backend with `kind=bitpanda` and a read-only
+Bitpanda API key (scopes Transaction and Trade (Read)) in `token`; no secret
+is needed. A key that can trade is refused.
+
+```bash
+kassiber backends create bitpanda-main --kind bitpanda \
+  --url https://api.public.bitpanda.com --token-stdin
+
+kassiber wallets sync-bitpanda --workspace W --profile P --backend bitpanda-main
+```
+
+The importer reads Bitpanda's public API (`/v1/operations` and the asset and
+currency lookups) and imports BTC buys and sells (including savings plans)
+with the cash leg as exact `exchange_execution` pricing (`pricing_method =
+"bitpanda_api"`), BTC deposits, withdrawals and rewards. Fiat-only and
+non-BTC operations (altcoins, BEST, metals, stocks, ETFs) are skipped and
+counted; swaps, index trades, reversals, separate trade fees and unknown
+types fail safe. [Bitpanda](bitpanda.md) records the API, the full mapping
+and every refusal.
 
 ### Binance API and Supplemental CSV
 

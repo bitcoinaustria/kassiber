@@ -21,6 +21,10 @@ cannot be reproduced in the fast replay lane.
 | Stop or remove persistent demo | `./scripts/integration-harness.sh demo-down [--purge]` | yes |
 | Time one large wallet's sync and journal step | `./scripts/integration-harness.sh sync-benchmark [--txs N]` | yes |
 
+Set `KASSIBER_RUNTIME=rust` (with `KASSIBER_RUST_BIN`, default
+`target/release/kassiber`) to run a lane's product children on the Rust
+binary; see [runtime selection](../../docs/reference/testing.md#runtime-selection).
+
 Use `demo-full` for test proof. Use `demo-up` for interactive development; it
 must leave reports immediately readable. Use `demo-tick` when the app refresh
 path needs new chain activity to import.

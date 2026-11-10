@@ -58,6 +58,8 @@ describe("provider form Test connection", () => {
       toolsAccepted: false,
       storeAccepted: false,
       probeModel: "m",
+      probeApiFormat: null,
+      modelsSaved: false,
       models: [{ id: "m" }],
     });
     const odd = aiProviderTestOutcome({
@@ -82,7 +84,7 @@ describe("provider form Test connection", () => {
         models: [{ id: "a" }],
         probe: { status: "skipped", reason: "no_model", model: null },
       }),
-    ).toEqual({ state: "no_model", modelCount: 12, models: [{ id: "a" }] });
+    ).toEqual({ state: "no_model", modelCount: 12, models: [{ id: "a" }], modelsSaved: false });
     // A CLI agent has no reply test; its check stays a success.
     expect(
       aiProviderTestOutcome({
@@ -91,5 +93,46 @@ describe("provider form Test connection", () => {
         probe: { status: "skipped", reason: "cli_provider", model: null },
       }).state,
     ).toBe("ok");
+  });
+
+  it("reads a CLI proxy's discovery: the format asked, a skipped model, a saved list", () => {
+    expect(
+      aiProviderTestOutcome({
+        model_count: 2,
+        models: [{ id: "claude-sonnet-5-5", api_format: "chat_completions" }],
+        api_format: null,
+        detected_api_format: null,
+        tools_accepted: true,
+        probe: {
+          status: "ok",
+          reason: null,
+          model: "claude-sonnet-5-5",
+          finish_reason: "stop",
+          api_format: "chat_completions",
+        },
+        models_saved: true,
+      }),
+    ).toMatchObject({
+      state: "ok",
+      detectedApiFormat: null,
+      probeModel: "claude-sonnet-5-5",
+      probeApiFormat: "chat_completions",
+      modelsSaved: true,
+    });
+    for (const reason of ["model_not_listed", "not_a_chat_model", "unknown_family"] as const) {
+      expect(
+        aiProviderTestOutcome({
+          model_count: 2,
+          models: [],
+          probe: { status: "skipped", reason, model: "gpt-image-2" },
+        }),
+      ).toEqual({
+        state: "no_model",
+        modelCount: 2,
+        models: [],
+        skipped: { reason, model: "gpt-image-2" },
+        modelsSaved: false,
+      });
+    }
   });
 });

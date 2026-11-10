@@ -38,6 +38,10 @@ separately stored `detected_api_format`:
   matches only on explicit endpoint or route wording, never on a bare "not
   found", which usually describes the request's content. A response that names
   a model or tools, any other error, and a pinned format never fall back.
+- A CLI proxy (`kind: "cli_proxy"`) has no format of its own: each chat
+  speaks the model's format from the proxy's saved model list (Responses for
+  Codex models, Chat Completions for the rest) and never falls back; see
+  [CLI proxy providers](ai-cli-proxy.md).
 - Changing the base URL clears the detection. CLI agents (`*-cli://`) have
   their own protocol and take only `auto`: a provider moved to a CLI locator
   without a format of its own goes back to `auto` (the desktop form sends
@@ -338,6 +342,11 @@ descriptors, xpubs, wallet configuration, secrets, local paths or URLs, or
 offers raw shell, filesystem or CLI dispatch, and consent still gates every
 write.
 
+Exchange API syncs are not tools in either mode: the assistant's wallet sync
+treats exchange wallets as sourceless, and the desktop's exchange connection
+kinds ([exchange connections in the desktop](exchange-desktop.md)) are
+renderer-only, so only the user's own Sync now contacts an exchange.
+
 ### Permission modes
 
 Who approves a write is the chat's `permission_mode`, decided by the daemon
@@ -445,7 +454,10 @@ go, each card with its posture badge:
   vLLM and llama.cpp refuse tools unless started with a tool parser
   (`--enable-auto-tool-choice --tool-call-parser …`) or `--jinja`.
 - **Through your subscription app**: the Claude, Codex, OpenCode and GitHub
-  Copilot CLI agents.
+  Copilot CLI agents, and **CLI proxy**, a CLIProxyAPI server serving the
+  subscriptions signed in to it as one API: its address, an optional client
+  key, then **Test & discover** (Rust backend only; see
+  [CLI proxy providers](ai-cli-proxy.md)).
 - **With an API key**: OpenAI (`https://api.openai.com/v1`), OpenRouter
   (`https://openrouter.ai/api/v1`), or **Other OpenAI-compatible API**.
 
@@ -1908,6 +1920,18 @@ evidence. `ui_source_funds_assemble`, `ui_source_funds_cases_save`, and the
 virtual `ui_source_funds_export` complete that workflow; export results sent to
 the model include the filename/format but not the managed local path.
 
+The partial Rust R5 shell now provides the shared source-funds save and daemon
+inspection services, including fingerprint revalidation under writer admission.
+The owner has assigned the AI execution loop, consent and once-only admission
+to Python under R6. AI source admission and case saving call
+`_ui_source_funds_payload_from_conn` directly inside `_run_scoped_ai_mutation`;
+they do not call the native CLI or daemon transport. Python retains advertised
+schemas, consent, duplicate-call suppression, frozen book/input binding and
+redaction. Direct native CLI/daemon services preserve service validation and
+review fingerprints. Native CLI/daemon save verification does not establish
+native AI tool acceptance; see
+the [case-save checkpoint](rust-shell.md#source-funds-case-save-checkpoint-r5-partial).
+
 Transaction review writes (`ui_transactions_metadata_update`,
 `ui_transactions_history_revert`, `ui_attachments_copy`) preserve the
 append-only edit/evidence audit trail and run only after consent. Commercial
@@ -2134,3 +2158,4 @@ transport and provider protections against the
 - [`../../kassiber/ai/contracts.py`](../../kassiber/ai/contracts.py)
 - [`../plan/08-external-document-reconciliation.md`](../plan/08-external-document-reconciliation.md)
 - [Privacy & security](privacy-and-security.md)
+- [CLI proxy providers](ai-cli-proxy.md)

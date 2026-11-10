@@ -284,6 +284,11 @@
         "why": "An older version counted this pair's network fee as moved principal but left it out of the sending side's full debit. The pair stays recorded and changes nothing until a corrected revision is reviewed.",
         "provide": "Review the pair. Preview and apply the corrected revision with kassiber review, update it with transfers update, or unpair it and pair the reviewed legs again. Excluding a leg does not answer this."
       },
+      "resetDecisionHeld": {
+        "title": "A decision kept by the reset is waiting",
+        "why": "\"Reset book data\" kept a decision on this transaction (a pair, loan mark, link or edit), but another transaction it names did not come back with the sync, or came back with different amounts.",
+        "provide": "Sync the wallet that holds the missing transaction. If it is gone for good, only \"Wipe everything\" in Settings releases the hold for now."
+      },
       "gapHold": {
         "title": "An intermediate wallet is missing",
         "why": "Coins left {{wallet}} and a similar amount came back later, but the wallet in between is not connected.",

@@ -1,4 +1,5 @@
 mod app_update;
+mod secret_floor;
 #[allow(dead_code)]
 mod secret_store;
 mod supervisor;
@@ -381,6 +382,12 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.connections.btcpay.discover",
     "ui.connections.btcpay.key_guide",
     "ui.connections.btcpay.test",
+    // Rust only (docs/reference/exchange-desktop.md); the Python daemon
+    // refuses them and the desktop explains that.
+    "ui.connections.exchange.status",
+    "ui.connections.exchange.test",
+    "ui.connections.exchange.create",
+    "ui.connections.exchange.sync",
     "ui.connections.node.snapshot",
     "ui.reports.lightning_profitability",
     "ui.metadata.bip329.preview",
@@ -3531,7 +3538,12 @@ pub fn run() {
                     .windows
                     .iter()
                     .find(|config| config.label == "main")
-                    .map(|config| (config.min_width.unwrap_or(0.0), config.min_height.unwrap_or(0.0)))
+                    .map(|config| {
+                        (
+                            config.min_width.unwrap_or(0.0),
+                            config.min_height.unwrap_or(0.0),
+                        )
+                    })
                     .unwrap_or((0.0, 0.0));
                 if let Err(error) = show_main_window(&window, min_size) {
                     eprintln!("kassiber: failed to restore the window frame: {error}");

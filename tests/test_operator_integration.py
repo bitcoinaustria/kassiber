@@ -8,6 +8,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from kassiber.db import open_db, resolve_database_path
 from kassiber.core import accounts as core_accounts
@@ -20,11 +21,27 @@ from tests.egress_guard import guarded_pythonpath
 
 
 BROKER_START_TIMEOUT_SECONDS = 20.0
-BROKER_SERVER_COMMAND = [
-    sys.executable,
-    str(Path(__file__).with_name("operator_server_fixture.py")),
-]
 SOURCE_ROOT = Path(__file__).resolve().parents[1]
+# KASSIBER_TEST_OPERATOR_BROKER=rust runs these scenarios against the Rust
+# broker (`KASSIBER_RUST_BIN --operator-broker-server`, a test-harness
+# build) instead of tests/operator_server_fixture.py. Its children are the
+# Rust CLI, and it honours the same gated runtime override plus a
+# test-harness-only login-session override, the fixture's equivalent.
+RUST_BROKER = os.environ.get("KASSIBER_TEST_OPERATOR_BROKER") == "rust"
+if RUST_BROKER:
+    BROKER_SERVER_COMMAND = [
+        os.environ.get("KASSIBER_RUST_BIN", str(SOURCE_ROOT / "target" / "debug" / "kassiber")),
+        "--operator-broker-server",
+    ]
+else:
+    BROKER_SERVER_COMMAND = [
+        sys.executable,
+        str(Path(__file__).with_name("operator_server_fixture.py")),
+    ]
+# A scoped read every build serves (the Rust CLI has no `health` yet).
+SCOPED_READ, SCOPED_READ_KIND = (
+    (["profiles", "get"], "profiles.get") if RUST_BROKER else (["health"], "health")
+)
 
 
 def _broker_environment(runtime: str) -> dict[str, str]:
@@ -32,6 +49,8 @@ def _broker_environment(runtime: str) -> dict[str, str]:
     environment["KASSIBER_OPERATOR_RUNTIME_DIR"] = runtime
     environment[TEST_RUNTIME_OVERRIDE_ENV] = "1"
     environment["XDG_RUNTIME_DIR"] = runtime
+    if RUST_BROKER:
+        environment["KASSIBER_RUST_TEST_OPERATOR_SESSION"] = "fixture"
     existing_pythonpath = environment.get("PYTHONPATH")
     environment["PYTHONPATH"] = os.pathsep.join(
         part
@@ -69,6 +88,21 @@ def _wait_for_broker(
 @unittest.skipIf(os.name == "nt", "Unix broker process integration")
 @unittest.skipUnless(sqlcipher_available(), "SQLCipher is required")
 class OperatorIntegrationTest(unittest.TestCase):
+    def setUp(self) -> None:
+        if RUST_BROKER:
+            # The Python client hands secrets only to its own build; a Rust
+            # broker names another, so the client adopts the build of the
+            # broker it pinged (the scenarios are the broker's, not the
+            # cross-build guard's, which test_operator_client.py covers).
+            def broker_build() -> dict[str, object]:
+                return BrokerClient().ping()["build"]
+
+            patcher = mock.patch(
+                "kassiber.operator.client.build_identity",
+                side_effect=broker_build,
+            )
+            patcher.start()
+            self.addCleanup(patcher.stop)
     def test_simultaneous_startup_elects_one_broker(self) -> None:
         with tempfile.TemporaryDirectory() as runtime:
             os.chmod(runtime, 0o700)
@@ -168,7 +202,7 @@ class OperatorIntegrationTest(unittest.TestCase):
                             "--data-root",
                             tmp,
                             "--machine",
-                            "health",
+                            *SCOPED_READ,
                             "--workspace",
                             workspace["id"],
                             "--profile",
@@ -191,7 +225,7 @@ class OperatorIntegrationTest(unittest.TestCase):
                 )
                 self.assertEqual(
                     json.loads(completed_second["stdout"])["kind"],
-                    "health",
+                    SCOPED_READ_KIND,
                 )
                 locked = client.lock(tmp)
                 self.assertTrue(locked["locked"])
@@ -210,6 +244,7 @@ class OperatorIntegrationTest(unittest.TestCase):
                 else:
                     os.environ[TEST_RUNTIME_OVERRIDE_ENV] = old_test_gate
 
+    # Under the Rust broker, its `mcp call` children are the Rust CLI (R6-8).
     def test_desktop_grant_serves_mcp_and_ends_with_the_desktop_session(self) -> None:
         import threading
         from types import SimpleNamespace
@@ -323,7 +358,47 @@ class OperatorIntegrationTest(unittest.TestCase):
                     )
                 self.assertEqual(raised.exception.code, "agent_session_scope")
                 # ... and any other process is a stranger, however it calls.
-                other = subprocess.run(
+                if RUST_BROKER:
+                    # A fresh Python process names its own build, which the
+                    # Rust broker refuses before pairing; the stranger is the
+                    # Rust server instead, with its own app-data root.
+                    call = {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "tools/call",
+                        "params": {
+                            "_meta": {
+                                "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+                                "io.modelcontextprotocol/clientCapabilities": {},
+                            },
+                            "name": "status",
+                            "arguments": {},
+                        },
+                    }
+                    served = subprocess.run(
+                        [
+                            BROKER_SERVER_COMMAND[0],
+                            "--data-root",
+                            tmp,
+                            "mcp",
+                            "serve",
+                            "--workspace",
+                            workspace["id"],
+                            "--profile",
+                            profile["id"],
+                        ],
+                        input=(json.dumps(call) + "\n").encode(),
+                        capture_output=True,
+                        env={**os.environ, "XDG_DATA_HOME": str(Path(config) / "xdg-data")},
+                        timeout=60,
+                        check=True,
+                    )
+                    structured = json.loads(served.stdout)["result"]["structuredContent"]
+                    self.assertEqual(
+                        structured["error"]["details"]["reason"], "agent_pairing_required"
+                    )
+                    self.assertEqual(served.stderr, b"")
+                other = None if RUST_BROKER else subprocess.run(
                     [
                         sys.executable,
                         "-c",
@@ -342,10 +417,11 @@ class OperatorIntegrationTest(unittest.TestCase):
                     timeout=60,
                     check=True,
                 )
-                self.assertEqual(
-                    json.loads(other.stdout)["error"]["details"]["reason"],
-                    "agent_pairing_required",
-                )
+                if other is not None:
+                    self.assertEqual(
+                        json.loads(other.stdout)["error"]["details"]["reason"],
+                        "agent_pairing_required",
+                    )
 
                 # The desktop locking itself ends the agents' lease too.
                 daemon._clear_unlocked_passphrase(ctx)

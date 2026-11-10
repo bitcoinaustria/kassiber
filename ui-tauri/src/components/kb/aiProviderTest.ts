@@ -27,10 +27,23 @@ export interface AiTestConnectionData {
   store_accepted?: boolean | null;
   probe?: {
     status?: "ok" | "skipped";
-    reason?: "no_model" | "cli_provider" | null;
+    reason?: "no_model" | "cli_provider" | CliProxyProbeSkip | null;
     model?: string | null;
     finish_reason?: string | null;
+    /** CLI proxy: the format the model was asked in, from its family. */
+    api_format?: AiWireApiFormat | null;
   };
+  /** CLI proxy: the listing became the saved provider's model list. */
+  models_saved?: boolean;
+}
+
+/** Why a CLI proxy test asked no model a question. */
+export type CliProxyProbeSkip = "model_not_listed" | "not_a_chat_model" | "unknown_family";
+
+function cliProxySkip(value: unknown): CliProxyProbeSkip | null {
+  return value === "model_not_listed" || value === "not_a_chat_model" || value === "unknown_family"
+    ? value
+    : null;
 }
 
 export type AiProviderTestOutcome =
@@ -48,10 +61,23 @@ export type AiProviderTestOutcome =
       storeAccepted: boolean | null;
       /** The model that answered the test prompt, when one was asked. */
       probeModel: string | null;
+      /** CLI proxy: the format that model was asked in. */
+      probeApiFormat: AiWireApiFormat | null;
+      /** CLI proxy: the listing is now the saved provider's model list. */
+      modelsSaved: boolean;
       models: AiModelRow[];
     }
-  /** Models listed, but nothing could ask one: generation is unchecked. */
-  | { state: "no_model"; modelCount: number; models: AiModelRow[] };
+  /**
+   * Models listed, but nothing could ask one: generation is unchecked. For a
+   * CLI proxy, `skipped` says why the chosen model was not asked.
+   */
+  | {
+      state: "no_model";
+      modelCount: number;
+      models: AiModelRow[];
+      skipped?: { reason: CliProxyProbeSkip; model: string };
+      modelsSaved: boolean;
+    };
 
 function wireFormat(value: unknown): AiWireApiFormat | null {
   return value === "responses" || value === "chat_completions" ? value : null;
@@ -101,8 +127,19 @@ export function aiProviderTestOutcome(
 ): AiProviderTestOutcome {
   const modelCount = data?.model_count ?? 0;
   const models = Array.isArray(data?.models) ? data.models : [];
+  const modelsSaved = data?.models_saved === true;
   if (data?.probe?.status === "skipped" && data.probe.reason === "no_model") {
-    return { state: "no_model", modelCount, models };
+    return { state: "no_model", modelCount, models, modelsSaved };
+  }
+  const skip = data?.probe?.status === "skipped" ? cliProxySkip(data.probe.reason) : null;
+  if (skip) {
+    return {
+      state: "no_model",
+      modelCount,
+      models,
+      skipped: { reason: skip, model: data?.probe?.model ?? "" },
+      modelsSaved,
+    };
   }
   const tested = data?.api_format;
   const probeModel = data?.probe?.status === "ok" ? data.probe.model : null;
@@ -115,6 +152,8 @@ export function aiProviderTestOutcome(
     toolsAccepted: typeof data?.tools_accepted === "boolean" ? data.tools_accepted : null,
     storeAccepted: typeof data?.store_accepted === "boolean" ? data.store_accepted : null,
     probeModel: typeof probeModel === "string" && probeModel ? probeModel : null,
+    probeApiFormat: data?.probe?.status === "ok" ? wireFormat(data.probe.api_format) : null,
+    modelsSaved,
     models,
   };
 }

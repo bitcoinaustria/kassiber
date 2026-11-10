@@ -65,11 +65,29 @@
       "recordedFanout": "Exact outputs from one recorded chain transaction",
       "rowMatched": "Exact matched wallet observations",
       "nativeTransfer": "Exact native wallet event",
+      "exchangeTxid": "Exchange withdrawal naming this transaction, exact amount (automatic)",
       "reviewedTransfer": "Reviewed internal transfer record",
       "reviewedGapBridge": "Reviewed missing-wallet custody bridge",
       "channelLifecycle": "Verified channel lifecycle",
       "reviewedDefault": "Reviewed internal custody evidence",
       "verifiedDefault": "Verified wallet or chain evidence"
+    },
+    "undo": {
+      "action": "Undo automatic pairing",
+      "title": "Undo this automatic pairing?",
+      "description": "Kassiber will stop treating the exchange withdrawal and this receipt as one move between your own wallets. Both transactions go back to review, and the journals need recalculating.",
+      "route": "{{from}} → {{to}}",
+      "restoreHint": "You can restore it on this page until you leave, or later through the assistant or “kassiber transfers dismissals delete”. Otherwise the undo lasts ten years.",
+      "cancel": "Keep pairing",
+      "confirm": "Undo pairing",
+      "undoing": "Undoing…",
+      "failed": "The pairing could not be undone."
+    },
+    "undone": {
+      "title": "Undone automatic pairings",
+      "description": "These pairings no longer count as moves between your own wallets. Restore one to let Kassiber pair it automatically again.",
+      "restore": "Restore pairing",
+      "failed": "The pairing could not be restored."
     }
   },
   "reviewQueue": {

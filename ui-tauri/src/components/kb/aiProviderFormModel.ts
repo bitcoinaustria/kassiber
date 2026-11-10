@@ -6,7 +6,7 @@
 import {
   isLoopbackAiHttpUrl,
   isNativeAiProviderLocator,
-  type AiProviderKind,
+  type AiProviderRowKind,
 } from "@/lib/aiCapabilities";
 
 type PresetHintKey =
@@ -19,7 +19,8 @@ type PresetHintKey =
   | "aiProvider.presetHint.openrouter"
   | "aiProvider.presetHint.custom"
   | "aiProvider.presetHint.customApi"
-  | "aiProvider.presetHint.cli";
+  | "aiProvider.presetHint.cli"
+  | "aiProvider.presetHint.cliProxy";
 
 export interface AiProviderPreset {
   /** Stable id for tests and state; never shown. */
@@ -29,7 +30,7 @@ export interface AiProviderPreset {
   /** What the Name field starts with. */
   display_name: string;
   base_url: string;
-  kind: AiProviderKind;
+  kind: AiProviderRowKind;
   default_model: string;
   /** One line under the presets saying what this one is for. */
   hintKey: PresetHintKey;
@@ -45,6 +46,8 @@ export interface AiProviderPreset {
    * posture follows it (see `autoRemoteReason`).
    */
   custom?: boolean;
+  /** What the empty address field shows, when the preset has no address. */
+  urlPlaceholder?: string;
 }
 
 /**
@@ -60,7 +63,10 @@ export const AI_PROVIDER_ROUTES: readonly { id: AiProviderRoute; presets: readon
     id: "local",
     presets: ["ollama", "lmstudio", "vllm", "llamacpp", "omlx", "openai-compatible"],
   },
-  { id: "app", presets: ["claude-cli", "codex-cli", "opencode-cli", "copilot-cli"] },
+  {
+    id: "app",
+    presets: ["claude-cli", "codex-cli", "opencode-cli", "copilot-cli", "cli-proxy"],
+  },
   { id: "api", presets: ["openai", "openrouter", "openai-compatible-api"] },
 ];
 
@@ -210,6 +216,19 @@ export const AI_PROVIDER_PRESETS: readonly AiProviderPreset[] = [
     default_model: "default",
     hintKey: "aiProvider.presetHint.cli",
   },
+  {
+    // A CLIProxyAPI server: the subscriptions it is signed in to, as one API.
+    // No address: the user's proxy is wherever they run it (loopback or a
+    // tailnet), and nothing is contacted until Test & discover.
+    id: "cli-proxy",
+    label: "CLI proxy",
+    display_name: "CLI proxy",
+    base_url: "",
+    kind: "cli_proxy",
+    default_model: "",
+    hintKey: "aiProvider.presetHint.cliProxy",
+    urlPlaceholder: "http://127.0.0.1:8317/v1",
+  },
 ];
 
 /** Whether the form must have a key: a keyed preset still at its own URL. */
@@ -229,7 +248,7 @@ export type AutoRemoteReason = "url" | "cli";
  * nothing is ever moved to local. Null while the URL has no host to judge.
  */
 export function autoRemoteReason(
-  kind: AiProviderKind,
+  kind: AiProviderRowKind,
   baseUrl: string,
 ): AutoRemoteReason | null {
   if (kind !== "local") return null;

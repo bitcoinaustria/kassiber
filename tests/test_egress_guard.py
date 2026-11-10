@@ -15,6 +15,7 @@ import pytest
 
 from tests import cli_runner
 from tests.egress_guard import CHILD_HOOKS, SWITCH, UNGUARDED_EXIT, UnguardedChildError, require_guarded_child
+from tests.integration.runtime_parity import child_env
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -66,6 +67,14 @@ def test_runner_refuses_a_fixture_that_drops_the_guard(armed, no_spawn, tmp_path
 def test_runner_refuses_interpreter_options_that_skip_the_hook(armed, no_spawn, options):
     with pytest.raises(UnguardedChildError, match="skip sitecustomize"):
         cli_runner.run(["--version"], reference=True, python_options=options)
+
+
+def test_runtime_parity_env_is_guarded_until_a_caller_replaces_its_path(armed, no_spawn, tmp_path):
+    env = child_env(tmp_path / "home", python_child=True)
+    require_guarded_child(env)
+    env["PYTHONPATH"] = str(ROOT)
+    with pytest.raises(UnguardedChildError):
+        cli_runner.run(["--version"], reference=True, env=env)
 
 
 def test_guarded_and_unarmed_children_are_admitted(armed, monkeypatch):

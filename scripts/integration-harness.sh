@@ -27,6 +27,82 @@ py() {
   uv run --locked python "$@"
 }
 
+# KASSIBER_RUNTIME selects the product every lane starts: `python` (default,
+# `python -m kassiber`) or `rust` (the binary KASSIBER_RUST_BIN names, default
+# target/release/kassiber). Product children go through tests/cli_runner.py,
+# so `rust` exports KASSIBER_TEST_CLI for them; the harness's own seeding and
+# probe helpers stay Python. A release binary has no test socket guard and
+# exits 78 when KASSIBER_TEST_NO_EGRESS is armed, so Rust lanes that need that
+# guard in a child use a `--features test-harness` build instead.
+configure_runtime() {
+  case "${KASSIBER_RUNTIME:-python}" in
+    python)
+      ;;
+    rust)
+      local bin="${KASSIBER_RUST_BIN:-$ROOT/target/release/kassiber}"
+      if [ ! -x "$bin" ]; then
+        echo "KASSIBER_RUNTIME=rust needs the Rust binary at $bin" >&2
+        echo "Build it with 'cargo build -p kassiber --release' or set KASSIBER_RUST_BIN." >&2
+        exit 2
+      fi
+      KASSIBER_RUST_BIN="$(cd "$(dirname "$bin")" && pwd -P)/$(basename "$bin")"
+      export KASSIBER_RUST_BIN
+      export KASSIBER_TEST_CLI="$KASSIBER_RUST_BIN"
+      ;;
+    shadow)
+      # Python drives the lane; each CLI step also runs on Rust from a copy
+      # of the same book and both are compared (tests/integration/runtime_shadow.py).
+      local bin="${KASSIBER_RUST_BIN:-$ROOT/target/release/kassiber}"
+      if [ ! -x "$bin" ] || [ ! -x "$ROOT/.venv/bin/python" ]; then
+        echo "KASSIBER_RUNTIME=shadow needs the Rust binary at $bin and ./.venv" >&2
+        exit 2
+      fi
+      KASSIBER_RUST_BIN="$(cd "$(dirname "$bin")" && pwd -P)/$(basename "$bin")"
+      export KASSIBER_RUST_BIN
+      local stamp
+      stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+      mkdir -p "$ROOT/target/runtime-shadow"
+      export KASSIBER_RUNTIME_SHADOW_DIR="${KASSIBER_RUNTIME_SHADOW_DIR:-$(cd "$ROOT/target/runtime-shadow" && pwd -P)/$MODE-$stamp}"
+      export KASSIBER_RUNTIME_SHADOW_LOG="${KASSIBER_RUNTIME_SHADOW_LOG:-$KASSIBER_RUNTIME_SHADOW_DIR/steps.jsonl}"
+      mkdir -p "$KASSIBER_RUNTIME_SHADOW_DIR"
+      export KASSIBER_TEST_CLI="[\"$ROOT/.venv/bin/python\", \"$ROOT/tests/integration/runtime_shadow.py\"]"
+      ;;
+    *)
+      echo "KASSIBER_RUNTIME must be python, rust or shadow, not '${KASSIBER_RUNTIME}'" >&2
+      exit 2
+      ;;
+  esac
+  export KASSIBER_RUNTIME="${KASSIBER_RUNTIME:-python}"
+}
+
+# The product reads the machine-wide offline switch and other preferences from
+# the account's default state root even with --data-root. Point every lane at
+# harness-owned files instead, so neither a developer's offline choice nor any
+# write reaches the real app-data root. Explicit values are kept.
+isolate_preferences() {
+  local dir
+  mkdir -p "$ROOT/target/integration-harness/preferences"
+  dir="$(cd "$ROOT/target/integration-harness/preferences" && pwd -P)"
+  chmod 700 "$dir"
+  export KASSIBER_OFFLINE_PREFERENCE_FILE="${KASSIBER_OFFLINE_PREFERENCE_FILE:-$dir/offline-mode.json}"
+  export KASSIBER_AGENT_ACCESS_FILE="${KASSIBER_AGENT_ACCESS_FILE:-$dir/agents.json}"
+  export KASSIBER_UPDATE_PREFERENCE_FILE="${KASSIBER_UPDATE_PREFERENCE_FILE:-$dir/updates.json}"
+  export KASSIBER_UPDATE_CACHE_FILE="${KASSIBER_UPDATE_CACHE_FILE:-$dir/update-cache.json}"
+  export KASSIBER_DISABLE_UPDATE_CHECK=1
+}
+
+# The product CLI in the selected runtime.
+kassiber_cli() {
+  if [ "$KASSIBER_RUNTIME" = rust ]; then
+    "$KASSIBER_RUST_BIN" "$@"
+  else
+    py -m kassiber "$@"
+  fi
+}
+
+configure_runtime
+isolate_preferences
+
 ensure_python_runtime() {
   if py - <<'PY' >/dev/null 2>&1
 import importlib.util
@@ -77,6 +153,7 @@ run_fast() {
     tests.integration.test_demo_fingerprint \
     tests.integration.test_regtest_demo_realism \
     tests.integration.test_regtest_exchange_cases \
+    tests.integration.test_regtest_tape_cli \
     -v
   # These tests exercise the real HTTP adapter against a loopback-only fixture.
   # Their socket guard blocks external destinations; the product kill switch
@@ -1023,7 +1100,7 @@ demo_seed_lightning() {
   export KASSIBER_DEMO_BACKDATE_SCENARIO="$DEMO_SCENARIO"
   export KASSIBER_DEMO_BACKDATE_SEED="${KASSIBER_DEMO_BACKDATE_SEED:-0}"
   py -m tests.integration.lightning_demo_backdate >/dev/null
-  py -m kassiber \
+  kassiber_cli \
     --data-root "$DEMO_HOME/data" \
     --machine \
     journals process \
@@ -1501,6 +1578,51 @@ run_btcpay_regtest() {
   run_with_bitcoin_core run_btcpay_seed_smoke
 }
 
+# Bark (Ark) BTCPay plugin stack: up, scenario, record, down. Records the
+# plugin's real Greenfield answers into a scratch directory. Needs the plugin
+# package from the BTCPay plugin builder under
+# $KASSIBER_BARK_PLUGIN_CACHE/<version>/BTCPayServer.Plugins.Bark.btcpay
+# (dev/regtest/btcpay_bark_stack.py lists the URL and sha256; nothing here
+# downloads it).
+run_btcpay_bark() (
+  local plugin="${KASSIBER_BARK_PLUGIN_VERSION:-0.13.0}"
+  local project="${KASSIBER_BARK_COMPOSE_PROJECT:-kassiber-bark}"
+  local base_port="${KASSIBER_BARK_BASE_PORT:-28600}"
+  local scratch="${KASSIBER_BARK_SCRATCH:-${TMPDIR:-/tmp}/kassiber-btcpay-bark-$project}"
+  local state="$scratch/state.json"
+  local out="${KASSIBER_BARK_FIXTURE_OUT:-$scratch/fixtures}"
+  local available port
+  available="$(free -g | awk '/^Mem:/ {print $7}')"
+  if [ "${available:-0}" -lt 40 ]; then
+    echo "btcpay-bark: free -g reports ${available:-?} GB available, need at least 40" >&2
+    return 1
+  fi
+  for port in "$base_port" "$((base_port + 1))" "$((base_port + 2))"; do
+    if ! python3 -I -c 'import socket, sys; socket.socket().bind(("127.0.0.1", int(sys.argv[1])))' "$port" 2>/dev/null; then
+      echo "btcpay-bark: port $port is in use" >&2
+      return 1
+    fi
+  done
+  if [ -z "${KASSIBER_BARK_PLUGIN_CACHE:-}" ]; then
+    echo "btcpay-bark: set KASSIBER_BARK_PLUGIN_CACHE to a directory holding <version>/BTCPayServer.Plugins.Bark.btcpay" >&2
+    return 2
+  fi
+  mkdir -p "$scratch"
+  bark_stack() {
+    python3 -I dev/regtest/btcpay_bark_stack.py "$@"
+  }
+  bark_stack_down() {
+    if [ -f "$state" ]; then
+      bark_stack down --state "$state" >/dev/null 2>&1 || true
+    fi
+  }
+  trap bark_stack_down EXIT
+  bark_stack up --plugin "$plugin" --state "$state" --project "$project" --base-port "$base_port"
+  bark_stack scenario --state "$state"
+  bark_stack record --state "$state" --out "$out"
+  echo "btcpay-bark: fixtures recorded in $out"
+)
+
 run_silent_payments() {
   export KASSIBER_REGTEST_COMPOSE_PROFILES="${KASSIBER_REGTEST_COMPOSE_PROFILES:-silent-payments}"
   run_with_bitcoin_core run_silent_payments_smoke
@@ -1572,16 +1694,15 @@ PY
 boltz_patch_host_ports() {
   local dir="$1"
   local port="${KASSIBER_BOLTZ_BITCOIN_RPC_PORT:-}"
-  BOLTZ_COMPOSE_FILE="$dir/docker-compose.yml"
   if [ -z "$port" ] && host_port_in_use 18443; then
     port=19443
   fi
-  if [ -z "$port" ] || [ "$port" = "18443" ]; then
-    return 0
-  fi
+  # Upstream publishes every host port on all interfaces (Postgres, Redis,
+  # node RPC). Always run a copy that binds them to loopback only, and move
+  # bitcoind's RPC port when 18443 is taken.
   BOLTZ_COMPOSE_TEMP="$(mktemp "${TMPDIR:-/tmp}/kassiber-boltz-compose.XXXXXX.yml")"
   KASSIBER_BOLTZ_REGTEST_DIR="$dir" \
-  KASSIBER_BOLTZ_BITCOIN_RPC_PORT="$port" \
+  KASSIBER_BOLTZ_BITCOIN_RPC_PORT="${port:-18443}" \
   KASSIBER_BOLTZ_COMPOSE_TEMP="$BOLTZ_COMPOSE_TEMP" \
     py - <<'PY'
 import os
@@ -1591,16 +1712,25 @@ from pathlib import Path
 source = Path(os.environ["KASSIBER_BOLTZ_REGTEST_DIR"]) / "docker-compose.yml"
 target = Path(os.environ["KASSIBER_BOLTZ_COMPOSE_TEMP"])
 text = source.read_text(encoding="utf-8")
-patched = re.sub(
+text = re.sub(
     r"(?m)^(\s*-\s*)(\d+):18443\s*$",
     rf"\g<1>{os.environ['KASSIBER_BOLTZ_BITCOIN_RPC_PORT']}:18443",
     text,
     count=1,
 )
-target.write_text(patched, encoding="utf-8")
+text = re.sub(r'(?m)^(\s*-\s*)"?(\d+:\d+(?:/\w+)?)"?\s*$', r'\g<1>"127.0.0.1:\g<2>"', text)
+target.write_text(text, encoding="utf-8")
 PY
   BOLTZ_COMPOSE_FILE="$BOLTZ_COMPOSE_TEMP"
-  echo "Boltz regtest host bitcoind RPC port mapped to $port -> 18443 to avoid local conflicts."
+  if [ -n "$port" ] && [ "$port" != "18443" ]; then
+    echo "Boltz regtest host bitcoind RPC port mapped to $port -> 18443 to avoid local conflicts."
+  fi
+}
+
+# Every Boltz compose call, `down --volumes` included, names this worktree's
+# own project rather than one derived from the checkout directory.
+boltz_compose_project() {
+  printf '%s\n' "${KASSIBER_BOLTZ_COMPOSE_PROJECT:-kassiber-boltz-$(printf '%s' "$ROOT" | sha256sum | cut -c1-12)}"
 }
 
 boltz_docker_compose() {
@@ -1614,12 +1744,14 @@ boltz_docker_compose() {
   fi
   if docker info >/dev/null 2>&1; then
     env UID="$uid" GID="$gid" docker compose \
+      -p "$(boltz_compose_project)" \
       --project-directory "$dir" \
       -f "$BOLTZ_COMPOSE_FILE" \
       "$@"
   elif sudo -n docker info >/dev/null 2>&1; then
     export KASSIBER_BOLTZ_DOCKER_CMD="${KASSIBER_BOLTZ_DOCKER_CMD:-sudo -n docker}"
     sudo -n env UID="$uid" GID="$gid" docker compose \
+      -p "$(boltz_compose_project)" \
       --project-directory "$dir" \
       -f "$BOLTZ_COMPOSE_FILE" \
       "$@"
@@ -1725,6 +1857,9 @@ case "$MODE" in
   btcpay|btcpay-regtest)
     run_btcpay_regtest
     ;;
+  btcpay-bark)
+    run_btcpay_bark
+    ;;
   silent-payments)
     run_silent_payments
     ;;
@@ -1738,7 +1873,7 @@ case "$MODE" in
     ( run_regtest_demo_full )
     ;;
   *)
-    echo "usage: $0 [fast|chain-analysis|bitcoin-core|bitcoin-electrum|sync-benchmark [options]|chain-observers [all|bitcoin|liquid]|slow|demo|demo-full|demo-up|demo-tick [N]|demo-down [--purge]|boltz-liquid|custody-desktop|lightning-business|btcpay|silent-payments|all]" >&2
+    echo "usage: $0 [fast|chain-analysis|bitcoin-core|bitcoin-electrum|sync-benchmark [options]|chain-observers [all|bitcoin|liquid]|slow|demo|demo-full|demo-up|demo-tick [N]|demo-down [--purge]|boltz-liquid|custody-desktop|lightning-business|btcpay|btcpay-bark|silent-payments|all]" >&2
     exit 2
     ;;
 esac

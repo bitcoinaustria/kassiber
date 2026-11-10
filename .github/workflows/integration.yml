@@ -55,6 +55,8 @@ jobs:
 
       - name: Set up Rust
         uses: ./.github/actions/setup-rust
+        with:
+          cache-key: python-binding
 
       - name: Sync dependencies
         run: uv sync --locked
@@ -85,6 +87,8 @@ jobs:
 
       - name: Set up Rust
         uses: ./.github/actions/setup-rust
+        with:
+          cache-key: python-binding
 
       - name: Sync dependencies
         run: uv sync --locked
@@ -115,6 +119,8 @@ jobs:
 
       - name: Set up Rust
         uses: ./.github/actions/setup-rust
+        with:
+          cache-key: python-binding
 
       - name: Sync dependencies
         run: uv sync --locked

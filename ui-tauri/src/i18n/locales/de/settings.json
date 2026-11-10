@@ -107,7 +107,7 @@
   },
   "resetBook": {
     "title": "Buchdaten zurücksetzen",
-    "description": "Dies behält die Wallet- und Backend-Verbindungen für {{book}} und löscht dann importierte/gesyncte Einträge, Journale, den Prüfstatus von Swaps, Labels, Anhänge und die Mittelherkunfts-Arbeit. Der gemeinsame Fiat-Kurs-Cache bleibt erhalten, sofern du ihn unten nicht ausdrücklich einbeziehst.",
+    "description": "Gesyncte Transaktionen und Journale von {{book}} werden gelöscht und beim nächsten Sync neu aufgebaut. Deine Entscheidungen und Dokumente bleiben erhalten: Prüfungen, Paare und Verwahrungskomponenten, Kreditmarkierungen, Mittelherkunfts-Verknüpfungen, Anhänge, Notizen, Tags und Preisänderungen. Jede wird wieder zugeordnet, sobald ihre Transaktionen zurückkommen; was nicht mehr passt, wird zur Prüfung zurückgehalten. Wallet- und Backend-Verbindungen bleiben erhalten, ebenso der gemeinsame Fiat-Kurs-Cache, sofern du ihn unten nicht einbeziehst.",
     "passphraseHint": " Gib das Datenbank-Passwort und den Buchnamen ein, um fortzufahren.",
     "plaintextHint": " Diese Klartext-Bücher haben kein Datenbank-Passwort; tippe die ausdrückliche Bestätigung für das lokale Zurücksetzen und den Buchnamen ein, um fortzufahren.",
     "passphraseLabel": "Passwort",
@@ -115,14 +115,20 @@
     "bookNameLabel": "Buchname",
     "clearRatesLabel": "Auch den gemeinsamen Fiat-Kurs-Cache löschen",
     "clearRatesHint": "Dieser Cache wird von allen Büchern in diesem lokalen Datenverzeichnis geteilt. Lass ihn aus, um die bestehende BTC-EUR-/BTC-USD-Historie zu behalten.",
+    "wipeLabel": "Stattdessen alles löschen",
+    "wipeHint": "Löscht auch die Entscheidungen und Dokumente dieses Buchs, einschließlich Anhangdateien und von einem früheren Zurücksetzen behaltener Entscheidungen. Nur die Verbindungen bleiben; mit dem nächsten Sync kommt nichts davon zurück.",
+    "wipeConfirmLabel": "Tippe {{challenge}}, um alles zu löschen",
     "submitPending": "Wird zurückgesetzt…",
     "submit": "Zurücksetzen",
+    "submitWipe": "Alles löschen",
     "errorPassphrase": "Gib das Datenbank-Passwort ein.",
     "errorPlaintext": "Tippe {{challenge}}, um das lokale Zurücksetzen zu bestätigen.",
     "errorConfirm": "Tippe {{book}}, um das Zurücksetzen zu bestätigen.",
+    "errorWipe": "Tippe {{challenge}}, um das Löschen von allem zu bestätigen.",
     "errorGeneric": "Zurücksetzen des Buchs fehlgeschlagen.",
     "notifyTitle": "Buchdaten zurückgesetzt",
     "notifyBody": "{{summary}} gelöscht. Wallet- und Backend-Verbindungen wurden behalten.",
+    "notifyKeptBody": "{{transactions}} Transaktionen und {{journalRows}} Journalzeilen gelöscht. {{decisions}} Entscheidungen behalten; synce die Wallets des Buchs, um sie wieder zuzuordnen.",
     "summary": {
       "transactions": "{{value}} Transaktionen",
       "journalRows": "{{value}} Journalzeilen",
@@ -564,14 +570,16 @@
       "local": "Auf diesem Computer",
       "remote": "Entfernter Server",
       "tee": "Vertraulicher Server (TEE)",
-      "cli": "Abo-App"
+      "cli": "Abo-App",
+      "cli_proxy": "CLI-Proxy"
     },
     "showDetails": "Details zu {{name}}",
     "address": "Adresse",
     "edit": "Bearbeiten",
     "remove": "Entfernen",
     "agentsAllowLabel": "Agenten erlauben",
-    "agentsSessionLabel": "Zugriff auf dieses Buch"
+    "agentsSessionLabel": "Zugriff auf dieses Buch",
+    "refreshModels": "Modelle aktualisieren"
   },
   "chatHistory": {
     "mode": {
@@ -611,7 +619,8 @@
     "kindHint": {
       "local": "Läuft auf diesem Gerät. Es verlassen keine Daten das Gerät.",
       "remote": "Cloud-, LAN- oder Hersteller-CLI-Provider. Prompts können das Gerät verlassen.",
-      "tee": "Der Provider beansprucht einen Trusted-Execution-/Attestierungs-Pfad (z. B. Maple AI). Kassiber behandelt ihn dennoch als gerätefern."
+      "tee": "Der Provider beansprucht einen Trusted-Execution-/Attestierungs-Pfad (z. B. Maple AI). Kassiber behandelt ihn dennoch als gerätefern.",
+      "cli_proxy": "Ein CLI-Proxy reicht Prompts an die Dienste hinter deinen Abos weiter und gilt deshalb immer als außerhalb dieses Geräts. Jedes Modell wird im Format angesprochen, das seine Familie braucht."
     },
     "editTitle": "AI-Provider bearbeiten",
     "addTitle": "AI-Provider hinzufügen",
@@ -626,7 +635,8 @@
       "openrouter": "Ein Schlüssel für Modelle vieler Hersteller.",
       "custom": "Jeder andere Server, der die OpenAI-API spricht, etwa ein Gateway in deinem Netzwerk. Gib seine Basis-URL ein, meist mit /v1 am Ende; eine Adresse außerhalb dieses Geräts wird als entfernt behandelt.",
       "cli": "Verwendet die {{label}}, bei der du angemeldet bist; sie kann Prompts an ihren eigenen Modelldienst senden.",
-      "customApi": "Jeder gehostete Dienst, der die OpenAI-API spricht, etwa Groq, Mistral oder Together. Gib seine Basis-URL ein, meist mit /v1 am Ende, und deinen Schlüssel."
+      "customApi": "Jeder gehostete Dienst, der die OpenAI-API spricht, etwa Groq, Mistral oder Together. Gib seine Basis-URL ein, meist mit /v1 am Ende, und deinen Schlüssel.",
+      "cliProxy": "Ein CLIProxyAPI-Server, der die Abos, bei denen du angemeldet bist (Claude Code, Codex, Gemini CLI, …), als eine API bereitstellt. Gib seine Adresse und, falls er einen hat, seinen Client-Schlüssel ein; Testen & abrufen listet seine Modelle."
     },
     "presetNoteLocal": "Lokaler {{label}}-Endpunkt.",
     "copyCommand": "Befehl kopieren",
@@ -742,7 +752,8 @@
     "postureName": {
       "local": "Auf diesem Computer",
       "remote": "Verlässt diesen Computer",
-      "tee": "Vertrauenswürdige Ausführung"
+      "tee": "Vertrauenswürdige Ausführung",
+      "cli_proxy": "Verlässt diesen Computer"
     },
     "privacy": {
       "title": "Prompts an {{name}} verlassen diesen Computer",
@@ -759,7 +770,19 @@
     "next": "Weiter",
     "errorChooseProvider": "Wähle einen Provider, um fortzufahren.",
     "errorNameRequired": "Gib diesem Provider einen Namen.",
-    "errorAckRequiredNext": "Bestätige, dass Prompts dieses Gerät verlassen können, um fortzufahren."
+    "errorAckRequiredNext": "Bestätige, dass Prompts dieses Gerät verlassen können, um fortzufahren.",
+    "testDiscover": "Testen & abrufen",
+    "checkHintCliProxy": "Testen & abrufen listet die Modelle, die der Proxy bereitstellt. Ist ein Standardmodell gewählt, prüft es mit einem kurzen Test-Prompt auch, ob dieses antwortet.",
+    "discovered_one": "{{count}} Modell am Proxy gefunden.",
+    "discovered_other": "{{count}} Modelle am Proxy gefunden.",
+    "discoveredUnusable_one": "{{count}} davon kann den Assistenten nicht ausführen (ein Bild- oder Videomodell oder eine unbekannte Familie).",
+    "discoveredUnusable_other": "{{count}} davon können den Assistenten nicht ausführen (Bild- oder Videomodelle oder unbekannte Familien).",
+    "discoveredChoose": "Wähle ein Standardmodell; ein weiterer Test prüft, ob es antwortet.",
+    "discoveredSaved": "Als Modellliste dieses Providers gespeichert.",
+    "testModelNotListed": "Der Proxy listet {{model}} nicht. Wähle eines seiner Modelle.",
+    "testModelNotChat": "{{model}} ist kein Chat-Modell. Wähle ein anderes.",
+    "testModelUnknownFamily": "Kassiber weiß nicht, welches Format {{model}} braucht. Wähle ein anderes.",
+    "testFormatUsed": "Im Format {{format}} gefragt."
   },
   "backendModal": {
     "edit": {

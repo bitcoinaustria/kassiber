@@ -27,8 +27,11 @@ SCANNED = ("tests", "dev", "scripts")
 # Files that may build the Python command themselves, and why.
 ALLOWED = {
     "tests/cli_runner.py": "the shared runner",
+    "tests/rust_port/hybrid_cli.py": "the hybrid candidate runs the Python reference for commands Rust lacks",
     "scripts/benchmark-wallet-sync.py": "profiles the Python reference under cProfile",
     "scripts/generate-source-funds-demo-report.py": "renders documentation assets, not a test",
+    "tests/fixtures/historical/build_pre_sync_fixture.py": "runs a historical checkout's Python through PYTHONPATH",
+    "tests/rust_port/repro_chat_file_token_key.py": "a manual repro that takes the candidate as its argument",
 }
 _SUBPROCESS_CALLS = {"run", "Popen", "call", "check_call", "check_output", "execv", "execvp", "execve", "spawnv"}
 

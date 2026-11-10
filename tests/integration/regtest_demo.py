@@ -3277,6 +3277,9 @@ def _export_reports(data_root: Path, export_dir: Path, scenario: dict[str, Any])
             str(exports["transactions_xlsx"]),
         )["data"],
     }
+    # The shared report design writes the full CSV report as one ZIP
+    # (docs/reference/report-design.md#csv); check the file each export names.
+    exports = {name: Path(results[name].get("file") or path) for name, path in exports.items()}
     missing = [name for name, path in exports.items() if not path.exists() or path.stat().st_size <= 0]
     if missing:
         raise RuntimeError(f"Missing or empty export files: {', '.join(missing)}")
@@ -3723,15 +3726,22 @@ def _read_transactions_csv_keys(path: Path) -> Counter:
     with path.open("r", encoding="utf-8", newline="") as handle:
         rows = list(csv.reader(handle))
     header_index = None
-    required = {"Transaction ID", "Wallet", "Direction", "Asset"}
+    # Python's titled export or the shared design's snake_case header row
+    # (docs/reference/report-design.md#csv).
+    layouts = (
+        {"Transaction ID": "Transaction ID", "Wallet": "Wallet", "Direction": "Direction", "Asset": "Asset"},
+        {"Transaction ID": "transaction_id", "Wallet": "wallet", "Direction": "direction", "Asset": "asset"},
+    )
+    columns = layouts[0]
     for index, row in enumerate(rows):
-        if required.issubset(set(row)):
-            header_index = index
+        layout = next((layout for layout in layouts if set(layout.values()).issubset(set(row))), None)
+        if layout is not None:
+            header_index, columns = index, layout
             break
     if header_index is None:
         raise RuntimeError(f"Transactions CSV export {path} is missing the transaction header")
     headers = rows[header_index]
-    indexes = {name: headers.index(name) for name in required}
+    indexes = {name: headers.index(column) for name, column in columns.items()}
     keys: Counter = Counter()
     for row in rows[header_index + 1:]:
         if not row or not any(cell.strip() for cell in row):
@@ -3977,8 +3987,11 @@ def _assert_expected(
             raise RuntimeError(
                 f"Expected at least {expected_pending} unconfirmed BTC rows, got {pending_count}"
             )
+    produced = {Path(item["path"]).name for item in exports.values()}
     for filename in expected["export_files"]:
-        if not any(Path(item["path"]).name == filename for item in exports.values()):
+        # The shared design writes a `.csv` full report as its `.zip` bundle.
+        bundle = filename.removesuffix(".csv") + ".zip" if filename.endswith(".csv") else None
+        if filename not in produced and bundle not in produced:
             raise RuntimeError(f"Expected export file was not produced: {filename}")
 
 
@@ -4308,7 +4321,11 @@ def run_demo(
     username = os.environ.get("KASSIBER_REGTEST_RPC_USER", "kassiber")
     password = os.environ.get("KASSIBER_REGTEST_RPC_PASSWORD", "kassiber")
     run_id = run_id or os.environ.get("KASSIBER_REGTEST_DEMO_RUN_ID") or uuid.uuid4().hex[:12]
-    base_dir = Path(os.environ.get("KASSIBER_REGTEST_DEMO_ROOT", f"/tmp/kassiber-regtest-demo-{run_id}"))
+    # The default follows TMPDIR like every other disposable lane path.
+    base_dir = Path(
+        os.environ.get("KASSIBER_REGTEST_DEMO_ROOT")
+        or Path(tempfile.gettempdir()) / f"kassiber-regtest-demo-{run_id}"
+    )
     data_root = Path(data_root or os.environ.get("KASSIBER_REGTEST_DEMO_DATA_ROOT", base_dir / "data"))
     export_dir = Path(export_dir or os.environ.get("KASSIBER_REGTEST_DEMO_EXPORT_DIR", base_dir / "exports"))
     if data_root.exists() or export_dir.exists():

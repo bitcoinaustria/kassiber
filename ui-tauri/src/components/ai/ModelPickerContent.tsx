@@ -22,12 +22,13 @@ import { useTranslation } from "react-i18next";
 import { RefreshCw, Search, Star } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import type {
-  AiModelRow,
-  AiModelsListData,
-  AiProviderKind,
-  AiProviderRow,
-  AssistantModelSelection,
+import {
+  providerPosture,
+  type AiModelRow,
+  type AiModelsListData,
+  type AiProviderKind,
+  type AiProviderRow,
+  type AssistantModelSelection,
 } from "@/lib/aiCapabilities";
 import { isImeKeyEvent } from "@/lib/imeKeyEvent";
 import { formatShortcut } from "@/lib/shortcutLabel";
@@ -47,6 +48,7 @@ import { PostureBadge, ProviderGlyph } from "./ProviderGlyph";
 import { isCliProvider, providerDisplayName } from "./providerIdentity";
 import {
   modelPrivacyPosture,
+  compareModelRoutePrefix,
   sortByPrivacyPosture,
   sortModelRowsByPosture,
 } from "./providerModelSearch";
@@ -194,12 +196,14 @@ export function ModelPickerContent({
 
   const groupItems = React.useCallback(
     (group: ModelPickerProviderGroup): PickerItem[] => {
-      // Favorites first, then privacy-first (`sortModelRowsByPosture` is
-      // stable), so posture stays the primary order.
+      // Favorites first, a CLI proxy's prefixed models grouped by prefix,
+      // then privacy-first (`sortModelRowsByPosture` is stable), so posture
+      // stays the primary order.
       const starredFirst = [...group.models].sort(
         (a, b) =>
           Number(favoriteKeys.has(modelPickerModelKey(group.provider.name, b.id))) -
-          Number(favoriteKeys.has(modelPickerModelKey(group.provider.name, a.id))),
+            Number(favoriteKeys.has(modelPickerModelKey(group.provider.name, a.id))) ||
+          compareModelRoutePrefix(a, b),
       );
       return sortModelRowsByPosture(group.provider, starredFirst).map((model) =>
         toItem(group.provider, model),
@@ -555,7 +559,7 @@ export function ModelPickerContent({
               <div className="min-w-0 flex-1">
                 <p className="flex min-w-0 items-center gap-1.5 text-xs font-medium leading-snug">
                   <span className="truncate">{providerDisplayName(activeGroup.provider)}</span>
-                  <PostureBadge posture={activeGroup.provider.kind} />
+                  <PostureBadge posture={providerPosture(activeGroup.provider.kind)} />
                 </p>
                 <p
                   className="truncate text-2xs leading-snug text-muted-foreground"

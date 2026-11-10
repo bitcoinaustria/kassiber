@@ -1403,5 +1403,86 @@
     "autoPaired_other": "{{count}} eindeutige Transfer-Paare zugeordnet.",
     "attentionTitle": "Journale brauchen Aufmerksamkeit",
     "autoPairSkipped": "Die automatische Zuordnung wurde übersprungen: {{message}}"
+  },
+  "exchange": {
+    "intro": "Kassiber liest deinen {{provider}}-Verlauf über einen API-Key, der nur lesen darf. Kassiber handelt nie, hebt nie ab und bewegt kein Guthaben, und kontaktiert {{provider}} nur, wenn du den Key testest oder „Sync starten“ drückst.",
+    "guide": {
+      "title": "API-Key nur zum Lesen erstellen",
+      "kraken": "Öffne in Kraken Einstellungen → API und erstelle einen neuen Key. Kopiere den API-Key und den Private Key; Kraken zeigt den Private Key nur einmal an.",
+      "coinbase": "Öffne in Coinbase Einstellungen → API und erstelle einen Key für deine BTC-Wallet. Kopiere den API-Key und sein Secret. Kassiber signiert mit diesem Key und Secret; Key-Dateien der Coinbase Developer Platform werden noch nicht unterstützt.",
+      "binance": "Öffne in Binance Konto → API-Verwaltung, erstelle einen systemgenerierten Key und bearbeite seine Beschränkungen. Kopiere den API-Key und den Secret Key; Binance zeigt das Secret nur einmal an. Kassiber lehnt einen Key ab, der mehr als lesen darf.",
+      "bitpanda": "Öffne in Bitpanda Kontoeinstellungen → API-Keys → Neuer API-Key. Bitpanda zeigt den Key nur einmal an, und er läuft spätestens nach einem Jahr ab. Kassiber lehnt einen Key ab, der handeln darf.",
+      "grant": "Nur einschalten",
+      "deny": "Ausgeschaltet lassen",
+      "open": "API-Key-Seite von {{provider}} öffnen"
+    },
+    "field": {
+      "apiKey": "API-Key",
+      "secret": {
+        "kraken": "Private Key",
+        "coinbase": "API-Secret",
+        "binance": "Secret Key"
+      },
+      "stored": "Wenn du die Verbindung hinzufügst, speichert Kassiber den Key in den Backend-Einstellungen dieses Buchs — verschlüsselt mit dem Buch, wenn das Buch verschlüsselt ist — und zeigt ihn nie wieder an."
+    },
+    "test": {
+      "button": "Verbindung testen",
+      "pending": "Wird getestet…",
+      "explain": "Beim Verbindungstest kontaktiert Kassiber {{provider}} zum ersten Mal: Es signiert ein bis drei Leseanfragen mit diesem Key. Gespeichert wird erst, wenn du die Verbindung hinzufügst.",
+      "okReadOnly": "Der Key funktioniert, und {{provider}} bestätigt, dass er nur lesen darf.",
+      "okUnknown": "Der Key funktioniert. {{provider}} gibt nicht an, was ein Key sonst noch darf; prüfe daher, dass nur die oben genannten Leserechte eingeschaltet sind.",
+      "changed": "Der Key hat sich seit dem letzten Test geändert. Teste ihn erneut, bevor du die Verbindung hinzufügst."
+    },
+    "issue": {
+      "api_key": "Füge den API-Key ein.",
+      "api_secret": "Füge das Secret zu diesem Key ein.",
+      "test_first": "Teste die Verbindung, bevor du sie hinzufügst."
+    },
+    "syncAfter": "{{provider}}-Verlauf gleich nach dem Hinzufügen importieren",
+    "added": {
+      "title": "{{provider}} verbunden",
+      "body": "{{label}} gespeichert. Drücke auf ihrer Seite „Sync starten“, um den Verlauf zu importieren.",
+      "importedBody_one": "{{count}} Transaktion in {{label}} importiert.",
+      "importedBody_other": "{{count}} Transaktionen in {{label}} importiert."
+    },
+    "error": {
+      "auth": "{{provider}} hat den Key abgelehnt. Prüfe, ob er gültig und vollständig kopiert ist, von dieser IP-Adresse aus erlaubt ist und genau die oben genannten Leserechte hat.",
+      "rateLimited": "{{provider}} begrenzt gerade die Anfragen. Warte eine Minute und versuche es erneut.",
+      "offline": "Der Offline-Modus ist an, daher hat Kassiber {{provider}} nicht kontaktiert. Schalte den Offline-Modus aus, um zu testen oder zu synchronisieren.",
+      "consent": "Kassiber hat für diese Anfrage keine Freigabe erhalten. Starte die Aktion erneut.",
+      "protocol": "{{provider}} hat so geantwortet, dass Kassiber die Antwort nicht sicher lesen kann. Es wurde nichts importiert.",
+      "refused": "Kassiber hat angehalten, weil ein Eintrag nicht sicher verbucht werden kann, und nichts importiert. Wenn die Details sagen, dass ein Typ nicht erkannt wird, melde ihn bitte, damit er unterstützt werden kann; bis dahin kannst du den Eintrag über das generische Ledger erfassen.",
+      "config": "Der gespeicherte Key dieser Verbindung ist unvollständig. Entferne die Verbindung und füge die Börse mit einem Key nur zum Lesen erneut hinzu.",
+      "timeout": "{{provider}} hat nicht rechtzeitig geantwortet. Versuche es später erneut.",
+      "network": "Kassiber konnte {{provider}} nicht erreichen. Prüfe die Netzwerkverbindung und etwaige Proxy-Einstellungen.",
+      "http": "{{provider}} hat mit einem Fehler geantwortet.",
+      "conflict": "In diesem Buch gibt es schon eine Wallet mit diesem Namen. Wähle einen anderen Namen.",
+      "needsRust": "Börsen-API-Verbindungen brauchen das Rust-Backend von Kassiber. Diese App läuft mit dem Python-Backend, das Börsen-Syncs nur über die Kommandozeile anbietet.",
+      "unknown": "Die Anfrage ist fehlgeschlagen.",
+      "permissions": "Noch eingeschaltete Rechte: {{list}}",
+      "serverSaid": "Details: {{message}}"
+    },
+    "sync": {
+      "title": "{{provider}}-API",
+      "body": "Kassiber kontaktiert {{provider}} nur, wenn du „Sync starten“ drückst. „Alle aktualisieren“, die Hintergrundaktualisierung und der Assistent synchronisieren Börsenkonten nie.",
+      "button": "Sync starten",
+      "running": "Sync läuft…",
+      "key": "API-Key nur zum Lesen",
+      "keyStored": "Gespeichert im Backend „{{backend}}“",
+      "keyMissing": "Fehlt — füge die Börse erneut hinzu",
+      "lastSync": "Letzter Sync",
+      "never": "Seit dem Start von Kassiber nicht synced",
+      "ok": "{{time}} · {{imported}} neu von {{fetched}} gelesen",
+      "failed": "{{time}} · fehlgeschlagen",
+      "skipped_one": "{{count}} Eintrag wurde übersprungen, weil er kein BTC ist oder nur Fiat bewegt.",
+      "skipped_other": "{{count}} Einträge wurden übersprungen, weil sie kein BTC sind oder nur Fiat bewegen.",
+      "sessionNote": "Sync-Ergebnisse bleiben bis zum Neustart von Kassiber erhalten; das Buch speichert nur die importierten Transaktionen.",
+      "startedTitle": "{{label}} wird synchronisiert",
+      "startedBody": "{{provider}}-Verlauf wird gelesen.",
+      "finishedTitle": "{{label}} synced",
+      "finishedBody_one": "{{count}} neue Transaktion von {{fetched}} gelesenen.",
+      "finishedBody_other": "{{count}} neue Transaktionen von {{fetched}} gelesenen.",
+      "failedTitle": "Sync von {{label}} fehlgeschlagen"
+    }
   }
 }

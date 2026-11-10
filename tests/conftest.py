@@ -26,6 +26,7 @@ import pytest
 from kassiber.operator import project as project_module
 from tests.integration.env import env_flag, no_egress_guard
 from tests.owner_lock_sweep import sweep_owner_locks
+from tests.rust_fixture_binary import stale_environment_binaries
 
 
 _ROOT = Path(__file__).resolve().parent.parent
@@ -103,6 +104,24 @@ def _select_tax_engine_backend(config: pytest.Config) -> None:
     _TAX_ENGINE_MODE = mode
 
 
+def _record_custody_snapshots() -> None:
+    """Write a snapshot of every custody build when asked to.
+
+    With `KASSIBER_TEST_CUSTODY_SNAPSHOT_DIR` set to an existing directory,
+    each in-process `build_custody_projection` call writes its inputs and
+    results there (`tests/custody_snapshot.py`). Product code reads no such
+    variable.
+    """
+    if os.environ.get("KASSIBER_TEST_JOURNAL_RENDER_DIR"):
+        from tests.rust_port import journal_render_oracle
+        journal_render_oracle.install_from_environment()
+    if not os.environ.get("KASSIBER_TEST_CUSTODY_SNAPSHOT_DIR", "").strip():
+        return
+    from tests import custody_snapshot
+
+    custody_snapshot.install_from_environment()
+
+
 def _arm_child_hooks() -> None:
     """Put `tests/_child_hooks/` and the repository on the children's path."""
     global _PREVIOUS_PYTHONPATH, _CHILD_HOOKS_ARMED
@@ -134,6 +153,22 @@ def _default_to_scope_distribution(config: pytest.Config) -> None:
     if any(arg == "--dist" or arg.startswith("--dist=") or arg == "-d" for arg in args):
         return
     config.option.dist = "loadscope"
+
+
+def _refuse_stale_binaries(config: pytest.Config) -> None:
+    """Stop the run when a Rust binary the environment names is stale.
+
+    An older binary's output reads as a port gap (tests/rust_fixture_binary.py);
+    examples found beside `KASSIBER_RUST_BIN` are checked where they run.
+    """
+    if hasattr(config, "workerinput"):
+        return
+    stale = stale_environment_binaries()
+    if stale:
+        raise pytest.UsageError(
+            "stale Rust test binaries; rebuild them with cargo:\n"
+            + "\n".join(f"  {variable}={path} {reason}" for variable, path, reason in stale)
+        )
 
 
 def _require_test_data() -> None:
@@ -191,10 +226,13 @@ def pytest_configure(config: pytest.Config) -> None:
         "stubs_tax_engine: the test replaces parts of the production tax engine, so the shadow mode runs "
         "its calls on production without comparing them with the oracle",
     )
+    _refuse_stale_binaries(config)
     _default_to_scope_distribution(config)
     _start_owner_lock_sweep(config)
     _isolate_offline_preference()
     _select_tax_engine_backend(config)
+    _record_custody_snapshots()
+    _select_custody_engine(config)
     integration = env_flag("KASSIBER_INTEGRATION")
     if _TAX_ENGINE_MODE is not None or not integration:
         _arm_child_hooks()
@@ -227,6 +265,8 @@ def pytest_runtest_protocol(item: pytest.Item, nextitem: pytest.Item | None):
     test spawns attribute their calls to it too. A `stubs_tax_engine` test
     runs uncompared under shadow.
     """
+    if os.environ.get("KASSIBER_TEST_CUSTODY_ENGINE"):
+        os.environ["KASSIBER_TEST_CUSTODY_MODULE"] = _test_module(item)
     if _TAX_MODULE_ENV is None:
         return (yield)
     from tests import tax_engine_compare as compare
@@ -246,6 +286,7 @@ def pytest_runtest_protocol(item: pytest.Item, nextitem: pytest.Item | None):
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     """Check the session's route records, in the process that created them."""
+    _finish_custody_session(session)
     _finish_owner_lock_sweep()
     global _TAX_REPORT
     if _TAX_RECORDS_DIR is None:
@@ -261,6 +302,7 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
 
 
 def pytest_terminal_summary(terminalreporter, exitstatus: int, config: pytest.Config) -> None:
+    _custody_terminal_summary(terminalreporter)
     if _TAX_REPORT is None:
         return
     lines, failures = _TAX_REPORT
@@ -272,6 +314,7 @@ def pytest_terminal_summary(terminalreporter, exitstatus: int, config: pytest.Co
 
 
 def pytest_unconfigure(config: pytest.Config) -> None:
+    _unconfigure_custody()
     global _EGRESS_STACK, _OFFLINE_PREFERENCE_DIR, _TAX_ENGINE_MODE, _TAX_MODULE_ENV, _TAX_RECORDS_DIR
     global _CHILD_HOOKS_ARMED
     if _TAX_ENGINE_MODE is not None:
@@ -340,3 +383,63 @@ def _finish_owner_lock_sweep() -> None:
     except Exception:
         # A session that already passed must not fail in teardown over it.
         return
+
+
+_CUSTODY_RECORDS_DIR = None
+_CUSTODY_PREVIOUS_RECORDS = None
+_CUSTODY_REPORT = None
+
+
+def _select_custody_engine(config):
+    global _CUSTODY_RECORDS_DIR, _CUSTODY_PREVIOUS_RECORDS
+    from tests import custody_engine_compare as custody_compare
+    mode = os.environ.get(custody_compare.MODE_ENV, "").strip().lower()
+    if not mode:
+        return
+    if mode not in {"shadow", "census"}:
+        raise pytest.UsageError("KASSIBER_TEST_CUSTODY_ENGINE must be shadow or census")
+    if not hasattr(config, "workerinput"):
+        _CUSTODY_RECORDS_DIR = tempfile.TemporaryDirectory(prefix="kassiber-custody-census-")
+        records = Path(_CUSTODY_RECORDS_DIR.name) / "records.jsonl"
+        records.touch()
+        _CUSTODY_PREVIOUS_RECORDS = os.environ.get(custody_compare.RECORDS_ENV)
+        os.environ[custody_compare.RECORDS_ENV] = str(records)
+    custody_compare.install_custody_mode(mode)
+    _arm_child_hooks()
+
+
+def _finish_custody_session(session):
+    global _CUSTODY_REPORT
+    if _CUSTODY_RECORDS_DIR is None:
+        return
+    from tests import custody_engine_compare as compare
+    _CUSTODY_REPORT = compare.session_report(compare.read_records(os.environ[compare.RECORDS_ENV]))
+    if os.environ.get("KASSIBER_TEST_CUSTODY_LOADER_BIN"):
+        loader_records = Path(os.environ[compare.RECORDS_ENV] + ".loader")
+        count = len(loader_records.read_text().splitlines()) if loader_records.exists() else 0
+        _CUSTODY_REPORT[0].append(f"native loader: {count} exact v1 byte matches")
+    if _CUSTODY_REPORT[1] and session.exitstatus in (pytest.ExitCode.OK, pytest.ExitCode.NO_TESTS_COLLECTED):
+        session.exitstatus = pytest.ExitCode.TESTS_FAILED
+
+
+def _custody_terminal_summary(reporter):
+    if _CUSTODY_REPORT is None:
+        return
+    reporter.write_sep("-", "custody engine " + os.environ.get("KASSIBER_TEST_CUSTODY_ENGINE", ""))
+    for line in _CUSTODY_REPORT[0]:
+        reporter.write_line(line)
+    for line in _CUSTODY_REPORT[1]:
+        reporter.write_line("FAILED: " + line, red=True)
+
+
+def _unconfigure_custody():
+    global _CUSTODY_RECORDS_DIR
+    from tests import custody_engine_compare as compare
+    compare.uninstall_custody_mode()
+    if _CUSTODY_RECORDS_DIR is not None:
+        if _CUSTODY_PREVIOUS_RECORDS is None:
+            os.environ.pop(compare.RECORDS_ENV, None)
+        else:
+            os.environ[compare.RECORDS_ENV] = _CUSTODY_PREVIOUS_RECORDS
+        _CUSTODY_RECORDS_DIR.cleanup()
+        _CUSTODY_RECORDS_DIR = None

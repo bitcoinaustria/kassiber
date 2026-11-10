@@ -130,3 +130,82 @@ class _InstallTaxModeAfterImport(importlib.abc.MetaPathFinder):
 
 if _TAX_MODE in {"shadow", "census"}:
     sys.meta_path.insert(0, _InstallTaxModeAfterImport())
+
+
+_CUSTODY_MODE = os.environ.get("KASSIBER_TEST_CUSTODY_ENGINE", "").strip().lower()
+
+
+_CUSTODY_INSTALLING = False
+
+
+def _install_custody_mode(module=None):
+    global _CUSTODY_INSTALLING
+    if _CUSTODY_INSTALLING:
+        return
+    for name, ready in (("tests.custody_snapshot", "install_from_environment"),
+                        ("tests.custody_engine_compare", "install_custody_mode"),
+                        ("tests.rust_port.journal_render_oracle", "install_from_environment")):
+        loaded = sys.modules.get(name)
+        if loaded is not None and not hasattr(loaded, ready):
+            # Its after-import callback will finish installation.
+            return
+    _CUSTODY_INSTALLING = True
+    try:
+        from tests import custody_snapshot
+        custody_snapshot.install_from_environment()
+        if os.environ.get("KASSIBER_TEST_JOURNAL_RENDER_DIR"):
+            from tests.rust_port import journal_render_oracle
+            journal_render_oracle.install_from_environment()
+        if _CUSTODY_MODE in {"shadow", "census"}:
+            from tests import custody_engine_compare
+            custody_engine_compare.install_custody_mode(_CUSTODY_MODE)
+    except Exception as exc:
+        print("Kassiber test custody engine mode could not start", file=sys.stderr)
+        raise SystemExit(78) from exc
+    finally:
+        _CUSTODY_INSTALLING = False
+
+
+def _custody_loaded(module):
+    _install_custody_mode()
+
+
+if _CUSTODY_MODE in {"shadow", "census"} or os.environ.get("KASSIBER_TEST_CUSTODY_SNAPSHOT_DIR") or os.environ.get("KASSIBER_TEST_JOURNAL_RENDER_DIR"):
+    class _InstallCustodyModeAfterImport(_InstallTaxModeAfterImport):
+        _AFTER = {
+            "kassiber.core.custody_journal": _custody_loaded,
+            "tests.custody_engine_compare": _install_custody_mode,
+            "tests.custody_snapshot": _install_custody_mode,
+            "tests.rust_port.journal_render_oracle": _install_custody_mode,
+        }
+    sys.meta_path.insert(0, _InstallCustodyModeAfterImport())
+
+
+_PREBUILD_INSTALLING = False
+
+
+def _install_prebuild_mode(module=None):
+    global _PREBUILD_INSTALLING
+    if _PREBUILD_INSTALLING:
+        return
+    loaded = sys.modules.get('tests.rust_port.journal_prebuild_recorder')
+    if loaded is not None and not hasattr(loaded, 'install_from_environment'):
+        return
+    _PREBUILD_INSTALLING = True
+    try:
+        from tests.rust_port import journal_prebuild_recorder
+        journal_prebuild_recorder.install_from_environment()
+    except Exception as exc:
+        print('Kassiber test pre-build recorder could not start', file=sys.stderr)
+        raise SystemExit(78) from exc
+    finally:
+        _PREBUILD_INSTALLING = False
+
+
+if os.environ.get('KASSIBER_TEST_JOURNAL_PREBUILD_BINARY'):
+    class _InstallPrebuildModeAfterImport(_InstallTaxModeAfterImport):
+        _AFTER = {
+            'kassiber.cli.handlers': _install_prebuild_mode,
+            'tests.rust_port.journal_prebuild_recorder': _install_prebuild_mode,
+        }
+    sys.meta_path.insert(0, _InstallPrebuildModeAfterImport())
