@@ -215,7 +215,7 @@ fn fake_cli(body: &str) -> (tempfile::TempDir, PathBuf) {
     use std::os::unix::fs::PermissionsExt;
     let root = tempfile::tempdir().unwrap();
     let program = root.path().join("fake-lightning-cli");
-    std::fs::write(&program, format!("#!/usr/bin/python3\n{body}\n")).unwrap();
+    std::fs::write(&program, format!("#!/bin/sh\n{body}\n")).unwrap();
     std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o700)).unwrap();
     (root, program)
 }
@@ -224,7 +224,7 @@ fn fake_cli(body: &str) -> (tempfile::TempDir, PathBuf) {
 #[cfg(unix)]
 fn cln_checked_report_refuses_between_resources_and_before_return() {
     for stop in [1, 2, 6, 10] {
-        let (_root, program) = fake_cli("print('{}')");
+        let (_root, program) = fake_cli("echo '{}'");
         let gate =
             Gate::new(|| Offline::Online, Ledger::default()).with_cln_fixture(program.clone());
         let client = ClnReportClient::new(
@@ -253,7 +253,6 @@ fn cln_checked_report_refuses_between_resources_and_before_return() {
 #[test]
 #[cfg(unix)]
 fn cln_report_loopback_transport_pins_commands_optional_errors_and_discard() {
-    use kassiber_net::test_support::FakeProvider;
     let Value::List(cases) =
         kassiber_pytext::loads(include_str!("../../../fixtures/python_cln.json")).unwrap()
     else {
@@ -272,21 +271,28 @@ fn cln_report_loopback_transport_pins_commands_optional_errors_and_discard() {
         ClnMethod::ListBalances,
         ClnMethod::ListAccountEvents,
     ];
-    let replies = methods
-        .iter()
-        .map(|method| {
-            (
-                200,
-                kassiber_pyjson::dumps(field(data, method.name()), &Default::default()).unwrap(),
-            )
-        })
-        .collect();
-    let node = FakeProvider::replies(replies).unwrap();
-    let (_root, program) = fake_cli("import json,sys\nfrom urllib.request import Request,urlopen\nargs=sys.argv[1:]\nurl=next(a.split('=',1)[1] for a in args if a.startswith('--rpc-file='))\nwith urlopen(Request(url, data=json.dumps(args).encode()), timeout=2) as r: sys.stdout.write(r.read().decode())");
+    // The fake `lightning-cli` answers each method from a file in the
+    // "rpc file" directory and logs its arguments there.
+    let replies = tempfile::tempdir().unwrap();
+    for method in &methods {
+        std::fs::write(
+            replies.path().join(format!("{}.json", method.name())),
+            kassiber_pyjson::dumps(field(data, method.name()), &Default::default()).unwrap(),
+        )
+        .unwrap();
+    }
+    let base = replies.path().to_string_lossy().into_owned();
+    let (_root, program) = fake_cli(concat!(
+        r#"dir=; for a in "$@"; do case "$a" in --rpc-file=*) dir=${a#--rpc-file=};; esac; method=$a; done"#,
+        "\n",
+        r#"{ printf '['; sep=; for a in "$@"; do printf '%s"%s"' "$sep" "$a"; sep=', '; done; echo ']'; } >> "$dir/args.log""#,
+        "\n",
+        r#"cat "$dir/$method.json""#,
+    ));
     let gate = Gate::new(|| Offline::Online, Ledger::default()).with_cln_fixture(program.clone());
-    let config = json!({"kind":"coreln", "lightning_cli":program, "rpc_file":node.base(), "lightning_dir":"disposable lightning directory", "network":"regtest"});
+    let config = json!({"kind":"coreln", "lightning_cli":program, "rpc_file":base, "lightning_dir":"disposable lightning directory", "network":"regtest"});
     let client = ClnReportClient::new(&config, gate.clone(), action()).unwrap();
-    assert!(node.requests().is_empty());
+    assert!(!replies.path().join("args.log").exists());
     let result = client
         .fetch(
             Some(&Consent::explicit_trigger(client.request())),
@@ -306,18 +312,18 @@ fn cln_report_loopback_transport_pins_commands_optional_errors_and_discard() {
         result,
         super::super::tests::projected(local.profitability())
     );
-    let hits = node.requests();
+    let log = std::fs::read_to_string(replies.path().join("args.log")).unwrap();
+    let hits: Vec<&str> = log.lines().collect();
     assert_eq!(hits.len(), 9);
     for (hit, method) in hits.iter().zip(methods) {
-        let args: Vec<String> =
-            serde_json::from_str(hit.split("\r\n\r\n").nth(1).unwrap()).unwrap();
+        let args: Vec<String> = serde_json::from_str(hit).unwrap();
         assert_eq!(
             args,
             [
                 "--json".to_owned(),
                 "--raw".to_owned(),
                 "--lightning-dir=disposable lightning directory".to_owned(),
-                format!("--rpc-file={}", node.base()),
+                format!("--rpc-file={base}"),
                 "--network=regtest".to_owned(),
                 method.name().to_owned()
             ]
@@ -335,23 +341,39 @@ fn cln_report_loopback_transport_pins_commands_optional_errors_and_discard() {
 #[cfg(unix)]
 fn cln_report_process_errors_are_typed_and_never_expose_raw_output() {
     for (body, code) in [
-        ("import sys; print('private-stdout'); print('private-stderr',file=sys.stderr); sys.exit(4)", "sync_error"),
-        ("print('private-non-json')", "sync_error"),
-        ("import sys; sys.stdout.buffer.write(b'\\xff')", "sync_error"),
-        ("import time; time.sleep(10)", "backend_timeout"),
+        (
+            "echo private-stdout; echo private-stderr >&2; exit 4",
+            "sync_error",
+        ),
+        ("echo private-non-json", "sync_error"),
+        ("printf '\\377'", "sync_error"),
+        ("exec sleep 10", "backend_timeout"),
     ] {
         let (_root, program) = fake_cli(body);
-        let gate = Gate::new(|| Offline::Online, Ledger::default()).with_cln_fixture(program.clone());
+        let gate =
+            Gate::new(|| Offline::Online, Ledger::default()).with_cln_fixture(program.clone());
         let config = json!({"kind":"coreln", "lightning_cli":program, "rpc_file":"private-rpc"});
         let client = ClnReportClient::new(&config, gate, action()).unwrap();
         // A freshly written script's first exec can take ~100 ms on macOS;
         // only the timeout case may be that short.
         let budget = Duration::from_millis(if code == "backend_timeout" { 100 } else { 2000 });
-        let error = client.fetch(Some(&Consent::explicit_trigger(client.request())), Instant::now() + budget).unwrap_err();
+        let error = client
+            .fetch(
+                Some(&Consent::explicit_trigger(client.request())),
+                Instant::now() + budget,
+            )
+            .unwrap_err();
         assert_eq!(error.code, code);
         assert!(error.retryable);
         let rendered = kassiber_pyjson::dumps(&error.envelope(None), &Default::default()).unwrap();
-        for secret in ["private-stdout", "private-stderr", "private-non-json", "private-rpc"] { assert!(!rendered.contains(secret)); }
+        for secret in [
+            "private-stdout",
+            "private-stderr",
+            "private-non-json",
+            "private-rpc",
+        ] {
+            assert!(!rendered.contains(secret));
+        }
     }
     let gate = Gate::new(|| Offline::Online, Ledger::default());
     let config = config();
