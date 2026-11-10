@@ -1,0 +1,172 @@
+[
+  {
+    "id": "mirror-entropy-chain",
+    "file": "crates/wallets/src/analysis_index/entropy.rs",
+    "find": "if chain != \"bitcoin\" {",
+    "replace": "if chain == \"unsupported\" {",
+    "expect_failing": [
+      "entropy_matches_python_captured_facts_byte_exact"
+    ],
+    "rule": "Only complete Bitcoin values enter the conditional model."
+  },
+  {
+    "id": "mirror-entropy-identity",
+    "file": "crates/wallets/src/analysis_index/entropy.rs",
+    "find": "if unique.len() != in_ids.len() + out_ids.len() {",
+    "replace": "if unique.len() > in_ids.len() + out_ids.len() {",
+    "expect_failing": [
+      "entropy_matches_python_captured_facts_byte_exact"
+    ],
+    "rule": "Duplicate or intersecting output identities fail closed."
+  },
+  {
+    "id": "mirror-entropy-integral",
+    "file": "crates/wallets/src/analysis_index/entropy.rs",
+    "find": "if inv.iter().chain(&outv).any(|v| v % 1000 != BigInt::from(0))",
+    "replace": "if false",
+    "expect_failing": [
+      "entropy_matches_python_captured_facts_byte_exact"
+    ],
+    "rule": "Sub-satoshi values cannot be rounded into the Bitcoin model."
+  },
+  {
+    "id": "mirror-entropy-scenario",
+    "file": "crates/wallets/src/analysis_index/entropy.rs",
+    "find": "return Err(\"independent_scenario_has_intrafees\");",
+    "replace": "return Ok(result);",
+    "expect_failing": [
+      "entropy_matches_python_captured_facts_byte_exact"
+    ],
+    "rule": "Independent scenarios refuse supplied participant fees."
+  },
+  {
+    "id": "mirror-entropy-pivot",
+    "file": "crates/wallets/src/analysis_index/entropy.rs",
+    "find": "comb(a - p, b - p)",
+    "replace": "comb(a - p, b.saturating_sub(p + 1))",
+    "expect_failing": [
+      "entropy_matches_python_captured_facts_byte_exact"
+    ],
+    "rule": "The distinguished input counts each unordered partition once."
+  },
+  {
+    "id": "mirror-entropy-weight",
+    "file": "crates/wallets/src/analysis_index/entropy.rs",
+    "find": "total += &weight * &child.count;",
+    "replace": "total += &child.count;",
+    "expect_failing": [
+      "entropy_matches_python_captured_facts_byte_exact"
+    ],
+    "rule": "Exchangeable transitions retain their labeled combinatorial weight."
+  },
+  {
+    "id": "mirror-entropy-intrafees",
+    "file": "crates/wallets/src/analysis_index/entropy.rs",
+    "find": "let required = (&isum - &p.value - &self.paid).max(zero.clone());",
+    "replace": "let required = BigInt::from(0);",
+    "expect_failing": [
+      "entropy_matches_python_captured_facts_byte_exact"
+    ],
+    "rule": "Participant fees preserve the globally conserved mining fee budget."
+  },
+  {
+    "id": "mirror-entropy-links",
+    "file": "crates/wallets/src/analysis_index/entropy.rs",
+    "find": "counts.push(&result.pairs[a * no + b] / denominator);",
+    "replace": "counts.push(result.pairs[a * no + b].clone());",
+    "expect_failing": [
+      "entropy_matches_python_captured_facts_byte_exact"
+    ],
+    "rule": "Labeled link counts divide aggregate class-pair incidence exactly."
+  },
+  {
+    "id": "mirror-entropy-states",
+    "file": "crates/wallets/src/analysis_index/entropy.rs",
+    "find": "if self.states > self.max_states {",
+    "replace": "if self.states >= self.max_states {",
+    "expect_failing": [
+      "entropy_matches_python_captured_facts_byte_exact"
+    ],
+    "rule": "The exact work limit permits equality and stops at the next increment."
+  },
+  {
+    "id": "mirror-entropy-memory",
+    "file": "crates/wallets/src/analysis_index/entropy.rs",
+    "find": "self.cells += n;",
+    "replace": "self.cells += n / 2;",
+    "expect_failing": [
+      "entropy_matches_python_captured_facts_byte_exact"
+    ],
+    "rule": "Output patterns and active memo ancestors charge the same bounded cell budget."
+  },
+  {
+    "id": "mirror-entropy-patterns",
+    "file": "crates/wallets/src/analysis_index/entropy.rs",
+    "find": "> MAX_PATTERNS",
+    "replace": "> usize::MAX",
+    "expect_failing": [
+      "entropy_matches_python_captured_facts_byte_exact"
+    ],
+    "rule": "Value-pattern work is rejected before unbounded subset enumeration."
+  },
+  {
+    "id": "mirror-entropy-time",
+    "file": "crates/wallets/src/analysis_index/entropy.rs",
+    "find": "if elapsed >= self.duration as f64 {",
+    "replace": "if elapsed > self.duration as f64 {",
+    "expect_failing": [
+      "entropy_matches_python_captured_facts_byte_exact"
+    ],
+    "rule": "The deadline is inclusive at each forced or 64-work checkpoint."
+  },
+  {
+    "id": "mirror-entropy-cancel",
+    "file": "crates/wallets/src/analysis_index/entropy.rs",
+    "find": "if self.hooks.cancelled.as_mut().is_some_and(|f| f()) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "entropy_matches_python_captured_facts_byte_exact"
+    ],
+    "rule": "Cancellation stops before returning exact links or entropy."
+  },
+  {
+    "id": "mirror-entropy-bound",
+    "file": "crates/wallets/src/analysis_index/entropy.rs",
+    "find": "self.budget.lower_bound.clone().max(total.clone())",
+    "replace": "self.budget.lower_bound.clone().min(total.clone())",
+    "expect_failing": [
+      "entropy_matches_python_captured_facts_byte_exact"
+    ],
+    "rule": "Stopped enumeration retains the proved completed-partition lower bound."
+  },
+  {
+    "id": "mirror-entropy-examples",
+    "file": "crates/wallets/src/analysis_index/entropy.rs",
+    "find": "child.examples.iter().take(3 - examples.len())",
+    "replace": "child.examples.iter().rev().take(3 - examples.len())",
+    "expect_failing": [
+      "entropy_matches_python_captured_facts_byte_exact"
+    ],
+    "rule": "Examples retain deterministic Python value-pattern order."
+  },
+  {
+    "id": "mirror-entropy-single",
+    "file": "crates/wallets/src/analysis_index/entropy.rs",
+    "find": "solver.budget.tick(ni * no, Some(\"projection\"))?;",
+    "replace": "solver.budget.tick(1, Some(\"projection\"))?;",
+    "expect_failing": [
+      "entropy_matches_python_captured_facts_byte_exact"
+    ],
+    "rule": "Single-flow reductions retain projection work accounting and callback phases."
+  },
+  {
+    "id": "mirror-entropy-logarithm",
+    "file": "crates/wallets/src/analysis_index/entropy.rs",
+    "find": "/ 2f64.powi(53)",
+    "replace": "/ 2f64.powi(52)",
+    "expect_failing": [
+      "entropy_logarithms_match_python_large_integers_byte_exact"
+    ],
+    "rule": "Large exact counts use the Python rounded binary mantissa for log2."
+  }
+]

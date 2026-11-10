@@ -1,0 +1,144 @@
+[
+ {
+  "id": "reset-claim-exact-fingerprint-first",
+  "file": "crates/setup/src/book_reset.rs",
+  "find": "AND fingerprint = ? AND state = 'pending'",
+  "replace": "AND fingerprint = ? AND 0",
+  "expect_failing": [
+   "an_ambiguous_identity_claims_nothing"
+  ],
+  "rule": "An exact fingerprint claims its own record before the identity fallback."
+ },
+ {
+  "id": "reset-claim-unique-identity",
+  "file": "crates/setup/src/book_reset.rs",
+  "find": "if rows.len() != 1 ||",
+  "replace": "if rows.is_empty() ||",
+  "expect_failing": [
+   "an_ambiguous_identity_claims_nothing"
+  ],
+  "rule": "Two records with the same wallet, external id, asset and direction claim nothing."
+ },
+ {
+  "id": "reset-settle-compares-amount",
+  "file": "crates/setup/src/book_reset.rs",
+  "find": "const FACT_COLUMNS: &[&str] = &[\"direction\", \"asset\", \"amount\", \"fee\", \"amount_includes_fee\"];",
+  "replace": "const FACT_COLUMNS: &[&str] = &[\"direction\", \"asset\", \"fee\", \"amount_includes_fee\"];",
+  "expect_failing": [
+   "settling_binds_metadata_and_legs_or_marks_changed_facts",
+   "holds_name_the_missing_and_changed_transactions"
+  ],
+  "rule": "A row that comes back with another amount binds nothing."
+ },
+ {
+  "id": "reset-settle-writes-metadata",
+  "file": "crates/setup/src/book_reset.rs",
+  "find": "    if !fields.is_empty() {\n        let assignments",
+  "replace": "    if false {\n        let assignments",
+  "expect_failing": [
+   "settling_binds_metadata_and_legs_or_marks_changed_facts"
+  ],
+  "rule": "A bound row gets the user's own fields back."
+ },
+ {
+  "id": "reset-settle-reanchors-legs",
+  "file": "crates/setup/src/book_reset.rs",
+  "find": "WHERE profile_id = ? AND transaction_id IS NULL AND anchor_transaction_id = ?",
+  "replace": "WHERE profile_id = ? AND 0 AND anchor_transaction_id = ?",
+  "expect_failing": [
+   "settling_binds_metadata_and_legs_or_marks_changed_facts"
+  ],
+  "rule": "Custody legs anchored to a bound row point at it again."
+ },
+ {
+  "id": "reset-memberships-bind-together",
+  "file": "crates/setup/src/book_reset.rs",
+  "find": "const GROUPED: (&str, &str) = (\"custody_component_transaction_memberships\", \"component_id\");",
+  "replace": "const GROUPED: (&str, &str) = (\"none\", \"component_id\");",
+  "expect_failing": [
+   "reset_parks_decisions_and_records_identities"
+  ],
+  "rule": "A component's memberships wait for every leg of the component."
+ },
+ {
+  "id": "reset-rebind-needs-bound-facts",
+  "file": "crates/setup/src/book_reset.rs",
+  "find": ".any(|(_, state)| *state != State::Bound)",
+  "replace": ".any(|(_, state)| *state == State::Missing)",
+  "expect_failing": [
+   "holds_name_the_missing_and_changed_transactions"
+  ],
+  "rule": "A decision on a changed row stays parked."
+ },
+ {
+  "id": "reset-rebind-keeps-taken-places",
+  "file": "crates/setup/src/book_reset.rs",
+  "find": "Err(error) if integrity(&error) =>",
+  "replace": "Err(error) if false =>",
+  "expect_failing": [
+   "a_taken_place_keeps_the_decision_parked"
+  ],
+  "rule": "A decision whose place is taken stays parked instead of failing the import."
+ },
+ {
+  "id": "reset-holds-include-changed-rows",
+  "file": "crates/setup/src/book_reset.rs",
+  "find": ".filter(|(_, s)| *s != State::Missing)",
+  "replace": ".filter(|(_, s)| *s == State::Bound)",
+  "expect_failing": [
+   "holds_name_the_missing_and_changed_transactions"
+  ],
+  "rule": "A changed returned row is held, not left unbooked or booked."
+ },
+ {
+  "id": "reset-keeps-user-prices",
+  "file": "crates/setup/src/book_reset.rs",
+  "find": "        &Sql::Text(\"manual_override\".into()),",
+  "replace": "        &Sql::Text(\"manual_override_x\".into()),",
+  "expect_failing": [
+   "reset_parks_decisions_and_records_identities"
+  ],
+  "rule": "A user-set price is kept with the transaction's own fields."
+ },
+ {
+  "id": "reset-discard-parked-rows",
+  "file": "crates/setup/src/book_reset.rs",
+  "find": "        \"DELETE FROM book_reset_parked_rows WHERE profile_id = ?\",\n        [profile_id],",
+  "replace": "        \"DELETE FROM book_reset_parked_rows WHERE profile_id = ? AND 0\",\n        [profile_id],",
+  "expect_failing": [
+   "the_wipe_discards_every_kept_record"
+  ],
+  "rule": "The wipe discards every kept record."
+ },
+ {
+  "id": "reset-tables-present",
+  "file": "crates/setup/src/book_reset.rs",
+  "find": ".map(|n| n == 2)",
+  "replace": ".map(|n| n >= 1)",
+  "expect_failing": [
+   "schemas_without_the_tables_have_no_state"
+  ],
+  "rule": "A schema without both tables keeps no reset state."
+ },
+ {
+  "id": "reset-default-keeps-decisions",
+  "file": "crates/setup/src/profile_reset.rs",
+  "find": "let wipe = flag(args, \"wipe_everything\");",
+  "replace": "let wipe = true;",
+  "expect_failing": [
+   "frozen_python_desktop_responses_and_database_states",
+   "profile_reset_keeps_other_books_and_confines_attachment_cleanup"
+  ],
+  "rule": "The default reset keeps decisions; only the explicit flag wipes."
+ },
+ {
+  "id": "reset-wipe-flag-boolean",
+  "file": "crates/setup/src/sensitive.rs",
+  "find": "optional(args, \"wipe_everything\").is_some_and(",
+  "replace": "optional(args, \"wipe_everything_\").is_some_and(",
+  "expect_failing": [
+   "sensitive_selection_requires_exact_current_names_and_boolean_rate_scope"
+  ],
+  "rule": "A non-boolean wipe flag is refused before authorization."
+ }
+]

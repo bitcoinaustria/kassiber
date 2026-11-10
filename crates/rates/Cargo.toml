@@ -1,0 +1,28 @@
+[package]
+name = "kassiber-rates"
+description = "Exact fiat rate cache and consent-bound market providers"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[dependencies]
+kassiber-store = { path = "../store" }
+kassiber-envelope = { path = "../envelope" }
+kassiber-pydecimal = { path = "../pydecimal" }
+kassiber-pyjson = { path = "../pyjson" }
+kassiber-pytext = { path = "../pytext" }
+kassiber-net = { path = "../net" }
+kassiber-paths = { path = "../paths" }
+# Local Kraken archives use DEFLATE. The standard library has no inflater;
+# the pure Rust backend adds no transport, native library or subprocess.
+flate2 = { version = "=1.1.9", default-features = false, features = ["rust_backend"] }
+
+[dev-dependencies]
+tempfile = "3"
+kassiber-net = { path = "../net", features = ["test-support"] }
+
+[lints.rust]
+unsafe_code = "forbid"

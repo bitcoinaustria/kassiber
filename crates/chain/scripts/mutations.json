@@ -1,0 +1,1305 @@
+[
+  {
+    "id": "electrum-wire-version",
+    "file": "crates/chain/src/electrum.rs",
+    "find": "\"jsonrpc\":\"2.0\"",
+    "replace": "\"jsonrpc\":\"1.0\"",
+    "expect_failing": [
+      "electrum_batches_reorder_ignore_notifications_and_split_at_configured_size"
+    ],
+    "rule": "Electrum requests use JSON-RPC 2.0."
+  },
+  {
+    "id": "electrum-batch-size",
+    "file": "crates/chain/src/electrum.rs",
+    "find": "requests.chunks(self.backend.batch_size)",
+    "replace": "requests.chunks(1)",
+    "expect_failing": [
+      "electrum_batches_reorder_ignore_notifications_and_split_at_configured_size"
+    ],
+    "rule": "The configured batch size controls newline request groups."
+  },
+  {
+    "id": "electrum-order",
+    "file": "crates/chain/src/electrum.rs",
+    "find": "results[index] = message.get(\"result\")",
+    "replace": "results[requests.len() - 1 - index] = message.get(\"result\")",
+    "expect_failing": [
+      "electrum_batches_reorder_ignore_notifications_and_split_at_configured_size"
+    ],
+    "rule": "Out-of-order replies must return in request order."
+  },
+  {
+    "id": "electrum-error-code",
+    "file": "crates/chain/src/electrum.rs",
+    "find": "\"electrum_rpc_error\"",
+    "replace": "\"app_error\"",
+    "expect_failing": [
+      "electrum_protocol_and_rpc_errors_are_typed_and_redacted"
+    ],
+    "rule": "Electrum peer errors preserve the typed RPC code."
+  },
+  {
+    "id": "core-wire-version",
+    "file": "crates/chain/src/core.rs",
+    "find": "\"jsonrpc\":\"1.0\"",
+    "replace": "\"jsonrpc\":\"2.0\"",
+    "expect_failing": [
+      "core_request_shape_wallet_path_and_typed_http_error_mapping"
+    ],
+    "rule": "Core uses its Python JSON-RPC 1.0 request shape."
+  },
+  {
+    "id": "core-error-id",
+    "file": "crates/chain/src/core.rs",
+    "find": "v.get(\"id\") == Some(&json!(id))",
+    "replace": "v.get(\"id\").is_some()",
+    "expect_failing": [
+      "core_request_shape_wallet_path_and_typed_http_error_mapping"
+    ],
+    "rule": "Typed HTTP RPC errors must match the request ID."
+  },
+  {
+    "id": "core-rescan-category",
+    "file": "crates/chain/src/core.rs",
+    "find": "&& error.get(\"category\").and_then(Value::as_str) == Some(\"rescan failed\"))",
+    "replace": "&& false)",
+    "expect_failing": [
+      "core_request_shape_wallet_path_and_typed_http_error_mapping"
+    ],
+    "rule": "Successful RPC envelopes preserve Python's sanitized rescan category."
+  },
+  {
+    "id": "core-history-cap",
+    "file": "crates/chain/src/core.rs",
+    "find": "if method == \"listsinceblock\" {",
+    "replace": "if method == \"listtransactions\" {",
+    "expect_failing": [
+      "core_listsinceblock_has_64_mib_budget_and_invalid_http_error_is_capped"
+    ],
+    "rule": "Core listsinceblock has a 64 MiB response budget."
+  },
+  {
+    "id": "http-attempts",
+    "file": "crates/chain/src/http.rs",
+    "find": "for attempt in 0..3 {",
+    "replace": "for attempt in 0..2 {",
+    "expect_failing": [
+      "retry_status_attempt_limit_and_nonretryable_errors_match_python"
+    ],
+    "rule": "429/503 receive at most three attempts."
+  },
+  {
+    "id": "http-retry-status",
+    "file": "crates/chain/src/http.rs",
+    "find": "if !matches!(response.status, 429 | 503) {",
+    "replace": "if !matches!(response.status, 429) {",
+    "expect_failing": [
+      "retry_status_attempt_limit_and_nonretryable_errors_match_python"
+    ],
+    "rule": "503 follows the same bounded retry contract as 429."
+  },
+  {
+    "id": "retry-date-year",
+    "file": "crates/chain/src/http.rs",
+    "find": "if !(1..=9999).contains(&year) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "retry_after_dates_refuse_overflow_invalid_calendar_and_unicode_zone"
+    ],
+    "rule": "Untrusted Retry-After dates cannot overflow calendar arithmetic."
+  },
+  {
+    "id": "esplora-token",
+    "file": "crates/chain/src/http.rs",
+    "find": "format!(\"Bearer {s}\")",
+    "replace": "format!(\"token {s}\")",
+    "expect_failing": [
+      "esplora_headers_paths_json_text_and_auth_match_python"
+    ],
+    "rule": "Esplora tokens use Bearer authorization."
+  },
+  {
+    "id": "probe-book-binding",
+    "file": "crates/chain/src/probes.rs",
+    "find": "c.args == *args && c.book == book",
+    "replace": "c.args == *args",
+    "expect_failing": [
+      "every_probe_requires_exact_action_arguments_and_book_and_refuses_offline"
+    ],
+    "rule": "Probe consent cannot move to another open book."
+  },
+  {
+    "id": "pruned-coverage",
+    "file": "crates/chain/src/probes.rs",
+    "find": "\"birthday_covered\":if pruned {Value::Null} else {json!(true)}",
+    "replace": "\"birthday_covered\":if pruned {json!(true)} else {json!(true)}",
+    "expect_failing": [
+      "core_probe_preserves_unknown_pruned_coverage_and_single_snapshot"
+    ],
+    "rule": "A pruned node cannot assert birthday coverage from timestamps."
+  },
+  {
+    "id": "detect-loopback",
+    "file": "crates/chain/src/detection.rs",
+    "find": "if !loopback(&url) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "detect_candidates_ignore_remote_configuration_and_refs_exclude_secrets"
+    ],
+    "rule": "Detect Core must skip non-loopback configuration before I/O."
+  },
+  {
+    "id": "positive-batch",
+    "file": "crates/chain/src/config.rs",
+    "find": "if number == 0 {",
+    "replace": "if false {",
+    "expect_failing": [
+      "invalid_batch_size_is_refused_before_transport"
+    ],
+    "rule": "Zero and invalid batch sizes must fail before transport."
+  },
+  {
+    "id": "probe-birthday-validation",
+    "file": "crates/chain/src/probes.rs",
+    "find": "time::parse(raw)",
+    "replace": "Some(time::UNIX)",
+    "expect_failing": [
+      "probe_invalid_inputs_refuse_before_any_connection"
+    ],
+    "rule": "An invalid Core birthday cannot silently become a genesis probe."
+  },
+  {
+    "id": "probe-argument-types",
+    "file": "crates/chain/src/probes.rs",
+    "find": "validate_args(kind, args)?;",
+    "replace": "// no argument validation",
+    "expect_failing": [
+      "probe_invalid_inputs_refuse_before_any_connection"
+    ],
+    "rule": "Malformed form arguments fail before transport instead of defaulting silently."
+  },
+  {
+    "id": "probe-timeout-overflow",
+    "file": "crates/chain/src/probes.rs",
+    "find": ".checked_add(Duration::from_secs(timeout))",
+    "replace": ".checked_add(Duration::from_secs(1))",
+    "expect_failing": [
+      "oversized_probe_timeouts_refuse_before_connection"
+    ],
+    "rule": "Unrepresentable overall probe deadlines fail before transport."
+  },
+  {
+    "id": "core-effective-origin",
+    "file": "crates/chain/src/probes.rs",
+    "find": "if !same_origin(config::value(&saved, &[\"url\"]).unwrap_or(\"\"), url) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "saved_core_config_url_override_cannot_forward_saved_credentials"
+    ],
+    "rule": "A nested config URL cannot inherit saved credentials for another endpoint."
+  },
+  {
+    "id": "chain-coinbase-prefetch",
+    "file": "kassiber/core/sync_backends.py",
+    "find": "if sync_state.chain == \"bitcoin\" and _is_bitcoin_coinbase_input(vin):",
+    "replace": "if False and sync_state.chain == \"bitcoin\" and _is_bitcoin_coinbase_input(vin):",
+    "expect_failing": [
+      "tests/test_electrum_coinbase.py::test_electrum_coinbase_fetch_and_record_keep_the_observed_receipt"
+    ],
+    "rule": "Bitcoin coinbase inputs never request a previous transaction during compatibility prefetch."
+  },
+  {
+    "id": "chain-coinbase-graph",
+    "file": "kassiber/core/sync_backends.py",
+    "find": "if _is_bitcoin_coinbase_input(entry):",
+    "replace": "if False and _is_bitcoin_coinbase_input(entry):",
+    "expect_failing": [
+      "tests/test_electrum_coinbase.py::test_electrum_coinbase_graph_does_not_lookup_the_null_outpoint"
+    ],
+    "rule": "Coinbase graph normalization leaves the null outpoint without a fabricated prevout."
+  },
+  {
+    "id": "chain-lnd-report-binding",
+    "file": "crates/chain/src/lightning.rs",
+    "find": ".with_action_binding(binding(&config)?);",
+    "replace": ".with_action_binding([0; 32]);",
+    "expect_failing": [
+      "lnd_report_consent_binds_book_profile_connection_window_export_and_credentials"
+    ],
+    "rule": "Consent distinguishes the owning book, profile, connection, window, export and complete backend configuration."
+  },
+  {
+    "id": "chain-lnd-report-consent",
+    "file": "crates/chain/src/lightning.rs",
+    "find": ".send(request, consent, deadline, RESPONSE_LIMIT)",
+    "replace": ".send(request, Some(&Consent::explicit_trigger(self.request())), deadline, RESPONSE_LIMIT)",
+    "expect_failing": [
+      "lnd_report_construction_and_refusals_make_no_attempts"
+    ],
+    "rule": "Saved configuration never manufactures consent for an LND read."
+  },
+  {
+    "id": "chain-lnd-report-macaroon",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "r.header(\"Grpc-Metadata-macaroon\", &self.macaroon)",
+    "replace": "r.header(\"X-Wrong-macaroon\", &self.macaroon)",
+    "expect_failing": [
+      "lnd_report_acquisition_pins_requests_window_rounding_and_discard_boundary"
+    ],
+    "rule": "Every LND endpoint uses the configured macaroon header."
+  },
+  {
+    "id": "chain-lnd-report-macaroon-case",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "let macaroon = macaroon.to_ascii_lowercase();",
+    "replace": "let macaroon = macaroon.to_owned();",
+    "expect_failing": [
+      "lnd_report_acquisition_pins_requests_window_rounding_and_discard_boundary"
+    ],
+    "rule": "Hex macaroons are normalized as in Python."
+  },
+  {
+    "id": "chain-lnd-report-user-agent",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "format!(\"kassiber/{}\", self.http.version)",
+    "replace": "format!(\"other/{}\", self.http.version)",
+    "expect_failing": [
+      "lnd_report_acquisition_pins_requests_window_rounding_and_discard_boundary"
+    ],
+    "rule": "LND HTTP requests identify the application with its fixed User-Agent."
+  },
+  {
+    "id": "chain-lnd-report-forward-window",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "&& timestamp < start",
+    "replace": "&& timestamp <= start",
+    "expect_failing": [
+      "lnd_report_acquisition_pins_requests_window_rounding_and_discard_boundary"
+    ],
+    "rule": "The forwarding window includes events exactly at its lower boundary."
+  },
+  {
+    "id": "chain-lnd-report-payment-window",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "&& integer(field(row, \"creation_date\"))? < start",
+    "replace": "|| integer(field(row, \"creation_date\"))? < start",
+    "expect_failing": [
+      "lnd_report_python_vectors_pin_projection_and_exact_requests"
+    ],
+    "rule": "Either seconds or nanoseconds may establish that a payment falls inside the window."
+  },
+  {
+    "id": "chain-lnd-report-channel-rounding",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "floor_div(fee(row, \"fee\")?, 1000)",
+    "replace": "fee(row, \"fee\")?",
+    "expect_failing": [
+      "lnd_report_acquisition_pins_requests_window_rounding_and_discard_boundary"
+    ],
+    "rule": "Per-channel routing earnings floor each forward independently before aggregation."
+  },
+  {
+    "id": "chain-lnd-report-summary-rounding",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "let revenue = floor_div(revenue_msat, 1000);",
+    "replace": "let revenue = floor_div(revenue_msat, 1000) + 1;",
+    "expect_failing": [
+      "lnd_report_acquisition_pins_requests_window_rounding_and_discard_boundary"
+    ],
+    "rule": "Routing summary floors the aggregate msat exactly once."
+  },
+  {
+    "id": "chain-lnd-report-payment-sat-fee",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "fee(row, \"fee_sat\")?",
+    "replace": "fee(row, \"fee\")?",
+    "expect_failing": [
+      "lnd_report_acquisition_pins_requests_window_rounding_and_discard_boundary"
+    ],
+    "rule": "Zero or absent payment fee_msat falls back to fee_sat."
+  },
+  {
+    "id": "chain-lnd-report-status",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "[\"SUCCEEDED\", \"SUCCESS\", \"COMPLETE\"]",
+    "replace": "[\"SUCCEEDED\", \"SUCCESS\", \"FAILED\"]",
+    "expect_failing": [
+      "lnd_report_acquisition_pins_requests_window_rounding_and_discard_boundary"
+    ],
+    "rule": "Only successful payments contribute costs and counts."
+  },
+  {
+    "id": "chain-lnd-report-private-alias",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "\"private peer\".into()",
+    "replace": "c.peer.clone().unwrap_or_else(|| \"private peer\".into())",
+    "expect_failing": [
+      "lnd_report_python_vectors_pin_projection_and_exact_requests"
+    ],
+    "rule": "Missing private aliases never fall back to the private peer pubkey."
+  },
+  {
+    "id": "chain-lnd-report-switch-route",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "\"/v1/switch\",",
+    "replace": "\"/v1/payments\",",
+    "expect_failing": [
+      "lnd_report_acquisition_pins_requests_window_rounding_and_discard_boundary"
+    ],
+    "rule": "Forwarding acquisition is limited to the read-only switch endpoint."
+  },
+  {
+    "id": "chain-lnd-report-limit",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "const LND_MAX_PAGE_SIZE: u32 = 1000;",
+    "replace": "const LND_MAX_PAGE_SIZE: u32 = 100;",
+    "expect_failing": [
+      "lnd_report_python_vectors_pin_projection_and_exact_requests"
+    ],
+    "rule": "The reference LND page size (forwards, payments and invoices) is preserved."
+  },
+  {
+    "id": "chain-lnd-report-identifier",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "    validate_short_id(chan_id.as_ref())?;\n",
+    "replace": "    let _ = &chan_id;\n",
+    "expect_failing": [
+      "lnd_report_invalid_credentials_and_channel_identifiers_fail_closed"
+    ],
+    "rule": "Channel identifiers must pass the format-only discard-boundary validator."
+  },
+  {
+    "id": "chain-lnd-report-outpoint",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "validate_outpoint(point)?;",
+    "replace": "let _ = point;",
+    "expect_failing": [
+      "lnd_report_invalid_credentials_and_channel_identifiers_fail_closed"
+    ],
+    "rule": "Funding outpoints cannot smuggle arbitrary node text into a curated shape."
+  },
+  {
+    "id": "chain-lnd-report-json-disclosure",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "AppError::new(\"backend_error\", \"LND returned non-JSON data\")",
+    "replace": "AppError::new(\"backend_error\", raw)",
+    "expect_failing": [
+      "lnd_report_errors_refuse_redirects_shapes_and_raw_secrets"
+    ],
+    "rule": "Malformed JSON errors never expose raw node responses."
+  },
+  {
+    "id": "chain-lnd-report-json-shape",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "if !matches!(value, Value::Dict(_))",
+    "replace": "if false && !matches!(value, Value::Dict(_))",
+    "expect_failing": [
+      "lnd_report_errors_refuse_redirects_shapes_and_raw_secrets"
+    ],
+    "rule": "LND REST response objects are validated before use."
+  },
+  {
+    "id": "chain-lnd-report-negative-rounding",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "if value < BigInt::from(0) && &value % divisor != BigInt::from(0)",
+    "replace": "if false && value < BigInt::from(0) && &value % divisor != BigInt::from(0)",
+    "expect_failing": [
+      "lnd_report_acquisition_pins_requests_window_rounding_and_discard_boundary"
+    ],
+    "rule": "Python floor division is retained for negative sub-sat forward fees."
+  },
+  {
+    "id": "chain-lnd-report-offline",
+    "file": "crates/net/src/lib.rs",
+    "find": "Offline::Offline => return Err(Error::Offline),",
+    "replace": "Offline::Offline => {},",
+    "expect_failing": [
+      "lnd_report_offline_and_unavailable_refuse_before_loopback"
+    ],
+    "rule": "An already consented LND report still refuses offline mode before any loopback attempt."
+  },
+  {
+    "id": "chain-lnd-report-private-whitespace",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "kassiber_pytext::strip(s)",
+    "replace": "s.trim()",
+    "expect_failing": [
+      "lnd_report_python_vectors_pin_projection_and_exact_requests"
+    ],
+    "rule": "Private flags use Python whitespace rules so a true flag cannot expose its peer as an alias fallback."
+  },
+  {
+    "id": "chain-cln-report-action-binding",
+    "file": "crates/net/src/process.rs",
+    "find": ".with_action_binding(binding);",
+    "replace": ".with_action_binding({ let _ = binding; [0; 32] });",
+    "expect_failing": [
+      "cln_report_consent_binds_action_and_every_process_option_before_launch"
+    ],
+    "rule": "The CLN grant binds book, profile, connection, window and export destination."
+  },
+  {
+    "id": "chain-cln-report-commando-refused",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "if wants_commando {",
+    "replace": "if wants_commando && false {",
+    "expect_failing": [
+      "cln_report_commando_configuration_is_refused_inert_and_secret_free"
+    ],
+    "rule": "A commando configuration is refused before a request or process exists, because lightning-cli takes the rune only in argv."
+  },
+  {
+    "id": "chain-cln-report-commando-peer",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "let wants_commando = value(&[\"commando_peer_id\"]).is_some()",
+    "replace": "let wants_commando = false",
+    "expect_failing": [
+      "cln_report_commando_configuration_is_refused_inert_and_secret_free"
+    ],
+    "rule": "A commando peer alone marks a commando connection."
+  },
+  {
+    "id": "chain-cln-report-commando-token",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "|| value(&[\"token\"]).is_some()",
+    "replace": "|| false",
+    "expect_failing": [
+      "cln_report_commando_configuration_is_refused_inert_and_secret_free"
+    ],
+    "rule": "A rune alone marks a commando connection."
+  },
+  {
+    "id": "chain-cln-report-commando-url",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "starts_with(\"cln://commando\")",
+    "replace": "starts_with(\"cln://other\")",
+    "expect_failing": [
+      "cln_report_commando_configuration_is_refused_inert_and_secret_free"
+    ],
+    "rule": "A cln://commando URL alone marks a commando connection, in any case."
+  },
+  {
+    "id": "chain-cln-report-optional-policy",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "![\"interaction_required\", \"network_egress_disabled\", \"backend_timeout\"].contains(&error.code.as_str())",
+    "replace": "true || ![\"interaction_required\", \"network_egress_disabled\", \"backend_timeout\"].contains(&error.code.as_str())",
+    "expect_failing": [
+      "cln_report_offline_unavailable_missing_revoked_and_optional_policy_refuse"
+    ],
+    "rule": "Optional-resource failures cannot swallow consent, offline or overall-budget refusal."
+  },
+  {
+    "id": "chain-cln-report-argv-secret-free",
+    "file": "crates/net/src/process.rs",
+    "find": "command.args([\"--json\", \"--raw\"]);",
+    "replace": "command.args([\"--json\", \"--raw\", \"--commando=peer:rune\"]);",
+    "expect_failing": [
+      "cln_process_pins_read_only_argv_and_redacted_ram_metadata",
+      "cln_report_loopback_transport_pins_commands_optional_errors_and_discard"
+    ],
+    "rule": "lightning-cli's argv is exactly the fixed flags, the configured paths and the method; no commando option or secret is added."
+  },
+  {
+    "id": "chain-cln-report-rpc-option",
+    "file": "crates/net/src/process.rs",
+    "find": "(\"rpc-file\", &config.rpc_file),",
+    "replace": "(\"rpc-file-wrong\", &config.rpc_file),",
+    "expect_failing": [
+      "cln_report_loopback_transport_pins_commands_optional_errors_and_discard"
+    ],
+    "rule": "The selected RPC route is preserved without probing another path."
+  },
+  {
+    "id": "chain-cln-report-method-order",
+    "file": "crates/net/src/process.rs",
+    "find": ".arg(method.name())",
+    "replace": ".arg({ let _ = method; \"getinfo\" })",
+    "expect_failing": [
+      "cln_report_loopback_transport_pins_commands_optional_errors_and_discard"
+    ],
+    "rule": "All nine read-only resources are called in reference order."
+  },
+  {
+    "id": "chain-cln-report-argv-redaction",
+    "file": "crates/net/src/process.rs",
+    "find": "f.write_str(\"ClnConfig(<redacted>)\")",
+    "replace": "write!(f, \"{:?} {:?}\", self.rpc_file, self.lightning_dir)",
+    "expect_failing": [
+      "cln_process_pins_read_only_argv_and_redacted_ram_metadata"
+    ],
+    "rule": "Debug output cannot disclose process paths."
+  },
+  {
+    "id": "chain-cln-report-poll-policy",
+    "file": "crates/net/src/process.rs",
+    "find": "loop {\n                    self.check()?;",
+    "replace": "loop {\n                    let _ = &self;",
+    "expect_failing": [
+      "cln_process_timeout_revocation_offline_exit_and_output_limit_reap_child"
+    ],
+    "rule": "Revocation and offline changes stop the in-flight subprocess."
+  },
+  {
+    "id": "chain-cln-report-output-bound",
+    "file": "crates/net/src/process.rs",
+    "find": "if bytes.len() > limit {",
+    "replace": "if bytes.len() > limit && false {",
+    "expect_failing": [
+      "cln_process_timeout_revocation_offline_exit_and_output_limit_reap_child"
+    ],
+    "rule": "Captured subprocess output has a finite byte bound."
+  },
+  {
+    "id": "chain-cln-report-child-reap",
+    "file": "crates/net/src/process.rs",
+    "find": "            let _ = child.0.kill();\n            let _ = child.0.wait();",
+    "replace": "            let _ = child.0.wait();",
+    "expect_failing": [
+      "cln_process_timeout_revocation_offline_exit_and_output_limit_reap_child"
+    ],
+    "rule": "Timeout/error cleanup kills and waits for the child before returning."
+  },
+  {
+    "id": "chain-cln-report-observer-fixture",
+    "file": "crates/net/src/process.rs",
+    "find": "self.gate.observer == Observer::Strict\n                || self.gate.cln_fixture.as_ref() != Some(&config.program)",
+    "replace": "self.gate.observer == Observer::Strict\n                && self.gate.cln_fixture.as_ref() != Some(&config.program)",
+    "expect_failing": [
+      "cln_process_test_observer_blocks_unapproved_children_before_spawn"
+    ],
+    "rule": "The observer blocks every child unless an owned fixture is explicitly registered; strict blocks all."
+  },
+  {
+    "id": "chain-cln-report-invalid-json",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "if raw.is_empty() { \"{}\" } else { raw }",
+    "replace": "if raw.is_empty() || raw.contains(\"private-non-json\") { \"{}\" } else { raw }",
+    "expect_failing": [
+      "cln_report_process_errors_are_typed_and_never_expose_raw_output"
+    ],
+    "rule": "Malformed required-resource JSON returns a typed secret-free error."
+  },
+  {
+    "id": "chain-cln-report-closed-channels",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": ".partition(|c| CLOSED_STATES.contains(&c.state));",
+    "replace": ".partition(|c| false && CLOSED_STATES.contains(&c.state));",
+    "expect_failing": [
+      "cln_report_python_vectors_pin_projection_requests_and_ancillary_refusals"
+    ],
+    "rule": "Closed and force-closed channels are listed apart from the open channels the profitability rows read."
+  },
+  {
+    "id": "chain-cln-report-capacity-fallback",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "capacity = &local + msat(field(row, \"their_amount_msat\"))?;",
+    "replace": "capacity = local.clone();",
+    "expect_failing": [
+      "cln_report_python_vectors_pin_projection_requests_and_ancillary_refusals"
+    ],
+    "rule": "Nonpositive declared capacity falls back to both local and remote amounts."
+  },
+  {
+    "id": "chain-cln-report-boolean-msat",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "Value::Null | Value::Bool(_) => return Ok(0.into()),",
+    "replace": "Value::Null => return Ok(0.into()),\n        Value::Bool(_) => return Ok(1.into()),",
+    "expect_failing": [
+      "cln_report_python_vectors_pin_projection_requests_and_ancillary_refusals"
+    ],
+    "rule": "CLN booleans in msat fields preserve Python zero semantics."
+  },
+  {
+    "id": "chain-cln-report-sat-suffix",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "(\"sat\", 3)",
+    "replace": "(\"sat\", 0)",
+    "expect_failing": [
+      "cln_report_python_vectors_pin_projection_requests_and_ancillary_refusals"
+    ],
+    "rule": "Sat-suffixed node amounts convert exactly to msat."
+  },
+  {
+    "id": "chain-cln-report-decimal-context",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "digits.saturating_sub(32)",
+    "replace": "digits.saturating_sub(33)",
+    "expect_failing": [
+      "cln_report_python_vectors_pin_projection_requests_and_ancillary_refusals"
+    ],
+    "rule": "Suffix scaling preserves the Python 32-digit decimal context."
+  },
+  {
+    "id": "chain-cln-report-decimal-tie",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "&& &coefficient % 2u32 == BigInt::from(1)",
+    "replace": "&& &coefficient % 2u32 == BigInt::from(0)",
+    "expect_failing": [
+      "cln_report_python_vectors_pin_projection_requests_and_ancillary_refusals"
+    ],
+    "rule": "Suffix scaling preserves half-even ties before integral validation."
+  },
+  {
+    "id": "chain-cln-report-channel-alias",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "aliases.insert(peer, alias);",
+    "replace": "aliases.entry(peer).or_insert(alias);",
+    "expect_failing": [
+      "cln_report_python_vectors_pin_projection_requests_and_ancillary_refusals"
+    ],
+    "rule": "The final alias for a peer wins across all channel rows."
+  },
+  {
+    "id": "chain-cln-report-rebalance-dedupe",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "rebalance_count += 1;\n            continue;",
+    "replace": "rebalance_count += 1;",
+    "expect_failing": [
+      "cln_report_python_vectors_pin_projection_requests_and_ancillary_refusals"
+    ],
+    "rule": "Rebalance-tagged pays count attempts without adding bookkeeper fees twice."
+  },
+  {
+    "id": "chain-cln-report-net-before-round",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "net_profit_sat: sat(&revenue - &payment_cost - &rebalance_cost - &onchain_cost),",
+    "replace": "net_profit_sat: sat(revenue.clone()) - sat(payment_cost.clone()) - sat(rebalance_cost.clone()) - sat(onchain_cost.clone()),",
+    "expect_failing": [
+      "cln_report_python_vectors_pin_projection_requests_and_ancillary_refusals"
+    ],
+    "rule": "Net is computed in msat before symmetric sat truncation."
+  },
+  {
+    "id": "chain-cln-report-signed-truncate",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "value / 1000u32",
+    "replace": "floor_div(value, 1000)",
+    "expect_failing": [
+      "cln_report_python_vectors_pin_projection_requests_and_ancillary_refusals"
+    ],
+    "rule": "Negative CLN msat totals truncate symmetrically toward zero."
+  },
+  {
+    "id": "chain-cln-report-routing-none",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "let routing_known = routing_known && !window.undated;",
+    "replace": "let routing_known = routing_known;",
+    "expect_failing": [
+      "cln_report_python_vectors_pin_projection_requests_and_ancillary_refusals"
+    ],
+    "rule": "An undated relevant routing fact leaves the requested window unknown."
+  },
+  {
+    "id": "chain-cln-routing-failed-resource",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "                | ClnMethod::ListIncome\n        )",
+    "replace": "                | ClnMethod::ListBalances\n        )",
+    "expect_failing": [
+      "cln_report_python_vectors_pin_projection_requests_and_ancillary_refusals"
+    ],
+    "rule": "A failed bookkeeper income resource leaves routing unknown."
+  },
+  {
+    "id": "chain-cln-routing-failure-recorded",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "            failed.push(method);\n",
+    "replace": "",
+    "expect_failing": [
+      "cln_report_python_vectors_pin_projection_requests_and_ancillary_refusals"
+    ],
+    "rule": "A failed optional resource is never a complete empty response."
+  },
+  {
+    "id": "chain-cln-window-start",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "Ok(value) => self.start <= value && value <= self.end,",
+    "replace": "Ok(value) => self.start < value && value <= self.end,",
+    "expect_failing": [
+      "cln_report_python_vectors_pin_projection_requests_and_ancillary_refusals"
+    ],
+    "rule": "The window includes its exact start."
+  },
+  {
+    "id": "chain-cln-window-end",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "Ok(value) => self.start <= value && value <= self.end,",
+    "replace": "Ok(value) => self.start <= value,",
+    "expect_failing": [
+      "cln_report_python_vectors_pin_projection_requests_and_ancillary_refusals"
+    ],
+    "rule": "Events after now are outside the window."
+  },
+  {
+    "id": "chain-cln-window-forwards",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": ".filter(|r| settled(r) && window.inside(r, &[\"resolved_time\", \"received_time\"]))",
+    "replace": ".filter(|r| settled(r) && window.inside(r, &[\"received_time\", \"resolved_time\"]))",
+    "expect_failing": [
+      "cln_report_python_vectors_pin_projection_requests_and_ancillary_refusals"
+    ],
+    "rule": "A forward is dated by its resolution time first."
+  },
+  {
+    "id": "chain-cln-window-pays",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "&& window.inside(r, &[\"completed_at\", \"created_at\"])",
+    "replace": "&& window.inside(r, &[\"created_at\"])",
+    "expect_failing": [
+      "cln_report_python_vectors_pin_projection_requests_and_ancillary_refusals"
+    ],
+    "rule": "A payment is dated by its completion time first."
+  },
+  {
+    "id": "chain-cln-window-income",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "&& window.inside(r, &[\"timestamp\"])",
+    "replace": "",
+    "expect_failing": [
+      "cln_report_python_vectors_pin_projection_requests_and_ancillary_refusals"
+    ],
+    "rule": "Bookkeeper costs outside the window are excluded."
+  },
+  {
+    "id": "chain-cln-known-zero",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "let routing = routing_known.then(|| Routing {",
+    "replace": "let routing = (routing_known && forward_count != 0).then(|| Routing {",
+    "expect_failing": [
+      "cln_report_python_vectors_pin_projection_requests_and_ancillary_refusals"
+    ],
+    "rule": "A complete empty response is a known zero window."
+  },
+  {
+    "id": "chain-cln-funding-output-zero",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "let output = if matches!(field(funding, \"output\"), Value::Null) {",
+    "replace": "let output = if !truthy(field(funding, \"output\")) {",
+    "expect_failing": [
+      "cln_report_python_vectors_pin_projection_requests_and_ancillary_refusals"
+    ],
+    "rule": "Funding output zero is kept instead of falling back to outnum."
+  },
+  {
+    "id": "chain-cln-report-ancillary-forward",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "amount_in_msat: msat(field(row, \"in_msat\"))?,",
+    "replace": "amount_in_msat: { let _ = field(row, \"in_msat\"); BigInt::from(0) },",
+    "expect_failing": [
+      "cln_report_python_vectors_pin_projection_requests_and_ancillary_refusals"
+    ],
+    "rule": "Forward input amounts come from the strict msat parser, so a malformed amount refuses the snapshot read."
+  },
+  {
+    "id": "chain-cln-report-ancillary-funds",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "        onchain += msat(field(row, \"amount_msat\"))?;",
+    "replace": "        let _ = field(row, \"amount_msat\");",
+    "expect_failing": [
+      "cln_report_python_vectors_pin_projection_requests_and_ancillary_refusals"
+    ],
+    "rule": "Eligible on-chain balance amounts are summed with reference refusal behavior."
+  },
+  {
+    "id": "chain-cln-report-ancillary-ppm",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "strict_int(if truthy(field(row, \"fee_proportional_millionths\"))",
+    "replace": "strict_int(if false && truthy(field(row, \"fee_proportional_millionths\"))",
+    "expect_failing": [
+      "cln_report_python_vectors_pin_projection_requests_and_ancillary_refusals"
+    ],
+    "rule": "Unused fee-rate fields still retain full-snapshot refusals."
+  },
+  {
+    "id": "chain-lnd-report-ancillary-fees",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "integer(field(row, \"base_fee_msat\"))?;",
+    "replace": "let _ = field(row, \"base_fee_msat\");",
+    "expect_failing": [
+      "lnd_report_python_vectors_pin_projection_and_exact_requests"
+    ],
+    "rule": "Fee-policy ancillary integers must retain Python refusal timing before channel acquisition."
+  },
+  {
+    "id": "chain-lnd-report-ancillary-balances",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "integer(field(row, \"local_balance\"))?;",
+    "replace": "let _ = field(row, \"local_balance\");",
+    "expect_failing": [
+      "lnd_report_python_vectors_pin_projection_and_exact_requests"
+    ],
+    "rule": "Open and closed channel balances are checked even when profitability does not use them."
+  },
+  {
+    "id": "chain-lnd-report-ancillary-htlcs",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "        _ => {\n            return Err(AppError::new(\n                \"internal_error\",\n                \"Invalid LND pending HTLC collection\",\n            ))\n        }",
+    "replace": "        _ => 0,",
+    "expect_failing": [
+      "lnd_report_python_vectors_pin_projection_and_exact_requests"
+    ],
+    "rule": "Truthy nonsized pending HTLC collections refuse as in the snapshot reference."
+  },
+  {
+    "id": "chain-lnd-report-ancillary-close-time",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "    let closed_at = if closed {\n        lnd_iso(",
+    "replace": "    let closed_at = if false && closed {\n        lnd_iso(",
+    "expect_failing": [
+      "lnd_report_python_vectors_pin_projection_and_exact_requests"
+    ],
+    "rule": "Closed-channel timestamps are validated and recorded on the closed channel."
+  },
+  {
+    "id": "chain-lnd-report-ancillary-peer-count",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "let peer_count = integer(field(&info, \"num_peers\"))?;",
+    "replace": "let peer_count = {\n            let _ = field(&info, \"num_peers\");\n            BigInt::from(0)\n        };",
+    "expect_failing": [
+      "lnd_report_python_vectors_pin_projection_and_exact_requests"
+    ],
+    "rule": "Node peer counts keep reference coercion failures."
+  },
+  {
+    "id": "chain-lnd-report-ancillary-onchain",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "integer(field(&onchain, \"confirmed_balance\"))?;",
+    "replace": "let _ = field(&onchain, \"confirmed_balance\");",
+    "expect_failing": [
+      "lnd_report_python_vectors_pin_projection_and_exact_requests"
+    ],
+    "rule": "Unused onchain balances still propagate reference coercion failures."
+  },
+  {
+    "id": "chain-lnd-report-ancillary-forward-amount",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "integer(field(row, sat))? * 1000",
+    "replace": "{\n                let _ = field(row, sat);\n                BigInt::from(0)\n            }",
+    "expect_failing": [
+      "lnd_report_python_vectors_pin_projection_and_exact_requests"
+    ],
+    "rule": "Forward amount fallback fields must be checked after snapshot balances."
+  },
+  {
+    "id": "chain-lnd-report-ancillary-timestamp-range",
+    "file": "crates/chain/src/lightning/snapshot.rs",
+    "find": "utc_iso(seconds)?.map(Some).ok_or_else(year_out_of_range)",
+    "replace": "Ok(utc_iso(seconds)?)",
+    "expect_failing": [
+      "lnd_report_python_vectors_pin_projection_and_exact_requests"
+    ],
+    "rule": "Positive timestamps beyond the Python datetime range refuse."
+  },
+  {
+    "id": "chain-lnd-report-terminal-newline",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "let s = s.strip_suffix('\\n').unwrap_or(s);",
+    "replace": "let s = s;",
+    "expect_failing": [
+      "lnd_report_python_vectors_pin_projection_and_exact_requests"
+    ],
+    "rule": "Keep the reference regex terminal-newline identifier quirk."
+  },
+  {
+    "id": "http-interruptible-backoff",
+    "file": "crates/chain/src/http.rs",
+    "find": "                        .min(Duration::from_millis(100)),",
+    "replace": "                        .min(Duration::from_secs(20)),",
+    "expect_failing": [
+      "checked_http_cancellation_interrupts_retry_backoff"
+    ],
+    "rule": "Cancellation interrupts a retry delay before another request is transmitted."
+  },
+  {
+    "id": "chain-btcpay-url-scheme",
+    "file": "crates/chain/src/btcpay/url.rs",
+    "find": "if !matches!(parts.scheme.as_str(), \"http\" | \"https\") {",
+    "replace": "if !matches!(parts.scheme.as_str(), \"http\" | \"https\" | \"ftp\") {",
+    "expect_failing": [
+      "btcpay_urls_match_python_vectors"
+    ],
+    "rule": "BTCPay server URLs accept only http and https."
+  },
+  {
+    "id": "chain-btcpay-url-credentials",
+    "file": "crates/chain/src/btcpay/url.rs",
+    "find": "    if parts.credentials() {\n        return Err(",
+    "replace": "    if false {\n        return Err(",
+    "expect_failing": [
+      "btcpay_urls_match_python_vectors"
+    ],
+    "rule": "A BTCPay URL never carries credentials; the API key is the secret."
+  },
+  {
+    "id": "chain-btcpay-url-loopback",
+    "file": "crates/chain/src/btcpay/url.rs",
+    "find": "|| host.starts_with(\"127.\")",
+    "replace": "|| host.starts_with(\"12\")",
+    "expect_failing": [
+      "btcpay_urls_match_python_vectors"
+    ],
+    "rule": "Only the 127/8 range counts as loopback."
+  },
+  {
+    "id": "chain-btcpay-url-onion",
+    "file": "crates/chain/src/btcpay/url.rs",
+    "find": ".ends_with(\".onion\")",
+    "replace": ".ends_with(\"onion\")",
+    "expect_failing": [
+      "btcpay_urls_match_python_vectors"
+    ],
+    "rule": "Onion detection needs the .onion label."
+  },
+  {
+    "id": "chain-btcpay-redact-credentials",
+    "file": "crates/chain/src/btcpay/url.rs",
+    "find": "host = format!(\"<redacted>@{host}\");",
+    "replace": "host = format!(\"{host}\");",
+    "expect_failing": [
+      "btcpay_urls_match_python_vectors"
+    ],
+    "rule": "Redacted backend URLs never echo user info."
+  },
+  {
+    "id": "chain-btcpay-wallet-history-ids",
+    "file": "crates/chain/src/btcpay/payment_methods.rs",
+    "find": "pub const WALLET_HISTORY_IDS: [&str; 3] = [\"BTC-CHAIN\", \"LBTC-CHAIN\", \"BTC-ARK\"];",
+    "replace": "pub const WALLET_HISTORY_IDS: [&str; 3] = [\"BTC-CHAIN\", \"BTC-LN\", \"BTC-ARK\"];",
+    "expect_failing": [
+      "payment_methods_match_python"
+    ],
+    "rule": "Only on-chain Bitcoin, Liquid and the Bark wallet have BTCPay wallet history."
+  },
+  {
+    "id": "chain-btcpay-handler-lnurl",
+    "file": "crates/chain/src/btcpay/payment_methods.rs",
+    "find": "\"LNURL\" | \"LNURLPAY\" => RAIL_LNURL,",
+    "replace": "\"LNURL\" | \"LNURLPAY\" => RAIL_LIGHTNING,",
+    "expect_failing": [
+      "payment_methods_match_python"
+    ],
+    "rule": "LNURL stays its own rail."
+  },
+  {
+    "id": "chain-btcpay-wallet-confirmations",
+    "file": "crates/chain/src/btcpay/fetch.rs",
+    "find": "            Value::Int(n) => return Ok(*n > 0.into()),",
+    "replace": "            Value::Int(n) => return Ok(*n >= 0.into()),",
+    "expect_failing": [
+      "confirmations_then_status_decide_and_bad_values_refuse"
+    ],
+    "rule": "Only confirmed wallet transactions import."
+  },
+  {
+    "id": "chain-btcpay-wallet-status",
+    "file": "crates/chain/src/btcpay/fetch.rs",
+    "find": "    Ok(status.is_empty() || status == \"confirmed\")",
+    "replace": "    Ok(status.is_empty() || status != \"confirmed\")",
+    "expect_failing": [
+      "confirmations_then_status_decide_and_bad_values_refuse"
+    ],
+    "rule": "Without confirmations the status decides."
+  },
+  {
+    "id": "chain-btcpay-wallet-currency",
+    "file": "crates/chain/src/btcpay/fetch.rs",
+    "find": "        kassiber_pytext::upper(method.split('-').next().unwrap_or_default())",
+    "replace": "        method.split('-').next().unwrap_or_default().to_owned()",
+    "expect_failing": [
+      "wallet_rows_take_the_method_currency_and_python_text"
+    ],
+    "rule": "The row currency is the method currency, upper-cased."
+  },
+  {
+    "id": "chain-btcpay-wallet-amount-default",
+    "file": "crates/chain/src/btcpay/fetch.rs",
+    "find": "        Value::Null => \"0\".to_owned(),",
+    "replace": "        Value::Null => String::new(),",
+    "expect_failing": [
+      "wallet_rows_take_the_method_currency_and_python_text"
+    ],
+    "rule": "A missing amount reads as zero."
+  },
+  {
+    "id": "echo-backend-body-raw",
+    "file": "crates/chain/src/http.rs",
+    "find": "                let detail = kassiber_credentials::withhold(\n                    &String::from_utf8_lossy(&response.body),\n                    &withheld,\n                );\n",
+    "replace": "                let detail = String::from_utf8_lossy(&response.body).into_owned();\n",
+    "expect_failing": [
+      "backend_error_bodies_withhold_the_credentials_the_request_carried"
+    ],
+    "rule": "A backend error body withholds every credential the request carried before the 200-character cut."
+  },
+  {
+    "id": "echo-backend-headers-ignored",
+    "file": "crates/chain/src/http.rs",
+    "find": "                    &headers,\n",
+    "replace": "                    &[] as &[(String, String)],\n",
+    "expect_failing": [
+      "backend_error_bodies_withhold_the_credentials_the_request_carried"
+    ],
+    "rule": "The request's own auth headers count as credentials to withhold."
+  },
+  {
+    "id": "echo-btcpay-body-raw",
+    "file": "crates/chain/src/btcpay.rs",
+    "find": "    let decoded = withhold_json(\n        serde_json::from_slice::<Value>(&body[..body.len().min(4096)]).unwrap_or(Value::Null),\n        withheld,\n    );",
+    "replace": "    let decoded =\n        serde_json::from_slice::<Value>(&body[..body.len().min(4096)]).unwrap_or(Value::Null);",
+    "expect_failing": [
+      "a_greenfield_error_body_withholds_the_api_key"
+    ],
+    "rule": "A Greenfield error body's message, code and missing permission withhold the API key."
+  },
+  {
+    "id": "echo-electrum-raw",
+    "file": "crates/chain/src/electrum.rs",
+    "find": "kassiber_credentials::withhold(&detail, &self.backend.credential_forms(&[]));",
+    "replace": "detail.clone();",
+    "expect_failing": [
+      "electrum_errors_withhold_backend_credentials"
+    ],
+    "rule": "An Electrum error message withholds the backend's credentials."
+  },
+  {
+    "id": "echo-config-top-level-ignored",
+    "file": "crates/chain/src/config.rs",
+    "find": "            .or_else(|| config.get(key));",
+    "replace": "            .or(None);",
+    "expect_failing": [
+      "backend_credential_forms_cover_config_passwords_proxies_and_extra_keys"
+    ],
+    "rule": "A backend field outside config_json still counts, as in Python's flattened backend dict."
+  },
+  {
+    "id": "core-createwallet-private-keys",
+    "file": "crates/chain/src/core.rs",
+    "find": "            if params.and_then(|p| p.get(1)) != Some(&Value::Bool(true)) {",
+    "replace": "            if false {",
+    "expect_failing": [
+      "watch_only_wallet_administration_refuses_key_material_before_connection"
+    ],
+    "rule": "Core wallets are only created with private keys disabled."
+  },
+  {
+    "id": "core-importdescriptors-private",
+    "file": "crates/chain/src/core.rs",
+    "find": "                if private(desc) {",
+    "replace": "                if false {",
+    "expect_failing": [
+      "watch_only_wallet_administration_refuses_key_material_before_connection"
+    ],
+    "rule": "Descriptor imports never carry private keys."
+  },
+  {
+    "id": "core-importmulti-watchonly",
+    "file": "crates/chain/src/core.rs",
+    "find": "                if request[\"watchonly\"] != Value::Bool(true)",
+    "replace": "                if false",
+    "expect_failing": [
+      "watch_only_wallet_administration_refuses_key_material_before_connection"
+    ],
+    "rule": "Address imports are watch-only."
+  },
+  {
+    "id": "core-importmulti-keys",
+    "file": "crates/chain/src/core.rs",
+    "find": "                    || request.get(\"keys\").is_some()",
+    "replace": "                    || false",
+    "expect_failing": [
+      "watch_only_wallet_administration_refuses_key_material_before_connection"
+    ],
+    "rule": "Address imports never carry keys."
+  },
+  {
+    "id": "core-importmulti-redeemscript",
+    "file": "crates/chain/src/core.rs",
+    "find": "                    || request.get(\"redeemscript\").is_some()",
+    "replace": "                    || false",
+    "expect_failing": [
+      "watch_only_wallet_administration_refuses_key_material_before_connection"
+    ],
+    "rule": "Address imports never carry scripts to sign with."
+  },
+  {
+    "id": "core-private-extended",
+    "file": "crates/chain/src/core.rs",
+    "find": "            let extended = word.len() == 111 && word.get(1..4) == Some(\"prv\");",
+    "replace": "            let extended = false;",
+    "expect_failing": [
+      "watch_only_wallet_administration_refuses_key_material_before_connection"
+    ],
+    "rule": "Extended private keys are recognized."
+  },
+  {
+    "id": "core-private-wif",
+    "file": "crates/chain/src/core.rs",
+    "find": "            let wif = matches!(word.len(), 51 | 52)",
+    "replace": "            let wif = matches!(word.len(), 0)",
+    "expect_failing": [
+      "watch_only_wallet_administration_refuses_key_material_before_connection"
+    ],
+    "rule": "WIF private keys are recognized."
+  },
+  {
+    "id": "core-admin-allowed",
+    "file": "crates/chain/src/core.rs",
+    "find": "        \"loadwallet\" => Ok(true),",
+    "replace": "        \"loadwallet\" => Ok(false),",
+    "expect_failing": [
+      "watch_only_wallet_administration_refuses_key_material_before_connection"
+    ],
+    "rule": "Loading the sync's watch-only wallet is allowed."
+  },
+  {
+    "id": "btcpay-wallet-policy-boundary",
+    "file": "crates/chain/src/btcpay/permissions.rs",
+    "find": "        Some(version) if version >= WALLET_POLICY_VERSION => vec![CAPABILITY_PERMISSIONS],",
+    "replace": "        Some(version) if version > WALLET_POLICY_VERSION => vec![CAPABILITY_PERMISSIONS],",
+    "expect_failing": [
+      "server_versions_match_python",
+      "key_grants_match_python"
+    ],
+    "rule": "BTCPay 2.4.0 itself guards the wallet with canviewwallet."
+  },
+  {
+    "id": "btcpay-unknown-version-both-tables",
+    "file": "crates/chain/src/btcpay/permissions.rs",
+    "find": "        None => vec![CAPABILITY_PERMISSIONS, LEGACY_CAPABILITY_PERMISSIONS],",
+    "replace": "        None => vec![CAPABILITY_PERMISSIONS],",
+    "expect_failing": [
+      "server_versions_match_python",
+      "key_grants_match_python"
+    ],
+    "rule": "An unknown server version accepts a capability either table grants."
+  },
+  {
+    "id": "btcpay-history-preset-by-version",
+    "file": "crates/chain/src/btcpay/permissions.rs",
+    "find": "        Some(version) if version >= WALLET_POLICY_VERSION => \"read_only\",",
+    "replace": "        Some(_) => \"read_only\",",
+    "expect_failing": [
+      "server_versions_match_python"
+    ],
+    "rule": "Only 2.4 and later read wallet history with the read-only key."
+  },
+  {
+    "id": "btcpay-capabilities-any-table",
+    "file": "crates/chain/src/btcpay/permissions.rs",
+    "find": "            let granted = tables.iter().any(|table| {",
+    "replace": "            let granted = tables.iter().all(|table| {",
+    "expect_failing": [
+      "key_grants_match_python"
+    ],
+    "rule": "With an unknown version a capability either table grants counts."
+  },
+  {
+    "id": "btcpay-read-only-asks-view-wallet",
+    "file": "crates/chain/src/btcpay/permissions.rs",
+    "find": "        permissions: &[VIEW_STORE_SETTINGS, VIEW_WALLET],",
+    "replace": "        permissions: &[VIEW_STORE_SETTINGS],",
+    "expect_failing": [
+      "key_setup_guides_match_python"
+    ],
+    "rule": "The read-only preset asks for canviewwallet, which 2.3 drops (#692)."
+  },
+  {
+    "id": "btcpay-authorize-permission-major",
+    "file": "crates/chain/src/btcpay/permissions.rs",
+    "find": "    for permission in preset.permissions {",
+    "replace": "    for permission in preset.permissions.iter().rev() {",
+    "expect_failing": [
+      "key_setup_guides_match_python"
+    ],
+    "rule": "Authorize URLs list permissions in preset order, each across the stores."
+  },
+  {
+    "id": "btcpay-wallet-settings-include-view",
+    "file": "crates/chain/src/btcpay/permissions.rs",
+    "find": "    (\"btcpay.store.canmanagewalletsettings\", &[VIEW_WALLET]),",
+    "replace": "    (\"btcpay.store.canmanagewalletsettings\", &[]),",
+    "expect_failing": [
+      "key_grants_match_python"
+    ],
+    "rule": "2.4's wallet management includes viewing the wallet."
+  },
+  {
+    "id": "btcpay-view-wallet-read-only",
+    "file": "crates/chain/src/btcpay/permissions.rs",
+    "find": "    VIEW_REPORTS,\n    VIEW_WALLET,",
+    "replace": "    VIEW_REPORTS,",
+    "expect_failing": [
+      "key_grants_match_python"
+    ],
+    "rule": "canviewwallet is a read-only permission, not excess."
+  },
+  {
+    "id": "btcpay-version-falsy",
+    "file": "crates/chain/src/btcpay/permissions.rs",
+    "find": "    let text = if kassiber_envelope::truthy(value) {",
+    "replace": "    let text = if true {",
+    "expect_failing": [
+      "server_versions_match_python"
+    ],
+    "rule": "A falsy version (0, False) is unknown, as str(value or \"\")."
+  },
+  {
+    "id": "btcpay-version-saturates",
+    "file": "crates/chain/src/btcpay/permissions.rs",
+    "find": "            i64::try_from(&n).unwrap_or(if n < kassiber_pyjson::BigInt::from(0) {",
+    "replace": "            i64::try_from(&n).unwrap_or(if true {",
+    "expect_failing": [
+      "server_versions_match_python"
+    ],
+    "rule": "An oversized version part still compares above 2.4."
+  },
+  {
+    "id": "btcpay-store-list-label",
+    "file": "crates/chain/src/btcpay.rs",
+    "find": "                let label=permissions::permission_label(missing);",
+    "replace": "                let label=missing;",
+    "expect_failing": [
+      "a_store_list_403_names_the_permission_by_its_label"
+    ],
+    "rule": "A store-list 403 names the permission by its label."
+  },
+  {
+    "id": "btcpay-bark-legacy-id",
+    "file": "crates/chain/src/btcpay/payment_methods.rs",
+    "find": "    if canonical == LEGACY_BARK_ID {",
+    "replace": "    if canonical == \"BARK\" {",
+    "expect_failing": [
+      "payment_methods_match_python"
+    ],
+    "rule": "Every spelling of the pre-0.10 BARK id maps to BTC-ARK."
+  },
+  {
+    "id": "btcpay-bark-wallet-history",
+    "file": "crates/chain/src/btcpay/payment_methods.rs",
+    "find": "pub const WALLET_HISTORY_IDS: [&str; 3] = [\"BTC-CHAIN\", \"LBTC-CHAIN\", \"BTC-ARK\"];",
+    "replace": "pub const WALLET_HISTORY_IDS: [&str; 3] = [\"BTC-CHAIN\", \"LBTC-CHAIN\", \"LBTC-CHAIN\"];",
+    "expect_failing": [
+      "payment_methods_match_python"
+    ],
+    "rule": "BTC-ARK is wallet history (plugin 0.10 and later)."
+  },
+  {
+    "id": "btcpay-bark-surrogate-id",
+    "file": "crates/chain/src/btcpay/bark.rs",
+    "find": "    if id.has_surrogates() {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "bark_pages_match_python"
+    ],
+    "rule": "A Bark row id with lone surrogates refuses."
+  },
+  {
+    "id": "btcpay-bark-page-fee",
+    "file": "crates/chain/src/btcpay/bark.rs",
+    "find": "            \"fee\",\n            \"confirmations\",",
+    "replace": "            \"confirmations\",",
+    "expect_failing": [
+      "bark_pages_match_python"
+    ],
+    "rule": "A Bark page's fingerprint covers each row's fee."
+  }
+]

@@ -1,0 +1,859 @@
+use crate::analysis_index::{self as engine, field, list, remove, Text};
+use crate::database_error;
+use crate::publication::{row::rows, wallet::Sources};
+use engine::runtime::{self, Runtime};
+use engine::views::GraphRead;
+use kassiber_envelope::{dict, get, s, set, truthy, AppError};
+use kassiber_pyjson::{dumps, Options, Value};
+use kassiber_store::rusqlite::{params_from_iter, types::Value as Sql, Connection};
+use std::collections::BTreeMap;
+use std::sync::{Arc, OnceLock};
+
+mod cursor;
+mod datasets;
+#[cfg(any(test, feature = "test-harness"))]
+pub mod fixture;
+pub(crate) mod preview;
+mod psbt;
+#[cfg(test)]
+mod tests;
+
+type Result<T> = std::result::Result<T, AppError>;
+
+pub const OPERATIONS: &[&str] = &[
+    "query",
+    "entropy",
+    "cases.list",
+    "cases.get",
+    "cases.compare",
+    "labels.list",
+    "datasets.list",
+    "datasets.get",
+    "datasets.query",
+    "psbt.analyze",
+    "psbt.compare",
+    "psbt.entropy",
+    "entropy.start",
+    "psbt.entropy.start",
+    "jobs.get",
+    "jobs.cancel",
+    "internal.stage",
+    "datasets.preview",
+    "datasets.preview.start",
+    "ai_context",
+];
+
+/// Caller-supplied local inputs. File bytes come from the CLI; the runtime
+/// holds the daemon's staged grants and receipts. Nothing here is persisted.
+#[derive(Default)]
+pub struct Local {
+    pub files: Vec<(String, Vec<u8>)>,
+    /// A CLI-opened dataset file; previews from it are not remembered.
+    pub stream: Option<Box<dyn std::io::BufRead + Send>>,
+    pub runtime: Option<Arc<Runtime>>,
+}
+pub use preview::unreadable as unreadable_dataset;
+impl Local {
+    /// The reference keeps one process-wide registry; callers without a
+    /// daemon runtime share this one.
+    fn runtime(&self) -> Arc<Runtime> {
+        static PROCESS: OnceLock<Arc<Runtime>> = OnceLock::new();
+        self.runtime
+            .clone()
+            .unwrap_or_else(|| Arc::clone(PROCESS.get_or_init(Runtime::new)))
+    }
+}
+
+fn merge(target: &mut Value, extra: Value) {
+    if let Value::Dict(fields) = extra {
+        for (k, v) in fields {
+            set(target, k.as_str().expect("analysis keys are text"), v);
+        }
+    }
+}
+fn scenario(args: &Value) -> Result<Value> {
+    engine::entropy::normalize_scenario(field(args, "scenario")).map_err(|reason| {
+        invalid("Invalid entropy scenario").with_details(dict([("reason", s(reason))]))
+    })
+}
+fn start(
+    conn: &Connection,
+    local: &Local,
+    scope: Vec<u8>,
+    request: Value,
+    compute: impl FnOnce(engine::entropy::Hooks<'_>) -> Value + Send + 'static,
+) -> Result<Value> {
+    local.runtime().start(
+        conn,
+        scope,
+        request,
+        Box::new(move |worker| {
+            let mut progress = |v| worker.progress(v);
+            let mut cancelled = || worker.cancelled();
+            // Harness builds add hook fields; product builds have only these two.
+            #[allow(clippy::needless_update)]
+            let hooks = engine::entropy::Hooks {
+                progress: Some(&mut progress),
+                cancelled: Some(&mut cancelled),
+                ..Default::default()
+            };
+            Ok(compute(hooks))
+        }),
+    )
+}
+
+fn invalid(message: impl Into<String>) -> AppError {
+    AppError::new("validation", message)
+}
+fn text<'a>(v: &'a Value, key: &str) -> &'a str {
+    field(v, key).as_str().unwrap_or("")
+}
+#[cfg(test)]
+fn json(v: &Value) -> Result<String> {
+    dumps(
+        v,
+        &Options::new().sort_keys(true).compact().allow_nan(false),
+    )
+    .map_err(|_| invalid("Invalid chain analysis JSON document"))
+}
+fn equivalent(a: &Value, b: &Value) -> bool {
+    match (a, b) {
+        (Value::Dict(a), Value::Dict(b)) => {
+            a.len() == b.len()
+                && a.iter().all(|(k, v)| {
+                    b.iter()
+                        .find(|(key, _)| key == k)
+                        .is_some_and(|(_, other)| equivalent(v, other))
+                })
+        }
+        (Value::List(a), Value::List(b)) => {
+            a.len() == b.len() && a.iter().zip(b).all(|(a, b)| equivalent(a, b))
+        }
+        (Value::Bool(a), Value::Int(b)) | (Value::Int(b), Value::Bool(a)) => {
+            *b == i64::from(*a).into()
+        }
+        (Value::Int(a), Value::Float(b)) | (Value::Float(b), Value::Int(a)) => {
+            b.is_finite()
+                && b.fract() == 0.0
+                && kassiber_pytext::parse_int(&format!("{b:.0}")).is_ok_and(|n| n == *a)
+        }
+        (Value::Bool(a), Value::Float(b)) | (Value::Float(b), Value::Bool(a)) => {
+            *b == f64::from(u8::from(*a))
+        }
+        _ => a == b,
+    }
+}
+fn arguments(args: &Value, allowed: &[&str], required: &[&str]) -> Result<()> {
+    let Value::Dict(fields) = args else {
+        return Err(invalid("Unsupported or missing chain analysis arguments"));
+    };
+    if fields
+        .iter()
+        .any(|(k, _)| !k.as_str().is_some_and(|k| allowed.contains(&k)))
+        || required.iter().any(|key| get(args, key).is_none())
+    {
+        return Err(invalid("Unsupported or missing chain analysis arguments"));
+    }
+    Ok(())
+}
+fn text_value<'a>(v: &'a Value, name: &str, max: usize) -> Result<&'a str> {
+    v.as_str()
+        .filter(|v| {
+            !kassiber_pytext::strip(v).is_empty()
+                && v.chars().count() <= max
+                && !v.chars().any(|c| c < ' ')
+        })
+        .map(kassiber_pytext::strip)
+        .ok_or_else(|| {
+            invalid(format!(
+                "{name} must be nonempty text up to {max} characters"
+            ))
+        })
+}
+fn limit(args: &Value, name: &str, default: i64, max: i64, message: &str) -> Result<i64> {
+    let v = get(args, name)
+        .cloned()
+        .unwrap_or(Value::Int(default.into()));
+    if let Value::Int(v) = v {
+        if let Ok(n) = i64::try_from(v) {
+            if (1..=max).contains(&n) {
+                return Ok(n);
+            }
+        }
+    }
+    Err(invalid(message))
+}
+fn atomic<T>(conn: &Connection, f: impl FnOnce() -> Result<T>) -> Result<T> {
+    kassiber_store::begin_write_savepoint(conn, "chain_analysis_reads").map_err(database_error)?;
+    let result = f();
+    if result.is_err() {
+        conn.execute_batch("ROLLBACK TO chain_analysis_reads")
+            .map_err(database_error)?;
+    }
+    conn.execute_batch("RELEASE chain_analysis_reads")
+        .map_err(database_error)?;
+    result
+}
+
+pub fn execute(
+    conn: &Connection,
+    workspace: &str,
+    profile: &str,
+    operation: &str,
+    args: &Value,
+    sources: &mut dyn Sources,
+) -> Result<Value> {
+    execute_local(
+        conn,
+        workspace,
+        profile,
+        operation,
+        args,
+        sources,
+        &mut Local::default(),
+    )
+}
+
+pub fn execute_local(
+    conn: &Connection,
+    workspace: &str,
+    profile: &str,
+    operation: &str,
+    args: &Value,
+    sources: &mut dyn Sources,
+    local: &mut Local,
+) -> Result<Value> {
+    if operation == "internal.stage" {
+        return stage(conn, workspace, profile, args, local);
+    }
+    if !OPERATIONS.contains(&operation) {
+        return Err(AppError::new(
+            "not_implemented",
+            "Unsupported chain analysis operation",
+        ));
+    }
+    if !matches!(args, Value::Dict(_)) {
+        return Err(invalid("Chain analysis arguments must be an object"));
+    }
+    let mut args = args.clone();
+    if let Some(expected) = get(&args, "expected_scope") {
+        if *expected != Value::Null
+            && !(matches!(expected, Value::Dict(fields) if fields.len() == 2)
+                && field(expected, "workspace_id") == &s(workspace)
+                && field(expected, "profile_id") == &s(profile))
+        {
+            return Err(AppError::new(
+                "scope_changed",
+                "The active book changed; reopen the investigation in its original book",
+            ));
+        }
+    }
+    remove(&mut args, "expected_scope");
+    match operation {
+        "query" => query(conn, profile, &args, sources),
+        "ai_context" => ai_context(conn, profile, &args, sources),
+        "entropy" => entropy(conn, profile, &args, sources, None),
+        "entropy.start" => entropy(conn, profile, &args, sources, Some(local)),
+        "jobs.get" | "jobs.cancel" => {
+            arguments(&args, &["job_id"], &["job_id"])?;
+            local.runtime().get(
+                &runtime::scope_key(conn, profile),
+                field(&args, "job_id"),
+                operation == "jobs.cancel",
+            )
+        }
+        op if op.starts_with("psbt.") => psbt::execute(conn, profile, op, &args, local),
+        "datasets.preview" | "datasets.preview.start" => {
+            dataset_preview(conn, profile, operation, &args, local)
+        }
+        "cases.list" => page(conn, profile, &args, false),
+        "cases.get" => {
+            arguments(&args, &["id"], &["id"])?;
+            get_case(conn, profile, field(&args, "id"))
+        }
+        "cases.compare" => compare(conn, profile, &args, sources),
+        "labels.list" => {
+            arguments(&args, &[], &[])?;
+            let items = rows(conn, "SELECT * FROM chain_analysis_labels WHERE profile_id=? AND deleted=0 ORDER BY chain,network,subject,id", [profile])?
+                .into_iter().map(|mut row| {
+                    for key in ["cluster_defining", "deleted"] {
+                        let v = Value::Bool(truthy(field(&row, key)));
+                        set(&mut row, key, v);
+                    }
+                    remove(&mut row, "profile_id");
+                    row
+                }).collect();
+            Ok(dict([("items", Value::List(items))]))
+        }
+        "datasets.list" => page(conn, profile, &args, true),
+        "datasets.get" => {
+            arguments(&args, &["id"], &["id"])?;
+            datasets::get_pack(conn, profile, field(&args, "id"))
+        }
+        "datasets.query" => datasets::query(conn, profile, &args),
+        _ => unreachable!(),
+    }
+}
+
+fn query(
+    conn: &Connection,
+    profile: &str,
+    args: &Value,
+    sources: &mut dyn Sources,
+) -> Result<Value> {
+    let query = engine::traversal::normalize_query(args)?;
+    atomic(conn, || {
+        engine::durable::synchronize_with_sources(conn, profile, false, sources)?;
+        engine::views::with_read(conn, profile, text(&query, "observer"), |view| {
+            engine::mirror::analyze_snapshot(view, &query)
+        })
+    })
+}
+
+/// `ai_context` before its projection: the investigation the desktop hands
+/// the assistant, bound to the snapshot the user was looking at, and the
+/// subject only once it resolves in that snapshot. The caller projects the
+/// result to `ca-ref:` handles (`project_ai_result`).
+fn ai_context(
+    conn: &Connection,
+    profile: &str,
+    args: &Value,
+    sources: &mut dyn Sources,
+) -> Result<Value> {
+    arguments(
+        args,
+        &["query", "subject", "expected_snapshot_id"],
+        &["query", "expected_snapshot_id"],
+    )?;
+    atomic(conn, || {
+        let result = query(conn, profile, field(args, "query"), sources)?;
+        if !equivalent(
+            field(&result, "snapshot_id"),
+            field(args, "expected_snapshot_id"),
+        ) {
+            return Err(AppError::new(
+                "chain_analysis_stale",
+                "Investigation changed; refresh before opening assistant context",
+            )
+            .retryable(true));
+        }
+        let mut context = dict([
+            ("query", field(&result, "query").clone()),
+            ("snapshot_id", field(&result, "snapshot_id").clone()),
+        ]);
+        let subject = field(args, "subject");
+        if truthy(subject) {
+            text_value(subject, "subject", 1024)?;
+            let query = field(&result, "query");
+            let subject_text = subject.as_str().unwrap_or_default();
+            engine::views::with_read(conn, profile, text(query, "observer"), |view| {
+                engine::traversal::resolve_read(view, subject_text, query)
+            })?;
+            set(&mut context, "subject", subject.clone());
+        }
+        Ok(context)
+    })
+}
+
+fn stage(
+    conn: &Connection,
+    workspace: &str,
+    profile: &str,
+    args: &Value,
+    local: &Local,
+) -> Result<Value> {
+    arguments(
+        args,
+        &["source_file", "purpose", "expected_scope"],
+        &["source_file", "purpose"],
+    )?;
+    if let Some(expected) = get(args, "expected_scope").filter(|v| **v != Value::Null) {
+        if !same_scope(expected, workspace, profile) {
+            return Err(AppError::new(
+                "scope_changed",
+                "The active book changed; choose the analysis source again",
+            ));
+        }
+    }
+    local.runtime().stage(
+        conn,
+        runtime::scope_key(conn, profile),
+        field(args, "source_file"),
+        field(args, "purpose"),
+    )
+}
+
+/// `_datasets` preview and the daemon's `datasets.preview.start` worker.
+fn dataset_preview(
+    conn: &Connection,
+    profile: &str,
+    operation: &str,
+    args: &Value,
+    local: &mut Local,
+) -> Result<Value> {
+    let fields = [
+        "source_token",
+        "manifest",
+        "format",
+        "adapter",
+        "expected_sha256",
+    ];
+    let scope = runtime::scope_key(conn, profile);
+    let format = get(args, "format").cloned().unwrap_or_else(|| s("csv"));
+    let adapter = get(args, "adapter")
+        .cloned()
+        .unwrap_or_else(|| s("generic"));
+    let token = field(args, "source_token").clone();
+    let recipe = |result: &Value, format: &Value, adapter: &Value| {
+        dict([
+            ("manifest", field(result, "manifest").clone()),
+            ("format", format.clone()),
+            ("adapter", adapter.clone()),
+        ])
+    };
+    if operation == "datasets.preview" {
+        arguments(args, &fields, &["manifest"])?;
+        let never = || false;
+        if let Some(stream) = local.stream.take() {
+            return preview::preview(
+                field(args, "manifest"),
+                &mut preview::Stream(stream),
+                &format,
+                &adapter,
+                &mut |_| {},
+                &never,
+            );
+        }
+        let runtime = local.runtime();
+        let mut source = runtime.open(&scope, &token, "dataset")?;
+        let result = preview::preview(
+            field(args, "manifest"),
+            &mut source,
+            &format,
+            &adapter,
+            &mut |_| {},
+            &never,
+        )?;
+        runtime.remember_preview(&scope, &token, &recipe(&result, &format, &adapter), &result);
+        return Ok(result);
+    }
+    let Some(runtime) = local.runtime.clone() else {
+        return Err(AppError::new(
+            "daemon_required",
+            "Background dataset work requires a running daemon; use the synchronous CLI operation",
+        ));
+    };
+    arguments(args, &fields, &["source_token", "manifest"])?;
+    let manifest = preview::normalize_manifest(field(args, "manifest"))?;
+    // Refuse stale or foreign selections before creating a running receipt.
+    drop(runtime.open(&scope, &token, "dataset")?);
+    let submitted = dict([
+        ("operation", s(operation)),
+        ("manifest", manifest.clone()),
+        ("format", format.clone()),
+        ("adapter", adapter.clone()),
+        ("expected_sha256", field(args, "expected_sha256").clone()),
+    ]);
+    let worker_runtime = Arc::clone(&runtime);
+    let worker_scope = scope.clone();
+    runtime.start(
+        conn,
+        scope,
+        submitted,
+        Box::new(move |worker| {
+            let began = std::time::Instant::now();
+            let stopped =
+                || worker.cancelled() || began.elapsed() >= std::time::Duration::from_secs(1800);
+            if stopped() {
+                return Ok(dict([("status", s("cancelled"))]));
+            }
+            let outcome = (|| {
+                let mut source = worker_runtime.open(&worker_scope, &token, "dataset")?;
+                let mut update = |value: Value| {
+                    let mut progress = dict([("phase", s("validating"))]);
+                    merge(&mut progress, value);
+                    worker.progress(progress);
+                };
+                let result = preview::preview(
+                    &manifest,
+                    &mut source,
+                    &format,
+                    &adapter,
+                    &mut update,
+                    &stopped,
+                )?;
+                if !stopped() {
+                    worker_runtime.remember_preview(
+                        &worker_scope,
+                        &token,
+                        &recipe(&result, &format, &adapter),
+                        &result,
+                    );
+                }
+                Ok(result)
+            })();
+            match outcome {
+                Err(_) if stopped() => Ok(dict([
+                    ("status", s("cancelled")),
+                    (
+                        "reason",
+                        s(if worker.cancelled() {
+                            "cancelled"
+                        } else {
+                            "duration_limit"
+                        }),
+                    ),
+                ])),
+                other => other,
+            }
+        }),
+    )
+}
+
+fn same_scope(expected: &Value, workspace: &str, profile: &str) -> bool {
+    matches!(expected, Value::Dict(fields) if fields.len() == 2)
+        && field(expected, "workspace_id") == &s(workspace)
+        && field(expected, "profile_id") == &s(profile)
+}
+
+/// `prepare_entropy` then `run_entropy`, or `start_entropy` with `local`.
+fn entropy(
+    conn: &Connection,
+    profile: &str,
+    args: &Value,
+    sources: &mut dyn Sources,
+    start_in: Option<&Local>,
+) -> Result<Value> {
+    arguments(
+        args,
+        &[
+            "subject",
+            "chain",
+            "network",
+            "observer",
+            "max_states",
+            "max_duration_ms",
+            "scenario",
+        ],
+        &[],
+    )
+    .map_err(|_| invalid("Unsupported entropy arguments"))?;
+    let mut query = dict([("mode", s("trace"))]);
+    for key in ["subject", "chain", "network", "observer"] {
+        if let Some(v) = get(args, key) {
+            set(&mut query, key, v.clone());
+        }
+    }
+    let query = engine::traversal::normalize_query(&query)?;
+    let states = Value::Int(
+        limit(
+            args,
+            "max_states",
+            200000,
+            2000000,
+            "max_states must be between 1 and 2000000",
+        )?
+        .into(),
+    );
+    let duration = Value::Int(
+        limit(
+            args,
+            "max_duration_ms",
+            1000,
+            30000,
+            "max_duration_ms must be between 1 and 30000",
+        )?
+        .into(),
+    );
+    let scenario = scenario(args)?;
+    let (context, prepared) = atomic(conn, || {
+        engine::durable::synchronize_with_sources(conn, profile, false, sources)?;
+        engine::views::with_read(conn, profile, text(&query, "observer"), |view| {
+            let mut context = dict([
+                ("schema_version", Value::Int(1.into())),
+                ("snapshot_id", view.snapshot_id()),
+                ("subject", field(&query, "subject").clone()),
+                ("observer", field(&query, "observer").clone()),
+            ]);
+            let unavailable =
+                |reason: &str| dict([("status", s("unavailable")), ("reason", s(reason))]);
+            let subjects =
+                match engine::traversal::resolve_read(view, text(&query, "subject"), &query) {
+                    Ok(v) => v,
+                    Err(e) if e.code == "subject_ambiguous" => {
+                        return Ok((context, Err(unavailable("ambiguous_domain"))));
+                    }
+                    Err(e) => return Err(e),
+                };
+            if subjects.len() != 1
+                || field(&view.get("nodes", &subjects[0])?, "kind") != &s("transaction")
+            {
+                return Ok((
+                    context,
+                    Err(unavailable("single_physical_transaction_required")),
+                ));
+            }
+            let id = &subjects[0];
+            set(&mut context, "subject", s(id.as_str()));
+            let node = view.get("nodes", id)?;
+            let facts = view.get("transaction_facts", id)?;
+            Ok((context, Ok((facts, text(&node, "chain").to_owned()))))
+        })
+    })?;
+    let snapshot = field(&context, "snapshot_id").clone();
+    let compute = move |hooks: engine::entropy::Hooks<'_>| {
+        let mut value = context;
+        let result = match prepared {
+            Err(unavailable) => unavailable,
+            Ok((facts, chain)) => engine::entropy::analyze_transaction_entropy(
+                &facts, &chain, &states, &duration, &scenario, hooks,
+            ),
+        };
+        merge(&mut value, result);
+        value
+    };
+    let Some(local) = start_in else {
+        return Ok(compute(engine::entropy::Hooks::default()));
+    };
+    let mut request = args.clone();
+    set(&mut request, "snapshot_id", snapshot);
+    start(
+        conn,
+        local,
+        runtime::scope_key(conn, profile),
+        request,
+        compute,
+    )
+}
+
+fn case(row: &Value, detail: bool) -> Result<Value> {
+    let failed = || {
+        AppError::new(
+            "integrity_error",
+            "Stored investigation failed its content integrity check",
+        )
+    };
+    let result = kassiber_pytext::loads(text(row, "result_json")).map_err(|_| failed())?;
+    let query = kassiber_pytext::loads(text(row, "query_json")).map_err(|_| failed())?;
+    if !matches!(result, Value::Dict(_))
+        || !equivalent(&query, field(&result, "query"))
+        || field(row, "snapshot_id") != field(&result, "snapshot_id")
+        || engine::digest(&result).map_err(|_| failed())? != text(row, "result_digest")
+    {
+        return Err(failed());
+    }
+    let mut value =
+        dict(["id", "title", "created_at", "snapshot_id"].map(|k| (k, field(row, k).clone())));
+    set(&mut value, "query", query);
+    set(
+        &mut value,
+        "summary",
+        get(&result, "summary")
+            .cloned()
+            .unwrap_or_else(|| dict::<&str>([])),
+    );
+    if detail {
+        set(&mut value, "result", result);
+    }
+    Ok(value)
+}
+fn get_case(conn: &Connection, profile: &str, id: &Value) -> Result<Value> {
+    text_value(id, "id", 64)?;
+    let found = rows(
+        conn,
+        "SELECT * FROM chain_analysis_cases WHERE profile_id=? AND id=?",
+        [profile, id.as_str().unwrap()],
+    )?;
+    case(
+        found
+            .first()
+            .ok_or_else(|| AppError::new("not_found", "Investigation not found in this book"))?,
+        true,
+    )
+}
+
+fn page(conn: &Connection, profile: &str, args: &Value, dataset: bool) -> Result<Value> {
+    arguments(args, &["limit", "cursor"], &[]).map_err(|e| {
+        if dataset {
+            invalid("Unsupported dataset list arguments")
+        } else {
+            e
+        }
+    })?;
+    let size = limit(
+        args,
+        "limit",
+        50,
+        100,
+        if dataset {
+            "Dataset list limit must be between 1 and 100"
+        } else {
+            "limit must be between 1 and 100"
+        },
+    )?;
+    let mut params = vec![Sql::Text(profile.to_owned())];
+    let mut clause = "";
+    if truthy(field(args, "cursor")) {
+        let invalid_cursor = || {
+            invalid(if dataset {
+                "Invalid dataset cursor"
+            } else {
+                "Invalid investigation cursor"
+            })
+        };
+        let raw =
+            text_value(field(args, "cursor"), "cursor", 2048).map_err(|_| invalid_cursor())?;
+        let v = cursor::decode(raw).ok_or_else(invalid_cursor)?;
+        let v = list(&v);
+        if v.len() != 3 || v[0] != s(profile) || v.iter().any(|v| v.as_str().is_none()) {
+            return Err(invalid_cursor());
+        }
+        params.extend(
+            v[1..]
+                .iter()
+                .map(|v| Sql::Text(v.as_str().unwrap().to_owned())),
+        );
+        clause = " AND (created_at,id)<(?,?)";
+    }
+    params.push(Sql::Integer(size + 1));
+    let table = if dataset {
+        "chain_analysis_datasets"
+    } else {
+        "chain_analysis_cases"
+    };
+    let found = rows(conn, &format!("SELECT * FROM {table} WHERE profile_id=?{clause} ORDER BY created_at DESC,id DESC LIMIT ?"), params_from_iter(params))?;
+    let mut next = Value::Null;
+    if found.len() > size as usize {
+        let last = &found[size as usize - 1];
+        next = cursor::encode(
+            &Value::List(vec![
+                s(profile),
+                field(last, "created_at").clone(),
+                field(last, "id").clone(),
+            ]),
+            !dataset,
+        )?;
+    }
+    let items = found
+        .iter()
+        .take(size as usize)
+        .map(|row| {
+            if dataset {
+                datasets::pack(row)
+            } else {
+                case(row, false)
+            }
+        })
+        .collect::<Result<Vec<_>>>()?;
+    Ok(dict([("items", Value::List(items)), ("next_cursor", next)]))
+}
+
+fn compare(
+    conn: &Connection,
+    profile: &str,
+    args: &Value,
+    sources: &mut dyn Sources,
+) -> Result<Value> {
+    arguments(args, &["id", "other_id"], &["id"])?;
+    atomic(conn, || {
+        let base = get_case(conn, profile, field(args, "id"))?;
+        let saved = truthy(field(args, "other_id"));
+        let current = if saved {
+            field(&get_case(conn, profile, field(args, "other_id"))?, "result").clone()
+        } else {
+            query(conn, profile, field(&base, "query"), sources)?
+        };
+        let old = field(&base, "result");
+        let mut value = dict([
+            ("base_id", field(&base, "id").clone()),
+            ("base_snapshot_id", field(&base, "snapshot_id").clone()),
+            (
+                "current_snapshot_id",
+                field(&current, "snapshot_id").clone(),
+            ),
+            (
+                "changed",
+                Value::Bool(engine::digest(old)? != engine::digest(&current)?),
+            ),
+            (
+                "comparison",
+                s(if saved {
+                    "saved_to_saved"
+                } else {
+                    "saved_to_current"
+                }),
+            ),
+            (
+                "summary",
+                dict([
+                    ("base", field(&base, "summary").clone()),
+                    (
+                        "current",
+                        get(&current, "summary")
+                            .cloned()
+                            .unwrap_or_else(|| dict::<&str>([])),
+                    ),
+                ]),
+            ),
+        ]);
+        for kind in [
+            "nodes",
+            "edges",
+            "findings",
+            "clusters",
+            "patterns",
+            "exposure",
+            "transaction_features",
+        ] {
+            let key = if kind == "transaction_features" {
+                "subject"
+            } else {
+                "id"
+            };
+            let map = |v| {
+                list(v)
+                    .iter()
+                    .map(|row| (text(row, key).to_owned(), row.clone()))
+                    .collect::<BTreeMap<_, _>>()
+            };
+            let before = map(field(old, kind));
+            let after = map(field(&current, kind));
+            let added = after
+                .iter()
+                .filter(|(k, _)| !before.contains_key(*k))
+                .map(|(_, v)| v.clone())
+                .collect();
+            let removed = before
+                .iter()
+                .filter(|(k, _)| !after.contains_key(*k))
+                .map(|(_, v)| v.clone())
+                .collect();
+            let mut changed = Vec::new();
+            for (id, row) in &before {
+                if let Some(new) = after.get(id) {
+                    if !equivalent(row, new) {
+                        changed.push(dict([
+                            ("id", s(id.as_str())),
+                            ("before", row.clone()),
+                            ("after", new.clone()),
+                        ]));
+                    }
+                }
+            }
+            for (prefix, rows) in [("added", added), ("removed", removed), ("changed", changed)] {
+                set(&mut value, &format!("{prefix}_{kind}"), Value::List(rows));
+            }
+        }
+        if !equivalent(field(old, "coverage"), field(&current, "coverage")) {
+            set(
+                &mut value,
+                "coverage_changed",
+                dict([
+                    ("before", field(old, "coverage").clone()),
+                    ("after", field(&current, "coverage").clone()),
+                ]),
+            );
+        }
+        Ok(value)
+    })
+}

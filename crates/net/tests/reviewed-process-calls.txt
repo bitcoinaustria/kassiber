@@ -1,0 +1,59 @@
+# Reviewed child launches: file|enclosing function|exact call line. One occurrence each.
+# Includes consent-gated update/daemon sidecars, native pickers, explicit browser/file opens,
+# local codesign inspection, and disposable binary protocol tests. No arbitrary new process call.
+ui-tauri/src-tauri/src/app_update.rs|run_sidecar_update_check|let mut child = tokio::process::Command::new(&program)
+ui-tauri/src-tauri/src/supervisor.rs|spawn_command_with_secret_store|let mut process_command = Command::new(&command.program);
+ui-tauri/src-tauri/src/supervisor.rs|run_cli|let mut process = Command::new(&command.program);
+ui-tauri/src-tauri/src/lib.rs|choose_import_project_directory_macos|let mut command = Command::new("osascript");
+ui-tauri/src-tauri/src/lib.rs|choose_import_project_directory_windows|let mut command = Command::new("powershell.exe");
+ui-tauri/src-tauri/src/lib.rs|try_unix_folder_picker|let mut command = Command::new(program);
+ui-tauri/src-tauri/src/lib.rs|default_app_command|let mut command = Command::new("open");
+ui-tauri/src-tauri/src/lib.rs|default_app_command|let mut command = Command::new("explorer");
+ui-tauri/src-tauri/src/lib.rs|default_app_command|let mut command = Command::new("xdg-open");
+ui-tauri/src-tauri/src/lib.rs|default_browser_command|let mut command = Command::new("open");
+ui-tauri/src-tauri/src/lib.rs|default_browser_command|let mut command = Command::new("explorer");
+ui-tauri/src-tauri/src/lib.rs|default_browser_command|let mut command = Command::new("xdg-open");
+ui-tauri/src-tauri/src/lib.rs|verified_codesign_identity|let verified = Command::new("/usr/bin/codesign")
+ui-tauri/src-tauri/src/lib.rs|verified_codesign_identity|let details = Command::new("/usr/bin/codesign")
+crates/kassiber/tests/supervisor_protocol.rs|spawn|let mut child = Command::new(env!("CARGO_BIN_EXE_kassiber"))
+crates/kassiber/tests/binary.rs|kassiber|let mut command = Command::new(env!("CARGO_BIN_EXE_kassiber"));
+crates/kassiber/tests/binary.rs|every_leaf_but_gated_chat_and_mcp_runs_natively|let mut command = Command::new(env!("CARGO_BIN_EXE_kassiber"));
+crates/kassiber/tests/operator_broker.rs|binary|let mut command = Command::new(env!("CARGO_BIN_EXE_kassiber"));
+crates/kassiber/tests/operator_broker.rs|interrupt|let status = Command::new("/bin/kill")
+crates/setup/src/network_partition.rs|export|let status = std::process::Command::new(&binary)
+crates/backup/src/encryption.rs|run|let status = std::process::Command::new(path)
+crates/backup/src/desktop_tests.rs|incoming_authentication_is_quiet_and_ignores_active_operator_binding|let child = std::process::Command::new(std::env::current_exe().unwrap())
+crates/journals/tests/crash.rs|killed_writes_recover_complete_stale_books_on_sqlite_and_sqlcipher|let mut command = Command::new(std::env::current_exe().unwrap());
+crates/diagnostics/build.rs|main|std::process::Command::new(std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into()))
+crates/kassiber/tests/privacy_reports.rs|reference|let output = Command::new(python)
+crates/wallets/src/file_import/document/pdf.rs|run|let mut child = Command::new(program)
+# AI chat PDF previews: `pdfinfo`/`pdftotext`/`pdftoppm` resolved by `which`, as Python's
+# `shutil.which` + `subprocess.run(..., timeout=20)`; no network, local file arguments only.
+crates/ai/src/chat/files.rs|run|let mut child = Command::new(program)
+crates/kassiber/src/real_store/journals/hybrid.rs|replay|Command::new(std::env::var_os("KASSIBER_RUST_TEST_JOURNAL_PYTHON").ok_or_else(failed)?)
+crates/kassiber/tests/psbt_privacy.rs|reference|let output = std::process::Command::new(python)
+crates/kassiber/tests/legacy_privacy_transport.rs|reference|let result = Command::new(python)
+# R6 child launches (docs/reference/r6-ai-operator-port.md, section 4): the one
+# std launch behind kassiber-ipc's explicit-inheritance builder, and its tests.
+crates/ipc/src/process.rs|spawn|let mut child = std::process::Command::new(&command.program);
+crates/ipc/src/process.rs|shell|let mut command = ChildCommand::new("/bin/sh");
+crates/operator/src/client.rs|launch_broker|let mut command = kassiber_ipc::process::ChildCommand::new(&self.executable);
+# R6-2 broker children: this executable re-run with the lease and secret pipes.
+crates/operator/src/runner.rs|run|let mut command = ChildCommand::new(&self.program);
+# R6-3 agent-session labels on macOS: `/bin/ps` with a fixed PATH and the C locale.
+crates/operator/src/peers.rs|run_ps|let mut command = ChildCommand::new("/bin/ps");
+# R6-4 Touch ID: `/usr/bin/codesign` on the helper path and live pids, and the
+# signed desktop helper itself behind its ready/go launch gate (macOS only).
+crates/operator/src/native_auth.rs|codesign|let mut command = ChildCommand::new(CODESIGN);
+crates/operator/src/native_auth.rs|spawn|let mut command = ChildCommand::new(program);
+crates/ownership/tests/project.rs|inherited_owner_handles_exclude_a_second_owner_after_parent_release|let mut command = ChildCommand::new("/bin/sh");
+crates/ownership/tests/project.rs|uninherited_children_hold_nothing|let mut command = ChildCommand::new("/bin/sh");
+# The store probe's lock-child op: a child holding inherited owner locks for the Python interop test.
+crates/store/examples/probe.rs|run|let mut command = ChildCommand::new("/bin/sh");
+# R6-7 `kassiber chat`: this binary re-run as its daemon child (in its own
+# process group since R6-8), and the R6-8 test of that group.
+crates/cli/src/chat/client.rs|start|let mut command = Command::new(program);
+crates/cli/src/chat/client.rs|the_daemon_child_leads_its_own_process_group|let mut command = Command::new("/bin/sh");
+# Report CSV writer test: `mkfifo` makes a named pipe in its own temporary directory, as
+# the Python vectors write to one; no network, local path argument only.
+crates/reports/src/export.rs|csv_exports_follow_the_python_report_writer|assert!(std::process::Command::new("mkfifo")

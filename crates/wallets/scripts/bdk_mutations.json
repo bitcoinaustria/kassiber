@@ -1,0 +1,1142 @@
+[
+  {
+    "id": "bdk-transport",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "if backend[\"kind\"] != \"electrum\" {",
+    "replace": "if false {",
+    "expect_failing": [
+      "bdk_preflight_refuses_unsupported_transport_secret_descriptors_and_zero_gap"
+    ],
+    "rule": "Native BDK accepts only the ordinary Electrum observer route."
+  },
+  {
+    "id": "bdk-gap",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "if gap == 0 {",
+    "replace": "if false {",
+    "expect_failing": [
+      "bdk_preflight_refuses_unsupported_transport_secret_descriptors_and_zero_gap"
+    ],
+    "rule": "A zero discovery gap is refused before networking."
+  },
+  {
+    "id": "bdk-source-external",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": ".descriptor(KeychainKind::External, Some(self.external.clone()))",
+    "replace": ".descriptor(KeychainKind::External, prior.descriptor.as_ref().map(ToString::to_string))",
+    "expect_failing": [
+      "bdk_state_reconstruction_preserves_all_fields_and_refuses_source_changes"
+    ],
+    "rule": "Reconstruction binds the exact external descriptor."
+  },
+  {
+    "id": "bdk-source-internal",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": ".descriptor(KeychainKind::Internal, self.internal.clone())",
+    "replace": ".descriptor(KeychainKind::Internal, prior.change_descriptor.as_ref().map(ToString::to_string))",
+    "expect_failing": [
+      "bdk_state_reconstruction_preserves_all_fields_and_refuses_source_changes"
+    ],
+    "rule": "Reconstruction binds the exact change descriptor, including absence."
+  },
+  {
+    "id": "bdk-source-network",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": ".check_network(self.network)",
+    "replace": ".check_network(bitcoin::Network::Bitcoin)",
+    "expect_failing": [
+      "bdk_state_reconstruction_preserves_all_fields_and_refuses_source_changes"
+    ],
+    "rule": "Reconstruction binds the current book network."
+  },
+  {
+    "id": "bdk-scope",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "if scope != &self.scope {",
+    "replace": "if false {",
+    "expect_failing": [
+      "bdk_requires_exact_consent_and_online_even_for_loopback"
+    ],
+    "rule": "A stale scope must refuse before opening the transport."
+  },
+  {
+    "id": "bdk-exact-action",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": ".filter(|p| Arc::ptr_eq(&p.identity, &self.identity))",
+    "replace": ".filter(|_| true)",
+    "expect_failing": [
+      "bdk_requires_exact_consent_and_online_even_for_loopback"
+    ],
+    "rule": "Another action cannot donate its consent to this execution."
+  },
+  {
+    "id": "bdk-single-use",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "if proof.started.swap(true, Ordering::SeqCst) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "bdk_requires_exact_consent_and_online_even_for_loopback"
+    ],
+    "rule": "An execution grant is single-use, including failed requests."
+  },
+  {
+    "id": "bdk-cancel-before-connect",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "        cancel.check(deadline)?;\n        if scope",
+    "replace": "        if scope",
+    "expect_failing": [
+      "bdk_requires_exact_consent_and_online_even_for_loopback"
+    ],
+    "rule": "Cancellation is checked before the consent and connection paths."
+  },
+  {
+    "id": "bdk-offline-before-return",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "        cancel.check(deadline)?;\n        gate.authorize(\n            self.backend.request().clone(),\n            Some(proof.transport.clone()),\n        )\n        .map_err(|e| e.app_error())?;\n        Ok(result)",
+    "replace": "        cancel.check(deadline)?;\n        Ok(result)",
+    "expect_failing": [
+      "bdk_offline_toggle_before_return_discards_prepared_state"
+    ],
+    "rule": "Offline mode is checked again before returning prepared state."
+  },
+  {
+    "id": "bdk-merge",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "aggregate.merge(staged);",
+    "replace": "let _ = staged;",
+    "expect_failing": [
+      "bdk_full_scan_and_restart_use_the_native_index_graph_and_merge"
+    ],
+    "rule": "The prepared state is the prior aggregate merged with staged BDK changes."
+  },
+  {
+    "id": "bdk-full-apply",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "            wallet.apply_update(update).map_err(|_| invalid())?;\n            reveal",
+    "replace": "            let _ = update;\n            reveal",
+    "expect_failing": [
+      "bdk_full_scan_and_restart_use_the_native_index_graph_and_merge"
+    ],
+    "rule": "Full scans apply native BDK graph/index updates."
+  },
+  {
+    "id": "bdk-active-index",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "update.last_active_indices.insert(key, last);",
+    "replace": "update.last_active_indices.insert(key, last + self.gap + 1);",
+    "expect_failing": [
+      "bdk_full_scan_and_restart_use_the_native_index_graph_and_merge"
+    ],
+    "rule": "A full scan cannot reveal a horizon beyond its completed active-index/gap range."
+  },
+  {
+    "id": "bdk-fixed-horizon",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "changed |= wallet.derivation_index(key) != before;",
+    "replace": "changed |= { let _ = before; true };",
+    "expect_failing": [
+      "bdk_incremental_widens_until_a_full_unused_gap_and_fixed_stops"
+    ],
+    "rule": "Non-ranged descriptors terminate when the actual revealed index stops changing."
+  },
+  {
+    "id": "bdk-unused-gap",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "if unused >= gap {",
+    "replace": "if unused >= 1 {",
+    "expect_failing": [
+      "bdk_full_scan_and_restart_use_the_native_index_graph_and_merge"
+    ],
+    "rule": "Full scans continue until an entire consecutive unused gap is observed."
+  },
+  {
+    "id": "bdk-gap-target",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "|i| i.checked_add(gap)",
+    "replace": "|i| i.checked_add(gap - 1)",
+    "expect_failing": [
+      "bdk_full_scan_and_restart_use_the_native_index_graph_and_merge"
+    ],
+    "rule": "The revealed horizon includes a complete gap after the highest owned output."
+  },
+  {
+    "id": "bdk-pass-bound",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "for _ in 0..64 {",
+    "replace": "for _ in 0..63 {",
+    "expect_failing": [
+      "bdk_widening_refuses_after_exactly_sixty_four_unsettled_passes"
+    ],
+    "rule": "Widening is bounded at exactly 64 passes."
+  },
+  {
+    "id": "bdk-unsettled-refusal",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "if !finished {",
+    "replace": "if false {",
+    "expect_failing": [
+      "bdk_widening_refuses_after_exactly_sixty_four_unsettled_passes"
+    ],
+    "rule": "An unsettled widening result is refused instead of returned as complete."
+  },
+  {
+    "id": "bdk-txid",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "if tx.compute_txid() != id {",
+    "replace": "if false {",
+    "expect_failing": [
+      "bdk_bad_protocol_identity_and_merkle_do_not_establish_confirmation"
+    ],
+    "rule": "Raw transactions must match the requested transaction ID."
+  },
+  {
+    "id": "bdk-tx-cache",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "            return Ok(tx.clone());",
+    "replace": "            let _ = tx;",
+    "expect_failing": [
+      "bdk_snapshot_precedes_histories_and_caches_transactions_and_anchors_per_request"
+    ],
+    "rule": "Transaction and parent fetches are cached only within the refresh."
+  },
+  {
+    "id": "bdk-anchor-cache",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "            return Ok(Some(*anchor));",
+    "replace": "            let _ = anchor;",
+    "expect_failing": [
+      "bdk_snapshot_precedes_histories_and_caches_transactions_and_anchors_per_request"
+    ],
+    "rule": "Validated confirmation anchors are cached within the refresh."
+  },
+  {
+    "id": "bdk-history-cardinality",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "if histories.len() != chunk.len() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "bdk_bad_protocol_identity_and_merkle_do_not_establish_confirmation"
+    ],
+    "rule": "A history batch cannot silently truncate the requested scripts."
+  },
+  {
+    "id": "bdk-mempool-seen",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "update.seen_ats.insert((id, time));",
+    "replace": "let _ = (id,time);",
+    "expect_failing": [
+      "bdk_incremental_widens_until_a_full_unused_gap_and_fixed_stops"
+    ],
+    "rule": "Unconfirmed histories enter the BDK seen-at model."
+  },
+  {
+    "id": "bdk-anchor",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "update.anchors.insert((anchor, id));",
+    "replace": "let _ = (anchor,id);",
+    "expect_failing": [
+      "bdk_full_scan_and_restart_use_the_native_index_graph_and_merge"
+    ],
+    "rule": "Only validated native anchors establish confirmed position."
+  },
+  {
+    "id": "bdk-prevouts",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "update.tx_update.txouts.insert(op, output.clone());",
+    "replace": "let _ = (op,output);",
+    "expect_failing": [
+      "bdk_full_scan_and_restart_use_the_native_index_graph_and_merge"
+    ],
+    "rule": "Floating previous outputs retain exact fee inputs without importing parent graphs."
+  },
+  {
+    "id": "bdk-coinbase",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "if tx.is_coinbase() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "bdk_incremental_widens_until_a_full_unused_gap_and_fixed_stops"
+    ],
+    "rule": "Coinbase inputs never cause a null-parent fetch."
+  },
+  {
+    "id": "bdk-behind-tip",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "if height < persisted_height {",
+    "replace": "if false {",
+    "expect_failing": [
+      "bdk_behind_tip_refuses_but_disconnected_tip_rebuilds_before_histories"
+    ],
+    "rule": "A backend behind persisted state cannot prepare an ordinary refresh."
+  },
+  {
+    "id": "bdk-disconnected-tip",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "if prior_hash != prior.hash() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "bdk_behind_tip_refuses_but_disconnected_tip_rebuilds_before_histories"
+    ],
+    "rule": "Disconnected persisted state rebuilds through the dependency before histories."
+  },
+  {
+    "id": "bdk-suffix-count",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "raws.len() != (height - start + 1) as usize",
+    "replace": "false",
+    "expect_failing": [
+      "bdk_malformed_suffix_header_and_history_refuse_without_prepared_state"
+    ],
+    "rule": "The atomic suffix must cover the advertised tip."
+  },
+  {
+    "id": "bdk-merkle-order",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "if position % 2 == 0 {",
+    "replace": "if position % 2 != 0 {",
+    "expect_failing": [
+      "bdk_merkle_proofs_bind_txid_order_siblings_and_root"
+    ],
+    "rule": "Merkle siblings follow the transaction position and serialized byte order."
+  },
+  {
+    "id": "bdk-merkle-root",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "Ok(current == header.merkle_root.to_raw_hash())",
+    "replace": "Ok({ let _ = (current,header); true })",
+    "expect_failing": [
+      "bdk_merkle_proofs_bind_txid_order_siblings_and_root"
+    ],
+    "rule": "A proof must actually match the block Merkle root."
+  },
+  {
+    "id": "bdk-merkle-validity",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "        if !merkle(id, header, &proof)? {\n            return Ok(None);\n        }",
+    "replace": "        if false { return Ok(None); }",
+    "expect_failing": [
+      "bdk_bad_protocol_identity_and_merkle_do_not_establish_confirmation"
+    ],
+    "rule": "A second invalid proof must not become an anchor."
+  },
+  {
+    "id": "bdk-codec-local_chain",
+    "file": "crates/wallets/src/bdk_state.rs",
+    "find": "for item in list(&p[\"local_chain\"])? {",
+    "replace": "for item in list(&p[\"local_chain\"])?.iter().take(0) {",
+    "expect_failing": [
+      "bdk_native_codec_carries_every_aggregate_component_in_serialized_hash_order"
+    ],
+    "rule": "Native reconstruction carries every local_chain entry."
+  },
+  {
+    "id": "bdk-codec-indexer",
+    "file": "crates/wallets/src/bdk_state.rs",
+    "find": "for item in list(&p[\"indexer\"])? {",
+    "replace": "for item in list(&p[\"indexer\"])?.iter().take(0) {",
+    "expect_failing": [
+      "bdk_native_codec_carries_every_aggregate_component_in_serialized_hash_order"
+    ],
+    "rule": "Native reconstruction carries every indexer entry."
+  },
+  {
+    "id": "bdk-codec-locked_outpoints",
+    "file": "crates/wallets/src/bdk_state.rs",
+    "find": "for item in list(&p[\"locked_outpoints\"])? {",
+    "replace": "for item in list(&p[\"locked_outpoints\"])?.iter().take(0) {",
+    "expect_failing": [
+      "bdk_native_codec_carries_every_aggregate_component_in_serialized_hash_order"
+    ],
+    "rule": "Native reconstruction carries every locked_outpoints entry."
+  },
+  {
+    "id": "bdk-codec-txs",
+    "file": "crates/wallets/src/bdk_state.rs",
+    "find": "for tx in list(&g[\"txs\"])? {",
+    "replace": "for tx in list(&g[\"txs\"])?.iter().take(0) {",
+    "expect_failing": [
+      "bdk_native_codec_carries_every_aggregate_component_in_serialized_hash_order"
+    ],
+    "rule": "Native reconstruction carries every graph txs entry."
+  },
+  {
+    "id": "bdk-codec-txouts",
+    "file": "crates/wallets/src/bdk_state.rs",
+    "find": "for item in list(&g[\"txouts\"])? {",
+    "replace": "for item in list(&g[\"txouts\"])?.iter().take(0) {",
+    "expect_failing": [
+      "bdk_native_codec_carries_every_aggregate_component_in_serialized_hash_order"
+    ],
+    "rule": "Native reconstruction carries every graph txouts entry."
+  },
+  {
+    "id": "bdk-codec-anchors",
+    "file": "crates/wallets/src/bdk_state.rs",
+    "find": "for item in list(&g[\"anchors\"])? {",
+    "replace": "for item in list(&g[\"anchors\"])?.iter().take(0) {",
+    "expect_failing": [
+      "bdk_native_codec_carries_every_aggregate_component_in_serialized_hash_order"
+    ],
+    "rule": "Native reconstruction carries every graph anchors entry."
+  },
+  {
+    "id": "bdk-codec-last_seen",
+    "file": "crates/wallets/src/bdk_state.rs",
+    "find": "(\"last_seen\", &mut c.tx_graph.last_seen)",
+    "replace": "(\"missing_last_seen\", &mut c.tx_graph.last_seen)",
+    "expect_failing": [
+      "bdk_native_codec_carries_every_aggregate_component_in_serialized_hash_order"
+    ],
+    "rule": "Native reconstruction retains graph last_seen timestamps."
+  },
+  {
+    "id": "bdk-codec-first_seen",
+    "file": "crates/wallets/src/bdk_state.rs",
+    "find": "(\"first_seen\", &mut c.tx_graph.first_seen)",
+    "replace": "(\"missing_first_seen\", &mut c.tx_graph.first_seen)",
+    "expect_failing": [
+      "bdk_native_codec_carries_every_aggregate_component_in_serialized_hash_order"
+    ],
+    "rule": "Native reconstruction retains graph first_seen timestamps."
+  },
+  {
+    "id": "bdk-codec-last_evicted",
+    "file": "crates/wallets/src/bdk_state.rs",
+    "find": "(\"last_evicted\", &mut c.tx_graph.last_evicted)",
+    "replace": "(\"missing_last_evicted\", &mut c.tx_graph.last_evicted)",
+    "expect_failing": [
+      "bdk_native_codec_carries_every_aggregate_component_in_serialized_hash_order"
+    ],
+    "rule": "Native reconstruction retains graph last_evicted timestamps."
+  },
+  {
+    "id": "bdk-codec-hash-order",
+    "file": "crates/wallets/src/bdk_state.rs",
+    "find": "v.as_ref().iter().map(|b| format!(\"{b:02x}\")).collect()",
+    "replace": "v.as_ref().iter().rev().map(|b| format!(\"{b:02x}\")).collect()",
+    "expect_failing": [
+      "bdk_native_codec_carries_every_aggregate_component_in_serialized_hash_order"
+    ],
+    "rule": "Native changesets retain BDK serialized hash order."
+  },
+  {
+    "id": "bdk-codec-quantity",
+    "file": "crates/wallets/src/bdk_state.rs",
+    "find": "Amount::from_sat(item[\"value_sats\"].as_u64().ok_or_else(invalid)?)",
+    "replace": "Amount::from_sat(item[\"value_sats\"].as_u64().ok_or_else(invalid)? + 1)",
+    "expect_failing": [
+      "bdk_native_codec_carries_every_aggregate_component_in_serialized_hash_order"
+    ],
+    "rule": "Native prevouts preserve exact integer satoshis."
+  },
+  {
+    "id": "cache-source",
+    "file": "crates/wallets/src/compatibility_cache.rs",
+    "find": "saved[\"backend_key\"] != key",
+    "replace": "false",
+    "expect_failing": [
+      "compatibility_cache_binds_membership_source_and_dirty_history"
+    ],
+    "rule": "Cache reuse requires the matching source, complete fingerprint, current graph and clean status."
+  },
+  {
+    "id": "cache-version",
+    "file": "crates/wallets/src/compatibility_cache.rs",
+    "find": "saved[\"version\"].as_u64() != Some(1) || saved[\"backend_key\"] != key",
+    "replace": "saved[\"backend_key\"] != key",
+    "expect_failing": [
+      "compatibility_cache_binds_membership_source_and_dirty_history"
+    ],
+    "rule": "Cache reuse requires the matching source, complete fingerprint, current graph and clean status."
+  },
+  {
+    "id": "cache-dirty",
+    "file": "crates/wallets/src/compatibility_cache.rs",
+    "find": "!crate::descriptors::truthy(&previous[\"mempool_dirty\"])",
+    "replace": "true",
+    "expect_failing": [
+      "compatibility_cache_binds_membership_source_and_dirty_history"
+    ],
+    "rule": "Cache reuse requires the matching source, complete fingerprint, current graph and clean status."
+  },
+  {
+    "id": "cache-fingerprint",
+    "file": "crates/wallets/src/compatibility_cache.rs",
+    "find": "previous[\"fingerprint\"] == fingerprint",
+    "replace": "true",
+    "expect_failing": [
+      "compatibility_cache_binds_membership_source_and_dirty_history"
+    ],
+    "rule": "Cache reuse requires the matching source, complete fingerprint, current graph and clean status."
+  },
+  {
+    "id": "cache-complete",
+    "file": "crates/wallets/src/compatibility_cache.rs",
+    "find": "m[\"complete\"] == true",
+    "replace": "true",
+    "expect_failing": [
+      "compatibility_cache_binds_membership_source_and_dirty_history"
+    ],
+    "rule": "Cache reuse requires the matching source, complete fingerprint, current graph and clean status."
+  },
+  {
+    "id": "cache-membership-fingerprint",
+    "file": "crates/wallets/src/compatibility_cache.rs",
+    "find": "m[\"fingerprint\"] == fingerprint",
+    "replace": "true",
+    "expect_failing": [
+      "compatibility_cache_binds_membership_source_and_dirty_history"
+    ],
+    "rule": "Cache reuse requires the matching source, complete fingerprint, current graph and clean status."
+  },
+  {
+    "id": "cache-electrum-status",
+    "file": "crates/wallets/src/compatibility_cache.rs",
+    "find": "status == previous",
+    "replace": "true",
+    "expect_failing": [
+      "compatibility_cache_binds_membership_source_and_dirty_history"
+    ],
+    "rule": "Cache reuse requires the matching source, complete fingerprint, current graph and clean status."
+  },
+  {
+    "id": "cache-electrum-version",
+    "file": "crates/wallets/src/compatibility_cache.rs",
+    "find": ".is_some_and(|n| n >= 2.into())",
+    "replace": ".is_some_and(|_| true)",
+    "expect_failing": [
+      "compatibility_cache_binds_membership_source_and_dirty_history"
+    ],
+    "rule": "Cache reuse requires the matching source, complete fingerprint, current graph and clean status."
+  },
+  {
+    "id": "cache-electrum-dirty",
+    "file": "crates/wallets/src/compatibility_cache.rs",
+    "find": "v.contains(&json!(hash))",
+    "replace": "{ let _ = hash; false }",
+    "expect_failing": [
+      "compatibility_cache_binds_membership_source_and_dirty_history"
+    ],
+    "rule": "Cache reuse requires the matching source, complete fingerprint, current graph and clean status."
+  },
+  {
+    "id": "cache-graph-kind",
+    "file": "crates/wallets/src/compatibility_cache.rs",
+    "find": "marker[\"kind\"] == \"bitcoin_electrum\"",
+    "replace": "true",
+    "expect_failing": [
+      "compatibility_cache_only_reuses_versioned_bound_graphs_and_changed_entries"
+    ],
+    "rule": "Stored graphs are reusable only with supported marker, identity and shape; unchanged entries are not fetched again."
+  },
+  {
+    "id": "cache-graph-version",
+    "file": "crates/wallets/src/compatibility_cache.rs",
+    "find": ".is_some_and(|n| n == 2.into())",
+    "replace": ".is_some_and(|_| true)",
+    "expect_failing": [
+      "compatibility_cache_only_reuses_versioned_bound_graphs_and_changed_entries"
+    ],
+    "rule": "Stored graphs are reusable only with supported marker, identity and shape; unchanged entries are not fetched again."
+  },
+  {
+    "id": "cache-graph-txid",
+    "file": "crates/wallets/src/compatibility_cache.rs",
+    "find": "s.eq_ignore_ascii_case(id)",
+    "replace": "{ let _ = (s,id); true }",
+    "expect_failing": [
+      "compatibility_cache_only_reuses_versioned_bound_graphs_and_changed_entries"
+    ],
+    "rule": "Stored graphs are reusable only with supported marker, identity and shape; unchanged entries are not fetched again."
+  },
+  {
+    "id": "cache-graph-vin",
+    "file": "crates/wallets/src/compatibility_cache.rs",
+    "find": "v[\"vin\"].is_array()",
+    "replace": "true",
+    "expect_failing": [
+      "compatibility_cache_only_reuses_versioned_bound_graphs_and_changed_entries"
+    ],
+    "rule": "Stored graphs are reusable only with supported marker, identity and shape; unchanged entries are not fetched again."
+  },
+  {
+    "id": "cache-graph-vout",
+    "file": "crates/wallets/src/compatibility_cache.rs",
+    "find": "v[\"vout\"].is_array()",
+    "replace": "true",
+    "expect_failing": [
+      "compatibility_cache_only_reuses_versioned_bound_graphs_and_changed_entries"
+    ],
+    "rule": "Stored graphs are reusable only with supported marker, identity and shape; unchanged entries are not fetched again."
+  },
+  {
+    "id": "cache-graph-changed",
+    "file": "crates/wallets/src/compatibility_cache.rs",
+    "find": "if prior[id] != *item {",
+    "replace": "if true {",
+    "expect_failing": [
+      "compatibility_cache_only_reuses_versioned_bound_graphs_and_changed_entries"
+    ],
+    "rule": "Stored graphs are reusable only with supported marker, identity and shape; unchanged entries are not fetched again."
+  },
+  {
+    "id": "cache-positive-height",
+    "file": "crates/wallets/src/compatibility_cache.rs",
+    "find": "!crate::scan::integer(&item[\"height\"]).is_some_and(|n| n > 0.into())",
+    "replace": "true",
+    "expect_failing": [
+      "compatibility_cache_only_reuses_versioned_bound_graphs_and_changed_entries"
+    ],
+    "rule": "Positive heights settle history dirty state."
+  },
+  {
+    "id": "cache-explicit-iso-time",
+    "file": "crates/wallets/src/compatibility_cache.rs",
+    "find": "kassiber_chain::parse_iso_time(&crate::descriptors::text(value)).is_some()",
+    "replace": "false",
+    "expect_failing": [
+      "compatibility_cache_explicit_times_match_python_recheck_policy"
+    ],
+    "rule": "Explicit ISO historical times settle non-height histories."
+  },
+  {
+    "id": "cache-explicit-zero-time",
+    "file": "crates/wallets/src/compatibility_cache.rs",
+    "find": "value.as_str() != Some(\"0\")",
+    "replace": "true",
+    "expect_failing": [
+      "compatibility_cache_explicit_times_match_python_recheck_policy"
+    ],
+    "rule": "Zero time sentinel is still unknown, rather than settled history."
+  },
+  {
+    "id": "cache-explicit-zero-number",
+    "file": "crates/wallets/src/compatibility_cache.rs",
+    "find": "value.as_f64() != Some(0.0)",
+    "replace": "true",
+    "expect_failing": [
+      "compatibility_cache_explicit_times_match_python_recheck_policy"
+    ],
+    "rule": "Zero numeric time sentinel stays unknown."
+  },
+  {
+    "id": "cache-explicit-range",
+    "file": "crates/wallets/src/compatibility_cache.rs",
+    "find": ".and_then(kassiber_chain::format_unix_time)",
+    "replace": ".map(|_| String::new())",
+    "expect_failing": [
+      "compatibility_cache_explicit_times_match_python_recheck_policy"
+    ],
+    "rule": "Out-of-range historical timestamps do not settle history."
+  },
+  {
+    "id": "cache-count-strict",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "stats[\"chain_stats\"][\"tx_count\"]\n        .as_u64()?",
+    "replace": "metadata_count(&stats[\"chain_stats\"][\"tx_count\"]).ok().and_then(|n|u64::try_from(n).ok())?",
+    "expect_failing": [
+      "compatibility_cached_metadata_coercions_never_establish_complete_counts"
+    ],
+    "rule": "Coerced display counters must never establish complete history coverage."
+  },
+  {
+    "id": "cache-count-metadata",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "crate::scan::integer(value).ok_or_else(invalid)",
+    "replace": "value.as_u64().map(Into::into).ok_or_else(invalid)",
+    "expect_failing": [
+      "compatibility_cached_metadata_coercions_never_establish_complete_counts"
+    ],
+    "rule": "Cache metadata counters match Python integer coercions and fail on malformed values."
+  },
+  {
+    "id": "cache-member-coverage",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "prior.keys().all(|s| current.contains_key(s))",
+    "replace": "true",
+    "expect_failing": [
+      "compatibility_cached_esplora_fetches_once_then_reuses_only_complete_membership"
+    ],
+    "rule": "Omitted scripts retain old membership and invalidate complete status."
+  },
+  {
+    "id": "cache-member-complete",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "current.values().all(|e| e[\"complete\"] == true)",
+    "replace": "true",
+    "expect_failing": [
+      "compatibility_cached_membership_requires_matching_graph_and_retains_partial_positives"
+    ],
+    "rule": "Partial histories retain all prior and new positive members."
+  },
+  {
+    "id": "cache-member-prior",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "prior.get(s).into_iter().chain(current.get(s))",
+    "replace": "current.get(s).into_iter().chain(current.get(s))",
+    "expect_failing": [
+      "compatibility_cached_membership_requires_matching_graph_and_retains_partial_positives"
+    ],
+    "rule": "Partial histories preserve prior positive observations."
+  },
+  {
+    "id": "cache-member-script",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "vin.iter().any(|i| output(&i[\"prevout\"]) == script)",
+    "replace": "vin.iter().any(|i| { let _ = i; false })",
+    "expect_failing": [
+      "compatibility_cached_membership_requires_matching_graph_and_retains_partial_positives"
+    ],
+    "rule": "Input prevouts as well as outputs can establish script membership."
+  },
+  {
+    "id": "cache-member-foreign-script",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "vout.iter().any(|o| output(o) == script)",
+    "replace": "vout.iter().any(|o| { let _ = (o,script); true })",
+    "expect_failing": [
+      "compatibility_cached_membership_requires_matching_graph_and_retains_partial_positives"
+    ],
+    "rule": "A graph for a different script is not complete membership evidence."
+  },
+  {
+    "id": "cache-skip-inventory",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "changed == 0",
+    "replace": "false",
+    "expect_failing": [
+      "compatibility_cached_esplora_fetches_once_then_reuses_only_complete_membership"
+    ],
+    "rule": "An unchanged complete Esplora round skips inventory traffic."
+  },
+  {
+    "id": "cache-skip-electrum",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "changed_hashes.is_empty()",
+    "replace": "false",
+    "expect_failing": [
+      "compatibility_cached_electrum_skips_history_graph_headers_and_inventory"
+    ],
+    "rule": "An unchanged Electrum round skips history, graph, header and inventory traffic."
+  },
+  {
+    "id": "cache-legacy-known-ids",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "cp.as_object_mut().unwrap().remove(\"electrum_known_txids\");",
+    "replace": "let _ = &cp;",
+    "expect_failing": [
+      "compatibility_cached_electrum_skips_history_graph_headers_and_inventory"
+    ],
+    "rule": "The obsolete known-txid cache is removed from the next checkpoint."
+  },
+  {
+    "id": "cache-stat-funded_txo_count",
+    "file": "crates/wallets/src/compatibility_cache.rs",
+    "find": "\n            \"funded_txo_count\",",
+    "replace": "\n            \"missing_funded_txo_count\",",
+    "expect_failing": [
+      "compatibility_cache_fingerprints_cover_every_statistic_and_backend_identity"
+    ],
+    "rule": "Every chain and mempool statistic contributes to the Python-compatible fingerprint."
+  },
+  {
+    "id": "cache-stat-funded_txo_sum",
+    "file": "crates/wallets/src/compatibility_cache.rs",
+    "find": "\n            \"funded_txo_sum\",",
+    "replace": "\n            \"missing_funded_txo_sum\",",
+    "expect_failing": [
+      "compatibility_cache_fingerprints_cover_every_statistic_and_backend_identity"
+    ],
+    "rule": "Every chain and mempool statistic contributes to the Python-compatible fingerprint."
+  },
+  {
+    "id": "cache-stat-spent_txo_count",
+    "file": "crates/wallets/src/compatibility_cache.rs",
+    "find": "\n            \"spent_txo_count\",",
+    "replace": "\n            \"missing_spent_txo_count\",",
+    "expect_failing": [
+      "compatibility_cache_fingerprints_cover_every_statistic_and_backend_identity"
+    ],
+    "rule": "Every chain and mempool statistic contributes to the Python-compatible fingerprint."
+  },
+  {
+    "id": "cache-stat-spent_txo_sum",
+    "file": "crates/wallets/src/compatibility_cache.rs",
+    "find": "\n            \"spent_txo_sum\",",
+    "replace": "\n            \"missing_spent_txo_sum\",",
+    "expect_failing": [
+      "compatibility_cache_fingerprints_cover_every_statistic_and_backend_identity"
+    ],
+    "rule": "Every chain and mempool statistic contributes to the Python-compatible fingerprint."
+  },
+  {
+    "id": "cache-stat-tx_count",
+    "file": "crates/wallets/src/compatibility_cache.rs",
+    "find": "\n            \"tx_count\",",
+    "replace": "\n            \"missing_tx_count\",",
+    "expect_failing": [
+      "compatibility_cache_fingerprints_cover_every_statistic_and_backend_identity"
+    ],
+    "rule": "Every chain and mempool statistic contributes to the Python-compatible fingerprint."
+  },
+  {
+    "id": "cache-source-identity",
+    "file": "crates/wallets/src/compatibility_cache.rs",
+    "find": "\"backend\":identity",
+    "replace": "\"backend\":null",
+    "expect_failing": [
+      "compatibility_cache_fingerprints_cover_every_statistic_and_backend_identity"
+    ],
+    "rule": "The membership source key binds the complete backend identity."
+  },
+  {
+    "id": "cache-mempool-alias",
+    "file": "crates/wallets/src/compatibility_cache.rs",
+    "find": "if v[\"kind\"] == \"mempool\" {",
+    "replace": "if false {",
+    "expect_failing": [
+      "compatibility_cache_fingerprints_cover_every_statistic_and_backend_identity"
+    ],
+    "rule": "The mempool backend alias normalizes to the Esplora observer kind."
+  },
+  {
+    "id": "cache-target-network",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": "if targets.iter().any(|t| t[\"network\"] != network) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "compatibility_cached_network_is_explicit_even_without_targets"
+    ],
+    "rule": "Cached targets must match the explicitly selected book network."
+  },
+  {
+    "id": "cache-empty-network",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": "network: network.into(),",
+    "replace": "network: \"main\".into(),",
+    "expect_failing": [
+      "compatibility_cached_network_is_explicit_even_without_targets"
+    ],
+    "rule": "An empty target set does not default the checkpoint identity to mainnet."
+  },
+  {
+    "id": "bdk-eviction",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": ".filter(|id| !present.contains(id))",
+    "replace": ".filter(|_| false)",
+    "expect_failing": [
+      "bdk_eviction_and_reappearance_merge_times_without_erasing_observed_transactions"
+    ],
+    "rule": "Absent expected transaction IDs update native eviction times while retaining observed graph history."
+  },
+  {
+    "id": "cache-missing-id-dirty",
+    "file": "crates/wallets/src/compatibility_cache.rs",
+    "find": "dirty |= !crate::scan::integer(&item[\"height\"])",
+    "replace": "dirty |= item[\"tx_hash\"].is_string() && !crate::scan::integer(&item[\"height\"])",
+    "expect_failing": [
+      "compatibility_cache_only_reuses_versioned_bound_graphs_and_changed_entries"
+    ],
+    "rule": "Every non-height history row contributes to dirty status even without an usable transaction ID."
+  },
+  {
+    "id": "cache-malformed-history-row",
+    "file": "crates/wallets/src/compatibility_cache.rs",
+    "find": "if !item.is_object() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "compatibility_cache_only_reuses_versioned_bound_graphs_and_changed_entries"
+    ],
+    "rule": "Malformed history rows refuse instead of becoming unchanged empty histories."
+  },
+  {
+    "id": "cache-prior-index",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "crate::scan::integer(&cp[\"highest_used\"][&branch]).ok_or_else(invalid)?",
+    "replace": "crate::scan::integer(&cp[\"highest_used\"][&branch]).unwrap_or((-1).into())",
+    "expect_failing": [
+      "compatibility_cached_indices_fail_closed_and_header_keys_normalize_like_python"
+    ],
+    "rule": "Malformed saved highest-used indices cannot be guessed as an unused prefix."
+  },
+  {
+    "id": "cache-target-index",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "let index = metadata_count(&target[\"address_index\"])?;",
+    "replace": "let index = metadata_count(&target[\"address_index\"]).unwrap_or_default();",
+    "expect_failing": [
+      "compatibility_cached_indices_fail_closed_and_header_keys_normalize_like_python"
+    ],
+    "rule": "Malformed address indices cannot become index zero."
+  },
+  {
+    "id": "cache-header-key-validation",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "(!key.is_empty()\n                && key\n                    .chars()\n                    .all(|c| kassiber_pytext::decimal_value(c as u32).is_some()))",
+    "replace": "true",
+    "expect_failing": [
+      "compatibility_cached_indices_fail_closed_and_header_keys_normalize_like_python"
+    ],
+    "rule": "Only decimal height keys survive the private header-cache projection."
+  },
+  {
+    "id": "cache-header-key-normalization",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "(n.to_string(), value.clone())",
+    "replace": "({ let _ = n; key.clone() }, value.clone())",
+    "expect_failing": [
+      "compatibility_cached_indices_fail_closed_and_header_keys_normalize_like_python"
+    ],
+    "rule": "Decimal and zero-padded header keys normalize to Python integer heights."
+  },
+  {
+    "id": "canonical-force-discard",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "prior: if refresh.force_full {",
+    "replace": "prior: if false {",
+    "expect_failing": [
+      "bdk_forced_rebuild_ignores_invalid_state_but_fences_checkpoint_height_and_history"
+    ],
+    "rule": "A forced scan discards even unsupported dependency state before decoding."
+  },
+  {
+    "id": "canonical-prior-preflight",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "if self.prior.is_some() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "bdk_canonical_reorg_rebuild_replaces_stale_state_and_keeps_absence_baseline"
+    ],
+    "rule": "Every incremental refresh checks the persisted tip before scanning."
+  },
+  {
+    "id": "canonical-fresh-wallet",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "wallet = self.fresh_wallet()?;",
+    "replace": "let _ = self.fresh_wallet()?;",
+    "expect_failing": [
+      "bdk_canonical_reorg_rebuild_replaces_stale_state_and_keeps_absence_baseline"
+    ],
+    "rule": "A disconnected dependency wallet is replaced rather than updated with stale anchors."
+  },
+  {
+    "id": "canonical-fresh-aggregate",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "aggregate = ChangeSet::default();",
+    "replace": "let _ = ChangeSet::default();",
+    "expect_failing": [
+      "bdk_canonical_reorg_rebuild_replaces_stale_state_and_keeps_absence_baseline"
+    ],
+    "rule": "Disconnected aggregates never merge back into a replacement wallet."
+  },
+  {
+    "id": "canonical-full-rebuild",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "if self.prior.is_none() || rebuilt {",
+    "replace": "if self.prior.is_none() {",
+    "expect_failing": [
+      "bdk_canonical_reorg_rebuild_replaces_stale_state_and_keeps_absence_baseline"
+    ],
+    "rule": "A reorg rebuild executes a full scan rather than incremental widening."
+  },
+  {
+    "id": "canonical-force-height",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "protocol.remote_block_hash(height)?;",
+    "replace": "let _ = height;",
+    "expect_failing": [
+      "bdk_forced_rebuild_ignores_invalid_state_but_fences_checkpoint_height_and_history"
+    ],
+    "rule": "A force-full checkpoint cannot let a lagging backend withdraw newer facts."
+  },
+  {
+    "id": "canonical-current-set",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": ".transactions()\n            .map",
+    "replace": ".transactions().filter(|_| false)\n            .map",
+    "expect_failing": [
+      "bdk_canonical_reorg_rebuild_replaces_stale_state_and_keeps_absence_baseline"
+    ],
+    "rule": "Current membership comes from every canonical BDK wallet transaction."
+  },
+  {
+    "id": "canonical-prior-difference",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": ".difference(&canonical_txids)",
+    "replace": ".intersection(&canonical_txids)",
+    "expect_failing": [
+      "bdk_retractions_use_canonical_membership_and_never_raw_graph_absence"
+    ],
+    "rule": "Only previously canonical transactions absent now are retracted."
+  },
+  {
+    "id": "canonical-retraction-only-prior",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": ".difference(&canonical_txids)",
+    "replace": ".symmetric_difference(&canonical_txids)",
+    "expect_failing": [
+      "bdk_retractions_use_canonical_membership_and_never_raw_graph_absence"
+    ],
+    "rule": "New canonical positives cannot become absence candidates."
+  },
+  {
+    "id": "canonical-snapshot-behind",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "return Ok(prior);",
+    "replace": "return Err(invalid());",
+    "expect_failing": [
+      "bdk_chain_snapshot_recovers_agreement_and_preserves_a_later_behind_tip"
+    ],
+    "rule": "A post-preflight lagging snapshot retains the previous chain as Python BDK does."
+  },
+  {
+    "id": "canonical-agreement-match",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "if hash == cp.hash() {",
+    "replace": "if hash != cp.hash() {",
+    "expect_failing": [
+      "bdk_chain_snapshot_recovers_agreement_and_preserves_a_later_behind_tip"
+    ],
+    "rule": "Chain recovery stops only at a matching local and remote checkpoint."
+  },
+  {
+    "id": "canonical-agreement-required",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "let mut chain = agreement.ok_or_else(invalid)?;",
+    "replace": "let mut chain = agreement.unwrap_or_else(|| CheckPoint::new(BlockId { height: 0, hash: bitcoin::BlockHash::all_zeros() }));",
+    "expect_failing": [
+      "bdk_chain_snapshot_recovers_agreement_and_preserves_a_later_behind_tip"
+    ],
+    "rule": "A chain with no common checkpoint fails closed."
+  },
+  {
+    "id": "canonical-agreement-extension",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "if h > chain.height() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "bdk_chain_snapshot_recovers_agreement_and_preserves_a_later_behind_tip"
+    ],
+    "rule": "Recovery retains the remote extension above its point of agreement."
+  },
+  {
+    "id": "canonical-preflight-cache-before",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "self.headers.remove(&persisted_height);\n        let hash",
+    "replace": "let hash",
+    "expect_failing": [
+      "bdk_preflight_does_not_seed_the_scan_header_cache"
+    ],
+    "rule": "Tip preflight does not read a cached stale block hash."
+  },
+  {
+    "id": "canonical-preflight-cache-after",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "self.headers.remove(&persisted_height);\n        Ok(hash)",
+    "replace": "Ok(hash)",
+    "expect_failing": [
+      "bdk_preflight_does_not_seed_the_scan_header_cache"
+    ],
+    "rule": "Preflight header reads do not seed the separate scanning cache."
+  },
+  {
+    "id": "absence-complete-only",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "let retracted = if complete {",
+    "replace": "let retracted = if true {",
+    "expect_failing": [
+      "esplora_absence_requires_complete_coverage_and_unions_live_script_memberships"
+    ],
+    "rule": "Partial or omitted-script rounds never withdraw prior observations."
+  },
+  {
+    "id": "absence-complete-withdrawal",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "let retracted = if complete {",
+    "replace": "let retracted = if false {",
+    "expect_failing": [
+      "esplora_absence_requires_complete_coverage_and_unions_live_script_memberships"
+    ],
+    "rule": "A complete empty round withdraws its prior memberships."
+  },
+  {
+    "id": "absence-old-minus-live",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "ids(prior).difference(&ids(&current)).cloned().collect()",
+    "replace": "ids(prior).intersection(&ids(&current)).cloned().collect()",
+    "expect_failing": [
+      "esplora_absence_requires_complete_coverage_and_unions_live_script_memberships"
+    ],
+    "rule": "Esplora retractions are prior positives minus the union of current positives."
+  },
+  {
+    "id": "absence-all-scripts",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "entries\n            .values()",
+    "replace": "entries\n            .values().take(1)",
+    "expect_failing": [
+      "esplora_absence_requires_complete_coverage_and_unions_live_script_memberships"
+    ],
+    "rule": "A transaction still observed by another script remains live."
+  },
+  {
+    "id": "absence-partial-baseline",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "prior.get(s).into_iter().chain(current.get(s))",
+    "replace": "prior.get(s).into_iter()",
+    "expect_failing": [
+      "esplora_partial_positive_then_complete_absence_preserves_its_retraction_baseline"
+    ],
+    "rule": "Positive observations from incomplete rounds survive until later complete absence."
+  },
+  {
+    "id": "absence-force-version",
+    "file": "crates/wallets/src/compatibility_cache.rs",
+    "find": "if saved.is_object() && saved[\"version\"].as_u64() == Some(1) {",
+    "replace": "if saved.is_object() {",
+    "expect_failing": [
+      "esplora_forced_scan_discards_fetch_caches_but_preserves_versioned_memberships"
+    ],
+    "rule": "A forced scan preserves only the known membership version without integer coercion."
+  },
+  {
+    "id": "absence-force-caches",
+    "file": "crates/wallets/src/compatibility_cache.rs",
+    "find": "    Value::Object(retained)\n}\n\npub(crate) fn digest",
+    "replace": "    Value::Object(checkpoint.clone())\n}\n\npub(crate) fn digest",
+    "expect_failing": [
+      "esplora_forced_scan_discards_fetch_caches_but_preserves_versioned_memberships"
+    ],
+    "rule": "Forced scans discard fetch caches and unrelated identity checkpoints."
+  },
+  {
+    "id": "absence-force-retain",
+    "file": "crates/wallets/src/compatibility_cache.rs",
+    "find": "            retained.insert(\"esplora_history_memberships\".into(), saved.clone());",
+    "replace": "            let _ = saved;",
+    "expect_failing": [
+      "esplora_forced_scan_discards_fetch_caches_but_preserves_versioned_memberships"
+    ],
+    "rule": "Forced scans preserve versioned positive membership for absence comparison."
+  },
+  {
+    "id": "canonical-agreement-cache",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "self.read_header(cp.height())?.block_hash()",
+    "replace": "self.header(cp.height())?.block_hash()",
+    "expect_failing": [
+      "bdk_chain_snapshot_recovers_agreement_and_preserves_a_later_behind_tip"
+    ],
+    "rule": "Point-of-agreement reads bypass stale anchor-header caches."
+  },
+  {
+    "id": "absence-empty-highest",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "if !crate::descriptors::truthy(&cp[\"highest_used\"]) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "empty_rounds_still_write_the_python_highest_used_mapping"
+    ],
+    "rule": "Even empty histories emit the same highest-used mapping as Python."
+  }
+]

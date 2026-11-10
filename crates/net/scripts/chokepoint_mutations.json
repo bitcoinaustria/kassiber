@@ -1,0 +1,32 @@
+[
+  {
+    "id": "binaries-scanned",
+    "file": "crates/net/tests/chokepoint.rs",
+    "find": "        // Sidecar binaries the desktop build copies in; not checked-in source.\n        \"ui-tauri/src-tauri/binaries\",\n",
+    "replace": "",
+    "expect_failing": [
+      "copied_sidecar_binaries_are_skipped_but_only_at_their_checkout_root"
+    ],
+    "rule": "Copied sidecar binaries at ui-tauri/src-tauri/binaries are build artifacts, not scanned source."
+  },
+  {
+    "id": "binaries-skipped-anywhere",
+    "file": "crates/net/tests/chokepoint.rs",
+    "find": "    .any(|name| relative == Path::new(name))\n    {\n        return;\n    }",
+    "replace": "    .any(|name| relative == Path::new(name) || path.ends_with(\"binaries\"))\n    {\n        return;\n    }",
+    "expect_failing": [
+      "copied_sidecar_binaries_are_skipped_but_only_at_their_checkout_root"
+    ],
+    "rule": "Only the exact checkout-root binaries directory is skipped."
+  },
+  {
+    "id": "pdf-preview-launch-changed",
+    "file": "crates/ai/src/chat/files.rs",
+    "find": "    let mut child = Command::new(program)\n",
+    "replace": "    let mut child = Command::new(&program)\n",
+    "expect_failing": [
+      "other_crates_cannot_open_connections_or_depend_on_network_clients"
+    ],
+    "rule": "The AI chat PDF preview launch is reviewed by its exact line; a changed launch there fails the scan."
+  }
+]

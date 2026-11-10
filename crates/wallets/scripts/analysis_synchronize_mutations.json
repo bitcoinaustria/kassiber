@@ -1,0 +1,132 @@
+[
+  {
+    "id": "sync-stale-version",
+    "file": "crates/wallets/src/analysis_index/durable/synchronize.rs",
+    "find": "state[\"version\"] != json!(VERSION)",
+    "replace": "false",
+    "expect_failing": [
+      "incremental_synchronization_matches_python_all_112_tables"
+    ],
+    "rule": "sync stale version"
+  },
+  {
+    "id": "sync-expiry",
+    "file": "crates/wallets/src/analysis_index/durable/synchronize.rs",
+    "find": "!value.is_empty() && value <= instant.as_str()",
+    "replace": "false",
+    "expect_failing": [
+      "incremental_synchronization_matches_python_all_112_tables"
+    ],
+    "rule": "sync expiry"
+  },
+  {
+    "id": "sync-dirty-watermark",
+    "file": "crates/wallets/src/analysis_index/durable/synchronize.rs",
+    "find": "revision>?",
+    "replace": "revision<?",
+    "expect_failing": [
+      "incremental_synchronization_preserves_atomicity_and_warm_contributions"
+    ],
+    "rule": "sync dirty watermark"
+  },
+  {
+    "id": "sync-wallet-invalidates",
+    "file": "crates/wallets/src/analysis_index/durable/synchronize.rs",
+    "find": "dirty.contains_key(\"wallets\") || dirty.contains_key(\"book_network_bindings\")",
+    "replace": "dirty.contains_key(\"book_network_bindings\")",
+    "expect_failing": [
+      "incremental_synchronization_matches_python_all_112_tables"
+    ],
+    "rule": "sync wallet invalidates"
+  },
+  {
+    "id": "sync-source-without-nodes",
+    "file": "crates/wallets/src/analysis_index/durable/synchronize.rs",
+    "find": "changed |= !selected.is_empty();",
+    "replace": "changed |= false;",
+    "expect_failing": [
+      "incremental_synchronization_matches_python_all_112_tables"
+    ],
+    "rule": "sync source without nodes"
+  },
+  {
+    "id": "sync-output-dependencies",
+    "file": "crates/wallets/src/analysis_index/durable/synchronize.rs",
+    "find": "node.contains(\":out:\")",
+    "replace": "false && node.contains(\":out:\")",
+    "expect_failing": [
+      "incremental_synchronization_matches_python_all_112_tables"
+    ],
+    "rule": "sync output dependencies"
+  },
+  {
+    "id": "sync-context-restore",
+    "file": "crates/wallets/src/analysis_index/durable/synchronize.rs",
+    "find": "!core.contains(*id)",
+    "replace": "false && !core.contains(*id)",
+    "expect_failing": [
+      "incremental_synchronization_matches_python_all_112_tables"
+    ],
+    "rule": "sync context restore"
+  },
+  {
+    "id": "sync-save-public",
+    "file": "crates/wallets/src/analysis_index/durable/synchronize.rs",
+    "find": "let public = index.observer(\"public\")?;",
+    "replace": "let public = index.clone();",
+    "expect_failing": [
+      "incremental_synchronization_matches_python_all_112_tables"
+    ],
+    "rule": "sync save public"
+  },
+  {
+    "id": "sync-label-delete",
+    "file": "crates/wallets/src/analysis_index/durable/synchronize.rs",
+    "find": "DELETE FROM chain_index_label_nodes WHERE profile_id=?",
+    "replace": "DELETE FROM chain_index_label_nodes WHERE profile_id=? AND 0",
+    "expect_failing": [
+      "incremental_synchronization_matches_python_all_112_tables"
+    ],
+    "rule": "sync label delete"
+  },
+  {
+    "id": "sync-rebuild-revision",
+    "file": "crates/wallets/src/analysis_index/durable/synchronize.rs",
+    "find": "!rebuild || state.is_null() || state[\"watermark\"] != json!(watermark) || expired",
+    "replace": "true",
+    "expect_failing": [
+      "incremental_synchronization_matches_python_all_112_tables"
+    ],
+    "rule": "sync rebuild revision"
+  },
+  {
+    "id": "sync-caller-transaction",
+    "file": "crates/wallets/src/analysis_index/durable/synchronize.rs",
+    "find": "crate::publication::row::require_transaction(conn)?;",
+    "replace": "let _ = conn;",
+    "expect_failing": [
+      "incremental_synchronization_preserves_atomicity_and_warm_contributions"
+    ],
+    "rule": "sync caller transaction"
+  },
+  {
+    "id": "sync-contributor-chunks",
+    "file": "crates/wallets/src/analysis_index/durable.rs",
+    "find": ".chunks(200)",
+    "replace": ".chunks(200).take(1)",
+    "expect_failing": [
+      "incremental_synchronization_matches_python_all_112_tables"
+    ],
+    "rule": "Contributor lookup preserves every bounded chunk of the affected region."
+  },
+  {
+    "id": "sync-dirty-source-chunks",
+    "file": "crates/wallets/src/analysis_index/durable/synchronize.rs",
+    "find": ".chunks(200)",
+    "replace": ".chunks(200).take(1)",
+    "expect_failing": [
+      "incremental_synchronization_matches_python_all_112_tables"
+    ],
+    "rule": "Incremental source reads retain dirty rows beyond the first bounded SQL chunk."
+  }
+]

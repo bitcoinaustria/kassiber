@@ -1,0 +1,152 @@
+[
+  {
+    "kind": "descriptor",
+    "summary": "Output-descriptor wallet with optional change branch; supports on-chain sync via mempool/esplora.",
+    "requires": "descriptor",
+    "config_fields": "descriptor, change_descriptor, gap_limit, backend, chain, network, policy_asset"
+  },
+  {
+    "kind": "xpub",
+    "summary": "Extended-public-key wallet: derives one or more script types (pinned with --script-type) to an address set; on-chain sync via mempool/esplora.",
+    "requires": "descriptor|script_types",
+    "config_fields": "descriptor, xpub, script_types, gap_limit, backend, chain, network"
+  },
+  {
+    "kind": "address",
+    "summary": "Bare-address list wallet; useful for receive-only tracking or imports.",
+    "requires": "addresses|source_file",
+    "config_fields": "addresses, backend, chain, network, source_file, source_format"
+  },
+  {
+    "kind": "silent-payment",
+    "summary": "Watch-only BIP352/BIP392 Silent Payments receive source; uses an explicit SP-capable backend or local scanner.",
+    "requires": "sp_descriptor, backend, scan start",
+    "config_fields": "sp_descriptor, sp_scan_start_height, sp_scan_start_date, sp_scan_mode, backend, chain, network"
+  },
+  {
+    "kind": "coreln",
+    "summary": "Core Lightning node wallet; read-only live sync through a coreln backend.",
+    "requires": "backend",
+    "config_fields": "backend"
+  },
+  {
+    "kind": "lnd",
+    "summary": "LND CSV-derived wallet (deposits/withdrawals from node exports).",
+    "requires": "",
+    "config_fields": "source_file, source_format"
+  },
+  {
+    "kind": "nwc",
+    "summary": "Nostr Wallet Connect wallet fed by CSV exports.",
+    "requires": "",
+    "config_fields": "source_file, source_format"
+  },
+  {
+    "kind": "phoenix",
+    "summary": "Phoenix Wallet CSV importer.",
+    "requires": "",
+    "config_fields": "source_file, source_format"
+  },
+  {
+    "kind": "river",
+    "summary": "River Bitcoin Activity or Account Activity CSV importer.",
+    "requires": "",
+    "config_fields": "source_file, source_format"
+  },
+  {
+    "kind": "bullbitcoin",
+    "summary": "Bull Bitcoin order evidence and unified wallet CSV importer.",
+    "requires": "",
+    "config_fields": "source_file, source_format"
+  },
+  {
+    "kind": "coinfinity",
+    "summary": "Coinfinity order CSV importer for exact buy/sell execution pricing.",
+    "requires": "",
+    "config_fields": "source_file, source_format"
+  },
+  {
+    "kind": "21bitcoin",
+    "summary": "21bitcoin custodial platform CSV importer with exact trade pricing.",
+    "requires": "",
+    "config_fields": "source_file, source_format"
+  },
+  {
+    "kind": "pocketbitcoin",
+    "summary": "Pocket Bitcoin account CSV importer for exact buy/sell execution pricing.",
+    "requires": "",
+    "config_fields": "source_file, source_format"
+  },
+  {
+    "kind": "strike",
+    "summary": "Strike custodial platform CSV importer for exchange, Bitcoin, and Lightning rows.",
+    "requires": "",
+    "config_fields": "source_file, source_format"
+  },
+  {
+    "kind": "ledgerlive",
+    "summary": "Ledger Live CSV importer for BTC/LBTC wallet movement only.",
+    "requires": "",
+    "config_fields": "source_file, source_format"
+  },
+  {
+    "kind": "cointracking",
+    "summary": "CoinTracking transaction CSV migration source, scoped to BTC/LBTC rows.",
+    "requires": "",
+    "config_fields": "source_file, source_format"
+  },
+  {
+    "kind": "blockpit",
+    "summary": "Blockpit transaction CSV migration source, scoped to BTC/LBTC rows.",
+    "requires": "",
+    "config_fields": "source_file, source_format"
+  },
+  {
+    "kind": "kraken",
+    "summary": "Kraken exchange import wallet for API or CSV execution evidence.",
+    "requires": "",
+    "config_fields": "backend, source_file, source_format"
+  },
+  {
+    "kind": "coinbase",
+    "summary": "Coinbase exchange import wallet for API execution and wallet movement evidence.",
+    "requires": "",
+    "config_fields": "backend, source_file, source_format"
+  },
+  {
+    "kind": "binance",
+    "summary": "Binance exchange import wallet for API rows and BTC supplemental CSVs.",
+    "requires": "",
+    "config_fields": "backend, source_file, source_format"
+  },
+  {
+    "kind": "bitpanda",
+    "summary": "Bitpanda read-only API import wallet for BTC trades and wallet movements.",
+    "requires": "",
+    "config_fields": "backend"
+  },
+  {
+    "kind": "wasabi",
+    "summary": "Wasabi Wallet sanitized RPC/export bundle importer with CoinJoin and anonymity evidence.",
+    "requires": "",
+    "config_fields": "source_file, source_format, wasabi_metadata"
+  },
+  {
+    "kind": "samourai",
+    "summary": "Logical Samourai/Whirlpool watch-only wallet group; child descriptor wallets carry sync targets.",
+    "requires": "wallets import-samourai",
+    "config_fields": "backend, chain, network, gap_limit, samourai"
+  },
+  {
+    "kind": "untracked",
+    "summary": "Owned historical custody with no connected source; used only by reviewed custody components to bridge missing wallets or nodes.",
+    "requires": "",
+    "config_fields": ""
+  },
+  {
+    "kind": "custom",
+    "summary": "Custom CSV/JSON source; use with --config/--config-file to describe field mapping.",
+    "requires": "source_file",
+    "config_fields": "source_file, source_format, config"
+  }
+]

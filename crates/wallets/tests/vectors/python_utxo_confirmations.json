@@ -1,0 +1,988 @@
+{
+ "seed": "\nINSERT INTO chain_index_clock(id,revision) VALUES(1,0);\nINSERT INTO workspaces(id,label,created_at) VALUES('w','W','fixed');\nINSERT INTO profiles(id,workspace_id,label,fiat_currency,created_at) VALUES('p','w','P','EUR','fixed');\nINSERT INTO wallets(id,workspace_id,profile_id,label,kind,created_at) VALUES\n ('wallet','w','p','Wallet','descriptor','fixed'),('other','w','p','Other','descriptor','fixed');\n",
+ "outputs": [
+  [
+   "in-scope",
+   "wallet",
+   "fixture",
+   "esplora",
+   "bitcoin",
+   "main",
+   "confirmed",
+   899990,
+   null,
+   1
+  ],
+  [
+   "at-tip",
+   "wallet",
+   "fixture",
+   "esplora",
+   "bitcoin",
+   "main",
+   "confirmed",
+   900005,
+   null,
+   1
+  ],
+  [
+   "above-tip",
+   "wallet",
+   "fixture",
+   "esplora",
+   "bitcoin",
+   "main",
+   "confirmed",
+   900006,
+   null,
+   7
+  ],
+  [
+   "zero-height",
+   "wallet",
+   "fixture",
+   "esplora",
+   "bitcoin",
+   "main",
+   "confirmed",
+   0,
+   null,
+   3
+  ],
+  [
+   "null-height",
+   "wallet",
+   "fixture",
+   "esplora",
+   "bitcoin",
+   "main",
+   "confirmed",
+   null,
+   null,
+   null
+  ],
+  [
+   "mempool",
+   "wallet",
+   "fixture",
+   "esplora",
+   "bitcoin",
+   "main",
+   "mempool",
+   899990,
+   null,
+   null
+  ],
+  [
+   "spent",
+   "wallet",
+   "fixture",
+   "esplora",
+   "bitcoin",
+   "main",
+   "confirmed",
+   899990,
+   "2026",
+   4
+  ],
+  [
+   "other-wallet",
+   "other",
+   "fixture",
+   "esplora",
+   "bitcoin",
+   "main",
+   "confirmed",
+   899990,
+   null,
+   5
+  ],
+  [
+   "other-backend",
+   "wallet",
+   "second",
+   "esplora",
+   "bitcoin",
+   "main",
+   "confirmed",
+   899990,
+   null,
+   6
+  ],
+  [
+   "other-kind",
+   "wallet",
+   "fixture",
+   "electrum",
+   "bitcoin",
+   "main",
+   "confirmed",
+   899990,
+   null,
+   8
+  ],
+  [
+   "raw-kind",
+   "wallet",
+   "fixture",
+   "mempool",
+   "bitcoin",
+   "main",
+   "confirmed",
+   899990,
+   null,
+   9
+  ],
+  [
+   "other-network",
+   "wallet",
+   "fixture",
+   "esplora",
+   "bitcoin",
+   "test",
+   "confirmed",
+   899990,
+   null,
+   10
+  ],
+  [
+   "other-chain",
+   "wallet",
+   "fixture",
+   "esplora",
+   "liquid",
+   "main",
+   "confirmed",
+   899990,
+   null,
+   11
+  ]
+ ],
+ "cases": [
+  {
+   "name": "esplora-int",
+   "fetch_kind": "esplora",
+   "backend_kind": "esplora",
+   "checkpoint": {
+    "esplora_tip_height": 900005,
+    "electrum_tip_height": 900005
+   },
+   "confirmations": {
+    "above-tip": 7,
+    "at-tip": 1,
+    "in-scope": 16,
+    "mempool": null,
+    "null-height": null,
+    "other-backend": 6,
+    "other-chain": 11,
+    "other-kind": 8,
+    "other-network": 10,
+    "other-wallet": 5,
+    "raw-kind": 9,
+    "spent": 4,
+    "zero-height": 3
+   }
+  },
+  {
+   "name": "esplora-zero",
+   "fetch_kind": "esplora",
+   "backend_kind": "esplora",
+   "checkpoint": {
+    "esplora_tip_height": 0,
+    "electrum_tip_height": 0
+   },
+   "confirmations": {
+    "above-tip": 7,
+    "at-tip": 1,
+    "in-scope": 1,
+    "mempool": null,
+    "null-height": null,
+    "other-backend": 6,
+    "other-chain": 11,
+    "other-kind": 8,
+    "other-network": 10,
+    "other-wallet": 5,
+    "raw-kind": 9,
+    "spent": 4,
+    "zero-height": 3
+   }
+  },
+  {
+   "name": "esplora-negative",
+   "fetch_kind": "esplora",
+   "backend_kind": "esplora",
+   "checkpoint": {
+    "esplora_tip_height": -1,
+    "electrum_tip_height": -1
+   },
+   "confirmations": {
+    "above-tip": 7,
+    "at-tip": 1,
+    "in-scope": 1,
+    "mempool": null,
+    "null-height": null,
+    "other-backend": 6,
+    "other-chain": 11,
+    "other-kind": 8,
+    "other-network": 10,
+    "other-wallet": 5,
+    "raw-kind": 9,
+    "spent": 4,
+    "zero-height": 3
+   }
+  },
+  {
+   "name": "esplora-bool",
+   "fetch_kind": "esplora",
+   "backend_kind": "esplora",
+   "checkpoint": {
+    "esplora_tip_height": true,
+    "electrum_tip_height": true
+   },
+   "confirmations": {
+    "above-tip": 7,
+    "at-tip": 1,
+    "in-scope": 1,
+    "mempool": null,
+    "null-height": null,
+    "other-backend": 6,
+    "other-chain": 11,
+    "other-kind": 8,
+    "other-network": 10,
+    "other-wallet": 5,
+    "raw-kind": 9,
+    "spent": 4,
+    "zero-height": 3
+   }
+  },
+  {
+   "name": "esplora-float",
+   "fetch_kind": "esplora",
+   "backend_kind": "esplora",
+   "checkpoint": {
+    "esplora_tip_height": 900005.0,
+    "electrum_tip_height": 900005.0
+   },
+   "confirmations": {
+    "above-tip": 7,
+    "at-tip": 1,
+    "in-scope": 1,
+    "mempool": null,
+    "null-height": null,
+    "other-backend": 6,
+    "other-chain": 11,
+    "other-kind": 8,
+    "other-network": 10,
+    "other-wallet": 5,
+    "raw-kind": 9,
+    "spent": 4,
+    "zero-height": 3
+   }
+  },
+  {
+   "name": "esplora-string",
+   "fetch_kind": "esplora",
+   "backend_kind": "esplora",
+   "checkpoint": {
+    "esplora_tip_height": "900005",
+    "electrum_tip_height": "900005"
+   },
+   "confirmations": {
+    "above-tip": 7,
+    "at-tip": 1,
+    "in-scope": 1,
+    "mempool": null,
+    "null-height": null,
+    "other-backend": 6,
+    "other-chain": 11,
+    "other-kind": 8,
+    "other-network": 10,
+    "other-wallet": 5,
+    "raw-kind": 9,
+    "spent": 4,
+    "zero-height": 3
+   }
+  },
+  {
+   "name": "esplora-missing",
+   "fetch_kind": "esplora",
+   "backend_kind": "esplora",
+   "checkpoint": {},
+   "confirmations": {
+    "above-tip": 7,
+    "at-tip": 1,
+    "in-scope": 1,
+    "mempool": null,
+    "null-height": null,
+    "other-backend": 6,
+    "other-chain": 11,
+    "other-kind": 8,
+    "other-network": 10,
+    "other-wallet": 5,
+    "raw-kind": 9,
+    "spent": 4,
+    "zero-height": 3
+   }
+  },
+  {
+   "name": "mempool-int",
+   "fetch_kind": "mempool",
+   "backend_kind": "mempool",
+   "checkpoint": {
+    "esplora_tip_height": 900005,
+    "electrum_tip_height": 900005
+   },
+   "confirmations": {
+    "above-tip": 7,
+    "at-tip": 1,
+    "in-scope": 1,
+    "mempool": null,
+    "null-height": null,
+    "other-backend": 6,
+    "other-chain": 11,
+    "other-kind": 8,
+    "other-network": 10,
+    "other-wallet": 5,
+    "raw-kind": 16,
+    "spent": 4,
+    "zero-height": 3
+   }
+  },
+  {
+   "name": "mempool-zero",
+   "fetch_kind": "mempool",
+   "backend_kind": "mempool",
+   "checkpoint": {
+    "esplora_tip_height": 0,
+    "electrum_tip_height": 0
+   },
+   "confirmations": {
+    "above-tip": 7,
+    "at-tip": 1,
+    "in-scope": 1,
+    "mempool": null,
+    "null-height": null,
+    "other-backend": 6,
+    "other-chain": 11,
+    "other-kind": 8,
+    "other-network": 10,
+    "other-wallet": 5,
+    "raw-kind": 9,
+    "spent": 4,
+    "zero-height": 3
+   }
+  },
+  {
+   "name": "mempool-negative",
+   "fetch_kind": "mempool",
+   "backend_kind": "mempool",
+   "checkpoint": {
+    "esplora_tip_height": -1,
+    "electrum_tip_height": -1
+   },
+   "confirmations": {
+    "above-tip": 7,
+    "at-tip": 1,
+    "in-scope": 1,
+    "mempool": null,
+    "null-height": null,
+    "other-backend": 6,
+    "other-chain": 11,
+    "other-kind": 8,
+    "other-network": 10,
+    "other-wallet": 5,
+    "raw-kind": 9,
+    "spent": 4,
+    "zero-height": 3
+   }
+  },
+  {
+   "name": "mempool-bool",
+   "fetch_kind": "mempool",
+   "backend_kind": "mempool",
+   "checkpoint": {
+    "esplora_tip_height": true,
+    "electrum_tip_height": true
+   },
+   "confirmations": {
+    "above-tip": 7,
+    "at-tip": 1,
+    "in-scope": 1,
+    "mempool": null,
+    "null-height": null,
+    "other-backend": 6,
+    "other-chain": 11,
+    "other-kind": 8,
+    "other-network": 10,
+    "other-wallet": 5,
+    "raw-kind": 9,
+    "spent": 4,
+    "zero-height": 3
+   }
+  },
+  {
+   "name": "mempool-float",
+   "fetch_kind": "mempool",
+   "backend_kind": "mempool",
+   "checkpoint": {
+    "esplora_tip_height": 900005.0,
+    "electrum_tip_height": 900005.0
+   },
+   "confirmations": {
+    "above-tip": 7,
+    "at-tip": 1,
+    "in-scope": 1,
+    "mempool": null,
+    "null-height": null,
+    "other-backend": 6,
+    "other-chain": 11,
+    "other-kind": 8,
+    "other-network": 10,
+    "other-wallet": 5,
+    "raw-kind": 9,
+    "spent": 4,
+    "zero-height": 3
+   }
+  },
+  {
+   "name": "mempool-string",
+   "fetch_kind": "mempool",
+   "backend_kind": "mempool",
+   "checkpoint": {
+    "esplora_tip_height": "900005",
+    "electrum_tip_height": "900005"
+   },
+   "confirmations": {
+    "above-tip": 7,
+    "at-tip": 1,
+    "in-scope": 1,
+    "mempool": null,
+    "null-height": null,
+    "other-backend": 6,
+    "other-chain": 11,
+    "other-kind": 8,
+    "other-network": 10,
+    "other-wallet": 5,
+    "raw-kind": 9,
+    "spent": 4,
+    "zero-height": 3
+   }
+  },
+  {
+   "name": "mempool-missing",
+   "fetch_kind": "mempool",
+   "backend_kind": "mempool",
+   "checkpoint": {},
+   "confirmations": {
+    "above-tip": 7,
+    "at-tip": 1,
+    "in-scope": 1,
+    "mempool": null,
+    "null-height": null,
+    "other-backend": 6,
+    "other-chain": 11,
+    "other-kind": 8,
+    "other-network": 10,
+    "other-wallet": 5,
+    "raw-kind": 9,
+    "spent": 4,
+    "zero-height": 3
+   }
+  },
+  {
+   "name": "electrum-int",
+   "fetch_kind": "electrum",
+   "backend_kind": "electrum",
+   "checkpoint": {
+    "esplora_tip_height": 900005,
+    "electrum_tip_height": 900005
+   },
+   "confirmations": {
+    "above-tip": 7,
+    "at-tip": 1,
+    "in-scope": 1,
+    "mempool": null,
+    "null-height": null,
+    "other-backend": 6,
+    "other-chain": 11,
+    "other-kind": 16,
+    "other-network": 10,
+    "other-wallet": 5,
+    "raw-kind": 9,
+    "spent": 4,
+    "zero-height": 3
+   }
+  },
+  {
+   "name": "electrum-zero",
+   "fetch_kind": "electrum",
+   "backend_kind": "electrum",
+   "checkpoint": {
+    "esplora_tip_height": 0,
+    "electrum_tip_height": 0
+   },
+   "confirmations": {
+    "above-tip": 7,
+    "at-tip": 1,
+    "in-scope": 1,
+    "mempool": null,
+    "null-height": null,
+    "other-backend": 6,
+    "other-chain": 11,
+    "other-kind": 8,
+    "other-network": 10,
+    "other-wallet": 5,
+    "raw-kind": 9,
+    "spent": 4,
+    "zero-height": 3
+   }
+  },
+  {
+   "name": "electrum-negative",
+   "fetch_kind": "electrum",
+   "backend_kind": "electrum",
+   "checkpoint": {
+    "esplora_tip_height": -1,
+    "electrum_tip_height": -1
+   },
+   "confirmations": {
+    "above-tip": 7,
+    "at-tip": 1,
+    "in-scope": 1,
+    "mempool": null,
+    "null-height": null,
+    "other-backend": 6,
+    "other-chain": 11,
+    "other-kind": 8,
+    "other-network": 10,
+    "other-wallet": 5,
+    "raw-kind": 9,
+    "spent": 4,
+    "zero-height": 3
+   }
+  },
+  {
+   "name": "electrum-bool",
+   "fetch_kind": "electrum",
+   "backend_kind": "electrum",
+   "checkpoint": {
+    "esplora_tip_height": true,
+    "electrum_tip_height": true
+   },
+   "confirmations": {
+    "above-tip": 7,
+    "at-tip": 1,
+    "in-scope": 1,
+    "mempool": null,
+    "null-height": null,
+    "other-backend": 6,
+    "other-chain": 11,
+    "other-kind": 8,
+    "other-network": 10,
+    "other-wallet": 5,
+    "raw-kind": 9,
+    "spent": 4,
+    "zero-height": 3
+   }
+  },
+  {
+   "name": "electrum-float",
+   "fetch_kind": "electrum",
+   "backend_kind": "electrum",
+   "checkpoint": {
+    "esplora_tip_height": 900005.0,
+    "electrum_tip_height": 900005.0
+   },
+   "confirmations": {
+    "above-tip": 7,
+    "at-tip": 1,
+    "in-scope": 1,
+    "mempool": null,
+    "null-height": null,
+    "other-backend": 6,
+    "other-chain": 11,
+    "other-kind": 8,
+    "other-network": 10,
+    "other-wallet": 5,
+    "raw-kind": 9,
+    "spent": 4,
+    "zero-height": 3
+   }
+  },
+  {
+   "name": "electrum-string",
+   "fetch_kind": "electrum",
+   "backend_kind": "electrum",
+   "checkpoint": {
+    "esplora_tip_height": "900005",
+    "electrum_tip_height": "900005"
+   },
+   "confirmations": {
+    "above-tip": 7,
+    "at-tip": 1,
+    "in-scope": 1,
+    "mempool": null,
+    "null-height": null,
+    "other-backend": 6,
+    "other-chain": 11,
+    "other-kind": 8,
+    "other-network": 10,
+    "other-wallet": 5,
+    "raw-kind": 9,
+    "spent": 4,
+    "zero-height": 3
+   }
+  },
+  {
+   "name": "electrum-missing",
+   "fetch_kind": "electrum",
+   "backend_kind": "electrum",
+   "checkpoint": {},
+   "confirmations": {
+    "above-tip": 7,
+    "at-tip": 1,
+    "in-scope": 1,
+    "mempool": null,
+    "null-height": null,
+    "other-backend": 6,
+    "other-chain": 11,
+    "other-kind": 8,
+    "other-network": 10,
+    "other-wallet": 5,
+    "raw-kind": 9,
+    "spent": 4,
+    "zero-height": 3
+   }
+  },
+  {
+   "name": "bitcoinrpc-int",
+   "fetch_kind": "bitcoinrpc",
+   "backend_kind": "bitcoinrpc",
+   "checkpoint": {
+    "esplora_tip_height": 900005,
+    "electrum_tip_height": 900005
+   },
+   "confirmations": {
+    "above-tip": 7,
+    "at-tip": 1,
+    "in-scope": 1,
+    "mempool": null,
+    "null-height": null,
+    "other-backend": 6,
+    "other-chain": 11,
+    "other-kind": 8,
+    "other-network": 10,
+    "other-wallet": 5,
+    "raw-kind": 9,
+    "spent": 4,
+    "zero-height": 3
+   }
+  },
+  {
+   "name": "bitcoinrpc-zero",
+   "fetch_kind": "bitcoinrpc",
+   "backend_kind": "bitcoinrpc",
+   "checkpoint": {
+    "esplora_tip_height": 0,
+    "electrum_tip_height": 0
+   },
+   "confirmations": {
+    "above-tip": 7,
+    "at-tip": 1,
+    "in-scope": 1,
+    "mempool": null,
+    "null-height": null,
+    "other-backend": 6,
+    "other-chain": 11,
+    "other-kind": 8,
+    "other-network": 10,
+    "other-wallet": 5,
+    "raw-kind": 9,
+    "spent": 4,
+    "zero-height": 3
+   }
+  },
+  {
+   "name": "bitcoinrpc-negative",
+   "fetch_kind": "bitcoinrpc",
+   "backend_kind": "bitcoinrpc",
+   "checkpoint": {
+    "esplora_tip_height": -1,
+    "electrum_tip_height": -1
+   },
+   "confirmations": {
+    "above-tip": 7,
+    "at-tip": 1,
+    "in-scope": 1,
+    "mempool": null,
+    "null-height": null,
+    "other-backend": 6,
+    "other-chain": 11,
+    "other-kind": 8,
+    "other-network": 10,
+    "other-wallet": 5,
+    "raw-kind": 9,
+    "spent": 4,
+    "zero-height": 3
+   }
+  },
+  {
+   "name": "bitcoinrpc-bool",
+   "fetch_kind": "bitcoinrpc",
+   "backend_kind": "bitcoinrpc",
+   "checkpoint": {
+    "esplora_tip_height": true,
+    "electrum_tip_height": true
+   },
+   "confirmations": {
+    "above-tip": 7,
+    "at-tip": 1,
+    "in-scope": 1,
+    "mempool": null,
+    "null-height": null,
+    "other-backend": 6,
+    "other-chain": 11,
+    "other-kind": 8,
+    "other-network": 10,
+    "other-wallet": 5,
+    "raw-kind": 9,
+    "spent": 4,
+    "zero-height": 3
+   }
+  },
+  {
+   "name": "bitcoinrpc-float",
+   "fetch_kind": "bitcoinrpc",
+   "backend_kind": "bitcoinrpc",
+   "checkpoint": {
+    "esplora_tip_height": 900005.0,
+    "electrum_tip_height": 900005.0
+   },
+   "confirmations": {
+    "above-tip": 7,
+    "at-tip": 1,
+    "in-scope": 1,
+    "mempool": null,
+    "null-height": null,
+    "other-backend": 6,
+    "other-chain": 11,
+    "other-kind": 8,
+    "other-network": 10,
+    "other-wallet": 5,
+    "raw-kind": 9,
+    "spent": 4,
+    "zero-height": 3
+   }
+  },
+  {
+   "name": "bitcoinrpc-string",
+   "fetch_kind": "bitcoinrpc",
+   "backend_kind": "bitcoinrpc",
+   "checkpoint": {
+    "esplora_tip_height": "900005",
+    "electrum_tip_height": "900005"
+   },
+   "confirmations": {
+    "above-tip": 7,
+    "at-tip": 1,
+    "in-scope": 1,
+    "mempool": null,
+    "null-height": null,
+    "other-backend": 6,
+    "other-chain": 11,
+    "other-kind": 8,
+    "other-network": 10,
+    "other-wallet": 5,
+    "raw-kind": 9,
+    "spent": 4,
+    "zero-height": 3
+   }
+  },
+  {
+   "name": "bitcoinrpc-missing",
+   "fetch_kind": "bitcoinrpc",
+   "backend_kind": "bitcoinrpc",
+   "checkpoint": {},
+   "confirmations": {
+    "above-tip": 7,
+    "at-tip": 1,
+    "in-scope": 1,
+    "mempool": null,
+    "null-height": null,
+    "other-backend": 6,
+    "other-chain": 11,
+    "other-kind": 8,
+    "other-network": 10,
+    "other-wallet": 5,
+    "raw-kind": 9,
+    "spent": 4,
+    "zero-height": 3
+   }
+  },
+  {
+   "name": "Esplora-int",
+   "fetch_kind": " Esplora ",
+   "backend_kind": "esplora",
+   "checkpoint": {
+    "esplora_tip_height": 900005,
+    "electrum_tip_height": 900005
+   },
+   "confirmations": {
+    "above-tip": 7,
+    "at-tip": 1,
+    "in-scope": 16,
+    "mempool": null,
+    "null-height": null,
+    "other-backend": 6,
+    "other-chain": 11,
+    "other-kind": 8,
+    "other-network": 10,
+    "other-wallet": 5,
+    "raw-kind": 9,
+    "spent": 4,
+    "zero-height": 3
+   }
+  },
+  {
+   "name": "Esplora-zero",
+   "fetch_kind": " Esplora ",
+   "backend_kind": "esplora",
+   "checkpoint": {
+    "esplora_tip_height": 0,
+    "electrum_tip_height": 0
+   },
+   "confirmations": {
+    "above-tip": 7,
+    "at-tip": 1,
+    "in-scope": 1,
+    "mempool": null,
+    "null-height": null,
+    "other-backend": 6,
+    "other-chain": 11,
+    "other-kind": 8,
+    "other-network": 10,
+    "other-wallet": 5,
+    "raw-kind": 9,
+    "spent": 4,
+    "zero-height": 3
+   }
+  },
+  {
+   "name": "Esplora-negative",
+   "fetch_kind": " Esplora ",
+   "backend_kind": "esplora",
+   "checkpoint": {
+    "esplora_tip_height": -1,
+    "electrum_tip_height": -1
+   },
+   "confirmations": {
+    "above-tip": 7,
+    "at-tip": 1,
+    "in-scope": 1,
+    "mempool": null,
+    "null-height": null,
+    "other-backend": 6,
+    "other-chain": 11,
+    "other-kind": 8,
+    "other-network": 10,
+    "other-wallet": 5,
+    "raw-kind": 9,
+    "spent": 4,
+    "zero-height": 3
+   }
+  },
+  {
+   "name": "Esplora-bool",
+   "fetch_kind": " Esplora ",
+   "backend_kind": "esplora",
+   "checkpoint": {
+    "esplora_tip_height": true,
+    "electrum_tip_height": true
+   },
+   "confirmations": {
+    "above-tip": 7,
+    "at-tip": 1,
+    "in-scope": 1,
+    "mempool": null,
+    "null-height": null,
+    "other-backend": 6,
+    "other-chain": 11,
+    "other-kind": 8,
+    "other-network": 10,
+    "other-wallet": 5,
+    "raw-kind": 9,
+    "spent": 4,
+    "zero-height": 3
+   }
+  },
+  {
+   "name": "Esplora-float",
+   "fetch_kind": " Esplora ",
+   "backend_kind": "esplora",
+   "checkpoint": {
+    "esplora_tip_height": 900005.0,
+    "electrum_tip_height": 900005.0
+   },
+   "confirmations": {
+    "above-tip": 7,
+    "at-tip": 1,
+    "in-scope": 1,
+    "mempool": null,
+    "null-height": null,
+    "other-backend": 6,
+    "other-chain": 11,
+    "other-kind": 8,
+    "other-network": 10,
+    "other-wallet": 5,
+    "raw-kind": 9,
+    "spent": 4,
+    "zero-height": 3
+   }
+  },
+  {
+   "name": "Esplora-string",
+   "fetch_kind": " Esplora ",
+   "backend_kind": "esplora",
+   "checkpoint": {
+    "esplora_tip_height": "900005",
+    "electrum_tip_height": "900005"
+   },
+   "confirmations": {
+    "above-tip": 7,
+    "at-tip": 1,
+    "in-scope": 1,
+    "mempool": null,
+    "null-height": null,
+    "other-backend": 6,
+    "other-chain": 11,
+    "other-kind": 8,
+    "other-network": 10,
+    "other-wallet": 5,
+    "raw-kind": 9,
+    "spent": 4,
+    "zero-height": 3
+   }
+  },
+  {
+   "name": "Esplora-missing",
+   "fetch_kind": " Esplora ",
+   "backend_kind": "esplora",
+   "checkpoint": {},
+   "confirmations": {
+    "above-tip": 7,
+    "at-tip": 1,
+    "in-scope": 1,
+    "mempool": null,
+    "null-height": null,
+    "other-backend": 6,
+    "other-chain": 11,
+    "other-kind": 8,
+    "other-network": 10,
+    "other-wallet": 5,
+    "raw-kind": 9,
+    "spent": 4,
+    "zero-height": 3
+   }
+  }
+ ]
+}

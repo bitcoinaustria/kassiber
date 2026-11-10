@@ -777,3 +777,59 @@ tests, regtest confirmation/RBF/reorg/restart coverage, fault injection around
 every apply stage, and packaged-binary smoke on each supported release target.
 Compatibility routes remain narrow, named and tested; unsupported
 configurations are never described as migrated.
+
+The plan-21 Rust port now has an unregistered native fetch assembler for the
+single-wallet Bitcoin descriptor scope: native BDK on ordinary Electrum and
+the named compatibility route on Esplora. Its complete native preparation and
+publication match Python across the existing fixture/restart/reviewed corpus.
+Shared product services and route acceptance remain pending; see the
+[native fetch handoff](rust-shell.md#bitcoin-native-fetch-assembly-r5).
+
+### Rust compatibility cache anchors
+
+The native compatibility adapters also apply the tip-identity rule above.
+Esplora reads `/blocks/tip/hash` before history statistics and persists its
+canonical hash in the private checkpoint. Electrum subscribes to the current
+header before script statuses and persists SHA-256 of the full header.
+Changed, unavailable or malformed anchors disable reuse of nonempty histories;
+Electrum additionally clears header timestamps and republishes unchanged
+history rows while retaining validated transaction graphs. Empty Electrum
+histories remain reusable under the reference's null-status rule. Reused graph
+normalization retains integral sat fields and existing inline previous outputs,
+including when decoder fields were serialized as JSON floats.
+
+These reads use only the existing `kassiber-net` HTTP/Electrum routes after the
+acquisition action's consent, scope, cancellation and offline checks. A tip
+failure grants no absence authority. No product route or background feature is
+enabled by the cache change. The live compatibility sequence oracle covers
+same-height reorgs, unchanged tips and missing legacy anchors on both protocols.
+
+### Rust wallet-sync service boundary
+
+`kassiber-wallets::sync` now selects wallets and joins native preparation to
+atomic publication. It preserves explicit versus `--all` selection, label
+ordering, deprecated-wallet filtering, force-full scans, per-wallet error
+isolation and successful freshness/journal-staleness publication. The supported
+backend path still requires a profile with one Bitcoin descriptor wallet; other
+backend/source shapes refuse during inert construction. Local no-source wallets
+retain their skip result and book-network guards.
+
+The service has request-bound consent and revalidates book, wallet, backend,
+network and observer inputs before preparation and publication. Cancellation,
+revocation and offline changes roll back every publication stage. Progress
+callbacks, daemon freshness queues and journal refresh remain pending. The CLI
+`wallets sync` is registered for the supported service boundary. Its live oracle
+compares complete Python/native CLI envelopes and every normalized table through
+the hybrid runner, with zero supported-shape fallbacks. Python's CLI does not
+refresh journals after sync; it retains the same journal-staleness writes.
+The daemon routes remain unregistered because their queue, progress and default
+local journal-refresh contracts require further implementation.
+
+### Rust Liquid observer
+
+The plan-21 Rust port runs Liquid descriptor wallets on `lwk_wollet` 0.18.0
+over Kassiber's own Electrum client, with the binding's store values, so books
+restore in either runtime. Every compatibility reason above refuses natively
+before connecting. See [Rust Liquid sync](rust-liquid-sync.md) for the step
+inventory, egress sequence, refusals and the Python reference fixes it
+prompted.

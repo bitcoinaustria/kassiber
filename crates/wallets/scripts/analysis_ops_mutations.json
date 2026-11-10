@@ -1,0 +1,532 @@
+[
+  {
+    "id": "analysis-label-edit-revision",
+    "file": "crates/wallets/src/analysis_ops/labels.rs",
+    "find": "if !matches!(get(args, \"expected_revision\"), Some(Value::Int(n)) if n == revision) {\n                return Err(stale(\"Label changed; reload before editing\"));",
+    "replace": "if false {\n                return Err(stale(\"Label changed; reload before editing\"));",
+    "expect_failing": [
+      "analysis_labels_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "A label edit must bind the current integer revision."
+  },
+  {
+    "id": "analysis-label-history",
+    "file": "crates/wallets/src/analysis_ops/labels.rs",
+    "find": "history(conn, &id, revision, &timestamp)",
+    "replace": "current(conn, &id)",
+    "expect_failing": [
+      "analysis_labels_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Every authored label revision must append the exact historical payload."
+  },
+  {
+    "id": "analysis-label-delete",
+    "file": "crates/wallets/src/analysis_ops/labels.rs",
+    "find": "SET deleted=1,revision=?,updated_at=?",
+    "replace": "SET deleted=0,revision=?,updated_at=?",
+    "expect_failing": [
+      "analysis_labels_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Deletion must retire the claim while preserving its history."
+  },
+  {
+    "id": "analysis-label-import-atomic",
+    "file": "crates/wallets/src/analysis_ops/labels.rs",
+    "find": "atomic(conn, || {\n        let mut results",
+    "replace": "Ok::<(), AppError>(()).and_then(|_| {\n        let mut results",
+    "expect_failing": [
+      "analysis_imports_match_python_atomic_history_and_all_112_tables"
+    ],
+    "rule": "A rejected import must roll back earlier claims and history in the batch."
+  },
+  {
+    "id": "analysis-case-snapshot",
+    "file": "crates/wallets/src/analysis_ops/cases.rs",
+    "find": "if field(&result, \"snapshot_id\") != field(args, \"expected_snapshot_id\") {",
+    "replace": "if false {",
+    "expect_failing": [
+      "analysis_cases_match_python_bytes_integrity_and_all_112_tables"
+    ],
+    "rule": "Saving requires the server-recomputed input snapshot approved by the user."
+  },
+  {
+    "id": "analysis-case-delete",
+    "file": "crates/wallets/src/analysis_ops/cases.rs",
+    "find": "DELETE FROM chain_analysis_cases WHERE profile_id=? AND id=?",
+    "replace": "DELETE FROM chain_analysis_cases WHERE profile_id=? AND id=? AND 0",
+    "expect_failing": [
+      "analysis_cases_match_python_bytes_integrity_and_all_112_tables"
+    ],
+    "rule": "Delete the requested saved case without deleting its observations."
+  },
+  {
+    "id": "analysis-case-integrity",
+    "file": "crates/wallets/src/analysis_ops/cases.rs",
+    "find": "|| digest(&result)? != field(&row, \"result_digest\").as_str().unwrap_or(\"\")",
+    "replace": "|| false",
+    "expect_failing": [
+      "analysis_cases_match_python_bytes_integrity_and_all_112_tables"
+    ],
+    "rule": "Case deletion must check retained content integrity first."
+  },
+  {
+    "id": "analysis-dataset-revoke",
+    "file": "crates/wallets/src/analysis_ops/datasets.rs",
+    "find": "SET status='revoked',revision=revision+1",
+    "replace": "SET status='superseded',revision=revision+1",
+    "expect_failing": [
+      "analysis_dataset_lifecycle_matches_python_and_all_112_tables"
+    ],
+    "rule": "Revocation must remove the dataset from active attribution."
+  },
+  {
+    "id": "analysis-dataset-discard",
+    "file": "crates/wallets/src/analysis_ops/datasets.rs",
+    "find": "DELETE FROM chain_analysis_datasets WHERE id=? AND profile_id=? AND status='failed'",
+    "replace": "DELETE FROM chain_analysis_datasets WHERE id=? AND profile_id=? AND status='failed' AND 0",
+    "expect_failing": [
+      "analysis_dataset_lifecycle_matches_python_and_all_112_tables"
+    ],
+    "rule": "Cleanup removes an incomplete dataset after bounded claim deletion."
+  },
+  {
+    "id": "analysis-operation-scope",
+    "file": "crates/wallets/src/analysis_ops.rs",
+    "find": "if expected != &Value::Null",
+    "replace": "if false && expected != &Value::Null",
+    "expect_failing": [
+      "analysis_labels_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "An operation must remain bound to its original book scope."
+  },
+  {
+    "id": "analysis-operation-rollback",
+    "file": "crates/wallets/src/analysis_ops.rs",
+    "find": "conn.execute_batch(\n                \"ROLLBACK TO SAVEPOINT chain_analysis_ops; RELEASE SAVEPOINT chain_analysis_ops\",",
+    "replace": "conn.execute_batch(\n                \"RELEASE SAVEPOINT chain_analysis_ops\",",
+    "expect_failing": [
+      "analysis_history_failure_rolls_back_label_and_import"
+    ],
+    "rule": "A database failure must not leave the label without its historical revision."
+  },
+  {
+    "id": "analysis-watch-encrypted-book",
+    "file": "crates/wallets/src/analysis_ops/watches.rs",
+    "find": "if !keyed.is_some_and(|value| truthy(&value)) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "analysis_watches_match_python_bytes_events_and_all_112_tables"
+    ],
+    "rule": "Background evidence work requires a keyed SQLCipher book."
+  },
+  {
+    "id": "analysis-watch-configure-revision",
+    "file": "crates/wallets/src/analysis_ops/watches.rs",
+    "find": "        let old = get_watch(conn, profile, field(args, \"id\"))?;\n        if !same_revision(args, &old) {",
+    "replace": "        let old = get_watch(conn, profile, field(args, \"id\"))?;\n        if false && !same_revision(args, &old) {",
+    "expect_failing": [
+      "analysis_watches_match_python_bytes_events_and_all_112_tables"
+    ],
+    "rule": "Configuration binds the watch's current integer revision."
+  },
+  {
+    "id": "analysis-watch-create-plan-binding",
+    "file": "crates/wallets/src/analysis_ops/watches.rs",
+    "find": "if canonical(&current)? != canonical(plan)? {",
+    "replace": "if false {",
+    "expect_failing": [
+      "analysis_watches_match_python_bytes_events_and_all_112_tables"
+    ],
+    "rule": "Creation persists only the unchanged reviewed preview."
+  },
+  {
+    "id": "analysis-watch-threshold-reversed",
+    "file": "crates/wallets/src/analysis_ops/watches.rs",
+    "find": "} else if only_true(before) {",
+    "replace": "} else if false {",
+    "expect_failing": [
+      "analysis_watches_match_python_bytes_events_and_all_112_tables"
+    ],
+    "rule": "A confirmation threshold that no longer holds emits a reversal."
+  },
+  {
+    "id": "analysis-watch-checkpoint-skip",
+    "file": "crates/wallets/src/analysis_ops/watches.rs",
+    "find": "if valid && field(&row, \"checkpoint\") == &s(checkpoint.as_str()) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "analysis_watches_match_python_bytes_events_and_all_112_tables"
+    ],
+    "rule": "Unchanged evidence revisions skip evaluation and keep the receipt."
+  },
+  {
+    "id": "analysis-watch-book-identity",
+    "file": "crates/wallets/src/analysis_ops/watches.rs",
+    "find": ".is_ok_and(|book| py_eq(field(&row, \"book_id\"), &book))",
+    "replace": ".is_ok_and(|_| true)",
+    "expect_failing": [
+      "analysis_watches_match_python_bytes_events_and_all_112_tables"
+    ],
+    "rule": "A watch never continues in a different book."
+  },
+  {
+    "id": "analysis-watch-acknowledge-once",
+    "file": "crates/wallets/src/analysis_ops/watches.rs",
+    "find": "SET acknowledged_at=COALESCE(acknowledged_at,?)",
+    "replace": "SET acknowledged_at=?",
+    "expect_failing": [
+      "analysis_watches_match_python_bytes_events_and_all_112_tables"
+    ],
+    "rule": "Acknowledgement keeps its first timestamp."
+  },
+  {
+    "id": "analysis-watch-report-impact",
+    "file": "crates/wallets/src/analysis_ops/watches.rs",
+    "find": "            set(item, \"report_impact\", impact);",
+    "replace": "            let _ = impact;",
+    "expect_failing": [
+      "analysis_watches_match_python_bytes_events_and_all_112_tables"
+    ],
+    "rule": "Inbox items expose their saved-report impact."
+  },
+  {
+    "id": "analysis-watch-report-reversal",
+    "file": "crates/wallets/src/publication/reports.rs",
+    "find": "|| ![\"coverage_lost\", \"threshold_reversed\"].contains(&code)",
+    "replace": "|| ![\"coverage_lost\"].contains(&code)",
+    "expect_failing": [
+      "analysis_watches_match_python_bytes_events_and_all_112_tables"
+    ],
+    "rule": "A reversed confirmation marks dependent saved reports uncertain."
+  },
+  {
+    "id": "analysis-grant-plan-fingerprint",
+    "file": "crates/wallets/src/analysis_ops/sources.rs",
+    "find": "        s(fingerprint.as_str()),\n        result.clone(),",
+    "replace": "        s(\"\"),\n        result.clone(),",
+    "expect_failing": [
+      "analysis_source_grants_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "A plan identity binds the source configuration fingerprint."
+  },
+  {
+    "id": "analysis-grant-authorize-unchanged",
+    "file": "crates/wallets/src/analysis_ops/sources.rs",
+    "find": "if canonical(submitted)? != canonical(&expected)? {",
+    "replace": "if false {",
+    "expect_failing": [
+      "analysis_source_grants_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Authorization stores only the unchanged reviewed plan."
+  },
+  {
+    "id": "analysis-grant-revoke-revision",
+    "file": "crates/wallets/src/analysis_ops/sources.rs",
+    "find": "            return Err(stale(\"Source authorization changed\"));",
+    "replace": "            let _ = stale(\"Source authorization changed\");",
+    "expect_failing": [
+      "analysis_source_grants_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Revocation binds the grant's current integer revision."
+  },
+  {
+    "id": "analysis-grant-expiry-boundary",
+    "file": "crates/wallets/src/analysis_ops/sources.rs",
+    "find": "expires <= runtime.epoch()",
+    "replace": "expires < runtime.epoch()",
+    "expect_failing": [
+      "analysis_source_grants_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "A grant expires exactly at its recorded deadline."
+  },
+  {
+    "id": "analysis-grant-source-fingerprint",
+    "file": "crates/wallets/src/analysis_ops/sources.rs",
+    "find": "    if field(&live, \"source_fingerprint\") != &s(fingerprint.as_str()) {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "analysis_source_grants_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "A changed source configuration invalidates the grant."
+  },
+  {
+    "id": "analysis-grant-offline-run",
+    "file": "crates/wallets/src/analysis_ops/sources.rs",
+    "find": "    if runtime.offline() {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "analysis_source_grants_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Offline mode refuses queueing acquisition instead of waiting silently."
+  },
+  {
+    "id": "analysis-grant-routing-proxy",
+    "file": "crates/wallets/src/analysis_ops/routing.rs",
+    "find": "            backend_value(backend, &[\"tor_proxy\", \"proxy\"]).as_deref(),\n            false,",
+    "replace": "            None,\n            false,",
+    "expect_failing": [
+      "analysis_source_grants_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "The plan identity binds the proxy route."
+  },
+  {
+    "id": "analysis-grant-unhashable",
+    "file": "crates/wallets/src/analysis_ops/sources.rs",
+    "find": "        Value::List(_) | Value::Dict(_) => Err(AppError::new(",
+    "replace": "        Value::List(_) | Value::Dict(_) if false => Err(AppError::new(",
+    "expect_failing": [
+      "analysis_source_grants_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Container choices fail like Python set membership."
+  },
+  {
+    "id": "analysis-acquire-plan-routing",
+    "file": "crates/wallets/src/analysis_ops/acquisition.rs",
+    "find": "        routing_identity(&backend)?,\n    ]))?;",
+    "replace": "        Value::Null,\n    ]))?;",
+    "expect_failing": [
+      "analysis_acquisition_plans_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "A plan identity binds the backend route."
+  },
+  {
+    "id": "analysis-acquire-genesis-pin",
+    "file": "crates/wallets/src/analysis_ops/acquisition.rs",
+    "find": "        if supplied != &Value::Null && supplied != &s(consensus) {",
+    "replace": "        if false {",
+    "expect_failing": [
+      "analysis_acquisition_plans_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "A standard network rejects a conflicting genesis pin."
+  },
+  {
+    "id": "analysis-acquire-seed-budget",
+    "file": "crates/wallets/src/analysis_ops/acquisition.rs",
+    "find": "    if seeds.len() as i64 > maximum {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "analysis_acquisition_plans_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "A subject cannot exceed the reviewed transaction budget."
+  },
+  {
+    "id": "analysis-acquire-backend-kind",
+    "file": "crates/wallets/src/analysis_ops/acquisition.rs",
+    "find": "    if ![\"bitcoinrpc\", \"esplora\", \"liquid-esplora\", \"electrum\"].contains(&kind.as_str()) {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "analysis_acquisition_plans_match_python_bytes_and_all_112_tables"
+    ],
+    "rule": "Only observation-capable backends can be planned."
+  },
+  {
+    "id": "analysis-acquire-apply-plan-binding",
+    "file": "crates/wallets/src/analysis_ops/acquisition/apply.rs",
+    "find": "    if canonical(&expected)? != canonical(supplied)? {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "acquisition_apply_sends_nothing_for_a_changed_plan_or_offline"
+    ],
+    "rule": "Egress starts only after the recomputed plan equals the reviewed plan."
+  },
+  {
+    "id": "analysis-acquire-apply-offline",
+    "file": "crates/wallets/src/analysis_ops/acquisition/reader.rs",
+    "find": "        if runtime.offline() {",
+    "replace": "        if false {",
+    "expect_failing": [
+      "acquisition_apply_sends_nothing_for_a_changed_plan_or_offline"
+    ],
+    "rule": "Offline mode refuses every acquisition request before connecting."
+  },
+  {
+    "id": "analysis-acquire-apply-depth",
+    "file": "crates/wallets/src/analysis_ops/acquisition/apply.rs",
+    "find": "            if depth >= depth_limit {",
+    "replace": "            if depth > depth_limit {",
+    "expect_failing": [
+      "acquisition_apply_stops_at_depth_and_transaction_limits"
+    ],
+    "rule": "Traversal stops at the reviewed depth."
+  },
+  {
+    "id": "analysis-acquire-apply-limit",
+    "file": "crates/wallets/src/analysis_ops/acquisition/apply.rs",
+    "find": "        if seen.len() as i64 >= maximum {",
+    "replace": "        if seen.len() as i64 > maximum {",
+    "expect_failing": [
+      "acquisition_apply_stops_at_depth_and_transaction_limits"
+    ],
+    "rule": "Traversal stops at the reviewed transaction budget."
+  },
+  {
+    "id": "analysis-acquire-apply-corroboration",
+    "file": "crates/wallets/src/analysis_ops/acquisition/apply.rs",
+    "find": "            if spent.contains(&(source.clone(), number.clone())) {\n                continue;\n            }",
+    "replace": "            if spent.contains(&(source.clone(), number.clone())) && false {\n                continue;\n            }",
+    "expect_failing": [
+      "acquisition_apply_flags_uncorroborated_spender_claims"
+    ],
+    "rule": "Only uncorroborated spender claims become a frontier."
+  },
+  {
+    "id": "analysis-acquire-apply-sequence",
+    "file": "crates/wallets/src/analysis_ops/acquisition/apply.rs",
+    "find": "                set(target, \"sequence\", Value::Int(sequence.clone()));",
+    "replace": "                let _ = sequence;",
+    "expect_failing": [
+      "acquisition_apply_backward_depth_discards_witnesses"
+    ],
+    "rule": "Public input sequence numbers are retained."
+  },
+  {
+    "id": "analysis-dataset-import-batch",
+    "file": "crates/wallets/src/analysis_ops/datasets.rs",
+    "find": "            if batch.len() >= 2000 {",
+    "replace": "            if batch.len() >= 1000 {",
+    "expect_failing": [
+      "analysis_dataset_imports_match_python_bytes_progress_and_all_112_tables"
+    ],
+    "rule": "Imports stage and report at most 2,000 claims per commit."
+  },
+  {
+    "id": "analysis-dataset-import-hash",
+    "file": "crates/wallets/src/analysis_ops/datasets.rs",
+    "find": "            .is_some_and(|e| e != &Value::Null && e != &s(content.as_str()))",
+    "replace": "            .is_some_and(|_| false)",
+    "expect_failing": [
+      "analysis_dataset_imports_match_python_bytes_progress_and_all_112_tables"
+    ],
+    "rule": "Activation requires the previewed source digest."
+  },
+  {
+    "id": "analysis-dataset-import-supersede",
+    "file": "crates/wallets/src/analysis_ops/datasets.rs",
+    "find": "            if truthy(previous) {",
+    "replace": "            if false {",
+    "expect_failing": [
+      "analysis_dataset_imports_match_python_bytes_progress_and_all_112_tables"
+    ],
+    "rule": "A replacement supersedes the active version atomically."
+  },
+  {
+    "id": "analysis-dataset-import-failed",
+    "file": "crates/wallets/src/analysis_ops/datasets.rs",
+    "find": "                conn.execute(\"UPDATE chain_analysis_datasets SET status='failed',updated_at=? WHERE id=? AND profile_id=? AND status='staging'\",",
+    "replace": "                conn.execute(\"UPDATE chain_analysis_datasets SET updated_at=? WHERE id=? AND profile_id=? AND status='staging'\",",
+    "expect_failing": [
+      "analysis_dataset_imports_match_python_bytes_progress_and_all_112_tables"
+    ],
+    "rule": "An interrupted or invalid import leaves an invisible failed pack."
+  },
+  {
+    "id": "analysis-dataset-import-claims-hash",
+    "file": "crates/wallets/src/analysis_ops/datasets.rs",
+    "find": "            claims.update(format!(\"{}\\n\", compact(&claim)?).as_bytes());",
+    "replace": "            claims.update(compact(&claim)?.as_bytes());",
+    "expect_failing": [
+      "analysis_dataset_imports_match_python_bytes_progress_and_all_112_tables"
+    ],
+    "rule": "The claims digest covers newline-delimited canonical claims."
+  },
+  {
+    "id": "analysis-dataset-discard-cancel",
+    "file": "crates/wallets/src/analysis_ops/datasets.rs",
+    "find": "        if cancelled() {\n            return Err(AppError::new(\n                \"chain_analysis_cancelled\",\n                \"Dataset cleanup cancelled\",",
+    "replace": "        if false {\n            return Err(AppError::new(\n                \"chain_analysis_cancelled\",\n                \"Dataset cleanup cancelled\",",
+    "expect_failing": [
+      "analysis_dataset_imports_match_python_bytes_progress_and_all_112_tables"
+    ],
+    "rule": "Cleanup observes cancellation between bounded batches."
+  },
+  {
+    "id": "analysis-dataset-job-discard-precheck",
+    "file": "crates/wallets/src/analysis_ops/jobs.rs",
+    "find": "        if status != s(\"staging\") && status != s(\"failed\") {",
+    "replace": "        if false {",
+    "expect_failing": [
+      "analysis_dataset_jobs_match_python_receipts_and_tables"
+    ],
+    "rule": "Cleanup jobs start only for incomplete packs."
+  },
+  {
+    "id": "analysis-dataset-job-source-precheck",
+    "file": "crates/wallets/src/analysis_ops/jobs.rs",
+    "find": "        drop(runtime.open(&key, &token, \"dataset\")?);",
+    "replace": "        let _ = runtime.open(&key, &token, \"dataset\");",
+    "expect_failing": [
+      "analysis_dataset_jobs_match_python_receipts_and_tables"
+    ],
+    "rule": "Import jobs refuse stale or foreign selections before a receipt exists."
+  },
+  {
+    "id": "analysis-dataset-job-phase",
+    "file": "crates/wallets/src/analysis_ops/jobs.rs",
+    "find": "        let phase = if discarding { \"discarding\" } else { \"staging\" };",
+    "replace": "        let phase = if discarding { \"discarding\" } else { \"importing\" };",
+    "expect_failing": [
+      "analysis_dataset_jobs_match_python_receipts_and_tables"
+    ],
+    "rule": "Job progress reports Python's phase names."
+  },
+  {
+    "id": "analysis-dataset-job-request",
+    "file": "crates/wallets/src/analysis_ops/jobs.rs",
+    "find": "        (\"manifest\", manifest.clone()),",
+    "replace": "        (\"manifest\", field(&args, \"manifest\").clone()),",
+    "expect_failing": [
+      "analysis_dataset_jobs_match_python_receipts_and_tables"
+    ],
+    "rule": "The receipt records the normalized submitted manifest."
+  },
+  {
+    "id": "analysis-source-runner-lease",
+    "file": "crates/wallets/src/analysis_ops/acquisition/runner.rs",
+    "find": "        if truthy(field(&live, \"lease_token\")) && small(field(&live, \"lease_until\")) > now {",
+    "replace": "        if false {",
+    "expect_failing": [
+      "source_runner_skips_a_leased_grant_and_pauses_offline"
+    ],
+    "rule": "A live lease keeps a second runner away."
+  },
+  {
+    "id": "analysis-source-runner-refund",
+    "file": "crates/wallets/src/analysis_ops/acquisition/runner.rs",
+    "find": "            let refund = (MAX_RESPONSE_BYTES - self.response_bytes).max(0);",
+    "replace": "            let refund = 0;",
+    "expect_failing": [
+      "source_runner_reserves_quota_settles_and_releases_its_lease"
+    ],
+    "rule": "Successful responses refund unused quota."
+  },
+  {
+    "id": "analysis-source-runner-quota",
+    "file": "crates/wallets/src/analysis_ops/acquisition/runner.rs",
+    "find": "                    > small(field(&spec, \"max_bytes\"))\n            {",
+    "replace": "                    > small(field(&spec, \"max_bytes\"))\n                && false\n            {",
+    "expect_failing": [
+      "source_runner_pauses_at_its_lifetime_quota"
+    ],
+    "rule": "Requests stop at the authorized lifetime quota."
+  },
+  {
+    "id": "analysis-source-runner-release",
+    "file": "crates/wallets/src/analysis_ops/acquisition/runner.rs",
+    "find": "next_run_at=?,lease_token=NULL,lease_until=NULL",
+    "replace": "next_run_at=?",
+    "expect_failing": [
+      "source_runner_reserves_quota_settles_and_releases_its_lease"
+    ],
+    "rule": "A finished pass releases its own lease."
+  },
+  {
+    "id": "analysis-worker-offline",
+    "file": "crates/wallets/src/analysis_ops.rs",
+    "find": "    let acquire = !runtime.offline();",
+    "replace": "    let acquire = true;",
+    "expect_failing": [
+      "source_runner_skips_a_leased_grant_and_pauses_offline"
+    ],
+    "rule": "Offline mode pauses authorized acquisition in the worker."
+  }
+]

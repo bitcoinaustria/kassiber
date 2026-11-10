@@ -1,0 +1,212 @@
+[
+  {
+    "id": "mirror-clustering-unsafe-status",
+    "file": "crates/wallets/src/analysis_index/analytics.rs",
+    "find": "!bad(n) && domain(n).is_some()",
+    "replace": "domain(n).is_some()",
+    "expect_failing": [
+      "clustering_matches_python_captured_snapshots_byte_exact"
+    ],
+    "rule": "Stale and conflicting facts cannot establish derived connectivity."
+  },
+  {
+    "id": "mirror-clustering-collaborative-boundary",
+    "file": "crates/wallets/src/analysis_index/analytics.rs",
+    "find": "if truthy(collab) {",
+    "replace": "if false && truthy(collab) {",
+    "expect_failing": [
+      "clustering_matches_python_captured_snapshots_byte_exact"
+    ],
+    "rule": "Collaboration suppresses common-input and change hypotheses."
+  },
+  {
+    "id": "mirror-clustering-private-change",
+    "file": "crates/wallets/src/analysis_index/analytics.rs",
+    "find": "if text(ctx.output(output), \"branch_role\") != \"change\" {",
+    "replace": "if true {",
+    "expect_failing": [
+      "clustering_matches_python_captured_snapshots_byte_exact"
+    ],
+    "rule": "Retain owner-scoped branch evidence as an explicitly private hypothesis."
+  },
+  {
+    "id": "mirror-clustering-op-return",
+    "file": "crates/wallets/src/analysis_index/analytics.rs",
+    "find": "!v.starts_with(\"6a\")",
+    "replace": "true",
+    "expect_failing": [
+      "clustering_matches_python_captured_snapshots_byte_exact"
+    ],
+    "rule": "Nonspendable scripts cannot imply shared control."
+  },
+  {
+    "id": "mirror-clustering-hypothesis-opt-in",
+    "file": "crates/wallets/src/analysis_index/analytics.rs",
+    "find": "if field(ctx.query, \"include_hypotheses\") != &Value::Bool(true)",
+    "replace": "if false",
+    "expect_failing": [
+      "clustering_matches_python_captured_snapshots_byte_exact"
+    ],
+    "rule": "Hypotheses require explicit opt-in."
+  },
+  {
+    "id": "mirror-clustering-hypothesis-budget",
+    "file": "crates/wallets/src/analysis_index/analytics.rs",
+    "find": "self.rows.len() >= 500",
+    "replace": "self.rows.len() >= 501",
+    "expect_failing": [
+      "clustering_matches_python_captured_snapshots_byte_exact"
+    ],
+    "rule": "Charge hypothesis attempts before deduplication."
+  },
+  {
+    "id": "mirror-clustering-label-budget",
+    "file": "crates/wallets/src/analysis_index/analytics.rs",
+    "find": "labels.len() >= 2000",
+    "replace": "labels.len() >= 2001",
+    "expect_failing": [
+      "clustering_matches_python_captured_snapshots_byte_exact"
+    ],
+    "rule": "Bound the visible label population."
+  },
+  {
+    "id": "mirror-clustering-label-cluster-opt-in",
+    "file": "crates/wallets/src/analysis_index/analytics.rs",
+    "find": "if field(label, \"cluster_defining\") == &Value::Bool(true)\n            || (field(label, \"cluster_defining\") == &count(1)\n                || field(label, \"cluster_defining\") == &Value::Float(1.0))",
+    "replace": "if true",
+    "expect_failing": [
+      "clustering_matches_python_captured_snapshots_byte_exact"
+    ],
+    "rule": "Labels define clusters only when explicitly authored to do so."
+  },
+  {
+    "id": "mirror-clustering-cluster-kind",
+    "file": "crates/wallets/src/analysis_index/analytics.rs",
+    "find": "(\"kind\", s(\"possible_common_control\"))",
+    "replace": "(\"kind\", s(\"common_ownership\"))",
+    "expect_failing": [
+      "clustering_matches_python_captured_snapshots_byte_exact"
+    ],
+    "rule": "Clusters remain reversible common-control hypotheses without ownership authority."
+  },
+  {
+    "id": "mirror-patterns-work-budget",
+    "file": "crates/wallets/src/analysis_index/analytics/patterns.rs",
+    "find": "let mut remaining = 20_000usize;",
+    "replace": "let mut remaining = 200usize;",
+    "expect_failing": [
+      "patterns_match_python_captured_snapshots_byte_exact"
+    ],
+    "rule": "Preserve the shared topology search work budget."
+  },
+  {
+    "id": "mirror-patterns-result-budget",
+    "file": "crates/wallets/src/analysis_index/analytics/patterns.rs",
+    "find": "self.rows.len() >= 250",
+    "replace": "self.rows.len() >= 1",
+    "expect_failing": [
+      "patterns_match_python_captured_snapshots_byte_exact"
+    ],
+    "rule": "Return all permitted patterns within the visible result budget."
+  },
+  {
+    "id": "mirror-patterns-depth-unit",
+    "file": "crates/wallets/src/analysis_index/analytics/patterns.rs",
+    "find": "hops >= max_steps * 2",
+    "replace": "hops >= max_steps",
+    "expect_failing": [
+      "patterns_match_python_captured_snapshots_byte_exact"
+    ],
+    "rule": "Pattern depth counts transaction hops across physical output vertices."
+  },
+  {
+    "id": "mirror-patterns-postmix-boundary",
+    "file": "crates/wallets/src/analysis_index/analytics/patterns.rs",
+    "find": "text(boundary, \"kind\") == \"coinjoin\"",
+    "replace": "false",
+    "expect_failing": [
+      "patterns_match_python_captured_snapshots_byte_exact"
+    ],
+    "rule": "Postmix reconvergence remains conditional on its listed collaboration boundary."
+  },
+  {
+    "id": "mirror-patterns-larger-peel-output",
+    "file": "crates/wallets/src/analysis_index/analytics/patterns.rs",
+    "find": "usize::from(a < b)",
+    "replace": "usize::from(a > b)",
+    "expect_failing": [
+      "patterns_match_python_captured_snapshots_byte_exact"
+    ],
+    "rule": "A peel candidate follows only the strictly larger known output."
+  },
+  {
+    "id": "mirror-patterns-minimum-peel",
+    "file": "crates/wallets/src/analysis_index/analytics/patterns.rs",
+    "find": "path.len() >= 3",
+    "replace": "path.len() >= 7",
+    "expect_failing": [
+      "patterns_match_python_captured_snapshots_byte_exact"
+    ],
+    "rule": "Preserve the listed three-transaction peel threshold."
+  },
+  {
+    "id": "mirror-attribution-work-budget",
+    "file": "crates/wallets/src/analysis_index/analytics/attribution.rs",
+    "find": "let mut remaining = 20_000usize;",
+    "replace": "let mut remaining = 200usize;",
+    "expect_failing": [
+      "attribution_matches_python_captured_snapshots_byte_exact"
+    ],
+    "rule": "Retain the full bounded attribution search allowance."
+  },
+  {
+    "id": "mirror-attribution-depth",
+    "file": "crates/wallets/src/analysis_index/analytics/attribution.rs",
+    "find": "bounded(field(ctx.query, \"depth\"), 6, 12) * 2",
+    "replace": "bounded(field(ctx.query, \"depth\"), 6, 12)",
+    "expect_failing": [
+      "attribution_matches_python_captured_snapshots_byte_exact"
+    ],
+    "rule": "Attribution transaction depth crosses physical output vertices."
+  },
+  {
+    "id": "mirror-attribution-custody",
+    "file": "crates/wallets/src/analysis_index/analytics/attribution.rs",
+    "find": "if ctx.observer != \"public\" &&",
+    "replace": "if false &&",
+    "expect_failing": [
+      "attribution_matches_python_captured_snapshots_byte_exact"
+    ],
+    "rule": "Retain explicitly enabled private custody paths with their relation evidence."
+  },
+  {
+    "id": "mirror-attribution-authority",
+    "file": "crates/wallets/src/analysis_index/analytics/attribution.rs",
+    "find": "(\"authority\", s(\"sourced_claim_with_evidence_path\"))",
+    "replace": "(\"authority\", s(\"verified_payment\"))",
+    "expect_failing": [
+      "attribution_matches_python_captured_snapshots_byte_exact"
+    ],
+    "rule": "A sourced claim and path do not establish a verified payment."
+  },
+  {
+    "id": "mirror-analytics-entropy-single",
+    "file": "crates/wallets/src/analysis_index/analytics.rs",
+    "find": "candidates.first()",
+    "replace": "candidates.last()",
+    "expect_failing": [
+      "analytics_composition_matches_python_captured_snapshots_byte_exact"
+    ],
+    "rule": "Only the first sorted transaction subject is analyzed and multiple candidates are reported."
+  },
+  {
+    "id": "mirror-analytics-pattern-coverage",
+    "file": "crates/wallets/src/analysis_index/analytics.rs",
+    "find": "field(field(&patterns, \"coverage\"), \"pattern_count\").clone()",
+    "replace": "count(0)",
+    "expect_failing": [
+      "analytics_composition_matches_python_captured_snapshots_byte_exact"
+    ],
+    "rule": "Full analytics retains pattern coverage alongside clustering, attribution and entropy."
+  }
+]

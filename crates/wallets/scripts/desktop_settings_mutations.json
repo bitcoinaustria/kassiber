@@ -1,0 +1,492 @@
+[
+  {
+    "id": "settings-registration",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "    kinds.extend(&settings::KINDS[..2]);\n    kinds.push(settings::RUN_KIND);\n    kinds.extend(&settings::KINDS[2..]);\n",
+    "replace": "    kinds.push(settings::RUN_KIND);\n",
+    "expect_failing": [
+      "tests/test_rust_desktop_settings.py::RustFreshnessSettingsTest::test_status_reads_match_wire_bytes_across_policies"
+    ],
+    "rule": "Freshness and maintenance settings kinds are advertised and served by the Rust daemon."
+  },
+  {
+    "id": "settings-read-args-ignored",
+    "file": "crates/daemon/src/settings.rs",
+    "find": "if kind.ends_with(\".configure\") {",
+    "replace": "if true {",
+    "expect_failing": [
+      "tests/test_rust_desktop_settings.py::RustFreshnessSettingsTest::test_status_reads_match_wire_bytes_across_policies"
+    ],
+    "rule": "Status and settings reads ignore their arguments as Python's handlers do."
+  },
+  {
+    "id": "settings-unknown-arguments",
+    "file": "crates/wallets/src/freshness/settings.rs",
+    "find": "    if unknown.is_empty() {\n        return Ok(());",
+    "replace": "    if true || unknown.is_empty() {\n        return Ok(());",
+    "expect_failing": [
+      "tests/test_rust_desktop_settings.py::RustFreshnessSettingsTest::test_configure_refusals_leave_every_table_unchanged"
+    ],
+    "rule": "Configure refuses unsupported arguments before any write."
+  },
+  {
+    "id": "settings-source-classes-type",
+    "file": "crates/wallets/src/freshness/settings.rs",
+    "find": "if !matches!(value, Value::Dict(_)) {\n            return Err(type_error(KIND, \"source_classes\"",
+    "replace": "if false {\n            return Err(type_error(KIND, \"source_classes\"",
+    "expect_failing": [
+      "tests/test_rust_desktop_settings.py::RustFreshnessSettingsTest::test_configure_refusals_leave_every_table_unchanged"
+    ],
+    "rule": "Configure refuses non-object source_classes."
+  },
+  {
+    "id": "settings-provider-type",
+    "file": "crates/wallets/src/freshness/settings.rs",
+    "find": "Some(value) => return Err(type_error(KIND, \"market_rate_provider\", \"a string\", value)),",
+    "replace": "Some(_) => None,",
+    "expect_failing": [
+      "tests/test_rust_desktop_settings.py::RustFreshnessSettingsTest::test_configure_refusals_leave_every_table_unchanged"
+    ],
+    "rule": "Configure refuses a non-string market-rate provider instead of ignoring it."
+  },
+  {
+    "id": "settings-provider-surrogates",
+    "file": "crates/wallets/src/freshness/settings.rs",
+    "find": "        .with_python_message(message)\n",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_desktop_settings.py::RustFreshnessSettingsTest::test_configure_refusals_leave_every_table_unchanged"
+    ],
+    "rule": "Unsupported provider text keeps Python's code points in the refusal."
+  },
+  {
+    "id": "daemon-error-codepoints",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "if let Some(message) = &error.message_codepoints {",
+    "replace": "if let (Some(message), false) = (&error.message_codepoints, true) {",
+    "expect_failing": [
+      "tests/test_rust_desktop_settings.py::RustFreshnessSettingsTest::test_configure_refusals_leave_every_table_unchanged"
+    ],
+    "rule": "Daemon error envelopes carry Python's message code points."
+  },
+  {
+    "id": "settings-legacy-report-read",
+    "file": "crates/wallets/src/freshness/settings.rs",
+    "find": "        report_read_sync = Some(legacy.clone());\n",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_desktop_settings.py::RustFreshnessSettingsTest::test_configure_writes_match_bytes_and_tables"
+    ],
+    "rule": "The legacy report-read flag overrides report_read_sync and the wallet source classes."
+  },
+  {
+    "id": "settings-profile-flags",
+    "file": "crates/wallets/src/freshness/settings.rs",
+    "find": "    if !updates.is_empty() {",
+    "replace": "    if false && !updates.is_empty() {",
+    "expect_failing": [
+      "tests/test_rust_desktop_settings.py::RustFreshnessSettingsTest::test_maintenance_profile_flags_commit_before_policy_validation"
+    ],
+    "rule": "Maintenance configure writes the profile review and carrying-value flags."
+  },
+  {
+    "id": "settings-profile-flags-commit-first",
+    "file": "crates/wallets/src/freshness/settings.rs",
+    "find": "        extend(&mut request, updates);\n        kassiber_setup::execute(conn, \"profiles.set\", &request, setup)?;\n",
+    "replace": "        extend(&mut request, updates);\n        if get(args, \"market_rate_provider\").is_none() && get(args, \"source_classes\").is_none() {\n            kassiber_setup::execute(conn, \"profiles.set\", &request, setup)?;\n        }\n",
+    "expect_failing": [
+      "tests/test_rust_desktop_settings.py::RustFreshnessSettingsTest::test_maintenance_profile_flags_commit_before_policy_validation"
+    ],
+    "rule": "A profile flag change is written even when the policy write that follows is refused."
+  },
+  {
+    "id": "settings-default-journals",
+    "file": "crates/wallets/src/freshness/settings.rs",
+    "find": "                (\"journals\", Value::Bool(true)),",
+    "replace": "                (\"journals\", Value::Bool(false)),",
+    "expect_failing": [
+      "tests/test_rust_desktop_settings.py::RustFreshnessSettingsTest::test_status_without_or_with_mismatched_context"
+    ],
+    "rule": "Without an active profile the default policy enables journal freshness only."
+  },
+  {
+    "id": "settings-snapshot-redaction",
+    "file": "crates/wallets/src/freshness/settings.rs",
+    "find": "    Ok(ui::payload(\n        &Queue::new(conn, &mut sources).snapshot(profile)?,\n    ))\n",
+    "replace": "    Queue::new(conn, &mut sources).snapshot(profile)\n",
+    "expect_failing": [
+      "tests/test_rust_desktop_settings.py::RustFreshnessSettingsTest::test_status_reads_match_wire_bytes_across_policies"
+    ],
+    "rule": "Snapshots pass through the UI redaction of secrets, URLs and checkpoints."
+  },
+  {
+    "id": "settings-coarse-excluded",
+    "file": "crates/wallets/src/freshness/settings.rs",
+    "find": "WHERE profile_id=? AND excluded=0 \\\n",
+    "replace": "WHERE profile_id=? \\\n",
+    "expect_failing": [
+      "tests/test_rust_desktop_settings.py::RustFreshnessSettingsTest::test_status_reads_match_wire_bytes_across_policies"
+    ],
+    "rule": "The coarse-priced count ignores excluded transactions."
+  },
+  {
+    "id": "settings-empty-workspace-label",
+    "file": "crates/wallets/src/freshness/settings.rs",
+    "find": "Value::Str(label) if label.code_points().next().is_some() =>",
+    "replace": "Value::Str(label) =>",
+    "expect_failing": [
+      "tests/test_rust_desktop_settings.py::RustFreshnessSettingsTest::test_status_without_or_with_mismatched_context"
+    ],
+    "rule": "An empty workspace label is reported as null."
+  },
+  {
+    "id": "settings-active-profile",
+    "file": "crates/wallets/src/freshness/settings.rs",
+    "find": "    let id = or_text(field(&context, \"profile_id\"));\n",
+    "replace": "    let _ = &context;\n    let raw = first(conn, \"SELECT value AS profile_id FROM settings WHERE key='context_profile'\", kassiber_store::rusqlite::params![])?.unwrap_or(Value::Null);\n    let id = or_text(field(&raw, \"profile_id\"));\n",
+    "expect_failing": [
+      "tests/test_rust_desktop_settings.py::RustFreshnessSettingsTest::test_status_without_or_with_mismatched_context"
+    ],
+    "rule": "The active profile comes from the context snapshot, so a profile outside the active workspace is not active."
+  },
+  {
+    "id": "backends-list-registration",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "                \"ui.backends.list\",\n",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_desktop_backends.py::RustBackendsListTest::test_list_without_backends_or_profile"
+    ],
+    "rule": "The active-profile backend list is advertised and served by the Rust daemon."
+  },
+  {
+    "id": "backends-list-args-ignored",
+    "file": "crates/daemon/src/services.rs",
+    "find": " || kind == \"ui.backends.list\" {",
+    "replace": " {",
+    "expect_failing": [
+      "tests/test_rust_desktop_backends.py::RustBackendsListTest::test_list_without_backends_or_profile"
+    ],
+    "rule": "The backend list ignores its arguments as Python's handler does."
+  },
+  {
+    "id": "backends-list-profile-scope",
+    "file": "crates/setup/src/backend_desktop.rs",
+    "find": "        if !referenced.contains(name) || !matches!(b, Value::Dict(_)) {",
+    "replace": "        if !matches!(b, Value::Dict(_)) {",
+    "expect_failing": [
+      "tests/test_rust_desktop_backends.py::RustBackendsListTest::test_list_redacts_and_scopes_to_active_profile_wallets"
+    ],
+    "rule": "Only backends the active profile's wallets use are listed."
+  },
+  {
+    "id": "backends-list-allowlist",
+    "file": "crates/setup/src/backend_desktop.rs",
+    "find": "            fields.retain(|(k, _)| k.as_str().is_some_and(|k| ALLOWED.contains(&k)));\n",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_desktop_backends.py::RustBackendsListTest::test_list_redacts_and_scopes_to_active_profile_wallets"
+    ],
+    "rule": "Listed backends keep only the allowlisted, presence-only fields."
+  },
+  {
+    "id": "backends-list-default-wallets",
+    "file": "crates/setup/src/backend_desktop.rs",
+    "find": "    if uses_default {",
+    "replace": "    if false && uses_default {",
+    "expect_failing": [
+      "tests/test_rust_desktop_backends.py::RustBackendsListTest::test_list_redacts_and_scopes_to_active_profile_wallets"
+    ],
+    "rule": "Descriptor and address wallets without an explicit backend reference the default backend."
+  },
+  {
+    "id": "backends-list-summary-default",
+    "file": "crates/setup/src/backend_desktop.rs",
+    "find": "                    if referenced.contains(&default_backend) {",
+    "replace": "                    if !default_backend.is_empty() {",
+    "expect_failing": [
+      "tests/test_rust_desktop_backends.py::RustBackendsListTest::test_list_redacts_and_scopes_to_active_profile_wallets"
+    ],
+    "rule": "The summary names the default backend only when an active wallet uses it."
+  },
+  {
+    "id": "backends-list-lightning-capabilities",
+    "file": "crates/setup/src/backend_desktop.rs",
+    "find": "        let kind = string(value(b, \"kind\")).map_or_else(String::new, |_| py_str(value(b, \"kind\")));\n        if [\"coreln\", \"lnd\", \"nwc\"].contains(&kind.as_str()) {",
+    "replace": "        let kind = string(value(b, \"kind\")).map_or_else(String::new, |_| py_str(value(b, \"kind\")));\n        if [\"lnd\", \"nwc\"].contains(&kind.as_str()) {",
+    "expect_failing": [
+      "tests/test_rust_desktop_backends.py::RustBackendsListTest::test_list_redacts_and_scopes_to_active_profile_wallets"
+    ],
+    "rule": "Lightning backends carry their registered capabilities."
+  },
+  {
+    "id": "utxos-registration",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "[\"ui.wallets.list\", \"ui.wallets.utxos\"]",
+    "replace": "[\"ui.wallets.list\"]",
+    "expect_failing": [
+      "tests/test_rust_desktop_utxos.py::RustWalletUtxosTest::test_every_support_branch_and_inventory_matches_wire_bytes"
+    ],
+    "rule": "The wallet UTXO inventory is advertised and served by the Rust daemon."
+  },
+  {
+    "id": "utxos-raw-args",
+    "file": "crates/wallets/src/utxos.rs",
+    "find": "    let Some(args @ Value::Dict(_)) = args else {",
+    "replace": "    let empty = dict::<&str>([]);\n    let Some(args @ Value::Dict(_)) = args.or(Some(&empty)) else {",
+    "expect_failing": [
+      "tests/test_rust_desktop_utxos.py::RustWalletUtxosTest::test_refusals_and_missing_profile"
+    ],
+    "rule": "Missing or non-object arguments are refused as Python's raw-args check does."
+  },
+  {
+    "id": "utxos-id-precedence",
+    "file": "crates/wallets/src/utxos.rs",
+    "find": "ORDER BY CASE WHEN w.id = ? THEN 0 ELSE 1 END",
+    "replace": "ORDER BY CASE WHEN w.label = ? THEN 0 ELSE 1 END",
+    "expect_failing": [
+      "tests/test_rust_desktop_utxos.py::RustWalletUtxosTest::test_every_support_branch_and_inventory_matches_wire_bytes"
+    ],
+    "rule": "A wallet id match wins over another wallet's equal label."
+  },
+  {
+    "id": "utxos-unspent-only",
+    "file": "crates/wallets/src/utxos.rs",
+    "find": "FROM wallet_utxos u WHERE u.wallet_id = ? AND spent_at IS NULL{source_where}",
+    "replace": "FROM wallet_utxos u WHERE u.wallet_id = ?{source_where}",
+    "expect_failing": [
+      "tests/test_rust_desktop_utxos.py::RustWalletUtxosTest::test_every_support_branch_and_inventory_matches_wire_bytes"
+    ],
+    "rule": "Spent outputs are not listed."
+  },
+  {
+    "id": "utxos-backend-source-filter",
+    "file": "crates/wallets/src/utxos.rs",
+    "find": "        (\"backend_name\", names),",
+    "replace": "        (\"backend_name\", vec![]),",
+    "expect_failing": [
+      "tests/test_rust_desktop_utxos.py::RustWalletUtxosTest::test_every_support_branch_and_inventory_matches_wire_bytes"
+    ],
+    "rule": "Rows from a previous backend are excluded by the source filter."
+  },
+  {
+    "id": "utxos-truncated",
+    "file": "crates/wallets/src/utxos.rs",
+    "find": "Value::Bool(supported && count > returned as i64),",
+    "replace": "Value::Bool(false),",
+    "expect_failing": [
+      "tests/test_rust_desktop_utxos.py::RustWalletUtxosTest::test_every_support_branch_and_inventory_matches_wire_bytes"
+    ],
+    "rule": "A wallet with more active outputs than the row limit reports truncation."
+  },
+  {
+    "id": "utxos-row-limit",
+    "file": "crates/wallets/src/utxos.rs",
+    "find": "const ROW_LIMIT: i64 = 500;",
+    "replace": "const ROW_LIMIT: i64 = 501;",
+    "expect_failing": [
+      "tests/test_rust_desktop_utxos.py::RustWalletUtxosTest::test_every_support_branch_and_inventory_matches_wire_bytes"
+    ],
+    "rule": "The inventory returns at most Python's 500 rows."
+  },
+  {
+    "id": "utxos-sp-capability",
+    "file": "crates/wallets/src/utxos.rs",
+    "find": "        if !supports_silent_payments(backend)? {",
+    "replace": "        if false && !supports_silent_payments(backend)? {",
+    "expect_failing": [
+      "tests/test_rust_desktop_utxos.py::RustWalletUtxosTest::test_every_support_branch_and_inventory_matches_wire_bytes"
+    ],
+    "rule": "Silent Payments inventory requires a backend declared Silent Payments capable."
+  },
+  {
+    "id": "utxos-liquid-unblind",
+    "file": "crates/wallets/src/utxos.rs",
+    "find": "    if chain == \"liquid\" {",
+    "replace": "    if chain == \"liquid-disabled\" {",
+    "expect_failing": [
+      "tests/test_rust_desktop_utxos.py::RustWalletUtxosTest::test_every_support_branch_and_inventory_matches_wire_bytes"
+    ],
+    "rule": "Liquid inventory requires descriptor material that can unblind outputs."
+  },
+  {
+    "id": "utxos-wasabi-support",
+    "file": "crates/wallets/src/utxos.rs",
+    "find": "    if string_or_empty(field(config, \"source_format\")) == \"wasabi_bundle\" {\n        return Ok(status(true, \"supported\", \"wasabi_import\", \"\"));",
+    "replace": "    if false {\n        return Ok(status(true, \"supported\", \"wasabi_import\", \"\"));",
+    "expect_failing": [
+      "tests/test_rust_desktop_utxos.py::RustWalletUtxosTest::test_every_support_branch_and_inventory_matches_wire_bytes"
+    ],
+    "rule": "Wasabi bundle wallets are supported from their imported inventory."
+  },
+  {
+    "id": "utxos-transaction-link",
+    "file": "crates/wallets/src/utxos.rs",
+    "find": "lower(t.external_id) = lower(u.txid)",
+    "replace": "t.external_id = u.txid",
+    "expect_failing": [
+      "tests/test_rust_desktop_utxos.py::RustWalletUtxosTest::test_every_support_branch_and_inventory_matches_wire_bytes"
+    ],
+    "rule": "Outputs link to their transaction by case-insensitive txid."
+  },
+  {
+    "id": "utxos-refresh-last-seen",
+    "file": "crates/wallets/src/utxos.rs",
+    "find": "        (Some(row), _) => field(row, \"last_seen_at\").clone(),",
+    "replace": "        (Some(_), Some(row)) => field(row, \"active_last_seen_at\").clone(),\n        (Some(row), None) => field(row, \"last_seen_at\").clone(),",
+    "expect_failing": [
+      "tests/test_rust_desktop_utxos.py::RustWalletUtxosTest::test_every_support_branch_and_inventory_matches_wire_bytes"
+    ],
+    "rule": "The refresh record's last-seen time wins over the newest active output."
+  },
+  {
+    "id": "utxos-btc-float",
+    "file": "crates/wallets/src/utxos.rs",
+    "find": "        \"{sign}{}.{:011}\",",
+    "replace": "        \"{sign}{}.{:08}\",",
+    "expect_failing": [
+      "tests/test_rust_desktop_utxos.py::RustWalletUtxosTest::test_every_support_branch_and_inventory_matches_wire_bytes"
+    ],
+    "rule": "BTC amounts are the exact msat quotient, correctly rounded to a float."
+  },
+  {
+    "id": "utxos-surrogate-reference",
+    "file": "crates/wallets/src/utxos.rs",
+    "find": "        None => return Err(surrogate_error(&reference)),",
+    "replace": "        None => None,",
+    "expect_failing": [
+      "tests/test_rust_desktop_utxos.py::RustWalletUtxosTest::test_surrogate_reference_matches_python_crash_code_and_message"
+    ],
+    "rule": "A reference SQLite cannot encode fails as Python's lookup does, not as not_found."
+  },
+  {
+    "id": "utxos-default-backend",
+    "file": "crates/wallets/src/utxos.rs",
+    "find": "        && !default_name.is_empty()",
+    "replace": "        && false",
+    "expect_failing": [
+      "tests/test_rust_desktop_utxos.py::RustWalletUtxosTest::test_every_support_branch_and_inventory_matches_wire_bytes"
+    ],
+    "rule": "Descriptor and address wallets without an explicit backend use the default backend."
+  },
+  {
+    "id": "lightning-test-registration",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "                \"ui.backends.lightning.test\",\n",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_desktop_lightning_test.py::RustLightningBackendTest::test_refusals_and_non_lightning_backends_make_no_node_traffic"
+    ],
+    "rule": "The Lightning backend test is advertised and served by the Rust daemon."
+  },
+  {
+    "id": "lightning-test-kind-gate",
+    "file": "crates/kassiber/src/real_store/lightning.rs",
+    "find": "    if ![\"coreln\", \"lnd\", \"nwc\"].contains(&kind.as_str()) {",
+    "replace": "    if kind.is_empty() {",
+    "expect_failing": [
+      "tests/test_rust_desktop_lightning_test.py::RustLightningBackendTest::test_refusals_and_non_lightning_backends_make_no_node_traffic"
+    ],
+    "rule": "A non-Lightning backend is refused without building a client or making a request."
+  },
+  {
+    "id": "lightning-test-backend-type",
+    "file": "crates/kassiber/src/real_store/lightning.rs",
+    "find": "        Some(value) => {\n            return Err(\n                AppError::new(\"validation\", \"backend must be a string\")",
+    "replace": "        Some(_) if true => None,\n        Some(value) => {\n            return Err(\n                AppError::new(\"validation\", \"backend must be a string\")",
+    "expect_failing": [
+      "tests/test_rust_desktop_lightning_test.py::RustLightningBackendTest::test_refusals_and_non_lightning_backends_make_no_node_traffic"
+    ],
+    "rule": "A non-string backend argument is a typed validation error."
+  },
+  {
+    "id": "lightning-test-name-case",
+    "file": "crates/setup/src/backend_runtime.rs",
+    "find": "        let name = kassiber_pytext::strip(name).to_lowercase();\n        self.view",
+    "replace": "        let name = kassiber_pytext::strip(name).to_owned();\n        self.view",
+    "expect_failing": [
+      "tests/test_rust_desktop_lightning_test.py::RustLightningBackendTest::test_refusals_and_non_lightning_backends_make_no_node_traffic"
+    ],
+    "rule": "Backend references resolve case-insensitively like Python's resolve_backend."
+  },
+  {
+    "id": "lightning-test-failure-log",
+    "file": "crates/kassiber/src/real_store/lightning.rs",
+    "find": "logs.push(s(format!(\"Connection failed: {}\", error.message)));",
+    "replace": "logs.push(s(format!(\"Connection error: {}\", error.message)));",
+    "expect_failing": [
+      "tests/test_rust_desktop_lightning_test.py::RustLightningBackendTest::test_failures_report_ok_false_with_the_reference_message"
+    ],
+    "rule": "Client failures answer ok:false with Python's log line and message."
+  },
+  {
+    "id": "lightning-test-block-height-log",
+    "file": "crates/kassiber/src/real_store/lightning.rs",
+    "find": "    if let Some(height) = &node.block_height {",
+    "replace": "    if let Some(height) = None::<&kassiber_pyjson::BigInt> {",
+    "expect_failing": [
+      "tests/test_rust_desktop_lightning_test.py::RustLightningBackendTest::test_cln_snapshot_matches_bytes_and_commands"
+    ],
+    "rule": "A known block height is logged."
+  },
+  {
+    "id": "lightning-lnd-alias",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "            alias: optional_text(field(&info, \"alias\")).unwrap_or_default(),",
+    "replace": "            alias: PyStr::default(),",
+    "expect_failing": [
+      "tests/test_rust_desktop_lightning_test.py::RustLightningBackendTest::test_lnd_node_fields_follow_the_reference_coercions"
+    ],
+    "rule": "The LND alias comes from getinfo."
+  },
+  {
+    "id": "lightning-lnd-network",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "        let network = lnd_network(&info);\n        let peer_count",
+    "replace": "        let network: PyStr = \"mainnet\".into();\n        let peer_count",
+    "expect_failing": [
+      "tests/test_rust_desktop_lightning_test.py::RustLightningBackendTest::test_lnd_node_fields_follow_the_reference_coercions"
+    ],
+    "rule": "The LND network follows the chains entry or the legacy testnet flag."
+  },
+  {
+    "id": "lightning-lnd-zero-height",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "            .filter(|height| *height != BigInt::from(0));",
+    "replace": "            .filter(|_| true);",
+    "expect_failing": [
+      "tests/test_rust_desktop_lightning_test.py::RustLightningBackendTest::test_lnd_node_fields_follow_the_reference_coercions"
+    ],
+    "rule": "A zero LND block height is reported as unknown."
+  },
+  {
+    "id": "lightning-lnd-peers",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "        let peer_count = integer(field(&info, \"num_peers\"))?;",
+    "replace": "        let peer_count: BigInt = 0.into();",
+    "expect_failing": [
+      "tests/test_rust_desktop_lightning_test.py::RustLightningBackendTest::test_lnd_node_fields_follow_the_reference_coercions"
+    ],
+    "rule": "The LND peer count is the reference's lenient integer of num_peers."
+  },
+  {
+    "id": "lightning-cln-alias",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "        alias: text(\"alias\"),",
+    "replace": "        alias: PyStr::default(),",
+    "expect_failing": [
+      "tests/test_rust_desktop_lightning_test.py::RustLightningBackendTest::test_cln_snapshot_matches_bytes_and_commands"
+    ],
+    "rule": "The CLN alias comes from getinfo."
+  },
+  {
+    "id": "lightning-cln-peers",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "        peer_count: peers.unwrap_or_else(|| 0.into()),",
+    "replace": "        peer_count: 0.into(),",
+    "expect_failing": [
+      "tests/test_rust_desktop_lightning_test.py::RustLightningBackendTest::test_cln_snapshot_matches_bytes_and_commands"
+    ],
+    "rule": "The CLN peer count comes from getinfo."
+  }
+]

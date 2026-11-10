@@ -1,0 +1,1516 @@
+[
+ {
+  "input": null,
+  "normalized": {
+   "error": {
+    "code": "validation",
+    "message": "BTCPay server URL is required",
+    "hint": "Enter the address you open BTCPay Server with, for example https://btcpay.example.com.",
+    "details": null
+   }
+  },
+  "identity": {
+   "ok": ""
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": ""
+  }
+ },
+ {
+  "input": "",
+  "normalized": {
+   "error": {
+    "code": "validation",
+    "message": "BTCPay server URL is required",
+    "hint": "Enter the address you open BTCPay Server with, for example https://btcpay.example.com.",
+    "details": null
+   }
+  },
+  "identity": {
+   "ok": ""
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": ""
+  }
+ },
+ {
+  "input": " ",
+  "normalized": {
+   "error": {
+    "code": "validation",
+    "message": "BTCPay server URL is required",
+    "hint": "Enter the address you open BTCPay Server with, for example https://btcpay.example.com.",
+    "details": null
+   }
+  },
+  "identity": {
+   "ok": ""
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": ""
+  }
+ },
+ {
+  "input": "\t",
+  "normalized": {
+   "error": {
+    "code": "validation",
+    "message": "BTCPay server URL is required",
+    "hint": "Enter the address you open BTCPay Server with, for example https://btcpay.example.com.",
+    "details": null
+   }
+  },
+  "identity": {
+   "ok": ""
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": ""
+  }
+ },
+ {
+  "input": "btcpay.example.com",
+  "normalized": {
+   "error": {
+    "code": "validation",
+    "message": "BTCPay server URL must start with https:// or http://",
+    "hint": "Use the full address, for example https://btcpay.example.com.",
+    "details": {
+     "reason": "missing_scheme"
+    }
+   }
+  },
+  "identity": {
+   "ok": "btcpay.example.com"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "btcpay.example.com"
+  }
+ },
+ {
+  "input": "https://btcpay.example.com",
+  "normalized": {
+   "ok": "https://btcpay.example.com"
+  },
+  "identity": {
+   "ok": "https://btcpay.example.com"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "https://btcpay.example.com"
+  }
+ },
+ {
+  "input": "https://btcpay.example.com/",
+  "normalized": {
+   "ok": "https://btcpay.example.com"
+  },
+  "identity": {
+   "ok": "https://btcpay.example.com"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "https://btcpay.example.com/"
+  }
+ },
+ {
+  "input": "HTTPS://BTCPay.Example.COM:443/",
+  "normalized": {
+   "ok": "https://BTCPay.Example.COM:443"
+  },
+  "identity": {
+   "ok": "https://btcpay.example.com"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "https://btcpay.example.com:443/"
+  }
+ },
+ {
+  "input": "http://127.0.0.1:1",
+  "normalized": {
+   "ok": "http://127.0.0.1:1"
+  },
+  "identity": {
+   "ok": "http://127.0.0.1:1"
+  },
+  "onion": false,
+  "loopback": true,
+  "redacted": {
+   "ok": "http://127.0.0.1:1"
+  }
+ },
+ {
+  "input": "http://127.0.0.1:1/prefix/api/v1",
+  "normalized": {
+   "ok": "http://127.0.0.1:1/prefix"
+  },
+  "identity": {
+   "ok": "http://127.0.0.1:1/prefix"
+  },
+  "onion": false,
+  "loopback": true,
+  "redacted": {
+   "ok": "http://127.0.0.1:1/prefix/api/v1"
+  }
+ },
+ {
+  "input": "https://example.invalid/api/v1",
+  "normalized": {
+   "ok": "https://example.invalid"
+  },
+  "identity": {
+   "ok": "https://example.invalid"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "https://example.invalid/api/v1"
+  }
+ },
+ {
+  "input": "https://example.invalid/API/V1/stores",
+  "normalized": {
+   "ok": "https://example.invalid"
+  },
+  "identity": {
+   "ok": "https://example.invalid"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "https://example.invalid/API/V1/stores"
+  }
+ },
+ {
+  "input": "https://merchant.invalid/proxy/WALLETS/w",
+  "normalized": {
+   "ok": "https://merchant.invalid/proxy"
+  },
+  "identity": {
+   "ok": "https://merchant.invalid/proxy"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "https://merchant.invalid/proxy/WALLETS/w"
+  }
+ },
+ {
+  "input": "HTTPS://EXAMPLE.invalid:443/shop/stores/s?secret=discard#fragment",
+  "normalized": {
+   "ok": "https://EXAMPLE.invalid:443/shop"
+  },
+  "identity": {
+   "ok": "https://example.invalid/shop"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "https://example.invalid:443/shop/stores/s"
+  }
+ },
+ {
+  "input": "https://merchant.invalid/proxy/invoices",
+  "normalized": {
+   "ok": "https://merchant.invalid/proxy"
+  },
+  "identity": {
+   "ok": "https://merchant.invalid/proxy"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "https://merchant.invalid/proxy/invoices"
+  }
+ },
+ {
+  "input": "https://merchant.invalid/i/abc",
+  "normalized": {
+   "ok": "https://merchant.invalid"
+  },
+  "identity": {
+   "ok": "https://merchant.invalid"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "https://merchant.invalid/i/abc"
+  }
+ },
+ {
+  "input": "https://merchant.invalid/apps/x/pos",
+  "normalized": {
+   "ok": "https://merchant.invalid"
+  },
+  "identity": {
+   "ok": "https://merchant.invalid"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "https://merchant.invalid/apps/x/pos"
+  }
+ },
+ {
+  "input": "https://merchant.invalid/account/apikeys",
+  "normalized": {
+   "ok": "https://merchant.invalid"
+  },
+  "identity": {
+   "ok": "https://merchant.invalid"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "https://merchant.invalid/account/apikeys"
+  }
+ },
+ {
+  "input": "https://merchant.invalid/login?ReturnUrl=%2F",
+  "normalized": {
+   "ok": "https://merchant.invalid"
+  },
+  "identity": {
+   "ok": "https://merchant.invalid"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "https://merchant.invalid/login"
+  }
+ },
+ {
+  "input": "https://merchant.invalid/docs#tag/Stores",
+  "normalized": {
+   "ok": "https://merchant.invalid"
+  },
+  "identity": {
+   "ok": "https://merchant.invalid"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "https://merchant.invalid/docs"
+  }
+ },
+ {
+  "input": "https://merchant.invalid/server/users",
+  "normalized": {
+   "ok": "https://merchant.invalid"
+  },
+  "identity": {
+   "ok": "https://merchant.invalid"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "https://merchant.invalid/server/users"
+  }
+ },
+ {
+  "input": "https://merchant.invalid/payment-requests/x",
+  "normalized": {
+   "ok": "https://merchant.invalid"
+  },
+  "identity": {
+   "ok": "https://merchant.invalid"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "https://merchant.invalid/payment-requests/x"
+  }
+ },
+ {
+  "input": "https://merchant.invalid/pull-payments/x",
+  "normalized": {
+   "ok": "https://merchant.invalid"
+  },
+  "identity": {
+   "ok": "https://merchant.invalid"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "https://merchant.invalid/pull-payments/x"
+  }
+ },
+ {
+  "input": "https://merchant.invalid/api-keys/authorize?x=1",
+  "normalized": {
+   "ok": "https://merchant.invalid"
+  },
+  "identity": {
+   "ok": "https://merchant.invalid"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "https://merchant.invalid/api-keys/authorize"
+  }
+ },
+ {
+  "input": "https://merchant.invalid/a/stores/b/stores/c",
+  "normalized": {
+   "ok": "https://merchant.invalid/a"
+  },
+  "identity": {
+   "ok": "https://merchant.invalid/a"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "https://merchant.invalid/a/stores/b/stores/c"
+  }
+ },
+ {
+  "input": "https://merchant.invalid//double//",
+  "normalized": {
+   "ok": "https://merchant.invalid//double"
+  },
+  "identity": {
+   "ok": "https://merchant.invalid//double"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "https://merchant.invalid//double//"
+  }
+ },
+ {
+  "input": "https://merchant.invalid/x///",
+  "normalized": {
+   "ok": "https://merchant.invalid/x"
+  },
+  "identity": {
+   "ok": "https://merchant.invalid/x"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "https://merchant.invalid/x///"
+  }
+ },
+ {
+  "input": "https://[::1]:443/prefix/docs/",
+  "normalized": {
+   "ok": "https://[::1]:443/prefix"
+  },
+  "identity": {
+   "ok": "https://::1/prefix"
+  },
+  "onion": false,
+  "loopback": true,
+  "redacted": {
+   "ok": "https://[::1]:443/prefix/docs/"
+  }
+ },
+ {
+  "input": "https://[::1]",
+  "normalized": {
+   "ok": "https://[::1]"
+  },
+  "identity": {
+   "ok": "https://::1"
+  },
+  "onion": false,
+  "loopback": true,
+  "redacted": {
+   "ok": "https://[::1]"
+  }
+ },
+ {
+  "input": "https://[fe80::1%25eth0]/",
+  "normalized": {
+   "ok": "https://[fe80::1%25eth0]"
+  },
+  "identity": {
+   "ok": "https://fe80::1%25eth0"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "https://[fe80::1%25eth0]/"
+  }
+ },
+ {
+  "input": "https://[v1.example]/stores/s",
+  "normalized": {
+   "ok": "https://[v1.example]"
+  },
+  "identity": {
+   "ok": "https://v1.example"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "https://v1.example/stores/s"
+  }
+ },
+ {
+  "input": "https://[::1]unexpected/",
+  "normalized": {
+   "error": {
+    "code": "validation",
+    "message": "BTCPay server URL is not a valid URL",
+    "hint": null,
+    "details": null
+   }
+  },
+  "identity": {
+   "ok": "https://[::1]unexpected"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "<redacted>"
+  }
+ },
+ {
+  "input": "http://[broken/",
+  "normalized": {
+   "error": {
+    "code": "validation",
+    "message": "BTCPay server URL is not a valid URL",
+    "hint": null,
+    "details": null
+   }
+  },
+  "identity": {
+   "ok": "http://[broken"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "<redacted>"
+  }
+ },
+ {
+  "input": "ftp://[broken/",
+  "normalized": {
+   "error": {
+    "code": "validation",
+    "message": "BTCPay server URL is not a valid URL",
+    "hint": null,
+    "details": null
+   }
+  },
+  "identity": {
+   "ok": "ftp://[broken"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "<redacted>"
+  }
+ },
+ {
+  "input": "https://[]/",
+  "normalized": {
+   "error": {
+    "code": "validation",
+    "message": "BTCPay server URL is not a valid URL",
+    "hint": null,
+    "details": null
+   }
+  },
+  "identity": {
+   "ok": "https://[]"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "<redacted>"
+  }
+ },
+ {
+  "input": "https://[1.2.3.4]/",
+  "normalized": {
+   "error": {
+    "code": "validation",
+    "message": "BTCPay server URL is not a valid URL",
+    "hint": null,
+    "details": null
+   }
+  },
+  "identity": {
+   "ok": "https://[1.2.3.4]"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "<redacted>"
+  }
+ },
+ {
+  "input": "missing-scheme.invalid",
+  "normalized": {
+   "error": {
+    "code": "validation",
+    "message": "BTCPay server URL must start with https:// or http://",
+    "hint": "Use the full address, for example https://btcpay.example.com.",
+    "details": {
+     "reason": "missing_scheme"
+    }
+   }
+  },
+  "identity": {
+   "ok": "missing-scheme.invalid"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "missing-scheme.invalid"
+  }
+ },
+ {
+  "input": "ftp://merchant.invalid",
+  "normalized": {
+   "error": {
+    "code": "validation",
+    "message": "BTCPay server URL must use https:// or http://",
+    "hint": null,
+    "details": {
+     "reason": "unsupported_scheme"
+    }
+   }
+  },
+  "identity": {
+   "ok": "ftp://merchant.invalid"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "ftp://merchant.invalid"
+  }
+ },
+ {
+  "input": "mailto:x@y",
+  "normalized": {
+   "error": {
+    "code": "validation",
+    "message": "BTCPay server URL must start with https:// or http://",
+    "hint": "Use the full address, for example https://btcpay.example.com.",
+    "details": {
+     "reason": "missing_scheme"
+    }
+   }
+  },
+  "identity": {
+   "ok": "mailto:x@y"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "<redacted>"
+  }
+ },
+ {
+  "input": "http:///missing",
+  "normalized": {
+   "error": {
+    "code": "validation",
+    "message": "BTCPay server URL is missing a host name",
+    "hint": null,
+    "details": null
+   }
+  },
+  "identity": {
+   "ok": "http:///missing"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "<redacted>"
+  }
+ },
+ {
+  "input": "http://",
+  "normalized": {
+   "error": {
+    "code": "validation",
+    "message": "BTCPay server URL is missing a host name",
+    "hint": null,
+    "details": null
+   }
+  },
+  "identity": {
+   "ok": "http:"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "<redacted>"
+  }
+ },
+ {
+  "input": "https://:443",
+  "normalized": {
+   "error": {
+    "code": "validation",
+    "message": "BTCPay server URL is missing a host name",
+    "hint": null,
+    "details": null
+   }
+  },
+  "identity": {
+   "ok": "https://:443"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "<redacted>"
+  }
+ },
+ {
+  "input": "https://user:secret@merchant.invalid",
+  "normalized": {
+   "error": {
+    "code": "validation",
+    "message": "BTCPay server URL must not contain a user name or password",
+    "hint": "Remove the credentials from the URL and use a Greenfield API key instead.",
+    "details": null
+   }
+  },
+  "identity": {
+   "ok": "https://user:secret@merchant.invalid"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "https://<redacted>@merchant.invalid"
+  }
+ },
+ {
+  "input": "https://user@merchant.invalid",
+  "normalized": {
+   "error": {
+    "code": "validation",
+    "message": "BTCPay server URL must not contain a user name or password",
+    "hint": "Remove the credentials from the URL and use a Greenfield API key instead.",
+    "details": null
+   }
+  },
+  "identity": {
+   "ok": "https://user@merchant.invalid"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "https://<redacted>@merchant.invalid"
+  }
+ },
+ {
+  "input": "https://:@merchant.invalid",
+  "normalized": {
+   "ok": "https://:@merchant.invalid"
+  },
+  "identity": {
+   "ok": "https://merchant.invalid"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "https://merchant.invalid"
+  }
+ },
+ {
+  "input": "https://::@merchant.invalid",
+  "normalized": {
+   "error": {
+    "code": "validation",
+    "message": "BTCPay server URL must not contain a user name or password",
+    "hint": "Remove the credentials from the URL and use a Greenfield API key instead.",
+    "details": null
+   }
+  },
+  "identity": {
+   "ok": "https://::@merchant.invalid"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "https://<redacted>@merchant.invalid"
+  }
+ },
+ {
+  "input": "https://@merchant.invalid",
+  "normalized": {
+   "ok": "https://@merchant.invalid"
+  },
+  "identity": {
+   "ok": "https://merchant.invalid"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "https://merchant.invalid"
+  }
+ },
+ {
+  "input": "https://a@b@merchant.invalid",
+  "normalized": {
+   "error": {
+    "code": "validation",
+    "message": "BTCPay server URL must not contain a user name or password",
+    "hint": "Remove the credentials from the URL and use a Greenfield API key instead.",
+    "details": null
+   }
+  },
+  "identity": {
+   "ok": "https://a@b@merchant.invalid"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "https://<redacted>@merchant.invalid"
+  }
+ },
+ {
+  "input": "\u0001https://merchant.invalid",
+  "normalized": {
+   "ok": "https://merchant.invalid"
+  },
+  "identity": {
+   "ok": "https://merchant.invalid"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "https://merchant.invalid"
+  }
+ },
+ {
+  "input": " https://merchant.invalid ",
+  "normalized": {
+   "ok": "https://merchant.invalid"
+  },
+  "identity": {
+   "ok": "https://merchant.invalid"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "https://merchant.invalid"
+  }
+ },
+ {
+  "input": "https://merch\tant.invalid/pa\nth",
+  "normalized": {
+   "ok": "https://merchant.invalid/path"
+  },
+  "identity": {
+   "ok": "https://merchant.invalid/path"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "https://merchant.invalid/path"
+  }
+ },
+ {
+  "input": "https://merchant\uff0finvalid/",
+  "normalized": {
+   "error": {
+    "code": "validation",
+    "message": "BTCPay server URL is not a valid URL",
+    "hint": null,
+    "details": null
+   }
+  },
+  "identity": {
+   "ok": "https://merchant\uff0finvalid"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "<redacted>"
+  }
+ },
+ {
+  "input": "https://merchant\u2100invalid/",
+  "normalized": {
+   "error": {
+    "code": "validation",
+    "message": "BTCPay server URL is not a valid URL",
+    "hint": null,
+    "details": null
+   }
+  },
+  "identity": {
+   "ok": "https://merchant\u2100invalid"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "<redacted>"
+  }
+ },
+ {
+  "input": "https://merchant.invalid\u3002com/",
+  "normalized": {
+   "ok": "https://merchant.invalid\u3002com"
+  },
+  "identity": {
+   "ok": "https://merchant.invalid\u3002com"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "https://merchant.invalid\u3002com/"
+  }
+ },
+ {
+  "input": "https://stra\u00dfe.example/",
+  "normalized": {
+   "ok": "https://stra\u00dfe.example"
+  },
+  "identity": {
+   "ok": "https://stra\u00dfe.example"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "https://stra\u00dfe.example/"
+  }
+ },
+ {
+  "input": "https://xn--strae-oqa.example/",
+  "normalized": {
+   "ok": "https://xn--strae-oqa.example"
+  },
+  "identity": {
+   "ok": "https://xn--strae-oqa.example"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "https://xn--strae-oqa.example/"
+  }
+ },
+ {
+  "input": "http://btcpayabcdefghijklmnop.onion/",
+  "normalized": {
+   "ok": "http://btcpayabcdefghijklmnop.onion"
+  },
+  "identity": {
+   "ok": "http://btcpayabcdefghijklmnop.onion"
+  },
+  "onion": true,
+  "loopback": false,
+  "redacted": {
+   "ok": "http://btcpayabcdefghijklmnop.onion/"
+  }
+ },
+ {
+  "input": "http://BTCPAY.ONION:80",
+  "normalized": {
+   "ok": "http://BTCPAY.ONION:80"
+  },
+  "identity": {
+   "ok": "http://btcpay.onion"
+  },
+  "onion": true,
+  "loopback": false,
+  "redacted": {
+   "ok": "http://btcpay.onion:80"
+  }
+ },
+ {
+  "input": "https://localhost:23001",
+  "normalized": {
+   "ok": "https://localhost:23001"
+  },
+  "identity": {
+   "ok": "https://localhost:23001"
+  },
+  "onion": false,
+  "loopback": true,
+  "redacted": {
+   "ok": "https://localhost:23001"
+  }
+ },
+ {
+  "input": "http://127.5.5.5/",
+  "normalized": {
+   "ok": "http://127.5.5.5"
+  },
+  "identity": {
+   "ok": "http://127.5.5.5"
+  },
+  "onion": false,
+  "loopback": true,
+  "redacted": {
+   "ok": "http://127.5.5.5/"
+  }
+ },
+ {
+  "input": "http://[::1]:8080/x",
+  "normalized": {
+   "ok": "http://[::1]:8080/x"
+  },
+  "identity": {
+   "ok": "http://::1:8080/x"
+  },
+  "onion": false,
+  "loopback": true,
+  "redacted": {
+   "ok": "http://[::1]:8080/x"
+  }
+ },
+ {
+  "input": "https://merchant.invalid:abc/",
+  "normalized": {
+   "ok": "https://merchant.invalid:abc"
+  },
+  "identity": {
+   "exception": "ValueError"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "<redacted>"
+  }
+ },
+ {
+  "input": "https://merchant.invalid:99999/",
+  "normalized": {
+   "ok": "https://merchant.invalid:99999"
+  },
+  "identity": {
+   "exception": "ValueError"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "<redacted>"
+  }
+ },
+ {
+  "input": "https://merchant.invalid:0080/",
+  "normalized": {
+   "ok": "https://merchant.invalid:0080"
+  },
+  "identity": {
+   "ok": "https://merchant.invalid:80"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "https://merchant.invalid:80/"
+  }
+ },
+ {
+  "input": "https://merchant.invalid?query",
+  "normalized": {
+   "ok": "https://merchant.invalid"
+  },
+  "identity": {
+   "ok": "https://merchant.invalid"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "https://merchant.invalid"
+  }
+ },
+ {
+  "input": "https://merchant.invalid#frag",
+  "normalized": {
+   "ok": "https://merchant.invalid"
+  },
+  "identity": {
+   "ok": "https://merchant.invalid"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "https://merchant.invalid"
+  }
+ },
+ {
+  "input": "HtTp://Mixed.Case/Path/STORES/x",
+  "normalized": {
+   "ok": "http://Mixed.Case/Path"
+  },
+  "identity": {
+   "ok": "http://mixed.case/path"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "http://mixed.case/Path/STORES/x"
+  }
+ },
+ {
+  "input": "https://merchant.invalid/%2Fapi/v1",
+  "normalized": {
+   "ok": "https://merchant.invalid/%2Fapi/v1"
+  },
+  "identity": {
+   "ok": "https://merchant.invalid/%2fapi/v1"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "https://merchant.invalid/%2Fapi/v1"
+  }
+ },
+ {
+  "input": "https://merchant.invalid/caf\u00e9/",
+  "normalized": {
+   "ok": "https://merchant.invalid/caf\u00e9"
+  },
+  "identity": {
+   "ok": "https://merchant.invalid/caf\u00e9"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "https://merchant.invalid/caf\u00e9/"
+  }
+ },
+ {
+  "input": 12345,
+  "normalized": {
+   "error": {
+    "code": "validation",
+    "message": "BTCPay server URL must start with https:// or http://",
+    "hint": "Use the full address, for example https://btcpay.example.com.",
+    "details": {
+     "reason": "missing_scheme"
+    }
+   }
+  },
+  "identity": {
+   "ok": "12345"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "12345"
+  }
+ },
+ {
+  "input": true,
+  "normalized": {
+   "error": {
+    "code": "validation",
+    "message": "BTCPay server URL must start with https:// or http://",
+    "hint": "Use the full address, for example https://btcpay.example.com.",
+    "details": {
+     "reason": "missing_scheme"
+    }
+   }
+  },
+  "identity": {
+   "ok": "true"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "True"
+  }
+ },
+ {
+  "input": "1",
+  "normalized": {
+   "error": {
+    "code": "validation",
+    "message": "BTCPay server URL must start with https:// or http://",
+    "hint": "Use the full address, for example https://btcpay.example.com.",
+    "details": {
+     "reason": "missing_scheme"
+    }
+   }
+  },
+  "identity": {
+   "ok": "1"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "1"
+  }
+ },
+ {
+  "input": "https://merchant.invalid/\ud800",
+  "normalized": {
+   "ok": "https://merchant.invalid/\ud800"
+  },
+  "identity": {
+   "ok": "https://merchant.invalid/\ud800"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "https://merchant.invalid/\ud800"
+  }
+ },
+ {
+  "input": "https://merchant.invalid:443/",
+  "normalized": {
+   "ok": "https://merchant.invalid:443"
+  },
+  "identity": {
+   "ok": "https://merchant.invalid"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "https://merchant.invalid:443/"
+  }
+ },
+ {
+  "input": "http://merchant.invalid:80/",
+  "normalized": {
+   "ok": "http://merchant.invalid:80"
+  },
+  "identity": {
+   "ok": "http://merchant.invalid"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "http://merchant.invalid:80/"
+  }
+ },
+ {
+  "input": "https://merchant.invalid:80/",
+  "normalized": {
+   "ok": "https://merchant.invalid:80"
+  },
+  "identity": {
+   "ok": "https://merchant.invalid:80"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "https://merchant.invalid:80/"
+  }
+ },
+ {
+  "input": "http://merchant.invalid:443/",
+  "normalized": {
+   "ok": "http://merchant.invalid:443"
+  },
+  "identity": {
+   "ok": "http://merchant.invalid:443"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "http://merchant.invalid:443/"
+  }
+ },
+ {
+  "input": "localhost:3000",
+  "normalized": {
+   "error": {
+    "code": "validation",
+    "message": "BTCPay server URL must start with https:// or http://",
+    "hint": "Use the full address, for example https://btcpay.example.com.",
+    "details": {
+     "reason": "missing_scheme"
+    }
+   }
+  },
+  "identity": {
+   "ok": "localhost:3000"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "localhost:3000"
+  }
+ },
+ {
+  "input": "[::1]:80",
+  "normalized": {
+   "error": {
+    "code": "validation",
+    "message": "BTCPay server URL must start with https:// or http://",
+    "hint": "Use the full address, for example https://btcpay.example.com.",
+    "details": {
+     "reason": "missing_scheme"
+    }
+   }
+  },
+  "identity": {
+   "ok": "[::1]:80"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "[::1]:80"
+  }
+ },
+ {
+  "input": "bad host",
+  "normalized": {
+   "error": {
+    "code": "validation",
+    "message": "BTCPay server URL must start with https:// or http://",
+    "hint": "Use the full address, for example https://btcpay.example.com.",
+    "details": {
+     "reason": "missing_scheme"
+    }
+   }
+  },
+  "identity": {
+   "ok": "bad host"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "<redacted>"
+  }
+ },
+ {
+  "input": "host:123456",
+  "normalized": {
+   "error": {
+    "code": "validation",
+    "message": "BTCPay server URL must start with https:// or http://",
+    "hint": "Use the full address, for example https://btcpay.example.com.",
+    "details": {
+     "reason": "missing_scheme"
+    }
+   }
+  },
+  "identity": {
+   "ok": "host:123456"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "<redacted>"
+  }
+ },
+ {
+  "input": "user:pw@host",
+  "normalized": {
+   "error": {
+    "code": "validation",
+    "message": "BTCPay server URL must start with https:// or http://",
+    "hint": "Use the full address, for example https://btcpay.example.com.",
+    "details": {
+     "reason": "missing_scheme"
+    }
+   }
+  },
+  "identity": {
+   "ok": "user:pw@host"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "<redacted>"
+  }
+ },
+ {
+  "input": "-x",
+  "normalized": {
+   "error": {
+    "code": "validation",
+    "message": "BTCPay server URL must start with https:// or http://",
+    "hint": "Use the full address, for example https://btcpay.example.com.",
+    "details": {
+     "reason": "missing_scheme"
+    }
+   }
+  },
+  "identity": {
+   "ok": "-x"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "<redacted>"
+  }
+ },
+ {
+  "input": "x-",
+  "normalized": {
+   "error": {
+    "code": "validation",
+    "message": "BTCPay server URL must start with https:// or http://",
+    "hint": "Use the full address, for example https://btcpay.example.com.",
+    "details": {
+     "reason": "missing_scheme"
+    }
+   }
+  },
+  "identity": {
+   "ok": "x-"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "<redacted>"
+  }
+ },
+ {
+  "input": "a.b_c",
+  "normalized": {
+   "error": {
+    "code": "validation",
+    "message": "BTCPay server URL must start with https:// or http://",
+    "hint": "Use the full address, for example https://btcpay.example.com.",
+    "details": {
+     "reason": "missing_scheme"
+    }
+   }
+  },
+  "identity": {
+   "ok": "a.b_c"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "a.b_c"
+  }
+ },
+ {
+  "input": "https://u:p@h.example:0080/p?q=1#f",
+  "normalized": {
+   "error": {
+    "code": "validation",
+    "message": "BTCPay server URL must not contain a user name or password",
+    "hint": "Remove the credentials from the URL and use a Greenfield API key instead.",
+    "details": null
+   }
+  },
+  "identity": {
+   "ok": "https://u:p@h.example:0080/p?q=1#f"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "https://<redacted>@h.example:80/p"
+  }
+ },
+ {
+  "input": "https://u@[::1]:1/p",
+  "normalized": {
+   "error": {
+    "code": "validation",
+    "message": "BTCPay server URL must not contain a user name or password",
+    "hint": "Remove the credentials from the URL and use a Greenfield API key instead.",
+    "details": null
+   }
+  },
+  "identity": {
+   "ok": "https://u@[::1]:1/p"
+  },
+  "onion": false,
+  "loopback": true,
+  "redacted": {
+   "ok": "https://<redacted>@[::1]:1/p"
+  }
+ },
+ {
+  "input": "http://h/a?b",
+  "normalized": {
+   "ok": "http://h/a"
+  },
+  "identity": {
+   "ok": "http://h/a"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "http://h/a"
+  }
+ },
+ {
+  "input": "socks5h://127.0.0.1:9050",
+  "normalized": {
+   "error": {
+    "code": "validation",
+    "message": "BTCPay server URL must use https:// or http://",
+    "hint": null,
+    "details": {
+     "reason": "unsupported_scheme"
+    }
+   }
+  },
+  "identity": {
+   "ok": "socks5h://127.0.0.1:9050"
+  },
+  "onion": false,
+  "loopback": true,
+  "redacted": {
+   "ok": "socks5h://127.0.0.1:9050"
+  }
+ },
+ {
+  "input": "http://12.0.0.1/",
+  "normalized": {
+   "ok": "http://12.0.0.1"
+  },
+  "identity": {
+   "ok": "http://12.0.0.1"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "http://12.0.0.1/"
+  }
+ },
+ {
+  "input": "http://128.0.0.1/",
+  "normalized": {
+   "ok": "http://128.0.0.1"
+  },
+  "identity": {
+   "ok": "http://128.0.0.1"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "http://128.0.0.1/"
+  }
+ },
+ {
+  "input": "http://btcpayonion/",
+  "normalized": {
+   "ok": "http://btcpayonion"
+  },
+  "identity": {
+   "ok": "http://btcpayonion"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "http://btcpayonion/"
+  }
+ },
+ {
+  "input": "http://merchant.notonion:80/",
+  "normalized": {
+   "ok": "http://merchant.notonion:80"
+  },
+  "identity": {
+   "ok": "http://merchant.notonion"
+  },
+  "onion": false,
+  "loopback": false,
+  "redacted": {
+   "ok": "http://merchant.notonion:80/"
+  }
+ }
+]

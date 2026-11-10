@@ -1,0 +1,582 @@
+[
+  {
+    "id": "acquisition-pagination",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": "if page.len() < 25 {",
+    "replace": "if page.len() <= 25 {",
+    "expect_failing": [
+      "acquisition_esplora_paginates_deduplicates_and_retains_both_statistics"
+    ],
+    "rule": "A full Esplora page continues from its last txid."
+  },
+  {
+    "id": "acquisition-mempool",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": "format!(\"{path}/txs/mempool\")",
+    "replace": "format!(\"{path}/txs/chain\")",
+    "expect_failing": [
+      "acquisition_esplora_paginates_deduplicates_and_retains_both_statistics"
+    ],
+    "rule": "Esplora history includes the independent mempool endpoint."
+  },
+  {
+    "id": "acquisition-dedup",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": "if seen.insert(txid.to_owned()) {",
+    "replace": "if { seen.insert(txid.to_owned()); true } {",
+    "expect_failing": [
+      "acquisition_esplora_paginates_deduplicates_and_retains_both_statistics"
+    ],
+    "rule": "Repeated txids are retained once across confirmed and mempool history."
+  },
+  {
+    "id": "acquisition-page-limit",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": "pages < limit",
+    "replace": "pages <= limit",
+    "expect_failing": [
+      "acquisition_page_limits_still_fetch_mempool_and_unknown_tip_never_becomes_zero"
+    ],
+    "rule": "Configured page limits bound confirmed history while retaining mempool observations."
+  },
+  {
+    "id": "acquisition-depth",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": "tip.checked_sub(height)?.checked_add(1)",
+    "replace": "tip.checked_sub(height)?.checked_add(0)",
+    "expect_failing": [
+      "acquisition_decoding_and_positions_preserve_exact_amounts_and_unknown_heights"
+    ],
+    "rule": "Depth includes the confirmation block and remains unknown without a valid height and tip."
+  },
+  {
+    "id": "acquisition-prevout",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": "input[\"prevout\"] =",
+    "replace": "input[\"ignored_prevout\"] =",
+    "expect_failing": [
+      "acquisition_electrum_fetches_prevouts_headers_and_exact_witness_graph"
+    ],
+    "rule": "Current Electrum graphs inline the exact referenced previous output."
+  },
+  {
+    "id": "acquisition-output-script",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": "output[\"scriptpubkey\"] = output[\"script_hex\"].clone();",
+    "replace": "output[\"scriptpubkey\"] = json!(\"\");",
+    "expect_failing": [
+      "acquisition_electrum_fetches_prevouts_headers_and_exact_witness_graph"
+    ],
+    "rule": "Normalized Electrum outputs retain the observed script."
+  },
+  {
+    "id": "acquisition-graph-version",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": "json!({\"kind\":\"bitcoin_electrum\",\"version\":2})",
+    "replace": "json!({\"kind\":\"bitcoin_electrum\",\"version\":1})",
+    "expect_failing": [
+      "acquisition_electrum_fetches_prevouts_headers_and_exact_witness_graph"
+    ],
+    "rule": "The Electrum graph representation matches Python stored graph version two."
+  },
+  {
+    "id": "acquisition-witness",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": "if witness { v[\"witness\"]",
+    "replace": "if !witness { v[\"witness\"]",
+    "expect_failing": [
+      "acquisition_electrum_fetches_prevouts_headers_and_exact_witness_graph"
+    ],
+    "rule": "Witness stacks are preserved without inventing witness data for legacy transactions."
+  },
+  {
+    "id": "acquisition-vsize",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": "\"vsize\":tx.vsize()",
+    "replace": "\"vsize\":tx.total_size()",
+    "expect_failing": [
+      "acquisition_electrum_fetches_prevouts_headers_and_exact_witness_graph"
+    ],
+    "rule": "Witness vsize is computed using weight rather than wire length."
+  },
+  {
+    "id": "acquisition-raw-identity",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": "if tx.compute_txid().to_string() != txid.to_lowercase() {",
+    "replace": "if false && tx.compute_txid().to_string() != txid.to_lowercase() {",
+    "expect_failing": [
+      "acquisition_raw_transaction_identity_and_encoding_fail_closed"
+    ],
+    "rule": "Raw Electrum transactions must match the requested txid."
+  },
+  {
+    "id": "acquisition-coinbase-prefetch",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": "if coinbase_input(input) {\n                    continue;",
+    "replace": "if false && coinbase_input(input) {\n                    continue;",
+    "expect_failing": [
+      "acquisition_coinbase_never_fetches_or_attaches_the_null_outpoint"
+    ],
+    "rule": "Coinbase issuance has no parent transaction to acquire."
+  },
+  {
+    "id": "acquisition-coinbase-graph",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": "if coinbase_input(input) {\n            continue;",
+    "replace": "if false && coinbase_input(input) {\n            continue;",
+    "expect_failing": [
+      "acquisition_coinbase_never_fetches_or_attaches_the_null_outpoint"
+    ],
+    "rule": "Graph normalization must not attach a previous output to coinbase issuance."
+  },
+  {
+    "id": "acquisition-scope",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": "if scope != &self.scope {",
+    "replace": "if false && scope != &self.scope {",
+    "expect_failing": [
+      "acquisition_every_path_requires_current_scope_and_exact_single_use_consent"
+    ],
+    "rule": "The current book/profile/wallet/environment/source scope must match the action."
+  },
+  {
+    "id": "acquisition-action",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": ".filter(|c| Arc::ptr_eq(&c.identity, &self.identity))",
+    "replace": ".filter(|c| Arc::ptr_eq(&c.identity, &c.identity))",
+    "expect_failing": [
+      "acquisition_every_path_requires_current_scope_and_exact_single_use_consent"
+    ],
+    "rule": "An identical endpoint cannot inherit consent for another action."
+  },
+  {
+    "id": "acquisition-single-use",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": "if proof.started.swap(true, Ordering::SeqCst) {",
+    "replace": "if false && proof.started.swap(true, Ordering::SeqCst) {",
+    "expect_failing": [
+      "acquisition_cancellation_revocation_and_replay_return_no_partial_batch"
+    ],
+    "rule": "An action grant cannot be replayed after cancellation or completion."
+  },
+  {
+    "id": "acquisition-exact-sats",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": "\"value_sats\":sats,",
+    "replace": "\"value_sats\":sats+1,",
+    "expect_failing": [
+      "acquisition_decoding_and_positions_preserve_exact_amounts_and_unknown_heights"
+    ],
+    "rule": "Decoded satoshi quantities retain their exact integer value."
+  },
+  {
+    "id": "acquisition-offline-return",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": "        cancel.check(deadline)?;\n        gate.authorize(\n            self.backend.request().clone(),\n            Some(proof.transport.clone()),\n        )\n        .map_err(|e| e.app_error())?;\n        Ok(result)",
+    "replace": "        cancel.check(deadline)?;\n        Ok(result)",
+    "expect_failing": [
+      "acquisition_rechecks_offline_before_returning_observed_facts"
+    ],
+    "rule": "An offline toggle during observation prevents returning a successful acquisition, even when an optional tip failure was suppressed."
+  },
+  {
+    "id": "acquisition-proxy-type",
+    "file": "crates/chain/src/config.rs",
+    "find": "        if let Some(raw) = field(&config, &[\"tor_proxy\", \"proxy\"]) {\n            let proxy = raw.as_str().ok_or_else(|| app(\"Invalid proxy URL\"))?;",
+    "replace": "        if let Some(proxy) = value(&config, &[\"tor_proxy\", \"proxy\"]).filter(|p| !p.is_empty()) {",
+    "expect_failing": [
+      "acquisition_invalid_proxy_types_refuse_instead_of_selecting_direct"
+    ],
+    "rule": "A configured proxy with an invalid type must fail closed instead of selecting a direct route."
+  },
+  {
+    "id": "acquisition-esplora-tip-reuse",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "let reused = same_tip\n                && cache::esplora_reusable(",
+    "replace": "let reused = cache::esplora_reusable(",
+    "expect_failing": [
+      "compatibility_cached_esplora_fetches_once_then_reuses_only_complete_membership"
+    ],
+    "rule": "Unchanged statistics cannot reuse evidence across a changed or missing tip anchor."
+  },
+  {
+    "id": "acquisition-esplora-tip-save",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "cp[\"esplora_tip_hash\"] = json!(tip_hash);",
+    "replace": "cp[\"esplora_tip_hash\"] = Value::Null;",
+    "expect_failing": [
+      "compatibility_cached_esplora_fetches_once_then_reuses_only_complete_membership"
+    ],
+    "rule": "The successful Esplora tip anchor must survive restart in the checkpoint."
+  },
+  {
+    "id": "acquisition-electrum-tip-reuse",
+    "file": "crates/wallets/src/compatibility_cache.rs",
+    "find": "same_tip\n        && crate::scan::integer",
+    "replace": "(same_tip || true)\n        && crate::scan::integer",
+    "expect_failing": [
+      "compatibility_cache_binds_membership_source_and_dirty_history"
+    ],
+    "rule": "A stable Electrum status cannot authorize reuse after a changed tip."
+  },
+  {
+    "id": "acquisition-electrum-tip-entries",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "if same_tip {\n                    &c.checkpoint[\"electrum_history_entries\"][h]",
+    "replace": "if true {\n                    &c.checkpoint[\"electrum_history_entries\"][h]",
+    "expect_failing": [
+      "compatibility_tip_change_refreshes_history_and_headers_but_reuses_valid_graphs"
+    ],
+    "rule": "Unchanged history rows are refreshed when their confirming block can change."
+  },
+  {
+    "id": "acquisition-electrum-tip-headers",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "let mut headers = if same_tip {",
+    "replace": "let mut headers = if true {",
+    "expect_failing": [
+      "compatibility_tip_change_refreshes_history_and_headers_but_reuses_valid_graphs"
+    ],
+    "rule": "A changed or missing tip invalidates cached block timestamps."
+  },
+  {
+    "id": "acquisition-electrum-tip-save",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "cp[\"electrum_tip_fingerprint\"] = json!(tip_fingerprint);",
+    "replace": "cp[\"electrum_tip_fingerprint\"] = Value::Null;",
+    "expect_failing": [
+      "compatibility_cached_electrum_skips_history_graph_headers_and_inventory"
+    ],
+    "rule": "The full-header anchor is persisted for the next compatibility round."
+  },
+  {
+    "id": "acquisition-tip-header-length",
+    "file": "crates/chain/src/electrum.rs",
+    "find": "(raw.len() >= 80).then(|| {",
+    "replace": "(!raw.is_empty()).then(|| {",
+    "expect_failing": [
+      "compatibility_tip_fingerprint_binds_full_header_and_rejects_unknown_anchors"
+    ],
+    "rule": "Malformed short Electrum headers cannot anchor caches."
+  },
+  {
+    "id": "acquisition-tip-header-identity",
+    "file": "crates/chain/src/electrum.rs",
+    "find": "Sha256::digest(raw)",
+    "replace": "Sha256::digest(&raw[..68])",
+    "expect_failing": [
+      "compatibility_tip_fingerprint_binds_full_header_and_rejects_unknown_anchors"
+    ],
+    "rule": "The anchor commits to every header byte, including timestamp and suffix."
+  },
+  {
+    "id": "acquisition-tip-header-height",
+    "file": "crates/chain/src/electrum.rs",
+    "find": "Value::Number(n) if n.to_string().bytes().all(|b| b.is_ascii_digit()) => {}",
+    "replace": "Value::Number(_) => {}",
+    "expect_failing": [
+      "compatibility_tip_fingerprint_binds_full_header_and_rejects_unknown_anchors"
+    ],
+    "rule": "Only a nonnegative integer Electrum tip height can accompany an anchor."
+  },
+  {
+    "id": "acquisition-tip-hash-shape",
+    "file": "crates/chain/src/http.rs",
+    "find": "text.len() == 64 && text.bytes().all(|b| b.is_ascii_hexdigit())",
+    "replace": "text.len() == 64",
+    "expect_failing": [
+      "esplora_tip_hash_is_optional_canonical_and_consent_bound"
+    ],
+    "rule": "Malformed Esplora tip hashes disable cache reuse."
+  },
+  {
+    "id": "acquisition-cache-integer-sats",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": "output[\"value\"] = graph_sats(&output[\"value_sats\"])?;",
+    "replace": "output[\"value\"] = output[\"value_sats\"].clone();",
+    "rule": "Reused decoded graphs normalize cached float fields back to integer sats.",
+    "expect_failing": [
+      "acquisition_cached_graph_normalization_keeps_integer_sats_and_existing_prevouts"
+    ]
+  },
+  {
+    "id": "acquisition-cache-existing-prevout",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": "if input[\"prevout\"].is_object() {",
+    "replace": "if false && input[\"prevout\"].is_object() {",
+    "rule": "Validated inline previous outputs survive cache normalization without another lookup.",
+    "expect_failing": [
+      "acquisition_cached_graph_normalization_keeps_integer_sats_and_existing_prevouts"
+    ]
+  },
+  {
+    "id": "acquisition-cache-sat-rounding",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": "to_fixed_places(0, Rounding::HalfEven)",
+    "replace": "to_fixed_places(0, Rounding::HalfUp)",
+    "rule": "Electrum graph sat normalization retains the reference half-even integral conversion.",
+    "expect_failing": [
+      "acquisition_cached_graph_normalization_keeps_integer_sats_and_existing_prevouts"
+    ]
+  },
+  {
+    "id": "anchor-esplora-height-bound",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "if esplora_block_hash(&client, observed, consent, deadline) == tip_hash {",
+    "replace": "if true {",
+    "expect_failing": [
+      "esplora_history_anchors_match_python_requests_and_checkpoints"
+    ],
+    "rule": "The Esplora anchor height must resolve to the observed tip hash."
+  },
+  {
+    "id": "anchor-esplora-previous-proof",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "if let Some(previous) = previous_height.filter(|p| observed > *p) {",
+    "replace": "if let Some(previous) = previous_height.filter(|p| observed < *p) {",
+    "expect_failing": [
+      "esplora_history_anchors_match_python_requests_and_checkpoints"
+    ],
+    "rule": "A taller tip reuses histories only after proving the saved tip block."
+  },
+  {
+    "id": "anchor-esplora-version",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "let same_tip = same_tip && anchor_version(&c.checkpoint, 2.0);",
+    "replace": "let same_tip = same_tip;",
+    "expect_failing": [
+      "esplora_history_anchors_match_python_requests_and_checkpoints"
+    ],
+    "rule": "Esplora checkpoints older than anchor version 2 rebuild once."
+  },
+  {
+    "id": "anchor-esplora-raced-on-chain",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": ".is_some_and(|hash| status[\"block_hash\"] == *hash)",
+    "replace": ".is_some()",
+    "expect_failing": [
+      "esplora_history_anchors_match_python_requests_and_checkpoints"
+    ],
+    "rule": "Every raced history entry must sit in the current chain."
+  },
+  {
+    "id": "anchor-esplora-raced-initial",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "if on_chain && initial.is_some() && initial == tip_hash {",
+    "replace": "if on_chain {",
+    "expect_failing": [
+      "esplora_history_anchors_match_python_requests_and_checkpoints"
+    ],
+    "rule": "The initial tip must survive the reads before the anchor advances."
+  },
+  {
+    "id": "anchor-esplora-raced-highest",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "let (highest, hash) = observed.pop_last().expect(\"raced heights\");",
+    "replace": "let (highest, hash) = observed.pop_first().expect(\"raced heights\");",
+    "expect_failing": [
+      "esplora_history_anchors_match_python_requests_and_checkpoints"
+    ],
+    "rule": "A raced anchor advances to the highest observed block."
+  },
+  {
+    "id": "anchor-esplora-save-height",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "cp[\"esplora_tip_height\"] = json!(tip_height);",
+    "replace": "cp[\"esplora_tip_height\"] = json!(null);",
+    "expect_failing": [
+      "esplora_history_anchors_match_python_requests_and_checkpoints"
+    ],
+    "rule": "The checkpoint keeps the proven Esplora anchor height."
+  },
+  {
+    "id": "anchor-esplora-save-version",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "cp[\"compatibility_history_anchor_version\"] = json!(2);",
+    "replace": "cp[\"compatibility_history_anchor_version\"] = json!(1);",
+    "expect_failing": [
+      "esplora_history_anchors_match_python_requests_and_checkpoints"
+    ],
+    "rule": "Esplora checkpoints record anchor version 2."
+  },
+  {
+    "id": "anchor-electrum-previous-proof",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "            if height > previous {",
+    "replace": "            if height < previous {",
+    "expect_failing": [
+      "electrum_history_anchors_match_python_requests_and_checkpoints"
+    ],
+    "rule": "A taller Electrum tip reuses histories only after proving the saved header."
+  },
+  {
+    "id": "anchor-electrum-version",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "let same_tip = same_tip && anchor_version(&c.checkpoint, 3.0);",
+    "replace": "let same_tip = same_tip;",
+    "expect_failing": [
+      "electrum_history_anchors_match_python_requests_and_checkpoints"
+    ],
+    "rule": "Electrum checkpoints older than anchor version 3 rebuild once."
+  },
+  {
+    "id": "anchor-electrum-raced-reread",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "if reread.is_none() || reread != fingerprints.get(h).cloned().flatten() {",
+    "replace": "if reread.is_none() {",
+    "expect_failing": [
+      "electrum_history_anchors_match_python_requests_and_checkpoints"
+    ],
+    "rule": "Every raced timestamp header must be re-read unchanged."
+  },
+  {
+    "id": "anchor-electrum-raced-initial",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "if raced_valid && initial.is_some() && initial == tip_fingerprint {",
+    "replace": "if raced_valid {",
+    "expect_failing": [
+      "electrum_history_anchors_match_python_requests_and_checkpoints"
+    ],
+    "rule": "The initial Electrum tip must survive the reads before the anchor advances."
+  },
+  {
+    "id": "anchor-electrum-raced-highest",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "tip_height = tip_fingerprint.is_some().then_some(highest);",
+    "replace": "tip_height = Some(height);",
+    "expect_failing": [
+      "electrum_history_anchors_match_python_requests_and_checkpoints"
+    ],
+    "rule": "A raced Electrum anchor advances to the highest cached header."
+  },
+  {
+    "id": "anchor-electrum-raced-fingerprint",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "fingerprints.insert(h, kassiber_chain::electrum_header_fingerprint(&raw));",
+    "replace": "fingerprints.insert(h, None);",
+    "expect_failing": [
+      "electrum_history_anchors_match_python_requests_and_checkpoints"
+    ],
+    "rule": "The anchor binds the exact header that supplied the cached timestamp."
+  },
+  {
+    "id": "anchor-electrum-save-height",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "cp[\"electrum_tip_height\"] = json!(tip_height);",
+    "replace": "cp[\"electrum_tip_height\"] = json!(null);",
+    "expect_failing": [
+      "electrum_history_anchors_match_python_requests_and_checkpoints"
+    ],
+    "rule": "The checkpoint keeps the proven Electrum anchor height."
+  },
+  {
+    "id": "anchor-electrum-save-version",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "cp[\"compatibility_history_anchor_version\"] = json!(3);",
+    "replace": "cp[\"compatibility_history_anchor_version\"] = json!(2);",
+    "expect_failing": [
+      "electrum_history_anchors_match_python_requests_and_checkpoints"
+    ],
+    "rule": "Electrum checkpoints record anchor version 3."
+  },
+  {
+    "id": "anchor-electrum-height-range",
+    "file": "crates/chain/src/electrum.rs",
+    "find": "n.as_u64().and_then(|n| u32::try_from(n).ok())",
+    "replace": "n.as_u64().map(|n| n as u32)",
+    "expect_failing": [
+      "electrum_history_anchors_match_python_requests_and_checkpoints"
+    ],
+    "rule": "A tip height beyond a block height anchor is no anchor."
+  },
+  {
+    "id": "confirmations-proven-height",
+    "file": "crates/wallets/src/publication/wallet.rs",
+    "find": "AND block_height > 0 AND block_height <= ?1",
+    "replace": "AND block_height > 0",
+    "expect_failing": [
+      "reused_utxo_confirmations_match_python"
+    ],
+    "rule": "Outputs above the proven height keep their counts."
+  },
+  {
+    "id": "confirmations-confirmed-only",
+    "file": "crates/wallets/src/publication/wallet.rs",
+    "find": "AND spent_at IS NULL AND confirmation_status = 'confirmed'",
+    "replace": "AND spent_at IS NULL",
+    "expect_failing": [
+      "reused_utxo_confirmations_match_python"
+    ],
+    "rule": "Only confirmed unspent outputs advance."
+  },
+  {
+    "id": "confirmations-kind-alias",
+    "file": "crates/wallets/src/publication/wallet.rs",
+    "find": "\"mempool\" | \"liquid-esplora\" => \"esplora\",",
+    "replace": "\"liquid-esplora\" => \"esplora\",",
+    "expect_failing": [
+      "reused_utxo_confirmations_match_python"
+    ],
+    "rule": "A mempool backend reads the Esplora anchor height."
+  },
+  {
+    "id": "confirmations-source-scope",
+    "file": "crates/wallets/src/publication/wallet.rs",
+    "find": "AND backend_name = ?4 AND backend_kind = ?5 AND chain = ?6 AND network = ?7",
+    "replace": "AND backend_name = ?4 AND chain = ?6 AND network = ?7",
+    "expect_failing": [
+      "reused_utxo_confirmations_match_python"
+    ],
+    "rule": "The refresh stays within its backend, chain and network."
+  },
+  {
+    "id": "confirmations-publication-wiring",
+    "file": "crates/wallets/src/publication/wallet.rs",
+    "find": "    } else if meta[\"utxos_skipped_unchanged\"] == true {",
+    "replace": "    } else if false {",
+    "expect_failing": [
+      "reused_utxo_membership_refreshes_confirmations_through_publication"
+    ],
+    "rule": "Publication refreshes confirmations when the adapter reused UTXO membership."
+  },
+  {
+    "id": "anchor-electrum-utxo-reconnect",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "            drop(client);\n            cancel.check(deadline)?;\n            let mut client = ElectrumClient::connect(\n                self.backend.clone(),\n                gate,\n                Some(consent.clone()),\n                deadline,\n            )?;\n",
+    "replace": "            cancel.check(deadline)?;\n",
+    "expect_failing": [
+      "electrum_history_anchors_match_python_requests_and_checkpoints"
+    ],
+    "rule": "Electrum UTXOs are listed over a second connection, as Python reads them."
+  },
+  {
+    "id": "anchor-electrum-utxo-tip",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "                .map(integer_json);",
+    "replace": "                .map(integer_json)\n                .filter(|_| false);",
+    "expect_failing": [
+      "electrum_history_anchors_match_python_requests_and_checkpoints"
+    ],
+    "rule": "The second connection re-reads the tip that fixes UTXO depth."
+  },
+  {
+    "id": "anchor-electrum-utxo-header",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "json!(header_timestamp(header.as_str().ok_or_else(invalid)?)?),",
+    "replace": "json!(0),",
+    "expect_failing": [
+      "electrum_history_anchors_match_python_requests_and_checkpoints"
+    ],
+    "rule": "Each confirmed UTXO height reads its header for the block time."
+  },
+  {
+    "id": "anchor-electrum-utxo-positive",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": ".filter_map(|utxo| positive_height(&utxo[\"height\"]))",
+    "replace": ".filter_map(|utxo| crate::scan::integer(&utxo[\"height\"]).and_then(|h| i64::try_from(h).ok()))",
+    "expect_failing": [
+      "electrum_history_anchors_match_python_requests_and_checkpoints"
+    ],
+    "rule": "Unconfirmed UTXOs read no header."
+  }
+]

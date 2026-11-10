@@ -1,0 +1,40 @@
+[package]
+name = "kassiber-chain"
+description = "Consent-bound watch-only chain backend clients and explicit probes"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[features]
+# Explicit opt-in for the differential driver and guarded downstream tests.
+# Keep the observer out of ordinary workspace feature unification.
+test-harness = ["kassiber-net/test-observer", "kassiber-net/test-support"]
+
+[[example]]
+name = "client_fixture"
+required-features = ["test-harness"]
+
+[[example]]
+name = "lightning_fixture"
+required-features = ["test-harness"]
+
+[dependencies]
+kassiber-net = { path = "../net" }
+kassiber-envelope = { path = "../envelope" }
+kassiber-pyjson = { path = "../pyjson" }
+kassiber-pytext = { path = "../pytext" }
+# Withholds what a request carried from what the server sends back.
+kassiber-credentials = { path = "../credentials" }
+serde_json = "1"
+base64 = "0.22"
+sha2 = "0.11"
+
+[dev-dependencies]
+kassiber-net = { path = "../net", features = ["test-support"] }
+tempfile = "3"
+
+[lints.rust]
+unsafe_code = "forbid"

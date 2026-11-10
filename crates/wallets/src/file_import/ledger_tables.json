@@ -1,0 +1,501 @@
+{
+  "aliases": {
+    "date": [
+      "date",
+      "date time",
+      "datetime",
+      "datum",
+      "executed at",
+      "time",
+      "timestamp",
+      "trade date",
+      "zeitpunkt"
+    ],
+    "type": [
+      "action",
+      "art",
+      "art der transaktion",
+      "buchungsart",
+      "category",
+      "operation",
+      "side",
+      "transaction type",
+      "transaktionsart",
+      "transaktionstyp",
+      "tx type",
+      "typ",
+      "type",
+      "vorgang",
+      "vorgangsart"
+    ],
+    "direction": [
+      "direction",
+      "flow",
+      "in/out",
+      "richtung"
+    ],
+    "received": [
+      "amount received",
+      "buy amount",
+      "credit",
+      "deposit amount",
+      "eingang",
+      "erhalten",
+      "incoming",
+      "received",
+      "received amount",
+      "received btc"
+    ],
+    "sent": [
+      "amount sent",
+      "ausgang",
+      "debit",
+      "gesendet",
+      "outgoing",
+      "sell amount",
+      "sent",
+      "sent amount",
+      "sent btc",
+      "withdrawal amount"
+    ],
+    "amount": [
+      "amount",
+      "amount btc",
+      "amount sats",
+      "betrag",
+      "btc",
+      "btc amount",
+      "menge",
+      "net amount",
+      "qty",
+      "quantity",
+      "sats",
+      "sats amount"
+    ],
+    "received_asset": [
+      "buy asset",
+      "buy currency",
+      "credit asset",
+      "incoming asset",
+      "received asset",
+      "received currency"
+    ],
+    "sent_asset": [
+      "debit asset",
+      "outgoing asset",
+      "sell asset",
+      "sell currency",
+      "sent asset",
+      "sent currency"
+    ],
+    "asset": [
+      "asset",
+      "coin",
+      "crypto",
+      "crypto asset",
+      "symbol"
+    ],
+    "fee": [
+      "fee",
+      "fee amount",
+      "fees",
+      "gebuehr",
+      "geb\u00fchr",
+      "miner fee",
+      "network fee",
+      "tx fee"
+    ],
+    "fee_asset": [
+      "fee asset",
+      "fee coin",
+      "fee cur.",
+      "fee currency"
+    ],
+    "fiat_currency": [
+      "cash currency",
+      "currency",
+      "fiat",
+      "fiat currency",
+      "quote currency",
+      "waehrung",
+      "w\u00e4hrung"
+    ],
+    "fiat_value": [
+      "cost",
+      "fiat value",
+      "gesamt",
+      "proceeds",
+      "total",
+      "total value",
+      "value",
+      "wert"
+    ],
+    "fiat_rate": [
+      "btc price",
+      "kurs",
+      "preis",
+      "price",
+      "price per btc",
+      "rate",
+      "spot",
+      "unit price"
+    ],
+    "note": [
+      "beschreibung",
+      "comment",
+      "description",
+      "label",
+      "memo",
+      "note",
+      "notes",
+      "notiz"
+    ],
+    "txid": [
+      "hash",
+      "ref",
+      "reference",
+      "transaction id",
+      "tx hash",
+      "tx-id",
+      "txid"
+    ],
+    "counterparty": [
+      "counterparty",
+      "exchange",
+      "gegenpartei",
+      "payee",
+      "platform"
+    ],
+    "payment_hash": [
+      "lightning payment hash",
+      "ln payment hash",
+      "payment hash",
+      "paymenthash"
+    ],
+    "payment_hash_source": [
+      "payment hash origin",
+      "payment hash source",
+      "paymenthash source"
+    ],
+    "swap_refund_funding_txid": [
+      "htlc funding txid",
+      "refund funding tx-id",
+      "refund funding txid",
+      "swap refund funding tx-id",
+      "swap refund funding txid"
+    ],
+    "swap_refund_funding_vout": [
+      "funding output index",
+      "htlc funding vout",
+      "refund funding vout",
+      "swap refund funding vout"
+    ]
+  },
+  "types": {
+    "buy": [
+      "inbound",
+      "buy"
+    ],
+    "purchase": [
+      "inbound",
+      "buy"
+    ],
+    "sell": [
+      "outbound",
+      "sell"
+    ],
+    "deposit": [
+      "inbound",
+      "deposit"
+    ],
+    "receive": [
+      "inbound",
+      "deposit"
+    ],
+    "transfer in": [
+      "inbound",
+      "deposit"
+    ],
+    "withdrawal": [
+      "outbound",
+      "withdrawal"
+    ],
+    "withdraw": [
+      "outbound",
+      "withdrawal"
+    ],
+    "send": [
+      "outbound",
+      "withdrawal"
+    ],
+    "transfer out": [
+      "outbound",
+      "withdrawal"
+    ],
+    "spend": [
+      "outbound",
+      "spend"
+    ],
+    "payment": [
+      "outbound",
+      "spend"
+    ],
+    "income": [
+      "inbound",
+      "income"
+    ],
+    "salary": [
+      "inbound",
+      "wages"
+    ],
+    "wages": [
+      "inbound",
+      "wages"
+    ],
+    "mining": [
+      "inbound",
+      "mining"
+    ],
+    "staking": [
+      "inbound",
+      "staking"
+    ],
+    "interest": [
+      "inbound",
+      "interest"
+    ],
+    "lending interest": [
+      "inbound",
+      "lending_interest"
+    ],
+    "airdrop": [
+      "inbound",
+      "airdrop"
+    ],
+    "fork": [
+      "inbound",
+      "hardfork"
+    ],
+    "hard fork": [
+      "inbound",
+      "hardfork"
+    ],
+    "gift received": [
+      "inbound",
+      null
+    ],
+    "gift sent": [
+      "outbound",
+      "gift"
+    ],
+    "gift": [
+      "outbound",
+      "gift"
+    ],
+    "donation": [
+      "outbound",
+      "donation"
+    ],
+    "lost": [
+      "outbound",
+      "lost"
+    ],
+    "stolen": [
+      "outbound",
+      "stolen"
+    ]
+  },
+  "display": [
+    "Buy",
+    "Deposit",
+    "Gift received",
+    "Sell",
+    "Withdrawal",
+    "Spend",
+    "Income",
+    "Mining",
+    "Staking",
+    "Interest",
+    "Airdrop",
+    "Fork",
+    "Gift sent",
+    "Donation",
+    "Lost",
+    "Stolen"
+  ],
+  "columns": [
+    "date",
+    "type",
+    "direction",
+    "received",
+    "sent",
+    "amount",
+    "received_asset",
+    "sent_asset",
+    "asset",
+    "fee",
+    "fee_asset",
+    "fiat_currency",
+    "fiat_value",
+    "fiat_rate",
+    "note",
+    "txid",
+    "counterparty",
+    "payment_hash",
+    "payment_hash_source",
+    "swap_refund_funding_txid",
+    "swap_refund_funding_vout"
+  ],
+  "asset_fields": [
+    "received_header_asset",
+    "sent_header_asset",
+    "amount_header_asset",
+    "fee_header_asset"
+  ],
+  "plan_fields": [
+    "amount",
+    "amount_header_asset",
+    "asset",
+    "counterparty",
+    "date",
+    "direction",
+    "fee",
+    "fee_asset",
+    "fee_header_asset",
+    "fiat_currency",
+    "fiat_rate",
+    "fiat_value",
+    "note",
+    "payment_hash",
+    "payment_hash_source",
+    "received",
+    "received_asset",
+    "received_header_asset",
+    "sent",
+    "sent_asset",
+    "sent_header_asset",
+    "swap_refund_funding_txid",
+    "swap_refund_funding_vout",
+    "txid",
+    "type",
+    "type_map"
+  ],
+  "hint_codes": [
+    "AUD",
+    "BTC",
+    "CAD",
+    "CHF",
+    "CZK",
+    "DKK",
+    "EUR",
+    "GBP",
+    "HUF",
+    "JPY",
+    "LBTC",
+    "NOK",
+    "PLN",
+    "SATS",
+    "SEK",
+    "USD"
+  ],
+  "header_assets": {
+    "btc": "BTC",
+    "bitcoin": "BTC",
+    "xbt": "BTC",
+    "lbtc": "LBTC",
+    "liquidbtc": "LBTC",
+    "liquid": "LBTC",
+    "sats": "SATS",
+    "sat": "SATS",
+    "eur": "EUR",
+    "euro": "EUR",
+    "usd": "USD",
+    "dollar": "USD",
+    "chf": "CHF",
+    "gbp": "GBP",
+    "aud": "AUD",
+    "cad": "CAD",
+    "jpy": "JPY",
+    "nok": "NOK",
+    "sek": "SEK",
+    "dkk": "DKK",
+    "pln": "PLN",
+    "czk": "CZK",
+    "huf": "HUF"
+  },
+  "received_tokens": [
+    "bought",
+    "buy",
+    "credit",
+    "deposit",
+    "eingang",
+    "erhalten",
+    "incoming",
+    "receive",
+    "received"
+  ],
+  "sent_tokens": [
+    "ausgang",
+    "debit",
+    "gesendet",
+    "outgoing",
+    "sell",
+    "send",
+    "sent",
+    "sold",
+    "withdraw",
+    "withdrawal"
+  ],
+  "type_values": {
+    "in": "Deposit",
+    "incoming": "Deposit",
+    "received": "Deposit",
+    "receive": "Deposit",
+    "credit": "Deposit",
+    "out": "Withdrawal",
+    "outgoing": "Withdrawal",
+    "sent": "Withdrawal",
+    "send": "Withdrawal",
+    "debit": "Withdrawal",
+    "kauf": "Buy",
+    "ankauf": "Buy",
+    "einzahlung": "Deposit",
+    "eingang": "Deposit",
+    "empfangen": "Deposit",
+    "erhalten": "Deposit",
+    "verkauf": "Sell",
+    "auszahlung": "Withdrawal",
+    "ausgang": "Withdrawal",
+    "gesendet": "Withdrawal"
+  },
+  "inbound": [
+    "ankauf",
+    "buy",
+    "credit",
+    "deposit",
+    "eingang",
+    "einzahlung",
+    "empfangen",
+    "erhalten",
+    "in",
+    "inbound",
+    "incoming",
+    "kauf",
+    "receive",
+    "received"
+  ],
+  "outbound": [
+    "ausgang",
+    "auszahlung",
+    "debit",
+    "gesendet",
+    "out",
+    "outbound",
+    "outgoing",
+    "sell",
+    "send",
+    "sent",
+    "verkauf",
+    "withdrawal"
+  ]
+}

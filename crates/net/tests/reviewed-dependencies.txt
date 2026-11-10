@@ -1,0 +1,133 @@
+# Reviewed direct dependency names and their allowed explicit/forwarded features.
+# Default features are the reviewed defaults from the lockfile, not a wildcard.
+# Adding any dependency or alias requires a networking/feature review.
+apple-native-keyring-store keychain
+base64
+block2
+core-foundation
+dirs
+fancy-regex
+flate2 rust_backend
+kassiber-ai
+kassiber-cli test-probe
+kassiber-chain
+kassiber-credentials
+kassiber-custody timing
+kassiber-daemon test-kinds
+kassiber-envelope
+kassiber-net test-observer test-support
+kassiber-ownership
+kassiber-paths
+kassiber-pdf
+kassiber-pydecimal
+kassiber-pyjson
+kassiber-pytext
+kassiber-rates
+kassiber-release
+kassiber-runtime fake
+kassiber-secrets native-keyring test-hooks
+kassiber-store test-hooks
+kassiber-tax-core
+kassiber-tax-countries
+keyring-core
+libc
+nix user fs feature resource signal
+num-bigint
+num-integer
+num-traits
+objc2
+objc2-app-kit std NSWindow
+objc2-foundation
+pyo3 macros abi3-py310
+rpassword
+rusqlite bundled-sqlcipher bundled-sqlcipher-vendored-openssl backup functions hooks
+security-framework OSX_10_15
+security-framework-sys
+serde derive
+# raw_value retains local custody snapshot fragments; it adds no transport.
+serde_json arbitrary_precision float_roundtrip raw_value
+sha2
+# In-process OpenSSH release-signature verification (Ed25519 via
+# ed25519-dalek); no I/O, no transport. `signature` is ssh-key's own trait crate.
+ssh-key std ed25519
+signature
+tauri
+tauri-build
+tauri-plugin-deep-link
+tauri-plugin-dialog
+tauri-plugin-single-instance deep-link
+tauri-plugin-window-state
+tempfile
+tokio io-util process time
+typst
+typst-layout
+typst-pdf
+windows-native-keyring-store
+windows-sys Win32_Foundation Win32_Storage_FileSystem Win32_UI_Shell Win32_Security Win32_Security_Authorization Win32_System_Threading Win32_System_Memory Win32_System_Pipes Win32_System_IO Win32_System_Console
+zbus-secret-service-keyring-store rt-tokio-crypto-rust
+zeroize
+# kassiber-net-only transport/parser dependencies; the crate owns the connector.
+httparse
+idna_adapter compiled_data
+rustls std ring tls12
+rustls-native-certs
+url
+webpki-roots
+toml_edit parse
+
+# Integrated local services: encryption/archive, descriptor, and pure text APIs.
+age
+tar
+uuid
+bitcoin
+# Existing locked pure hash algorithms; transfer UUIDv5 uses SHA-1, no transport.
+bitcoin_hashes
+miniscript
+elements-miniscript
+regex
+kassiber-setup
+kassiber-transactions
+kassiber-transfers test-harness
+kassiber-imports
+kassiber-wallets test-harness
+kassiber-workspace
+# Stored-journal reports: SQLite/Decimal/JSON only; no transport or process API.
+kassiber-reports
+# Journal composition and review probes reuse existing local services only.
+kassiber-journals test-harness timing
+
+# Existing secrets entropy and backup service; test hooks add no transport.
+getrandom
+kassiber-backup test-hooks
+
+# Custody HTLC replay reuses the already pinned pure HASH160/SHA-256 crate.
+bitcoin_hashes
+
+kassiber-diagnostics test-hooks
+
+# Pure BDK wallet/index/update types; no protocol client or storage features.
+bdk_wallet std
+bdk_chain std
+bdk_core std
+
+# Pure LWK 0.18 wollet/update/descriptor types for Liquid sync. Default
+# features are off: no Electrum, Esplora, Waterfalls, registry, price or
+# SQLite clients; LWK receives chain data only through kassiber-net.
+lwk_wollet
+lwk_common
+
+# In-memory OOXML/ZIP rendering only. No optional clock, filesystem or C zlib.
+kassiber-xlsx
+rust_xlsxwriter
+zip deflate
+
+# R6 local IPC: AF_UNIX sockets and named pipes only (the chokepoint scanner
+# admits their forms in crates/ipc alone); the operator protocol and client.
+kassiber-ipc
+kassiber-operator test-harness
+# AI providers, tools and discovery; HTTP only through kassiber-net routes.
+kassiber-ai test-harness
+
+# R6-8 MCP: the stdio JSON-RPC server and its read-only tool projection;
+# no I/O of its own beyond the streams it is handed.
+kassiber-mcp

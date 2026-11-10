@@ -1,0 +1,822 @@
+[
+  {
+    "id": "observer-fields",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": ".filter(|v| v.len() == keys.len() && keys.iter().all(|k| v.contains_key(*k)))",
+    "replace": ".filter(|v| { let _ = (v, keys); true })",
+    "expect_failing": [
+      "observer_bdk_unknown_missing_malformed_components_fail_closed_without_material_in_errors"
+    ],
+    "rule": "Missing and unknown aggregate components require a rebuild."
+  },
+  {
+    "id": "observer-version",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "if !version_one(&payload[\"schema_version\"]) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "observer_bdk_unknown_missing_malformed_components_fail_closed_without_material_in_errors"
+    ],
+    "rule": "Only version one of the BDK aggregate is decoded."
+  },
+  {
+    "id": "observer-network",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "if !network.is_null()",
+    "replace": "if false && !network.is_null()",
+    "expect_failing": [
+      "observer_bdk_unknown_missing_malformed_components_fail_closed_without_material_in_errors"
+    ],
+    "rule": "Unknown BDK network values require a rebuild."
+  },
+  {
+    "id": "observer-integer-range",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": ".filter(|v| *v <= max)",
+    "replace": ".filter(|_| { let _ = max; true })",
+    "expect_failing": [
+      "observer_bdk_unknown_missing_malformed_components_fail_closed_without_material_in_errors"
+    ],
+    "rule": "Dependency integer widths must not be truncated."
+  },
+  {
+    "id": "observer-integer-coercion",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "crate::scan::integer(value)",
+    "replace": "value.as_u64().map(kassiber_pyjson::BigInt::from)",
+    "expect_failing": [
+      "observer_bdk_all_components_roundtrip_python_serialized_order_and_exact_quantities"
+    ],
+    "rule": "Persisted integer conversion follows Python, including Unicode decimal strings and truncated finite floats."
+  },
+  {
+    "id": "observer-hash-width",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "if length.is_some_and(|n| n != bytes.len()) {",
+    "replace": "if false && length.is_some_and(|n| n != bytes.len()) {",
+    "expect_failing": [
+      "observer_bdk_unknown_missing_malformed_components_fail_closed_without_material_in_errors"
+    ],
+    "rule": "Serialized BDK hashes retain their exact 32-byte width."
+  },
+  {
+    "id": "observer-hash-order",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "Ok(bytes.iter().map(|v| format!(\"{v:02x}\")).collect())",
+    "replace": "Ok(bytes.iter().rev().map(|v| format!(\"{v:02x}\")).collect())",
+    "expect_failing": [
+      "observer_bdk_all_components_roundtrip_python_serialized_order_and_exact_quantities"
+    ],
+    "rule": "BDK serialized hash order is preserved rather than converted to display order."
+  },
+  {
+    "id": "observer-chain",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "json!({\"height\":height,\"hash\":block_hash})",
+    "replace": "json!({\"height\":height+1,\"hash\":block_hash})",
+    "expect_failing": [
+      "observer_bdk_all_components_roundtrip_python_serialized_order_and_exact_quantities"
+    ],
+    "rule": "All local-chain changes, including tombstones, survive the aggregate roundtrip."
+  },
+  {
+    "id": "observer-transactions",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "txs.push(consensus::encode::serialize_hex(&tx));",
+    "replace": "txs.push(String::new()); let _ = tx;",
+    "expect_failing": [
+      "observer_bdk_all_components_roundtrip_python_serialized_order_and_exact_quantities"
+    ],
+    "rule": "The aggregate retains complete serialized transactions and witness."
+  },
+  {
+    "id": "observer-prevouts",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "\"value_sats\":value,",
+    "replace": "\"value_sats\":value+1,",
+    "expect_failing": [
+      "observer_bdk_all_components_roundtrip_python_serialized_order_and_exact_quantities"
+    ],
+    "rule": "Aggregate prevout quantities retain exact integer satoshis."
+  },
+  {
+    "id": "observer-anchors",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "\"confirmation_time\":time}",
+    "replace": "\"confirmation_time\":time+1}",
+    "expect_failing": [
+      "observer_bdk_all_components_roundtrip_python_serialized_order_and_exact_quantities"
+    ],
+    "rule": "All anchor block heights, hashes and confirmation times survive state encoding."
+  },
+  {
+    "id": "observer-first_seen",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "for name in [\"last_seen\", \"first_seen\", \"last_evicted\"] {",
+    "replace": "for name in [\"last_seen\",\"last_evicted\"] {",
+    "expect_failing": [
+      "observer_bdk_all_components_roundtrip_python_serialized_order_and_exact_quantities"
+    ],
+    "rule": "The aggregate retains first_seen timestamps independently."
+  },
+  {
+    "id": "observer-last_seen",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "for name in [\"last_seen\", \"first_seen\", \"last_evicted\"] {",
+    "replace": "for name in [\"first_seen\",\"last_evicted\"] {",
+    "expect_failing": [
+      "observer_bdk_all_components_roundtrip_python_serialized_order_and_exact_quantities"
+    ],
+    "rule": "The aggregate retains last_seen timestamps independently."
+  },
+  {
+    "id": "observer-last_evicted",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "for name in [\"last_seen\", \"first_seen\", \"last_evicted\"] {",
+    "replace": "for name in [\"last_seen\",\"first_seen\"] {",
+    "expect_failing": [
+      "observer_bdk_all_components_roundtrip_python_serialized_order_and_exact_quantities"
+    ],
+    "rule": "The aggregate retains last_evicted timestamps independently."
+  },
+  {
+    "id": "observer-indexer",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "\"last_revealed\":index}",
+    "replace": "\"last_revealed\":index+1}",
+    "expect_failing": [
+      "observer_bdk_all_components_roundtrip_python_serialized_order_and_exact_quantities"
+    ],
+    "rule": "Revealed descriptor indices retain the exact persisted horizon."
+  },
+  {
+    "id": "observer-locked",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "\"locked\":is_locked}",
+    "replace": "\"locked\":!is_locked}",
+    "expect_failing": [
+      "observer_bdk_all_components_roundtrip_python_serialized_order_and_exact_quantities"
+    ],
+    "rule": "Locked-outpoint state retains both true and false values."
+  },
+  {
+    "id": "observer-receive-descriptor",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "\"descriptor\":descriptor(&payload[\"descriptor\"], \"descriptor\", network == \"BITCOIN\")?",
+    "replace": "\"descriptor\":Value::Null",
+    "expect_failing": [
+      "observer_bdk_all_components_roundtrip_python_serialized_order_and_exact_quantities"
+    ],
+    "rule": "Receive descriptors remain part of the aggregate."
+  },
+  {
+    "id": "observer-change-descriptor",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "\"change_descriptor\":descriptor(&payload[\"change_descriptor\"], \"change_descriptor\", network == \"BITCOIN\")?",
+    "replace": "\"change_descriptor\":Value::Null",
+    "expect_failing": [
+      "observer_bdk_all_components_roundtrip_python_serialized_order_and_exact_quantities"
+    ],
+    "rule": "Change descriptors remain independent of receive descriptors."
+  },
+  {
+    "id": "observer-descriptor-normalization",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "Ok(json!(parsed.to_string()))",
+    "replace": "{ let _ = parsed; Ok(value.clone()) }",
+    "expect_failing": [
+      "observer_bdk_all_components_roundtrip_python_serialized_order_and_exact_quantities"
+    ],
+    "rule": "Descriptor encoding uses BDK-compatible normalized paths and checksums."
+  },
+  {
+    "id": "observer-identity",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "\"chain-observer-identity-v1\\0{logical_wallet}\\0{source_wallet}\\0{source_key}\"",
+    "replace": "\"chain-observer-identity-v1\\0{logical_wallet}\\0{source_wallet}\"",
+    "expect_failing": [
+      "observer_commitments_match_python_unicode_floats_opaque_json_and_integer_msat"
+    ],
+    "rule": "Observer identity is bound to logical wallet, concrete source and structural source key."
+  },
+  {
+    "id": "observer-fingerprint-depth",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "position.remove(\"confirmations\");",
+    "replace": "position.remove(\"unused\");",
+    "expect_failing": [
+      "observer_fingerprints_match_python_and_bind_every_record_input_except_depth"
+    ],
+    "rule": "Growing depth alone does not invalidate a confirmed record fingerprint."
+  },
+  {
+    "id": "observer-fingerprint-txid",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "record[\"txid\"]",
+    "replace": "Value::Null",
+    "expect_failing": [
+      "observer_fingerprints_match_python_and_bind_every_record_input_except_depth"
+    ],
+    "rule": "The record fingerprint commits to txid."
+  },
+  {
+    "id": "observer-fingerprint-vin",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "record[\"vin\"]",
+    "replace": "Value::Null",
+    "expect_failing": [
+      "observer_fingerprints_match_python_and_bind_every_record_input_except_depth"
+    ],
+    "rule": "The record fingerprint commits to vin."
+  },
+  {
+    "id": "observer-fingerprint-vout",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "record[\"vout\"]",
+    "replace": "Value::Null",
+    "expect_failing": [
+      "observer_fingerprints_match_python_and_bind_every_record_input_except_depth"
+    ],
+    "rule": "The record fingerprint commits to vout."
+  },
+  {
+    "id": "observer-fingerprint-observed_at",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "record[\"observed_at\"]",
+    "replace": "Value::Null",
+    "expect_failing": [
+      "observer_fingerprints_match_python_and_bind_every_record_input_except_depth"
+    ],
+    "rule": "The record fingerprint commits to observed_at."
+  },
+  {
+    "id": "observer-fingerprint-owned_scripts",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "record[\"owned_scripts\"]",
+    "replace": "Value::Null",
+    "expect_failing": [
+      "observer_fingerprints_match_python_and_bind_every_record_input_except_depth"
+    ],
+    "rule": "The record fingerprint commits to owned_scripts."
+  },
+  {
+    "id": "observer-fingerprint-backend",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "record[\"backend\"]",
+    "replace": "Value::Null",
+    "expect_failing": [
+      "observer_fingerprints_match_python_and_bind_every_record_input_except_depth"
+    ],
+    "rule": "The record fingerprint commits to backend."
+  },
+  {
+    "id": "observer-fingerprint-position",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "\"position\":position",
+    "replace": "\"position\":Value::Null",
+    "expect_failing": [
+      "observer_fingerprints_match_python_and_bind_every_record_input_except_depth"
+    ],
+    "rule": "Record fingerprints include block identity and chain position."
+  },
+  {
+    "id": "observer-fingerprint-release",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "\"version\":version",
+    "replace": "\"version\":\"\"",
+    "expect_failing": [
+      "observer_fingerprints_match_python_and_bind_every_record_input_except_depth"
+    ],
+    "rule": "Record fingerprints bind the format and Kassiber release."
+  },
+  {
+    "id": "observer-reuse-full-scan",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "!use_full_scan && current_txids.is_some()",
+    "replace": "{ let _ = use_full_scan; true } && current_txids.is_some()",
+    "expect_failing": [
+      "observer_reuse_requires_confirmed_current_single_observer_same_release_incremental_state"
+    ],
+    "rule": "A full scan or reorg rebuild cannot reuse prior records."
+  },
+  {
+    "id": "observer-reuse-release",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": ".filter(|v| v[\"record_fingerprint_version\"].as_str() == Some(version))",
+    "replace": ".filter(|_| { let _ = version; true })",
+    "expect_failing": [
+      "observer_reuse_requires_confirmed_current_single_observer_same_release_incremental_state"
+    ],
+    "rule": "Another release cannot reuse records under an older fingerprint format."
+  },
+  {
+    "id": "observer-reuse-confirmed",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "        confirmed\n            &&",
+    "replace": "        (confirmed || true)\n            &&",
+    "expect_failing": [
+      "observer_reuse_requires_confirmed_current_single_observer_same_release_incremental_state"
+    ],
+    "rule": "Unconfirmed transactions are always emitted again."
+  },
+  {
+    "id": "observer-reuse-proof",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "&& self.current_txids.contains(txid)",
+    "replace": "&& { let _ = &self.current_txids; true }",
+    "expect_failing": [
+      "observer_reuse_requires_confirmed_current_single_observer_same_release_incremental_state"
+    ],
+    "rule": "Reuse requires a current closed provenance proof for this txid."
+  },
+  {
+    "id": "observer-reuse-fingerprint",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "self.prior_fingerprints.get(txid).and_then(Value::as_str) == Some(fingerprint)",
+    "replace": "{ let _ = (&self.prior_fingerprints, fingerprint); true }",
+    "expect_failing": [
+      "observer_reuse_requires_confirmed_current_single_observer_same_release_incremental_state"
+    ],
+    "rule": "A changed record fingerprint requires re-emission."
+  },
+  {
+    "id": "observer-graph-encoding",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "compact(&parsed, false)?",
+    "replace": "compact(&parsed, true)?",
+    "expect_failing": [
+      "observer_commitments_match_python_unicode_floats_opaque_json_and_integer_msat"
+    ],
+    "rule": "Graph commitments use Python non-ASCII JSON without changing bytes."
+  },
+  {
+    "id": "observer-graph-opaque",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "dict([(\"opaque_text\", s(raw_json))])",
+    "replace": "dict([(\"opaque_text\", s(\"\"))])",
+    "expect_failing": [
+      "observer_commitments_match_python_unicode_floats_opaque_json_and_integer_msat"
+    ],
+    "rule": "Opaque graph text remains distinguishable from other invalid graphs."
+  },
+  {
+    "id": "observer-json-order",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": ".sort_keys(true)",
+    "replace": ".sort_keys(false)",
+    "expect_failing": [
+      "observer_commitments_match_python_unicode_floats_opaque_json_and_integer_msat"
+    ],
+    "rule": "Graph and quantity commitments use Python sorted-key canonical JSON."
+  },
+  {
+    "id": "observer-quantity-amount",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "integer(\"amount\")?",
+    "replace": "PyValue::Int(0.into())",
+    "expect_failing": [
+      "observer_commitments_match_python_unicode_floats_opaque_json_and_integer_msat"
+    ],
+    "rule": "Observation quantities commit to exact integer msat."
+  },
+  {
+    "id": "observer-quantity-fee",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "integer(\"fee\")?",
+    "replace": "PyValue::Int(0.into())",
+    "expect_failing": [
+      "observer_commitments_match_python_unicode_floats_opaque_json_and_integer_msat"
+    ],
+    "rule": "Observation quantities independently commit to the fee."
+  },
+  {
+    "id": "observer-quantity-wallet",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "s(text(row, \"wallet_id\"))",
+    "replace": "s(\"\")",
+    "expect_failing": [
+      "observer_commitments_match_python_unicode_floats_opaque_json_and_integer_msat"
+    ],
+    "rule": "The quantity proof cannot cross wallet identity."
+  },
+  {
+    "id": "observer-quantity-asset",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "(\"asset\", s(asset))",
+    "replace": "(\"asset\", {let _ = asset; s(\"\")})",
+    "expect_failing": [
+      "observer_commitments_match_python_unicode_floats_opaque_json_and_integer_msat"
+    ],
+    "rule": "The quantity proof binds the normalized asset."
+  },
+  {
+    "id": "observer-quantity-includes-fee",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "PyValue::Bool(truthy(field(row, \"amount_includes_fee\")))",
+    "replace": "PyValue::Bool(false)",
+    "expect_failing": [
+      "observer_commitments_match_python_unicode_floats_opaque_json_and_integer_msat"
+    ],
+    "rule": "The quantity proof distinguishes amount-includes-fee semantics."
+  },
+  {
+    "id": "observer-authority",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "if version == Some(1)",
+    "replace": "if { let _ = version; true }",
+    "expect_failing": [
+      "observer_current_rows_require_both_commitments_authority_scope_and_every_active_sibling"
+    ],
+    "rule": "Only the supported closed provenance authority version permits reuse."
+  },
+  {
+    "id": "observer-sole-source",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "&& ids == Some(json!([observer_id]))",
+    "replace": "&& { let _ = (&ids,observer_id); true }",
+    "expect_failing": [
+      "observer_current_rows_require_both_commitments_authority_scope_and_every_active_sibling"
+    ],
+    "rule": "A foreign or multi-source observation is never this observer's reusable row."
+  },
+  {
+    "id": "observer-quantity-proof",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "&& quantity.as_deref() == Some(quantity_hash(&observed)?.as_str())",
+    "replace": "&& { let _ = (&quantity,&observed); true }",
+    "expect_failing": [
+      "observer_current_rows_require_both_commitments_authority_scope_and_every_active_sibling"
+    ],
+    "rule": "The current row's exact quantity must match persisted authority."
+  },
+  {
+    "id": "observer-every-active-row",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "Ok(current.difference(&stale).cloned().collect())",
+    "replace": "{ let _ = stale; Ok(current) }",
+    "expect_failing": [
+      "observer_current_rows_require_both_commitments_authority_scope_and_every_active_sibling"
+    ],
+    "rule": "One stale active sibling prevents reusing the entire canonical txid."
+  },
+  {
+    "id": "observer-canonical-txid",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": ".to_ascii_lowercase();\n        if txid.len()",
+    "replace": ".to_string();\n        if txid.len()",
+    "expect_failing": [
+      "observer_current_rows_require_both_commitments_authority_scope_and_every_active_sibling"
+    ],
+    "rule": "Active siblings use canonical case-insensitive Bitcoin txid identity."
+  },
+  {
+    "id": "observer-wallet-scope",
+    "file": "crates/store/src/observer.rs",
+    "find": "WHERE tx.wallet_id=? AND tx.excluded=0",
+    "replace": "WHERE (tx.wallet_id=? OR 1) AND tx.excluded=0",
+    "expect_failing": [
+      "observer_current_rows_require_both_commitments_authority_scope_and_every_active_sibling"
+    ],
+    "rule": "Reusable rows are restricted to the requested wallet."
+  },
+  {
+    "id": "observer-exclusions",
+    "file": "crates/store/src/observer.rs",
+    "find": "WHERE tx.wallet_id=? AND tx.excluded=0",
+    "replace": "WHERE tx.wallet_id=?",
+    "expect_failing": [
+      "observer_current_rows_require_both_commitments_authority_scope_and_every_active_sibling"
+    ],
+    "rule": "Excluded rows neither authorize reuse nor poison active rows."
+  },
+  {
+    "id": "observer-prepare-transaction",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "if !conn.is_autocommit() {",
+    "replace": "if false && !conn.is_autocommit() {",
+    "expect_failing": [
+      "observer_snapshot_restores_epoch_exact_exclusive_coverage_and_refuses_incompatible_state"
+    ],
+    "rule": "State preparation refuses an active wallet write transaction."
+  },
+  {
+    "id": "observer-state-version",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "if row.state_version != 1 {",
+    "replace": "if false && row.state_version != 1 {",
+    "expect_failing": [
+      "observer_snapshot_restores_epoch_exact_exclusive_coverage_and_refuses_incompatible_state"
+    ],
+    "rule": "Unknown state representations require a rebuild."
+  },
+  {
+    "id": "observer-state-observer_kind",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "row.observer_kind != identity.observer_kind",
+    "replace": "false && row.observer_kind != identity.observer_kind",
+    "expect_failing": [
+      "observer_snapshot_restores_epoch_exact_exclusive_coverage_and_refuses_incompatible_state"
+    ],
+    "rule": "Persisted state is bound to the requested observer_kind."
+  },
+  {
+    "id": "observer-state-chain",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "row.chain != identity.chain",
+    "replace": "false && row.chain != identity.chain",
+    "expect_failing": [
+      "observer_snapshot_restores_epoch_exact_exclusive_coverage_and_refuses_incompatible_state"
+    ],
+    "rule": "Persisted state is bound to the requested chain."
+  },
+  {
+    "id": "observer-state-network",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "row.network != identity.network",
+    "replace": "false && row.network != identity.network",
+    "expect_failing": [
+      "observer_snapshot_restores_epoch_exact_exclusive_coverage_and_refuses_incompatible_state"
+    ],
+    "rule": "Persisted state is bound to the requested network."
+  },
+  {
+    "id": "observer-state-logical_wallet_id",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "row.logical_wallet_id != identity.logical_wallet_id",
+    "replace": "false && row.logical_wallet_id != identity.logical_wallet_id",
+    "expect_failing": [
+      "observer_snapshot_restores_epoch_exact_exclusive_coverage_and_refuses_incompatible_state"
+    ],
+    "rule": "Persisted state is bound to the requested logical_wallet_id."
+  },
+  {
+    "id": "observer-state-source_wallet_id",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "row.source_wallet_id != identity.source_wallet_id",
+    "replace": "false && row.source_wallet_id != identity.source_wallet_id",
+    "expect_failing": [
+      "observer_snapshot_restores_epoch_exact_exclusive_coverage_and_refuses_incompatible_state"
+    ],
+    "rule": "Persisted state is bound to the requested source_wallet_id."
+  },
+  {
+    "id": "observer-state-source_key",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "row.source_key != identity.source_key",
+    "replace": "false && row.source_key != identity.source_key",
+    "expect_failing": [
+      "observer_snapshot_restores_epoch_exact_exclusive_coverage_and_refuses_incompatible_state"
+    ],
+    "rule": "Persisted state is bound to the requested source_key."
+  },
+  {
+    "id": "observer-coverage-version",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "if point.coverage_version != 2 {",
+    "replace": "if false && point.coverage_version != 2 {",
+    "expect_failing": [
+      "observer_snapshot_restores_epoch_exact_exclusive_coverage_and_refuses_incompatible_state"
+    ],
+    "rule": "Coverage version one cannot acquire exclusive version-two semantics."
+  },
+  {
+    "id": "observer-coverage-boundary",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "\"scanned_to\":point.scanned_to",
+    "replace": "\"scanned_to\":point.scanned_to+1",
+    "expect_failing": [
+      "observer_snapshot_restores_epoch_exact_exclusive_coverage_and_refuses_incompatible_state"
+    ],
+    "rule": "The loaded scan boundary is exact and exclusive."
+  },
+  {
+    "id": "observer-coverage-highest",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "\"highest_used\":point.highest_used",
+    "replace": "\"highest_used\":Value::Null",
+    "expect_failing": [
+      "observer_snapshot_restores_epoch_exact_exclusive_coverage_and_refuses_incompatible_state"
+    ],
+    "rule": "Used indices are preserved independently of scanned coverage."
+  },
+  {
+    "id": "observer-coverage-order",
+    "file": "crates/store/src/observer.rs",
+    "find": "WHERE observer_id=? ORDER BY branch_key",
+    "replace": "WHERE observer_id=? ORDER BY branch_key DESC",
+    "expect_failing": [
+      "observer_snapshot_restores_epoch_exact_exclusive_coverage_and_refuses_incompatible_state"
+    ],
+    "rule": "Coverage branches use Python's deterministic lexical order."
+  },
+  {
+    "id": "observer-state-shape",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "if !parsed.is_object() {",
+    "replace": "if false && !parsed.is_object() {",
+    "expect_failing": [
+      "observer_snapshot_restores_epoch_exact_exclusive_coverage_and_refuses_incompatible_state"
+    ],
+    "rule": "Stored state and coverage details must be JSON objects."
+  },
+  {
+    "id": "observer-force-rebuild",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "Err(error) if force_full && error.code == \"observer_state_rebuild_required\"",
+    "replace": "Err(error) if !force_full && error.code == \"observer_state_rebuild_required\"",
+    "expect_failing": [
+      "observer_snapshot_restores_epoch_exact_exclusive_coverage_and_refuses_incompatible_state"
+    ],
+    "rule": "Only an explicit forced rebuild may discard incompatible state in memory."
+  },
+  {
+    "id": "observer-epoch",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "expected_epoch: Some(row.state_epoch)",
+    "replace": "expected_epoch: Some(0)",
+    "expect_failing": [
+      "observer_snapshot_restores_epoch_exact_exclusive_coverage_and_refuses_incompatible_state"
+    ],
+    "rule": "A forced rebuild retains the prior raw epoch as its future compare-and-swap fence."
+  },
+  {
+    "id": "observer-instance-scope",
+    "file": "crates/store/src/observer.rs",
+    "find": "FROM chain_observer_instances WHERE id=?",
+    "replace": "FROM chain_observer_instances WHERE id<>?",
+    "expect_failing": [
+      "observer_snapshot_restores_epoch_exact_exclusive_coverage_and_refuses_incompatible_state"
+    ],
+    "rule": "State lookup cannot borrow another observer's aggregate."
+  },
+  {
+    "id": "observer-graph-proof",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "&& graph.as_deref()\n                == Some(\n                    match raw.as_deref() {\n                        Some(raw) => graph_hash(raw)?,\n                        None => hash(b\"null\"),\n                    }\n                    .as_str(),\n                )",
+    "replace": "&& { let _ = (&graph,&raw); true }",
+    "expect_failing": [
+      "observer_current_rows_require_both_commitments_authority_scope_and_every_active_sibling"
+    ],
+    "rule": "A reusable record must still match its closed graph commitment, including SQL NULL graphs."
+  },
+  {
+    "id": "observer-wallet-full",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "if force_full {",
+    "replace": "if false && force_full {",
+    "expect_failing": [
+      "observer_full_rebuild_discards_only_wallet_state_and_never_borrows_another_checkpoint"
+    ],
+    "rule": "Forced refresh ignores dependency state in memory without replacing the durable observer rows."
+  },
+  {
+    "id": "observer-wallet-version",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "if !version_one(&prior[\"schema_version\"]) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "observer_full_rebuild_discards_only_wallet_state_and_never_borrows_another_checkpoint"
+    ],
+    "rule": "A non-rebuild BDK wallet load refuses another inner observer-state version."
+  },
+  {
+    "id": "observer-own-checkpoint",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": ".get(observer_id)",
+    "replace": ".get(\"other\")",
+    "expect_failing": [
+      "observer_full_rebuild_discards_only_wallet_state_and_never_borrows_another_checkpoint"
+    ],
+    "rule": "Aggregate checkpoints never lend another observer instance its canonical facts."
+  },
+  {
+    "id": "observer-checkpoint-shape",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": ".filter(|v| v.is_object())",
+    "replace": ".filter(|_| true)",
+    "expect_failing": [
+      "observer_full_rebuild_discards_only_wallet_state_and_never_borrows_another_checkpoint"
+    ],
+    "rule": "A malformed own checkpoint cannot become usable state."
+  },
+  {
+    "id": "observer-consistent-snapshot",
+    "file": "crates/store/src/observer.rs",
+    "find": "    let tx = conn.unchecked_transaction()?;\n    let instance = tx.query_row(\n        \"SELECT observer_kind,chain,network,logical_wallet_id,source_wallet_id,source_key,state_version,state_epoch,state_json\n         FROM chain_observer_instances WHERE id=?\",\n        [observer_id], |r| Ok(Instance {\n            observer_kind:r.get(0)?,chain:r.get(1)?,network:r.get(2)?,logical_wallet_id:r.get(3)?,\n            source_wallet_id:r.get(4)?,source_key:r.get(5)?,state_version:r.get(6)?,state_epoch:r.get(7)?,state_json:r.get(8)?,\n        })\n    ).optional()?;\n    after_instance(&tx)?;\n    let result = if let Some(instance) = instance {\n        let coverage = tx.prepare(\"SELECT branch_key,coverage_version,highest_used,scanned_to,details_json FROM chain_observer_coverage WHERE observer_id=? ORDER BY branch_key\")?\n            .query_map([observer_id], |r| Ok(Coverage { branch_key:r.get(0)?,coverage_version:r.get(1)?,highest_used:r.get(2)?,scanned_to:r.get(3)?,details_json:r.get(4)? }))?\n            .collect::<Result<Vec<_>>>()?;\n        Some((instance, coverage))\n    } else {\n        None\n    };\n    tx.commit()?;\n    Ok(result)",
+    "replace": "    let tx = conn;\n    let instance = tx.query_row(\n        \"SELECT observer_kind,chain,network,logical_wallet_id,source_wallet_id,source_key,state_version,state_epoch,state_json\n         FROM chain_observer_instances WHERE id=?\",\n        [observer_id], |r| Ok(Instance {\n            observer_kind:r.get(0)?,chain:r.get(1)?,network:r.get(2)?,logical_wallet_id:r.get(3)?,\n            source_wallet_id:r.get(4)?,source_key:r.get(5)?,state_version:r.get(6)?,state_epoch:r.get(7)?,state_json:r.get(8)?,\n        })\n    ).optional()?;\n    after_instance(&tx)?;\n    let result = if let Some(instance) = instance {\n        let coverage = tx.prepare(\"SELECT branch_key,coverage_version,highest_used,scanned_to,details_json FROM chain_observer_coverage WHERE observer_id=? ORDER BY branch_key\")?\n            .query_map([observer_id], |r| Ok(Coverage { branch_key:r.get(0)?,coverage_version:r.get(1)?,highest_used:r.get(2)?,scanned_to:r.get(3)?,details_json:r.get(4)? }))?\n            .collect::<Result<Vec<_>>>()?;\n        Some((instance, coverage))\n    } else {\n        None\n    };\n    Ok(result)",
+    "expect_failing": [
+      "observer_snapshot_epoch_and_coverage_share_one_read_transaction_and_release_on_error"
+    ],
+    "rule": "The instance epoch and branch coverage are read in one consistent SQLite snapshot that closes before network work."
+  },
+  {
+    "id": "observer-quantity-external_id",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "row,\n                \"external_id\",",
+    "replace": "row,\n                \"unused\",",
+    "expect_failing": [
+      "observer_commitments_match_python_unicode_floats_opaque_json_and_integer_msat"
+    ],
+    "rule": "Quantity provenance binds the normalized external_id independently of the graph."
+  },
+  {
+    "id": "observer-quantity-direction",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "row,\n                \"direction\",",
+    "replace": "row,\n                \"unused\",",
+    "expect_failing": [
+      "observer_commitments_match_python_unicode_floats_opaque_json_and_integer_msat"
+    ],
+    "rule": "Quantity provenance binds the normalized direction independently of the graph."
+  },
+  {
+    "id": "observer-chain-list-duplicates",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "chain.sort_by_key(|(height, _)| *height);",
+    "replace": "chain.sort_by_key(|(height, _)| *height); chain.dedup_by_key(|(height, _)| *height);",
+    "expect_failing": [
+      "observer_bdk_duplicate_lists_and_hex_whitespace_match_python_without_collapsing_entries"
+    ],
+    "rule": "BDK local-chain lists preserve repeated heights in stable input order."
+  },
+  {
+    "id": "observer-transaction-list-duplicates",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "txs.sort();",
+    "replace": "txs.sort(); txs.dedup();",
+    "expect_failing": [
+      "observer_bdk_duplicate_lists_and_hex_whitespace_match_python_without_collapsing_entries"
+    ],
+    "rule": "BDK transaction lists preserve repeated serialized transactions."
+  },
+  {
+    "id": "observer-anchor-list-duplicates",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "anchors.sort_by(|(left, _), (right, _)| left.cmp(right));",
+    "replace": "anchors.sort_by(|(left, _), (right, _)| left.cmp(right)); anchors.dedup();",
+    "expect_failing": [
+      "observer_bdk_duplicate_lists_and_hex_whitespace_match_python_without_collapsing_entries"
+    ],
+    "rule": "BDK anchor lists preserve repeated identical anchors."
+  },
+  {
+    "id": "observer-anchor-stable-order",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "anchors.sort_by(|(left, _), (right, _)| left.cmp(right));",
+    "replace": "anchors.sort_by(|(left, lv), (right, rv)| left.cmp(right).then_with(||lv[\"confirmation_time\"].as_u64().cmp(&rv[\"confirmation_time\"].as_u64())));",
+    "expect_failing": [
+      "observer_bdk_duplicate_lists_and_hex_whitespace_match_python_without_collapsing_entries"
+    ],
+    "rule": "Anchor sorting excludes confirmation time and preserves tied input order."
+  },
+  {
+    "id": "observer-hex-byte-whitespace",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "if matches!(first, b'\\t'..=b'\\r' | b' ') {",
+    "replace": "if false && matches!(first, b'\\t'..=b'\\r' | b' ') {",
+    "expect_failing": [
+      "observer_bdk_duplicate_lists_and_hex_whitespace_match_python_without_collapsing_entries"
+    ],
+    "rule": "Python hex decoding permits ASCII whitespace between complete bytes."
+  },
+  {
+    "id": "observer-hex-split-byte",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "let low = input\n            .next()",
+    "replace": "let low = input\n            .find(|v| !matches!(*v, b'\\t'..=b'\\r' | b' '))",
+    "expect_failing": [
+      "observer_bdk_network_binds_every_extended_key_and_hex_refuses_split_bytes_or_unicode_spaces"
+    ],
+    "rule": "Whitespace inside a hex byte is invalid, including ordinary ASCII space."
+  },
+  {
+    "id": "observer-hex-unicode-space",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "if matches!(first, b'\\t'..=b'\\r' | b' ') {",
+    "replace": "if matches!(first, b'\\t'..=b'\\r' | b' ' | 0xc2 | 0xa0) {",
+    "expect_failing": [
+      "observer_bdk_network_binds_every_extended_key_and_hex_refuses_split_bytes_or_unicode_spaces"
+    ],
+    "rule": "Python hex decoding refuses non-ASCII whitespace."
+  },
+  {
+    "id": "observer-xpub-network",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "DescriptorPublicKey::XPub(key) => key.xkey.network.is_mainnet() == mainnet,",
+    "replace": "DescriptorPublicKey::XPub(key) => { let _ = key; true },",
+    "expect_failing": [
+      "observer_bdk_network_binds_every_extended_key_and_hex_refuses_split_bytes_or_unicode_spaces"
+    ],
+    "rule": "Every extended public key must match BDK network kind, including absent network as test."
+  },
+  {
+    "id": "observer-multipath-network",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "DescriptorPublicKey::MultiXPub(key) => key.xkey.network.is_mainnet() == mainnet,",
+    "replace": "DescriptorPublicKey::MultiXPub(key) => { let _ = key; true },",
+    "expect_failing": [
+      "observer_bdk_network_binds_every_extended_key_and_hex_refuses_split_bytes_or_unicode_spaces"
+    ],
+    "rule": "Multipath extended public keys obey the same BDK network-kind check."
+  }
+]

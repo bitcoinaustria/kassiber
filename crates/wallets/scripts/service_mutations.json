@@ -1,0 +1,492 @@
+[
+  {
+    "id": "service-exclusive",
+    "file": "crates/wallets/src/sync.rs",
+    "find": "if all && reference.is_some_and(|v| !v.is_empty()) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "sync_service_selection_skips_deprecated_only_for_all_and_validates_flags"
+    ],
+    "rule": "Reject mutually exclusive wallet selection."
+  },
+  {
+    "id": "service-all",
+    "file": "crates/wallets/src/sync.rs",
+    "find": "    if all {\n        return rows(",
+    "replace": "    if false {\n        return rows(",
+    "expect_failing": [
+      "sync_service_selection_skips_deprecated_only_for_all_and_validates_flags"
+    ],
+    "rule": "All selects the full undeprecated population."
+  },
+  {
+    "id": "service-order",
+    "file": "crates/wallets/src/sync.rs",
+    "find": "WHERE profile_id=? ORDER BY label ASC",
+    "replace": "WHERE profile_id=? ORDER BY label DESC",
+    "expect_failing": [
+      "sync_service_all_preserves_label_order_and_redacts_isolated_errors"
+    ],
+    "rule": "Keep Python label order."
+  },
+  {
+    "id": "service-deprecated",
+    "file": "crates/wallets/src/sync.rs",
+    "find": "Ok(false) => None,",
+    "replace": "Ok(false) => Some(Ok(row)),",
+    "expect_failing": [
+      "sync_service_selection_skips_deprecated_only_for_all_and_validates_flags"
+    ],
+    "rule": "All excludes retired wallets whose history is already imported."
+  },
+  {
+    "id": "service-explicit-deprecated",
+    "file": "crates/wallets/src/sync.rs",
+    "find": "let wallet = crate::resolve(conn, profile, reference)?;",
+    "replace": "let wallet = crate::resolve(conn, profile, \"missing\")?;",
+    "expect_failing": [
+      "sync_service_selection_skips_deprecated_only_for_all_and_validates_flags"
+    ],
+    "rule": "Explicit selection still includes deprecated wallets."
+  },
+  {
+    "id": "service-empty-config",
+    "file": "crates/wallets/src/freshness/sources.rs",
+    "find": "serde_json::from_str(if raw.is_empty() { \"{}\" } else { &raw })",
+    "replace": "serde_json::from_str(&raw)",
+    "expect_failing": [
+      "sync_service_preflight_rejects_malformed_inputs_and_node_routes_without_io"
+    ],
+    "rule": "An empty stored configuration means an empty object."
+  },
+  {
+    "id": "service-constructor-transaction",
+    "file": "crates/wallets/src/sync.rs",
+    "find": "        if !conn.is_autocommit() {\n            return Err(AppError::new(\n                \"observer_prepare_in_transaction\",\n                \"Wallet sync must start outside a transaction\",\n            ));\n        }",
+    "replace": "        if false {\n            return Err(AppError::new(\n                \"observer_prepare_in_transaction\",\n                \"Wallet sync must start outside a transaction\",\n            ));\n        }",
+    "expect_failing": [
+      "sync_service_preflight_rejects_malformed_inputs_and_node_routes_without_io"
+    ],
+    "rule": "Keep the constructor transaction error contract."
+  },
+  {
+    "id": "service-unknown-profile",
+    "file": "crates/wallets/src/sync.rs",
+    "find": "\"SELECT * FROM profiles WHERE id=?\",\n            [request.profile_id],",
+    "replace": "\"SELECT * FROM profiles WHERE id='p'\",\n            [],",
+    "expect_failing": [
+      "sync_service_preflight_rejects_malformed_inputs_and_node_routes_without_io"
+    ],
+    "rule": "Never borrow another profile during preflight."
+  },
+  {
+    "id": "service-node-route",
+    "file": "crates/wallets/src/sync.rs",
+    "find": "                    || node.is_some()\n                    || file.is_some()",
+    "replace": "                    || file.is_some()",
+    "expect_failing": [
+      "sync_service_preflight_rejects_malformed_inputs_and_node_routes_without_io"
+    ],
+    "rule": "Configured node wallets take the node route, never the chain fetch or a source-less skip."
+  },
+  {
+    "id": "service-unsupported-wallet",
+    "file": "crates/wallets/src/sync.rs",
+    "find": "wallet::require_supported(&row)?;",
+    "replace": "let _ = &row;",
+    "expect_failing": [
+      "sync_service_unsupported_invocation_refuses_during_inert_construction"
+    ],
+    "rule": "Refuse unsupported shapes before a grant is minted."
+  },
+  {
+    "id": "service-force-full",
+    "file": "crates/wallets/src/sync.rs",
+    "find": "                                request.force_full,\n                                request.version,",
+    "replace": "                                false,\n                                request.version,",
+    "expect_failing": [
+      "sync_service_native_driver_fetches_and_publishes_one_explicit_action"
+    ],
+    "rule": "Retain the requested force-full behavior."
+  },
+  {
+    "id": "service-unsupported-backend",
+    "file": "crates/wallets/src/sync.rs",
+    "find": "                                if e.code == \"native_fallback_required\" {\n                                    return Err(e.clone());\n                                }",
+    "replace": "                                if false {\n                                    return Err(e.clone());\n                                }",
+    "expect_failing": [
+      "sync_service_unsupported_invocation_refuses_during_inert_construction"
+    ],
+    "rule": "Reject unsupported backend invocations in inert construction."
+  },
+  {
+    "id": "service-resolver-fallback",
+    "file": "crates/wallets/src/sync.rs",
+    "find": "                            if e.code == \"native_fallback_required\" {\n                                return Err(e);\n                            }",
+    "replace": "                            if false {\n                                return Err(e);\n                            }",
+    "expect_failing": [
+      "sync_service_constructor_failures_keep_single_and_all_error_contracts"
+    ],
+    "rule": "A routing refusal is not an ordinary per-wallet error."
+  },
+  {
+    "id": "service-connection",
+    "file": "crates/wallets/src/sync.rs",
+    "find": "std::ptr::from_ref(conn).addr() != self.connection",
+    "replace": "false",
+    "expect_failing": [
+      "sync_service_revalidates_observer_checkpoint_overlap_and_connection_before_traffic"
+    ],
+    "rule": "A request cannot move to another admitted connection."
+  },
+  {
+    "id": "service-book-identity",
+    "file": "crates/wallets/src/sync.rs",
+    "find": "database_identity(conn)? != self.database_identity",
+    "replace": "false",
+    "expect_failing": [
+      "sync_service_scope_changes_refuse_before_fetch_and_do_not_consume_consent"
+    ],
+    "rule": "Revalidate the database identity before traffic."
+  },
+  {
+    "id": "service-profile",
+    "file": "crates/wallets/src/sync.rs",
+    "find": "|| !stable_profile",
+    "replace": "|| false",
+    "expect_failing": [
+      "sync_service_scope_changes_refuse_before_fetch_and_do_not_consume_consent"
+    ],
+    "rule": "Revalidate the selected profile workspace."
+  },
+  {
+    "id": "service-selection",
+    "file": "crates/wallets/src/sync.rs",
+    "find": "                        } else {\n                            a != &b.row\n                        }",
+    "replace": "                        } else {\n                            false\n                        }",
+    "expect_failing": [
+      "sync_service_scope_changes_refuse_before_fetch_and_do_not_consume_consent"
+    ],
+    "rule": "Revalidate authored wallet inputs and their order."
+  },
+  {
+    "id": "service-backend",
+    "file": "crates/wallets/src/sync.rs",
+    "find": "if backend(conn, &wallet.backend_name)? != *captured {",
+    "replace": "if backend(conn, &wallet.backend_name).is_err() {",
+    "expect_failing": [
+      "sync_service_scope_changes_refuse_before_fetch_and_do_not_consume_consent"
+    ],
+    "rule": "Saved configuration cannot redirect request consent."
+  },
+  {
+    "id": "service-observer-revalidation",
+    "file": "crates/wallets/src/sync.rs",
+    "find": "action.revalidate(conn)?;",
+    "replace": "let _ = action;",
+    "expect_failing": [
+      "sync_service_revalidates_observer_checkpoint_overlap_and_connection_before_traffic"
+    ],
+    "rule": "Recheck observer epochs, checkpoints and overlap before acquisition."
+  },
+  {
+    "id": "service-exact-consent",
+    "file": "crates/wallets/src/sync.rs",
+    "find": "Arc::ptr_eq(&p.identity, &self.identity) && !p.revoked.load(Ordering::SeqCst)",
+    "replace": "!p.revoked.load(Ordering::SeqCst)",
+    "expect_failing": [
+      "sync_service_consent_is_exact_revocable_single_use_and_inert"
+    ],
+    "rule": "Consent is bound to the exact immutable service action."
+  },
+  {
+    "id": "service-revoked-consent",
+    "file": "crates/wallets/src/sync.rs",
+    "find": "Arc::ptr_eq(&p.identity, &self.identity) && !p.revoked.load(Ordering::SeqCst)",
+    "replace": "Arc::ptr_eq(&p.identity, &self.identity)",
+    "expect_failing": [
+      "sync_service_consent_is_exact_revocable_single_use_and_inert"
+    ],
+    "rule": "A revoked service grant never starts work."
+  },
+  {
+    "id": "service-replay",
+    "file": "crates/wallets/src/sync.rs",
+    "find": "if proof.started.swap(true, Ordering::SeqCst) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "sync_service_consent_is_exact_revocable_single_use_and_inert"
+    ],
+    "rule": "An exact service grant is single use, including failed requests."
+  },
+  {
+    "id": "service-early-cancel",
+    "file": "crates/wallets/src/sync.rs",
+    "find": "        cancel.check(deadline)?;\n        if !conn.is_autocommit() {",
+    "replace": "        if !conn.is_autocommit() {",
+    "expect_failing": [
+      "sync_service_offline_early_cancel_and_deadline_make_no_traffic_or_writes"
+    ],
+    "rule": "Cancellation before start must not consume request consent."
+  },
+  {
+    "id": "service-run-transaction",
+    "file": "crates/wallets/src/sync.rs",
+    "find": "        if !conn.is_autocommit() {\n            return Err(AppError::new(\n                \"observer_prepare_in_transaction\",\n                \"Wallet sync must run outside a transaction\",\n            ));\n        }",
+    "replace": "        if false {\n            return Err(AppError::new(\n                \"observer_prepare_in_transaction\",\n                \"Wallet sync must run outside a transaction\",\n            ));\n        }",
+    "expect_failing": [
+      "sync_service_revalidates_observer_checkpoint_overlap_and_connection_before_traffic"
+    ],
+    "rule": "Preserve the run-time transaction refusal."
+  },
+  {
+    "id": "service-preapply-backend",
+    "file": "crates/wallets/src/sync.rs",
+    "find": "                    self.validate(conn, backend, Some(index))?;\n                    let grant = grant.as_ref().expect(\"matching service grant\");\n                    crate::progress::silenced(|| {",
+    "replace": "                    let grant = grant.as_ref().expect(\"matching service grant\");\n                    crate::progress::silenced(|| {",
+    "expect_failing": [
+      "sync_service_rechecks_backend_at_prefetch_and_publication"
+    ],
+    "rule": "Revalidate the backend again after preparation."
+  },
+  {
+    "id": "service-prefetch-backend",
+    "file": "crates/wallets/src/sync.rs",
+    "find": "            self.validate(conn, backend, None)?;\n            let result = match &wallet.fetch {",
+    "replace": "            let result = match &wallet.fetch {",
+    "expect_failing": [
+      "sync_service_rechecks_backend_at_prefetch_and_publication"
+    ],
+    "rule": "Revalidate before starting every prepared fetch."
+  },
+  {
+    "id": "service-apply-cancel",
+    "file": "crates/wallets/src/sync.rs",
+    "find": "                                cancel.check(deadline)?;\n                                action.check_permission(gate, Some(grant))?;\n                                stage(name)?;\n                                cancel.check(deadline)?;\n                                action.check_permission(gate, Some(grant))",
+    "replace": "                                action.check_permission(gate, Some(grant))?;\n                                stage(name)?;\n                                action.check_permission(gate, Some(grant))",
+    "expect_failing": [
+      "sync_service_every_apply_stage_rolls_back_on_cancel_revocation_and_offline"
+    ],
+    "rule": "Check cancellation throughout the wallet savepoint and at commit."
+  },
+  {
+    "id": "service-apply-permission",
+    "file": "crates/wallets/src/sync.rs",
+    "find": "                                cancel.check(deadline)?;\n                                action.check_permission(gate, Some(grant))?;\n                                stage(name)?;\n                                cancel.check(deadline)?;\n                                action.check_permission(gate, Some(grant))",
+    "replace": "                                cancel.check(deadline)?;\n                                stage(name)?;\n                                cancel.check(deadline)",
+    "expect_failing": [
+      "sync_service_every_apply_stage_rolls_back_on_cancel_revocation_and_offline"
+    ],
+    "rule": "Revocation or offline transitions roll back all local publication."
+  },
+  {
+    "id": "service-all-error-isolation",
+    "file": "crates/wallets/src/sync.rs",
+    "find": "Err(e) if self.all => results.push(error_row(field(&wallet.row, \"label\"), &e)),",
+    "replace": "Err(e) if false => results.push(error_row(field(&wallet.row, \"label\"), &e)),",
+    "expect_failing": [
+      "sync_service_all_preserves_label_order_and_redacts_isolated_errors"
+    ],
+    "rule": "All records isolated wallet errors; explicit single-wallet errors propagate."
+  },
+  {
+    "id": "service-error-code",
+    "file": "crates/wallets/src/sync.rs",
+    "find": "(\"code\", s(e.code.as_str())),",
+    "replace": "(\"code\", s(\"internal_error\")),",
+    "expect_failing": [
+      "sync_service_all_preserves_label_order_and_redacts_isolated_errors"
+    ],
+    "rule": "Preserve the per-wallet error code."
+  },
+  {
+    "id": "service-error-message",
+    "file": "crates/wallets/src/sync.rs",
+    "find": "(\"message\", s(redact_backend_text(&e.message))),",
+    "replace": "(\"message\", s(e.message.as_str())),",
+    "expect_failing": [
+      "sync_service_all_preserves_label_order_and_redacts_isolated_errors"
+    ],
+    "rule": "Redact credentials and queries from backend error messages."
+  },
+  {
+    "id": "service-error-hint",
+    "file": "crates/wallets/src/sync.rs",
+    "find": ".map(redact_backend_text)",
+    "replace": ".map(str::to_owned)",
+    "expect_failing": [
+      "sync_service_all_preserves_label_order_and_redacts_isolated_errors"
+    ],
+    "rule": "Redact backend locations in hints."
+  },
+  {
+    "id": "service-error-details",
+    "file": "crates/wallets/src/sync.rs",
+    "find": "e.details.as_ref().map_or(Value::Null, redact_backend_value)",
+    "replace": "e.details.clone().unwrap_or(Value::Null)",
+    "expect_failing": [
+      "sync_service_all_preserves_label_order_and_redacts_isolated_errors"
+    ],
+    "rule": "Redact nested backend error details."
+  },
+  {
+    "id": "service-retryable",
+    "file": "crates/wallets/src/sync.rs",
+    "find": "(\"retryable\", Value::Bool(e.retryable)),",
+    "replace": "(\"retryable\", Value::Bool(false)),",
+    "expect_failing": [
+      "sync_service_all_preserves_label_order_and_redacts_isolated_errors"
+    ],
+    "rule": "Retain per-wallet retryability."
+  },
+  {
+    "id": "service-url-suffix",
+    "file": "crates/wallets/src/sync.rs",
+    "find": "let url = raw.trim_end_matches([':', '.', '!', '?']);",
+    "replace": "let url = raw;",
+    "expect_failing": [
+      "sync_service_all_preserves_label_order_and_redacts_isolated_errors"
+    ],
+    "rule": "Preserve punctuation following a redacted backend URL."
+  },
+  {
+    "id": "service-fetch-current",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "if !same {",
+    "replace": "if false {",
+    "expect_failing": [
+      "sync_service_revalidates_observer_checkpoint_overlap_and_connection_before_traffic"
+    ],
+    "rule": "Prepared observer snapshots cannot outlive local source revisions."
+  },
+  {
+    "id": "service-fetch-permission-identity",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": ".filter(|grant| Arc::ptr_eq(&self.identity, &grant.identity))",
+    "replace": ".filter(|_| true)",
+    "expect_failing": [
+      "sync_service_transport_permission_rejects_missing_foreign_and_revoked_grants"
+    ],
+    "rule": "Transport grants retain exact action identity at publication."
+  },
+  {
+    "id": "service-network-scope",
+    "file": "crates/wallets/src/sync.rs",
+    "find": "if environment != wallet.environment {",
+    "replace": "if false {",
+    "expect_failing": [
+      "sync_service_network_scope_is_checked_for_wallets_without_sources"
+    ],
+    "rule": "An inert wallet selection remains bound to the current book network, even without a provider source."
+  },
+  {
+    "id": "service-config-shape",
+    "file": "crates/wallets/src/freshness/sources.rs",
+    "find": "    if !parsed.is_object() {\n        return Err(AppError::new(\n            \"internal_error\",\n            \"Wallet configuration must be an object\",",
+    "replace": "    if false {\n        return Err(AppError::new(\n            \"internal_error\",\n            \"Wallet configuration must be an object\",",
+    "expect_failing": [
+      "sync_service_preflight_rejects_malformed_inputs_and_node_routes_without_io"
+    ],
+    "rule": "Stored non-object configurations must fail closed instead of becoming source-less skipped wallets."
+  },
+  {
+    "id": "service-backend-request",
+    "file": "crates/wallets/src/sync.rs",
+    "find": "if backend(conn, &wallet.backend_name)? != *captured {",
+    "replace": "if backend(conn, captured[\"name\"].as_str().unwrap_or(\"\"))? != *captured {",
+    "expect_failing": [
+      "sync_service_resolves_saved_and_default_backends_and_rechecks_default_selection"
+    ],
+    "rule": "Retain the original default-backend selection when revalidating consent."
+  },
+  {
+    "id": "service-default-backend",
+    "file": "crates/wallets/src/sync.rs",
+    "find": "current.default_backend.as_str()",
+    "replace": "requested",
+    "expect_failing": [
+      "sync_service_resolves_saved_and_default_backends_and_rechecks_default_selection"
+    ],
+    "rule": "Wallets without an explicit backend use the active default."
+  },
+  {
+    "id": "service-default-policy",
+    "file": "crates/wallets/src/sync.rs",
+    "find": "current.merge(conn)?;",
+    "replace": "let _ = conn;",
+    "expect_failing": [
+      "sync_service_resolves_saved_and_default_backends_and_rechecks_default_selection"
+    ],
+    "rule": "Resolve the default from current stored policy before traffic."
+  },
+  {
+    "id": "service-missing-backend",
+    "file": "crates/wallets/src/sync.rs",
+    "find": "if name.trim().is_empty() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "sync_service_resolves_saved_and_default_backends_and_rechecks_default_selection"
+    ],
+    "rule": "A manual book with no backend returns the Python backend-not-configured error."
+  },
+  {
+    "id": "service-saved-backend",
+    "file": "crates/setup/src/backend_runtime.rs",
+    "find": "if stored.is_none() && !self.runtime.contains_key(&name) {",
+    "replace": "if !self.runtime.contains_key(&name) {",
+    "expect_failing": [
+      "sync_service_resolves_saved_and_default_backends_and_rechecks_default_selection"
+    ],
+    "rule": "Saved named backends remain usable without a seeded or environment entry."
+  },
+  {
+    "id": "service-fetch-default",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "            _ => return Err(fallback(\"backend_selection\")),\n        };\n        if (!requested.is_empty() && requested.to_lowercase() != text(&backend[\"name\"]))",
+    "replace": "            _ => return Err(fallback(\"backend_selection\")),\n        };\n        if (requested.to_lowercase() != text(&backend[\"name\"]))",
+    "expect_failing": [
+      "sync_service_resolves_saved_and_default_backends_and_rechecks_default_selection"
+    ],
+    "rule": "Accept the service-resolved default when the wallet has no named backend."
+  },
+  {
+    "id": "service-fetch-backend-shape",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "_ => return Err(fallback(\"backend_selection\")),",
+    "replace": "_ => \"\",",
+    "expect_failing": [
+      "sync_service_resolves_saved_and_default_backends_and_rechecks_default_selection"
+    ],
+    "rule": "Malformed backend values cannot become a default-backend consent grant."
+  },
+  {
+    "id": "W-sync-all-unsynced-retired",
+    "file": "crates/wallets/src/config.rs",
+    "find": "    Ok(synced.is_none_or(|v| kassiber_pytext::strip(&text(v)).is_empty()))",
+    "replace": "    Ok(synced.is_none_or(|_| false) && false)",
+    "expect_failing": [
+      "sync::tests::sync_all_includes_retired_wallets_until_their_history_is_imported"
+    ],
+    "rule": "Sync-all includes a retired wallet whose history the book has not imported."
+  },
+  {
+    "id": "W-sync-all-force-full-retired",
+    "file": "crates/wallets/src/config.rs",
+    "find": "    if force_full || !boolean(config.get(\"deprecated\"))? {",
+    "replace": "    if !boolean(config.get(\"deprecated\"))? {",
+    "expect_failing": [
+      "sync::tests::sync_all_includes_retired_wallets_until_their_history_is_imported"
+    ],
+    "rule": "A forced full sync of all wallets includes every retired wallet."
+  },
+  {
+    "id": "W-sync-keeps-published-retired",
+    "file": "crates/wallets/src/sync.rs",
+    "find": "Ok(_) if published.contains(field(&row, \"id\")) => Some(Ok(row)),",
+    "replace": "Ok(_) if published.is_empty() && false => Some(Ok(row)),",
+    "expect_failing": [
+      "sync::tests::sync_all_includes_retired_wallets_until_their_history_is_imported"
+    ],
+    "rule": "A retired wallet's first sync keeps its place in the selection it was prepared in."
+  }
+]

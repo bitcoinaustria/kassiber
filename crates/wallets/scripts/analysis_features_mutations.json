@@ -1,0 +1,472 @@
+[
+  {
+    "id": "features-r5-p2pkh-length",
+    "file": "crates/wallets/src/analysis_features.rs",
+    "find": "s.len() == 25",
+    "replace": "s.len() == 26",
+    "expect_failing": [
+      "public_feature_script_templates_match_python_without_payloads"
+    ],
+    "rule": "P2PKH requires its exact complete script length."
+  },
+  {
+    "id": "features-r5-p2sh-template",
+    "file": "crates/wallets/src/analysis_features.rs",
+    "find": "s.ends_with(&[0x87])",
+    "replace": "s.ends_with(&[0x88])",
+    "expect_failing": [
+      "public_feature_script_templates_match_python_without_payloads"
+    ],
+    "rule": "P2SH requires its final OP_EQUAL."
+  },
+  {
+    "id": "features-r5-wpkh-template",
+    "file": "crates/wallets/src/analysis_features.rs",
+    "find": "s.len() == 22",
+    "replace": "s.len() == 21",
+    "expect_failing": [
+      "public_feature_script_templates_match_python_without_payloads"
+    ],
+    "rule": "Witness pubkey hashes require twenty-byte programs."
+  },
+  {
+    "id": "features-r5-wsh-template",
+    "file": "crates/wallets/src/analysis_features.rs",
+    "find": "s.starts_with(&[0, 0x20])",
+    "replace": "s.starts_with(&[0, 0x21])",
+    "expect_failing": [
+      "public_feature_script_templates_match_python_without_payloads"
+    ],
+    "rule": "Witness script hashes require version-zero programs."
+  },
+  {
+    "id": "features-r5-taproot-template",
+    "file": "crates/wallets/src/analysis_features.rs",
+    "find": "s.starts_with(&[0x51, 0x20])",
+    "replace": "s.starts_with(&[0x52, 0x20])",
+    "expect_failing": [
+      "public_feature_script_templates_match_python_without_payloads"
+    ],
+    "rule": "Taproot requires a version-one 32-byte program."
+  },
+  {
+    "id": "features-r5-op-return",
+    "file": "crates/wallets/src/analysis_features.rs",
+    "find": "s.starts_with(&[0x6a])",
+    "replace": "s.starts_with(&[0x6b])",
+    "expect_failing": [
+      "public_feature_script_templates_match_python_without_payloads"
+    ],
+    "rule": "OP_RETURN is classified without returning its payload."
+  },
+  {
+    "id": "features-r5-p2pk-length",
+    "file": "crates/wallets/src/analysis_features.rs",
+    "find": "matches!(s.len(), 35 | 67)",
+    "replace": "matches!(s.len(), 35)",
+    "expect_failing": [
+      "public_feature_script_templates_match_python_without_payloads"
+    ],
+    "rule": "P2PK recognizes compressed and uncompressed key encodings."
+  },
+  {
+    "id": "features-r5-witness-version",
+    "file": "crates/wallets/src/analysis_features.rs",
+    "find": "(s[0] == 0 || (0x51..=0x60).contains(&s[0]))",
+    "replace": "(s[0] == 0 || (0x51..=0x61).contains(&s[0]))",
+    "expect_failing": [
+      "public_feature_script_templates_match_python_without_payloads"
+    ],
+    "rule": "Unknown witness templates still require a valid witness version."
+  },
+  {
+    "id": "features-r5-schnorr-flags",
+    "file": "crates/wallets/src/analysis_features.rs",
+    "find": "![1, 2, 3, 0x81, 0x82, 0x83].contains(&v[64])",
+    "replace": "![0, 1, 2, 3, 0x81, 0x82, 0x83].contains(&v[64])",
+    "expect_failing": [
+      "public_feature_signature_encodings_match_python_without_verification"
+    ],
+    "rule": "Explicit Schnorr DEFAULT bytes are invalid encodings."
+  },
+  {
+    "id": "features-r5-der-tag",
+    "file": "crates/wallets/src/analysis_features.rs",
+    "find": "v[0] != 0x30",
+    "replace": "v[0] != 0x31",
+    "expect_failing": [
+      "public_feature_signature_encodings_match_python_without_verification"
+    ],
+    "rule": "ECDSA observations require DER sequence framing."
+  },
+  {
+    "id": "features-r5-der-length",
+    "file": "crates/wallets/src/analysis_features.rs",
+    "find": "v[1] as usize != v.len() - 3",
+    "replace": "v[1] as usize != v.len() - 2",
+    "expect_failing": [
+      "public_feature_signature_encodings_match_python_without_verification"
+    ],
+    "rule": "DER framing excludes the final sighash byte."
+  },
+  {
+    "id": "features-r5-der-positive",
+    "file": "crates/wallets/src/analysis_features.rs",
+    "find": "n[0] & 0x80 != 0",
+    "replace": "false",
+    "expect_failing": [
+      "public_feature_signature_encodings_match_python_without_verification"
+    ],
+    "rule": "Negative DER integers cannot enter signature observations."
+  },
+  {
+    "id": "features-r5-der-zero-r",
+    "file": "crates/wallets/src/analysis_features.rs",
+    "find": "r <= BigInt::from(0)",
+    "replace": "r < BigInt::from(0)",
+    "expect_failing": [
+      "public_feature_signature_encodings_match_python_without_verification"
+    ],
+    "rule": "The encoded R scalar must be nonzero."
+  },
+  {
+    "id": "features-r5-der-order-s",
+    "file": "crates/wallets/src/analysis_features.rs",
+    "find": "s >= n",
+    "replace": "s > n",
+    "expect_failing": [
+      "public_feature_signature_encodings_match_python_without_verification"
+    ],
+    "rule": "Encoded S must be below the curve order."
+  },
+  {
+    "id": "features-r5-der-low-r",
+    "file": "crates/wallets/src/analysis_features.rs",
+    "find": "r < (BigInt::from(1)<<255)",
+    "replace": "r > (BigInt::from(1)<<255)",
+    "expect_failing": [
+      "public_feature_signature_encodings_match_python_without_verification"
+    ],
+    "rule": "Low-R observations use the exact scalar threshold."
+  },
+  {
+    "id": "features-r5-der-low-s",
+    "file": "crates/wallets/src/analysis_features.rs",
+    "find": "s <= n/2",
+    "replace": "s < n/2",
+    "expect_failing": [
+      "public_feature_signature_encodings_match_python_without_verification"
+    ],
+    "rule": "The low-S half-order endpoint is inclusive."
+  },
+  {
+    "id": "features-r5-redeem-binding",
+    "file": "crates/wallets/src/analysis_features.rs",
+    "find": "hash160::Hash::hash(redeem).as_byte_array() != &script.as_ref().unwrap()[2..22]",
+    "replace": "false",
+    "expect_failing": [
+      "public_feature_extraction_matches_python_and_all_112_tables"
+    ],
+    "rule": "P2SH redeem evidence must match its locking-script hash."
+  },
+  {
+    "id": "features-r5-wpkh-binding",
+    "file": "crates/wallets/src/analysis_features.rs",
+    "find": "hash160::Hash::hash(&witness[1]).as_byte_array() == &script[2..]",
+    "replace": "true",
+    "expect_failing": [
+      "public_feature_extraction_matches_python_and_all_112_tables"
+    ],
+    "rule": "A pubkey-hash witness is interpreted only at its bound script position."
+  },
+  {
+    "id": "features-r5-wsh-binding",
+    "file": "crates/wallets/src/analysis_features.rs",
+    "find": "sha256::Hash::hash(&witness[witness.len() - 1]).as_byte_array() == &script[2..]",
+    "replace": "true",
+    "expect_failing": [
+      "public_feature_extraction_matches_python_and_all_112_tables"
+    ],
+    "rule": "Witness-script observations require the matching script hash."
+  },
+  {
+    "id": "features-r5-taproot-annex",
+    "file": "crates/wallets/src/analysis_features.rs",
+    "find": "witness[witness.len() - 1].starts_with(&[0x50])",
+    "replace": "false",
+    "expect_failing": [
+      "public_feature_extraction_matches_python_and_all_112_tables"
+    ],
+    "rule": "A Taproot annex is removed only at its final stack position."
+  },
+  {
+    "id": "features-r5-signed-version",
+    "file": "crates/wallets/src/analysis_features.rs",
+    "find": "n as u32 as i32 as i64",
+    "replace": "n as i64",
+    "expect_failing": [
+      "public_feature_extraction_matches_python_and_all_112_tables"
+    ],
+    "rule": "Unsigned parser version bit patterns are reinterpreted as signed int32."
+  },
+  {
+    "id": "features-r5-rbf-boundary",
+    "file": "crates/wallets/src/analysis_features.rs",
+    "find": "*n < 0xffff_fffe",
+    "replace": "*n <= 0xffff_fffe",
+    "expect_failing": [
+      "public_feature_extraction_matches_python_and_all_112_tables"
+    ],
+    "rule": "The final-minus-one sequence does not signal BIP125."
+  },
+  {
+    "id": "features-r5-relative-version",
+    "file": "crates/wallets/src/analysis_features.rs",
+    "find": "version.is_some_and(|v| v>=2)",
+    "replace": "version.is_some_and(|v| v>=1)",
+    "expect_failing": [
+      "public_feature_extraction_matches_python_and_all_112_tables"
+    ],
+    "rule": "BIP68 constraints require version two or later."
+  },
+  {
+    "id": "features-r5-relative-disable",
+    "file": "crates/wallets/src/analysis_features.rs",
+    "find": "n & (1<<31) == 0",
+    "replace": "n & (1<<31) != 0",
+    "expect_failing": [
+      "public_feature_extraction_matches_python_and_all_112_tables"
+    ],
+    "rule": "The BIP68 disable bit suppresses relative-lock interpretation."
+  },
+  {
+    "id": "features-r5-relative-time-unit",
+    "file": "crates/wallets/src/analysis_features.rs",
+    "find": "(n&0xffff)*if n&(1<<22)!=0 {512} else {1}",
+    "replace": "(n&0xffff)*if n&(1<<22)!=0 {1} else {1}",
+    "expect_failing": [
+      "public_feature_extraction_matches_python_and_all_112_tables"
+    ],
+    "rule": "BIP68 time units are 512 seconds."
+  },
+  {
+    "id": "features-r5-absolute-enabled",
+    "file": "crates/wallets/src/analysis_features.rs",
+    "find": "*n != 0xffff_ffff",
+    "replace": "*n < 0xffff_fffe",
+    "expect_failing": [
+      "public_feature_extraction_matches_python_and_all_112_tables"
+    ],
+    "rule": "Any nonfinal sequence enables absolute locktime."
+  },
+  {
+    "id": "features-r5-equal-groups",
+    "file": "crates/wallets/src/analysis_features.rs",
+    "find": "**n > BigInt::from(0) && *c >= 2",
+    "replace": "**n >= BigInt::from(0) && *c >= 2",
+    "expect_failing": [
+      "public_feature_extraction_matches_python_and_all_112_tables"
+    ],
+    "rule": "Zero-valued outputs do not form equal-amount groups."
+  },
+  {
+    "id": "features-r5-msat-exact",
+    "file": "crates/wallets/src/analysis_features.rs",
+    "find": "(n*1000_u32).to_string()",
+    "replace": "(n*100_u32).to_string()",
+    "expect_failing": [
+      "public_feature_extraction_matches_python_and_all_112_tables"
+    ],
+    "rule": "Equal-output amounts are exact integer msat strings."
+  },
+  {
+    "id": "features-r5-fee-vsize",
+    "file": "crates/wallets/src/analysis_features.rs",
+    "find": "vsize.is_some_and(|n| n > 0)",
+    "replace": "vsize.is_some()",
+    "expect_failing": [
+      "public_feature_extraction_matches_python_and_all_112_tables"
+    ],
+    "rule": "Fee-rate observations require positive virtual size."
+  },
+  {
+    "id": "features-r5-cache-exact-shape",
+    "file": "crates/wallets/src/analysis_features/normalize.rs",
+    "find": "v.len() == tests.len()",
+    "replace": "v.len() >= tests.len()",
+    "expect_failing": [
+      "public_feature_cache_rebinding_matches_python_and_rejects_private_fields"
+    ],
+    "rule": "Public cached values reject extra secret-bearing fields."
+  },
+  {
+    "id": "features-r5-cache-version",
+    "file": "crates/wallets/src/analysis_features/normalize.rs",
+    "find": "!version_one(&value[\"extractor_version\"])",
+    "replace": "false",
+    "expect_failing": [
+      "public_feature_cache_rebinding_matches_python_and_rejects_private_fields"
+    ],
+    "rule": "Unsupported extractor versions are refused."
+  },
+  {
+    "id": "features-r5-cache-duplicate",
+    "file": "crates/wallets/src/analysis_features/normalize.rs",
+    "find": "!seen.insert(code)",
+    "replace": "!seen.insert(code) && false",
+    "expect_failing": [
+      "public_feature_cache_rebinding_matches_python_and_rejects_private_fields"
+    ],
+    "rule": "Caches cannot contain duplicate categories."
+  },
+  {
+    "id": "features-r5-cache-values",
+    "file": "crates/wallets/src/analysis_features/normalize.rs",
+    "find": "!valid(code, &row[\"value\"])",
+    "replace": "false",
+    "expect_failing": [
+      "public_feature_cache_rebinding_matches_python_and_rejects_private_fields"
+    ],
+    "rule": "Cache values obey the closed per-category grammar."
+  },
+  {
+    "id": "features-r5-cache-array-budget",
+    "file": "crates/wallets/src/analysis_features/normalize.rs",
+    "find": "rows.len() <= limit",
+    "replace": "rows.len() <= limit + 4097",
+    "expect_failing": [
+      "public_feature_cache_rebinding_matches_python_and_rejects_private_fields"
+    ],
+    "rule": "Cache arrays retain their documented element limits."
+  },
+  {
+    "id": "features-r5-cache-context",
+    "file": "crates/wallets/src/analysis_features/normalize.rs",
+    "find": "source, subject, &[]",
+    "replace": "\"untrusted-source\", Some(\"private-subject\"), &[]",
+    "expect_failing": [
+      "public_feature_cache_rebinding_matches_python_and_rejects_private_fields"
+    ],
+    "rule": "Imported context is replaced with trusted caller context."
+  },
+  {
+    "id": "features-r5-cache-confidence",
+    "file": "crates/wallets/src/analysis_features/normalize.rs",
+    "find": "trusted[\"confidence\"] = if availability == \"unavailable\"",
+    "replace": "trusted[\"confidence\"] = if availability != \"unavailable\"",
+    "expect_failing": [
+      "public_feature_cache_rebinding_matches_python_and_rejects_private_fields"
+    ],
+    "rule": "Unavailable caches retain unknown confidence."
+  },
+  {
+    "id": "features-r5-rule-prerequisites",
+    "file": "crates/wallets/src/analysis_features/rules.rs",
+    "find": "keys.iter().any(|k| !self.observed.contains_key(k))",
+    "replace": "false",
+    "expect_failing": [
+      "public_feature_rules_match_python_with_collaboration_and_missing_prerequisites"
+    ],
+    "rule": "Every rule retains all its observed prerequisites."
+  },
+  {
+    "id": "features-r5-rule-version",
+    "file": "crates/wallets/src/analysis_features/rules.rs",
+    "find": "version != 1 && version != 2",
+    "replace": "version != 1",
+    "expect_failing": [
+      "public_feature_rules_match_python_with_collaboration_and_missing_prerequisites"
+    ],
+    "rule": "Version two is ordinary and does not identify a wallet."
+  },
+  {
+    "id": "features-r5-rule-fee-threshold",
+    "file": "crates/wallets/src/analysis_features/rules.rs",
+    "find": "delta * 100_u32 < size",
+    "replace": "delta * 100_u32 <= size",
+    "expect_failing": [
+      "public_feature_rules_match_python_with_collaboration_and_missing_prerequisites"
+    ],
+    "rule": "Rounded-rate hypotheses use a strict precision threshold."
+  },
+  {
+    "id": "features-r5-rule-fee-collaboration",
+    "file": "crates/wallets/src/analysis_features/rules.rs",
+    "find": "delta * 100_u32 < size\n            && collaboration.is_none()",
+    "replace": "delta * 100_u32 < size",
+    "expect_failing": [
+      "public_feature_rules_match_python_with_collaboration_and_missing_prerequisites"
+    ],
+    "rule": "Collaboration suppresses rounded-fee interpretations."
+  },
+  {
+    "id": "features-r5-rule-relative-evidence",
+    "file": "crates/wallets/src/analysis_features/rules.rs",
+    "find": "&[\"sequences\",\"transaction_version\"]",
+    "replace": "&[\"sequences\"]",
+    "expect_failing": [
+      "public_feature_rules_match_python_with_collaboration_and_missing_prerequisites"
+    ],
+    "rule": "Relative-lock findings retain their version prerequisite."
+  },
+  {
+    "id": "features-r5-rule-consolidation-collaboration",
+    "file": "crates/wallets/src/analysis_features/rules.rs",
+    "find": "ins >= 3 && outs == 1 && collaboration.is_none()",
+    "replace": "ins >= 3 && outs == 1",
+    "expect_failing": [
+      "public_feature_rules_match_python_with_collaboration_and_missing_prerequisites"
+    ],
+    "rule": "Collaboration suppresses consolidation hypotheses."
+  },
+  {
+    "id": "features-r5-rule-batch-collaboration",
+    "file": "crates/wallets/src/analysis_features/rules.rs",
+    "find": "outs >= 4 && !equal && collaboration.is_none()",
+    "replace": "outs >= 4 && !equal",
+    "expect_failing": [
+      "public_feature_rules_match_python_with_collaboration_and_missing_prerequisites"
+    ],
+    "rule": "Collaboration suppresses ordinary batch hypotheses."
+  },
+  {
+    "id": "features-r5-rule-default-sighash",
+    "file": "crates/wallets/src/analysis_features/rules.rs",
+    "find": "[0_u64, 1]",
+    "replace": "[0_u64, 1, 3]",
+    "expect_failing": [
+      "public_feature_rules_match_python_with_collaboration_and_missing_prerequisites"
+    ],
+    "rule": "Only DEFAULT and ALL are default commitments."
+  },
+  {
+    "id": "features-r5-adapter-algorithm",
+    "file": "crates/wallets/src/analysis_features.rs",
+    "find": "matches!(row[\"algorithm\"].as_str(), Some(\"ecdsa\" | \"schnorr\"))",
+    "replace": "true",
+    "expect_failing": [
+      "public_feature_extraction_matches_python_and_all_112_tables"
+    ],
+    "rule": "PSBT adapter signature categories accept only recognized algorithms."
+  },
+  {
+    "id": "features-r5-adapter-sighash",
+    "file": "crates/wallets/src/analysis_features.rs",
+    "find": "integer(&row[\"sighash\"], 255).is_some()",
+    "replace": "true",
+    "expect_failing": [
+      "public_feature_extraction_matches_python_and_all_112_tables"
+    ],
+    "rule": "The categorized PSBT adapter rejects boolean and out-of-range sighash bytes."
+  },
+  {
+    "id": "features-r5-adapter-closure",
+    "file": "crates/wallets/src/analysis_features.rs",
+    "find": "(k.into(), row[k].clone())",
+    "replace": "(k.into(), Value::Null)",
+    "expect_failing": [
+      "public_feature_extraction_matches_python_and_all_112_tables"
+    ],
+    "rule": "Categorized PSBT observations retain their six known public fields and discard other metadata."
+  }
+]

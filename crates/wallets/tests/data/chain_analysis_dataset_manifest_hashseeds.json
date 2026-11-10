@@ -1,0 +1,170 @@
+{
+  "0": {
+    "canonical": "{\"accounting_authority\": false, \"adapter\": \"generic\", \"byte_count\": 81, \"format\": \"csv\", \"manifest\": {\"attribution_method\": \"published\", \"category\": \"unknown\", \"chain\": \"bitcoin\", \"dataset_key\": \"pack-1\", \"expected_active_id\": null, \"license\": \"CC0\", \"name\": \"Pack\", \"network\": \"main\", \"observed_at\": null, \"source\": \"Local file\", \"source_url\": null, \"valid_from\": null, \"valid_until\": null, \"version\": \"1\", \"visibility\": \"public\"}, \"row_count\": 1, \"sample_claims\": [{\"category\": \"other\", \"label\": \"A\", \"record_number\": 1, \"source_record\": {\"original_category\": \"unknown\", \"original_subject\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\", \"record_number\": 1}, \"subject\": \"tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\", \"valid_from\": null, \"valid_until\": null}], \"sha256\": \"676c524d09e646d0e884101bef3ce59a8cec277734a944398ca77b27accfba36\", \"validation\": \"complete\"}",
+    "first_error": "license must be nonempty text up to 512 characters",
+    "manifest_keys": [
+      "license",
+      "attribution_method",
+      "visibility",
+      "name",
+      "dataset_key",
+      "source",
+      "version",
+      "network",
+      "chain",
+      "source_url",
+      "observed_at",
+      "valid_from",
+      "valid_until",
+      "category",
+      "expected_active_id"
+    ]
+  },
+  "1": {
+    "canonical": "{\"accounting_authority\": false, \"adapter\": \"generic\", \"byte_count\": 81, \"format\": \"csv\", \"manifest\": {\"attribution_method\": \"published\", \"category\": \"unknown\", \"chain\": \"bitcoin\", \"dataset_key\": \"pack-1\", \"expected_active_id\": null, \"license\": \"CC0\", \"name\": \"Pack\", \"network\": \"main\", \"observed_at\": null, \"source\": \"Local file\", \"source_url\": null, \"valid_from\": null, \"valid_until\": null, \"version\": \"1\", \"visibility\": \"public\"}, \"row_count\": 1, \"sample_claims\": [{\"category\": \"other\", \"label\": \"A\", \"record_number\": 1, \"source_record\": {\"original_category\": \"unknown\", \"original_subject\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\", \"record_number\": 1}, \"subject\": \"tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\", \"valid_from\": null, \"valid_until\": null}], \"sha256\": \"676c524d09e646d0e884101bef3ce59a8cec277734a944398ca77b27accfba36\", \"validation\": \"complete\"}",
+    "first_error": "name must be nonempty text up to 256 characters",
+    "manifest_keys": [
+      "dataset_key",
+      "name",
+      "license",
+      "chain",
+      "visibility",
+      "attribution_method",
+      "source",
+      "version",
+      "network",
+      "source_url",
+      "observed_at",
+      "valid_from",
+      "valid_until",
+      "category",
+      "expected_active_id"
+    ]
+  },
+  "2": {
+    "canonical": "{\"accounting_authority\": false, \"adapter\": \"generic\", \"byte_count\": 81, \"format\": \"csv\", \"manifest\": {\"attribution_method\": \"published\", \"category\": \"unknown\", \"chain\": \"bitcoin\", \"dataset_key\": \"pack-1\", \"expected_active_id\": null, \"license\": \"CC0\", \"name\": \"Pack\", \"network\": \"main\", \"observed_at\": null, \"source\": \"Local file\", \"source_url\": null, \"valid_from\": null, \"valid_until\": null, \"version\": \"1\", \"visibility\": \"public\"}, \"row_count\": 1, \"sample_claims\": [{\"category\": \"other\", \"label\": \"A\", \"record_number\": 1, \"source_record\": {\"original_category\": \"unknown\", \"original_subject\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\", \"record_number\": 1}, \"subject\": \"tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\", \"valid_from\": null, \"valid_until\": null}], \"sha256\": \"676c524d09e646d0e884101bef3ce59a8cec277734a944398ca77b27accfba36\", \"validation\": \"complete\"}",
+    "first_error": "version must be nonempty text up to 256 characters",
+    "manifest_keys": [
+      "attribution_method",
+      "dataset_key",
+      "version",
+      "chain",
+      "license",
+      "source",
+      "name",
+      "visibility",
+      "network",
+      "source_url",
+      "observed_at",
+      "valid_from",
+      "valid_until",
+      "category",
+      "expected_active_id"
+    ]
+  },
+  "3": {
+    "canonical": "{\"accounting_authority\": false, \"adapter\": \"generic\", \"byte_count\": 81, \"format\": \"csv\", \"manifest\": {\"attribution_method\": \"published\", \"category\": \"unknown\", \"chain\": \"bitcoin\", \"dataset_key\": \"pack-1\", \"expected_active_id\": null, \"license\": \"CC0\", \"name\": \"Pack\", \"network\": \"main\", \"observed_at\": null, \"source\": \"Local file\", \"source_url\": null, \"valid_from\": null, \"valid_until\": null, \"version\": \"1\", \"visibility\": \"public\"}, \"row_count\": 1, \"sample_claims\": [{\"category\": \"other\", \"label\": \"A\", \"record_number\": 1, \"source_record\": {\"original_category\": \"unknown\", \"original_subject\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\", \"record_number\": 1}, \"subject\": \"tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\", \"valid_from\": null, \"valid_until\": null}], \"sha256\": \"676c524d09e646d0e884101bef3ce59a8cec277734a944398ca77b27accfba36\", \"validation\": \"complete\"}",
+    "first_error": "name must be nonempty text up to 256 characters",
+    "manifest_keys": [
+      "name",
+      "version",
+      "license",
+      "visibility",
+      "chain",
+      "dataset_key",
+      "network",
+      "attribution_method",
+      "source",
+      "source_url",
+      "observed_at",
+      "valid_from",
+      "valid_until",
+      "category",
+      "expected_active_id"
+    ]
+  },
+  "4": {
+    "canonical": "{\"accounting_authority\": false, \"adapter\": \"generic\", \"byte_count\": 81, \"format\": \"csv\", \"manifest\": {\"attribution_method\": \"published\", \"category\": \"unknown\", \"chain\": \"bitcoin\", \"dataset_key\": \"pack-1\", \"expected_active_id\": null, \"license\": \"CC0\", \"name\": \"Pack\", \"network\": \"main\", \"observed_at\": null, \"source\": \"Local file\", \"source_url\": null, \"valid_from\": null, \"valid_until\": null, \"version\": \"1\", \"visibility\": \"public\"}, \"row_count\": 1, \"sample_claims\": [{\"category\": \"other\", \"label\": \"A\", \"record_number\": 1, \"source_record\": {\"original_category\": \"unknown\", \"original_subject\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\", \"record_number\": 1}, \"subject\": \"tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\", \"valid_from\": null, \"valid_until\": null}], \"sha256\": \"676c524d09e646d0e884101bef3ce59a8cec277734a944398ca77b27accfba36\", \"validation\": \"complete\"}",
+    "first_error": "name must be nonempty text up to 256 characters",
+    "manifest_keys": [
+      "chain",
+      "name",
+      "license",
+      "visibility",
+      "source",
+      "attribution_method",
+      "network",
+      "dataset_key",
+      "version",
+      "source_url",
+      "observed_at",
+      "valid_from",
+      "valid_until",
+      "category",
+      "expected_active_id"
+    ]
+  },
+  "5": {
+    "canonical": "{\"accounting_authority\": false, \"adapter\": \"generic\", \"byte_count\": 81, \"format\": \"csv\", \"manifest\": {\"attribution_method\": \"published\", \"category\": \"unknown\", \"chain\": \"bitcoin\", \"dataset_key\": \"pack-1\", \"expected_active_id\": null, \"license\": \"CC0\", \"name\": \"Pack\", \"network\": \"main\", \"observed_at\": null, \"source\": \"Local file\", \"source_url\": null, \"valid_from\": null, \"valid_until\": null, \"version\": \"1\", \"visibility\": \"public\"}, \"row_count\": 1, \"sample_claims\": [{\"category\": \"other\", \"label\": \"A\", \"record_number\": 1, \"source_record\": {\"original_category\": \"unknown\", \"original_subject\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\", \"record_number\": 1}, \"subject\": \"tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\", \"valid_from\": null, \"valid_until\": null}], \"sha256\": \"676c524d09e646d0e884101bef3ce59a8cec277734a944398ca77b27accfba36\", \"validation\": \"complete\"}",
+    "first_error": "license must be nonempty text up to 512 characters",
+    "manifest_keys": [
+      "license",
+      "version",
+      "network",
+      "chain",
+      "attribution_method",
+      "source",
+      "name",
+      "visibility",
+      "dataset_key",
+      "source_url",
+      "observed_at",
+      "valid_from",
+      "valid_until",
+      "category",
+      "expected_active_id"
+    ]
+  },
+  "6": {
+    "canonical": "{\"accounting_authority\": false, \"adapter\": \"generic\", \"byte_count\": 81, \"format\": \"csv\", \"manifest\": {\"attribution_method\": \"published\", \"category\": \"unknown\", \"chain\": \"bitcoin\", \"dataset_key\": \"pack-1\", \"expected_active_id\": null, \"license\": \"CC0\", \"name\": \"Pack\", \"network\": \"main\", \"observed_at\": null, \"source\": \"Local file\", \"source_url\": null, \"valid_from\": null, \"valid_until\": null, \"version\": \"1\", \"visibility\": \"public\"}, \"row_count\": 1, \"sample_claims\": [{\"category\": \"other\", \"label\": \"A\", \"record_number\": 1, \"source_record\": {\"original_category\": \"unknown\", \"original_subject\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\", \"record_number\": 1}, \"subject\": \"tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\", \"valid_from\": null, \"valid_until\": null}], \"sha256\": \"676c524d09e646d0e884101bef3ce59a8cec277734a944398ca77b27accfba36\", \"validation\": \"complete\"}",
+    "first_error": "version must be nonempty text up to 256 characters",
+    "manifest_keys": [
+      "dataset_key",
+      "version",
+      "attribution_method",
+      "name",
+      "license",
+      "network",
+      "source",
+      "visibility",
+      "chain",
+      "source_url",
+      "observed_at",
+      "valid_from",
+      "valid_until",
+      "category",
+      "expected_active_id"
+    ]
+  },
+  "7": {
+    "canonical": "{\"accounting_authority\": false, \"adapter\": \"generic\", \"byte_count\": 81, \"format\": \"csv\", \"manifest\": {\"attribution_method\": \"published\", \"category\": \"unknown\", \"chain\": \"bitcoin\", \"dataset_key\": \"pack-1\", \"expected_active_id\": null, \"license\": \"CC0\", \"name\": \"Pack\", \"network\": \"main\", \"observed_at\": null, \"source\": \"Local file\", \"source_url\": null, \"valid_from\": null, \"valid_until\": null, \"version\": \"1\", \"visibility\": \"public\"}, \"row_count\": 1, \"sample_claims\": [{\"category\": \"other\", \"label\": \"A\", \"record_number\": 1, \"source_record\": {\"original_category\": \"unknown\", \"original_subject\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\", \"record_number\": 1}, \"subject\": \"tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\", \"valid_from\": null, \"valid_until\": null}], \"sha256\": \"676c524d09e646d0e884101bef3ce59a8cec277734a944398ca77b27accfba36\", \"validation\": \"complete\"}",
+    "first_error": "license must be nonempty text up to 512 characters",
+    "manifest_keys": [
+      "attribution_method",
+      "license",
+      "name",
+      "visibility",
+      "source",
+      "dataset_key",
+      "version",
+      "chain",
+      "network",
+      "source_url",
+      "observed_at",
+      "valid_from",
+      "valid_until",
+      "category",
+      "expected_active_id"
+    ]
+  }
+}

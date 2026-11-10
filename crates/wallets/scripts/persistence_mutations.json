@@ -1,0 +1,1363 @@
+[
+  {
+    "id": "persist-transaction",
+    "file": "crates/wallets/src/observer_apply.rs",
+    "find": "pub fn persist(conn: &Connection, prepared: &Prepared<'_>, timestamp: &str) -> Result<()> {\n    if conn.is_autocommit() {",
+    "replace": "pub fn persist(conn: &Connection, prepared: &Prepared<'_>, timestamp: &str) -> Result<()> {\n    if false {",
+    "expect_failing": [
+      "observer_persistence_matches_reference_rows_and_epoch_fences"
+    ],
+    "rule": "State writes require the caller transaction."
+  },
+  {
+    "id": "persist-unicode-json",
+    "file": "crates/wallets/src/observer_apply.rs",
+    "find": ".ensure_ascii(false)",
+    "replace": ".ensure_ascii(true)",
+    "expect_failing": [
+      "observer_persistence_matches_unchanged_python_vectors"
+    ],
+    "rule": "Observer JSON preserves literal Unicode."
+  },
+  {
+    "id": "persist-branch-order",
+    "file": "crates/wallets/src/observer_apply.rs",
+    "find": "a.branch_key.cmp(&b.branch_key)",
+    "replace": "b.branch_key.cmp(&a.branch_key)",
+    "expect_failing": [
+      "observer_persistence_matches_unchanged_python_vectors"
+    ],
+    "rule": "Coverage replacement is inserted in sorted branch order."
+  },
+  {
+    "id": "persist-duplicate-branch",
+    "file": "crates/wallets/src/observer_apply.rs",
+    "find": "if !seen.insert(branch) {",
+    "replace": "if false && !seen.insert(branch) {",
+    "expect_failing": [
+      "observer_persistence_rejects_invalid_coverage_before_writing"
+    ],
+    "rule": "Duplicate coverage branches refuse before any write."
+  },
+  {
+    "id": "persist-known-branch",
+    "file": "crates/wallets/src/observer_apply.rs",
+    "find": "if !prepared.branch_keys.contains(&branch) {",
+    "replace": "if false && !prepared.branch_keys.contains(&branch) {",
+    "expect_failing": [
+      "observer_persistence_rejects_invalid_coverage_before_writing"
+    ],
+    "rule": "Coverage cannot introduce an unknown source branch."
+  },
+  {
+    "id": "persist-negative-scan",
+    "file": "crates/wallets/src/observer_apply.rs",
+    "find": "point.scanned_to < 0 ||",
+    "replace": "point.scanned_to < -1 ||",
+    "expect_failing": [
+      "observer_persistence_matches_unchanged_python_vectors"
+    ],
+    "rule": "Negative scan boundaries refuse before writes."
+  },
+  {
+    "id": "persist-negative-used",
+    "file": "crates/wallets/src/observer_apply.rs",
+    "find": "index < 0",
+    "replace": "index < -1",
+    "expect_failing": [
+      "observer_persistence_rejects_invalid_coverage_before_writing"
+    ],
+    "rule": "Negative highest-used indices refuse before writes."
+  },
+  {
+    "id": "persist-exclusive-boundary",
+    "file": "crates/wallets/src/observer_apply.rs",
+    "find": "index >= point.scanned_to",
+    "replace": "index > point.scanned_to",
+    "expect_failing": [
+      "observer_persistence_rejects_invalid_coverage_before_writing"
+    ],
+    "rule": "Highest-used must be below the exclusive scan boundary."
+  },
+  {
+    "id": "persist-zero-boundary",
+    "file": "crates/wallets/src/observer_apply.rs",
+    "find": "point.scanned_to < 0 ||",
+    "replace": "point.scanned_to <= 0 ||",
+    "expect_failing": [
+      "observer_persistence_rejects_invalid_coverage_before_writing"
+    ],
+    "rule": "An empty unused branch may have a zero exclusive scan boundary."
+  },
+  {
+    "id": "persist-coverage-version",
+    "file": "crates/wallets/src/observer_apply.rs",
+    "find": "coverage_version: 2,",
+    "replace": "coverage_version: 1,",
+    "expect_failing": [
+      "observer_persistence_matches_unchanged_python_vectors"
+    ],
+    "rule": "Coverage rows retain the Python version-two contract."
+  },
+  {
+    "id": "persist-state-version",
+    "file": "crates/wallets/src/observer_apply.rs",
+    "find": "state_version: 1,",
+    "replace": "state_version: 2,",
+    "expect_failing": [
+      "observer_persistence_matches_unchanged_python_vectors"
+    ],
+    "rule": "Observer JSON state rows retain version one."
+  },
+  {
+    "id": "persist-workspace",
+    "file": "crates/wallets/src/observer_apply.rs",
+    "find": "workspace_id: prepared.workspace_id,",
+    "replace": "workspace_id: prepared.profile_id,",
+    "expect_failing": [
+      "observer_persistence_matches_unchanged_python_vectors"
+    ],
+    "rule": "Observer state retains its workspace scope."
+  },
+  {
+    "id": "persist-profile",
+    "file": "crates/wallets/src/observer_apply.rs",
+    "find": "profile_id: prepared.profile_id,",
+    "replace": "profile_id: prepared.workspace_id,",
+    "expect_failing": [
+      "observer_persistence_matches_unchanged_python_vectors"
+    ],
+    "rule": "Observer state retains its profile scope."
+  },
+  {
+    "id": "persist-epoch-increment",
+    "file": "crates/store/src/observer.rs",
+    "find": "state_epoch=state_epoch+1",
+    "replace": "state_epoch=state_epoch",
+    "expect_failing": [
+      "observer_persistence_matches_unchanged_python_vectors"
+    ],
+    "rule": "Successful replacements increment the captured epoch."
+  },
+  {
+    "id": "persist-epoch-compare",
+    "file": "crates/store/src/observer.rs",
+    "find": "WHERE id=?12 AND state_epoch=?13",
+    "replace": "WHERE id=?12 AND (?13 IS NOT NULL)",
+    "expect_failing": [
+      "observer_persistence_matches_unchanged_python_vectors"
+    ],
+    "rule": "Existing-state replacements compare the captured epoch."
+  },
+  {
+    "id": "persist-new-epoch",
+    "file": "crates/store/src/observer.rs",
+    "find": "?9,?10,1,?11,?12,?12)",
+    "replace": "?9,?10,0,?11,?12,?12)",
+    "expect_failing": [
+      "observer_persistence_matches_unchanged_python_vectors"
+    ],
+    "rule": "Initial observer state starts at epoch one."
+  },
+  {
+    "id": "persist-duplicate-insert",
+    "file": "crates/store/src/observer.rs",
+    "find": "ON CONFLICT(id) DO NOTHING",
+    "replace": "ON CONFLICT(id) DO UPDATE SET state_json=excluded.state_json",
+    "expect_failing": [
+      "observer_persistence_matches_unchanged_python_vectors"
+    ],
+    "rule": "A newly prepared observer cannot overwrite an existing observer."
+  },
+  {
+    "id": "persist-stale-result",
+    "file": "crates/store/src/observer.rs",
+    "find": "if changed != 1 {",
+    "replace": "if false && changed != 1 {",
+    "expect_failing": [
+      "observer_persistence_matches_unchanged_python_vectors"
+    ],
+    "rule": "An unsuccessful compare-and-swap refuses before replacing coverage."
+  },
+  {
+    "id": "persist-clear-coverage",
+    "file": "crates/store/src/observer.rs",
+    "find": "DELETE FROM chain_observer_coverage WHERE observer_id=?",
+    "replace": "DELETE FROM chain_observer_coverage WHERE observer_id=? AND 0",
+    "expect_failing": [
+      "observer_persistence_matches_unchanged_python_vectors"
+    ],
+    "rule": "Coverage is a full replacement including an empty snapshot."
+  },
+  {
+    "id": "persist-scan-value",
+    "file": "crates/store/src/observer.rs",
+    "find": "point.scanned_to,",
+    "replace": "point.scanned_to + 1,",
+    "expect_failing": [
+      "observer_persistence_matches_unchanged_python_vectors"
+    ],
+    "rule": "Stored scan boundaries remain exact."
+  },
+  {
+    "id": "persist-used-value",
+    "file": "crates/store/src/observer.rs",
+    "find": "point.highest_used,",
+    "replace": "point.highest_used.map(|value| value + 1),",
+    "expect_failing": [
+      "observer_persistence_matches_unchanged_python_vectors"
+    ],
+    "rule": "Stored highest-used indices remain exact."
+  },
+  {
+    "id": "persist-created-time",
+    "file": "crates/store/src/observer.rs",
+    "find": "state_epoch=state_epoch+1,updated_at=?11",
+    "replace": "state_epoch=state_epoch+1,created_at=?11,updated_at=?11",
+    "expect_failing": [
+      "observer_persistence_matches_unchanged_python_vectors"
+    ],
+    "rule": "Replacing state preserves its creation timestamp."
+  },
+  {
+    "id": "persist-nonfinite",
+    "file": "crates/wallets/src/observer_apply.rs",
+    "find": "text.parse::<f64>().is_ok_and(|value| !value.is_finite())",
+    "replace": "text.parse::<f64>().is_ok_and(|value| value.is_nan())",
+    "expect_failing": [
+      "observer_persistence_matches_unchanged_python_vectors"
+    ],
+    "rule": "Non-finite nested observer JSON refuses before any write."
+  },
+  {
+    "id": "persist-details-default",
+    "file": "crates/wallets/src/observer_apply.rs",
+    "find": "if point.details.is_null() {",
+    "replace": "if false && point.details.is_null() {",
+    "expect_failing": [
+      "observer_persistence_matches_unchanged_python_vectors"
+    ],
+    "rule": "Absent coverage details are stored as an empty object."
+  },
+  {
+    "id": "publish-initial-cancel",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "    check_cancelled()?;\n    let value",
+    "replace": "    let value",
+    "expect_failing": [
+      "publication_savepoint_preserves_outer_transaction_and_cancellation_and_unwinds"
+    ],
+    "rule": "Cancellation before writes refuses the entire apply."
+  },
+  {
+    "id": "publish-final-cancel",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "    let value = apply(&savepoint)?;\n    check_cancelled()?;",
+    "replace": "    let value = apply(&savepoint)?;",
+    "expect_failing": [
+      "publication_savepoint_preserves_outer_transaction_and_cancellation_and_unwinds"
+    ],
+    "rule": "Cancellation after writes rolls the savepoint back."
+  },
+  {
+    "id": "publish-success-release",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "    savepoint.commit().map_err(database_error)?;",
+    "replace": "    drop(savepoint);",
+    "expect_failing": [
+      "publication_retractions_and_metadata_match_unchanged_python_full_table_vectors"
+    ],
+    "rule": "Successful application releases its savepoint."
+  },
+  {
+    "id": "retract-transaction",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "    if conn.is_autocommit() {\n        return Err(AppError::new(\n            \"observer_apply_outside_transaction\",\n            \"Observation retraction requires",
+    "replace": "    if false {\n        return Err(AppError::new(\n            \"observer_apply_outside_transaction\",\n            \"Observation retraction requires",
+    "expect_failing": [
+      "publication_retractions_chunk_large_sets_and_refuse_unowned_transactions"
+    ],
+    "rule": "Retraction cannot write outside the wallet transaction."
+  },
+  {
+    "id": "retract-trim",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "kassiber_pytext::strip(id).to_lowercase()",
+    "replace": "id.to_lowercase()",
+    "expect_failing": [
+      "publication_retractions_and_metadata_match_unchanged_python_full_table_vectors"
+    ],
+    "rule": "Python Unicode strip precedes retraction matching."
+  },
+  {
+    "id": "retract-case",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "kassiber_pytext::strip(id).to_lowercase()",
+    "replace": "kassiber_pytext::strip(id).to_owned()",
+    "expect_failing": [
+      "publication_retractions_and_metadata_match_unchanged_python_full_table_vectors"
+    ],
+    "rule": "Retraction candidates are case insensitive."
+  },
+  {
+    "id": "retract-all-chunks",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "for chunk in candidates.chunks(500) {",
+    "replace": "for chunk in candidates.chunks(500).take(1) {",
+    "expect_failing": [
+      "publication_retractions_chunk_large_sets_and_refuse_unowned_transactions"
+    ],
+    "rule": "Every batch of retraction candidates is applied."
+  },
+  {
+    "id": "retract-wallet-scope",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "[profile_id, wallet_id]",
+    "replace": "[profile_id, \"b\"]",
+    "expect_failing": [
+      "publication_retractions_and_metadata_match_unchanged_python_full_table_vectors"
+    ],
+    "rule": "Retractions select the requested wallet."
+  },
+  {
+    "id": "retract-profile-scope",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "[profile_id, wallet_id]",
+    "replace": "[\"q\", wallet_id]",
+    "expect_failing": [
+      "publication_retractions_and_metadata_match_unchanged_python_full_table_vectors"
+    ],
+    "rule": "Retractions select the requested profile."
+  },
+  {
+    "id": "retract-db-case",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "LOWER(external_id) IN",
+    "replace": "external_id IN",
+    "expect_failing": [
+      "publication_retractions_and_metadata_match_unchanged_python_full_table_vectors"
+    ],
+    "rule": "Stored external identities match case insensitively."
+  },
+  {
+    "id": "retract-delete",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "DELETE FROM transactions WHERE id IN",
+    "replace": "SELECT * FROM transactions WHERE id IN",
+    "expect_failing": [
+      "publication_retractions_and_metadata_match_unchanged_python_full_table_vectors"
+    ],
+    "rule": "Authoritative absence physically retires matching rows."
+  },
+  {
+    "id": "retract-empty-journal",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "let invalidated = !retracted.is_empty();",
+    "replace": "let invalidated = true;",
+    "expect_failing": [
+      "publication_retractions_and_metadata_match_unchanged_python_full_table_vectors"
+    ],
+    "rule": "Empty retractions leave journal input versions unchanged."
+  },
+  {
+    "id": "retract-journal",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "        invalidate_journals(conn, profile_id)?;",
+    "replace": "        let _ = profile_id;",
+    "expect_failing": [
+      "publication_retractions_and_metadata_match_unchanged_python_full_table_vectors"
+    ],
+    "rule": "Nonempty retractions invalidate the journal once."
+  },
+  {
+    "id": "publish-ascii",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "Options::default().sort_keys(true)",
+    "replace": "Options::default().sort_keys(true).ensure_ascii(false)",
+    "expect_failing": [
+      "publication_retractions_and_metadata_match_unchanged_python_full_table_vectors"
+    ],
+    "rule": "Wallet config and checkpoint JSON preserve Python ASCII escapes."
+  },
+  {
+    "id": "publish-json-spacing",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "python_json(&config, false)?",
+    "replace": "python_json(&config, true)?",
+    "expect_failing": [
+      "publication_retractions_and_metadata_match_unchanged_python_full_table_vectors"
+    ],
+    "rule": "Wallet config preserves Python spaced sorted JSON."
+  },
+  {
+    "id": "publish-checkpoint-spacing",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "python_json(checkpoint, true)?",
+    "replace": "python_json(checkpoint, false)?",
+    "expect_failing": [
+      "publication_retractions_and_metadata_match_unchanged_python_full_table_vectors"
+    ],
+    "rule": "Freshness checkpoints use compact sorted JSON."
+  },
+  {
+    "id": "publish-time",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "json!(synced.timestamp)",
+    "replace": "json!(\"wrong\")",
+    "expect_failing": [
+      "publication_retractions_and_metadata_match_unchanged_python_full_table_vectors"
+    ],
+    "rule": "Successful sync metadata records the injected publication time."
+  },
+  {
+    "id": "publish-retry",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "SELECT paused,retry_count FROM freshness_source_states",
+    "replace": "SELECT paused,0 FROM freshness_source_states",
+    "expect_failing": [
+      "publication_retractions_and_metadata_match_unchanged_python_full_table_vectors"
+    ],
+    "rule": "Existing retry counts survive successful refresh."
+  },
+  {
+    "id": "publish-paused",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "let status = if paused {",
+    "replace": "let status = if false {",
+    "expect_failing": [
+      "publication_retractions_and_metadata_match_unchanged_python_full_table_vectors"
+    ],
+    "rule": "Paused status overrides ordinary and blocking success."
+  },
+  {
+    "id": "publish-blocking",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "} else if synced.blocking_reports {",
+    "replace": "} else if false {",
+    "expect_failing": [
+      "publication_retractions_and_metadata_match_unchanged_python_full_table_vectors"
+    ],
+    "rule": "Blocking reports override ordinary successful freshness."
+  },
+  {
+    "id": "publish-partial",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "} else if synced.partial_success {",
+    "replace": "} else if false {",
+    "expect_failing": [
+      "publication_retractions_and_metadata_match_unchanged_python_full_table_vectors"
+    ],
+    "rule": "Partial success remains partially stale."
+  },
+  {
+    "id": "publish-degraded",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "if synced.partial_success {\n                synced.degraded_reason",
+    "replace": "if false {\n                synced.degraded_reason",
+    "expect_failing": [
+      "publication_retractions_and_metadata_match_unchanged_python_full_table_vectors"
+    ],
+    "rule": "Partial success preserves its degraded reason."
+  },
+  {
+    "id": "publish-state",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "synced.wallet_label,\n            status,\n            status,",
+    "replace": "synced.wallet_label,\n            status,\n            \"fresh\",",
+    "expect_failing": [
+      "publication_retractions_and_metadata_match_unchanged_python_full_table_vectors"
+    ],
+    "rule": "The freshness state follows the effective status."
+  },
+  {
+    "id": "publish-rollback-on-error",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "    let savepoint = kassiber_store::write_savepoint(conn).map_err(database_error)?;\n    check_cancelled()?;\n    let value = apply(&savepoint)?;",
+    "replace": "    let mut savepoint = kassiber_store::write_savepoint(conn).map_err(database_error)?; savepoint.set_drop_behavior(kassiber_store::rusqlite::DropBehavior::Commit);\n    check_cancelled()?;\n    let value = apply(&savepoint)?;",
+    "expect_failing": [
+      "publication_savepoint_preserves_outer_transaction_and_cancellation_and_unwinds"
+    ],
+    "rule": "Errors, cancellation and panic roll back instead of committing earlier writes."
+  },
+  {
+    "id": "publish-updated-time",
+    "file": "crates/wallets/src/publication.rs",
+    "find": "            synced.updated_at,",
+    "replace": "            synced.timestamp,",
+    "expect_failing": [
+      "publication_retractions_and_metadata_match_unchanged_python_full_table_vectors"
+    ],
+    "rule": "Freshness updated_at uses its own clock read, separately from the wallet success timestamp."
+  },
+  {
+    "id": "insert-msat",
+    "file": "crates/wallets/src/publication/insert.rs",
+    "find": "100_000_000_000_u64",
+    "replace": "100_000_000_u64",
+    "expect_failing": [
+      "insertion_matches_python_oracle_cases"
+    ],
+    "rule": "Convert BTC to integer msat exactly."
+  },
+  {
+    "id": "insert-canonical-case",
+    "file": "crates/wallets/src/publication/insert.rs",
+    "find": "AND LOWER(external_id) = ? AND asset = ?",
+    "replace": "AND external_id = ? AND asset = ?",
+    "expect_failing": [
+      "insertion_matches_python_oracle_cases"
+    ],
+    "rule": "Resolve canonical transaction identities case insensitively."
+  },
+  {
+    "id": "insert-duplicate-active",
+    "file": "crates/wallets/src/publication/insert.rs",
+    "find": "if active_same.len() > 1 {",
+    "replace": "if active_same.len() > 100 {",
+    "expect_failing": [
+      "insertion_matches_python_oracle_cases"
+    ],
+    "rule": "Ambiguous active rows must refuse."
+  },
+  {
+    "id": "insert-excluded-direction",
+    "file": "crates/wallets/src/publication/insert.rs",
+    "find": "!excluded_same.is_empty() && !obsolete.is_empty()",
+    "replace": "false && !excluded_same.is_empty() && !obsolete.is_empty()",
+    "expect_failing": [
+      "insertion_matches_python_oracle_cases"
+    ],
+    "rule": "Excluded authored directions must retain their identity."
+  },
+  {
+    "id": "insert-authored-kind",
+    "file": "crates/wallets/src/publication/insert.rs",
+    "find": "truthy(kind_override) && kind_direction(kind_override) != direction.as_str_opt()",
+    "replace": "false && truthy(kind_override) && kind_direction(kind_override) != direction.as_str_opt()",
+    "expect_failing": [
+      "insertion_matches_python_oracle_cases"
+    ],
+    "rule": "An authored kind cannot contradict a direction correction."
+  },
+  {
+    "id": "insert-authored-superseded",
+    "file": "crates/wallets/src/publication/insert.rs",
+    "find": "if has_authored_state(conn, row)? {",
+    "replace": "if false && has_authored_state(conn, row)? {",
+    "expect_failing": [
+      "insertion_matches_python_oracle_cases"
+    ],
+    "rule": "Supersession cannot discard authored metadata."
+  },
+  {
+    "id": "insert-supersede",
+    "file": "crates/wallets/src/publication/insert.rs",
+    "find": "UPDATE transactions SET excluded = 1 WHERE id = ?",
+    "replace": "UPDATE transactions SET excluded = 0 WHERE id = ?",
+    "expect_failing": [
+      "insertion_matches_python_oracle_cases"
+    ],
+    "rule": "Retire obsolete projections by exclusion."
+  },
+  {
+    "id": "insert-merge-amount",
+    "file": "crates/wallets/src/publication/insert.rs",
+    "find": "if amount_changed {\n        updates.put",
+    "replace": "if false && amount_changed {\n        updates.put",
+    "expect_failing": [
+      "insertion_matches_python_oracle_cases"
+    ],
+    "rule": "A corrected observed quantity updates the existing row."
+  },
+  {
+    "id": "insert-merge-fee",
+    "file": "crates/wallets/src/publication/insert.rs",
+    "find": "if int_or_zero(e(\"fee\"))? != incoming_fee {",
+    "replace": "if false && int_or_zero(e(\"fee\"))? != incoming_fee {",
+    "expect_failing": [
+      "insertion_matches_python_oracle_cases"
+    ],
+    "rule": "A corrected fee updates the existing row."
+  },
+  {
+    "id": "insert-merge-confirmation",
+    "file": "crates/wallets/src/publication/insert.rs",
+    "find": "if added || changed || removed {",
+    "replace": "if false && (added || changed || removed) {",
+    "expect_failing": [
+      "insertion_matches_python_oracle_cases"
+    ],
+    "rule": "Confirmation and retraction changes update timestamps."
+  },
+  {
+    "id": "insert-price-invalidation",
+    "file": "crates/wallets/src/publication/insert.rs",
+    "find": "if (added || changed || removed) && cached_time_price {",
+    "replace": "if false && (added || changed || removed) && cached_time_price {",
+    "expect_failing": [
+      "insertion_matches_python_oracle_cases"
+    ],
+    "rule": "Timestamp changes clear cached time-dependent prices."
+  },
+  {
+    "id": "insert-raw-merge",
+    "file": "crates/wallets/src/publication/insert.rs",
+    "find": "updates.put(\"raw_json\", n(\"raw_json\").clone());",
+    "replace": "updates.put(\"raw_json\", e(\"raw_json\").clone());",
+    "expect_failing": [
+      "insertion_matches_python_oracle_cases"
+    ],
+    "rule": "Persist improved graph and ownership attestations."
+  },
+  {
+    "id": "insert-staleness",
+    "file": "crates/wallets/src/publication/insert.rs",
+    "find": "let invalidated = imported + updated + superseded > 0;",
+    "replace": "let invalidated = false;",
+    "expect_failing": [
+      "insertion_matches_python_oracle_cases"
+    ],
+    "rule": "Insertions, updates and supersession invalidate journal inputs."
+  },
+  {
+    "id": "insert-direction-conflict",
+    "file": "crates/wallets/src/publication/insert.rs",
+    "find": "Some((_, direction)) if !py_eq(direction, field(record, \"direction\"))",
+    "replace": "Some((_, direction)) if false && !py_eq(direction, field(record, \"direction\"))",
+    "expect_failing": [
+      "insertion_matches_python_oracle_cases"
+    ],
+    "rule": "Opposite directions in one publication must refuse."
+  },
+  {
+    "id": "provenance-version",
+    "file": "crates/wallets/src/publication/provenance.rs",
+    "find": "pub const AUTHORITY_VERSION: i64 = 1;",
+    "replace": "pub const AUTHORITY_VERSION: i64 = 2;",
+    "expect_failing": [
+      "provenance_and_accounting_inputs_match_python_oracle"
+    ],
+    "rule": "Persist the closed authority version."
+  },
+  {
+    "id": "provenance-duplicate-key",
+    "file": "crates/wallets/src/publication/provenance.rs",
+    "find": "if unique.len() != keys.len() {",
+    "replace": "if false && unique.len() != keys.len() {",
+    "expect_failing": [
+      "provenance_and_accounting_inputs_match_python_oracle"
+    ],
+    "rule": "Reject duplicate provenance keys."
+  },
+  {
+    "id": "provenance-closed-resolution",
+    "file": "crates/wallets/src/publication/provenance.rs",
+    "find": "if unique != resolved_keys {",
+    "replace": "if false && unique != resolved_keys {",
+    "expect_failing": [
+      "provenance_and_accounting_inputs_match_python_oracle"
+    ],
+    "rule": "Provenance must match the complete resolved-record set."
+  },
+  {
+    "id": "provenance-conflicting-id",
+    "file": "crates/wallets/src/publication/provenance.rs",
+    "find": "Some((_, previous)) if *previous != id",
+    "replace": "Some((_, previous)) if false && *previous != id",
+    "expect_failing": [
+      "provenance_and_accounting_inputs_match_python_oracle"
+    ],
+    "rule": "One provenance key cannot resolve to two rows."
+  },
+  {
+    "id": "provenance-row-identity",
+    "file": "crates/wallets/src/publication/provenance.rs",
+    "find": "if row_key != *key {",
+    "replace": "if false && row_key != *key {",
+    "expect_failing": [
+      "provenance_and_accounting_inputs_match_python_oracle"
+    ],
+    "rule": "Resolved row identities must match provenance keys."
+  },
+  {
+    "id": "provenance-fee-attribution",
+    "file": "crates/wallets/src/publication/provenance.rs",
+    "find": "return \"implicit_wallet_delta\"",
+    "replace": "return \"exact\"",
+    "expect_failing": [
+      "provenance_and_accounting_inputs_match_python_oracle"
+    ],
+    "rule": "Implicit fee attribution must remain distinct from exact fees."
+  },
+  {
+    "id": "provenance-promote-txid",
+    "file": "crates/wallets/src/publication/provenance.rs",
+    "find": "if canonical.is_some() && or_text(field(&row, \"external_id_kind\")) != \"txid\" {",
+    "replace": "if false && canonical.is_some() && or_text(field(&row, \"external_id_kind\")) != \"txid\" {",
+    "expect_failing": [
+      "provenance_and_accounting_inputs_match_python_oracle"
+    ],
+    "rule": "Canonical native provenance promotes the txid identity kind."
+  },
+  {
+    "id": "provenance-revision",
+    "file": "crates/wallets/src/publication/provenance.rs",
+    "find": "Sql::Text(target.application_revision.into()),",
+    "replace": "Sql::Text(\"wrong\".into()),",
+    "expect_failing": [
+      "provenance_and_accounting_inputs_match_python_oracle"
+    ],
+    "rule": "Bind provenance to the publication revision."
+  },
+  {
+    "id": "provenance-quantity",
+    "file": "crates/wallets/src/publication/provenance.rs",
+    "find": "Sql::Text(crate::observer_state::quantity_hash(&row)?),",
+    "replace": "Sql::Text(String::new()),",
+    "expect_failing": [
+      "provenance_and_accounting_inputs_match_python_oracle"
+    ],
+    "rule": "Bind closed authority to the exact quantity hash."
+  },
+  {
+    "id": "provenance-graph",
+    "file": "crates/wallets/src/publication/provenance.rs",
+    "find": "Sql::Text(graph_hash(field(&row, \"raw_json\"))?),",
+    "replace": "Sql::Text(String::new()),",
+    "expect_failing": [
+      "provenance_and_accounting_inputs_match_python_oracle"
+    ],
+    "rule": "Bind closed authority to the observed graph hash."
+  },
+  {
+    "id": "provenance-refresh",
+    "file": "crates/wallets/src/publication/provenance.rs",
+    "find": "application_revision = excluded.application_revision,",
+    "replace": "application_revision = application_revision,",
+    "expect_failing": [
+      "provenance_and_accounting_inputs_match_python_oracle"
+    ],
+    "rule": "Refresh provenance on deduplicated observations."
+  },
+  {
+    "id": "provenance-journal-current",
+    "file": "crates/wallets/src/publication/provenance.rs",
+    "find": "AND journal_input_version = last_processed_input_version",
+    "replace": "AND journal_input_version != last_processed_input_version",
+    "expect_failing": [
+      "provenance_and_accounting_inputs_match_python_oracle"
+    ],
+    "rule": "Only a processed current journal receives the comparison optimization."
+  },
+  {
+    "id": "inventory-msat",
+    "file": "crates/wallets/src/publication/inventory.rs",
+    "find": "amount.checked_mul(1000)",
+    "replace": "amount.checked_mul(1)",
+    "expect_failing": [
+      "inventory_matches_python_oracle_cases"
+    ],
+    "rule": "Persist output amounts in msat."
+  },
+  {
+    "id": "inventory-minimum",
+    "file": "crates/wallets/src/publication/inventory.rs",
+    "find": "if minimum.is_some_and(|minimum| normalized < minimum) {",
+    "replace": "if false && minimum.is_some_and(|minimum| normalized < minimum) {",
+    "expect_failing": [
+      "inventory_matches_python_oracle_cases"
+    ],
+    "rule": "Reject negative output indices and quantities."
+  },
+  {
+    "id": "inventory-spend-source",
+    "file": "crates/wallets/src/publication/inventory.rs",
+    "find": "AND COALESCE(backend_name, '') = ? AND COALESCE(backend_kind, '') = ?",
+    "replace": "AND (? IS NOT NULL) AND COALESCE(backend_kind, '') = ?",
+    "expect_failing": [
+      "inventory_matches_python_oracle_cases"
+    ],
+    "rule": "Only the matching backend may mark an absent output spent."
+  },
+  {
+    "id": "inventory-active",
+    "file": "crates/wallets/src/publication/inventory.rs",
+    "find": "AND outpoint NOT IN ({})",
+    "replace": "AND outpoint IN ({})",
+    "expect_failing": [
+      "inventory_matches_python_oracle_cases"
+    ],
+    "rule": "Active outputs must remain unspent."
+  },
+  {
+    "id": "inventory-first-seen",
+    "file": "crates/wallets/src/publication/inventory.rs",
+    "find": "last_seen_at = excluded.last_seen_at,",
+    "replace": "first_seen_at = excluded.last_seen_at, last_seen_at = excluded.last_seen_at,",
+    "expect_failing": [
+      "inventory_matches_python_oracle_cases"
+    ],
+    "rule": "An output refresh preserves its first-seen time."
+  },
+  {
+    "id": "inventory-refresh-count",
+    "file": "crates/wallets/src/publication/inventory.rs",
+    "find": "Sql::Integer(active.len() as i64),",
+    "replace": "Sql::Integer(0),",
+    "expect_failing": [
+      "inventory_matches_python_oracle_cases"
+    ],
+    "rule": "Record the complete active output count."
+  },
+  {
+    "id": "policy-private-fields",
+    "file": "crates/wallets/src/publication/policy.rs",
+    "find": "\"ownership_scan_to_index\",",
+    "replace": "\"unknown\",",
+    "expect_failing": [
+      "policy_coverage_matches_python_oracle_cases"
+    ],
+    "rule": "Keep the complete private policy material in the local epoch."
+  },
+  {
+    "id": "policy-reuse-active",
+    "file": "crates/wallets/src/publication/policy.rs",
+    "find": "status = 'active'",
+    "replace": "status = 'retired'",
+    "expect_failing": [
+      "policy_coverage_matches_python_oracle_cases"
+    ],
+    "rule": "Reuse an existing active epoch."
+  },
+  {
+    "id": "policy-branch-dedup",
+    "file": "crates/wallets/src/publication/policy.rs",
+    "find": "if !branch_keys.contains(&key) {",
+    "replace": "if true {",
+    "expect_failing": [
+      "policy_coverage_matches_python_oracle_cases"
+    ],
+    "rule": "Preserve first-seen unique structural branch keys."
+  },
+  {
+    "id": "policy-coverage-boundary",
+    "file": "crates/wallets/src/publication/policy.rs",
+    "find": "Sql::Integer(point.scanned_to),",
+    "replace": "Sql::Integer(point.scanned_to + 1),",
+    "expect_failing": [
+      "policy_coverage_matches_python_oracle_cases"
+    ],
+    "rule": "Persist exclusive scan boundaries without rounding."
+  },
+  {
+    "id": "policy-coverage-used",
+    "file": "crates/wallets/src/publication/policy.rs",
+    "find": "point.highest_used.map_or(Sql::Null, Sql::Integer),",
+    "replace": "point.highest_used.map_or(Sql::Null, |n| Sql::Integer(n + 1)),",
+    "expect_failing": [
+      "policy_coverage_matches_python_oracle_cases"
+    ],
+    "rule": "Persist exact highest-used indices."
+  },
+  {
+    "id": "policy-refresh",
+    "file": "crates/wallets/src/publication/policy.rs",
+    "find": "scanned_to_exclusive = excluded.scanned_to_exclusive,",
+    "replace": "scanned_to_exclusive = scanned_to_exclusive,",
+    "expect_failing": [
+      "policy_coverage_matches_python_oracle_cases"
+    ],
+    "rule": "Refresh existing durable coverage witnesses."
+  },
+  {
+    "id": "report-domain-guard",
+    "file": "crates/wallets/src/publication/reports.rs",
+    "find": "return Ok(unavailable(\"domain_changed\"));",
+    "replace": "return Ok(unavailable(\"authority_unavailable\"));",
+    "expect_failing": [
+      "report_impacts_match_python_oracle_cases"
+    ],
+    "rule": "Report impacts distinguish changed domains."
+  },
+  {
+    "id": "report-retraction",
+    "file": "crates/wallets/src/publication/reports.rs",
+    "find": "if unavailable_after && txid_retracted {",
+    "replace": "if false && unavailable_after && txid_retracted {",
+    "expect_failing": [
+      "report_impacts_match_python_oracle_cases"
+    ],
+    "rule": "An authoritative absence appends retraction evidence."
+  },
+  {
+    "id": "report-reversal",
+    "file": "crates/wallets/src/publication/reports.rs",
+    "find": "} else if before_confirmed && !after_confirmed {",
+    "replace": "} else if false && before_confirmed && !after_confirmed {",
+    "expect_failing": [
+      "report_impacts_match_python_oracle_cases"
+    ],
+    "rule": "Reversed confirmation thresholds retain their impact code."
+  },
+  {
+    "id": "report-identical",
+    "file": "crates/wallets/src/publication/reports.rs",
+    "find": "if py_eq(&before, &after) {",
+    "replace": "if false && py_eq(&before, &after) {",
+    "expect_failing": [
+      "report_impacts_match_python_oracle_cases"
+    ],
+    "rule": "Identical observations append no impact."
+  },
+  {
+    "id": "report-latest",
+    "file": "crates/wallets/src/publication/reports.rs",
+    "find": "ORDER BY inbox.rowid DESC LIMIT 1",
+    "replace": "ORDER BY inbox.rowid ASC LIMIT 1",
+    "expect_failing": [
+      "report_impacts_match_python_oracle_cases"
+    ],
+    "rule": "Compare with the latest appended report observation."
+  },
+  {
+    "id": "wallet-captured-config",
+    "file": "crates/wallets/src/publication/wallet.rs",
+    "find": "if config_json != request.captured_config {",
+    "replace": "if false && config_json != request.captured_config {",
+    "expect_failing": [
+      "unsupported_shapes_and_stale_preparations_refuse_without_writes"
+    ],
+    "rule": "Refuse a changed captured wallet configuration."
+  },
+  {
+    "id": "wallet-book-scope",
+    "file": "crates/wallets/src/publication/wallet.rs",
+    "find": "if py(&fetch[\"book_environment_id\"])? != environment {",
+    "replace": "if false && py(&fetch[\"book_environment_id\"])? != environment {",
+    "expect_failing": [
+      "unsupported_shapes_and_stale_preparations_refuse_without_writes"
+    ],
+    "rule": "Refuse a changed book environment."
+  },
+  {
+    "id": "overlap-canonical-deprecated",
+    "file": "crates/wallets/src/source_overlap.rs",
+    "find": "                row.deprecated,\n",
+    "replace": "                false,\n",
+    "expect_failing": [
+      "source_overlap::tests::canonical_owner_ranks_like_python"
+    ],
+    "rule": "A deprecated wallet never becomes the canonical owner."
+  },
+  {
+    "id": "overlap-canonical-kind",
+    "file": "crates/wallets/src/source_overlap.rs",
+    "find": "                !matches!(\n                    row.first.kind.as_str(),\n                    \"descriptor\" | \"xpub\" | \"silent-payment\"\n                ),",
+    "replace": "                false,",
+    "expect_failing": [
+      "source_overlap::tests::canonical_owner_ranks_like_python"
+    ],
+    "rule": "Descriptor, xpub and silent-payment wallets outrank other kinds."
+  },
+  {
+    "id": "overlap-canonical-priority",
+    "file": "crates/wallets/src/source_overlap.rs",
+    "find": "        \"sync_target\" => 2,",
+    "replace": "        \"sync_target\" => 0,",
+    "expect_failing": [
+      "source_overlap::tests::canonical_owner_ranks_like_python"
+    ],
+    "rule": "Stored evidence outranks a sync target."
+  },
+  {
+    "id": "overlap-canonical-activity",
+    "file": "crates/wallets/src/source_overlap.rs",
+    "find": "                row.count == 0,",
+    "replace": "                row.count != 0,",
+    "expect_failing": [
+      "source_overlap::tests::canonical_owner_ranks_like_python"
+    ],
+    "rule": "An active wallet outranks an idle one."
+  },
+  {
+    "id": "overlap-canonical-label",
+    "file": "crates/wallets/src/source_overlap.rs",
+    "find": "                row.first.label.clone(),",
+    "replace": "                std::cmp::Reverse(row.first.label.clone()),",
+    "expect_failing": [
+      "source_overlap::tests::canonical_owner_ranks_like_python"
+    ],
+    "rule": "Ties go to the first label."
+  },
+  {
+    "id": "overlap-row-first-source",
+    "file": "crates/wallets/src/source_overlap.rs",
+    "find": "        row.count = row.count.max(source.count);",
+    "replace": "        row.count = row.first.count;",
+    "expect_failing": [
+      "source_overlap::tests::canonical_owner_ranks_like_python",
+      "source_overlap::tests::prefetch_index_and_publish_recheck_name_one_owner"
+    ],
+    "rule": "A wallet's activity is its highest across all its sources, not its first source's."
+  },
+  {
+    "id": "overlap-row-first-source-deprecated",
+    "file": "crates/wallets/src/source_overlap.rs",
+    "find": "        row.deprecated |= source.deprecated;",
+    "replace": "        row.deprecated = row.first.deprecated;",
+    "expect_failing": [
+      "source_overlap::tests::canonical_owner_ranks_like_python"
+    ],
+    "rule": "A wallet is retired if any of its sources is, whatever comes first."
+  },
+  {
+    "id": "overlap-include-deprecated",
+    "file": "crates/wallets/src/source_overlap.rs",
+    "find": "source.wallet == self.wallet || !source.deprecated || source.count > 0;",
+    "replace": "true;",
+    "expect_failing": [
+      "source_overlap::tests::deprecated_wallets_without_activity_are_ignored"
+    ],
+    "rule": "Idle deprecated wallets are not ownership evidence."
+  },
+  {
+    "id": "overlap-network-scope",
+    "file": "crates/wallets/src/source_overlap.rs",
+    "find": "            let key = (chain, network, source.script.clone());",
+    "replace": "            let key = (chain, String::new(), source.script.clone());",
+    "expect_failing": [
+      "source_overlap::tests::inventory_and_address_lists_are_evidence"
+    ],
+    "rule": "Overlap groups are per chain and network."
+  },
+  {
+    "id": "overlap-inventory-evidence",
+    "file": "crates/wallets/src/source_overlap.rs",
+    "find": "        sources.extend(self.inventory.iter().cloned());",
+    "replace": "",
+    "expect_failing": [
+      "source_overlap::tests::inventory_and_address_lists_are_evidence"
+    ],
+    "rule": "The output inventory is ownership evidence."
+  },
+  {
+    "id": "overlap-keep",
+    "file": "crates/wallets/src/source_overlap.rs",
+    "find": "        .filter(|target| !dropped.contains(",
+    "replace": "        .filter(|target| dropped.contains(",
+    "expect_failing": [
+      "source_overlap::tests::inventory_and_address_lists_are_evidence"
+    ],
+    "rule": "Only dropped scripts leave the target list."
+  },
+  {
+    "id": "overlap-discovered-owned",
+    "file": "crates/wallets/src/source_overlap.rs",
+    "find": "                if owned[\"role\"] == \"owned\" {",
+    "replace": "                if owned[\"role\"] != \"\" {",
+    "expect_failing": [
+      "source_overlap::tests::discovered_targets_follow_python_sources_and_order"
+    ],
+    "rule": "Only owned graph entries are discovered targets."
+  },
+  {
+    "id": "overlap-expanded-new",
+    "file": "crates/wallets/src/source_overlap.rs",
+    "find": "    if new.is_empty() {\n        return None;",
+    "replace": "    if new.len() > 99 {\n        return None;",
+    "expect_failing": [
+      "source_overlap::tests::discovered_targets_follow_python_sources_and_order"
+    ],
+    "rule": "Nothing new means no expanded state."
+  },
+  {
+    "id": "fetch-overlap-skip",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "if preflight == Preflight::Skipped || (kept.is_empty() && !targets.is_empty()) {",
+    "replace": "if preflight == Preflight::Skipped {",
+    "expect_failing": [
+      "fetch::tests::fetch_overlap_skip_makes_no_request_even_offline"
+    ],
+    "rule": "A wallet whose every target has a better owner is skipped before any request."
+  },
+  {
+    "id": "fetch-overlap-skip-transport",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "        if self.skip.is_none() {\n            self.authorize(gate, proof)?;",
+    "replace": "        if true {\n            self.authorize(gate, proof)?;",
+    "expect_failing": [
+      "fetch::tests::fetch_overlap_skip_makes_no_request_even_offline"
+    ],
+    "rule": "An overlap skip makes no request, so it needs no transport."
+  },
+  {
+    "id": "fetch-overlap-partial-electrum",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "        if !dropped.is_empty() && reason.is_empty() {\n            reason = \"source_overlap_partial_descriptor\";",
+    "replace": "        if false {\n            reason = \"source_overlap_partial_descriptor\";",
+    "expect_failing": [
+      "fetch::tests::fetch_trimmed_electrum_descriptor_takes_the_compatibility_route"
+    ],
+    "rule": "A trimmed Bitcoin descriptor takes Python's compatibility observer unless a transport reason already applies."
+  },
+  {
+    "id": "publication-overlap-recheck",
+    "file": "crates/wallets/src/publication/wallet.rs",
+    "find": "    recheck_overlap(conn, request, &wallet, &routed, sync_state)?;\n",
+    "replace": "",
+    "expect_failing": [
+      "publication::wallet::tests::publication_rechecks_target_ownership_against_the_current_book"
+    ],
+    "rule": "Publication re-checks target ownership against the current book."
+  },
+  {
+    "id": "wallet-commit",
+    "file": "crates/wallets/src/publication/wallet.rs",
+    "find": "savepoint.commit().map_err(database_error)?;",
+    "replace": "drop(savepoint);",
+    "expect_failing": [
+      "publication_books_match_python_fixture_and_sequence_rounds"
+    ],
+    "rule": "Successful publication persists all state groups."
+  },
+  {
+    "id": "wallet-error-rollback",
+    "file": "crates/wallets/src/publication/wallet.rs",
+    "find": "    let savepoint = kassiber_store::write_savepoint(conn).map_err(database_error)?;\n    let mut stage = |name: &str| stage(&savepoint, name);",
+    "replace": "    let mut savepoint = kassiber_store::write_savepoint(conn).map_err(database_error)?; savepoint.set_drop_behavior(kassiber_store::rusqlite::DropBehavior::Commit);\n    let mut stage = |name: &str| stage(&savepoint, name);",
+    "expect_failing": [
+      "every_stage_failure_and_cancellation_restores_the_book"
+    ],
+    "rule": "Every stage failure rolls back the complete publication."
+  },
+  {
+    "id": "wallet-observer-policy",
+    "file": "crates/wallets/src/publication/wallet.rs",
+    "find": "&points,\n            &mut || clock.id(),",
+    "replace": "&[],\n            &mut || clock.id(),",
+    "expect_failing": [
+      "publication_books_match_python_fixture_and_sequence_rounds"
+    ],
+    "rule": "Publish durable policy coverage alongside observer state."
+  },
+  {
+    "id": "wallet-retractions",
+    "file": "crates/wallets/src/publication/wallet.rs",
+    "find": "if retracted.is_empty() {",
+    "replace": "if true {",
+    "expect_failing": [
+      "publication_books_match_python_fixture_and_sequence_rounds"
+    ],
+    "rule": "Apply authoritative retractions in the same transaction."
+  },
+  {
+    "id": "wallet-provenance",
+    "file": "crates/wallets/src/publication/wallet.rs",
+    "find": "if let Some(observation) = observation.filter(|v| v.is_object()) {",
+    "replace": "if let Some(observation) = observation.filter(|_| false) {",
+    "expect_failing": [
+      "publication_books_match_python_fixture_and_sequence_rounds"
+    ],
+    "rule": "Publish closed provenance alongside transaction records."
+  },
+  {
+    "id": "wallet-reports",
+    "file": "crates/wallets/src/publication/wallet.rs",
+    "find": "if sync_state.is_object() {\n        let impacts",
+    "replace": "if false && sync_state.is_object() {\n        let impacts",
+    "expect_failing": [
+      "publication_books_match_python_fixture_and_sequence_rounds"
+    ],
+    "rule": "Saved-report impacts share the atomic publication."
+  },
+  {
+    "id": "wallet-inventory",
+    "file": "crates/wallets/src/publication/wallet.rs",
+    "find": "if let Some(utxos) = &observed_utxos {",
+    "replace": "if let Some(utxos) = (&observed_utxos).as_ref().filter(|_| false) {",
+    "expect_failing": [
+      "publication_books_match_python_fixture_and_sequence_rounds"
+    ],
+    "rule": "Publish output inventory including empty snapshots."
+  },
+  {
+    "id": "inventory-caller-transaction",
+    "file": "crates/wallets/src/publication/inventory.rs",
+    "find": "    super::row::require_transaction(conn)?;",
+    "replace": "",
+    "expect_failing": [
+      "persistence_writers_require_the_wallet_transaction"
+    ],
+    "rule": "This writer must refuse outside the caller wallet transaction."
+  },
+  {
+    "id": "provenance-caller-transaction",
+    "file": "crates/wallets/src/publication/provenance.rs",
+    "find": "    super::row::require_transaction(conn)?;",
+    "replace": "",
+    "expect_failing": [
+      "persistence_writers_require_the_wallet_transaction"
+    ],
+    "rule": "This writer must refuse outside the caller wallet transaction."
+  },
+  {
+    "id": "policy-caller-transaction",
+    "file": "crates/wallets/src/publication/policy.rs",
+    "find": "    super::row::require_transaction(conn)?;",
+    "replace": "",
+    "expect_failing": [
+      "persistence_writers_require_the_wallet_transaction"
+    ],
+    "rule": "This writer must refuse outside the caller wallet transaction."
+  },
+  {
+    "id": "reports-caller-transaction",
+    "file": "crates/wallets/src/publication/reports.rs",
+    "find": "    super::row::require_transaction(conn)?;",
+    "replace": "",
+    "expect_failing": [
+      "persistence_writers_require_the_wallet_transaction"
+    ],
+    "rule": "This writer must refuse outside the caller wallet transaction."
+  },
+  {
+    "id": "wallet-provenance-staleness",
+    "file": "crates/wallets/src/publication/wallet.rs",
+    "find": "if !previous.same(&provenance::accounting_inputs(",
+    "replace": "if false && !previous.same(&provenance::accounting_inputs(",
+    "expect_failing": [
+      "publication_books_match_python_fixture_and_sequence_rounds"
+    ],
+    "rule": "Restoring closed authority invalidates a current journal even if transaction insertion is unchanged."
+  },
+  {
+    "id": "physical-txid-conflict",
+    "file": "crates/wallets/src/publication/physical.rs",
+    "find": "if graph != external {",
+    "replace": "if false && graph != external {",
+    "expect_failing": [
+      "physical_scope_and_confirmation_match_python_vectors"
+    ],
+    "rule": "Graph and external physical identities must agree."
+  },
+  {
+    "id": "physical-chain-conflict",
+    "file": "crates/wallets/src/publication/physical.rs",
+    "find": "if chains.len() > 1 {",
+    "replace": "if false && chains.len() > 1 {",
+    "expect_failing": [
+      "physical_scope_and_confirmation_match_python_vectors"
+    ],
+    "rule": "Conflicting chain evidence cannot establish transfer scope."
+  },
+  {
+    "id": "physical-network-conflict",
+    "file": "crates/wallets/src/publication/physical.rs",
+    "find": "if networks.len() > 1 {",
+    "replace": "if false && networks.len() > 1 {",
+    "expect_failing": [
+      "physical_scope_and_confirmation_match_python_vectors"
+    ],
+    "rule": "Conflicting network evidence cannot establish transfer scope."
+  },
+  {
+    "id": "physical-latest-authority",
+    "file": "crates/wallets/src/publication/physical.rs",
+    "find": "evidence.iter().map(|(at, _)| *at).max()",
+    "replace": "evidence.iter().map(|(at, _)| *at).min()",
+    "expect_failing": [
+      "physical_scope_and_confirmation_match_python_vectors"
+    ],
+    "rule": "Newest closed evidence controls confirmation state."
+  },
+  {
+    "id": "physical-contradictory-authority",
+    "file": "crates/wallets/src/publication/physical.rs",
+    "find": ".all(|(_, confirmed)| *confirmed)",
+    "replace": ".any(|(_, confirmed)| *confirmed)",
+    "expect_failing": [
+      "physical_scope_and_confirmation_match_python_vectors"
+    ],
+    "rule": "Contradictory equally recent authority must fail closed on confirmation."
+  },
+  {
+    "id": "fetch-esplora-reason-auth",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "        return Ok(\"custom_http_auth\");",
+    "replace": "        return Ok(\"http_route_policy\");",
+    "expect_failing": [
+      "fetch::tests::esplora_compatibility_reasons_follow_python_order"
+    ],
+    "rule": "A token or auth header names custom_http_auth."
+  },
+  {
+    "id": "fetch-esplora-reason-timeout",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "!= Some(30.into())",
+    "replace": "!= Some(31.into())",
+    "expect_failing": [
+      "fetch::tests::esplora_compatibility_reasons_follow_python_order"
+    ],
+    "rule": "Only a timeout other than 30 names custom_timeout."
+  },
+  {
+    "id": "fetch-esplora-reason-onion",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "kassiber_pytext::lower(host.trim_end_matches('.')).ends_with(\".onion\")",
+    "replace": "kassiber_pytext::lower(host).ends_with(\".onion\")",
+    "expect_failing": [
+      "fetch::tests::esplora_compatibility_reasons_follow_python_order"
+    ],
+    "rule": "A trailing-dot .onion host is still an onion endpoint."
+  },
+  {
+    "id": "fetch-esplora-reason-order",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "    if value(\"certificate\").is_some() {\n        return Ok(\"custom_ca\");",
+    "replace": "    if value(\"certificate\").is_some() && value(\"proxy\").is_none() {\n        return Ok(\"custom_ca\");",
+    "expect_failing": [
+      "fetch::tests::esplora_compatibility_reasons_follow_python_order"
+    ],
+    "rule": "A custom CA outranks a proxy, in Python's order."
+  },
+  {
+    "id": "fetch-esplora-transport-native",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "        } else if electrum {\n            electrum_reason(backend)",
+    "replace": "        } else if true {\n            electrum_reason(backend)",
+    "expect_failing": [
+      "fetch::tests::fetch_trimmed_electrum_descriptor_takes_the_compatibility_route"
+    ],
+    "rule": "Esplora keeps its own compatibility reasons; only Electrum takes the BDK route's."
+  },
+  {
+    "id": "fetch-address-electrum",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "        crate::scan::validate_backend_scope(&chain, &network, backend, config)?;\n        let transport = Backend::new(backend, backend[\"kind\"] == \"electrum\")?;",
+    "replace": "        crate::scan::validate_backend_scope(&chain, &network, backend, config)?;\n        let transport = Backend::new(backend, false)?;",
+    "expect_failing": [
+      "fetch::tests::address_lists_prepare_their_targets_without_a_request"
+    ],
+    "rule": "An Electrum address list takes Python's compatibility Electrum observer over the Electrum transport."
+  },
+  {
+    "id": "fetch-address-liquid",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "if chain == \"liquid\" {",
+    "replace": "if false {",
+    "expect_failing": [
+      "fetch::tests::address_lists_prepare_their_targets_without_a_request"
+    ],
+    "rule": "A Liquid address list refuses as Python does."
+  },
+  {
+    "id": "fetch-address-scope",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "        crate::scan::validate_backend_scope(&chain, &network, backend, config)?;\n",
+    "replace": "",
+    "expect_failing": [
+      "fetch::tests::address_lists_prepare_their_targets_without_a_request"
+    ],
+    "rule": "An address list's backend must serve its chain and network."
+  }
+]

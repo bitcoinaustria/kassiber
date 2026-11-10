@@ -1,0 +1,677 @@
+[
+  {
+    "id": "fetch-distinct-reuse-sources",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "let current = if source_count > 1 {",
+    "replace": "let current = if source_count > 0 {",
+    "expect_failing": [
+      "fetch_reuse_counts_distinct_observer_sources_instead_of_duplicate_script_labels"
+    ],
+    "rule": "Only multiple distinct observers disable single-source record reuse."
+  },
+  {
+    "id": "fetch-esplora-tip-read",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "            depth_height = client\n                .get_text(\"blocks/tip/height\", Some(consent), deadline)",
+    "replace": "            depth_height = client\n                .get_text(\"blocks/tip/unknown\", Some(consent), deadline)",
+    "expect_failing": [
+      "compatibility_cached_esplora_fetches_once_then_reuses_only_complete_membership"
+    ],
+    "rule": "Read the source tip after histories and before output inventory."
+  },
+  {
+    "id": "fetch-inherit-bdk",
+    "file": "crates/wallets/src/bdk.rs",
+    "find": "pub(crate) fn for_fetch(action: &Execution, transport: Consent) -> Self {\n        Self {\n            identity: action.identity.clone(),\n            transport,",
+    "replace": "pub(crate) fn for_fetch(action: &Execution, transport: Consent) -> Self {\n        Self {\n            identity: action.identity.clone(),\n            transport: Consent::explicit_trigger(action.backend.request()),",
+    "expect_failing": [
+      "fetch_grant_revocation_reaches_every_protocol_stage"
+    ],
+    "rule": "Every protocol stage inherits the same revocable exact-action transport grant."
+  },
+  {
+    "id": "fetch-inherit-discovery",
+    "file": "crates/wallets/src/scan.rs",
+    "find": "pub(crate) fn for_fetch(action: &CompatibilityDiscovery, transport: Consent) -> Self {\n        Self {\n            identity: action.identity.clone(),\n            transport,",
+    "replace": "pub(crate) fn for_fetch(action: &CompatibilityDiscovery, transport: Consent) -> Self {\n        Self {\n            identity: action.identity.clone(),\n            transport: Consent::explicit_trigger(action.backend.request()),",
+    "expect_failing": [
+      "fetch_grant_revocation_reaches_every_protocol_stage"
+    ],
+    "rule": "Every protocol stage inherits the same revocable exact-action transport grant."
+  },
+  {
+    "id": "fetch-inherit-acquisition",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": "pub(crate) fn for_fetch(action: &Acquisition, transport: Consent) -> Self {\n        Self {\n            identity: action.identity.clone(),\n            transport,",
+    "replace": "pub(crate) fn for_fetch(action: &Acquisition, transport: Consent) -> Self {\n        Self {\n            identity: action.identity.clone(),\n            transport: Consent::explicit_trigger(action.backend.request()),",
+    "expect_failing": [
+      "fetch_grant_revocation_reaches_every_protocol_stage"
+    ],
+    "rule": "Every protocol stage inherits the same revocable exact-action transport grant."
+  },
+  {
+    "id": "fetch-consent-replay",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "if proof.started.swap(true, Ordering::SeqCst) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "fetch_grant_is_consumed_once_even_after_backend_failure"
+    ],
+    "rule": "A fetch grant cannot be replayed after any transport attempt."
+  },
+  {
+    "id": "fetch-bdk-record-order",
+    "file": "crates/wallets/src/bdk/projection.rs",
+    "find": ".transactions_sort_by(|a, b| b.chain_position.cmp(&a.chain_position))",
+    "replace": ".transactions_sort_by(|a, b| a.chain_position.cmp(&b.chain_position))",
+    "expect_failing": [
+      "bdk_complete_update_orders_records_by_descending_chain_position"
+    ],
+    "rule": "Match bdkpython's descending chain-position presentation."
+  },
+  {
+    "id": "fetch-bdk-state",
+    "file": "crates/wallets/src/bdk/projection.rs",
+    "find": "\"bdk_changeset\":self.changeset()",
+    "replace": "\"bdk_changeset\":{}",
+    "expect_failing": [
+      "bdk_complete_update_covers_outputs_policy_horizon_and_private_state"
+    ],
+    "rule": "Persist the complete dependency aggregate."
+  },
+  {
+    "id": "fetch-bdk-canonical",
+    "file": "crates/wallets/src/bdk/projection.rs",
+    "find": "\"state\":{\"schema_version\":1,\"bdk_changeset\":self.changeset(),\"canonical_txids\":self.canonical_txids",
+    "replace": "\"state\":{\"schema_version\":1,\"bdk_changeset\":self.changeset(),\"canonical_txids\":[]",
+    "expect_failing": [
+      "bdk_complete_update_covers_outputs_policy_horizon_and_private_state"
+    ],
+    "rule": "Keep canonical membership in private state."
+  },
+  {
+    "id": "fetch-bdk-fingerprint-version",
+    "file": "crates/wallets/src/bdk/projection.rs",
+    "find": "\"record_fingerprint_version\":fingerprint_version",
+    "replace": "\"record_fingerprint_version\":\"wrong\"",
+    "expect_failing": [
+      "bdk_complete_update_covers_outputs_policy_horizon_and_private_state"
+    ],
+    "rule": "Bind reuse to the current release."
+  },
+  {
+    "id": "fetch-bdk-fingerprints",
+    "file": "crates/wallets/src/bdk/projection.rs",
+    "find": "\"record_fingerprints\":projection.fingerprints",
+    "replace": "\"record_fingerprints\":{}",
+    "expect_failing": [
+      "bdk_complete_update_covers_outputs_policy_horizon_and_private_state"
+    ],
+    "rule": "Persist the complete record fingerprint map."
+  },
+  {
+    "id": "fetch-bdk-outputs",
+    "file": "crates/wallets/src/bdk/projection.rs",
+    "find": "\"outputs\":outputs",
+    "replace": "\"outputs\":[]",
+    "expect_failing": [
+      "bdk_complete_update_covers_outputs_policy_horizon_and_private_state"
+    ],
+    "rule": "Publish every live output even when records are reused."
+  },
+  {
+    "id": "fetch-bdk-coverage",
+    "file": "crates/wallets/src/bdk/projection.rs",
+    "find": "\"coverage\":coverage",
+    "replace": "\"coverage\":[]",
+    "expect_failing": [
+      "bdk_complete_update_covers_outputs_policy_horizon_and_private_state"
+    ],
+    "rule": "Publish derivation coverage with the observer."
+  },
+  {
+    "id": "fetch-bdk-highest",
+    "file": "crates/wallets/src/bdk/projection.rs",
+    "find": "let used = highest.get(&keychain).copied();",
+    "replace": "let used = None::<u32>;",
+    "expect_failing": [
+      "bdk_complete_update_covers_outputs_policy_horizon_and_private_state"
+    ],
+    "rule": "Derive highest use from all wallet outputs."
+  },
+  {
+    "id": "fetch-bdk-horizon",
+    "file": "crates/wallets/src/bdk/projection.rs",
+    "find": ".map_or(0u64, |i| u64::from(i) + 1);",
+    "replace": ".map_or(0u64, u64::from);",
+    "expect_failing": [
+      "bdk_complete_update_covers_outputs_policy_horizon_and_private_state"
+    ],
+    "rule": "Coverage ends after the last revealed script."
+  },
+  {
+    "id": "fetch-bdk-sats",
+    "file": "crates/wallets/src/bdk/projection.rs",
+    "find": "\"amount_sats\":local.txout.value.to_sat()",
+    "replace": "\"amount_sats\":local.txout.value.to_sat()+1",
+    "expect_failing": [
+      "bdk_complete_update_covers_outputs_policy_horizon_and_private_state"
+    ],
+    "rule": "Keep exact satoshi output quantities."
+  },
+  {
+    "id": "fetch-bdk-branch-index",
+    "file": "crates/wallets/src/bdk/projection.rs",
+    "find": "\"branch_index\":branch.index,\"branch_label\":branch.label",
+    "replace": "\"branch_index\":branch.index+1,\"branch_label\":branch.label",
+    "expect_failing": [
+      "bdk_complete_update_covers_outputs_policy_horizon_and_private_state"
+    ],
+    "rule": "Preserve the stored policy branch identity."
+  },
+  {
+    "id": "fetch-bdk-depth",
+    "file": "crates/wallets/src/bdk/projection.rs",
+    "find": "\"confirmations\":tip.height().saturating_add(1).saturating_sub(anchor.block_id.height)",
+    "replace": "\"confirmations\":tip.height().saturating_sub(anchor.block_id.height)",
+    "expect_failing": [
+      "bdk_complete_update_covers_outputs_policy_horizon_and_private_state"
+    ],
+    "rule": "Confirmed depth includes the containing block."
+  },
+  {
+    "id": "fetch-bdk-mempool-height",
+    "file": "crates/wallets/src/bdk/projection.rs",
+    "find": "\"confirmation_status\":\"mempool\",\"confirmations\":0,\"block_height\":null",
+    "replace": "\"confirmation_status\":\"mempool\",\"confirmations\":0,\"block_height\":0",
+    "expect_failing": [
+      "bdk_complete_update_keeps_mempool_unknown_height_and_clears_empty_inventory"
+    ],
+    "rule": "Mempool height remains unknown."
+  },
+  {
+    "id": "fetch-bdk-mempool-time",
+    "file": "crates/wallets/src/bdk/projection.rs",
+    "find": "\"confirmations\":0,\"block_height\":null,\"block_time\":null",
+    "replace": "\"confirmations\":0,\"block_height\":null,\"block_time\":0",
+    "expect_failing": [
+      "bdk_complete_update_keeps_mempool_unknown_height_and_clears_empty_inventory"
+    ],
+    "rule": "Mempool block time remains unknown."
+  },
+  {
+    "id": "fetch-bdk-reused-count",
+    "file": "crates/wallets/src/bdk/projection.rs",
+    "find": "\"reused_records\":projection.reused_records",
+    "replace": "\"reused_records\":0",
+    "expect_failing": [
+      "bdk_complete_update_covers_outputs_policy_horizon_and_private_state"
+    ],
+    "rule": "Account for reused records while retaining full outputs."
+  },
+  {
+    "id": "fetch-consent-identity",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": ".filter(|p| Arc::ptr_eq(&p.identity, &self.identity))",
+    "replace": ".filter(|_| true)",
+    "expect_failing": [
+      "fetch_preflight_and_missing_foreign_revoked_consent_make_no_traffic_or_writes"
+    ],
+    "rule": "A grant belongs to one exact action."
+  },
+  {
+    "id": "fetch-scope",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "if scope != &self.scope {",
+    "replace": "if false {",
+    "expect_failing": [
+      "fetch_changed_scope_offline_and_cancelled_actions_make_no_traffic"
+    ],
+    "rule": "Fence database, profile, wallet, environment and source revision before traffic."
+  },
+  {
+    "id": "fetch-transaction",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "if !in_savepoint && !conn.is_autocommit() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "fetch_unsupported_routes_refuse_before_traffic_and_transactions"
+    ],
+    "rule": "Preparation refuses an active write transaction."
+  },
+  {
+    "id": "fetch-backend-selection",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "if (!requested.is_empty() && requested.to_lowercase() != text(&backend[\"name\"]))\n            || text(&backend[\"name\"]).is_empty()\n        {",
+    "replace": "if false {",
+    "expect_failing": [
+      "fetch_unsupported_routes_refuse_before_traffic_and_transactions"
+    ],
+    "rule": "Only the wallet-selected backend may be contacted."
+  },
+  {
+    "id": "fetch-esplora-route",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "\"observer_route\":route,",
+    "replace": "\"observer_route\":\"bdk\",",
+    "expect_failing": [
+      "fetch_esplora_output_facts_preserve_exact_amounts_depth_and_unknowns"
+    ],
+    "rule": "Esplora retains the named compatibility route."
+  },
+  {
+    "id": "fetch-esplora-checkpoint",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "\"freshness_checkpoint\":acquired[\"freshness_checkpoint\"]",
+    "replace": "\"freshness_checkpoint\":{}",
+    "expect_failing": [
+      "fetch_esplora_output_facts_preserve_exact_amounts_depth_and_unknowns"
+    ],
+    "rule": "Carry the source-bound cache checkpoint."
+  },
+  {
+    "id": "fetch-esplora-known",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "\"known_txids\":acquired[\"transactions\"].as_object().map_or(0,|t|t.len())",
+    "replace": "\"known_txids\":0",
+    "expect_failing": [
+      "fetch_esplora_output_facts_preserve_exact_amounts_depth_and_unknowns"
+    ],
+    "rule": "Keep fetched transaction counts."
+  },
+  {
+    "id": "fetch-esplora-retraction",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "\"observer_retracted_external_ids\":acquired[\"observer_retracted_external_ids\"]",
+    "replace": "\"observer_retracted_external_ids\":[]",
+    "expect_failing": [
+      "fetch_esplora_output_facts_preserve_exact_amounts_depth_and_unknowns"
+    ],
+    "rule": "Keep complete-history absence candidates."
+  },
+  {
+    "id": "fetch-esplora-completeness",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "\"esplora_history_complete\":acquired[\"esplora_history_complete\"]",
+    "replace": "\"esplora_history_complete\":false",
+    "expect_failing": [
+      "fetch_esplora_output_facts_preserve_exact_amounts_depth_and_unknowns"
+    ],
+    "rule": "Carry explicit complete-history authority."
+  },
+  {
+    "id": "fetch-esplora-skip",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "if acquired[\"utxos_skipped_unchanged\"] == true {",
+    "replace": "if false {",
+    "expect_failing": [
+      "fetch_esplora_unchanged_cache_retains_no_inventory_claim"
+    ],
+    "rule": "A cache-only round makes no fresh inventory claim."
+  },
+  {
+    "id": "fetch-esplora-depth",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": ".map(|(h, t)| t - h + 1);",
+    "replace": ".map(|(h, t)| t - h);",
+    "expect_failing": [
+      "fetch_esplora_output_facts_preserve_exact_amounts_depth_and_unknowns"
+    ],
+    "rule": "Confirmed Esplora depth includes its block."
+  },
+  {
+    "id": "fetch-esplora-unknown-tip",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "let tip = acquired[\"tip_height\"].as_i64();",
+    "replace": "let tip = acquired[\"tip_height\"].as_i64().or(Some(12));",
+    "expect_failing": [
+      "fetch_esplora_output_facts_preserve_exact_amounts_depth_and_unknowns"
+    ],
+    "rule": "Unavailable tip leaves depth unknown."
+  },
+  {
+    "id": "fetch-esplora-sats",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "\"amount_sats\":amount",
+    "replace": "\"amount_sats\":amount+1",
+    "expect_failing": [
+      "fetch_esplora_output_facts_preserve_exact_amounts_depth_and_unknowns"
+    ],
+    "rule": "Keep exact Esplora output quantities."
+  },
+  {
+    "id": "fetch-esplora-network",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "\"chain\":\"bitcoin\",\"network\":network",
+    "replace": "\"chain\":\"bitcoin\",\"network\":\"main\"",
+    "expect_failing": [
+      "fetch_esplora_output_facts_preserve_exact_amounts_depth_and_unknowns"
+    ],
+    "rule": "Output facts retain their captured network."
+  },
+  {
+    "id": "fetch-esplora-empty-inventory",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "    meta[\"utxos\"] = json!(outputs()?);\n    Ok(meta)",
+    "replace": "    let found = outputs()?;\n    if !found.is_empty() {\n        meta[\"utxos\"] = json!(found);\n    }\n    Ok(meta)",
+    "expect_failing": [
+      "fetch_esplora_output_facts_preserve_exact_amounts_depth_and_unknowns"
+    ],
+    "rule": "A fetched empty snapshot clears output inventory."
+  },
+  {
+    "id": "fetch-electrum-proxy-reason",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "if value(\"tor_proxy\") || value(\"proxy\") || onion(text(&backend[\"url\"])) {",
+    "replace": "if value(\"tor_proxy\") || onion(text(&backend[\"url\"])) {",
+    "expect_failing": [
+      "electrum_compatibility_reasons_follow_python_order"
+    ],
+    "rule": "A proxy selects Python's compatibility Electrum observer (`proxy_transport`)."
+  },
+  {
+    "id": "fetch-electrum-onion-reason",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "if value(\"tor_proxy\") || value(\"proxy\") || onion(text(&backend[\"url\"])) {",
+    "replace": "if value(\"tor_proxy\") || value(\"proxy\") {",
+    "expect_failing": [
+      "electrum_compatibility_reasons_follow_python_order"
+    ],
+    "rule": "An onion endpoint selects the compatibility Electrum observer."
+  },
+  {
+    "id": "fetch-electrum-custom-ca",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "} else if value(\"certificate\") {",
+    "replace": "} else if false {",
+    "expect_failing": [
+      "electrum_compatibility_reasons_follow_python_order"
+    ],
+    "rule": "A custom certificate selects the compatibility Electrum observer (`custom_ca`) after the proxy reason."
+  },
+  {
+    "id": "fetch-electrum-no-bdk-on-compatibility",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "} else if electrum && reason.is_empty() {",
+    "replace": "} else if electrum {",
+    "expect_failing": [
+      "electrum_compatibility_reasons_follow_python_order",
+      "fetch_trimmed_electrum_descriptor_takes_the_compatibility_route"
+    ],
+    "rule": "A compatibility route prepares no BDK observer."
+  },
+  {
+    "id": "fetch-trimmed-compatibility",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "            reason = \"source_overlap_partial_descriptor\";",
+    "replace": "            reason = \"\";",
+    "expect_failing": [
+      "fetch_trimmed_electrum_descriptor_takes_the_compatibility_route"
+    ],
+    "rule": "A trimmed Bitcoin descriptor takes the compatibility observer."
+  },
+  {
+    "id": "fetch-revalidate-keeps-route",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "if let Preflight::Prepared(prepared) = preflight {",
+    "replace": "if let Preflight::Prepared(prepared) = Preflight::Prepared(\"\") {",
+    "expect_failing": [
+      "fetch_trimmed_electrum_descriptor_takes_the_compatibility_route"
+    ],
+    "rule": "Revalidation keeps the route the ownership index chose."
+  },
+  {
+    "id": "fetch-electrum-records",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "            records.extend(electrum::records(\n                &acquired, &tracked, backend, deadline, cancel,\n            )?);",
+    "replace": "            electrum::records(&acquired, &tracked, backend, deadline, cancel)?;",
+    "expect_failing": [
+      "electrum_address_list_fetch_builds_python_records_and_outputs"
+    ],
+    "rule": "The compatibility Electrum route publishes the records of its changed histories."
+  },
+  {
+    "id": "fetch-compatibility-route-label",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "let route = if reason == \"address_list\" {",
+    "replace": "let route = if reason == \"address-list\" {",
+    "expect_failing": [
+      "electrum_address_list_fetch_builds_python_records_and_outputs"
+    ],
+    "rule": "An address list reports route `bitcoin_script`."
+  },
+  {
+    "id": "fetch-electrum-metadata",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "        let electrum = self.backend[\"kind\"] == \"electrum\";\n        let meta = if liquid {",
+    "replace": "        let electrum = self.backend[\"kind\"] == \"electrumx\";\n        let meta = if liquid {",
+    "expect_failing": [
+      "electrum_address_list_fetch_builds_python_records_and_outputs"
+    ],
+    "rule": "An Electrum acquisition takes the Electrum metadata and outputs."
+  },
+  {
+    "id": "fetch-history-forced",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "            None if force_full => json!({}),",
+    "replace": "            None if false => json!({}),",
+    "expect_failing": [
+      "stored_electrum_graphs_follow_python_selection"
+    ],
+    "rule": "A forced fetch reads no stored Electrum graphs."
+  },
+  {
+    "id": "fetch-history-repair-inherits",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "                gap: self.rescan_gap(),\n                history: Some(self.history.clone()),\n                ..Overrides::default()",
+    "replace": "                gap: self.rescan_gap(),\n                history: None,\n                ..Overrides::default()",
+    "expect_failing": [
+      "stored_electrum_graphs_follow_python_selection"
+    ],
+    "rule": "The repair fetch keeps the original's stored graphs, as Python's repair wallet does."
+  },
+  {
+    "id": "fetch-history-backend-kind",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "kassiber_pytext::strip(&kind)) != \"electrum\"",
+    "replace": "kassiber_pytext::strip(&kind)) != \"esplora\"",
+    "expect_failing": [
+      "stored_electrum_graphs_follow_python_selection"
+    ],
+    "rule": "Only a stored Electrum backend selects the stored graphs."
+  },
+  {
+    "id": "fetch-history-observer-kind",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": ".is_some_and(|kinds| kinds.contains(&json!(\"electrum\")))",
+    "replace": ".is_some_and(|kinds| !kinds.is_empty())",
+    "expect_failing": [
+      "stored_electrum_graphs_follow_python_selection"
+    ],
+    "rule": "Only graphs an Electrum observer stored are offered."
+  },
+  {
+    "id": "fetch-history-graph-hash",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "if raw.is_empty() || hash.unwrap_or_default() != observer_state::graph_hash(&raw)? {",
+    "replace": "if raw.is_empty() {",
+    "expect_failing": [
+      "stored_electrum_graphs_follow_python_selection"
+    ],
+    "rule": "A stored graph must still match its provenance hash."
+  },
+  {
+    "id": "fetch-electrum-sort-confirmed-first",
+    "file": "crates/wallets/src/fetch/electrum.rs",
+    "find": "Some(height) => (0, height, String::new(), txid.into()),",
+    "replace": "Some(height) => (2, height, String::new(), txid.into()),",
+    "expect_failing": [
+      "electrum_histories_sort_confirmed_by_height_then_unconfirmed_by_time"
+    ],
+    "rule": "Confirmed histories publish first, by height."
+  },
+  {
+    "id": "fetch-electrum-explicit-time-truncates",
+    "file": "crates/wallets/src/fetch/electrum.rs",
+    "find": "(us - UNIX_US).div_euclid(1_000_000)",
+    "replace": "(us - UNIX_US + 999_999).div_euclid(1_000_000)",
+    "expect_failing": [
+      "electrum_explicit_times_follow_python_coercions"
+    ],
+    "rule": "An explicit ISO time drops its fraction, as `replace(microsecond=0)` does."
+  },
+  {
+    "id": "fetch-electrum-explicit-time-zero",
+    "file": "crates/wallets/src/fetch/electrum.rs",
+    "find": "if key != \"height\" && !zero {",
+    "replace": "if key != \"height\" {",
+    "expect_failing": [
+      "electrum_explicit_times_follow_python_coercions"
+    ],
+    "rule": "A zero timestamp is no explicit time."
+  },
+  {
+    "id": "fetch-electrum-occurred-at-header",
+    "file": "crates/wallets/src/fetch/electrum.rs",
+    "find": "                header_time(&headers[height.to_string()])?.unwrap_or_else(|| UNKNOWN.into())",
+    "replace": "                UNKNOWN.to_owned()",
+    "expect_failing": [
+      "electrum_address_list_fetch_builds_python_records_and_outputs"
+    ],
+    "rule": "A confirmed history is dated by its block header."
+  },
+  {
+    "id": "fetch-electrum-output-header-time",
+    "file": "crates/wallets/src/fetch/electrum.rs",
+    "find": "Some(height) => (true, header_time(&headers[height.to_string()])?),",
+    "replace": "Some(_) => (true, None),",
+    "expect_failing": [
+      "electrum_outputs_match_python_utxo_rows",
+      "electrum_address_list_fetch_builds_python_records_and_outputs"
+    ],
+    "rule": "A confirmed output takes its header's time."
+  },
+  {
+    "id": "fetch-electrum-output-explicit-confirms",
+    "file": "crates/wallets/src/fetch/electrum.rs",
+    "find": "(time.is_some(), time)",
+    "replace": "(false, time)",
+    "expect_failing": [
+      "electrum_outputs_match_python_utxo_rows"
+    ],
+    "rule": "An explicit time confirms an output without a height."
+  },
+  {
+    "id": "fetch-electrum-output-missing-value",
+    "file": "crates/wallets/src/fetch/electrum.rs",
+    "find": "                0.into()",
+    "replace": "                1.into()",
+    "expect_failing": [
+      "electrum_outputs_match_python_utxo_rows"
+    ],
+    "rule": "A missing output value is zero sats."
+  },
+  {
+    "id": "fetch-electrum-output-depth",
+    "file": "crates/wallets/src/fetch/electrum.rs",
+    "find": ".map(|(h, t)| t - h + 1);",
+    "replace": ".map(|(h, t)| t - h);",
+    "expect_failing": [
+      "electrum_outputs_match_python_utxo_rows",
+      "electrum_address_list_fetch_builds_python_records_and_outputs"
+    ],
+    "rule": "Depth counts the output's own block."
+  },
+  {
+    "id": "fetch-electrum-output-default-label",
+    "file": "crates/wallets/src/fetch/electrum.rs",
+    "find": "        json!(\"address\")",
+    "replace": "        json!(\"receive\")",
+    "expect_failing": [
+      "electrum_outputs_match_python_utxo_rows"
+    ],
+    "rule": "A target without a branch label is an `address`."
+  },
+  {
+    "id": "fetch-electrum-known-txids",
+    "file": "crates/wallets/src/fetch/electrum.rs",
+    "find": "\"known_txids\":known.len(),",
+    "replace": "\"known_txids\":0,",
+    "expect_failing": [
+      "electrum_outputs_match_python_utxo_rows",
+      "electrum_address_list_fetch_builds_python_records_and_outputs"
+    ],
+    "rule": "Known txids count every distinct history entry."
+  },
+  {
+    "id": "fetch-electrum-utxo-reuse",
+    "file": "crates/wallets/src/fetch/electrum.rs",
+    "find": "if acquired[\"utxos_skipped_unchanged\"] == true {",
+    "replace": "if acquired[\"utxos_skipped_unchanged\"] == false {",
+    "expect_failing": [
+      "electrum_outputs_match_python_utxo_rows",
+      "electrum_address_list_fetch_builds_python_records_and_outputs"
+    ],
+    "rule": "Unchanged scripts skip the output listing; otherwise outputs are published."
+  },
+  {
+    "id": "fetch-electrum-histories",
+    "file": "crates/wallets/src/acquisition/cached.rs",
+    "find": "\"histories\":txids,",
+    "replace": "\"histories\":{},",
+    "expect_failing": [
+      "electrum_address_list_fetch_builds_python_records_and_outputs"
+    ],
+    "rule": "The acquisition returns the changed histories the records are built from."
+  },
+  {
+    "id": "fetch-samourai-parent-logical",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "logical_wallet_id: part(\"parent_wallet_id\", wallet_id),",
+    "replace": "logical_wallet_id: wallet_id.into(),",
+    "expect_failing": [
+      "bdk_identities_follow_python_source_keys"
+    ],
+    "rule": "A Samourai child observes under its parent's logical wallet."
+  },
+  {
+    "id": "fetch-samourai-change-branch-key",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "                    branch_keys.push(\"change\".into());\n",
+    "replace": "",
+    "expect_failing": [
+      "bdk_identities_follow_python_source_keys"
+    ],
+    "rule": "A Samourai child's identity carries a change key only with a change descriptor."
+  },
+  {
+    "id": "fetch-samourai-parent-observes-nothing",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "Some(\"parent\") => return vec![],",
+    "replace": "Some(\"parent\") => {}",
+    "expect_failing": [
+      "bdk_identities_follow_python_source_keys"
+    ],
+    "rule": "A Samourai parent has no observer identity."
+  },
+  {
+    "id": "fetch-xpub-identities-need-script-types",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "if optional_text(config.get(\"xpub\")).is_some() && !script_types.is_empty() {",
+    "replace": "if optional_text(config.get(\"xpub\")).is_some() {",
+    "expect_failing": [
+      "bdk_identities_follow_python_source_keys"
+    ],
+    "rule": "An xpub without script types observes through its descriptor, as identities_for_wallet does."
+  },
+  {
+    "id": "publication-btcpay-enrichment",
+    "file": "crates/wallets/src/publication/wallet.rs",
+    "find": "crate::sync::btcpay::enrichment(conn, ctx, &scope, &captured, &checkpoint)?",
+    "replace": "None::<Value>.filter(|_| { let _ = (ctx, &scope, &captured, &checkpoint); false })",
+    "expect_failing": [
+      "btcpay_provenance_routes_enrich_inside_the_savepoint"
+    ],
+    "rule": "A descriptor wallet's BTCPay provenance routes are read inside its publication savepoint."
+  }
+]

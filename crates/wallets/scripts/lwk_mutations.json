@@ -1,0 +1,464 @@
+[
+  {
+    "id": "lwk-transport",
+    "file": "crates/wallets/src/lwk.rs",
+    "find": "if backend[\"kind\"] != \"electrum\" {",
+    "replace": "if false {",
+    "expect_failing": [
+      "lwk_incompatible_state_requires_a_rebuild_before_any_request"
+    ],
+    "rule": "Native LWK accepts only the Electrum observer route."
+  },
+  {
+    "id": "lwk-state-version",
+    "file": "crates/wallets/src/lwk.rs",
+    "find": "if prior[\"schema_version\"].as_i64() != Some(STATE_VERSION) && !refresh.force_full {",
+    "replace": "if false {",
+    "expect_failing": [
+      "lwk_incompatible_state_requires_a_rebuild_before_any_request"
+    ],
+    "rule": "An incompatible stored payload requires a rebuild unless the refresh is forced."
+  },
+  {
+    "id": "lwk-horizon-gap",
+    "file": "crates/wallets/src/lwk.rs",
+    "find": ".fold(gap - 1, i128::max);",
+    "replace": ".fold(gap, i128::max);",
+    "expect_failing": [
+      "lwk_scan_horizon_follows_prior_coverage_and_the_checkpoint"
+    ],
+    "rule": "The minimum scan horizon is the gap limit minus one."
+  },
+  {
+    "id": "lwk-horizon-prior",
+    "file": "crates/wallets/src/lwk.rs",
+    "find": "if self.refresh.prior.is_some() && self.prior_compatible() {",
+    "replace": "if self.refresh.prior.is_some() {",
+    "expect_failing": [
+      "lwk_scan_horizon_follows_prior_coverage_and_the_checkpoint"
+    ],
+    "rule": "Coverage of an incompatible payload widens no horizon."
+  },
+  {
+    "id": "lwk-horizon-checkpoint",
+    "file": "crates/wallets/src/lwk.rs",
+    "find": "if parsed >= 0 {",
+    "replace": "if false {",
+    "expect_failing": [
+      "lwk_scan_horizon_follows_prior_coverage_and_the_checkpoint"
+    ],
+    "rule": "Checkpoint highest-used indices keep the horizon ahead of prior discoveries."
+  },
+  {
+    "id": "lwk-baseline-state",
+    "file": "crates/wallets/src/lwk.rs",
+    "find": "(Some(prior), true) => &prior[\"canonical_txids\"],",
+    "replace": "(Some(_), true) => &self.refresh.checkpoint[\"canonical_txids\"],",
+    "expect_failing": [
+      "lwk_previous_txids_come_from_state_or_a_forced_rebuild_checkpoint"
+    ],
+    "rule": "Stored canonical txids are the retraction baseline."
+  },
+  {
+    "id": "lwk-baseline-forced",
+    "file": "crates/wallets/src/lwk.rs",
+    "find": "_ if self.refresh.force_full => &self.refresh.checkpoint[\"canonical_txids\"],",
+    "replace": "_ if false => &self.refresh.checkpoint[\"canonical_txids\"],",
+    "expect_failing": [
+      "lwk_previous_txids_come_from_state_or_a_forced_rebuild_checkpoint"
+    ],
+    "rule": "A forced rebuild without state retracts against the identity checkpoint."
+  },
+  {
+    "id": "lwk-lag-guard",
+    "file": "crates/wallets/src/lwk.rs",
+    "find": "if i64::from(remote) < persisted {",
+    "replace": "if false {",
+    "expect_failing": [
+      "lwk_forced_rebuild_refuses_a_lagging_backend_but_an_ordinary_refresh_does_not"
+    ],
+    "rule": "A forced rebuild refuses a backend behind the persisted tip."
+  },
+  {
+    "id": "lwk-lag-equal",
+    "file": "crates/wallets/src/lwk.rs",
+    "find": "if i64::from(remote) < persisted {",
+    "replace": "if i64::from(remote) <= persisted {",
+    "expect_failing": [
+      "lwk_forced_rebuild_refuses_a_lagging_backend_but_an_ordinary_refresh_does_not"
+    ],
+    "rule": "A backend at the persisted tip is not lagging."
+  },
+  {
+    "id": "lwk-fence-passthrough",
+    "file": "crates/wallets/src/lwk.rs",
+    "find": "\"cancelled\" | \"interaction_required\" | \"network_egress_disabled\" | \"stale_context\"",
+    "replace": "\"interaction_required\" | \"network_egress_disabled\" | \"stale_context\"",
+    "expect_failing": [
+      "lwk_transport_fences_pass_through_and_other_failures_are_redacted"
+    ],
+    "rule": "Cancellation inside a scan reaches the caller unchanged."
+  },
+  {
+    "id": "lwk-txid-binding",
+    "file": "crates/wallets/src/lwk/backend.rs",
+    "find": "if tx.txid() != *id {",
+    "replace": "if false {",
+    "expect_failing": [
+      "lwk_backend_rejects_substituted_transactions_and_never_broadcasts"
+    ],
+    "rule": "A server cannot substitute another transaction's bytes."
+  },
+  {
+    "id": "lwk-header-height",
+    "file": "crates/wallets/src/lwk/backend.rs",
+    "find": "if header.height != *height {",
+    "replace": "if false {",
+    "expect_failing": [
+      "lwk_backend_requires_headers_for_the_requested_heights"
+    ],
+    "rule": "Headers must answer the requested heights."
+  },
+  {
+    "id": "lwk-fee-mixed",
+    "file": "crates/wallets/src/lwk/facts.rs",
+    "find": "if mixed {",
+    "replace": "if false {",
+    "expect_failing": [
+      "lwk_mixed_input_spend_keeps_the_fee_inside_the_exact_delta",
+      "lwk_outbound_mixed_input_spend_books_the_exact_delta_with_the_fee_inside"
+    ],
+    "rule": "A mixed-input spend keeps the fee inside the exact wallet delta."
+  },
+  {
+    "id": "lwk-fee-owner",
+    "file": "crates/wallets/src/lwk/facts.rs",
+    "find": "if !owns_input || delta >= 0 || transaction_fee <= 0 {",
+    "replace": "if delta >= 0 || transaction_fee <= 0 {",
+    "expect_failing": [
+      "lwk_mixed_input_spend_keeps_the_fee_inside_the_exact_delta"
+    ],
+    "rule": "Only a spend of owned inputs is charged a fee."
+  },
+  {
+    "id": "lwk-amount-includes-fee",
+    "file": "crates/wallets/src/lwk/facts.rs",
+    "find": "\"amount_includes_fee\": includes_fee,",
+    "replace": "\"amount_includes_fee\": false,",
+    "expect_failing": [
+      "lwk_outbound_mixed_input_spend_books_the_exact_delta_with_the_fee_inside"
+    ],
+    "rule": "A folded fee is recorded as included in the amount."
+  },
+  {
+    "id": "lwk-fee-role",
+    "file": "crates/wallets/src/lwk/facts.rs",
+    "find": "} else if output.is_fee() {",
+    "replace": "} else if false {",
+    "expect_failing": [
+      "lwk_records_carry_exact_amounts_fees_assets_and_htlc_evidence"
+    ],
+    "rule": "Explicit fee outputs keep the fee role in the graph."
+  },
+  {
+    "id": "lwk-mempool-confirmed",
+    "file": "crates/wallets/src/lwk/facts.rs",
+    "find": "let confirmed_at = wallet_tx.timestamp.map(|_| occurred_at.clone());",
+    "replace": "let confirmed_at = Some(occurred_at.clone());",
+    "expect_failing": [
+      "lwk_records_carry_exact_amounts_fees_assets_and_htlc_evidence"
+    ],
+    "rule": "Mempool records carry no confirmation time."
+  },
+  {
+    "id": "lwk-claim-single-input",
+    "file": "crates/wallets/src/lwk/facts.rs",
+    "find": "[input] => claim_hash(",
+    "replace": "[input, ..] => claim_hash(",
+    "expect_failing": [
+      "lwk_htlc_evidence_needs_one_claim_input_or_one_refund_outpoint"
+    ],
+    "rule": "A payment hash needs exactly one claim input."
+  },
+  {
+    "id": "lwk-refund-unique",
+    "file": "crates/wallets/src/lwk/facts.rs",
+    "find": "[one] => Some(one.clone()),",
+    "replace": "[one, ..] => Some(one.clone()),",
+    "expect_failing": [
+      "lwk_htlc_evidence_needs_one_claim_input_or_one_refund_outpoint"
+    ],
+    "rule": "A refund link needs exactly one funding outpoint."
+  },
+  {
+    "id": "lwk-attestation-inputs",
+    "file": "crates/wallets/src/lwk/facts.rs",
+    "find": "if inputs != 1 || claim.is_some() == refund.is_some() {",
+    "replace": "if claim.is_some() == refund.is_some() {",
+    "expect_failing": [
+      "lwk_htlc_evidence_needs_one_claim_input_or_one_refund_outpoint"
+    ],
+    "rule": "An HTLC attestation covers single-input spends only."
+  },
+  {
+    "id": "lwk-confirmations",
+    "file": "crates/wallets/src/lwk/facts.rs",
+    "find": "(i64::from(tip_height) - i64::from(h) + 1)",
+    "replace": "(i64::from(tip_height) - i64::from(h))",
+    "expect_failing": [
+      "lwk_outputs_coverage_and_checkpoint_describe_the_scanned_wollet"
+    ],
+    "rule": "Confirmations count the including block."
+  },
+  {
+    "id": "lwk-coverage-exclusive",
+    "file": "crates/wallets/src/lwk/facts.rs",
+    "find": "let scanned_to = (u64::from(scan_to) + 1)",
+    "replace": "let scanned_to = u64::from(scan_to)",
+    "expect_failing": [
+      "lwk_coverage_is_the_exclusive_request_bound_widened_only_by_discovery"
+    ],
+    "rule": "Coverage is the exclusive bound of the inclusive request."
+  },
+  {
+    "id": "lwk-checkpoint-branch",
+    "file": "crates/wallets/src/lwk/facts.rs",
+    "find": "checkpoint_highest.insert(u32::from(*key == \"change\").to_string(), json!(value));",
+    "replace": "checkpoint_highest.insert(u32::from(*key == \"receive\").to_string(), json!(value));",
+    "expect_failing": [
+      "lwk_outputs_coverage_and_checkpoint_describe_the_scanned_wollet"
+    ],
+    "rule": "Checkpoint highest-used keys are the branch indices."
+  },
+  {
+    "id": "lwk-wrapper-sh",
+    "file": "crates/wallets/src/lwk/descriptor.rs",
+    "find": "(\"sh(\", \"elsh(\"),",
+    "replace": "(\"sh(\", \"sh(\"),",
+    "expect_failing": [
+      "lwk_wrapper_translation_matches_python_on_raw_text",
+      "lwk_descriptor_translation_changes_only_the_outer_wrapper_and_view_key"
+    ],
+    "rule": "Nested SegWit translates its outer wrapper to elsh."
+  },
+  {
+    "id": "lwk-slip77-hex",
+    "file": "crates/wallets/src/lwk/descriptor.rs",
+    "find": "Some(tail) => format!(\"ct(slip77({hex}),{tail}\"),",
+    "replace": "Some(tail) => format!(\"ct({tail}\"),",
+    "expect_failing": [
+      "lwk_descriptor_translation_changes_only_the_outer_wrapper_and_view_key"
+    ],
+    "rule": "SLIP-77 keys reach LWK as hex master blinding keys."
+  },
+  {
+    "id": "lwk-multipath-shape",
+    "file": "crates/wallets/src/lwk/descriptor.rs",
+    "find": "if replace_steps(receive, \"/{branch}/*\") != replace_steps(change, \"/{branch}/*\") {",
+    "replace": "if false {",
+    "expect_failing": [
+      "lwk_separate_change_with_other_blinding_is_not_canonicalized"
+    ],
+    "rule": "Only structurally equal separate descriptors merge into <0;1>."
+  },
+  {
+    "id": "lwk-reason-timeout",
+    "file": "crates/wallets/src/lwk/descriptor.rs",
+    "find": "t != 30.into()",
+    "replace": "t != 5.into()",
+    "expect_failing": [
+      "lwk_compatibility_reasons_name_every_unported_route"
+    ],
+    "rule": "Only the default timeout stays on the native route."
+  },
+  {
+    "id": "lwk-reason-onion",
+    "file": "crates/wallets/src/lwk/descriptor.rs",
+    "find": ".ends_with(\".onion\")",
+    "replace": ".ends_with(\".onion.invalid\")",
+    "expect_failing": [
+      "lwk_compatibility_reasons_name_every_unported_route"
+    ],
+    "rule": "Onion endpoints keep the proxy route."
+  },
+  {
+    "id": "lwk-reason-electrum-ca",
+    "file": "crates/wallets/src/lwk/descriptor.rs",
+    "find": "if kind == \"electrum\" && value(backend, \"certificate\").is_some() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "lwk_compatibility_reasons_name_every_unported_route"
+    ],
+    "rule": "A custom Electrum CA refuses the native route."
+  },
+  {
+    "id": "lwk-fetch-refusal",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "            lwk::descriptor::compatibility_reason(backend, &plan)?.unwrap_or(\"\")",
+    "replace": "            \"\"",
+    "expect_failing": [
+      "fetch_liquid_builds_one_lwk_observer_or_names_its_compatibility_route"
+    ],
+    "rule": "Every unported Liquid route selects the compatibility observer and names its reason before any connection (d6115d610)."
+  },
+  {
+    "id": "lwk-fetch-values",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "observer_state::load_values(conn, &id)?",
+    "replace": "BTreeMap::new()",
+    "expect_failing": [
+      "fetch_liquid_loads_versioned_values_and_revalidates_them"
+    ],
+    "rule": "The opaque store loads with its namespace check."
+  },
+  {
+    "id": "lwk-fetch-revalidate",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "&& a.values == b.values",
+    "replace": "",
+    "expect_failing": [
+      "fetch_liquid_loads_versioned_values_and_revalidates_them"
+    ],
+    "rule": "Changed opaque values make the prepared fetch stale."
+  },
+  {
+    "id": "lwk-overlay-txid",
+    "file": "crates/wallets/src/publication/wallet.rs",
+    "find": "by_external_id.insert(overlay, stored.len() - 1);",
+    "replace": "let _ = &overlay;",
+    "expect_failing": [
+      "prospective_overlay_is_keyed_by_txid_and_asset"
+    ],
+    "rule": "A re-observed (txid, asset) replaces the earlier overlay record."
+  },
+  {
+    "id": "lwk-overlay-retraction",
+    "file": "crates/wallets/src/publication/wallet.rs",
+    "find": "stored.retain(|row| !retracted.contains(&key(field(row, \"external_id\"))));",
+    "replace": "stored.retain(|_| true);",
+    "expect_failing": [
+      "prospective_overlay_is_keyed_by_txid_and_asset"
+    ],
+    "rule": "Retracted rows leave the prospective overlay."
+  },
+  {
+    "id": "lwk-values-sorted",
+    "file": "crates/wallets/src/observer_apply.rs",
+    "find": "decoded.sort();",
+    "replace": "decoded.reverse();",
+    "expect_failing": [
+      "opaque_values_replace_sorted_inside_the_savepoint_only"
+    ],
+    "rule": "Opaque values persist in key order."
+  },
+  {
+    "id": "lwk-values-key",
+    "file": "crates/wallets/src/observer_apply.rs",
+    "find": "if key.is_empty() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "opaque_values_replace_sorted_inside_the_savepoint_only"
+    ],
+    "rule": "Opaque value keys must be non-empty."
+  },
+  {
+    "id": "lwk-explicit-delta",
+    "file": "crates/wallets/src/lwk/facts.rs",
+    "find": "for owned in items.iter().flatten().filter(|o| explicit(&o.unblinded)) {",
+    "replace": "for owned in items.iter().flatten().filter(|_| false) {",
+    "expect_failing": [
+      "lwk_records_carry_exact_amounts_fees_assets_and_htlc_evidence"
+    ],
+    "rule": "Explicit owned outputs and inputs count in the wallet delta."
+  },
+  {
+    "id": "lwk-explicit-sign",
+    "file": "crates/wallets/src/lwk/facts.rs",
+    "find": "[(1i128, &wallet_tx.outputs), (-1, &wallet_tx.inputs)]",
+    "replace": "[(1i128, &wallet_tx.outputs), (1, &wallet_tx.inputs)]",
+    "expect_failing": [
+      "lwk_records_carry_exact_amounts_fees_assets_and_htlc_evidence"
+    ],
+    "rule": "A spent explicit output is a debit."
+  },
+  {
+    "id": "lwk-explicit-held",
+    "file": "crates/wallets/src/lwk/facts.rs",
+    "find": "explicit(&o.unblinded) && !listed_or_spent.contains(&o.outpoint)",
+    "replace": "false && explicit(&o.unblinded)",
+    "expect_failing": [
+      "lwk_restart_reuses_the_store_and_a_reorg_retracts_only_the_dropped_spend"
+    ],
+    "rule": "An unspent explicit output is held in the inventory."
+  },
+  {
+    "id": "lwk-explicit-spent",
+    "file": "crates/wallets/src/lwk/facts.rs",
+    "find": "explicit(&o.unblinded) && !listed_or_spent.contains(&o.outpoint)",
+    "replace": "explicit(&o.unblinded)",
+    "expect_failing": [
+      "lwk_restart_reuses_the_store_and_a_reorg_retracts_only_the_dropped_spend"
+    ],
+    "rule": "A spent explicit output is not held."
+  },
+  {
+    "id": "lwk-explicit-confidential",
+    "file": "crates/wallets/src/lwk/facts.rs",
+    "find": "\"confidential\": !explicit(secrets)",
+    "replace": "\"confidential\": true",
+    "expect_failing": [
+      "lwk_restart_reuses_the_store_and_a_reorg_retracts_only_the_dropped_spend"
+    ],
+    "rule": "Explicit outputs are published as not confidential."
+  },
+  {
+    "id": "checkpoint-rebuild-tip",
+    "file": "crates/wallets/src/compatibility_cache.rs",
+    "find": "[\"tip_height\", \"canonical_txids\"]",
+    "replace": "[\"canonical_txids\"]",
+    "expect_failing": [
+      "esplora_forced_scan_discards_fetch_caches_but_preserves_versioned_memberships"
+    ],
+    "rule": "A forced rebuild keeps each observer's persisted tip for the lag guard."
+  },
+  {
+    "id": "checkpoint-rebuild-null",
+    "file": "crates/wallets/src/compatibility_cache.rs",
+    "find": ".filter(|v| !v.is_null())",
+    "replace": ".filter(|_| true)",
+    "expect_failing": [
+      "esplora_forced_scan_discards_fetch_caches_but_preserves_versioned_memberships"
+    ],
+    "rule": "A null baseline field is not retained."
+  },
+  {
+    "id": "checkpoint-rebuild-instances",
+    "file": "crates/wallets/src/compatibility_cache.rs",
+    "find": "if !baselines.is_empty() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "esplora_forced_scan_discards_fetch_caches_but_preserves_versioned_memberships"
+    ],
+    "rule": "Observer baselines survive the forced checkpoint."
+  },
+  {
+    "id": "lwk-overlay-candidate-asset",
+    "file": "crates/wallets/src/publication/wallet.rs",
+    "find": "let overlay = (external_id.clone(), asset(field(&normalized, \"asset\")));",
+    "replace": "let overlay = (external_id.clone(), String::new());",
+    "expect_failing": [
+      "prospective_overlay_is_keyed_by_txid_and_asset"
+    ],
+    "rule": "One asset's record never hides another asset of the same txid."
+  },
+  {
+    "id": "lwk-overlay-stored-asset",
+    "file": "crates/wallets/src/publication/wallet.rs",
+    "find": "let id = (key(field(row, \"external_id\")), asset(field(row, \"asset\")));",
+    "replace": "let id = (key(field(row, \"external_id\")), String::new());",
+    "expect_failing": [
+      "prospective_overlay_is_keyed_by_txid_and_asset"
+    ],
+    "rule": "Stored rows join the overlay under their own (txid, asset)."
+  }
+]
