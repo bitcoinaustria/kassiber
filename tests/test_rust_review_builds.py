@@ -4,6 +4,8 @@ from pathlib import Path
 import uuid
 from unittest.mock import patch
 
+import pytest
+
 from kassiber.core import custody_compute, custody_journal, tax_events
 from kassiber.core.engines import ledger_response
 from tests.custody_snapshot import to_jsonable
@@ -12,6 +14,9 @@ from tests.rust_port.journal_render_oracle import canonical, refusal
 PATH = Path(__file__).resolve().parents[1] / "crates/journals/tests/data/review-builds.json"
 
 
+# The replay feeds recorded entry ids into uuid4 and journal_entry_id; a
+# second (oracle) build would draw from the same ids.
+@pytest.mark.stubs_tax_engine
 def test_complete_review_build_vectors_replay_through_python():
     for case in json.loads(PATH.read_text()):
         snapshot = case["snapshot"]
