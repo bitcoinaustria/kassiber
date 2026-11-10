@@ -733,6 +733,7 @@
     "crates/wallets/scripts/mutations.json",
     "crates/store/scripts/mutations.json",
     "crates/reports/scripts/mutations.json",
+    "crates/journals/scripts/mutations.json",
     "crates/transactions/scripts/mutations.json",
     "crates/rates/scripts/mutations.json"
    ],
