@@ -553,7 +553,10 @@ impl Cancel {
     }
 
     fn register(&self, connection: &mut Connection) -> Result<(), Error> {
-        let socket = connection.transport().stream.try_clone()?;
+        // A replayed test tape has no socket to shut down.
+        let Some(socket) = crate::cancel_handle(&connection.transport().stream)? else {
+            return Ok(());
+        };
         let mut slot = self.0.socket.lock().unwrap_or_else(|e| e.into_inner());
         if self.is_cancelled() {
             let _ = socket.shutdown(std::net::Shutdown::Both);

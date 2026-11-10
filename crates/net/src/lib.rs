@@ -33,6 +33,8 @@ mod offline;
 mod pinned;
 mod process;
 mod socks;
+#[cfg(feature = "test-observer")]
+mod tape;
 mod tls;
 
 #[cfg(feature = "test-support")]
@@ -62,6 +64,30 @@ use std::net::{IpAddr, SocketAddr, TcpStream, ToSocketAddrs};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+
+/// What a transport reads and writes: always a socket in product builds; in
+/// `test-observer` builds also a replayed tape (`tape`).
+#[cfg(not(feature = "test-observer"))]
+type Stream = TcpStream;
+#[cfg(feature = "test-observer")]
+use tape::Stream;
+
+#[cfg(not(feature = "test-observer"))]
+fn socket(stream: TcpStream) -> Stream {
+    stream
+}
+#[cfg(feature = "test-observer")]
+fn socket(stream: TcpStream) -> Stream {
+    Stream::Tcp(stream)
+}
+
+/// A duplicate of the socket a cancel can shut down.
+pub(crate) fn cancel_handle(stream: &Stream) -> io::Result<Option<TcpStream>> {
+    #[cfg(feature = "test-observer")]
+    return stream.cancel_handle();
+    #[cfg(not(feature = "test-observer"))]
+    stream.try_clone().map(Some)
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Endpoint {
@@ -474,6 +500,48 @@ impl Route {
             .checked_add(timeout)
             .ok_or(Error::InvalidTimeout)?;
         remaining(deadline)?;
+        #[cfg(feature = "test-observer")]
+        {
+            let (host, port, tls) = (
+                self.request.endpoint.host.clone(),
+                self.request.endpoint.port,
+                config.is_some(),
+            );
+            if let Some(recorded) = tape::replaying(&host, port, tls) {
+                return self.replay(recorded?, timeout, deadline);
+            }
+            let Some(recorder) = tape::recording(&host, port, tls) else {
+                return self.connect_socket(timeout, config, deadline, &Default::default());
+            };
+            let attempts = std::cell::Cell::new(0);
+            let result = self.connect_socket(timeout, config, deadline, &attempts);
+            recorder.attempts(attempts.get());
+            match result {
+                Ok(inner) => Ok(Connection {
+                    channel: Channel::Taped(Box::new(tape::Taped {
+                        inner: Box::new(inner),
+                        recorder,
+                    })),
+                }),
+                Err(error) => {
+                    recorder.failed(&error);
+                    Err(error)
+                }
+            }
+        }
+        #[cfg(not(feature = "test-observer"))]
+        {
+            self.connect_socket(timeout, config, deadline)
+        }
+    }
+
+    fn connect_socket(
+        self,
+        timeout: Duration,
+        config: Option<Arc<rustls::ClientConfig>>,
+        deadline: Instant,
+        #[cfg(feature = "test-observer")] attempts: &std::cell::Cell<u32>,
+    ) -> Result<Connection, Error> {
         let endpoint = self
             .request
             .proxy
@@ -501,6 +569,8 @@ impl Route {
         };
         let mut last = None;
         for address in addresses {
+            #[cfg(feature = "test-observer")]
+            attempts.set(attempts.get() + 1);
             self.check()?;
             self.gate
                 .observe(&self.request, endpoint, Operation::Connect);
@@ -510,7 +580,7 @@ impl Route {
             match TcpStream::connect_timeout(&address, remaining(deadline)?) {
                 Ok(stream) => {
                     let mut connection = Transport {
-                        stream,
+                        stream: socket(stream),
                         route: self,
                         timeout,
                         deadline: Some(deadline),
@@ -538,6 +608,56 @@ impl Route {
             io::Error::new(io::ErrorKind::NotFound, "no route addresses")
         })))
     }
+
+    /// Serve a recorded connection: the same checks, observer and ledger
+    /// records as a real connect, and the recorded bytes instead of a socket.
+    #[cfg(feature = "test-observer")]
+    fn replay(
+        self,
+        recorded: tape::Recorded,
+        timeout: Duration,
+        deadline: Instant,
+    ) -> Result<Connection, Error> {
+        let endpoint = self
+            .request
+            .proxy
+            .as_ref()
+            .map_or(&self.request.endpoint, |p| &p.endpoint)
+            .clone();
+        if endpoint.host.parse::<IpAddr>().is_err() && !endpoint.loopback() {
+            self.check()?;
+            self.gate.observe(&self.request, &endpoint, Operation::Dns);
+            self.gate
+                .ledger
+                .record(&self.request, &endpoint, Operation::Dns, 0);
+        }
+        for _ in 0..recorded.attempts() {
+            self.check()?;
+            self.gate
+                .observe(&self.request, &endpoint, Operation::Connect);
+            self.gate
+                .ledger
+                .record(&self.request, &endpoint, Operation::Connect, 0);
+        }
+        if let Some(error) = recorded.failure() {
+            return Err(error);
+        }
+        let mut connection = Connection {
+            channel: Channel::Plain(Transport {
+                stream: Stream::replay(recorded),
+                route: self,
+                timeout,
+                deadline: Some(deadline),
+                write_context: WriteContext::Raw,
+                read_timeout: None,
+                write_timeout: None,
+                in_operation: false,
+                pending: io::Cursor::new(Vec::new()),
+            }),
+        };
+        connection.set_deadline(None);
+        Ok(connection)
+    }
 }
 
 fn remaining(deadline: Instant) -> Result<Duration, Error> {
@@ -550,7 +670,7 @@ fn remaining(deadline: Instant) -> Result<Duration, Error> {
 /// Guarded stream. All writes (including SOCKS negotiation) recheck policy.
 /// There is deliberately no AsRawFd, IntoRawSocket, try_clone or TcpStream getter.
 struct Transport {
-    stream: TcpStream,
+    stream: Stream,
     route: Route,
     timeout: Duration,
     deadline: Option<Instant>,
@@ -671,6 +791,9 @@ pub struct Connection {
 enum Channel {
     Plain(Transport),
     Tls(Box<rustls::StreamOwned<rustls::ClientConnection, Transport>>),
+    /// A real connection whose application bytes are being recorded.
+    #[cfg(feature = "test-observer")]
+    Taped(Box<tape::Taped>),
 }
 
 impl Connection {
@@ -678,6 +801,8 @@ impl Connection {
         match &mut self.channel {
             Channel::Plain(transport) => transport,
             Channel::Tls(stream) => &mut stream.sock,
+            #[cfg(feature = "test-observer")]
+            Channel::Taped(taped) => taped.inner.transport(),
         }
     }
 
@@ -702,6 +827,8 @@ impl Read for Connection {
                 stream.sock.in_operation = false;
                 result
             }
+            #[cfg(feature = "test-observer")]
+            Channel::Taped(taped) => taped.read(bytes),
         }
     }
 }
@@ -718,6 +845,8 @@ impl Write for Connection {
                 stream.flush()?;
                 Ok(count)
             }
+            #[cfg(feature = "test-observer")]
+            Channel::Taped(taped) => taped.write(bytes),
         }
     }
 
@@ -729,6 +858,8 @@ impl Write for Connection {
                 stream.sock.timeout()?;
                 stream.flush()
             }
+            #[cfg(feature = "test-observer")]
+            Channel::Taped(taped) => taped.flush(),
         }
     }
 }

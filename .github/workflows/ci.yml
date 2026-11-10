@@ -691,6 +691,13 @@ jobs:
       - name: Validate mutation catalogs
         run: cargo run --locked -p kassiber-mutation-check -- check
 
+      # The network tape (crates/net/src/tape.rs) is test-observer code; a
+      # product build of the binary must not contain it.
+      - name: Product build carries no test network tape
+        run: |
+          cargo build --locked -p kassiber
+          scripts/check-no-test-tape.sh target/debug/kassiber
+
       # The egress observer only exists in harness builds; test it there too.
       - name: Run egress observer tests
         run: cargo test -p kassiber-net --features test-observer --locked

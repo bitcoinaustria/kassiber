@@ -40,6 +40,8 @@ while [ "$#" -gt 0 ]; do
 done
 [ -n "$cli" ] && [ -n "$scratch" ] || { usage; exit 2; }
 [ -x "$cli" ] || { echo "Not an executable: $cli" >&2; exit 2; }
+# The packaged binary must not carry test-only code such as the network tape.
+"$(dirname "$0")/check-no-test-tape.sh" "$cli"
 if [ -e "$scratch" ] && [ -n "$(ls -A "$scratch")" ]; then
   echo "Scratch directory is not empty: $scratch" >&2
   exit 2
