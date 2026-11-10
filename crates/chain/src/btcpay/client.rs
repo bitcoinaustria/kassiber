@@ -174,6 +174,45 @@ pub struct Greenfield {
     http: HttpClient,
     base: String,
     token: String,
+    /// The API key and the backend's other credentials, in every spelling
+    /// a server could echo (`credentials = (self.token, *self.withheld)`).
+    withheld: kassiber_credentials::Forms,
+}
+
+/// `withhold_credentials_value`: every string key and leaf, eight levels
+/// deep; a key that becomes equal to an earlier one keeps that key's place
+/// and takes the later value, as a Python dict comprehension does.
+fn withhold_value(value: Value, forms: &kassiber_credentials::Forms, depth: usize) -> Value {
+    use kassiber_credentials::withhold_py;
+    use kassiber_pyjson::Key;
+    if depth > 8 {
+        return s("[truncated]");
+    }
+    match value {
+        Value::Dict(pairs) => {
+            let mut out: Vec<(Key, Value)> = Vec::with_capacity(pairs.len());
+            for (key, item) in pairs {
+                let key = match key {
+                    Key::Str(text) => Key::Str(withhold_py(&text, forms)),
+                    other => other,
+                };
+                let item = withhold_value(item, forms, depth + 1);
+                match out.iter_mut().find(|(existing, _)| *existing == key) {
+                    Some(slot) => slot.1 = item,
+                    None => out.push((key, item)),
+                }
+            }
+            Value::Dict(out)
+        }
+        Value::List(items) => Value::List(
+            items
+                .into_iter()
+                .map(|item| withhold_value(item, forms, depth + 1))
+                .collect(),
+        ),
+        Value::Str(text) => Value::Str(withhold_py(&text, forms)),
+        other => other,
+    }
 }
 
 impl Greenfield {
@@ -202,12 +241,14 @@ impl Greenfield {
         let base = normalize_server_url(&raw)?;
         let mut config = backend.clone();
         config["url"] = serde_json::Value::String(base.clone());
+        let withheld = config::credential_forms_of(&config, &[&token]);
         let mut backend = Backend::new(&config, false)?;
         backend.request = backend.request.clone().with_action_binding(binding);
         Ok(Self {
             http: HttpClient::new(backend, gate, version),
             base,
             token,
+            withheld,
         })
     }
 
@@ -256,15 +297,23 @@ impl Greenfield {
                     AppError::new("network_error", "Could not reach the BTCPay server")
                         .retryable(true)
                         .with_hint("Check the server URL, your network or Tor proxy, and that BTCPay is running.")
-                        .with_details(details(serde_json::json!({"reason": error.message.to_string()})))
+                        .with_details(details(serde_json::json!({"reason": kassiber_credentials::withhold(&error.message.to_string(), &self.withheld)})))
                 } else {
                     error
                 }
             })?;
         if !(200..300).contains(&response.status) {
+            // BTCPay's error body is the server's text: a `message` that
+            // repeats the API key must not carry it into an error.
+            let body = decode_error_body(&response.body);
+            let body = if self.withheld.is_empty() {
+                body
+            } else {
+                withhold_value(body, &self.withheld, 0)
+            };
             return Err(Failure::Http(HttpFailure {
                 status: response.status,
-                body: decode_error_body(&response.body),
+                body,
             }));
         }
         if response.body.is_empty() {
@@ -344,4 +393,52 @@ pub fn scrub_api_key(payload: &Value) -> Option<(Value, Vec<String>)> {
         _ => Vec::new(),
     };
     Some((label, permissions))
+}
+
+#[cfg(test)]
+mod withhold_tests {
+    use super::*;
+
+    const KEY: &str = "0123456789abcdef0123456789abcdef01234567";
+
+    /// The provenance sync's error body (`test_btcpay_store_sync`): the
+    /// server repeats the request's `Authorization: token KEY` in every
+    /// spelling, and none may reach the message.
+    #[test]
+    fn a_greenfield_error_body_withholds_the_backend_credentials() {
+        let config = serde_json::json!({"name":"shop","url":"https://pay.example","token":KEY,
+            "tor_proxy":"socks5h://u:proxy-pw-1@127.0.0.1:9050"});
+        let forms = config::credential_forms_of(&config, &[KEY]);
+        let raw = format!(
+            r#"{{"message":"token {KEY} | token%20{KEY} | token+{KEY} | via proxy-pw-1","code":"bad-{KEY}","{KEY}":[{{"deep":"{KEY}"}}]}}"#
+        );
+        let body = withhold_value(decode_error_body(raw.as_bytes()), &forms, 0);
+        let message = text(get(&body, "message").unwrap());
+        let message = message.as_str().unwrap();
+        assert_eq!(
+            message,
+            "token <redacted> | token%20<redacted> | token+<redacted> | via <redacted>"
+        );
+        let printed = py_str(&body);
+        assert!(!printed.contains("0123456789abcdef"), "{printed}");
+        assert!(!printed.contains("proxy-pw-1"), "{printed}");
+        let failure = HttpFailure { status: 500, body };
+        let error = app_error(&failure, Context::default());
+        assert_eq!(
+            error.message,
+            "BTCPay returned HTTP 500: token <redacted> | token%20<redacted> | token+<redacted> | via <redacted>"
+        );
+    }
+
+    #[test]
+    fn the_withholding_stops_eight_levels_down() {
+        let forms = kassiber_credentials::credential_forms([KEY]);
+        let mut value = s(KEY);
+        for _ in 0..10 {
+            value = Value::List(vec![value]);
+        }
+        let printed = py_str(&withhold_value(value, &forms, 0));
+        assert!(printed.contains("'[truncated]'"), "{printed}");
+        assert!(!printed.contains(KEY), "{printed}");
+    }
 }
