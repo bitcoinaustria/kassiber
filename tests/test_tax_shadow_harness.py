@@ -503,8 +503,9 @@ class SessionReportTest(unittest.TestCase):
                 users[name] = count
         # A spy that only observes, like the request spies of
         # test_custody_pre_tax_projection and test_review_regressions, needs
-        # no marker.
-        self.assertEqual(users, {})
+        # no marker. The review vector replays feed recorded ids to the build
+        # (and their exporter children run without the shadow mode).
+        self.assertEqual(users, {"tests/test_rust_review_builds.py": 1, "tests/test_rust_review_cases.py": 2})
 
 
 if __name__ == "__main__":  # pragma: no cover
