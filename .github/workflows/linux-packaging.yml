@@ -17,8 +17,8 @@ on:
       - "scripts/package-cli-rpm.sh"
       - "scripts/package-desktop-rpm.sh"
       - "scripts/publish-linux-repositories-s3.sh"
-      - "scripts/render_aur.py"
-      - "scripts/render_nix.py"
+      - "crates/release/**"
+      - ".github/actions/release-tool/**"
       - "tests/test_linux_channel_renderers.py"
       - "tests/test_linux_packaging.py"
       - "tests/test_rpm_packaging.py"
@@ -84,28 +84,33 @@ jobs:
   aur:
     name: AUR recipes
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           persist-credentials: false
-      - name: Render and validate AUR metadata
+      - name: Build the release tool
+        uses: ./.github/actions/release-tool
+      - name: Render AUR metadata
+        run: |
+          set -euo pipefail
+          "$KASSIBER_RELEASE_TOOL" render-aur desktop \
+            --version 1.2.3 \
+            --sha256 "$(printf a%.0s {1..64})" \
+            --output build/aur/desktop
+          "$KASSIBER_RELEASE_TOOL" render-aur cli \
+            --version 1.2.3 \
+            --sha256 "$(printf b%.0s {1..64})" \
+            --output build/aur/cli
+      - name: Validate AUR metadata
         run: |
           docker run --rm \
-            --volume "$GITHUB_WORKSPACE:/workspace:ro" \
-            --workdir /workspace \
+            --volume "$GITHUB_WORKSPACE/build/aur:/aur:ro" \
             archlinux:base-devel@sha256:bf0af8920a0e70715207d9c4f463ebac321db72748db2b8a391b639696965d87 \
             bash -euxo pipefail -c '
-              pacman -Syu --noconfirm --needed namcap python
+              pacman -Syu --noconfirm --needed namcap
               work="$(mktemp -d)"
-              python scripts/render_aur.py desktop \
-                --version 1.2.3 \
-                --sha256 "$(printf a%.0s {1..64})" \
-                --output "$work/desktop"
-              python scripts/render_aur.py cli \
-                --version 1.2.3 \
-                --sha256 "$(printf b%.0s {1..64})" \
-                --output "$work/cli"
+              cp -a /aur/. "$work/"
               useradd --create-home builder
               chown -R builder:builder "$work"
               for package in desktop cli; do
@@ -120,14 +125,16 @@ jobs:
   nix:
     name: Nix flake evaluation
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           persist-credentials: false
+      - name: Build the release tool
+        uses: ./.github/actions/release-tool
       - name: Render release flake
         run: |
-          python3 scripts/render_nix.py \
+          "$KASSIBER_RELEASE_TOOL" render-nix \
             --version 1.2.3 \
             --sha256-desktop "$(printf a%.0s {1..64})" \
             --sha256-cli "$(printf b%.0s {1..64})" \

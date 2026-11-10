@@ -391,7 +391,7 @@ def test_workflows_keep_signing_keys_in_protected_ci_and_publication_gated():
     build = yaml.safe_load((workflows / "prerelease-binaries.yml").read_text())
     publish_steps = build["jobs"]["publish"]["steps"]
     assert next(s for s in publish_steps if s.get("name") == "Create or update release")["with"]["draft"] is True
-    assert "scripts/macos_release.py verify" in final
+    assert "\"$KASSIBER_RELEASE_TOOL\" macos verify" in final
     assert 'case "$actual_draft" in true|false)' in final
     assert "if: steps.release.outputs.draft == 'true'" in final
     assert "--smoke" in final

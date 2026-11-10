@@ -51,7 +51,7 @@ things are not compiled in:
 | File | Where | Why |
 | --- | --- | --- |
 | `provider_broker/index.mjs` | `<executable dir>/provider_broker/` | `kassiber_ai::broker::bundled_script()` resolves the real executable path and looks there. Without it, CLI-backed AI providers report the broker as unavailable. It still needs Node.js 20+ on the host, as before. |
-| `BUILD_INFO.json` | beside the executable in archives and sidecar directories | Readable build provenance; `scripts/macos_release.py` refuses to sign an app without one. The binary itself carries channel and commit from compile time. |
+| `BUILD_INFO.json` | beside the executable in archives and sidecar directories | Readable build provenance; `kassiber-release macos sign` refuses to sign an app without one. The binary itself carries channel and commit from compile time. |
 | Host CA bundle | the system store | `rustls-native-certs`, with `SSL_CERT_FILE` authoritative and WebPKI roots as the fallback, matching the frozen Python bootstrap ([Linux packaging](linux-packaging.md#frozen-tls-trust)). |
 
 ## Artifact inventory
@@ -75,8 +75,8 @@ floor build runs on Ubuntu 22.04 in CI).
 | `kassiber-<version>-manifest.txt` (+ `.sig`) | SHA-256 of every asset; OpenSSH signature | unchanged | — | generated locally, unsigned |
 
 No release artifact carries an SBOM today; the Rust build does not add one.
-Channel renderers consume these assets: AUR (`scripts/render_aur.py`) and Nix
-(`scripts/render_nix.py`) now install the CLI under `/usr/lib/kassiber-cli`
+Channel renderers consume these assets: AUR (`kassiber-release render-aur`) and Nix
+(`kassiber-release render-nix`) now install the CLI under `/usr/lib/kassiber-cli`
 (`$out/libexec/kassiber-cli` in Nix) with the broker beside it and depend on
 `gcc-libs` / `stdenv.cc.cc.lib` instead of zlib; Homebrew is unchanged.
 
@@ -179,7 +179,7 @@ Bitwarden SSH agent:
 ```bash
 export SSH_AUTH_SOCK="$HOME/.bitwarden-ssh-agent.sock"
 ssh-add -l -E sha256   # must list SHA256:UzYeHzOEIbanmYDAylIaGhI6dGFvhNOkszPXwUgzo9M
-uv run --locked python scripts/release_manifest.py sign \
+target/release/kassiber-release manifest sign \
   --manifest kassiber-<version>-manifest.txt \
   --public-key ~/.ssh/kassiber-release.pub
 ```
@@ -194,7 +194,7 @@ identifier: `Contents/Resources/binaries/kassiber-cli/kassiber-cli-aarch64-apple
 identifier `kassiber-cli-aarch64-apple-darwin`, Bitcoin Austria's team. The
 Touch ID helper's code requirement pins exactly that identifier and team, and
 Keychain items the signed Python sidecar wrote stay readable without a prompt
-only for the same pair. `scripts/macos_release.py sign` already signs every
+only for the same pair. `kassiber-release macos sign` already signs every
 Mach-O under its file name; `verify` now also refuses an app whose sidecar is
 missing from that location or signed under another identifier.
 `build-rust-cli.sh` ad-hoc signs the binary under that identifier after
@@ -216,7 +216,7 @@ codesign -d --verbose=2 "dist/macos-arm64/Kassiber Rust Dev.app/Contents/Resourc
 ```
 
 The release path is the CI macOS leg plus the [macOS release runbook](macos-release.md)
-(`prepare_macos_release.py`, `macos_release.py sign`, `notarize`, `verify
+(`kassiber-release macos prepare`, `macos sign`, `notarize`, `verify
 --smoke`). Still to prove natively: the strip/re-sign step, the bundled
 sidecar's identifier after Tauri, Touch ID unlock against a Developer ID
 signed Rust sidecar, and Keychain continuity for items the Python sidecar wrote.
@@ -240,8 +240,9 @@ OS-level no-egress check is Linux-only.
 ## CI changes
 
 - `build-cli` no longer syncs the Python environment or runs PyInstaller. It
-  installs uv's managed Python only for `write_build_info.py` and the smoke's
-  JSON assertions, checks every version copy against the backend crate, and
+  writes `BUILD_INFO.json` with the release tool (`kassiber-release
+  build-info`), installs uv's managed Python only for the smoke's JSON
+  assertions, checks every version copy against the backend crate, and
   builds, smokes and packages the Rust binary. Linux runs the no-egress check.
 - `build-desktop` refuses a staged `_internal/` payload, requires the broker
   and `BUILD_INFO.json` beside the sidecar, copies the broker beside the

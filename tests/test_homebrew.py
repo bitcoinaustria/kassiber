@@ -169,8 +169,8 @@ class PrereleaseWorkflowHomebrewTest(unittest.TestCase):
 
         self.assertIn("HOMEBREW_CASK_PATH: Casks/kassiber.rb", workflow)
         self.assertIn("HOMEBREW_FORMULA_PATH: Formula/kassiber-cli.rb", workflow)
-        self.assertIn("render_homebrew.py cask", workflow)
-        self.assertIn("render_homebrew.py cli-formula", workflow)
+        self.assertIn("render-homebrew cask", workflow)
+        self.assertIn("render-homebrew cli-formula", workflow)
         self.assertNotIn("render_homebrew_cask.py", workflow)
         self.assertIn('git add "$HOMEBREW_CASK_PATH" "$HOMEBREW_FORMULA_PATH"', workflow)
 

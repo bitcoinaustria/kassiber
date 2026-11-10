@@ -4,7 +4,10 @@ Kassiber separates build, protected-CI Developer ID signing and notarization,
 and SSH-signed release-manifest authentication. The Developer ID identity is stored
 only as an encrypted GitHub environment secret and imported into an ephemeral
 runner keychain. The Apple team is `6Q4R2C3GJK` (Bitcoin Austria); changing
-that trust root requires a reviewed code change in `scripts/macos_release.py`.
+that trust root requires a reviewed code change in the release tool
+(`crates/release/src/bin/kassiber-release/macos.rs`). Build the tool with
+`cargo build --locked --release -p kassiber-release --no-default-features`; the commands below call
+`target/release/kassiber-release`.
 
 ## One-time operator setup
 
@@ -75,7 +78,7 @@ release; include each merged PR once. Commit it with the version bump. The
 publish job reads the changelog from the tagged source and copies that section
 unchanged into the GitHub draft. Missing, duplicate or empty sections stop
 publication. Keep transient CI/notarization status out of this historical text.
-Preview locally with `python3 scripts/release_notes.py --version v<VERSION>
+Preview locally with `target/release/kassiber-release release-notes --version v<VERSION>
 --output /private/tmp/kassiber-release-notes.md`. No personal skill is required.
 
 1. Review/test the exact commit on `main`, set the package version, and create
@@ -116,7 +119,7 @@ Preview locally with `python3 scripts/release_notes.py --version v<VERSION>
    verify the manifest hashes and run:
 
    ```sh
-   python3 scripts/macos_release.py verify --release-dir /path/to/final-assets \
+   target/release/kassiber-release macos verify --release-dir /path/to/final-assets \
      --commit <FULL_TAG_COMMIT> --version <VERSION>
    ```
 
@@ -134,7 +137,7 @@ Preview locally with `python3 scripts/release_notes.py --version v<VERSION>
 
    ```bash
    export SSH_AUTH_SOCK="$HOME/.bitwarden-ssh-agent.sock"
-   uv run --locked python scripts/release_manifest.py sign \
+   target/release/kassiber-release manifest sign \
      --manifest kassiber-<VERSION>-manifest.txt \
      --public-key ~/.ssh/kassiber-release.pub
    ```
@@ -189,7 +192,7 @@ commit/version and app bundle version.
 Create an **unpublished draft** whose identifier is
 `macos-candidate-<FULL_COMMIT>-<BUILD_RUN_ID>` and whose `target_commitish` is that
 full commit. Do not create a matching Git tag. Candidate signing uses the existing
-`macos_release.py sign` arguments plus `--candidate-id <IDENTIFIER>` and this
+`kassiber-release macos sign` arguments plus `--candidate-id <IDENTIFIER>` and this
 explicit `source.json` shape (all placeholders must be replaced):
 
 ```json
@@ -210,10 +213,10 @@ Dispatch `notarize-macos.yml` from protected `main` with `tag_name=<IDENTIFIER>`
 The workflow rechecks the draft target and absence of a Git tag before uploading
 the verified results. It leaves the three notarized macOS distributions in the
 draft; it does not generate a version-release manifest, publish, run a finalizer,
-or update package channels. Download and verify them with `macos_release.py verify`
+or update package channels. Download and verify them with `kassiber-release macos verify`
 using the same `--candidate-id`, `--commit` and `--version` (plus `--smoke` only on
 a disposable verification Mac). Ordinary release verification rejects candidate
-provenance. The tag-based `prepare_macos_release.py` helper is for releases and
+provenance. The tag-based `kassiber-release macos prepare` helper is for releases and
 does not prepare these candidates.
 
 Every intermediate state is a draft. A failed notarization, expired identity,

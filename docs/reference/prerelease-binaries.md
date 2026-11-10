@@ -368,12 +368,27 @@ version/commit display. The build record contains:
 }
 ```
 
-`scripts/write_build_info.py` honors `SOURCE_DATE_EPOCH`; CI and the local macOS
+`kassiber-release build-info` honors `SOURCE_DATE_EPOCH`; CI and the local macOS
 builder derive it from the source commit timestamp. This removes wall-clock
 drift from `built_at` while retaining the run id as explicit provenance.
 `scripts/build-rust-cli.sh` passes the same epoch to the compiler so vendored
 OpenSSL's build stamp is fixed too; see
 [Rust packaging](rust-packaging.md#reproducibility).
+
+## Release tool
+
+The release workflows run `kassiber-release` (`crates/release`), built by the
+`.github/actions/release-tool` composite action with
+`cargo build --locked --release -p kassiber-release --no-default-features`
+(no network stack or SQLCipher) and exported as `KASSIBER_RELEASE_TOOL`. Its
+subcommands replace the former Python scripts with byte-identical output:
+`manifest generate|sign|verify-artifacts|verify-release|policy`,
+`render-aur`, `render-nix`, `render-homebrew`, `release-notes`, `build-info`
+and `macos sign|notarize|verify|prepare`. `crates/release/tests/tool.rs`
+pins the output against the scripts' frozen results. Release signatures are
+verified in process, as `kassiber verify-download` does; only `manifest sign`
+still runs `ssh-keygen -Y sign` against the SSH agent. Workflows that check
+out an older release tag need that tag to contain the tool.
 
 ## Verification When Editing This Workflow
 

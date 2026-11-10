@@ -133,7 +133,7 @@ snapshots below the selected `stable` or `prerelease` suite before changing its
 mirrorlist pointer. Fedora 43 and 44 CI builds, signs, installs, swaps CLI to
 desktop, and removes the packages with DNF in disposable containers.
 
-`scripts/render_aur.py` generates separate project-owned `kassiber-bin` and
+`kassiber-release render-aur` (crates/release) generates separate project-owned `kassiber-bin` and
 `kassiber-cli-bin` repositories with pinned release URLs, SHA-256 checksums,
 conflicts/provides metadata, license files, and launchers. CI compares
 the rendered `.SRCINFO` to `makepkg --printsrcinfo` and runs `namcap`. Before
@@ -141,7 +141,7 @@ publication credentials are configured, the guarded release job also builds,
 installs, smokes, and removes both recipes against their real release assets in
 a clean pinned Arch container.
 
-`scripts/render_nix.py` generates an x86_64-only binary flake with explicit
+`kassiber-release render-nix` generates an x86_64-only binary flake with explicit
 `binaryNativeCode` provenance, pinned release hashes, a desktop AppImage
 wrapper, and an auto-patched GUI-free CLI derivation. The external
 channel workflow locks, checks, builds both outputs, and smokes the CLI in a

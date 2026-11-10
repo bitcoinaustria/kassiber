@@ -99,7 +99,7 @@ class LinuxChannelWorkflowTest(unittest.TestCase):
         self.assertNotIn("\n  push:", workflow)
         self.assertNotIn("apt upgrade", workflow)
         self.assertNotIn("dnf upgrade", workflow)
-        self.assertIn("scripts/release_manifest.py verify-release", workflow)
+        self.assertIn("\"$KASSIBER_RELEASE_TOOL\" manifest verify-release", workflow)
         self.assertIn("packaging/release/signing-policy.json", workflow)
         self.assertIn('--signature "release/$manifest_name.sig"', workflow)
         self.assertNotIn('$manifest_name.asc', workflow)
@@ -134,7 +134,7 @@ class LinuxChannelWorkflowTest(unittest.TestCase):
 
         self.assertLess(
             repositories.index("ref: ${{ needs.prepare.outputs.release_commit }}"),
-            repositories.index("scripts/release_manifest.py policy"),
+            repositories.index("\"$KASSIBER_RELEASE_TOOL\" manifest policy"),
         )
 
     def test_release_workflow_uploads_rpms(self):
@@ -152,7 +152,7 @@ class LinuxChannelWorkflowTest(unittest.TestCase):
         ).read_text(encoding="utf-8")
 
         self.assertIn("environment: release-production", workflow)
-        self.assertIn("scripts/release_manifest.py verify-release", workflow)
+        self.assertIn("\"$KASSIBER_RELEASE_TOOL\" manifest verify-release", workflow)
         self.assertIn('manifest.txt.sig" >> "$GITHUB_OUTPUT"', workflow)
         self.assertNotIn("gnupg", workflow)
         self.assertNotIn(".asc", workflow)
@@ -165,7 +165,7 @@ class LinuxChannelWorkflowTest(unittest.TestCase):
         self.assertIn('ref: ${{ github.sha }}', workflow)
         self.assertLess(
             workflow.index(tag_guard),
-            workflow.index("scripts/release_manifest.py policy"),
+            workflow.index("\"$KASSIBER_RELEASE_TOOL\" manifest policy"),
         )
         self.assertNotIn("gh release upload", workflow)
         self.assertNotIn("--clobber", workflow)
@@ -196,7 +196,7 @@ class LinuxChannelWorkflowTest(unittest.TestCase):
         self.assertIn("git merge-base --is-ancestor HEAD origin/main", publish)
         self.assertLess(
             publish.index("git merge-base --is-ancestor HEAD origin/main"),
-            publish.index("scripts/release_manifest.py policy"),
+            publish.index("\"$KASSIBER_RELEASE_TOOL\" manifest policy"),
         )
 
 

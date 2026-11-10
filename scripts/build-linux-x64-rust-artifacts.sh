@@ -118,9 +118,16 @@ release="$output"
 
 run "$ROOT/scripts/build-rust-cli.sh" --target "$TRIPLE" --channel "$channel" \
   --commit "$commit" --output "$work/dist" --glibc-floor "$glibc_floor"
+
+# The release tool (crates/release) writes BUILD_INFO.json and the manifest.
+release_tool="${KASSIBER_RELEASE_TOOL:-}"
+if [ -z "$release_tool" ]; then
+  run cargo build --locked --release -p kassiber-release --no-default-features --bin kassiber-release
+  release_tool="$ROOT/target/release/kassiber-release"
+fi
 binary="$work/dist/kassiber"
 
-run python3 scripts/write_build_info.py --output "$work/BUILD_INFO.json" \
+run "$release_tool" build-info --output "$work/BUILD_INFO.json" \
   --version "$version" --commit "$commit" --ref "$(git rev-parse --abbrev-ref HEAD)" \
   --run-id local --channel "$channel"
 
@@ -201,7 +208,7 @@ if [ "$want_rpm" -eq 1 ]; then
     --version "$version" --architecture x86_64 --output "$release/kassiber-$TARGET.rpm"
 fi
 
-run python3 scripts/release_manifest.py generate --release-dir "$release" --version "$version"
+run "$release_tool" manifest generate --release-dir "$release" --version "$version"
 
 echo
 echo "Linux x86_64 artifacts ($channel, commit $short_commit, glibc floor $glibc_floor):"
