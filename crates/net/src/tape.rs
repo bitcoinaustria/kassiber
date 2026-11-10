@@ -2,17 +2,20 @@
 //! plaintext tapes, and replay them without opening a socket.
 //!
 //! `KASSIBER_TEST_NET_TAPE=record:<file>` keeps every application byte a
-//! connection reads (above TLS), the number of bytes it writes, how many
-//! addresses it tried, and how it failed. `replay:<file>` serves the
-//! recorded bytes instead of connecting: each connection to the same
-//! endpoint takes the next recorded one, and the route's consent and
-//! offline checks, the egress observer and the egress ledger run as they do
-//! for a real connection. Product builds do not compile this module, and an
+//! connection reads and writes (above TLS), how many addresses it tried, and
+//! how it failed. `replay:<file>` serves the recorded bytes instead of
+//! connecting. A recorded failure is replayed at connect time; a recorded
+//! connection is bound to the replayed one at its first write, to the unused
+//! recording for that endpoint whose first write was the same bytes, since
+//! parallel connections open in any order (recorded order is the fallback).
+//! The route's consent and offline checks, the egress observer and the egress
+//! ledger run as they do for a real connection; an endpoint with nothing left
+//! on the tape is refused. Product builds do not compile this module, and an
 //! armed tape variable has no meaning there.
 //!
 //! The tape is one line per event, tab separated, payloads base64:
 //! `open id tls host port`, `attempts id n`, `fail id error`, `r id bytes`,
-//! `w id count`, `re id error`, `eof id`.
+//! `w id count bytes`, `re id error`, `eof id`.
 
 use std::collections::{HashMap, VecDeque};
 use std::fs::{File, OpenOptions};
@@ -35,14 +38,16 @@ enum Mode {
 
 #[derive(Default)]
 struct Replays {
-    /// Recorded connections per endpoint key, in connection order.
-    by_key: HashMap<String, VecDeque<Recorded>>,
+    /// Recorded connections per endpoint key, in connection order; a
+    /// replayed connection takes one out (`None`).
+    by_key: HashMap<String, Vec<Option<Recorded>>>,
 }
 
 #[derive(Clone, Default)]
 pub(crate) struct Recorded {
     attempts: u32,
     failure: Option<String>,
+    first_write: Option<Vec<u8>>,
     events: VecDeque<Event>,
 }
 
@@ -90,7 +95,6 @@ fn key(host: &str, port: u16, tls: bool) -> String {
 }
 
 fn load(text: &str) -> Replays {
-    let mut keys: HashMap<String, String> = HashMap::new();
     let mut connections: Vec<(u64, String, Recorded)> = Vec::new();
     let mut index: HashMap<String, usize> = HashMap::new();
     for line in text.lines() {
@@ -100,14 +104,13 @@ fn load(text: &str) -> Replays {
         };
         if *op == "open" && parts.len() == 5 {
             let port = parts[4].parse().unwrap_or(0);
-            let k = key(
-                &String::from_utf8_lossy(&unb64(parts[3])),
-                port,
-                parts[2] == "1",
-            );
-            keys.insert((*id).to_owned(), k.clone());
+            let host = String::from_utf8_lossy(&unb64(parts[3])).into_owned();
             index.insert((*id).to_owned(), connections.len());
-            connections.push((id.parse().unwrap_or(0), k, Recorded::default()));
+            connections.push((
+                id.parse().unwrap_or(0),
+                key(&host, port, parts[2] == "1"),
+                Recorded::default(),
+            ));
             continue;
         }
         let Some(&at) = index.get(*id) else { continue };
@@ -119,46 +122,80 @@ fn load(text: &str) -> Replays {
             ("re", Some(error)) => recorded
                 .events
                 .push_back(Event::ReadError((*error).to_owned())),
-            ("w", _) => recorded.events.push_back(Event::Write),
+            ("w", _) => {
+                if recorded.first_write.is_none() {
+                    recorded.first_write = Some(parts.get(3).map(|d| unb64(d)).unwrap_or_default());
+                }
+                recorded.events.push_back(Event::Write);
+            }
             _ => {}
         }
     }
     connections.sort_by_key(|(id, _, _)| *id);
     let mut replays = Replays::default();
     for (_, k, recorded) in connections {
-        replays.by_key.entry(k).or_default().push_back(recorded);
+        replays.by_key.entry(k).or_default().push(Some(recorded));
     }
     replays
 }
 
-/// The recorded connection a replaying process takes for an endpoint, or
-/// `None` when this process does not replay. An endpoint without one left
-/// is refused, never connected.
-pub(crate) fn replaying(host: &str, port: u16, tls: bool) -> Option<Result<Recorded, Error>> {
+/// What a replayed connect does: fail as recorded, or connect to a tape
+/// that binds to its recording on first use.
+pub(crate) enum Replayed {
+    Failed { attempts: u32, error: Error },
+    Connected { attempts: u32, tape: Tape },
+}
+
+/// `None` when this process does not replay.
+pub(crate) fn replaying(host: &str, port: u16, tls: bool) -> Option<Result<Replayed, Error>> {
     let Mode::Replay(replays) = mode()? else {
         return None;
     };
     let mut replays = replays.lock().unwrap_or_else(|e| e.into_inner());
-    let next = replays
-        .by_key
-        .get_mut(&key(host, port, tls))
-        .and_then(VecDeque::pop_front);
-    Some(next.ok_or_else(|| {
+    let k = key(host, port, tls);
+    let refused = || {
         Error::Io(io::Error::new(
             io::ErrorKind::ConnectionRefused,
             "no recorded connection left on the tape",
         ))
+    };
+    let Some(slots) = replays.by_key.get_mut(&k) else {
+        return Some(Err(refused()));
+    };
+    let Some(next) = slots.iter_mut().find(|slot| slot.is_some()) else {
+        return Some(Err(refused()));
+    };
+    let recorded = next.as_ref().expect("an unused slot");
+    let attempts = recorded.attempts.max(1);
+    if let Some(failure) = recorded.failure.clone() {
+        next.take();
+        return Some(Ok(Replayed::Failed {
+            attempts,
+            error: decode_error(&failure),
+        }));
+    }
+    Some(Ok(Replayed::Connected {
+        attempts,
+        tape: Tape::Unbound(k),
     }))
 }
 
-impl Recorded {
-    pub(crate) fn attempts(&self) -> u32 {
-        self.attempts.max(1)
-    }
-
-    pub(crate) fn failure(&self) -> Option<Error> {
-        self.failure.as_deref().map(decode_error)
-    }
+/// Take the unused recorded connection to `key` whose first write was
+/// `first`, or the earliest one when none matches or nothing was written.
+fn bind(key: &str, first: Option<&[u8]>) -> Option<Recorded> {
+    let Some(Mode::Replay(replays)) = mode() else {
+        return None;
+    };
+    let mut replays = replays.lock().unwrap_or_else(|e| e.into_inner());
+    let slots = replays.by_key.get_mut(key)?;
+    let open = |slot: &Option<Recorded>| slot.as_ref().is_some_and(|r| r.failure.is_none());
+    let matching = first.and_then(|bytes| {
+        slots.iter().position(|slot| {
+            open(slot) && slot.as_ref().and_then(|r| r.first_write.as_deref()) == Some(bytes)
+        })
+    });
+    let index = matching.or_else(|| slots.iter().position(open))?;
+    slots[index].take()
 }
 
 /// A connection's handle while recording.
@@ -205,8 +242,8 @@ impl Recorder {
         }
     }
 
-    pub(crate) fn wrote(&self, count: usize) {
-        append(&format!("w\t{}\t{count}", self.id));
+    pub(crate) fn wrote(&self, bytes: &[u8]) {
+        append(&format!("w\t{}\t{}\t{}", self.id, bytes.len(), b64(bytes)));
     }
 }
 
@@ -261,10 +298,28 @@ fn decode_error(text: &str) -> Error {
     }
 }
 
+/// A replayed connection's bytes, bound to a recording on first use.
+pub(crate) enum Tape {
+    Unbound(String),
+    Bound(Recorded),
+}
+
+impl Tape {
+    fn bound(&mut self, first: Option<&[u8]>) -> &mut Recorded {
+        if let Tape::Unbound(key) = self {
+            *self = Tape::Bound(bind(key, first).unwrap_or_default());
+        }
+        match self {
+            Tape::Bound(recorded) => recorded,
+            Tape::Unbound(_) => unreachable!("bound above"),
+        }
+    }
+}
+
 /// The byte source behind a transport: a socket, or a replayed tape.
 pub(crate) enum Stream {
     Tcp(TcpStream),
-    Replay(Arc<Mutex<Recorded>>),
+    Replay(Arc<Mutex<Tape>>),
 }
 
 impl Stream {
@@ -290,8 +345,8 @@ impl Stream {
         }
     }
 
-    pub(crate) fn replay(recorded: Recorded) -> Self {
-        Stream::Replay(Arc::new(Mutex::new(recorded)))
+    pub(crate) fn replay(tape: Tape) -> Self {
+        Stream::Replay(Arc::new(Mutex::new(tape)))
     }
 }
 
@@ -301,8 +356,9 @@ impl Read for Stream {
             Stream::Tcp(stream) => stream.read(bytes),
             Stream::Replay(tape) => {
                 let mut tape = tape.lock().unwrap_or_else(|e| e.into_inner());
+                let recorded = tape.bound(None);
                 loop {
-                    match tape.events.pop_front() {
+                    match recorded.events.pop_front() {
                         None => return Ok(0),
                         Some(Event::Write) => continue,
                         Some(Event::ReadError(error)) => return Err(decode_io(&error)),
@@ -310,7 +366,9 @@ impl Read for Stream {
                             let count = data.len().min(bytes.len());
                             bytes[..count].copy_from_slice(&data[..count]);
                             if count < data.len() {
-                                tape.events.push_front(Event::Read(data.split_off(count)));
+                                recorded
+                                    .events
+                                    .push_front(Event::Read(data.split_off(count)));
                             }
                             return Ok(count);
                         }
@@ -325,7 +383,12 @@ impl Write for Stream {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
         match self {
             Stream::Tcp(stream) => stream.write(bytes),
-            Stream::Replay(_) => Ok(bytes.len()),
+            Stream::Replay(tape) => {
+                tape.lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .bound(Some(bytes));
+                Ok(bytes.len())
+            }
         }
     }
 
@@ -354,7 +417,7 @@ impl Read for Taped {
 impl Write for Taped {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
         let count = self.inner.write(bytes)?;
-        self.recorder.wrote(count);
+        self.recorder.wrote(&bytes[..count]);
         Ok(count)
     }
 
@@ -372,7 +435,7 @@ mod tests {
         let text = [
             format!("open\t1\t0\t{}\t5000", b64(b"127.0.0.1")),
             "attempts\t1\t2".to_owned(),
-            "w\t1\t5".to_owned(),
+            format!("w\t1\t5\t{}", b64(b"query")),
             format!("r\t1\t{}", b64(b"hello world")),
             format!(
                 "re\t1\t{}",
@@ -389,14 +452,14 @@ mod tests {
         ]
         .join("\n");
         let mut replays = load(&text);
-        let mut queue = replays
+        let mut slots = replays
             .by_key
             .remove(&key("127.0.0.1", 5000, false))
             .unwrap();
-        let first = queue.pop_front().unwrap();
-        assert_eq!(first.attempts(), 2);
-        assert!(first.failure().is_none());
-        let mut stream = Stream::replay(first);
+        let first = slots[0].take().unwrap();
+        assert_eq!(first.attempts, 2);
+        assert_eq!(first.first_write.as_deref(), Some(&b"query"[..]));
+        let mut stream = Stream::replay(Tape::Bound(first));
         let mut buffer = [0u8; 5];
         assert_eq!(stream.write(b"query").unwrap(), 5);
         assert_eq!(stream.read(&mut buffer).unwrap(), 5);
@@ -408,9 +471,8 @@ mod tests {
             io::ErrorKind::TimedOut
         );
         assert_eq!(stream.read(&mut rest).unwrap(), 0);
-        let second = queue.pop_front().unwrap();
-        assert!(
-            matches!(second.failure(), Some(Error::Io(e)) if e.kind() == io::ErrorKind::ConnectionRefused)
-        );
+        let second = slots[1].take().unwrap();
+        assert!(matches!(decode_error(second.failure.as_deref().unwrap()),
+            Error::Io(e) if e.kind() == io::ErrorKind::ConnectionRefused));
     }
 }

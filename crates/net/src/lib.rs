@@ -614,10 +614,14 @@ impl Route {
     #[cfg(feature = "test-observer")]
     fn replay(
         self,
-        recorded: tape::Recorded,
+        replayed: tape::Replayed,
         timeout: Duration,
         deadline: Instant,
     ) -> Result<Connection, Error> {
+        let attempts = match &replayed {
+            tape::Replayed::Failed { attempts, .. }
+            | tape::Replayed::Connected { attempts, .. } => *attempts,
+        };
         let endpoint = self
             .request
             .proxy
@@ -631,7 +635,7 @@ impl Route {
                 .ledger
                 .record(&self.request, &endpoint, Operation::Dns, 0);
         }
-        for _ in 0..recorded.attempts() {
+        for _ in 0..attempts {
             self.check()?;
             self.gate
                 .observe(&self.request, &endpoint, Operation::Connect);
@@ -639,12 +643,13 @@ impl Route {
                 .ledger
                 .record(&self.request, &endpoint, Operation::Connect, 0);
         }
-        if let Some(error) = recorded.failure() {
-            return Err(error);
-        }
+        let tape = match replayed {
+            tape::Replayed::Failed { error, .. } => return Err(error),
+            tape::Replayed::Connected { tape, .. } => tape,
+        };
         let mut connection = Connection {
             channel: Channel::Plain(Transport {
-                stream: Stream::replay(recorded),
+                stream: Stream::replay(tape),
                 route: self,
                 timeout,
                 deadline: Some(deadline),
