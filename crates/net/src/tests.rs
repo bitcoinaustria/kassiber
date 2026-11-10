@@ -404,7 +404,14 @@ fn socks_rechecks_consent_before_revealing_credentials() {
         revoke.revoke();
         socket.write_all(&[5, 2]).unwrap();
         let mut remaining = Vec::new();
-        socket.read_to_end(&mut remaining).unwrap();
+        // The client may drop the connection with this reply still unread;
+        // the kernel then resets it instead of closing it. Either way it
+        // sent nothing more.
+        match socket.read_to_end(&mut remaining) {
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::ConnectionReset => {}
+            Err(error) => panic!("{error}"),
+        }
         assert!(remaining.is_empty());
     });
     assert!(matches!(
