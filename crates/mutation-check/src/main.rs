@@ -141,6 +141,18 @@ fn run_suite(root: &Path, config: &Config, args: &[String]) -> ExitCode {
         }
     };
     let runner = Runner::new(suite, root, &target);
+    // KASSIBER_MUTATION_BUILD_LIMIT_GB (default 40) bounds target/scratch-build.
+    let limit_gb: u64 = std::env::var("KASSIBER_MUTATION_BUILD_LIMIT_GB")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(40);
+    let size = runner.bound_build_dir(limit_gb << 30);
+    if size > limit_gb << 30 {
+        println!(
+            "cleared target/scratch-build ({} GiB > {limit_gb} GiB)",
+            size >> 30
+        );
+    }
     if let Err(error) = runner.prepare() {
         eprintln!("{error}");
         return ExitCode::from(2);

@@ -146,6 +146,20 @@ pub fn locked_test_data(root: &Path) -> Vec<String> {
         .collect()
 }
 
+fn dir_size(dir: &Path) -> u64 {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return 0;
+    };
+    entries
+        .filter_map(|e| e.ok())
+        .map(|e| match e.file_type() {
+            Ok(kind) if kind.is_dir() => dir_size(&e.path()),
+            Ok(kind) if kind.is_file() => e.metadata().map(|m| m.len()).unwrap_or(0),
+            _ => 0,
+        })
+        .sum()
+}
+
 pub struct Runner<'a> {
     suite: &'a Suite,
     root: PathBuf,
@@ -214,7 +228,10 @@ impl<'a> Runner<'a> {
         Self {
             suite,
             root: root.to_path_buf(),
-            scratch: target.join("mutation-scratch").join(&suite.name),
+            // One tree path for every suite: cargo keys the workspace crates'
+            // artifacts on their path, so per-suite trees would each keep a
+            // full copy in the shared build dir.
+            scratch: target.join("mutation-scratch").join("tree"),
             build: target.join("scratch-build"),
         }
     }
@@ -386,10 +403,20 @@ impl<'a> Runner<'a> {
     pub fn cleanup(&self) {
         if self
             .scratch
-            .ends_with(Path::new("mutation-scratch").join(&self.suite.name))
+            .ends_with(Path::new("mutation-scratch").join("tree"))
         {
             let _ = fs::remove_dir_all(&self.scratch);
         }
+    }
+
+    /// Clear the shared build dir when it has grown past `limit` bytes, so
+    /// many suites' feature sets cannot fill the build disk.
+    pub fn bound_build_dir(&self, limit: u64) -> u64 {
+        let size = dir_size(&self.build);
+        if size > limit && self.build.ends_with("scratch-build") {
+            let _ = fs::remove_dir_all(&self.build);
+        }
+        size
     }
 
     /// Baseline, then one entry at a time. Returns the failures.
