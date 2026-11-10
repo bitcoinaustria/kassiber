@@ -53,9 +53,15 @@ def sync_directory(path: str | os.PathLike) -> None:
 
 
 def sync_file(path: str | os.PathLike) -> None:
-    """Flush an already written file by path."""
+    """Flush an already written file by path.
 
-    fd = os.open(Path(path), os.O_RDONLY | getattr(os, "O_BINARY", 0))
+    Windows flushes (`_commit`, i.e. `FlushFileBuffers`) need a handle with
+    write access and fail with EBADF on a read-only one; elsewhere a
+    read-only descriptor is enough.
+    """
+
+    access = os.O_RDWR if _platform() == "win32" else os.O_RDONLY
+    fd = os.open(Path(path), access | getattr(os, "O_BINARY", 0))
     try:
         full_fsync(fd)
     finally:

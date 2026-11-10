@@ -83,6 +83,26 @@ def test_full_fsync_uses_f_fullfsync_on_macos_only(tmp_path, macos, monkeypatch)
     assert macos.paths == [_resolved(target)] and macos.plain == [_resolved(target)]
 
 
+@pytest.mark.parametrize(("platform", "access"), [("win32", os.O_RDWR), ("linux", os.O_RDONLY), ("darwin", os.O_RDONLY)])
+def test_file_syncs_open_for_writing_only_on_windows(tmp_path, monkeypatch, platform, access):
+    # Windows' fsync (`_commit`) refuses a read-only descriptor with EBADF.
+    target = tmp_path / "file"
+    target.write_bytes(b"x")
+    opened = []
+    real_open = os.open
+
+    def recording_open(path, flags, *args, **kwargs):
+        opened.append((Path(path), flags))
+        return real_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(durable_sync, "_platform", lambda: platform)
+    monkeypatch.setattr(durable_sync, "fcntl", None)
+    monkeypatch.setattr(durable_sync.os, "open", recording_open)
+    durable_sync.sync_file(target)
+    assert [(path, flags & (os.O_RDONLY | os.O_WRONLY | os.O_RDWR)) for path, flags in opened] == [(target, access)]
+    assert target.read_bytes() == b"x"
+
+
 def test_refused_full_fsync_falls_back_to_fsync(tmp_path, macos):
     macos.refuse = True
     target = tmp_path / "file"
