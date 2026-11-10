@@ -8,6 +8,9 @@
 //! connection is bound to the replayed one at its first write, to the unused
 //! recording for that endpoint whose first write was the same bytes, since
 //! parallel connections open in any order (recorded order is the fallback).
+//! `replay-strict:<file>` has no fallback: a first write no unused recording
+//! began with gets a connection that delivers nothing, so a request the
+//! recording never made fails instead of reading another request's reply.
 //! The route's consent and offline checks, the egress observer and the egress
 //! ledger run as they do for a real connection; an endpoint with nothing left
 //! on the tape is refused. Product builds do not compile this module, and an
@@ -41,6 +44,8 @@ struct Replays {
     /// Recorded connections per endpoint key, in connection order; a
     /// replayed connection takes one out (`None`).
     by_key: HashMap<String, Vec<Option<Recorded>>>,
+    /// `replay-strict:`: a first write must match a recording's.
+    strict: bool,
 }
 
 #[derive(Clone, Default)]
@@ -82,10 +87,13 @@ fn mode() -> Option<&'static Mode> {
                 .ok()?;
             return Some(Mode::Record(Mutex::new(file)));
         }
-        let path = value.strip_prefix("replay:")?;
-        Some(Mode::Replay(Mutex::new(load(
-            &std::fs::read_to_string(path).ok()?,
-        ))))
+        let (path, strict) = match value.strip_prefix("replay-strict:") {
+            Some(path) => (path, true),
+            None => (value.strip_prefix("replay:")?, false),
+        };
+        let mut replays = load(&std::fs::read_to_string(path).ok()?);
+        replays.strict = strict;
+        Some(Mode::Replay(Mutex::new(replays)))
     })
     .as_ref()
 }
@@ -187,15 +195,25 @@ fn bind(key: &str, first: Option<&[u8]>) -> Option<Recorded> {
         return None;
     };
     let mut replays = replays.lock().unwrap_or_else(|e| e.into_inner());
+    let strict = replays.strict;
     let slots = replays.by_key.get_mut(key)?;
+    let index = pick(slots, first, strict)?;
+    slots[index].take()
+}
+
+/// The slot `bind` takes: the first unused recording whose first write was
+/// `first`; otherwise, unless strict, the earliest unused one.
+fn pick(slots: &[Option<Recorded>], first: Option<&[u8]>, strict: bool) -> Option<usize> {
     let open = |slot: &Option<Recorded>| slot.as_ref().is_some_and(|r| r.failure.is_none());
     let matching = first.and_then(|bytes| {
         slots.iter().position(|slot| {
             open(slot) && slot.as_ref().and_then(|r| r.first_write.as_deref()) == Some(bytes)
         })
     });
-    let index = matching.or_else(|| slots.iter().position(open))?;
-    slots[index].take()
+    if strict && first.is_some() {
+        return matching;
+    }
+    matching.or_else(|| slots.iter().position(open))
 }
 
 /// A connection's handle while recording.
@@ -429,6 +447,25 @@ impl Write for Taped {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_strict_tape_has_no_fallback_binding() {
+        let text = [
+            format!("open\t1\t0\t{}\t5000", b64(b"127.0.0.1")),
+            format!("w\t1\t5\t{}", b64(b"query")),
+            format!("r\t1\t{}", b64(b"reply")),
+            format!("open\t2\t0\t{}\t5000", b64(b"127.0.0.1")),
+            format!("w\t2\t5\t{}", b64(b"other")),
+        ]
+        .join("\n");
+        let replays = load(&text);
+        let slots = &replays.by_key[&key("127.0.0.1", 5000, false)];
+        assert_eq!(pick(slots, Some(b"other"), true), Some(1));
+        assert_eq!(pick(slots, Some(b"query"), false), Some(0));
+        assert_eq!(pick(slots, Some(b"never"), false), Some(0));
+        assert_eq!(pick(slots, Some(b"never"), true), None);
+        assert_eq!(pick(slots, None, true), Some(0));
+    }
 
     #[test]
     fn a_tape_round_trips_reads_failures_and_order() {
