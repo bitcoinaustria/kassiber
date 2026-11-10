@@ -964,9 +964,9 @@ mod tests {
     #[test]
     fn a_broker_route_never_opens_a_socket_and_needs_the_online_gate() {
         let dir = tempfile::tempdir().unwrap();
-        let script = dir.path().join("broker.py");
-        fs::write(&script, "raise SystemExit('must not run')\n").unwrap();
-        let program = BrokerProgram::new(which("python3"), script.clone());
+        let script = dir.path().join("broker.sh");
+        fs::write(&script, "echo 'must not run' >&2\nexit 1\n").unwrap();
+        let program = BrokerProgram::new(which("sh"), script.clone());
         let online = Gate::new(|| Offline::Online, Ledger::default());
         let request = Request::ai_broker(program.clone());
         let route = online
@@ -986,7 +986,7 @@ mod tests {
             offline.authorize(request.clone(), Some(Consent::explicit_trigger(&request))),
             Err(Error::Offline)
         ));
-        let other = Request::ai_broker(BrokerProgram::new(which("python3"), dir.path().join("x")));
+        let other = Request::ai_broker(BrokerProgram::new(which("sh"), dir.path().join("x")));
         assert!(matches!(
             online.authorize(request, Some(Consent::explicit_trigger(&other))),
             Err(Error::ConsentScope)
@@ -1008,8 +1008,8 @@ mod tests {
         let mut gate = Gate::new(|| Offline::Online, Ledger::default());
         gate.observer = Observer::LoopbackAllowed;
         for program in [
-            BrokerProgram::new(None, dir.path().join("broker.py")),
-            BrokerProgram::new(which("python3"), dir.path().join("absent.py")),
+            BrokerProgram::new(None, dir.path().join("broker.sh")),
+            BrokerProgram::new(which("sh"), dir.path().join("absent.sh")),
         ] {
             let request = Request::ai_broker(program);
             let route = gate

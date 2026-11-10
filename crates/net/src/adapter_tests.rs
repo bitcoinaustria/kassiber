@@ -747,34 +747,29 @@ fn http_timeout_and_expired_budget_are_bounded() {
 }
 
 #[test]
-fn pinned_self_signed_shapes_match_python_on_owned_loopback() {
-    for (pem, key, filename) in [
+fn pinned_self_signed_shapes_verify_on_owned_loopback() {
+    for (pem, key) in [
         (
             include_bytes!("../tests/fixtures/lnd-ca.pem").as_slice(),
             include_bytes!("../tests/fixtures/lnd-ca-key.pem").as_slice(),
-            "lnd-ca.pem",
         ),
         (
             include_bytes!("../tests/fixtures/openssl-ca.pem").as_slice(),
             include_bytes!("../tests/fixtures/openssl-ca-key.pem").as_slice(),
-            "openssl-ca.pem",
         ),
         (
             include_bytes!("../tests/fixtures/cn-only.pem").as_slice(),
             include_bytes!("../tests/fixtures/cn-only-key.pem").as_slice(),
-            "cn-only.pem",
         ),
     ] {
         let (server, port) = listener();
         let handle = thread::spawn(move || {
-            for _ in 0..2 {
-                let mut stream = tls_server_with(accept(&server), pem, key);
-                head(&mut stream);
-                stream
-                    .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
-                    .unwrap();
-                stream.flush().unwrap();
-            }
+            let mut stream = tls_server_with(accept(&server), pem, key);
+            head(&mut stream);
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
+                .unwrap();
+            stream.flush().unwrap();
         });
         let gate = test_gate(|| Offline::Online);
         let request = Request::new(
@@ -790,19 +785,10 @@ fn pinned_self_signed_shapes_match_python_on_owned_loopback() {
                 .body,
             b"ok"
         );
-        let result = std::process::Command::new("python3")
-            .args(["-c", r#"import socket, ssl, sys
-ctx = ssl.create_default_context(cafile=sys.argv[1])
-with ctx.wrap_socket(socket.create_connection(('127.0.0.1', int(sys.argv[2])), timeout=3), server_hostname='localhost') as s:
-    s.sendall(b'GET / HTTP/1.1\r\nHost: localhost\r\n\r\n')
-    assert s.recv(4096).endswith(b'ok')
-"#])
-            .arg(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures").join(filename)).arg(port.to_string()).output().unwrap();
-        assert!(
-            result.status.success(),
-            "{}",
-            String::from_utf8_lossy(&result.stderr)
-        );
+        // Until Python's removal this test also connected CPython's `ssl`
+        // client (default context, `cafile=` the same PEM) and required it to
+        // accept all three shapes; it did on 91822979e. The Rust client above
+        // is the contract now.
         handle.join().unwrap();
     }
 }
