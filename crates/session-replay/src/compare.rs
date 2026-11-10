@@ -178,6 +178,36 @@ fn iso_instant(caps: &regex::Captures<'_>) -> Option<(i64, bool)> {
     }
 }
 
+/// Names of fields holding amounts, prices and tax figures: a number under
+/// one is never a clock reading, however close to the run's time it falls
+/// (an msat amount can look like a millisecond epoch).
+fn figure_key() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(
+            r"(?i)(?:amount|msat|sat|sats|price|fee|fees|gain|gains|loss|losses|basis|proceeds|tax|cost|value|quantity|qty|balance|total|fiat|eur|usd|income|rate|fx)",
+        )
+        .unwrap()
+    })
+}
+
+/// Whether the token at `start` is the value of a figure field: JSON
+/// (`"amount_msat": `, also escaped) or a dumped row (`amount_msat=int `).
+pub fn figure_key_before(text: &str, start: usize) -> bool {
+    static KEY: OnceLock<Regex> = OnceLock::new();
+    let key = KEY.get_or_init(|| {
+        Regex::new(r#"([A-Za-z_][A-Za-z0-9_]*)(?:\\?"\s*:\s*\\?"?|=(?:int|real|text) "?)$"#)
+            .unwrap()
+    });
+    let from = text[..start]
+        .char_indices()
+        .rev()
+        .nth(79)
+        .map_or(0, |(i, _)| i);
+    key.captures(&text[from..start])
+        .is_some_and(|c| figure_key().is_match(&c[1]))
+}
+
 /// The generated tokens in `text`, by byte span, in order.
 pub fn generated_spans(
     text: &str,
@@ -273,7 +303,10 @@ pub fn generated_spans(
         }
     }
     for m in epoch().find_iter(text) {
-        if !boundary_ok(text, m.start(), m.end(), true) || text[m.end()..].starts_with('.') {
+        if !boundary_ok(text, m.start(), m.end(), true)
+            || text[m.end()..].starts_with('.')
+            || figure_key_before(text, m.start())
+        {
             continue;
         }
         let token = m.as_str();

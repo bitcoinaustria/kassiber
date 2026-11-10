@@ -280,9 +280,22 @@ fn main() {
             .as_deref()
             .unwrap_or("/nonexistent"),
     ));
-    let env: BTreeMap<String, String> = std::env::vars()
+    let mut env: BTreeMap<String, String> = std::env::vars()
         .filter(|(k, v)| keeps_env(k) || keeps_secret_env(k, v, &allowlist))
         .collect();
+    // A fresh SQLite seed per recorded process (kassiber_store::
+    // seed_test_prng): its random row ids, and the hashes over them, replay
+    // identically. Kept in the session's environment like any test switch.
+    if record.is_some() {
+        let mut bytes = [0u8; 4];
+        let seed = fs::File::open("/dev/urandom")
+            .and_then(|mut f| f.read_exact(&mut bytes))
+            .map(|_| i32::from_le_bytes(bytes) & 0x3fff_ffff)
+            .unwrap_or(0)
+            .max(1);
+        env.insert("KASSIBER_TEST_SQLITE_SEED".into(), seed.to_string());
+        command.env("KASSIBER_TEST_SQLITE_SEED", seed.to_string());
+    }
     let prefixes: Vec<PathBuf> = config.root_prefixes.iter().map(PathBuf::from).collect();
     let blobs = record.as_ref().map(|dir| Blobs::new(dir));
     // Inherited input descriptors (a test's passphrase pipe): read them,
