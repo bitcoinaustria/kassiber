@@ -1,0 +1,128 @@
+# stored=false
+$ --machine reports privacy-mirror
+exit 0
+--- stdout
+{
+  "kind": "reports.privacy-mirror",
+  "schema_version": 1,
+  "data": {
+    "payload_schema_version": 2,
+    "observer": "public",
+    "local_only": true,
+    "read_only": true,
+    "advisory_only": true,
+    "redaction": "ai_export_safe",
+    "investigation": {
+      "query": {
+… [3332 bytes, 117 lines fnv128 f733155d98289c5aeaeeac3da4b2f11c]
+=== book changes after the step
+- (116 tables, 99 empty)
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000001" | node_id=t:"bitcoin:main:record:out"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000001" | node_id=t:"liquid:liquidv1:record:earn"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000004" | node_id=t:"bitcoin:main:record:in"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000004" | node_id=t:"bitcoin:main:record:out"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000005" | node_id=t:"bitcoin:main:record:out"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000005" | node_id=t:"record:custody:0000000000000000000000000000000000000000000000000000000000000005"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:main:record:excluded" | node_id=t:"bitcoin:main:record:excluded"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:main:record:in" | node_id=t:"bitcoin:main:record:in"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:main:record:no-tax" | node_id=t:"bitcoin:main:record:no-tax"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:main:record:out" | node_id=t:"bitcoin:main:record:out"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"cold" | node_id=t:"bitcoin:main:record:excluded"
+… [20507 bytes, 54 lines fnv128 3bea25d968ba7c8d1cb60c28fca8b24c]
+$ --machine reports privacy-mirror
+exit 0
+--- stdout
+{
+  "kind": "reports.privacy-mirror",
+  "schema_version": 1,
+  "data": {
+    "payload_schema_version": 2,
+    "observer": "public",
+    "local_only": true,
+    "read_only": true,
+    "advisory_only": true,
+    "redaction": "ai_export_safe",
+    "investigation": {
+      "query": {
+… [3332 bytes, 117 lines fnv128 f733155d98289c5aeaeeac3da4b2f11c]
+=== book changes after the step
+(unchanged)
+$ daemon
+> {"kind":"ui.reports.privacy_mirror","request_id":"1"}
+< {"kind":"ui.reports.privacy_mirror","schema_version":1,"data":{"payload_schema_version":2,"observer":"public","local_only":true,"read_only":true,"advisory_only":true,"redaction":"desktop_local","investigation":{"query":{"mode":"overview",… [2234 bytes fnv128 d0c73d7223186ac808bdbad4ed4ec46b]
+> {"args":null,"kind":"ui.reports.privacy_mirror","request_id":"2"}
+< {"kind":"ui.reports.privacy_mirror","schema_version":1,"data":{"payload_schema_version":2,"observer":"public","local_only":true,"read_only":true,"advisory_only":true,"redaction":"desktop_local","investigation":{"query":{"mode":"overview",… [2234 bytes fnv128 d0c738e78e186ac808bdbad4eb72199a]
+> {"args":{},"kind":"ui.reports.privacy_mirror","request_id":"3"}
+< {"kind":"ui.reports.privacy_mirror","schema_version":1,"data":{"payload_schema_version":2,"observer":"public","local_only":true,"read_only":true,"advisory_only":true,"redaction":"desktop_local","investigation":{"query":{"mode":"overview",… [2234 bytes fnv128 d0c73466f5186ac808bdbad4e99ba979]
+> {"args":"x","kind":"ui.reports.privacy_mirror","request_id":"4"}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"daemon args must be an object","hint":null,"details":{"type":"str"},"retryable":false,"debug":null},"request_id":"4"}
+> {"args":{"redacted":false,"wallet":"cold"},"kind":"ui.reports.privacy_mirror","request_id":"5"}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.reports.privacy_mirror received unsupported arguments","hint":null,"details":{"unknown":["redacted","wallet"]},"retryable":false,"debug":null},"request_id":"5"}
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the step
+(unchanged)
+# stored=true
+$ --machine reports privacy-mirror
+exit 0
+--- stdout
+{
+  "kind": "reports.privacy-mirror",
+  "schema_version": 1,
+  "data": {
+    "payload_schema_version": 2,
+    "observer": "public",
+    "local_only": true,
+    "read_only": true,
+    "advisory_only": true,
+    "redaction": "ai_export_safe",
+    "investigation": {
+      "query": {
+… [5191 bytes, 171 lines fnv128 eb706f262f6663111ad6fa3fb8e72d0c]
+=== book changes after the step
+- (116 tables, 99 empty)
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000001" | node_id=t:"bitcoin:main:record:out"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000001" | node_id=t:"liquid:liquidv1:record:earn"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000004" | node_id=t:"bitcoin:main:record:out"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000004" | node_id=t:"bitcoin:main:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000005" | node_id=t:"bitcoin:main:record:out"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000005" | node_id=t:"record:custody:0000000000000000000000000000000000000000000000000000000000000005"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" | node_id=t:"bitcoin:main:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0" | node_id=t:"bitcoin:main:out:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:main:out:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0" | node_id=t:"bitcoin:main:out:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:main:out:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:0" | node_id=t:"bitcoin:main:out:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:0"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:main:record:excluded" | node_id=t:"bitcoin:main:record:excluded"
+… [48240 bytes, 90 lines fnv128 35874197d39e27c0cb598c0b3f7ccc05]
+$ --machine reports privacy-mirror
+exit 0
+--- stdout
+{
+  "kind": "reports.privacy-mirror",
+  "schema_version": 1,
+  "data": {
+    "payload_schema_version": 2,
+    "observer": "public",
+    "local_only": true,
+    "read_only": true,
+    "advisory_only": true,
+    "redaction": "ai_export_safe",
+    "investigation": {
+      "query": {
+… [5191 bytes, 171 lines fnv128 cd75a48d60b0bde36d2df3465a62da5c]
+=== book changes after the step
+(unchanged)
+$ daemon
+> {"kind":"ui.reports.privacy_mirror","request_id":"1"}
+< {"kind":"ui.reports.privacy_mirror","schema_version":1,"data":{"payload_schema_version":2,"observer":"public","local_only":true,"read_only":true,"advisory_only":true,"redaction":"desktop_local","investigation":{"query":{"mode":"overview",… [3421 bytes fnv128 c934a2c5ddbb5f1284ee10c4b905bd91]
+> {"args":null,"kind":"ui.reports.privacy_mirror","request_id":"2"}
+< {"kind":"ui.reports.privacy_mirror","schema_version":1,"data":{"payload_schema_version":2,"observer":"public","local_only":true,"read_only":true,"advisory_only":true,"redaction":"desktop_local","investigation":{"query":{"mode":"overview",… [3421 bytes fnv128 c934b066a4bb5f1284ee10c4be9d02dc]
+> {"args":{},"kind":"ui.reports.privacy_mirror","request_id":"3"}
+< {"kind":"ui.reports.privacy_mirror","schema_version":1,"data":{"payload_schema_version":2,"observer":"public","local_only":true,"read_only":true,"advisory_only":true,"redaction":"desktop_local","investigation":{"query":{"mode":"overview",… [3421 bytes fnv128 c934abd20bbb5f1284ee10c4bcba1383]
+> {"args":"x","kind":"ui.reports.privacy_mirror","request_id":"4"}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"daemon args must be an object","hint":null,"details":{"type":"str"},"retryable":false,"debug":null},"request_id":"4"}
+> {"args":{"redacted":false,"wallet":"cold"},"kind":"ui.reports.privacy_mirror","request_id":"5"}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.reports.privacy_mirror received unsupported arguments","hint":null,"details":{"unknown":["redacted","wallet"]},"retryable":false,"debug":null},"request_id":"5"}
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the step
+(unchanged)

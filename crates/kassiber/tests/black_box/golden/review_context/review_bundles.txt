@@ -1,0 +1,25 @@
+$ daemon
+> {"args":{"transaction":"h"},"kind":"ui.transactions.review_context","request_id":"0"}
+< {"kind":"ui.transactions.review_context","schema_version":1,"data":{"transaction":{"id":"h","externalId":null,"explorerId":null,"date":"2025-03-05 10:00","type":"Withdrawal","kind":"withdrawal","kindOverride":null,"asset":"BTC","chain":"b… [28424 bytes fnv128 ba55dd575a7bb61b1dfb0e28ec5c085c]
+> {"args":{"transaction":" i "},"kind":"ui.transactions.review_context","request_id":"1"}
+< {"kind":"ui.transactions.review_context","schema_version":1,"data":{"transaction":{"id":"i","externalId":null,"explorerId":null,"date":"2025-03-05 10:30","type":"Deposit","kind":"deposit","kindOverride":null,"asset":"BTC","chain":"bitcoin… [27815 bytes fnv128 922e06d31ebf152d48441c76580d2718]
+> {"args":{"transaction":"j"},"kind":"ui.transactions.review_context","request_id":"2"}
+< {"kind":"ui.transactions.review_context","schema_version":1,"data":{"transaction":{"id":"j","externalId":null,"explorerId":null,"date":"2025-04-10 12:00","type":"Expense","kind":"peg-in","kindOverride":null,"asset":"BTC","chain":"bitcoin"… [23885 bytes fnv128 91311b1200d200144b8ef315d85a67fd]
+> {"args":{"transaction":"k"},"kind":"ui.transactions.review_context","request_id":"3"}
+< {"kind":"ui.transactions.review_context","schema_version":1,"data":{"transaction":{"id":"k","externalId":null,"explorerId":null,"date":"2025-04-10 12:20","type":"Acquired","kind":"peg-in","kindOverride":null,"asset":"LBTC","chain":"liquid… [22397 bytes fnv128 f8f912b51a5108515c75316a0c9a44b1]
+> {"args":{"transaction":"l"},"kind":"ui.transactions.review_context","request_id":"4"}
+< {"kind":"ui.transactions.review_context","schema_version":1,"data":{"transaction":{"id":"l","externalId":null,"explorerId":null,"date":"2024-10-27 00:30","type":"Buy","kind":"buy","kindOverride":null,"asset":"BTC","chain":"bitcoin","netwo… [10939 bytes fnv128 0e38aa5d668e100b2ad65b85aa03d359]
+> {"args":{"transaction":"m"},"kind":"ui.transactions.review_context","request_id":"5"}
+< {"kind":"ui.transactions.review_context","schema_version":1,"data":{"transaction":{"id":"m","externalId":null,"explorerId":null,"date":"2023-12-31 23:30","type":"Buy","kind":"buy","kindOverride":null,"asset":"BTC","chain":"bitcoin","netwo… [20675 bytes fnv128 86a411efaa5ccada168e22bfea9d8d6e]
+> {"args":{"transaction":"a"},"kind":"ui.transactions.review_context","request_id":"6"}
+< {"kind":"ui.transactions.review_context","schema_version":1,"data":{"transaction":{"id":"a","externalId":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","explorerId":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa… [21257 bytes fnv128 9f3542b695a5595203d664feb06f1d6b]
+> {"args":{"transaction":"c"},"kind":"ui.transactions.review_context","request_id":"7"}
+< {"kind":"ui.transactions.review_context","schema_version":1,"data":{"transaction":{"id":"c","externalId":null,"explorerId":null,"date":"2025-02-01 00:00","type":"Fee","kind":"withdrawal","kindOverride":null,"asset":"BTC","chain":"bitcoin"… [21169 bytes fnv128 2f8ff365d03a9848df5de486fe74ec11]
+> {"args":{"history_limit":1,"include_evidence":false,"include_graph":false,"include_privacy":false,"transaction":"h"},"kind":"ui.transactions.review_context","request_id":"8"}
+< {"kind":"ui.transactions.review_context","schema_version":1,"data":{"transaction":{"id":"h","externalId":null,"explorerId":null,"date":"2025-03-05 10:00","type":"Withdrawal","kind":"withdrawal","kindOverride":null,"asset":"BTC","chain":"b… [6099 bytes fnv128 eed167c15cc205d61e316e821cc4a9de]
+> {"args":{"history_limit":"99","transaction":"i"},"kind":"ui.transactions.review_context","request_id":"9"}
+< {"kind":"ui.transactions.review_context","schema_version":1,"data":{"transaction":{"id":"i","externalId":null,"explorerId":null,"date":"2025-03-05 10:30","type":"Deposit","kind":"deposit","kindOverride":null,"asset":"BTC","chain":"bitcoin… [27815 bytes fnv128 d866512a0a39f74d4469077e2a982dea]
+> {"args":{"history_limit":2.7,"transaction":"j"},"kind":"ui.transactions.review_context","request_id":"10"}
+< {"kind":"ui.transactions.review_context","schema_version":1,"data":{"transaction":{"id":"j","externalId":null,"explorerId":null,"date":"2025-04-10 12:00","type":"Expense","kind":"peg-in","kindOverride":null,"asset":"BTC","chain":"bitcoin"… [23885 bytes fnv128 98a992126d0a2d51ca8d532d5a5b0b01]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}

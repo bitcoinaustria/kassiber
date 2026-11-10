@@ -1,0 +1,25 @@
+$ daemon
+> {"args":[],"kind":"ui.maintenance.run","request_id":"0"}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"daemon args must be an object","hint":null,"details":{"type":"list"},"retryable":false,"debug":null},"request_id":"0"}
+> {"args":"x","kind":"ui.maintenance.run","request_id":"1"}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"daemon args must be an object","hint":null,"details":{"type":"str"},"retryable":false,"debug":null},"request_id":"1"}
+> {"args":3,"kind":"ui.maintenance.run","request_id":"2"}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"daemon args must be an object","hint":null,"details":{"type":"int"},"retryable":false,"debug":null},"request_id":"2"}
+> {"args":{"a":2,"z":1},"kind":"ui.maintenance.run","request_id":"3"}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.maintenance.run received unsupported arguments","hint":null,"details":{"unknown":["a","z"]},"retryable":false,"debug":null},"request_id":"3"}
+> {"args":{"sync":"never","x":1},"kind":"ui.maintenance.run","request_id":"4"}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.maintenance.run received unsupported arguments","hint":null,"details":{"unknown":["x"]},"retryable":false,"debug":null},"request_id":"4"}
+> {"args":{"sync":"bad"},"kind":"ui.maintenance.run","request_id":"5"}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.maintenance.run sync must be never, if_enabled, or always","hint":null,"details":{"sync":"bad"},"retryable":false,"debug":null},"request_id":"5"}
+> {"args":{"sync":null},"kind":"ui.maintenance.run","request_id":"6"}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.maintenance.run sync must be never, if_enabled, or always","hint":null,"details":{"sync":null},"retryable":false,"debug":null},"request_id":"6"}
+> {"args":{"sync":1},"kind":"ui.maintenance.run","request_id":"7"}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.maintenance.run sync must be never, if_enabled, or always","hint":null,"details":{"sync":1},"retryable":false,"debug":null},"request_id":"7"}
+> {"args":{"sync":true},"kind":"ui.maintenance.run","request_id":"8"}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.maintenance.run sync must be never, if_enabled, or always","hint":null,"details":{"sync":true},"retryable":false,"debug":null},"request_id":"8"}
+> {"args":{"sync":" never"},"kind":"ui.maintenance.run","request_id":"9"}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.maintenance.run sync must be never, if_enabled, or always","hint":null,"details":{"sync":" never"},"retryable":false,"debug":null},"request_id":"9"}
+> {"args":{"sync":"NEVER"},"kind":"ui.maintenance.run","request_id":"10"}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.maintenance.run sync must be never, if_enabled, or always","hint":null,"details":{"sync":"NEVER"},"retryable":false,"debug":null},"request_id":"10"}
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}

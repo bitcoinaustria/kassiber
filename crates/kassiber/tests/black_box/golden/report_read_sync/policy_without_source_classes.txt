@@ -1,0 +1,9 @@
+$ daemon
+> {"args":{},"kind":"ui.report.blockers","request_id":"0"}
+< {"kind":"ui.report.blockers","schema_version":1,"data":{"ready":false,"blockers":[{"id":"no_transactions","severity":"blocking","title":"No transactions","detail":"Refresh sources or import transactions before reports can be useful.","dae… [3113 bytes fnv128 041ef3a91e8d677e53b1602261408c37]
+> {"args":{},"kind":"ui.report.blockers","request_id":"1"}
+< {"kind":"ui.report.blockers","schema_version":1,"data":{"ready":false,"blockers":[{"id":"no_transactions","severity":"blocking","title":"No transactions","detail":"Refresh sources or import transactions before reports can be useful.","dae… [3113 bytes fnv128 041ef83db78d677e53b1602263237b90]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the ui.report.blockers session
+(unchanged)

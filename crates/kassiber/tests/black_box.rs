@@ -10,3 +10,27 @@ mod support;
 
 #[path = "black_box/cli_leaves.rs"]
 mod cli_leaves;
+
+#[path = "black_box/desktop.rs"]
+mod desktop;
+
+#[path = "black_box/audit_package.rs"]
+mod audit_package;
+#[path = "black_box/evidence_summary.rs"]
+mod evidence_summary;
+#[path = "black_box/maintenance_run.rs"]
+mod maintenance_run;
+#[path = "black_box/privacy_mirror.rs"]
+mod privacy_mirror;
+#[path = "black_box/report_blockers.rs"]
+mod report_blockers;
+#[path = "black_box/report_read_sync.rs"]
+mod report_read_sync;
+#[path = "black_box/review_context.rs"]
+mod review_context;
+#[path = "black_box/transaction_dashboard.rs"]
+mod transaction_dashboard;
+#[path = "black_box/transaction_graph.rs"]
+mod transaction_graph;
+#[path = "black_box/wallet_completeness.rs"]
+mod wallet_completeness;

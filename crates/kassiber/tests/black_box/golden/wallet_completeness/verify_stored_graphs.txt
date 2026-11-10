@@ -1,0 +1,272 @@
+$ --machine transactions verify --transaction g1
+exit 0
+--- stdout
+{
+  "kind": "transactions.verify",
+  "schema_version": 1,
+  "data": {
+    "transaction_id": "g1",
+    "txid": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+    "chain": "bitcoin",
+    "network": "main",
+    "asset": "BTC",
+    "network_contacted": false,
+    "definitions": {
+      "status": "ok: every check passed; mismatch: at least one check failed; partial: no failure but some check could not run; unverifiable: no stored graph to check against.",
+… [3683 bytes, 114 lines fnv128 5319a7f97497034a0f6c52c9bc8c3943]
+$ --machine transactions verify --transaction a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1
+exit 0
+--- stdout
+{
+  "kind": "transactions.verify",
+  "schema_version": 1,
+  "data": {
+    "transaction_id": "g1",
+    "txid": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+    "chain": "bitcoin",
+    "network": "main",
+    "asset": "BTC",
+    "network_contacted": false,
+    "definitions": {
+      "status": "ok: every check passed; mismatch: at least one check failed; partial: no failure but some check could not run; unverifiable: no stored graph to check against.",
+… [3683 bytes, 114 lines fnv128 5319a7f97497034a0f6c52c9bc8c3943]
+$ --machine transactions verify --transaction b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2
+exit 0
+--- stdout
+{
+  "kind": "transactions.verify",
+  "schema_version": 1,
+  "data": {
+    "transaction_id": "g2",
+    "txid": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+    "chain": "bitcoin",
+    "network": "main",
+    "asset": "BTC",
+    "network_contacted": false,
+    "definitions": {
+      "status": "ok: every check passed; mismatch: at least one check failed; partial: no failure but some check could not run; unverifiable: no stored graph to check against.",
+… [3461 bytes, 104 lines fnv128 80be427e9bac903f317d38885eb4e324]
+$ --machine transactions verify --transaction g3
+exit 0
+--- stdout
+{
+  "kind": "transactions.verify",
+  "schema_version": 1,
+  "data": {
+    "transaction_id": "g3",
+    "txid": "e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5",
+    "chain": "unknown",
+    "network": "unknown",
+    "asset": "LBTC",
+    "network_contacted": false,
+    "definitions": {
+      "status": "ok: every check passed; mismatch: at least one check failed; partial: no failure but some check could not run; unverifiable: no stored graph to check against.",
+… [2942 bytes, 84 lines fnv128 a408798afdaa597e171f697056d5f46c]
+$ --machine transactions verify --transaction g6
+exit 0
+--- stdout
+{
+  "kind": "transactions.verify",
+  "schema_version": 1,
+  "data": {
+    "transaction_id": "g6",
+    "txid": "f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6",
+    "chain": "bitcoin",
+    "network": "main",
+    "asset": "BTC",
+    "network_contacted": false,
+    "definitions": {
+      "status": "ok: every check passed; mismatch: at least one check failed; partial: no failure but some check could not run; unverifiable: no stored graph to check against.",
+… [3140 bytes, 92 lines fnv128 c3fc8ebdd88af345e9a5255b2f5b3412]
+$ --machine transactions verify --transaction  g2 
+exit 0
+--- stdout
+{
+  "kind": "transactions.verify",
+  "schema_version": 1,
+  "data": {
+    "transaction_id": "g2",
+    "txid": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+    "chain": "bitcoin",
+    "network": "main",
+    "asset": "BTC",
+    "network_contacted": false,
+    "definitions": {
+      "status": "ok: every check passed; mismatch: at least one check failed; partial: no failure but some check could not run; unverifiable: no stored graph to check against.",
+… [3461 bytes, 104 lines fnv128 80be427e9bac903f317d38885eb4e324]
+$ --machine transactions verify --transaction v1
+exit 0
+--- stdout
+{
+  "kind": "transactions.verify",
+  "schema_version": 1,
+  "data": {
+    "transaction_id": "v1",
+    "txid": "1111111111111111111111111111111111111111111111111111111111111111",
+    "chain": "bitcoin",
+    "network": "main",
+    "asset": "BTC",
+    "network_contacted": false,
+    "definitions": {
+      "status": "ok: every check passed; mismatch: at least one check failed; partial: no failure but some check could not run; unverifiable: no stored graph to check against.",
+… [4008 bytes, 126 lines fnv128 52bf5a674fac684d68b3fb6ee2f46b65]
+$ --machine transactions verify --transaction v2
+exit 0
+--- stdout
+{
+  "kind": "transactions.verify",
+  "schema_version": 1,
+  "data": {
+    "transaction_id": "v2",
+    "txid": "2222222222222222222222222222222222222222222222222222222222222222",
+    "chain": "bitcoin",
+    "network": "main",
+    "asset": "BTC",
+    "network_contacted": false,
+    "definitions": {
+      "status": "ok: every check passed; mismatch: at least one check failed; partial: no failure but some check could not run; unverifiable: no stored graph to check against.",
+… [3448 bytes, 104 lines fnv128 b8ec1792ccd4e8404516b9465c5bd9ce]
+$ --machine transactions verify --transaction v3
+exit 0
+--- stdout
+{
+  "kind": "transactions.verify",
+  "schema_version": 1,
+  "data": {
+    "transaction_id": "v3",
+    "txid": "3333333333333333333333333333333333333333333333333333333333333333",
+    "chain": "bitcoin",
+    "network": "main",
+    "asset": "BTC",
+    "network_contacted": false,
+    "definitions": {
+      "status": "ok: every check passed; mismatch: at least one check failed; partial: no failure but some check could not run; unverifiable: no stored graph to check against.",
+… [3551 bytes, 108 lines fnv128 477069b6f886748f9793475a46eb7793]
+$ --machine transactions verify --transaction v4
+exit 0
+--- stdout
+{
+  "kind": "transactions.verify",
+  "schema_version": 1,
+  "data": {
+    "transaction_id": "v4",
+    "txid": "4444444444444444444444444444444444444444444444444444444444444444",
+    "chain": "bitcoin",
+    "network": "main",
+    "asset": "BTC",
+    "network_contacted": false,
+    "definitions": {
+      "status": "ok: every check passed; mismatch: at least one check failed; partial: no failure but some check could not run; unverifiable: no stored graph to check against.",
+… [3582 bytes, 109 lines fnv128 dc58e605eddf45e12e3ccb8645041084]
+$ --machine transactions verify --transaction v5
+exit 0
+--- stdout
+{
+  "kind": "transactions.verify",
+  "schema_version": 1,
+  "data": {
+    "transaction_id": "v5",
+    "txid": "5555555555555555555555555555555555555555555555555555555555555555",
+    "chain": "bitcoin",
+    "network": "main",
+    "asset": "BTC",
+    "network_contacted": false,
+    "definitions": {
+      "status": "ok: every check passed; mismatch: at least one check failed; partial: no failure but some check could not run; unverifiable: no stored graph to check against.",
+… [4117 bytes, 128 lines fnv128 36690c711cb577644d58ff6ddaee40ee]
+$ --machine transactions verify --transaction v6
+exit 0
+--- stdout
+{
+  "kind": "transactions.verify",
+  "schema_version": 1,
+  "data": {
+    "transaction_id": "v6",
+    "txid": "6666666666666666666666666666666666666666666666666666666666666666",
+    "chain": "bitcoin",
+    "network": "main",
+    "asset": "BTC",
+    "network_contacted": false,
+    "definitions": {
+      "status": "ok: every check passed; mismatch: at least one check failed; partial: no failure but some check could not run; unverifiable: no stored graph to check against.",
+… [3627 bytes, 113 lines fnv128 2a830c28b75438bcedaaf1ba33dc6c26]
+$ --machine transactions verify --transaction v7
+exit 0
+--- stdout
+{
+  "kind": "transactions.verify",
+  "schema_version": 1,
+  "data": {
+    "transaction_id": "v7",
+    "txid": "7777777777777777777777777777777777777777777777777777777777777777",
+    "chain": "bitcoin",
+    "network": "main",
+    "asset": "BTC",
+    "network_contacted": false,
+    "definitions": {
+      "status": "ok: every check passed; mismatch: at least one check failed; partial: no failure but some check could not run; unverifiable: no stored graph to check against.",
+… [3398 bytes, 103 lines fnv128 a953423a64de468a2ab4b7659342b308]
+$ --machine transactions verify --transaction v8
+exit 0
+--- stdout
+{
+  "kind": "transactions.verify",
+  "schema_version": 1,
+  "data": {
+    "transaction_id": "v8",
+    "txid": "8888888888888888888888888888888888888888888888888888888888888888",
+    "chain": "bitcoin",
+    "network": "main",
+    "asset": "BTC",
+    "network_contacted": false,
+    "definitions": {
+      "status": "ok: every check passed; mismatch: at least one check failed; partial: no failure but some check could not run; unverifiable: no stored graph to check against.",
+… [3223 bytes, 93 lines fnv128 4ff29626c91164a1d5cea14b872c05a3]
+$ --machine transactions verify --transaction 1111111111111111111111111111111111111111111111111111111111111111
+exit 0
+--- stdout
+{
+  "kind": "transactions.verify",
+  "schema_version": 1,
+  "data": {
+    "transaction_id": "v1x",
+    "txid": "1111111111111111111111111111111111111111111111111111111111111111",
+    "chain": "bitcoin",
+    "network": "main",
+    "asset": "BTC",
+    "network_contacted": false,
+    "definitions": {
+      "status": "ok: every check passed; mismatch: at least one check failed; partial: no failure but some check could not run; unverifiable: no stored graph to check against.",
+… [4006 bytes, 126 lines fnv128 b242709036b8b224431b03d0c0093438]
+$ --format table transactions verify --transaction v1
+exit 0
+--- stdout
+field              value                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
+-----------------  -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+transaction_id     v1                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             
+txid               1111111111111111111111111111111111111111111111111111111111111111                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               
+chain              bitcoin                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
+network            main                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           
+asset              BTC                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            
+network_contacted  False                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
+definitions        {'status': 'ok: every check passed; mismatch: at least one check failed; partial: no failure but some check could not run; unverifiable: no stored graph to check against.', 'conservation': 'Sum of input values minus sum of output values against the fee the importer recorded, in msat; a source that reports no fee had it derived from the same graph, which then only proves the graph is self-consistent.', 'legs': "Per wallet of this book owning a graph input or output: owned outputs minus owned inputs (expected_delta_msat) against the imported row's wallet delta (inbound amount, or minus amount and fee). missing_imported_leg means no row of that wallet carries this txid.", 'unexplained_rows': 'Rows with this txid whose wallet owns no graph leg; expected for an exchange or custodial record of the same transfer, a mismatch for a wallet this book observes on chain.', 'keychain': "receive or change from the owning wallet's derivation branch; unknown when the ownership evidence names no branch (address lists, unlabeled inventory)."}
+graph_source       stored_observation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             
+conservation       {'inputs_msat': 60000000, 'outputs_msat': 59000000, 'fee_expected_msat': 1000000, 'fee_recorded_msat': 1000000, 'fee_source': 'observer_record', 'status': 'ok', 'reason': None}                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               
+status             mismatch                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
+… [21180 bytes, 20 lines fnv128 f469c3f5a62bab1b7c377b61286ecc5f]
+$ --format plain transactions verify --transaction v1
+exit 0
+--- stdout
+transaction_id: v1
+txid: 1111111111111111111111111111111111111111111111111111111111111111
+chain: bitcoin
+network: main
+asset: BTC
+network_contacted: False
+definitions: {"status": "ok: every check passed; mismatch: at least one check failed; partial: no failure but some check could not run; unverifiable: no stored graph to check against.", "conservation": "Sum of input values minus sum of output values against the fee the importer recorded, in msat; a source that reports no fee had it derived from the same graph, which then only proves the graph is self-consistent.", "legs": "Per wallet of this book owning a graph input or output: owned outputs minus owned inputs (expected_delta_msat) against the imported row's wallet delta (inbound amount, or minus amount and fee). missing_imported_leg means no row of that wallet carries this txid.", "unexplained_rows": "Rows with this txid whose wallet owns no graph leg; expected for an exchange or custodial record of the same transfer, a mismatch for a wallet this book observes on chain.", "keychain": "receive or change from the owning wallet's derivation branch; unknown when the ownership evidence names no branch (address lists, unlabeled inventory)."}
+graph_source: stored_observation
+conservation: {"inputs_msat": 60000000, "outputs_msat": 59000000, "fee_expected_msat": 1000000, "fee_recorded_msat": 1000000, "fee_source": "observer_record", "status": "ok", "reason": null}
+status: mismatch
+reasons: ["leg:row_without_owned_graph_leg"]
+legs: [{"wallet_id": "watch", "wallet": "Watch", "owned_inputs_msat": 60000000, "owned_outputs_msat": 20000000, "owned_input_count": 1, "owned_output_count": 1, "expected_delta_msat": -40000000, "rows": [{"transaction_id": "v1", "direction": "outbound", "recorded_delta_msat": -40000000, "excluded": false}], "status": "ok", "reason": null}]
+… [3007 bytes, 18 lines fnv128 66dce2d7af5faabe65a9bdbc7073a380]

@@ -1,0 +1,9 @@
+$ daemon
+> {"args":{"sync":[]},"kind":"ui.maintenance.run","request_id":"0"}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.maintenance.run sync must be never, if_enabled, or always","hint":null,"details":{"sync":[]},"retryable":false,"debug":null},"request_id":"0"}
+> {"args":{"sync":{"a":1}},"kind":"ui.maintenance.run","request_id":"1"}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.maintenance.run sync must be never, if_enabled, or always","hint":null,"details":{"sync":{"a":1}},"retryable":false,"debug":null},"request_id":"1"}
+> {"args":{"sync":["never"]},"kind":"ui.maintenance.run","request_id":"2"}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.maintenance.run sync must be never, if_enabled, or always","hint":null,"details":{"sync":["never"]},"retryable":false,"debug":null},"request_id":"2"}
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}

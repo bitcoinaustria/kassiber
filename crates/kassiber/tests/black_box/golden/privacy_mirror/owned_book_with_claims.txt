@@ -1,0 +1,486 @@
+# offline=false
+$ --machine reports privacy-mirror
+exit 0
+--- stdout
+{
+  "kind": "reports.privacy-mirror",
+  "schema_version": 1,
+  "data": {
+    "payload_schema_version": 2,
+    "observer": "public",
+    "local_only": true,
+    "read_only": true,
+    "advisory_only": true,
+    "redaction": "ai_export_safe",
+    "investigation": {
+      "query": {
+… [9874 bytes, 312 lines fnv128 f00b1235327a0b8b260f498a8d1f76e9]
+=== book changes after the step
+- (116 tables, 96 empty)
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000001" | node_id=t:"bitcoin:main:record:out"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000001" | node_id=t:"liquid:liquidv1:record:earn"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000004" | node_id=t:"bitcoin:main:record:out"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000004" | node_id=t:"bitcoin:main:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000005" | node_id=t:"bitcoin:main:record:out"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000005" | node_id=t:"record:custody:0000000000000000000000000000000000000000000000000000000000000005"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" | node_id=t:"bitcoin:main:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0" | node_id=t:"bitcoin:main:out:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:main:out:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0" | node_id=t:"bitcoin:main:out:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:main:out:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:0" | node_id=t:"bitcoin:main:out:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:0"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:main:record:excluded" | node_id=t:"bitcoin:main:record:excluded"
+… [53783 bytes, 101 lines fnv128 5c9f97bdec2c9f2b5df77e2f4bbfcab7]
+$ --machine reports privacy-mirror
+exit 0
+--- stdout
+{
+  "kind": "reports.privacy-mirror",
+  "schema_version": 1,
+  "data": {
+    "payload_schema_version": 2,
+    "observer": "public",
+    "local_only": true,
+    "read_only": true,
+    "advisory_only": true,
+    "redaction": "ai_export_safe",
+    "investigation": {
+      "query": {
+… [9884 bytes, 312 lines fnv128 d4018ef423c1e39e8dbf430441ce2441]
+=== book changes after the step
+(unchanged)
+$ --format table reports privacy-mirror
+exit 0
+--- stdout
+surface   severity  item                  evidence_level  detail                                                                                    
+--------  --------  --------------------  --------------  ------------------------------------------------------------------------------------------
+finding   info      direct_label_match    sourced_claim   A locally imported public dataset names this subject. The claim is not verified ownership.
+finding   info      direct_label_match    sourced_claim   A locally imported public dataset names this subject. The claim is not verified ownership.
+finding   info      direct_label_match    sourced_claim   A locally imported public dataset names this subject. The claim is not verified ownership.
+coverage  info      physical_topology     partial         1/1 evaluated                                                                             
+coverage  info      ownership_hypotheses  partial         1/1 evaluated                                                                             
+coverage  info      structural_features   partial         1/2 evaluated                                                                             
+coverage  info      multi_hop_patterns    partial         1/1 evaluated                                                                             
+coverage  info      public_attribution    partial         3/3 evaluated                                                                             
+coverage  info      conditional_entropy   complete        1/1 evaluated                                                                             
+=== book changes after the step
+(unchanged)
+$ --format plain reports privacy-mirror
+exit 0
+--- stdout
+surface: finding
+severity: info
+item: direct_label_match
+evidence_level: sourced_claim
+detail: A locally imported public dataset names this subject. The claim is not verified ownership.
+
+surface: finding
+severity: info
+item: direct_label_match
+evidence_level: sourced_claim
+detail: A locally imported public dataset names this subject. The claim is not verified ownership.
+
+surface: finding
+severity: info
+item: direct_label_match
+evidence_level: sourced_claim
+detail: A locally imported public dataset names this subject. The claim is not verified ownership.
+
+surface: coverage
+severity: info
+item: physical_topology
+evidence_level: partial
+detail: 1/1 evaluated
+
+surface: coverage
+severity: info
+item: ownership_hypotheses
+evidence_level: partial
+detail: 1/1 evaluated
+
+surface: coverage
+severity: info
+item: structural_features
+evidence_level: partial
+detail: 1/2 evaluated
+
+surface: coverage
+severity: info
+item: multi_hop_patterns
+evidence_level: partial
+detail: 1/1 evaluated
+
+surface: coverage
+severity: info
+item: public_attribution
+evidence_level: partial
+detail: 3/3 evaluated
+
+surface: coverage
+severity: info
+item: conditional_entropy
+evidence_level: complete
+detail: 1/1 evaluated
+=== book changes after the step
+(unchanged)
+$ --format csv reports privacy-mirror
+exit 0
+--- stdout
+surface,severity,item,evidence_level,detail
+finding,info,direct_label_match,sourced_claim,A locally imported public dataset names this subject. The claim is not verified ownership.
+finding,info,direct_label_match,sourced_claim,A locally imported public dataset names this subject. The claim is not verified ownership.
+finding,info,direct_label_match,sourced_claim,A locally imported public dataset names this subject. The claim is not verified ownership.
+coverage,info,physical_topology,partial,1/1 evaluated
+coverage,info,ownership_hypotheses,partial,1/1 evaluated
+coverage,info,structural_features,partial,1/2 evaluated
+coverage,info,multi_hop_patterns,partial,1/1 evaluated
+coverage,info,public_attribution,partial,3/3 evaluated
+coverage,info,conditional_entropy,complete,1/1 evaluated
+=== book changes after the step
+(unchanged)
+$ --machine reports privacy-mirror --workspace Main --profile Book
+exit 0
+--- stdout
+{
+  "kind": "reports.privacy-mirror",
+  "schema_version": 1,
+  "data": {
+    "payload_schema_version": 2,
+    "observer": "public",
+    "local_only": true,
+    "read_only": true,
+    "advisory_only": true,
+    "redaction": "ai_export_safe",
+    "investigation": {
+      "query": {
+… [9888 bytes, 312 lines fnv128 d93a26b63f2467f86d50a886fcfabb5c]
+=== book changes after the step
+(unchanged)
+$ --machine reports privacy-mirror --profile absent
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "not_found",
+    "message": "Profile 'absent' not found in the selected workspace",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+=== book changes after the step
+(unchanged)
+$ daemon
+> {"kind":"ui.reports.privacy_mirror","request_id":"1"}
+< {"kind":"ui.reports.privacy_mirror","schema_version":1,"data":{"payload_schema_version":2,"observer":"public","local_only":true,"read_only":true,"advisory_only":true,"redaction":"desktop_local","investigation":{"query":{"mode":"overview",… [7055 bytes fnv128 b1ae71cdeb9ab9543332365eae098dec]
+> {"args":null,"kind":"ui.reports.privacy_mirror","request_id":"2"}
+< {"kind":"ui.reports.privacy_mirror","schema_version":1,"data":{"payload_schema_version":2,"observer":"public","local_only":true,"read_only":true,"advisory_only":true,"redaction":"desktop_local","investigation":{"query":{"mode":"overview",… [7055 bytes fnv128 b1ae64cb249ab9543332365ea8d3cc61]
+> {"args":{},"kind":"ui.reports.privacy_mirror","request_id":"3"}
+< {"kind":"ui.reports.privacy_mirror","schema_version":1,"data":{"payload_schema_version":2,"observer":"public","local_only":true,"read_only":true,"advisory_only":true,"redaction":"desktop_local","investigation":{"query":{"mode":"overview",… [7055 bytes fnv128 b1ae694cbd9ab9543332365eaaab7782]
+> {"args":"x","kind":"ui.reports.privacy_mirror","request_id":"4"}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"daemon args must be an object","hint":null,"details":{"type":"str"},"retryable":false,"debug":null},"request_id":"4"}
+> {"args":{"redacted":false,"wallet":"cold"},"kind":"ui.reports.privacy_mirror","request_id":"5"}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.reports.privacy_mirror received unsupported arguments","hint":null,"details":{"unknown":["redacted","wallet"]},"retryable":false,"debug":null},"request_id":"5"}
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the step
+(unchanged)
+# UPDATE wallet_utxos SET amount=9000 WHERE id='utxo';
+$ --machine reports privacy-mirror
+exit 0
+--- stdout
+{
+  "kind": "reports.privacy-mirror",
+  "schema_version": 1,
+  "data": {
+    "payload_schema_version": 2,
+    "observer": "public",
+    "local_only": true,
+    "read_only": true,
+    "advisory_only": true,
+    "redaction": "ai_export_safe",
+    "investigation": {
+      "query": {
+… [9888 bytes, 312 lines fnv128 561681e03653bf8bd8080be6739ca61b]
+=== book changes after the step
+- chain_index_edges: profile_id=t:"p" | id=t:"creates:d5996b1fdde4c6fa8be1b638cdb0bbd2" | source=t:"bitcoin:main:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" | target=t:"bitcoin:main:out:aaaaaaaaaaaaaaaaaaaaaaaaaaaaa… [1623 bytes fnv128 f1fcc2e5292c0dba0c5d488db35dc2a7]
+- chain_index_nodes: profile_id=t:"p" | id=t:"bitcoin:main:out:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0" | payload_json=t:"{\"amount_msat\":\"10000\",\"asset\":\"BTC\",\"chain\":\"bitcoin\",\"evidence\":[{\"level\"… [2180 bytes fnv128 99a93b15df678ed3d69c7582ddbd8008]
+- chain_index_nodes: profile_id=t:"p" | id=t:"bitcoin:main:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" | payload_json=t:"{\"amount_msat\":null,\"asset\":\"BTC\",\"chain\":\"bitcoin\",\"evidence\":[{\"level\":\"obser… [11662 bytes fnv128 95c6099252304dba718106a041f8c2e3]
+- chain_index_sources: profile_id=t:"p" | source_table=t:"wallet_utxos" | source_key=i:1 | payload_json=t:"{\"_source_key\":1,\"address\":null,\"address_index\":null,\"address_label\":null,\"amount\":10000,\"anon_history_json\":\"[]\",\"anonymity_score\":null,\"asset\":\"BTC\",\"backend_kind\":null,\"backend_name\":null,\"block_height\":null,\"block_time\":null,\"branch_index\":1,\"branch_label\":null,\"chain\":\"bitcoin\",\"confirmation_status\":\"confirmed\",\"confirmations\":null,\"excluded_from_coinjoin\":null,\"first_seen_at\":\"fixed\",\"id\":\"utxo\",\"key_state\":null,\"last_seen_at\":\"fixed\",\"network\":\"main\",\"outpoint\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0\",\"profile_id\":\"p\",\"raw_json\":\"{}\",\"script_pubkey\":\"00142222222222222222222222222222222222222222\",\"spent_at\":null,\"spent_by\":null,\"txid\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"vout\":0,\"wallet_id\":\"cold\",\"workspace_id\":\"ws\"}" | invalid_count=i:0 | rejected_count=i:0
+- chain_index_state: profile_id=t:"p" | instance_id=t:"00000000000040008000000000000001" | version=i:4 | watermark=i:33 | revision=i:1 | snapshot_id=t:"f5452d62070fa4855fafa105e94c98a7ecc36d371bd8e523cab1572f8f6e8cee" | coverage_json=t:"{\"… [1624 bytes fnv128 c39137896717b2dbe4b264227fb7d64a]
++ chain_index_edges: profile_id=t:"p" | id=t:"creates:d5996b1fdde4c6fa8be1b638cdb0bbd2" | source=t:"bitcoin:main:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" | target=t:"bitcoin:main:out:aaaaaaaaaaaaaaaaaaaaaaaaaaaaa… [1621 bytes fnv128 eb641bcede65f741f9d21c35756b6e6d]
++ chain_index_nodes: profile_id=t:"p" | id=t:"bitcoin:main:out:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0" | payload_json=t:"{\"amount_msat\":\"9000\",\"asset\":\"BTC\",\"chain\":\"bitcoin\",\"evidence\":[{\"level\":… [2178 bytes fnv128 9d0353de694ffff9f7301061b29b46b8]
++ chain_index_nodes: profile_id=t:"p" | id=t:"bitcoin:main:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" | payload_json=t:"{\"amount_msat\":null,\"asset\":\"BTC\",\"chain\":\"bitcoin\",\"evidence\":[{\"level\":\"obser… [11660 bytes fnv128 ce1d7ff0f6fe1df8a24b9a0f69f0c4ef]
++ chain_index_sources: profile_id=t:"p" | source_table=t:"wallet_utxos" | source_key=i:1 | payload_json=t:"{\"_source_key\":1,\"address\":null,\"address_index\":null,\"address_label\":null,\"amount\":9000,\"anon_history_json\":\"[]\",\"anonymity_score\":null,\"asset\":\"BTC\",\"backend_kind\":null,\"backend_name\":null,\"block_height\":null,\"block_time\":null,\"branch_index\":1,\"branch_label\":null,\"chain\":\"bitcoin\",\"confirmation_status\":\"confirmed\",\"confirmations\":null,\"excluded_from_coinjoin\":null,\"first_seen_at\":\"fixed\",\"id\":\"utxo\",\"key_state\":null,\"last_seen_at\":\"fixed\",\"network\":\"main\",\"outpoint\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0\",\"profile_id\":\"p\",\"raw_json\":\"{}\",\"script_pubkey\":\"00142222222222222222222222222222222222222222\",\"spent_at\":null,\"spent_by\":null,\"txid\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"vout\":0,\"wallet_id\":\"cold\",\"workspace_id\":\"ws\"}" | invalid_count=i:0 | rejected_count=i:0
++ chain_index_state: profile_id=t:"p" | instance_id=t:"00000000000040008000000000000001" | version=i:4 | watermark=i:34 | revision=i:2 | snapshot_id=t:"780f789e0ef57641074cc8c299b7ae6aa0921be9796e9872eb2976f077be5011" | coverage_json=t:"{\"… [1624 bytes fnv128 3f3c99e85296979cedf12e8506ae9ec6]
+… [36255 bytes, 10 lines fnv128 97a8df52ed448170a37114b901d526d9]
+# UPDATE chain_analysis_datasets SET status='revoked';
+$ daemon
+> {"kind":"ui.reports.privacy_mirror","request_id":"1"}
+< {"kind":"ui.reports.privacy_mirror","schema_version":1,"data":{"payload_schema_version":2,"observer":"public","local_only":true,"read_only":true,"advisory_only":true,"redaction":"desktop_local","investigation":{"query":{"mode":"overview",… [3430 bytes fnv128 73247a2ec36a6b4193f0387985a1420f]
+> {"args":null,"kind":"ui.reports.privacy_mirror","request_id":"2"}
+< {"kind":"ui.reports.privacy_mirror","schema_version":1,"data":{"payload_schema_version":2,"observer":"public","local_only":true,"read_only":true,"advisory_only":true,"redaction":"desktop_local","investigation":{"query":{"mode":"overview",… [3430 bytes fnv128 732475a42e6a6b4193f0387983c4973e]
+> {"args":{},"kind":"ui.reports.privacy_mirror","request_id":"3"}
+< {"kind":"ui.reports.privacy_mirror","schema_version":1,"data":{"payload_schema_version":2,"observer":"public","local_only":true,"read_only":true,"advisory_only":true,"redaction":"desktop_local","investigation":{"query":{"mode":"overview",… [3430 bytes fnv128 73247122956a6b4193f0387981ecec1d]
+> {"args":"x","kind":"ui.reports.privacy_mirror","request_id":"4"}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"daemon args must be an object","hint":null,"details":{"type":"str"},"retryable":false,"debug":null},"request_id":"4"}
+> {"args":{"redacted":false,"wallet":"cold"},"kind":"ui.reports.privacy_mirror","request_id":"5"}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.reports.privacy_mirror received unsupported arguments","hint":null,"details":{"unknown":["redacted","wallet"]},"retryable":false,"debug":null},"request_id":"5"}
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the step
+- chain_index_label_nodes: profile_id=t:"p" | label_id=t:"dataset:pack:1" | node_id=t:"bitcoin:main:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+- chain_index_label_nodes: profile_id=t:"p" | label_id=t:"dataset:pack:2" | node_id=t:"bitcoin:main:out:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0"
+- chain_index_label_nodes: profile_id=t:"p" | label_id=t:"dataset:pack:3" | node_id=t:"bitcoin:main:out:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0"
+- chain_index_labels: profile_id=t:"p" | id=t:"dataset:pack:1" | payload_json=t:"{\"accounting_authority\":false,\"attribution_method\":\"declared\",\"category\":\"service\",\"chain\":\"bitcoin\",\"cluster_defining\":false,\"confidence\":\"imported\",\"content_sha256\":\"fixture\",\"dataset_id\":\"pack\",\"dataset_status\":\"active\",\"dataset_version\":\"one\",\"evidence_level\":\"sourced_claim\",\"id\":\"dataset:pack:1\",\"label\":\"Declared entity\",\"license\":\"Local fixture\",\"network\":\"main\",\"node_ids\":[\"bitcoin:main:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"],\"revision\":1,\"source\":\"Declared source\",\"source_record\":{\"retained\":\"\\u96ea\"},\"subject\":\"tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"valid_from\":null,\"valid_until\":null,\"visibility\":\"public\"}"
+- chain_index_labels: profile_id=t:"p" | id=t:"dataset:pack:2" | payload_json=t:"{\"accounting_authority\":false,\"attribution_method\":\"declared\",\"category\":\"service\",\"chain\":\"bitcoin\",\"cluster_defining\":false,\"confidence\":\"imported\",\"content_sha256\":\"fixture\",\"dataset_id\":\"pack\",\"dataset_status\":\"active\",\"dataset_version\":\"one\",\"evidence_level\":\"sourced_claim\",\"id\":\"dataset:pack:2\",\"label\":\"Declared entity\",\"license\":\"Local fixture\",\"network\":\"main\",\"node_ids\":[\"bitcoin:main:out:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0\"],\"revision\":1,\"source\":\"Declared source\",\"source_record\":{\"retained\":\"\\u96ea\"},\"subject\":\"out:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0\",\"valid_from\":null,\"valid_until\":null,\"visibility\":\"public\"}"
+- chain_index_labels: profile_id=t:"p" | id=t:"dataset:pack:3" | payload_json=t:"{\"accounting_authority\":false,\"attribution_method\":\"declared\",\"category\":\"service\",\"chain\":\"bitcoin\",\"cluster_defining\":false,\"confidence\":\"imported\",\"content_sha256\":\"fixture\",\"dataset_id\":\"pack\",\"dataset_status\":\"active\",\"dataset_version\":\"one\",\"evidence_level\":\"sourced_claim\",\"id\":\"dataset:pack:3\",\"label\":\"Declared entity\",\"license\":\"Local fixture\",\"network\":\"main\",\"node_ids\":[\"bitcoin:main:out:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0\"],\"revision\":1,\"source\":\"Declared source\",\"source_record\":{\"retained\":\"\\u96ea\"},\"subject\":\"script:00142222222222222222222222222222222222222222\",\"valid_from\":null,\"valid_until\":null,\"visibility\":\"public\"}"
+- chain_index_state: profile_id=t:"p" | instance_id=t:"00000000000040008000000000000001" | version=i:4 | watermark=i:34 | revision=i:2 | snapshot_id=t:"780f789e0ef57641074cc8c299b7ae6aa0921be9796e9872eb2976f077be5011" | coverage_json=t:"{\"… [1624 bytes fnv128 7b98e03191916f5765aff287477a9d7c]
+- (116 tables, 88 empty)
++ chain_index_state: profile_id=t:"p" | instance_id=t:"00000000000040008000000000000001" | version=i:4 | watermark=i:35 | revision=i:3 | snapshot_id=t:"288759279caa4575e907add9b779ad1648d85d2d6ce96383c4a5e6af21497902" | coverage_json=t:"{\"… [1624 bytes fnv128 a611f48f3c8bded1e68a06b223fbacd4]
++ (116 tables, 90 empty)
+… [6362 bytes, 10 lines fnv128 61fae1bfc169f31b09cc09ccdc833719]
+# offline=true
+$ --machine reports privacy-mirror
+exit 0
+--- stdout
+{
+  "kind": "reports.privacy-mirror",
+  "schema_version": 1,
+  "data": {
+    "payload_schema_version": 2,
+    "observer": "public",
+    "local_only": true,
+    "read_only": true,
+    "advisory_only": true,
+    "redaction": "ai_export_safe",
+    "investigation": {
+      "query": {
+… [9888 bytes, 312 lines fnv128 35f66125291baa620845b8ff770432db]
+=== book changes after the step
+- (116 tables, 96 empty)
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000001" | node_id=t:"bitcoin:main:record:out"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000001" | node_id=t:"liquid:liquidv1:record:earn"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000004" | node_id=t:"bitcoin:main:record:out"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000004" | node_id=t:"bitcoin:main:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000005" | node_id=t:"bitcoin:main:record:out"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000005" | node_id=t:"record:custody:0000000000000000000000000000000000000000000000000000000000000005"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" | node_id=t:"bitcoin:main:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0" | node_id=t:"bitcoin:main:out:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:main:out:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0" | node_id=t:"bitcoin:main:out:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:main:out:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:0" | node_id=t:"bitcoin:main:out:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:0"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:main:record:excluded" | node_id=t:"bitcoin:main:record:excluded"
+… [53783 bytes, 101 lines fnv128 5c9f97bdec2c9f2b5df77e2f4bbfcab7]
+$ --machine reports privacy-mirror
+exit 0
+--- stdout
+{
+  "kind": "reports.privacy-mirror",
+  "schema_version": 1,
+  "data": {
+    "payload_schema_version": 2,
+    "observer": "public",
+    "local_only": true,
+    "read_only": true,
+    "advisory_only": true,
+    "redaction": "ai_export_safe",
+    "investigation": {
+      "query": {
+… [9888 bytes, 312 lines fnv128 56aed41ae45f70d9b370dbc69bb2655f]
+=== book changes after the step
+(unchanged)
+$ --format table reports privacy-mirror
+exit 0
+--- stdout
+surface   severity  item                  evidence_level  detail                                                                                    
+--------  --------  --------------------  --------------  ------------------------------------------------------------------------------------------
+finding   info      direct_label_match    sourced_claim   A locally imported public dataset names this subject. The claim is not verified ownership.
+finding   info      direct_label_match    sourced_claim   A locally imported public dataset names this subject. The claim is not verified ownership.
+finding   info      direct_label_match    sourced_claim   A locally imported public dataset names this subject. The claim is not verified ownership.
+coverage  info      physical_topology     partial         1/1 evaluated                                                                             
+coverage  info      ownership_hypotheses  partial         1/1 evaluated                                                                             
+coverage  info      structural_features   partial         1/2 evaluated                                                                             
+coverage  info      multi_hop_patterns    partial         1/1 evaluated                                                                             
+coverage  info      public_attribution    partial         3/3 evaluated                                                                             
+coverage  info      conditional_entropy   complete        1/1 evaluated                                                                             
+=== book changes after the step
+(unchanged)
+$ --format plain reports privacy-mirror
+exit 0
+--- stdout
+surface: finding
+severity: info
+item: direct_label_match
+evidence_level: sourced_claim
+detail: A locally imported public dataset names this subject. The claim is not verified ownership.
+
+surface: finding
+severity: info
+item: direct_label_match
+evidence_level: sourced_claim
+detail: A locally imported public dataset names this subject. The claim is not verified ownership.
+
+surface: finding
+severity: info
+item: direct_label_match
+evidence_level: sourced_claim
+detail: A locally imported public dataset names this subject. The claim is not verified ownership.
+
+surface: coverage
+severity: info
+item: physical_topology
+evidence_level: partial
+detail: 1/1 evaluated
+
+surface: coverage
+severity: info
+item: ownership_hypotheses
+evidence_level: partial
+detail: 1/1 evaluated
+
+surface: coverage
+severity: info
+item: structural_features
+evidence_level: partial
+detail: 1/2 evaluated
+
+surface: coverage
+severity: info
+item: multi_hop_patterns
+evidence_level: partial
+detail: 1/1 evaluated
+
+surface: coverage
+severity: info
+item: public_attribution
+evidence_level: partial
+detail: 3/3 evaluated
+
+surface: coverage
+severity: info
+item: conditional_entropy
+evidence_level: complete
+detail: 1/1 evaluated
+=== book changes after the step
+(unchanged)
+$ --format csv reports privacy-mirror
+exit 0
+--- stdout
+surface,severity,item,evidence_level,detail
+finding,info,direct_label_match,sourced_claim,A locally imported public dataset names this subject. The claim is not verified ownership.
+finding,info,direct_label_match,sourced_claim,A locally imported public dataset names this subject. The claim is not verified ownership.
+finding,info,direct_label_match,sourced_claim,A locally imported public dataset names this subject. The claim is not verified ownership.
+coverage,info,physical_topology,partial,1/1 evaluated
+coverage,info,ownership_hypotheses,partial,1/1 evaluated
+coverage,info,structural_features,partial,1/2 evaluated
+coverage,info,multi_hop_patterns,partial,1/1 evaluated
+coverage,info,public_attribution,partial,3/3 evaluated
+coverage,info,conditional_entropy,complete,1/1 evaluated
+=== book changes after the step
+(unchanged)
+$ --machine reports privacy-mirror --workspace Main --profile Book
+exit 0
+--- stdout
+{
+  "kind": "reports.privacy-mirror",
+  "schema_version": 1,
+  "data": {
+    "payload_schema_version": 2,
+    "observer": "public",
+    "local_only": true,
+    "read_only": true,
+    "advisory_only": true,
+    "redaction": "ai_export_safe",
+    "investigation": {
+      "query": {
+… [9888 bytes, 312 lines fnv128 0731256ac72a1943362b988739ba13c7]
+=== book changes after the step
+(unchanged)
+$ --machine reports privacy-mirror --profile absent
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "not_found",
+    "message": "Profile 'absent' not found in the selected workspace",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+=== book changes after the step
+(unchanged)
+$ daemon
+> {"kind":"ui.reports.privacy_mirror","request_id":"1"}
+< {"kind":"ui.reports.privacy_mirror","schema_version":1,"data":{"payload_schema_version":2,"observer":"public","local_only":true,"read_only":true,"advisory_only":true,"redaction":"desktop_local","investigation":{"query":{"mode":"overview",… [7055 bytes fnv128 b1ae71cdeb9ab9543332365eae098dec]
+> {"args":null,"kind":"ui.reports.privacy_mirror","request_id":"2"}
+< {"kind":"ui.reports.privacy_mirror","schema_version":1,"data":{"payload_schema_version":2,"observer":"public","local_only":true,"read_only":true,"advisory_only":true,"redaction":"desktop_local","investigation":{"query":{"mode":"overview",… [7055 bytes fnv128 b1ae64cb249ab9543332365ea8d3cc61]
+> {"args":{},"kind":"ui.reports.privacy_mirror","request_id":"3"}
+< {"kind":"ui.reports.privacy_mirror","schema_version":1,"data":{"payload_schema_version":2,"observer":"public","local_only":true,"read_only":true,"advisory_only":true,"redaction":"desktop_local","investigation":{"query":{"mode":"overview",… [7055 bytes fnv128 b1ae694cbd9ab9543332365eaaab7782]
+> {"args":"x","kind":"ui.reports.privacy_mirror","request_id":"4"}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"daemon args must be an object","hint":null,"details":{"type":"str"},"retryable":false,"debug":null},"request_id":"4"}
+> {"args":{"redacted":false,"wallet":"cold"},"kind":"ui.reports.privacy_mirror","request_id":"5"}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.reports.privacy_mirror received unsupported arguments","hint":null,"details":{"unknown":["redacted","wallet"]},"retryable":false,"debug":null},"request_id":"5"}
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the step
+(unchanged)
+# UPDATE wallet_utxos SET amount=9000 WHERE id='utxo';
+$ --machine reports privacy-mirror
+exit 0
+--- stdout
+{
+  "kind": "reports.privacy-mirror",
+  "schema_version": 1,
+  "data": {
+    "payload_schema_version": 2,
+    "observer": "public",
+    "local_only": true,
+    "read_only": true,
+    "advisory_only": true,
+    "redaction": "ai_export_safe",
+    "investigation": {
+      "query": {
+… [9888 bytes, 312 lines fnv128 dfdeb08d85739515b421462286d76058]
+=== book changes after the step
+- chain_index_edges: profile_id=t:"p" | id=t:"creates:d5996b1fdde4c6fa8be1b638cdb0bbd2" | source=t:"bitcoin:main:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" | target=t:"bitcoin:main:out:aaaaaaaaaaaaaaaaaaaaaaaaaaaaa… [1623 bytes fnv128 f1fcc2e5292c0dba0c5d488db35dc2a7]
+- chain_index_nodes: profile_id=t:"p" | id=t:"bitcoin:main:out:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0" | payload_json=t:"{\"amount_msat\":\"10000\",\"asset\":\"BTC\",\"chain\":\"bitcoin\",\"evidence\":[{\"level\"… [2180 bytes fnv128 99a93b15df678ed3d69c7582ddbd8008]
+- chain_index_nodes: profile_id=t:"p" | id=t:"bitcoin:main:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" | payload_json=t:"{\"amount_msat\":null,\"asset\":\"BTC\",\"chain\":\"bitcoin\",\"evidence\":[{\"level\":\"obser… [11662 bytes fnv128 95c6099252304dba718106a041f8c2e3]
+- chain_index_sources: profile_id=t:"p" | source_table=t:"wallet_utxos" | source_key=i:1 | payload_json=t:"{\"_source_key\":1,\"address\":null,\"address_index\":null,\"address_label\":null,\"amount\":10000,\"anon_history_json\":\"[]\",\"anonymity_score\":null,\"asset\":\"BTC\",\"backend_kind\":null,\"backend_name\":null,\"block_height\":null,\"block_time\":null,\"branch_index\":1,\"branch_label\":null,\"chain\":\"bitcoin\",\"confirmation_status\":\"confirmed\",\"confirmations\":null,\"excluded_from_coinjoin\":null,\"first_seen_at\":\"fixed\",\"id\":\"utxo\",\"key_state\":null,\"last_seen_at\":\"fixed\",\"network\":\"main\",\"outpoint\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0\",\"profile_id\":\"p\",\"raw_json\":\"{}\",\"script_pubkey\":\"00142222222222222222222222222222222222222222\",\"spent_at\":null,\"spent_by\":null,\"txid\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"vout\":0,\"wallet_id\":\"cold\",\"workspace_id\":\"ws\"}" | invalid_count=i:0 | rejected_count=i:0
+- chain_index_state: profile_id=t:"p" | instance_id=t:"00000000000040008000000000000001" | version=i:4 | watermark=i:33 | revision=i:1 | snapshot_id=t:"f5452d62070fa4855fafa105e94c98a7ecc36d371bd8e523cab1572f8f6e8cee" | coverage_json=t:"{\"… [1624 bytes fnv128 c39137896717b2dbe4b264227fb7d64a]
++ chain_index_edges: profile_id=t:"p" | id=t:"creates:d5996b1fdde4c6fa8be1b638cdb0bbd2" | source=t:"bitcoin:main:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" | target=t:"bitcoin:main:out:aaaaaaaaaaaaaaaaaaaaaaaaaaaaa… [1621 bytes fnv128 eb641bcede65f741f9d21c35756b6e6d]
++ chain_index_nodes: profile_id=t:"p" | id=t:"bitcoin:main:out:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0" | payload_json=t:"{\"amount_msat\":\"9000\",\"asset\":\"BTC\",\"chain\":\"bitcoin\",\"evidence\":[{\"level\":… [2178 bytes fnv128 9d0353de694ffff9f7301061b29b46b8]
++ chain_index_nodes: profile_id=t:"p" | id=t:"bitcoin:main:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" | payload_json=t:"{\"amount_msat\":null,\"asset\":\"BTC\",\"chain\":\"bitcoin\",\"evidence\":[{\"level\":\"obser… [11660 bytes fnv128 ce1d7ff0f6fe1df8a24b9a0f69f0c4ef]
++ chain_index_sources: profile_id=t:"p" | source_table=t:"wallet_utxos" | source_key=i:1 | payload_json=t:"{\"_source_key\":1,\"address\":null,\"address_index\":null,\"address_label\":null,\"amount\":9000,\"anon_history_json\":\"[]\",\"anonymity_score\":null,\"asset\":\"BTC\",\"backend_kind\":null,\"backend_name\":null,\"block_height\":null,\"block_time\":null,\"branch_index\":1,\"branch_label\":null,\"chain\":\"bitcoin\",\"confirmation_status\":\"confirmed\",\"confirmations\":null,\"excluded_from_coinjoin\":null,\"first_seen_at\":\"fixed\",\"id\":\"utxo\",\"key_state\":null,\"last_seen_at\":\"fixed\",\"network\":\"main\",\"outpoint\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0\",\"profile_id\":\"p\",\"raw_json\":\"{}\",\"script_pubkey\":\"00142222222222222222222222222222222222222222\",\"spent_at\":null,\"spent_by\":null,\"txid\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"vout\":0,\"wallet_id\":\"cold\",\"workspace_id\":\"ws\"}" | invalid_count=i:0 | rejected_count=i:0
++ chain_index_state: profile_id=t:"p" | instance_id=t:"00000000000040008000000000000001" | version=i:4 | watermark=i:34 | revision=i:2 | snapshot_id=t:"780f789e0ef57641074cc8c299b7ae6aa0921be9796e9872eb2976f077be5011" | coverage_json=t:"{\"… [1624 bytes fnv128 3f3c99e85296979cedf12e8506ae9ec6]
+… [36255 bytes, 10 lines fnv128 97a8df52ed448170a37114b901d526d9]
+# UPDATE chain_analysis_datasets SET status='revoked';
+$ daemon
+> {"kind":"ui.reports.privacy_mirror","request_id":"1"}
+< {"kind":"ui.reports.privacy_mirror","schema_version":1,"data":{"payload_schema_version":2,"observer":"public","local_only":true,"read_only":true,"advisory_only":true,"redaction":"desktop_local","investigation":{"query":{"mode":"overview",… [3430 bytes fnv128 73247a2ec36a6b4193f0387985a1420f]
+> {"args":null,"kind":"ui.reports.privacy_mirror","request_id":"2"}
+< {"kind":"ui.reports.privacy_mirror","schema_version":1,"data":{"payload_schema_version":2,"observer":"public","local_only":true,"read_only":true,"advisory_only":true,"redaction":"desktop_local","investigation":{"query":{"mode":"overview",… [3430 bytes fnv128 732475a42e6a6b4193f0387983c4973e]
+> {"args":{},"kind":"ui.reports.privacy_mirror","request_id":"3"}
+< {"kind":"ui.reports.privacy_mirror","schema_version":1,"data":{"payload_schema_version":2,"observer":"public","local_only":true,"read_only":true,"advisory_only":true,"redaction":"desktop_local","investigation":{"query":{"mode":"overview",… [3430 bytes fnv128 73247122956a6b4193f0387981ecec1d]
+> {"args":"x","kind":"ui.reports.privacy_mirror","request_id":"4"}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"daemon args must be an object","hint":null,"details":{"type":"str"},"retryable":false,"debug":null},"request_id":"4"}
+> {"args":{"redacted":false,"wallet":"cold"},"kind":"ui.reports.privacy_mirror","request_id":"5"}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.reports.privacy_mirror received unsupported arguments","hint":null,"details":{"unknown":["redacted","wallet"]},"retryable":false,"debug":null},"request_id":"5"}
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the step
+- chain_index_label_nodes: profile_id=t:"p" | label_id=t:"dataset:pack:1" | node_id=t:"bitcoin:main:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+- chain_index_label_nodes: profile_id=t:"p" | label_id=t:"dataset:pack:2" | node_id=t:"bitcoin:main:out:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0"
+- chain_index_label_nodes: profile_id=t:"p" | label_id=t:"dataset:pack:3" | node_id=t:"bitcoin:main:out:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0"
+- chain_index_labels: profile_id=t:"p" | id=t:"dataset:pack:1" | payload_json=t:"{\"accounting_authority\":false,\"attribution_method\":\"declared\",\"category\":\"service\",\"chain\":\"bitcoin\",\"cluster_defining\":false,\"confidence\":\"imported\",\"content_sha256\":\"fixture\",\"dataset_id\":\"pack\",\"dataset_status\":\"active\",\"dataset_version\":\"one\",\"evidence_level\":\"sourced_claim\",\"id\":\"dataset:pack:1\",\"label\":\"Declared entity\",\"license\":\"Local fixture\",\"network\":\"main\",\"node_ids\":[\"bitcoin:main:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"],\"revision\":1,\"source\":\"Declared source\",\"source_record\":{\"retained\":\"\\u96ea\"},\"subject\":\"tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"valid_from\":null,\"valid_until\":null,\"visibility\":\"public\"}"
+- chain_index_labels: profile_id=t:"p" | id=t:"dataset:pack:2" | payload_json=t:"{\"accounting_authority\":false,\"attribution_method\":\"declared\",\"category\":\"service\",\"chain\":\"bitcoin\",\"cluster_defining\":false,\"confidence\":\"imported\",\"content_sha256\":\"fixture\",\"dataset_id\":\"pack\",\"dataset_status\":\"active\",\"dataset_version\":\"one\",\"evidence_level\":\"sourced_claim\",\"id\":\"dataset:pack:2\",\"label\":\"Declared entity\",\"license\":\"Local fixture\",\"network\":\"main\",\"node_ids\":[\"bitcoin:main:out:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0\"],\"revision\":1,\"source\":\"Declared source\",\"source_record\":{\"retained\":\"\\u96ea\"},\"subject\":\"out:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0\",\"valid_from\":null,\"valid_until\":null,\"visibility\":\"public\"}"
+- chain_index_labels: profile_id=t:"p" | id=t:"dataset:pack:3" | payload_json=t:"{\"accounting_authority\":false,\"attribution_method\":\"declared\",\"category\":\"service\",\"chain\":\"bitcoin\",\"cluster_defining\":false,\"confidence\":\"imported\",\"content_sha256\":\"fixture\",\"dataset_id\":\"pack\",\"dataset_status\":\"active\",\"dataset_version\":\"one\",\"evidence_level\":\"sourced_claim\",\"id\":\"dataset:pack:3\",\"label\":\"Declared entity\",\"license\":\"Local fixture\",\"network\":\"main\",\"node_ids\":[\"bitcoin:main:out:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0\"],\"revision\":1,\"source\":\"Declared source\",\"source_record\":{\"retained\":\"\\u96ea\"},\"subject\":\"script:00142222222222222222222222222222222222222222\",\"valid_from\":null,\"valid_until\":null,\"visibility\":\"public\"}"
+- chain_index_state: profile_id=t:"p" | instance_id=t:"00000000000040008000000000000001" | version=i:4 | watermark=i:34 | revision=i:2 | snapshot_id=t:"780f789e0ef57641074cc8c299b7ae6aa0921be9796e9872eb2976f077be5011" | coverage_json=t:"{\"… [1624 bytes fnv128 7b98e03191916f5765aff287477a9d7c]
+- (116 tables, 88 empty)
++ chain_index_state: profile_id=t:"p" | instance_id=t:"00000000000040008000000000000001" | version=i:4 | watermark=i:35 | revision=i:3 | snapshot_id=t:"288759279caa4575e907add9b779ad1648d85d2d6ce96383c4a5e6af21497902" | coverage_json=t:"{\"… [1624 bytes fnv128 a611f48f3c8bded1e68a06b223fbacd4]
++ (116 tables, 90 empty)
+… [6362 bytes, 10 lines fnv128 61fae1bfc169f31b09cc09ccdc833719]

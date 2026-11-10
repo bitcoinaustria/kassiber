@@ -1,0 +1,5 @@
+$ daemon
+> {"args":{},"kind":"ui.report.blockers","request_id":"0"}
+< {"kind":"ui.report.blockers","schema_version":1,"data":{"ready":false,"blockers":[{"id":"sync_failed","severity":"blocking","title":"Connection refresh failed","detail":"3 source refresh failure(s) must be repaired before final reports ca… [11133 bytes fnv128 3b0dd6f518d25519f6d0b445283dea09]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}

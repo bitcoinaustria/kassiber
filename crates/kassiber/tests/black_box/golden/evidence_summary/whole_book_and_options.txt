@@ -1,0 +1,19 @@
+$ daemon
+> {"kind":"ui.audit.evidence.summary","request_id":"0"}
+< {"kind":"ui.audit.evidence.summary","schema_version":1,"data":{"schema_version":2,"workspace":{"id":"w","label":"Main"},"profile":{"id":"p","label":"Book","cost_basis_pool_scope":"global"},"scope":{"type":"active_profile"},"journal_freshn… [41321 bytes fnv128 99eb995cc9eeac7e38178446981a2d43]
+> {"args":null,"kind":"ui.audit.evidence.summary","request_id":"1"}
+< {"kind":"ui.audit.evidence.summary","schema_version":1,"data":{"schema_version":2,"workspace":{"id":"w","label":"Main"},"profile":{"id":"p","label":"Book","cost_basis_pool_scope":"global"},"scope":{"type":"active_profile"},"journal_freshn… [41321 bytes fnv128 99eb9df162eeac7e3817844699fd1c9c]
+> {"args":{},"kind":"ui.audit.evidence.summary","request_id":"2"}
+< {"kind":"ui.audit.evidence.summary","schema_version":1,"data":{"schema_version":2,"workspace":{"id":"w","label":"Main"},"profile":{"id":"p","label":"Book","cost_basis_pool_scope":"global"},"scope":{"type":"active_profile"},"journal_freshn… [41321 bytes fnv128 99eb90519beeac7e3817844694671251]
+> {"args":{"unknown":true},"kind":"ui.audit.evidence.summary","request_id":"3"}
+< {"kind":"ui.audit.evidence.summary","schema_version":1,"data":{"schema_version":2,"workspace":{"id":"w","label":"Main"},"profile":{"id":"p","label":"Book","cost_basis_pool_scope":"global"},"scope":{"type":"active_profile"},"journal_freshn… [41321 bytes fnv128 99eb94d234eeac7e38178446963d8272]
+> {"args":{"include_journal_state":false},"kind":"ui.audit.evidence.summary","request_id":"4"}
+< {"kind":"ui.audit.evidence.summary","schema_version":1,"data":{"schema_version":2,"workspace":{"id":"w","label":"Main"},"profile":{"id":"p","label":"Book","cost_basis_pool_scope":"global"},"scope":{"type":"active_profile"},"journal_freshn… [38170 bytes fnv128 468ccc0040d4cf31c24fa73f6d982d70]
+> {"args":{"include_review_state":false},"kind":"ui.audit.evidence.summary","request_id":"5"}
+< {"kind":"ui.audit.evidence.summary","schema_version":1,"data":{"schema_version":2,"workspace":{"id":"w","label":"Main"},"profile":{"id":"p","label":"Book","cost_basis_pool_scope":"global"},"scope":{"type":"active_profile"},"journal_freshn… [37449 bytes fnv128 2365a74ed53eb396473a653f098b5ea4]
+> {"args":{"include_edit_history":true},"kind":"ui.audit.evidence.summary","request_id":"6"}
+< {"kind":"ui.audit.evidence.summary","schema_version":1,"data":{"schema_version":2,"workspace":{"id":"w","label":"Main"},"profile":{"id":"p","label":"Book","cost_basis_pool_scope":"global"},"scope":{"type":"active_profile"},"journal_freshn… [44033 bytes fnv128 1c4488810fb163196990d5930690a1b5]
+> {"args":{"include_edit_history":true,"include_journal_state":false,"include_review_state":false},"kind":"ui.audit.evidence.summary","request_id":"7"}
+< {"kind":"ui.audit.evidence.summary","schema_version":1,"data":{"schema_version":2,"workspace":{"id":"w","label":"Main"},"profile":{"id":"p","label":"Book","cost_basis_pool_scope":"global"},"scope":{"type":"active_profile"},"journal_freshn… [37010 bytes fnv128 561e4d239aaa79035d23e0f9b2c0ae7d]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
