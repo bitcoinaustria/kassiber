@@ -1,7 +1,7 @@
 /**
  * Daemon/supervisor log bridge.
  *
- * Folds the Python daemon's RAM log ring (`ui.logs.snapshot`) and the Rust
+ * Folds the daemon's RAM log ring (`ui.logs.snapshot`) and the Rust
  * supervisor's lifecycle ring (`daemon_lifecycle_snapshot`) into the webview
  * log ring so the Logs screen shows all three layers in one place. RAM-only
  * on every side; the transport wrapper and the daemon both skip logging the

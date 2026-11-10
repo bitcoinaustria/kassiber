@@ -382,8 +382,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.connections.btcpay.discover",
     "ui.connections.btcpay.key_guide",
     "ui.connections.btcpay.test",
-    // Rust only (docs/reference/exchange-desktop.md); the Python daemon
-    // refuses them and the desktop explains that.
+    // Exchange connections: docs/reference/exchange-desktop.md.
     "ui.connections.exchange.status",
     "ui.connections.exchange.test",
     "ui.connections.exchange.create",
@@ -735,9 +734,7 @@ async fn daemon_invoke(
                     Ok(envelope) => envelope,
                     Err(error) => error_envelope(
                         "daemon_protocol_error",
-                        format!(
-                            "Python daemon response did not match the envelope contract: {error}"
-                        ),
+                        format!("Daemon response did not match the envelope contract: {error}"),
                         Some("Check daemon smoke tests before wiring more UI kinds."),
                         None,
                         task_request_id.clone(),
@@ -1542,7 +1539,7 @@ async fn touch_id_unlock_passphrase_command(
                 }
                 attach_secret_store_policy_status(&mut response);
                 serde_json::from_value(response).map_err(|error| {
-                    format!("Python daemon response did not match the envelope contract: {error}")
+                    format!("Daemon response did not match the envelope contract: {error}")
                 })
             }
             Err(error) => Ok(supervisor_error_envelope(error, None)),
@@ -5531,7 +5528,7 @@ mod tests {
     #[test]
     fn wallet_detail_daemon_kinds_are_in_allowlist() {
         // ConnectionDetail.tsx reads wallet-detail panes through these daemon
-        // kinds. Missing entries fail at the Tauri shell before the Python
+        // kinds. Missing entries fail at the Tauri shell before the
         // daemon can return the feature payload.
         let required: &[&str] = &["ui.wallets.utxos"];
         for kind in required {

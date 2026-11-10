@@ -523,7 +523,7 @@ export function NetworkStatusIndicator({
     const generation = health.generation;
     health.setChecking(true);
     const results: Array<[string, ConnectionHealthRecord]> = [];
-    // The Python daemon currently executes foreground requests serially. Send
+    // The daemon currently executes foreground requests serially. Send
     // probes one at a time so later probes do not spend their supervisor
     // timeout waiting behind earlier network calls.
     for (const row of rows) {

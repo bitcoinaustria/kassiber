@@ -7,24 +7,22 @@ per line from stdin, and writes one JSON envelope per line to stdout.
 Start it directly for development:
 
 ```bash
-python -m kassiber --data-root /tmp/kassiber-demo/data daemon
+target/debug/kassiber --data-root /tmp/kassiber-demo/data daemon
 ```
 
 The daemon bootstraps the normal Kassiber runtime: it creates the state
 layout if needed, opens the SQLite database, and serves status from that
 local store.
 
-The Tauri supervisor starts the same command. In development it prefers the
-repo-local `.venv/bin/python`, then `.venv\Scripts\python.exe` on Windows,
-then `python3`. Set `KASSIBER_PYTHON=/path/to/python` to override the Python
-executable, or `KASSIBER_REPO_ROOT=/path/to/checkout` when the development
-binary should run against a different checkout.
-
-Packaged prerelease desktop builds bundle the Rust `kassiber` binary as their
-sidecar ([Rust packaging](rust-packaging.md))
-and prefer that bundled executable before the development Python fallback when
-starting the daemon. `KASSIBER_PYTHON` remains the highest-priority override
-for daemon startup and installed-app CLI forwarding during debugging.
+The Tauri supervisor starts the same command with the Rust `kassiber`
+binary. `KASSIBER_BIN=/path/to/kassiber` overrides it for daemon startup and
+installed-app CLI forwarding during debugging. Otherwise packaged desktop
+builds start the bundled sidecar ([Rust packaging](rust-packaging.md)).
+Debug builds of the shell (`pnpm tauri:dev`) then fall back to the checkout's
+`target/release/kassiber`, then `target/debug/kassiber`;
+`KASSIBER_REPO_ROOT=/path/to/checkout` points them at a different checkout.
+With none of these the supervisor refuses with `daemon_binary_missing`; there
+is no Python fallback.
 
 The first record is `daemon.ready`. Its `data` includes `version` and
 `supported_kinds`; read that payload for the running daemon's capability list.

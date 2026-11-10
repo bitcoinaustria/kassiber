@@ -8,7 +8,7 @@
 
 export const DEFAULT_OPEN_COST_SAT = 2_500;
 
-// Wallet kinds the Python daemon treats as Lightning nodes. The UI
+// Wallet kinds the daemon treats as Lightning nodes. The UI
 // catalog uses `core-ln` (hyphen) for display while the wallets table
 // stores `coreln`; both spellings are accepted across the boundary.
 export const LIGHTNING_CONNECTION_KINDS: ReadonlySet<string> = new Set([

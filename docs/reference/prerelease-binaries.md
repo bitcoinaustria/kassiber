@@ -282,8 +282,8 @@ macOS `.app` bundles also include `Contents/Resources/bin/kassiber`, a stable
 launcher that the Homebrew cask links directly with its `binary` stanza. A
 `kassiber-cli` formula covers CLI-only installs; see [Homebrew](homebrew.md).
 
-`KASSIBER_PYTHON` remains available as an intentional debug override for daemon
-startup and installed-app CLI forwarding.
+`KASSIBER_BIN` is the intentional debug override for daemon startup and
+installed-app CLI forwarding.
 
 CLI-only archives are intentionally portable: extract them and place the
 `kassiber` executable in an existing PATH directory, or invoke it by path.
