@@ -59,7 +59,7 @@ write_ignore() {
   {
     [ -f .gitignore ] && awk -v b="$begin" -v e="$end" '$0==b{skip=1} !skip{print} $0==e{skip=0}' .gitignore
     printf '%s\n/.test-data/\n' "$begin"
-    grep -E '^[0-9a-f]{40} ' "$lock" | cut -d' ' -f2- | sed 's|^|/|'
+    printf '%s\n' "$entries" | sed '/^$/d' | cut -d' ' -f2- | sed 's|^|/|'
     printf '%s\n' "$end"
   } > .gitignore.new
   mv .gitignore.new .gitignore
@@ -93,7 +93,7 @@ if [ "$mode" = publish ]; then
   index=$(mktemp)
   trap 'rm -f "$index"' EXIT
   if [ -n "$parent" ]; then GIT_INDEX_FILE=$index git read-tree "$parent"; else GIT_INDEX_FILE=$index git read-tree --empty; fi
-  { printf '%s\n' "$entries" | cut -d' ' -f2-; printf '%s\n' "$@"; } | sed '/^$/d' | sort -u > "$index.paths"
+  { printf '%s\n' "$entries" | cut -d' ' -f2-; printf '%s\n' ${@+"$@"}; } | sed '/^$/d' | sort -u > "$index.paths"
   while IFS= read -r path; do
     [ -f "$path" ] || { echo "cannot publish $path: no such file" >&2; exit 1; }
     blob=$(git hash-object -w "$path")
@@ -127,14 +127,12 @@ git cat-file -e "$commit^{commit}" 2>/dev/null ||
 
 missing=$(stale)
 if [ -n "$missing" ]; then
-  declare -A pinned=()
-  while IFS= read -r line; do
-    pinned[${line#* }]=${line%% *}
-  done < <(git ls-tree -r "$commit" | awk -F'\t' '{split($1, meta, " "); print meta[3] " " $2}')
+  # No associative arrays here: macOS runners still ship bash 3.2.
   while IFS= read -r path; do
     want=$(printf '%s\n' "$entries" | awk -v p="$path" '{blob=$1; $1=""; sub(/^ /, ""); if ($0 == p) print blob}')
-    [ "${pinned[$path]:-}" = "$want" ] ||
-      { echo "$lock pins $path at $want, but $commit holds ${pinned[$path]:-nothing}" >&2; exit 1; }
+    held=$(git rev-parse -q --verify "$commit:$path" 2>/dev/null || true)
+    [ "$held" = "$want" ] ||
+      { echo "$lock pins $path at $want, but $commit holds ${held:-nothing}" >&2; exit 1; }
     mkdir -p "$(dirname "$path")"
     git cat-file blob "$want" > "$path.fetch-tmp"
     mv "$path.fetch-tmp" "$path"

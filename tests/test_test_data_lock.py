@@ -40,7 +40,7 @@ def test_lock_names_a_branch_a_commit_and_sorted_unique_files():
     assert header.get("branch") == "t3code/test-data"
     assert re.fullmatch(r"[0-9a-f]{40}", header.get("commit", ""))
     paths = [path for _blob, path in entries]
-    assert paths, "the lock pins no files"
+    # An empty lock is valid: files a build reads stay in the tree.
     assert paths == sorted(set(paths))
     assert all(not path.startswith("/") and ".." not in path.split("/") for path in paths)
 
@@ -64,6 +64,15 @@ def test_fetch_script_is_executable_and_uses_git_only():
     assert "tests/test-data.lock" in text
     for tool in ("curl", "wget", "pip ", "uv ", "npm "):
         assert tool not in text
+
+
+def test_fetch_script_runs_on_the_bash_macos_ships():
+    # macOS runners and Macs ship bash 3.2: no associative arrays, mapfile or
+    # case-changing expansions, and "$@" must not trip `set -u` when empty.
+    text = SCRIPT.read_text(encoding="utf-8")
+    for construct in ("declare -A", "local -A", "mapfile", "readarray", ",,}", "^^}", "local -n"):
+        assert construct not in text, construct
+    assert re.search(r'(?<![{+])"\$@"', text) is None
 
 
 def test_ci_fetches_the_data_before_tests_and_rust_builds():
