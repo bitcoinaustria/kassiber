@@ -6,12 +6,16 @@
 #
 # Every Rust executable the suite starts (KASSIBER_RUST_BIN, KASSIBER_TEST_CLI,
 # the probes it names by variable, and the cargo examples under
-# target/debug/examples) runs behind session-shim. Build the examples first:
-#   cargo build --examples -p kassiber-wallets ... (see the plan's recording step) The suite runs in a user and mount namespace with RUN_DIR (an
-# empty disposable directory) bound at /mnt, its basetemp and TMPDIR under
-# /mnt, so session-replay can recreate the very same paths. Build first:
+# target/debug/examples) runs behind session-shim. The suite runs in a user
+# and mount namespace with RUN_DIR (an empty disposable directory) bound at
+# /mnt, its basetemp and TMPDIR under /mnt, so session-replay can recreate
+# the very same paths. Build first, all with kassiber-store/test-hooks so
+# every process takes its recorded SQLite seed:
 #   cargo build -p kassiber --features test-harness
+#   cargo build --examples -p kassiber -p kassiber-wallets -p kassiber-journals ...
+#     --features kassiber-store/test-hooks,<each package>/test-harness
 #   cargo build -p kassiber-session-replay
+# Run it under the fast-io wrapper; recordings never need durable writes.
 # The junit report lands in RECORD_DIR; keep only sessions of passing tests.
 set -euo pipefail
 ROOT="$(git rev-parse --show-toplevel)"
