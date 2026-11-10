@@ -71,7 +71,8 @@
     "find": "journals: !request.wallets_sync && included(request.journals, \"journals\"),",
     "replace": "journals: !request.wallets_sync && request.journals != Some(false),",
     "expect_failing": [
-      "tests/test_rust_freshness_journals.py::test_default_refresh_policy_and_coalesced_pairing[disabled-ui.freshness.run]"
+      "tests/test_rust_freshness_journals.py::test_default_refresh_policy_and_coalesced_pairing[disabled-ui.freshness.run]",
+      "test_default_refresh_policy_and_coalesced_pairing"
     ],
     "rule": "Implicit journal refresh honors the saved journal source policy."
   },

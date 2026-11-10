@@ -7,7 +7,8 @@
 //! the book's canonical snapshot afterwards (every nonempty table, rows in
 //! the parity tests' sort order). A replay restores the book at a fresh
 //! path, runs the same fixture code in process, and requires the identical
-//! line and snapshot. Book schemas live once in `schemas.json`, by digest.
+//! line and snapshot. Book schemas live once in `schemas.json`, starting
+//! books and network tapes once in `blobs.json`, by digest.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -24,20 +25,21 @@ const TMP: &str = "@TMP@";
 pub struct Golden {
     root: Value,
     schemas: Value,
+    blobs: Value,
 }
 
 fn field<'a>(value: &'a Value, key: &str) -> &'a Value {
     get(value, key).unwrap_or(&Value::Null)
 }
 
-fn list(value: &Value) -> &[Value] {
+pub fn list(value: &Value) -> &[Value] {
     match value {
         Value::List(items) => items,
         other => panic!("expected a list, not {other:?}"),
     }
 }
 
-fn entries(value: &Value) -> Vec<(String, &Value)> {
+pub fn entries(value: &Value) -> Vec<(String, &Value)> {
     match value {
         Value::Dict(items) => items
             .iter()
@@ -54,8 +56,9 @@ fn entries(value: &Value) -> Vec<(String, &Value)> {
 impl Golden {
     pub fn load(name: &str) -> Self {
         let read = |file: &str| {
+            // Both the wallets and the kassiber crate read these.
             let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("tests/data/freshness")
+                .join("../wallets/tests/data/freshness")
                 .join(file);
             let text = std::fs::read_to_string(&path)
                 .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
@@ -64,6 +67,17 @@ impl Golden {
         Self {
             root: read(&format!("{name}.json")),
             schemas: read("schemas.json"),
+            blobs: read("blobs.json"),
+        }
+    }
+
+    /// A call's book or tape: stored once in `blobs.json`, by digest.
+    pub fn resolve<'a>(&'a self, item: &'a Value) -> &'a Value {
+        match get(item, "$ref") {
+            Some(digest) => {
+                get(&self.blobs, &py_str(digest)).unwrap_or_else(|| panic!("no blob {digest:?}"))
+            }
+            None => item,
         }
     }
 
@@ -143,6 +157,7 @@ fn sql(value: &Value) -> Sql {
 /// their rowids, then indexes, views and triggers, so trigger-maintained
 /// rows are restored rather than regenerated.
 pub fn restore(golden: &Golden, before: &Value, path: &Path) {
+    let before = golden.resolve(before);
     let conn = Connection::open(path).unwrap();
     let pragmas = field(before, "pragmas");
     conn.execute_batch(&format!(
@@ -203,7 +218,14 @@ fn column(value: ValueRef<'_>) -> Value {
         ValueRef::Null => Value::Null,
         ValueRef::Integer(n) => Value::Int(n.into()),
         ValueRef::Real(n) => Value::Float(n),
-        ValueRef::Text(text) => Value::from(std::str::from_utf8(text).unwrap()),
+        ValueRef::Text(text) => {
+            let text = std::str::from_utf8(text).unwrap();
+            if text.contains("\"elapsed_ms\"") {
+                Value::from(fixed_elapsed_ms(text).as_str())
+            } else {
+                Value::from(text)
+            }
+        }
         ValueRef::Blob(_) => panic!("freshness books hold no blobs"),
     }
 }
@@ -215,7 +237,11 @@ fn text(value: &Value) -> String {
 /// The parity tests' `dump`: every nonempty table's rows, sorted by their
 /// `json.dumps(row, sort_keys=True)`.
 pub fn snapshot(path: &Path) -> Value {
-    let conn = Connection::open(path).unwrap();
+    snapshot_of(&Connection::open(path).unwrap())
+}
+
+/// `snapshot` of an open book (an encrypted one, keyed).
+pub fn snapshot_of(conn: &Connection) -> Value {
     let tables: Vec<String> = conn
         .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
         .unwrap()
@@ -305,4 +331,34 @@ pub fn string(value: &Value, key: &str) -> String {
 
 pub fn value<'a>(value: &'a Value, key: &str) -> &'a Value {
     field(value, key)
+}
+
+/// A sync's `elapsed_ms` is its real wall time, in what a fixture prints and
+/// in the outcome a job stores; the parity tests checked it is a
+/// non-negative integer and then fixed it, as this does (`"elapsed_ms":`
+/// with or without a space, then the value up to `,`, `}`, `]` or space).
+pub fn fixed_elapsed_ms(text: &str) -> String {
+    const KEY: &str = "\"elapsed_ms\":";
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(at) = rest.find(KEY) {
+        let after = at + KEY.len();
+        out.push_str(&rest[..after]);
+        let tail = &rest[after..];
+        let space = usize::from(tail.starts_with(' '));
+        out.push_str(&tail[..space]);
+        let tail = &tail[space..];
+        let end = tail
+            .find(|c: char| matches!(c, ',' | '}' | ']') || c.is_whitespace())
+            .unwrap_or(tail.len());
+        let token = &tail[..end];
+        assert!(
+            !token.is_empty() && token.bytes().all(|b| b.is_ascii_digit()),
+            "elapsed_ms must be a non-negative integer, not {token:?}"
+        );
+        out.push('0');
+        rest = &tail[end..];
+    }
+    out.push_str(rest);
+    out
 }

@@ -5,7 +5,8 @@
     "find": "kind == \"journal_refresh\"",
     "replace": "kind == \"disabled_journal_refresh\"",
     "expect_failing": [
-      "tests/test_rust_freshness_journals.py::test_default_refresh_envelopes_events_and_all_tables[empty-ui.freshness.run-esplora]"
+      "tests/test_rust_freshness_journals.py::test_default_refresh_envelopes_events_and_all_tables[empty-ui.freshness.run-esplora]",
+      "test_default_refresh_envelopes_events_and_all_tables"
     ],
     "rule": "Journal jobs execute through the shared native journals service."
   },
@@ -15,7 +16,8 @@
     "find": "(\"skip_rebuild_when_current\", Value::Bool(true))",
     "replace": "(\"skip_rebuild_when_current\", Value::Bool(false))",
     "expect_failing": [
-      "tests/test_rust_freshness_journals.py::test_default_refresh_current_after_repeat"
+      "tests/test_rust_freshness_journals.py::test_default_refresh_current_after_repeat",
+      "test_default_refresh_current_after_repeat"
     ],
     "rule": "Wallet sync leaves a current journal projection intact when no new pairs were applied."
   },
@@ -25,7 +27,8 @@
     "find": "auto_pair: get(payload, \"auto_pair\").is_some_and(truthy),",
     "replace": "auto_pair: true,",
     "expect_failing": [
-      "tests/test_rust_freshness_journals.py::test_journal_job_pairing_and_caller_authority[False-exact]"
+      "tests/test_rust_freshness_journals.py::test_journal_job_pairing_and_caller_authority[False-exact]",
+      "test_journal_job_pairing_and_caller_authority"
     ],
     "rule": "Freshness without automatic-pair authority must not author transaction pairs."
   },
@@ -35,7 +38,8 @@
     "find": "auto_pair: request.auto_pair,",
     "replace": "auto_pair: false,",
     "expect_failing": [
-      "tests/test_rust_freshness_journals.py::test_journal_job_pairing_and_caller_authority[True-exact]"
+      "tests/test_rust_freshness_journals.py::test_journal_job_pairing_and_caller_authority[True-exact]",
+      "test_journal_job_pairing_and_caller_authority"
     ],
     "rule": "An explicit automatic-pair request reaches journal processing."
   },
@@ -45,7 +49,8 @@
     "find": "&& guard.unchanged(conn)\n                    && hybrid::enabled()",
     "replace": "&& true\n                    && hybrid::enabled()",
     "expect_failing": [
-      "tests/test_rust_freshness_journals.py::test_journal_refusal_census_and_hybrid_only_replay[after-first-commit-True]"
+      "tests/test_rust_freshness_journals.py::test_journal_refusal_census_and_hybrid_only_replay[after-first-commit-True]",
+      "test_journal_refusal_census_and_hybrid_only_replay"
     ],
     "rule": "A journal refusal after the first durable rebuild cannot replay in Python."
   },
@@ -55,7 +60,8 @@
     "find": "let _ = self.0.kill();",
     "replace": "let _ = self.0.try_wait();",
     "expect_failing": [
-      "tests/test_rust_freshness_journals.py::test_encrypted_journal_job_and_hybrid_key_handoff[cancel]"
+      "tests/test_rust_freshness_journals.py::test_encrypted_journal_job_and_hybrid_key_handoff[cancel]",
+      "test_encrypted_journal_job_and_hybrid_key_handoff"
     ],
     "rule": "Cancellation kills and joins development replay before it can publish journals."
   },

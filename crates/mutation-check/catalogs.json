@@ -1093,7 +1093,8 @@
    "resolve_target": {
     "tests_dir": "crates/kassiber/tests",
     "extra": {
-     "freshness": "crates/wallets/tests/freshness/main.rs"
+     "freshness": "crates/wallets/tests/freshness/main.rs",
+     "freshness_daemon": "crates/kassiber/tests/freshness_daemon/main.rs"
     }
    }
   },
