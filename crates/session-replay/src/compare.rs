@@ -53,11 +53,16 @@ fn chat_request() -> &'static Regex {
     RE.get_or_init(|| Regex::new(r"\bchat-(?:[a-z]+-)*([0-9a-f]{32})\b").unwrap())
 }
 
-/// Random 256-bit url-safe tokens under a `*token` key (a document import's
-/// `document_token`).
+/// Random url-safe tokens: 256-bit ones under a `token` or `*_token` key (a
+/// document import's `document_token`), 128-bit ones under `upload_id`.
 fn url_token() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r#"_token\\?"\s*:\s*\\?"([A-Za-z0-9_-]{43})\\?""#).unwrap())
+    RE.get_or_init(|| {
+        Regex::new(
+            r#"(?:\b|_)token\\?"\s*:\s*\\?"([A-Za-z0-9_-]{43})\\?"|\bupload_id\\?"\s*:\s*\\?"([A-Za-z0-9_-]{22})\\?""#,
+        )
+        .unwrap()
+    })
 }
 
 fn datetime() -> &'static Regex {
@@ -247,7 +252,7 @@ pub fn generated_spans(
         .captures_iter(text)
         .chain(url_token().captures_iter(text))
     {
-        let token = caps.get(1).unwrap();
+        let token = caps.get(1).or_else(|| caps.get(2)).unwrap();
         take_identity(token.start(), token.end(), &mut spans);
     }
     for m in uuid4_hex().find_iter(text) {
@@ -823,6 +828,15 @@ mod tests {
         );
         let right = b.rewrite(
             r#"{"document_token":"zIJsCmBiD4H0mSFKOwqB0mKzzmOxs76DYdSeSlVhSPk"} chat-provider-list-d949957e66972ad045439423d93fb062"#,
+            true,
+        );
+        assert_eq!(left, right);
+        let left = a.rewrite(
+            r#"{"token": "zQ3xoXZBaXYJqgEdfF73rzQXEUXr5PcYRTYUpSRQA5g", "upload_id": "db1PhNKH3B_1jozyVtn14A"}"#,
+            true,
+        );
+        let right = b.rewrite(
+            r#"{"token": "x1J2WRUXPP0soDDwndV6djrhK_OrFAnCFU8uNiuNixo", "upload_id": "RO0M4G8Il68isMLStnipVA"}"#,
             true,
         );
         assert_eq!(left, right);

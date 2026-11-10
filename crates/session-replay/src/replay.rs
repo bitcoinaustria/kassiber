@@ -413,6 +413,24 @@ pub fn replay(
     }
     command.env("HOME", scratch.join("home"));
     for (key, value) in &session.env {
+        if key == "PATH" {
+            // The recorded search path, minus directories this host lacks
+            // (the recording account's tool installs); directories of the
+            // session's own roots map to the replay's.
+            let entries: Vec<String> = value
+                .split(':')
+                .map(|entry| paths.forward(entry))
+                .filter(|entry| {
+                    !entry.is_empty()
+                        && ((namespaced && entry.starts_with(NAMESPACE_ROOT))
+                            || Path::new(entry).is_dir())
+                })
+                .collect();
+            if !entries.is_empty() {
+                command.env("PATH", entries.join(":"));
+            }
+            continue;
+        }
         let value = paths.forward(value);
         // A recorded path that is not part of the session (the recording
         // account's config or runtime dirs) is never handed to a replay.

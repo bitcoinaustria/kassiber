@@ -470,6 +470,9 @@ pub fn restore(root: &Path, file: bool, entries: &[Entry], blobs: &Blobs) -> io:
 /// whose name says it is a secret.
 pub fn keeps_env(name: &str) -> bool {
     const NAMES: &[&str] = &[
+        // A test that hides a tool (poppler, lightning-cli) does it through
+        // PATH; a replay keeps the recorded entries this host has.
+        "PATH",
         "HOME",
         "USERPROFILE",
         "LOCALAPPDATA",
