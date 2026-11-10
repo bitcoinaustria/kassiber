@@ -172,7 +172,7 @@ def setup_steps(server: TapeRpcServer, addresses: list[str]) -> list[tuple[str, 
 
 
 def core_wallet_name(wallet_id: str) -> str:
-    from kassiber.core.sync_backends import sanitize_wallet_segment
+    from tests.integration.book import sanitize_wallet_segment
 
     return f"kassiber-{sanitize_wallet_segment(wallet_id)}"
 

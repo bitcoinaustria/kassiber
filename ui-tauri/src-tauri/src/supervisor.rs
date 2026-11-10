@@ -19,8 +19,8 @@ use std::sync::{
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter};
 
-// Packaged one-file Python sidecars can take longer than a development checkout
-// to start on cold launch, especially before the database unlock screen.
+// A cold first launch (before the database unlock screen, with the OS still
+// validating a freshly installed sidecar) can take far longer than a warm one.
 const DAEMON_READY_TIMEOUT: Duration = Duration::from_secs(30);
 const STDERR_TAIL_LIMIT: usize = 16 * 1024;
 const LIFECYCLE_RING_CAPACITY: usize = 64;
@@ -303,7 +303,13 @@ impl DaemonSupervisor {
             args.push(data_root.to_string_lossy().to_string());
         }
         args.push("daemon".into());
-        let command = kassiber_command(self.resource_dir.as_deref(), args);
+        let command = match kassiber_command(self.resource_dir.as_deref(), args) {
+            Ok(command) => command,
+            Err(error) => {
+                self.record_lifecycle("spawn_failed", &error.message, "", "missing");
+                return Err(error);
+            }
+        };
         let source = command.source;
         match DaemonProcess::spawn_command_with_secret_store(
             command,
@@ -441,7 +447,7 @@ impl DaemonSupervisor {
                 Ok(Ok(response)) => response,
                 Ok(Err(error)) => break Err(error.with_stderr_tail(process.stderr_tail())),
                 Err(mpsc::RecvTimeoutError::Timeout) => {
-                    // A non-streaming request blew its budget. The Python daemon
+                    // A non-streaming request blew its budget. The daemon
                     // dispatches requests on one serial loop, so an overdue reply
                     // almost always means it is *busy* serving another (often
                     // streaming) request — or doing legitimately long work like a
@@ -465,7 +471,7 @@ impl DaemonSupervisor {
                         self.record_lifecycle("exited", &status.to_string(), &stderr_tail, "");
                         break Err(SupervisorError::new(
                             "daemon_exited",
-                            format!("Python daemon exited before answering: {status}"),
+                            format!("Daemon exited before answering: {status}"),
                         )
                         .with_stderr_tail(stderr_tail)
                         .retryable());
@@ -479,7 +485,7 @@ impl DaemonSupervisor {
                     self.record_lifecycle("killed", "daemon_exited", &stderr_tail, "");
                     break Err(SupervisorError::new(
                         "daemon_exited",
-                        "Python daemon stdout reader stopped",
+                        "Daemon stdout reader stopped",
                     )
                     .with_stderr_tail(stderr_tail)
                     .retryable());
@@ -527,7 +533,7 @@ impl DaemonSupervisor {
             self.record_lifecycle("killed", "daemon_protocol_error", &stderr_tail, "");
             break Err(SupervisorError::new(
                 "daemon_protocol_error",
-                "Python daemon emitted a non-terminal record for a non-streaming request",
+                "Daemon emitted a non-terminal record for a non-streaming request",
             )
             .details(json!({
                 "request_id": request_id,
@@ -580,9 +586,7 @@ impl DaemonSupervisor {
                             self.record_lifecycle("exited", &status.to_string(), &stderr_tail, "");
                             return Err(SupervisorError::new(
                                 "daemon_exited",
-                                format!(
-                                    "Python daemon exited before handling the request: {status}"
-                                ),
+                                format!("Daemon exited before handling the request: {status}"),
                             )
                             .hint("Restart the Tauri shell and check the daemon smoke test output.")
                             .with_stderr_tail(stderr_tail)
@@ -593,7 +597,7 @@ impl DaemonSupervisor {
                             *slot = None;
                             return Err(SupervisorError::new(
                                 "daemon_status_failed",
-                                format!("Could not inspect Python daemon status: {error}"),
+                                format!("Could not inspect daemon status: {error}"),
                             )
                             .retryable());
                         }
@@ -618,9 +622,9 @@ impl DaemonSupervisor {
             *slot = Some(self.spawn_daemon(data_root)?);
         }
 
-        slot.as_ref().cloned().ok_or_else(|| {
-            SupervisorError::new("daemon_unavailable", "Python daemon is unavailable")
-        })
+        slot.as_ref()
+            .cloned()
+            .ok_or_else(|| SupervisorError::new("daemon_unavailable", "Daemon is unavailable"))
     }
 }
 
@@ -760,23 +764,14 @@ impl DaemonProcess {
         };
 
         let stdin = child.stdin.take().ok_or_else(|| {
-            SupervisorError::new(
-                "daemon_spawn_failed",
-                "Python daemon stdin was not captured",
-            )
+            SupervisorError::new("daemon_spawn_failed", "Daemon stdin was not captured")
         })?;
         let stdin = Arc::new(Mutex::new(stdin));
         let stdout = child.stdout.take().ok_or_else(|| {
-            SupervisorError::new(
-                "daemon_spawn_failed",
-                "Python daemon stdout was not captured",
-            )
+            SupervisorError::new("daemon_spawn_failed", "Daemon stdout was not captured")
         })?;
         let stderr = child.stderr.take().ok_or_else(|| {
-            SupervisorError::new(
-                "daemon_spawn_failed",
-                "Python daemon stderr was not captured",
-            )
+            SupervisorError::new("daemon_spawn_failed", "Daemon stderr was not captured")
         })?;
         let stderr_tail = StderrTail::spawn(stderr);
 
@@ -812,7 +807,7 @@ impl DaemonProcess {
                 return Err(SupervisorError::new(
                     "daemon_timeout",
                     format!(
-                        "Python daemon did not answer within {} seconds",
+                        "Daemon did not answer within {} seconds",
                         DAEMON_READY_TIMEOUT.as_secs()
                     ),
                 )
@@ -822,12 +817,11 @@ impl DaemonProcess {
             Err(mpsc::RecvTimeoutError::Disconnected) => {
                 process.mark_broken();
                 process.kill();
-                return Err(SupervisorError::new(
-                    "daemon_exited",
-                    "Python daemon stdout reader stopped",
-                )
-                .with_stderr_tail(process.stderr_tail())
-                .retryable());
+                return Err(
+                    SupervisorError::new("daemon_exited", "Daemon stdout reader stopped")
+                        .with_stderr_tail(process.stderr_tail())
+                        .retryable(),
+                );
             }
         };
         if ready.get("kind").and_then(Value::as_str) != Some("daemon.ready") {
@@ -835,7 +829,7 @@ impl DaemonProcess {
             process.kill();
             return Err(SupervisorError::new(
                 "daemon_protocol_error",
-                "Python daemon did not emit daemon.ready on startup",
+                "Daemon did not emit daemon.ready on startup",
             )
             .details(ready)
             .with_stderr_tail(process.stderr_tail()));
@@ -850,11 +844,9 @@ impl DaemonProcess {
         sender: mpsc::Sender<Result<Value, SupervisorError>>,
     ) -> Result<(), SupervisorError> {
         if self.is_broken() {
-            return Err(SupervisorError::new(
-                "daemon_exited",
-                "Python daemon stdout reader stopped",
-            )
-            .retryable());
+            return Err(
+                SupervisorError::new("daemon_exited", "Daemon stdout reader stopped").retryable(),
+            );
         }
         let mut pending = self.pending.lock().map_err(|_| {
             SupervisorError::new(
@@ -894,14 +886,14 @@ impl DaemonProcess {
         writeln!(stdin, "{line}").map_err(|error| {
             SupervisorError::new(
                 "daemon_write_failed",
-                format!("Could not write to Python daemon stdin: {error}"),
+                format!("Could not write to daemon stdin: {error}"),
             )
             .retryable()
         })?;
         stdin.flush().map_err(|error| {
             SupervisorError::new(
                 "daemon_write_failed",
-                format!("Could not flush Python daemon stdin: {error}"),
+                format!("Could not flush daemon stdin: {error}"),
             )
             .retryable()
         })
@@ -943,14 +935,14 @@ struct DaemonCommand {
 }
 
 /// Resolve the same CLI invocation the daemon supervisor uses (env override,
-/// bundled sidecar, developer Python fallback) for one-shot CLI calls that
+/// bundled sidecar, development checkout build) for one-shot CLI calls that
 /// need captured output instead of inherited stdio.
 pub(crate) fn cli_invocation(
     resource_dir: Option<&Path>,
     args: Vec<String>,
-) -> (PathBuf, Vec<String>, PathBuf) {
-    let command = kassiber_command(resource_dir, args);
-    (command.program, command.args, command.cwd)
+) -> Result<(PathBuf, Vec<String>, PathBuf), SupervisorError> {
+    let command = kassiber_command(resource_dir, args)?;
+    Ok((command.program, command.args, command.cwd))
 }
 
 pub fn run_cli(resource_dir: Option<&Path>, args: Vec<String>) -> i32 {
@@ -958,7 +950,16 @@ pub fn run_cli(resource_dir: Option<&Path>, args: Vec<String>) -> i32 {
         .is_none()
         .then(resource_dir_before_tauri)
         .flatten();
-    let command = kassiber_command(resource_dir.or(inferred_resource_dir.as_deref()), args);
+    let command = match kassiber_command(resource_dir.or(inferred_resource_dir.as_deref()), args) {
+        Ok(command) => command,
+        Err(error) => {
+            eprintln!("{}", error.message);
+            if let Some(hint) = &error.hint {
+                eprintln!("{hint}");
+            }
+            return 1;
+        }
+    };
     let mut process = Command::new(&command.program);
     process.args(&command.args).current_dir(&command.cwd);
     if let Ok(executable) = env::current_exe() {
@@ -1010,9 +1011,10 @@ impl DaemonCommand {
     fn failure_hint(&self) -> &'static str {
         match self.source {
             "bundled_sidecar" => {
-                "The bundled Kassiber CLI sidecar failed to start; reinstall the desktop package or set KASSIBER_PYTHON to override it."
+                "The bundled Kassiber CLI sidecar failed to start; reinstall the desktop package or set KASSIBER_BIN to override it."
             }
-            _ => "Set KASSIBER_PYTHON to a Python with Kassiber importable.",
+            "env_bin" => "Set KASSIBER_BIN to a working kassiber binary, or unset it.",
+            _ => "Rebuild the kassiber binary with `cargo build -p kassiber --bin kassiber`, or set KASSIBER_BIN.",
         }
     }
 }
@@ -1081,8 +1083,7 @@ fn spawn_stdout_reader(
                         &broken,
                         &pending,
                         &mut startup,
-                        SupervisorError::new("daemon_exited", "Python daemon closed stdout")
-                            .retryable(),
+                        SupervisorError::new("daemon_exited", "Daemon closed stdout").retryable(),
                     );
                     return;
                 }
@@ -1104,7 +1105,7 @@ fn spawn_stdout_reader(
                                 &mut startup,
                                 SupervisorError::new(
                                     "daemon_protocol_error",
-                                    "Python daemon emitted a request response before daemon.ready",
+                                    "Daemon emitted a request response before daemon.ready",
                                 )
                                 .details(response),
                             );
@@ -1141,7 +1142,7 @@ fn spawn_stdout_reader(
                                 &mut startup,
                                 SupervisorError::new(
                                     "daemon_protocol_error",
-                                    "Python daemon emitted a response without request_id",
+                                    "Daemon emitted a response without request_id",
                                 )
                                 .details(response),
                             );
@@ -1199,7 +1200,7 @@ fn spawn_stdout_reader(
                             &mut startup,
                             SupervisorError::new(
                                 "daemon_protocol_error",
-                                format!("Python daemon emitted invalid JSON: {error}"),
+                                format!("Daemon emitted invalid JSON: {error}"),
                             )
                             .details(json!({ "line": line.trim() })),
                         );
@@ -1213,7 +1214,7 @@ fn spawn_stdout_reader(
                         &mut startup,
                         SupervisorError::new(
                             "daemon_read_failed",
-                            format!("Could not read from Python daemon stdout: {error}"),
+                            format!("Could not read from daemon stdout: {error}"),
                         )
                         .retryable(),
                     );
@@ -1358,7 +1359,7 @@ fn handle_secret_store_operation(
         .and_then(Value::as_str)
         .unwrap_or(STORE_ID_SQLCIPHER_INLINE);
     if store_id == STORE_ID_SQLCIPHER_INLINE {
-        return Err("sqlcipher_inline refs are handled by the Python daemon".to_string());
+        return Err("sqlcipher_inline refs are handled by the daemon".to_string());
     }
     let platform = current_secret_store_platform();
     let Some(native_store_id) = native_store_id_for_platform(&platform) else {
@@ -1472,7 +1473,7 @@ fn handle_daemon_event_record(
     if response.get("request_id").is_some() {
         return Err(SupervisorError::new(
             "daemon_protocol_error",
-            "Python daemon emitted an event record with a request_id",
+            "Daemon emitted an event record with a request_id",
         )
         .details(response.clone()));
     }
@@ -1484,7 +1485,7 @@ fn handle_daemon_event_record(
     {
         return Err(SupervisorError::new(
             "daemon_protocol_error",
-            "Python daemon emitted an event record without a kind",
+            "Daemon emitted an event record without a kind",
         )
         .details(response.clone()));
     }
@@ -1579,7 +1580,7 @@ fn attach_stderr_tail_to_internal_error(response: &mut Value, stderr_tail: Strin
 fn request_id_mismatch(expected: &str, response: &Value) -> SupervisorError {
     SupervisorError::new(
         "daemon_request_id_mismatch",
-        "Python daemon response request_id did not match the active request",
+        "Daemon response request_id did not match the active request",
     )
     .details(json!({
         "expected": expected,
@@ -1604,64 +1605,93 @@ fn repo_root() -> PathBuf {
         }
     }
 
-    // Packaged previews use this as a venv search root before falling back to python3.
+    // Last resort only; debug builds look for target/ builds under it.
     env::current_exe()
         .ok()
         .and_then(|path| path.parent().map(PathBuf::from))
         .unwrap_or_else(|| PathBuf::from("."))
 }
 
-fn default_python(repo_root: &Path) -> PathBuf {
-    let unix_venv = repo_root.join(".venv").join("bin").join("python");
-    if unix_venv.exists() {
-        return unix_venv;
-    }
-
-    let windows_venv = repo_root.join(".venv").join("Scripts").join("python.exe");
-    if windows_venv.exists() {
-        return windows_venv;
-    }
-
-    PathBuf::from("python3")
+/// The daemon executable: `KASSIBER_BIN` when set (a debugging override, as
+/// `KASSIBER_PYTHON` was), else the bundled sidecar, else, in debug builds
+/// only, the checkout's `target/{release,debug}/kassiber` for `tauri dev`.
+/// Nothing falls back to Python; a missing binary is a clear error.
+fn kassiber_command(
+    resource_dir: Option<&Path>,
+    args: Vec<String>,
+) -> Result<DaemonCommand, SupervisorError> {
+    let checkout_root = cfg!(debug_assertions).then(repo_root);
+    resolve_kassiber_command(
+        env::var_os("KASSIBER_BIN"),
+        resource_dir,
+        checkout_root,
+        args,
+    )
 }
 
-fn kassiber_command(resource_dir: Option<&Path>, args: Vec<String>) -> DaemonCommand {
-    if let Ok(python) = env::var("KASSIBER_PYTHON") {
-        let repo_root = repo_root();
-        let mut python_args = vec!["-m".into(), "kassiber".into()];
-        python_args.extend(args);
-        return DaemonCommand {
-            program: PathBuf::from(python),
-            args: python_args,
-            cwd: repo_root,
-            source: "env_python",
-        };
+fn resolve_kassiber_command(
+    env_bin: Option<std::ffi::OsString>,
+    resource_dir: Option<&Path>,
+    checkout_root: Option<PathBuf>,
+    args: Vec<String>,
+) -> Result<DaemonCommand, SupervisorError> {
+    if let Some(binary) = env_bin.filter(|value| !value.is_empty()) {
+        return Ok(DaemonCommand {
+            program: PathBuf::from(binary),
+            args,
+            cwd: env::temp_dir(),
+            source: "env_bin",
+        });
     }
 
     if let Some(sidecar) = bundled_sidecar(resource_dir) {
         // Packaged macOS builds inherit the bundle's read-only Contents/Resources
-        // as cwd, which breaks any third-party library that writes relative paths
-        // at import time (RP2's logger wrote ./log/rp2_*.log before packaged
-        // builds stopped bundling RP2). Hand the sidecar a writable scratch
-        // directory so the daemon never has to dodge EACCES on startup. Per-call
-        // code already uses absolute paths under the data root.
-        return DaemonCommand {
+        // as cwd, which breaks anything that writes relative paths at startup.
+        // Hand the sidecar a writable scratch directory so the daemon never has
+        // to dodge EACCES on startup. Per-call code already uses absolute paths
+        // under the data root.
+        return Ok(DaemonCommand {
             program: sidecar,
             args,
             cwd: env::temp_dir(),
             source: "bundled_sidecar",
-        };
+        });
     }
 
-    let repo_root = repo_root();
-    let mut python_args = vec!["-m".into(), "kassiber".into()];
-    python_args.extend(args);
-    DaemonCommand {
-        program: default_python(&repo_root),
-        args: python_args,
-        cwd: repo_root,
-        source: "python_fallback",
+    if let Some(repo_root) = checkout_root {
+        if let Some(binary) = checkout_build(&repo_root) {
+            return Ok(DaemonCommand {
+                program: binary,
+                args,
+                cwd: repo_root,
+                source: "checkout_build",
+            });
+        }
     }
+
+    Err(missing_binary_error())
+}
+
+fn missing_binary_error() -> SupervisorError {
+    let hint = if cfg!(debug_assertions) {
+        "Build it with `cargo build -p kassiber --bin kassiber`, or set KASSIBER_BIN to a kassiber binary."
+    } else {
+        "Reinstall the desktop package, or set KASSIBER_BIN to a kassiber binary."
+    };
+    SupervisorError::new(
+        "daemon_binary_missing",
+        "Kassiber daemon binary not found: the bundled kassiber sidecar is missing",
+    )
+    .hint(hint)
+}
+
+/// `target/release/kassiber`, then `target/debug/kassiber`, under the checkout.
+fn checkout_build(repo_root: &Path) -> Option<PathBuf> {
+    let executable = format!("kassiber{}", env::consts::EXE_SUFFIX);
+    ["release", "debug"]
+        .into_iter()
+        .map(|profile| repo_root.join("target").join(profile).join(&executable))
+        .find(|path| path.is_file())
 }
 
 fn bundled_sidecar(resource_dir: Option<&Path>) -> Option<PathBuf> {
@@ -1690,8 +1720,8 @@ fn sidecar_filename() -> Option<String> {
     let triple = match (env::consts::OS, env::consts::ARCH) {
         ("macos", "aarch64") => "aarch64-apple-darwin",
         ("macos", "x86_64") => "x86_64-apple-darwin",
-        // Not built by the prerelease workflow yet; Linux arm64 falls back to
-        // developer Python unless a matching sidecar is manually bundled.
+        // Not built by the prerelease workflow yet; Linux arm64 needs a
+        // manually bundled sidecar or KASSIBER_BIN.
         ("linux", "aarch64") => "aarch64-unknown-linux-gnu",
         ("linux", "x86_64") => "x86_64-unknown-linux-gnu",
         ("windows", "x86_64") => "x86_64-pc-windows-msvc",
@@ -1740,6 +1770,114 @@ mod tests {
 
         fs::write(&one_dir, b"#!/bin/sh\n").expect("write one-dir sidecar");
         assert_eq!(bundled_sidecar(Some(&root)), Some(one_dir));
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    fn temp_resource_dir(label: &str) -> PathBuf {
+        let counter = TEST_TEMP_COUNTER.fetch_add(1, Ordering::SeqCst);
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock before epoch")
+            .as_nanos();
+        let root = env::temp_dir().join(format!(
+            "kassiber-{label}-{}-{unique}-{counter}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&root).expect("create temp resource dir");
+        root
+    }
+
+    #[test]
+    fn kassiber_bin_overrides_the_bundled_sidecar() {
+        let Some(name) = sidecar_filename() else {
+            return;
+        };
+        let root = temp_resource_dir("command-env-bin");
+        let binaries = root.join("binaries");
+        fs::create_dir_all(&binaries).expect("create binaries dir");
+        fs::write(binaries.join(&name), b"#!/bin/sh\n").expect("write sidecar");
+
+        let command = resolve_kassiber_command(
+            Some("/opt/kassiber/bin/kassiber".into()),
+            Some(&root),
+            Some(root.clone()),
+            vec!["daemon".into()],
+        )
+        .expect("env override resolves");
+        assert_eq!(command.source, "env_bin");
+        assert_eq!(command.program, PathBuf::from("/opt/kassiber/bin/kassiber"));
+        assert_eq!(command.args, vec!["daemon".to_string()]);
+
+        // An empty KASSIBER_BIN is unset, not a program named "".
+        let command =
+            resolve_kassiber_command(Some("".into()), Some(&root), Some(root.clone()), Vec::new())
+                .expect("bundled sidecar resolves");
+        assert_eq!(command.source, "bundled_sidecar");
+        assert_eq!(command.program, binaries.join(&name));
+        // The sidecar runs the binary itself: no interpreter, no `-m kassiber`.
+        assert!(command.args.is_empty());
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn missing_sidecar_is_a_clear_error() {
+        let root = temp_resource_dir("command-missing");
+        // Release builds pass no checkout root; debug builds pass one that
+        // holds no target/ build here. Both refuse instead of guessing.
+        for checkout_root in [None, Some(root.clone())] {
+            let error = resolve_kassiber_command(None, Some(&root), checkout_root, Vec::new())
+                .err()
+                .expect("missing binary refuses");
+            assert_eq!(error.code, "daemon_binary_missing");
+            assert!(!error.retryable);
+            assert!(error.message.contains("sidecar is missing"));
+            let hint = error.hint.expect("hint");
+            assert!(hint.contains("KASSIBER_BIN"));
+            assert!(!hint.to_lowercase().contains("python"));
+        }
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn debug_builds_fall_back_to_the_checkout_build_after_the_sidecar() {
+        let root = temp_resource_dir("command-checkout");
+        let executable = format!("kassiber{}", env::consts::EXE_SUFFIX);
+        let debug = root.join("target").join("debug").join(&executable);
+        fs::create_dir_all(debug.parent().expect("debug dir")).expect("create debug dir");
+        fs::write(&debug, b"#!/bin/sh\n").expect("write debug build");
+
+        let command = resolve_kassiber_command(None, None, Some(root.clone()), vec!["x".into()])
+            .expect("checkout build resolves");
+        assert_eq!(command.source, "checkout_build");
+        assert_eq!(command.program, debug);
+        assert_eq!(command.cwd, root);
+        assert_eq!(command.args, vec!["x".to_string()]);
+        // Without a checkout root (release builds) the same tree is ignored.
+        assert!(resolve_kassiber_command(None, None, None, Vec::new()).is_err());
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn checkout_build_prefers_release_and_skips_directories() {
+        let root = temp_resource_dir("checkout-build");
+        let executable = format!("kassiber{}", env::consts::EXE_SUFFIX);
+        assert_eq!(checkout_build(&root), None);
+
+        let release = root.join("target").join("release").join(&executable);
+        fs::create_dir_all(&release).expect("directory named like the binary");
+        assert_eq!(checkout_build(&root), None);
+
+        let debug = root.join("target").join("debug").join(&executable);
+        fs::create_dir_all(debug.parent().expect("debug dir")).expect("create debug dir");
+        fs::write(&debug, b"#!/bin/sh\n").expect("write debug build");
+        assert_eq!(checkout_build(&root), Some(debug));
+
+        fs::remove_dir(&release).expect("remove directory");
+        fs::write(&release, b"#!/bin/sh\n").expect("write release build");
+        assert_eq!(checkout_build(&root), Some(release));
 
         let _ = fs::remove_dir_all(&root);
     }
@@ -1799,7 +1937,7 @@ mod tests {
             "killed",
             "daemon rejected api_key=sk-test-secret",
             &stderr_tail,
-            "env_python",
+            "env_bin",
         );
         let (records, _) = supervisor.lifecycle_snapshot(0);
         let record = records.first().expect("lifecycle record");
@@ -1812,7 +1950,7 @@ mod tests {
         let encoded = serde_json::to_string(record).expect("record json");
         assert!(encoded.contains("\"tsMs\""));
         assert!(encoded.contains("\"stderrTail\""));
-        assert!(encoded.contains("\"source\":\"env_python\""));
+        assert!(encoded.contains("\"source\":\"env_bin\""));
     }
 
     #[test]
@@ -1898,7 +2036,7 @@ mod tests {
             "killed",
             "daemon crashed",
             r#"Traceback: AuthError({"api_key": "sk-leaked-key"})"#,
-            "env_python",
+            "env_bin",
         );
         let (records, _) = supervisor.lifecycle_snapshot(0);
         let record = records.first().expect("lifecycle record");
@@ -1914,7 +2052,7 @@ mod tests {
         assert_eq!(last_id, 0);
 
         for index in 0..3u64 {
-            supervisor.record_lifecycle("spawned", &format!("spawn {index}"), "", "env_python");
+            supervisor.record_lifecycle("spawned", &format!("spawn {index}"), "", "env_bin");
         }
         let (records, last_id) = supervisor.lifecycle_snapshot(1);
         assert_eq!(last_id, 3);
@@ -1950,68 +2088,74 @@ mod tests {
             std::process::id()
         ));
         fs::create_dir_all(&dir).expect("create temp dir");
-        let script = dir.join("stub-daemon.py");
+        let script = dir.join("stub-daemon.sh");
         let test_secret_store_id = native_store_id_for_platform(&current_secret_store_platform())
             .unwrap_or(STORE_ID_SQLCIPHER_INLINE);
         fs::write(
             &script,
-            r#"#!/usr/bin/env python3
-import json
-import os
-import sys
-import threading
-import time
+            r#"#!/bin/sh
+# Stand-in for `kassiber daemon`: one JSON record per line on stdout. Each
+# record goes out in a single printf, so the background "slow" stream and
+# foreground answers never interleave within a line.
+field() {
+  printf '%s\n' "$2" | sed -n "s/.*\"$1\":\"\([^\"]*\)\".*/\1/p"
+}
+emit() {
+  printf '%s\n' "$1"
+}
 
-write_lock = threading.Lock()
+printf '%s\n' "stub-daemon startup api_key=sk-stub-stderr-secret" >&2
 
-def emit(payload):
-    with write_lock:
-        sys.stdout.write(json.dumps(payload, separators=(",", ":")) + "\n")
-        sys.stdout.flush()
+emit '{"kind":"daemon.ready","schema_version":1,"data":{"version":"test","supported_kinds":["slow","fast","locked","secret-get","emit-event","daemon.shutdown","ui.overview.snapshot","ui.wallets.create"]}}'
 
-sys.stderr.write("stub-daemon startup api_key=sk-stub-stderr-secret\n")
-sys.stderr.flush()
-
-emit({"kind":"daemon.ready","schema_version":1,"data":{"version":"test","supported_kinds":["slow","fast","locked","secret-get","emit-event","daemon.shutdown","ui.overview.snapshot","ui.wallets.create"]}})
-
-def slow(request_id):
-    emit({"kind":"slow.delta","schema_version":1,"request_id":request_id,"data":{"delta":{"content":"a"}}})
-    time.sleep(0.35)
-    emit({"kind":"slow","schema_version":1,"request_id":request_id,"data":{"finish_reason":"stop"}})
-
-for line in sys.stdin:
-    if not line.strip():
-        continue
-    request = json.loads(line)
-    request_id = request.get("request_id")
-    kind = request.get("kind")
-    if kind == "slow":
-        threading.Thread(target=slow, args=(request_id,), daemon=True).start()
-    elif kind == "fast":
-        emit({"kind":"fast","schema_version":1,"request_id":request_id,"data":{"ok":True,"pid":os.getpid()}})
-    elif kind in ("busy", "ui.overview.snapshot", "ui.wallets.create"):
-        # Read but never answer: models the single-threaded daemon being busy
-        # on another request. The reader loop stays free for later requests.
-        pass
-    elif kind == "stray":
-        # Emit a record for a request_id the supervisor never sent (a late
-        # straggler from an abandoned/timed-out request) BEFORE this request's
-        # own terminal. The supervisor must drop the stray record and still
-        # resolve this one, rather than killing the daemon.
-        emit({"kind":"ghost.delta","schema_version":1,"request_id":"ghost-1","data":{"delta":"late"}})
-        emit({"kind":"stray","schema_version":1,"request_id":request_id,"data":{"ok":True,"pid":os.getpid()}})
-    elif kind == "locked":
-        emit({"kind":"auth_required","schema_version":1,"request_id":request_id,"data":{"scope":"unlock_database"}})
-    elif kind == "emit-event":
-        emit({"kind":"ui.freshness.background","schema_version":1,"event":True,"data":{"enqueued":[],"completed":[]}})
-        emit({"kind":"emit-event","schema_version":1,"request_id":request_id,"data":{"ok":True}})
-    elif kind == "secret-get":
-        emit({"kind":"supervisor.ai_secret_store.request","schema_version":1,"request_id":"secret-control-1","data":{"op":"get","provider_name":"remote","store_id":"__TEST_STORE_ID__","service":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","account":"remote"}})
-        control = json.loads(sys.stdin.readline())
-        emit({"kind":"secret-get","schema_version":1,"request_id":request_id,"data":{"control_kind":control.get("kind"),"state":control.get("data",{}).get("state"),"secret":control.get("data",{}).get("secret")}})
-    elif kind == "daemon.shutdown":
-        emit({"kind":"daemon.shutdown","schema_version":1,"request_id":request_id,"data":{}})
-        break
+while IFS= read -r line; do
+  case "$line" in
+    *[![:space:]]*) ;;
+    *) continue ;;
+  esac
+  request_id=$(field request_id "$line")
+  kind=$(field kind "$line")
+  case "$kind" in
+    slow)
+      (
+        emit "{\"kind\":\"slow.delta\",\"schema_version\":1,\"request_id\":\"$request_id\",\"data\":{\"delta\":{\"content\":\"a\"}}}"
+        sleep 0.35
+        emit "{\"kind\":\"slow\",\"schema_version\":1,\"request_id\":\"$request_id\",\"data\":{\"finish_reason\":\"stop\"}}"
+      ) &
+      ;;
+    fast)
+      emit "{\"kind\":\"fast\",\"schema_version\":1,\"request_id\":\"$request_id\",\"data\":{\"ok\":true,\"pid\":$$}}"
+      ;;
+    busy|ui.overview.snapshot|ui.wallets.create)
+      # Read but never answer: models the single-threaded daemon being busy
+      # on another request. The reader loop stays free for later requests.
+      ;;
+    stray)
+      # Emit a record for a request_id the supervisor never sent (a late
+      # straggler from an abandoned/timed-out request) BEFORE this request's
+      # own terminal. The supervisor must drop the stray record and still
+      # resolve this one, rather than killing the daemon.
+      emit '{"kind":"ghost.delta","schema_version":1,"request_id":"ghost-1","data":{"delta":"late"}}'
+      emit "{\"kind\":\"stray\",\"schema_version\":1,\"request_id\":\"$request_id\",\"data\":{\"ok\":true,\"pid\":$$}}"
+      ;;
+    locked)
+      emit "{\"kind\":\"auth_required\",\"schema_version\":1,\"request_id\":\"$request_id\",\"data\":{\"scope\":\"unlock_database\"}}"
+      ;;
+    emit-event)
+      emit '{"kind":"ui.freshness.background","schema_version":1,"event":true,"data":{"enqueued":[],"completed":[]}}'
+      emit "{\"kind\":\"emit-event\",\"schema_version\":1,\"request_id\":\"$request_id\",\"data\":{\"ok\":true}}"
+      ;;
+    secret-get)
+      emit '{"kind":"supervisor.ai_secret_store.request","schema_version":1,"request_id":"secret-control-1","data":{"op":"get","provider_name":"remote","store_id":"__TEST_STORE_ID__","service":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","account":"remote"}}'
+      IFS= read -r control
+      emit "{\"kind\":\"secret-get\",\"schema_version\":1,\"request_id\":\"$request_id\",\"data\":{\"control_kind\":\"$(field kind "$control")\",\"state\":\"$(field state "$control")\",\"secret\":\"$(field secret "$control")\"}}"
+      ;;
+    daemon.shutdown)
+      emit "{\"kind\":\"daemon.shutdown\",\"schema_version\":1,\"request_id\":\"$request_id\",\"data\":{}}"
+      break
+      ;;
+  esac
+done
 "#
             .replace("__TEST_STORE_ID__", test_secret_store_id),
         )
@@ -2039,7 +2183,7 @@ for line in sys.stdin:
             program: script,
             args: Vec::new(),
             cwd: dir.clone(),
-            source: "env_python",
+            source: "env_bin",
         })
         .expect("retry transient executable-busy spawn");
         release_writer.join().expect("release stub writer");
@@ -2067,7 +2211,7 @@ for line in sys.stdin:
             program: script,
             args: Vec::new(),
             cwd: dir.clone(),
-            source: "env_python",
+            source: "env_bin",
         })
         .expect("spawn stub daemon");
         let supervisor = Arc::new(DaemonSupervisor::new_with_process(process));
@@ -2126,7 +2270,7 @@ for line in sys.stdin:
             program: script,
             args: Vec::new(),
             cwd: dir.clone(),
-            source: "env_python",
+            source: "env_bin",
         })
         .expect("spawn stub daemon");
         // Short invoke budget so the busy request times out fast.
@@ -2177,7 +2321,7 @@ for line in sys.stdin:
             program: script,
             args: Vec::new(),
             cwd: dir.clone(),
-            source: "env_python",
+            source: "env_bin",
         })
         .expect("spawn stub daemon");
         let supervisor = DaemonSupervisor::new_with_process(process)
@@ -2228,7 +2372,7 @@ for line in sys.stdin:
             program: script,
             args: Vec::new(),
             cwd: dir.clone(),
-            source: "env_python",
+            source: "env_bin",
         })
         .expect("spawn stub daemon");
         let supervisor = DaemonSupervisor::new_with_process(process);
@@ -2311,7 +2455,7 @@ for line in sys.stdin:
             program: script,
             args: Vec::new(),
             cwd: dir.clone(),
-            source: "env_python",
+            source: "env_bin",
         })
         .expect("spawn stub daemon");
         let supervisor = DaemonSupervisor::new_with_process(process);
@@ -2353,7 +2497,7 @@ for line in sys.stdin:
                 program: script,
                 args: Vec::new(),
                 cwd: dir.clone(),
-                source: "env_python",
+                source: "env_bin",
             },
             event_sink,
         )
@@ -2407,7 +2551,7 @@ for line in sys.stdin:
             program: script,
             args: Vec::new(),
             cwd: dir.clone(),
-            source: "env_python",
+            source: "env_bin",
         })
         .expect("spawn stub daemon");
         let supervisor = DaemonSupervisor::new_with_process(process);
@@ -2489,7 +2633,7 @@ for line in sys.stdin:
                 program: script,
                 args: Vec::new(),
                 cwd: dir.clone(),
-                source: "env_python",
+                source: "env_bin",
             },
             secret_store.clone(),
             Arc::new(Mutex::new(None)),
@@ -2690,7 +2834,7 @@ for line in sys.stdin:
             program: old_script,
             args: Vec::new(),
             cwd: old_dir.clone(),
-            source: "env_python",
+            source: "env_bin",
         })
         .expect("spawn old daemon");
         let unique = SystemTime::now()

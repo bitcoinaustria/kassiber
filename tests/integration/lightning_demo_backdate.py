@@ -33,8 +33,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
-from kassiber.core.lightning.cln import _stable_hash
-from kassiber.db import open_db, resolve_database_path
+from tests.integration.book import database_path as resolve_database_path
+from tests.integration.book import open_book as open_db
+from tests.integration.book import stable_hash as _stable_hash
 
 # Transaction kinds emitted by the Lightning adapters (see cln.py/lnd.py import
 # helpers). Only these ledger rows are backdated.

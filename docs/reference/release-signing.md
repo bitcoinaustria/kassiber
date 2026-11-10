@@ -84,12 +84,13 @@ The GitHub workflow builds the artifacts and deterministically creates the
 manifest. On the signing workstation, verify the tag and source commit,
 download the manifest, and inspect its complete artifact list. Then point the
 shell at the Bitwarden agent, confirm the agent offers the release key, and
-run the repository helper:
+run the repository helper (build it first with
+`cargo build --locked --release -p kassiber-release --no-default-features`):
 
 ```bash
 export SSH_AUTH_SOCK="$HOME/.bitwarden-ssh-agent.sock"
 ssh-add -l -E sha256   # must list SHA256:UzYeHzOEIbanmYDAylIaGhI6dGFvhNOkszPXwUgzo9M
-uv run --locked python scripts/release_manifest.py sign \
+target/release/kassiber-release manifest sign \
   --manifest kassiber-0.23.0-manifest.txt \
   --public-key ~/.ssh/kassiber-release.pub
 ```

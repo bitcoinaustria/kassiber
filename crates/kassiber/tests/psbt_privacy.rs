@@ -2,6 +2,7 @@
 
 #[path = "../examples/psbt_transport_fixture/book.rs"]
 mod book;
+mod privacy_transport;
 use book::ReportBook;
 use kassiber_envelope::{dict, s};
 use kassiber_pyjson::{Options, PyStr, Value};
@@ -253,44 +254,27 @@ fn psbt_cli_file_refusals_preserve_reference_precedence_and_literal_paths() {
     assert_eq!(error.details, Some(dict([("path", s(path))])));
 }
 
+// The whole-process tests below replay the frozen Python reference
+// (`privacy_transport`); they used to run tests/test_rust_psbt_product.py.
+
 #[test]
 fn psbt_product_cli_daemon_bytes_all_tables_and_zero_fallback() {
-    reference("tests/test_rust_psbt_product.py::test_psbt_product_bytes_files_all_tables_and_zero_hybrid_fallback");
+    // 4 cases, online and offline: 12 source/format reads, the usage refusal,
+    // 3 scopes, 4 bad files, 2 missing paths, invalid text, 2 --output
+    // writes, and one daemon session.
+    assert_eq!(
+        privacy_transport::replay("psbt", "psbt/"),
+        8 * (12 + 1 + 3 + 4 + 2 + 1 + 2 + 1)
+    );
 }
 
 #[test]
 fn psbt_product_registration_and_wire_order_match_python() {
-    reference(
-        "tests/test_rust_psbt_product.py::test_psbt_registered_product_routes_and_wire_order",
-    );
+    assert_eq!(privacy_transport::replay("psbt", "psbt-routes"), 2);
 }
 
 #[test]
 fn psbt_product_unhandled_decoder_diagnostic_matches_python() {
-    reference("tests/test_rust_psbt_product.py::test_psbt_decoder_daemon_preserves_native_unhandled_debug_contract");
-}
-
-fn reference(test: &str) {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../..")
-        .canonicalize()
-        .unwrap();
-    let python = std::env::var_os("KASSIBER_REFERENCE_PYTHON")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| root.join(".venv/bin/python"));
-    let scratch = tempfile::tempdir().unwrap();
-    let output = std::process::Command::new(python)
-        .current_dir(&root)
-        .args(["-m", "pytest", test, "-q", "-s", "--basetemp"])
-        .arg(scratch.path())
-        .env("KASSIBER_RUST_BIN", env!("CARGO_BIN_EXE_kassiber"))
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "{}\n{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
-    println!("{}", String::from_utf8_lossy(&output.stdout));
+    // Online and offline, with and without --debug.
+    assert_eq!(privacy_transport::replay("psbt", "psbt-debug/"), 4);
 }

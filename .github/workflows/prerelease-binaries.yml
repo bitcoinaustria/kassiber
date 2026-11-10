@@ -20,16 +20,13 @@ on:
       - "scripts/package-cli-deb.sh"
       - "scripts/package-cli-rpm.sh"
       - "scripts/package-desktop-rpm.sh"
-      - "scripts/release_manifest.py"
-      - "scripts/render_aur.py"
-      - "scripts/render_nix.py"
-      - "scripts/write_build_info.py"
       - "tax-engine/**"
       - "crates/**"
       - "Cargo.toml"
       - "Cargo.lock"
       - "rust-toolchain.toml"
       - ".github/actions/setup-rust/**"
+      - ".github/actions/release-tool/**"
       - "packaging/linux/**"
       - "packaging/release/**"
       - "ui-tauri/package.json"
@@ -147,6 +144,11 @@ jobs:
       - name: Set up Rust
         uses: ./.github/actions/setup-rust
 
+      - name: Build the release tool
+        uses: ./.github/actions/release-tool
+        with:
+          setup-rust: "false"
+
       # The AI provider broker is a Node script bundled from
       # ui-tauri/provider-broker. It is deliberately NOT committed. The Rust
       # binary looks for it at <executable dir>/provider_broker/index.mjs, so
@@ -234,7 +236,7 @@ jobs:
           fi
           SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)"
           export SOURCE_DATE_EPOCH
-          "$PYTHON" scripts/write_build_info.py \
+          "$KASSIBER_RELEASE_TOOL" build-info \
             --output build/BUILD_INFO.json \
             --version "$version" \
             --commit "$package_commit" \
@@ -636,7 +638,7 @@ jobs:
       - build-cli
       - build-desktop
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     if: >-
       github.event_name == 'push' ||
       (github.event_name == 'workflow_dispatch' &&
@@ -659,15 +661,18 @@ jobs:
             exit 1
           fi
 
+      - name: Build the release tool
+        uses: ./.github/actions/release-tool
+
       - name: Enforce release signing cutover policy
         id: release-signing
         env:
           RELEASE_IS_DRAFT: 'true'
         run: |
           set -euo pipefail
-          policy_json="$(python3 scripts/release_manifest.py policy \
+          policy_json="$("$KASSIBER_RELEASE_TOOL" manifest policy \
             --policy packaging/release/signing-policy.json)"
-          policy_enabled="$(python3 -c 'import json,sys; print(str(json.loads(sys.argv[1])["enabled"]).lower())' "$policy_json")"
+          policy_enabled="$(jq -r '.enabled' <<< "$policy_json")"
           if [ "$policy_enabled" = true ] && [ "$RELEASE_IS_DRAFT" != true ]; then
             echo "Signed-release policy is enabled; build a draft and publish it only through finalize-signed-release.yml." >&2
             exit 1
@@ -708,7 +713,7 @@ jobs:
         run: |
           set -euo pipefail
           version="${RELEASE_TAG_NAME#v}"
-          python scripts/release_manifest.py generate \
+          "$KASSIBER_RELEASE_TOOL" manifest generate \
             --release-dir release \
             --version "$version"
           manifest_path="release/kassiber-${version}-manifest.txt"
@@ -732,7 +737,7 @@ jobs:
       - name: Extract reviewed release notes
         env:
           RELEASE_TAG_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
-        run: python scripts/release_notes.py --version "$RELEASE_TAG_NAME" --output "$RUNNER_TEMP/release-notes.md"
+        run: '"$KASSIBER_RELEASE_TOOL" release-notes --version "$RELEASE_TAG_NAME" --output "$RUNNER_TEMP/release-notes.md"'
       - name: Create or update release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
         with:
@@ -795,12 +800,12 @@ jobs:
             printf '%s' "$sha256"
           }
 
-          python scripts/render_homebrew.py cask \
+          "$KASSIBER_RELEASE_TOOL" render-homebrew cask \
             --version "$version" \
             --sha256 "$(release_sha256 kassiber-macos-arm64.dmg)" \
             --output "homebrew-tap/${HOMEBREW_CASK_PATH}"
 
-          python scripts/render_homebrew.py cli-formula \
+          "$KASSIBER_RELEASE_TOOL" render-homebrew cli-formula \
             --version "$version" \
             --sha256-macos-arm64 "$(release_sha256 kassiber-cli-macos-arm64.tar.gz)" \
             --sha256-linux-x64 "$(release_sha256 kassiber-cli-linux-x64.tar.gz)" \

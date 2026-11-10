@@ -12,9 +12,9 @@ reports, for one BTCPay version:
 
 Usage (from the repository root, Docker available to this user):
 
-    uv run --locked python dev/regtest/btcpay_permission_probe.py up --btcpay 2.4.7
-    uv run --locked python dev/regtest/btcpay_permission_probe.py probe > probe.json
-    uv run --locked python dev/regtest/btcpay_permission_probe.py down
+    python3 -I dev/regtest/btcpay_permission_probe.py up --btcpay 2.4.7
+    python3 -I dev/regtest/btcpay_permission_probe.py probe > probe.json
+    python3 -I dev/regtest/btcpay_permission_probe.py down
 
 `up` prints the base URL and seeded secrets to the state file; `probe` reads
 them. The project name (`--project`) and ports keep the stack apart from the

@@ -1,0 +1,1231 @@
+{
+ "cases": [
+  {
+   "name": "aur-desktop",
+   "script": "render_aur.py",
+   "args": [
+    "desktop",
+    "--version",
+    "v1.2.3",
+    "--sha256",
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "--output",
+    "out"
+   ],
+   "rust": [
+    "render-aur"
+   ],
+   "setup": {},
+   "repo_files": {},
+   "env": {},
+   "compare_stderr": true,
+   "exit": 0,
+   "stdout": "",
+   "stderr": "",
+   "files": {
+    "out/.SRCINFO": {
+     "sha256": "d3724119cc59c531ccb9f0267d0762f1e110189c05f0ef8efd0599b4a9e5fe2a",
+     "mode": "0o644",
+     "text": "pkgbase = kassiber-bin\n\tpkgdesc = Local-first Bitcoin accounting desktop application\n\tpkgver = 1.2.3\n\tpkgrel = 1\n\turl = https://github.com/bitcoinaustria/kassiber\n\tarch = x86_64\n\tlicense = AGPL-3.0-only\n\tdepends = glibc\n\tdepends = gcc-libs\n\tdepends = gtk3\n\tdepends = webkit2gtk-4.1\n\tprovides = kassiber\n\tprovides = kassiber-command\n\tconflicts = kassiber\n\tconflicts = kassiber-cli\n\tconflicts = kassiber-cli-bin\n\toptions = !strip\n\tsource = kassiber\n\tsource = kassiber-ui\n\tsource = kassiber.desktop\n\tsource = kassiber.png\n\tsource = LICENSE\n\tsource = kassiber-bin-1.2.3.AppImage::https://github.com/bitcoinaustria/kassiber/releases/download/v1.2.3/kassiber-linux-x64.AppImage\n\tsha256sums = 14d084034106b3b880bf0d1cdeacb58aa803b0f5e5f05b20958e052b951f0b07\n\tsha256sums = 24732518d9dfef597b3be0f4c838e07e566dff3abc11d9222877abb8fa0a9676\n\tsha256sums = dd8a6d3e0dc738a017ea3c39a2c7bf1a974dda056062fcb957bd1feebaf39c4f\n\tsha256sums = 40f5918831c42713365cf3cc5b7b4c3d10fb4d1e393627fc391a2523c4fcec7f\n\tsha256sums = 8a32c337e37071ecfaca599c0ad89aff2057b6a1853f9ef989732401d72f4377\n\tsha256sums = aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n\npkgname = kassiber-bin\n"
+    },
+    "out/LICENSE": {
+     "sha256": "8a32c337e37071ecfaca599c0ad89aff2057b6a1853f9ef989732401d72f4377",
+     "mode": "0o644"
+    },
+    "out/PKGBUILD": {
+     "sha256": "5c4eec9bcb6899fef8e8668fac9c0ef84b46698f5783177053771ae225393aec",
+     "mode": "0o644",
+     "text": "pkgname=kassiber-bin\npkgver=1.2.3\npkgrel=1\npkgdesc='Local-first Bitcoin accounting desktop application'\narch=('x86_64')\nurl='https://github.com/bitcoinaustria/kassiber'\nlicense=('AGPL-3.0-only')\ndepends=('glibc' 'gcc-libs' 'gtk3' 'webkit2gtk-4.1')\nprovides=('kassiber' 'kassiber-command')\nconflicts=('kassiber' 'kassiber-cli' 'kassiber-cli-bin')\noptions=('!strip')\nsource=(\n        'kassiber'\n        'kassiber-ui'\n        'kassiber.desktop'\n        'kassiber.png'\n        'LICENSE'\n        'kassiber-bin-1.2.3.AppImage::https://github.com/bitcoinaustria/kassiber/releases/download/v1.2.3/kassiber-linux-x64.AppImage'\n)\nsha256sums=(\n          '14d084034106b3b880bf0d1cdeacb58aa803b0f5e5f05b20958e052b951f0b07'\n          '24732518d9dfef597b3be0f4c838e07e566dff3abc11d9222877abb8fa0a9676'\n          'dd8a6d3e0dc738a017ea3c39a2c7bf1a974dda056062fcb957bd1feebaf39c4f'\n          '40f5918831c42713365cf3cc5b7b4c3d10fb4d1e393627fc391a2523c4fcec7f'\n          '8a32c337e37071ecfaca599c0ad89aff2057b6a1853f9ef989732401d72f4377'\n          'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'\n)\n\npackage() {\n  install -Dpm755 \"${srcdir}/kassiber-bin-1.2.3.AppImage\"     \"${pkgdir}/opt/kassiber/kassiber.AppImage\"\n  install -Dpm755 \"${srcdir}/kassiber\" \"${pkgdir}/usr/bin/kassiber\"\n  install -Dpm755 \"${srcdir}/kassiber-ui\" \"${pkgdir}/usr/bin/kassiber-ui\"\n  install -Dpm644 \"${srcdir}/kassiber.desktop\"     \"${pkgdir}/usr/share/applications/Kassiber.desktop\"\n  install -Dpm644 \"${srcdir}/kassiber.png\"     \"${pkgdir}/usr/share/icons/hicolor/128x128/apps/kassiber-ui.png\"\n  install -Dpm644 \"${srcdir}/LICENSE\"     \"${pkgdir}/usr/share/licenses/${pkgname}/LICENSE\"\n}\n"
+    },
+    "out/kassiber": {
+     "sha256": "14d084034106b3b880bf0d1cdeacb58aa803b0f5e5f05b20958e052b951f0b07",
+     "mode": "0o755",
+     "text": "#!/bin/sh\nexport APPIMAGE_EXTRACT_AND_RUN=1\nexec /opt/kassiber/kassiber.AppImage --cli \"$@\"\n"
+    },
+    "out/kassiber-ui": {
+     "sha256": "24732518d9dfef597b3be0f4c838e07e566dff3abc11d9222877abb8fa0a9676",
+     "mode": "0o755",
+     "text": "#!/bin/sh\nexport APPIMAGE_EXTRACT_AND_RUN=1\nexec /opt/kassiber/kassiber.AppImage \"$@\"\n"
+    },
+    "out/kassiber.desktop": {
+     "sha256": "dd8a6d3e0dc738a017ea3c39a2c7bf1a974dda056062fcb957bd1feebaf39c4f",
+     "mode": "0o644",
+     "text": "[Desktop Entry]\nType=Application\nName=Kassiber\nComment=Local-first Bitcoin accounting suite\nExec=kassiber-ui\nIcon=kassiber-ui\nTerminal=false\nCategories=Office;Finance;\n"
+    },
+    "out/kassiber.png": {
+     "sha256": "40f5918831c42713365cf3cc5b7b4c3d10fb4d1e393627fc391a2523c4fcec7f",
+     "mode": "0o644"
+    }
+   }
+  },
+  {
+   "name": "aur-cli",
+   "script": "render_aur.py",
+   "args": [
+    "cli",
+    "--version",
+    "1.2.3",
+    "--sha256",
+    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "--output",
+    "out/nested"
+   ],
+   "rust": [
+    "render-aur"
+   ],
+   "setup": {},
+   "repo_files": {},
+   "env": {},
+   "compare_stderr": true,
+   "exit": 0,
+   "stdout": "",
+   "stderr": "",
+   "files": {
+    "out/nested/.SRCINFO": {
+     "sha256": "0002d080b6776947f4b7b5569108581b47ab9311e60d3cc7134fb33ef2a9eea3",
+     "mode": "0o644",
+     "text": "pkgbase = kassiber-cli-bin\n\tpkgdesc = Local-first Bitcoin accounting CLI\n\tpkgver = 1.2.3\n\tpkgrel = 1\n\turl = https://github.com/bitcoinaustria/kassiber\n\tarch = x86_64\n\tlicense = AGPL-3.0-only\n\tdepends = glibc\n\tdepends = gcc-libs\n\tprovides = kassiber-cli\n\tprovides = kassiber-command\n\tconflicts = kassiber\n\tconflicts = kassiber-bin\n\tconflicts = kassiber-cli\n\toptions = !strip\n\tsource = LICENSE\n\tsource = kassiber-cli-bin-1.2.3.tar.gz::https://github.com/bitcoinaustria/kassiber/releases/download/v1.2.3/kassiber-cli-linux-x64.tar.gz\n\tsha256sums = 8a32c337e37071ecfaca599c0ad89aff2057b6a1853f9ef989732401d72f4377\n\tsha256sums = bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n\npkgname = kassiber-cli-bin\n"
+    },
+    "out/nested/LICENSE": {
+     "sha256": "8a32c337e37071ecfaca599c0ad89aff2057b6a1853f9ef989732401d72f4377",
+     "mode": "0o644"
+    },
+    "out/nested/PKGBUILD": {
+     "sha256": "f7b9722c2b7116b6b244619c821a2b45ab6df1a92f9ce5ecbd74bdec3c7b9646",
+     "mode": "0o644",
+     "text": "pkgname=kassiber-cli-bin\npkgver=1.2.3\npkgrel=1\npkgdesc='Local-first Bitcoin accounting CLI'\narch=('x86_64')\nurl='https://github.com/bitcoinaustria/kassiber'\nlicense=('AGPL-3.0-only')\ndepends=('glibc' 'gcc-libs')\nprovides=('kassiber-cli' 'kassiber-command')\nconflicts=('kassiber' 'kassiber-bin' 'kassiber-cli')\noptions=('!strip')\nsource=('LICENSE'\n        'kassiber-cli-bin-1.2.3.tar.gz::https://github.com/bitcoinaustria/kassiber/releases/download/v1.2.3/kassiber-cli-linux-x64.tar.gz')\nsha256sums=('8a32c337e37071ecfaca599c0ad89aff2057b6a1853f9ef989732401d72f4377'\n            'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb')\n\npackage() {\n  # The binary finds the AI provider broker beside its resolved executable.\n  install -Dpm755 \"${srcdir}/kassiber-cli-linux-x64/kassiber\"     \"${pkgdir}/usr/lib/kassiber-cli/kassiber\"\n  install -Dpm644 \"${srcdir}/kassiber-cli-linux-x64/provider_broker/index.mjs\"     \"${pkgdir}/usr/lib/kassiber-cli/provider_broker/index.mjs\"\n  install -dm755 \"${pkgdir}/usr/bin\"\n  ln -s ../lib/kassiber-cli/kassiber \"${pkgdir}/usr/bin/kassiber\"\n  install -Dpm644 \"${srcdir}/LICENSE\"     \"${pkgdir}/usr/share/licenses/${pkgname}/LICENSE\"\n}\n"
+    }
+   }
+  },
+  {
+   "name": "aur-bad-version",
+   "script": "render_aur.py",
+   "args": [
+    "cli",
+    "--version",
+    "1.2.3-rc.1",
+    "--sha256",
+    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "--output",
+    "out"
+   ],
+   "rust": [
+    "render-aur"
+   ],
+   "setup": {},
+   "repo_files": {},
+   "env": {},
+   "compare_stderr": false,
+   "exit": 1,
+   "stdout": "",
+   "stderr": null,
+   "files": {}
+  },
+  {
+   "name": "aur-bad-sha",
+   "script": "render_aur.py",
+   "args": [
+    "desktop",
+    "--version",
+    "1.2.3",
+    "--sha256",
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "--output",
+    "out"
+   ],
+   "rust": [
+    "render-aur"
+   ],
+   "setup": {},
+   "repo_files": {},
+   "env": {},
+   "compare_stderr": false,
+   "exit": 1,
+   "stdout": "",
+   "stderr": null,
+   "files": {}
+  },
+  {
+   "name": "nix",
+   "script": "render_nix.py",
+   "args": [
+    "--version",
+    "v1.2.3",
+    "--sha256-desktop",
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "--sha256-cli",
+    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "--output",
+    "out"
+   ],
+   "rust": [
+    "render-nix"
+   ],
+   "setup": {},
+   "repo_files": {},
+   "env": {},
+   "compare_stderr": true,
+   "exit": 0,
+   "stdout": "",
+   "stderr": "",
+   "files": {
+    "out/LICENSE": {
+     "sha256": "8a32c337e37071ecfaca599c0ad89aff2057b6a1853f9ef989732401d72f4377",
+     "mode": "0o644"
+    },
+    "out/flake.nix": {
+     "sha256": "3088633ce265adfe662bf2d80d87609f389256d24b5213b7978799cf1822de9c",
+     "mode": "0o644",
+     "text": "{\n  description = \"Kassiber release packages\";\n\n  inputs.nixpkgs.url = \"github:NixOS/nixpkgs/nixos-unstable\";\n\n  outputs = { self, nixpkgs }:\n    let\n      system = \"x86_64-linux\";\n      pkgs = import nixpkgs { inherit system; };\n      inherit (pkgs) lib;\n\n      cli = pkgs.stdenvNoCC.mkDerivation {\n        pname = \"kassiber-cli\";\n        version = \"1.2.3\";\n        src = pkgs.fetchurl {\n          url = \"https://github.com/bitcoinaustria/kassiber/releases/download/v1.2.3/kassiber-cli-linux-x64.tar.gz\";\n          sha256 = \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\";\n        };\n        sourceRoot = \"kassiber-cli-linux-x64\";\n        nativeBuildInputs = [ pkgs.autoPatchelfHook ];\n        buildInputs = [ pkgs.stdenv.cc.cc.lib ];\n        installPhase = ''\n          runHook preInstall\n          # The binary finds the AI provider broker beside its executable.\n          install -Dpm755 kassiber \"$out/libexec/kassiber-cli/kassiber\"\n          install -Dpm644 provider_broker/index.mjs             \"$out/libexec/kassiber-cli/provider_broker/index.mjs\"\n          mkdir -p \"$out/bin\"\n          ln -s \"$out/libexec/kassiber-cli/kassiber\" \"$out/bin/kassiber\"\n          install -Dpm644 ${./LICENSE}             \"$out/share/licenses/kassiber-cli/LICENSE\"\n          runHook postInstall\n        '';\n        meta = {\n          description = \"Local-first Bitcoin accounting CLI\";\n          homepage = \"https://github.com/bitcoinaustria/kassiber\";\n          license = lib.licenses.agpl3Only;\n          platforms = [ \"x86_64-linux\" ];\n          sourceProvenance = [ lib.sourceTypes.binaryNativeCode ];\n          mainProgram = \"kassiber\";\n        };\n      };\n\n      desktopSrc = pkgs.fetchurl {\n        url = \"https://github.com/bitcoinaustria/kassiber/releases/download/v1.2.3/kassiber-linux-x64.AppImage\";\n        sha256 = \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\";\n      };\n      desktopContents = pkgs.appimageTools.extractType2 {\n        pname = \"kassiber\";\n        src = desktopSrc;\n        version = \"1.2.3\";\n      };\n      desktop = pkgs.appimageTools.wrapType2 {\n        pname = \"kassiber\";\n        version = \"1.2.3\";\n        src = desktopSrc;\n        nativeBuildInputs = [ pkgs.makeWrapper ];\n        extraPkgs = pkgs: with pkgs; [ gtk3 webkitgtk_4_1 ];\n        extraInstallCommands = ''\n          mv \"$out/bin/kassiber\" \"$out/bin/kassiber-ui\"\n          makeWrapper \"$out/bin/kassiber-ui\" \"$out/bin/kassiber\"             --add-flags \"--cli\"\n          install -Dpm644 ${./LICENSE}             \"$out/share/licenses/kassiber/LICENSE\"\n          desktop_file=\"\"\n          for candidate in             \"${desktopContents}/Kassiber.desktop\"             \"${desktopContents}/usr/share/applications/Kassiber.desktop\"; do\n            if [ -f \"$candidate\" ]; then\n              desktop_file=\"$candidate\"\n              break\n            fi\n          done\n          if [ -n \"$desktop_file\" ]; then\n            install -Dpm644 \"$desktop_file\"               \"$out/share/applications/Kassiber.desktop\"\n            sed -i               's|^Exec=[^[:space:]]*|Exec=kassiber-ui|'               \"$out/share/applications/Kassiber.desktop\"\n          fi\n          for size in 32x32 128x128 256x256@2; do\n            icon=\"${desktopContents}/usr/share/icons/hicolor/$size/apps/kassiber-ui.png\"\n            if [ -f \"$icon\" ]; then\n              install -Dpm644 \"$icon\"                 \"$out/share/icons/hicolor/$size/apps/kassiber-ui.png\"\n            fi\n          done\n        '';\n        meta = {\n          description = \"Local-first Bitcoin accounting suite\";\n          homepage = \"https://github.com/bitcoinaustria/kassiber\";\n          license = lib.licenses.agpl3Only;\n          platforms = [ \"x86_64-linux\" ];\n          sourceProvenance = [ lib.sourceTypes.binaryNativeCode ];\n          mainProgram = \"kassiber-ui\";\n        };\n      };\n    in {\n      packages.${system} = {\n        inherit cli desktop;\n        default = desktop;\n      };\n      apps.${system} = {\n        default = { type = \"app\"; program = \"${desktop}/bin/kassiber-ui\"; };\n        cli = { type = \"app\"; program = \"${cli}/bin/kassiber\"; };\n      };\n    };\n}\n"
+    }
+   }
+  },
+  {
+   "name": "nix-bad-version",
+   "script": "render_nix.py",
+   "args": [
+    "--version",
+    "1",
+    "--sha256-desktop",
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "--sha256-cli",
+    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "--output",
+    "out"
+   ],
+   "rust": [
+    "render-nix"
+   ],
+   "setup": {},
+   "repo_files": {},
+   "env": {},
+   "compare_stderr": false,
+   "exit": 1,
+   "stdout": "",
+   "stderr": null,
+   "files": {}
+  },
+  {
+   "name": "cask",
+   "script": "render_homebrew.py",
+   "args": [
+    "cask",
+    "--version",
+    "v1.2.3-rc.1",
+    "--sha256",
+    "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "--output",
+    "Casks/kassiber.rb"
+   ],
+   "rust": [
+    "render-homebrew"
+   ],
+   "setup": {},
+   "repo_files": {},
+   "env": {},
+   "compare_stderr": true,
+   "exit": 0,
+   "stdout": "",
+   "stderr": "",
+   "files": {
+    "Casks/kassiber.rb": {
+     "sha256": "6b2e43df32a080044aae617b1dde1ff9ba61f57a698dfc021306d0c6c97c3e8d",
+     "mode": "0o644",
+     "text": "cask \"kassiber\" do\n  version \"1.2.3-rc.1\"\n  sha256 \"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\"\n\n  url \"https://github.com/bitcoinaustria/kassiber/releases/download/v#{version}/kassiber-macos-arm64.dmg\"\n  name \"Kassiber\"\n  desc \"Local-first Bitcoin accounting suite\"\n  homepage \"https://github.com/bitcoinaustria/kassiber\"\n\n  depends_on arch: :arm64\n\n  app \"Kassiber.app\"\n  binary \"#{appdir}/Kassiber.app/Contents/Resources/bin/kassiber\",\n         target: \"kassiber\"\n\n  zap trash: [\n    \"~/Library/Application Support/at.bitcoinaustria.kassiber\",\n    \"~/Library/Preferences/at.bitcoinaustria.kassiber.plist\",\n    \"~/Library/Saved Application State/at.bitcoinaustria.kassiber.savedState\",\n  ]\n\n  # Homebrew has no cask<->formula conflict stanza (the cask one only accepts\n  # cask:), so the overlap is surfaced as a caveat on both sides.\n  caveats <<~EOS\n    The bitcoinaustria/kassiber/kassiber-cli formula installs the same\n    `kassiber` command. Install either this cask or the formula, not both.\n  EOS\nend\n"
+    }
+   }
+  },
+  {
+   "name": "formula",
+   "script": "render_homebrew.py",
+   "args": [
+    "cli-formula",
+    "--version",
+    "1.2.3",
+    "--sha256-macos-arm64",
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "--sha256-linux-x64",
+    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "--output",
+    "Formula/kassiber-cli.rb"
+   ],
+   "rust": [
+    "render-homebrew"
+   ],
+   "setup": {},
+   "repo_files": {},
+   "env": {},
+   "compare_stderr": true,
+   "exit": 0,
+   "stdout": "",
+   "stderr": "",
+   "files": {
+    "Formula/kassiber-cli.rb": {
+     "sha256": "ef9e404c84083d228b4d3faa5797556c4ce8e050fde3709447451da7ae86ca12",
+     "mode": "0o644",
+     "text": "class KassiberCli < Formula\n  desc \"Local-first Bitcoin accounting CLI\"\n  homepage \"https://github.com/bitcoinaustria/kassiber\"\n  version \"1.2.3\"\n  license \"AGPL-3.0-only\"\n\n  on_macos do\n    # Homebrew must not rewrite the Developer ID-sealed runtime or metadata.\n    preserve_rpath\n    skip_clean \"libexec/Kassiber.app\"\n    on_arm do\n      url \"https://github.com/bitcoinaustria/kassiber/releases/download/v#{version}/kassiber-cli-macos-arm64.tar.gz\"\n      sha256 \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n    end\n  end\n\n  on_linux do\n    on_intel do\n      url \"https://github.com/bitcoinaustria/kassiber/releases/download/v#{version}/kassiber-cli-linux-x64.tar.gz\"\n      sha256 \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    end\n  end\n\n  def install\n    if OS.mac?\n      # Keep the notarized bundle intact; its launcher resolves symlinks.\n      libexec.install \"Kassiber.app\"\n      (bin/\"kassiber\").write_env_script libexec/\"Kassiber.app/Contents/Resources/bin/kassiber\",\n                                       KASSIBER_HOMEBREW_PACKAGE: \"formula\"\n    else\n      bin.install \"kassiber\"\n    end\n  end\n\n  # Formulae cannot declare conflicts with casks, so the overlap is surfaced\n  # as user guidance only, mirroring the cask-side caveat.\n  def caveats\n    <<~EOS\n      The Kassiber desktop cask (\"bitcoinaustria/kassiber/kassiber\") links its own\n      `kassiber` command. Install either kassiber-cli or the desktop cask,\n      not both.\n    EOS\n  end\n\n  test do\n    assert_match \"Kassiber\", shell_output(\"#{bin}/kassiber --version\")\n  end\nend\n"
+    }
+   }
+  },
+  {
+   "name": "cask-bad-sha",
+   "script": "render_homebrew.py",
+   "args": [
+    "cask",
+    "--version",
+    "1.2.3",
+    "--sha256",
+    "abc",
+    "--output",
+    "x.rb"
+   ],
+   "rust": [
+    "render-homebrew"
+   ],
+   "setup": {},
+   "repo_files": {},
+   "env": {},
+   "compare_stderr": false,
+   "exit": 1,
+   "stdout": "",
+   "stderr": null,
+   "files": {}
+  },
+  {
+   "name": "notes",
+   "script": "release_notes.py",
+   "args": [
+    "--version",
+    "v1.2.3",
+    "--changelog",
+    "CHANGELOG.md",
+    "--output",
+    "notes.md"
+   ],
+   "rust": [
+    "release-notes"
+   ],
+   "setup": {
+    "CHANGELOG.md": "# Changelog\n\n## 1.2.30\n\nOther\n\n## 1.2.3\n\n### Fixed\n\n- A & B.\r\n\n## 1.2.3-rc.1\n\nCandidate\n\n## 1.2.2\n\n\n\n## 1.2.1\n\nOlder\n"
+   },
+   "repo_files": {},
+   "env": {},
+   "compare_stderr": true,
+   "exit": 0,
+   "stdout": "",
+   "stderr": "",
+   "files": {
+    "notes.md": {
+     "sha256": "222a0d10337590d9aad9e02c2465cef64366bac5d4aecf9ed11ac3d810681163",
+     "mode": "0o644",
+     "text": "### Fixed\n\n- A & B.\n"
+    }
+   }
+  },
+  {
+   "name": "notes-rc",
+   "script": "release_notes.py",
+   "args": [
+    "--version",
+    "1.2.3-rc.1",
+    "--changelog",
+    "CHANGELOG.md",
+    "--output",
+    "notes.md"
+   ],
+   "rust": [
+    "release-notes"
+   ],
+   "setup": {
+    "CHANGELOG.md": "# Changelog\n\n## 1.2.30\n\nOther\n\n## 1.2.3\n\n### Fixed\n\n- A & B.\r\n\n## 1.2.3-rc.1\n\nCandidate\n\n## 1.2.2\n\n\n\n## 1.2.1\n\nOlder\n"
+   },
+   "repo_files": {},
+   "env": {},
+   "compare_stderr": true,
+   "exit": 0,
+   "stdout": "",
+   "stderr": "",
+   "files": {
+    "notes.md": {
+     "sha256": "90e64460786ace851169f996e91cc971f1c6d81976e5c4722136895500a1f0ab",
+     "mode": "0o644",
+     "text": "Candidate\n"
+    }
+   }
+  },
+  {
+   "name": "notes-missing",
+   "script": "release_notes.py",
+   "args": [
+    "--version",
+    "9.9.9",
+    "--changelog",
+    "CHANGELOG.md",
+    "--output",
+    "notes.md"
+   ],
+   "rust": [
+    "release-notes"
+   ],
+   "setup": {
+    "CHANGELOG.md": "# Changelog\n\n## 1.2.30\n\nOther\n\n## 1.2.3\n\n### Fixed\n\n- A & B.\r\n\n## 1.2.3-rc.1\n\nCandidate\n\n## 1.2.2\n\n\n\n## 1.2.1\n\nOlder\n"
+   },
+   "repo_files": {},
+   "env": {},
+   "compare_stderr": true,
+   "exit": 1,
+   "stdout": "",
+   "stderr": "Release notes: Require exactly one changelog section for 9.9.9\n",
+   "files": {}
+  },
+  {
+   "name": "notes-empty",
+   "script": "release_notes.py",
+   "args": [
+    "--version",
+    "1.2.2",
+    "--changelog",
+    "CHANGELOG.md",
+    "--output",
+    "notes.md"
+   ],
+   "rust": [
+    "release-notes"
+   ],
+   "setup": {
+    "CHANGELOG.md": "# Changelog\n\n## 1.2.30\n\nOther\n\n## 1.2.3\n\n### Fixed\n\n- A & B.\r\n\n## 1.2.3-rc.1\n\nCandidate\n\n## 1.2.2\n\n\n\n## 1.2.1\n\nOlder\n"
+   },
+   "repo_files": {},
+   "env": {},
+   "compare_stderr": true,
+   "exit": 1,
+   "stdout": "",
+   "stderr": "Release notes: Empty changelog section for 1.2.2\n",
+   "files": {}
+  },
+  {
+   "name": "notes-bad",
+   "script": "release_notes.py",
+   "args": [
+    "--version",
+    "1.2",
+    "--changelog",
+    "CHANGELOG.md",
+    "--output",
+    "notes.md"
+   ],
+   "rust": [
+    "release-notes"
+   ],
+   "setup": {
+    "CHANGELOG.md": "# Changelog\n\n## 1.2.30\n\nOther\n\n## 1.2.3\n\n### Fixed\n\n- A & B.\r\n\n## 1.2.3-rc.1\n\nCandidate\n\n## 1.2.2\n\n\n\n## 1.2.1\n\nOlder\n"
+   },
+   "repo_files": {},
+   "env": {},
+   "compare_stderr": true,
+   "exit": 1,
+   "stdout": "",
+   "stderr": "Release notes: Invalid release version\n",
+   "files": {}
+  },
+  {
+   "name": "notes-no-changelog",
+   "script": "release_notes.py",
+   "args": [
+    "--version",
+    "1.2.3",
+    "--output",
+    "notes.md"
+   ],
+   "rust": [
+    "release-notes"
+   ],
+   "setup": {},
+   "repo_files": {},
+   "env": {},
+   "compare_stderr": true,
+   "exit": 1,
+   "stdout": "",
+   "stderr": "Release notes: [Errno 2] No such file or directory: 'CHANGELOG.md'\n",
+   "files": {}
+  },
+  {
+   "name": "build-info",
+   "script": "write_build_info.py",
+   "args": [
+    "--output",
+    "out/BUILD_INFO.json",
+    "--version",
+    "1.2.3",
+    "--commit",
+    "0123456789abcdef",
+    "--ref",
+    "refs/tags/v1.2.3",
+    "--run-id",
+    "42",
+    "--channel",
+    "release",
+    "--built-at",
+    "2026-01-02T03:04:05Z"
+   ],
+   "rust": [
+    "build-info"
+   ],
+   "setup": {},
+   "repo_files": {},
+   "env": {},
+   "compare_stderr": true,
+   "exit": 0,
+   "stdout": "",
+   "stderr": "",
+   "files": {
+    "out/BUILD_INFO.json": {
+     "sha256": "27a0f5738ea18220da5d75d9b07dccedf1401a124ab6dc70830741fa48af704b",
+     "mode": "0o644",
+     "text": "{\n  \"built_at\": \"2026-01-02T03:04:05Z\",\n  \"channel\": \"release\",\n  \"commit\": \"0123456789abcdef\",\n  \"ref\": \"refs/tags/v1.2.3\",\n  \"run_id\": \"42\",\n  \"schema_version\": 1,\n  \"version\": \"1.2.3\"\n}\n"
+    }
+   }
+  },
+  {
+   "name": "build-info-epoch",
+   "script": "write_build_info.py",
+   "args": [
+    "--output",
+    "BUILD_INFO.json",
+    "--version",
+    "1.2.3-dev",
+    "--commit",
+    "ü",
+    "--ref",
+    "main",
+    "--channel",
+    "dev"
+   ],
+   "rust": [
+    "build-info"
+   ],
+   "setup": {},
+   "repo_files": {},
+   "env": {
+    "SOURCE_DATE_EPOCH": "1700000000"
+   },
+   "compare_stderr": true,
+   "exit": 0,
+   "stdout": "",
+   "stderr": "",
+   "files": {
+    "BUILD_INFO.json": {
+     "sha256": "65ee4220c4534565192c947fee19b05b016e93c4708149d06b062328e574a4fb",
+     "mode": "0o644",
+     "text": "{\n  \"built_at\": \"2023-11-14T22:13:20Z\",\n  \"channel\": \"dev\",\n  \"commit\": \"\\u00fc\",\n  \"ref\": \"main\",\n  \"run_id\": \"local\",\n  \"schema_version\": 1,\n  \"version\": \"1.2.3-dev\"\n}\n"
+    }
+   }
+  },
+  {
+   "name": "manifest-generate",
+   "script": "release_manifest.py",
+   "args": [
+    "generate",
+    "--release-dir",
+    "./release/",
+    "--version",
+    "v1.2.3",
+    "--exclude",
+    "notes.md"
+   ],
+   "rust": [
+    "manifest"
+   ],
+   "setup": {
+    "release/kassiber-cli-linux-x64.tar.gz": "app",
+    "release/kassiber-linux-x64.AppImage": "desktop",
+    "release/notes.md": "x"
+   },
+   "repo_files": {},
+   "env": {},
+   "compare_stderr": true,
+   "exit": 0,
+   "stdout": "{\"ok\": true, \"manifest\": \"release/kassiber-1.2.3-manifest.txt\", \"entries\": 2}\n",
+   "stderr": "",
+   "files": {
+    "release/kassiber-1.2.3-manifest.txt": {
+     "sha256": "37bfbf7f40d5ee6ff169b1b57b1339661f48abfaa1094306dc1ca88b5f688d99",
+     "mode": "0o644",
+     "text": "# Kassiber release manifest v1\n# Version: 1.2.3\na172cedcae47474b615c54d510a5d84a8dea3032e958587430b413538be3f333  kassiber-cli-linux-x64.tar.gz\n68693d02ab4fbb2331b8cc39915322e48e61f06d4d1b31e7d19913202857bc8a  kassiber-linux-x64.AppImage\n"
+    }
+   }
+  },
+  {
+   "name": "manifest-generate-empty",
+   "script": "release_manifest.py",
+   "args": [
+    "generate",
+    "--release-dir",
+    "release",
+    "--version",
+    "1.2.3"
+   ],
+   "rust": [
+    "manifest"
+   ],
+   "setup": {
+    "release/kassiber-1.2.3-manifest.txt": "old"
+   },
+   "repo_files": {},
+   "env": {},
+   "compare_stderr": true,
+   "exit": 1,
+   "stdout": "",
+   "stderr": "{\"ok\": false, \"error\": {\"code\": \"empty_release_artifact_set\", \"message\": \"No release artifacts found\", \"hint\": null, \"details\": null}}\n",
+   "files": {}
+  },
+  {
+   "name": "manifest-generate-unsafe",
+   "script": "release_manifest.py",
+   "args": [
+    "generate",
+    "--release-dir",
+    "release",
+    "--version",
+    "1.2.3"
+   ],
+   "rust": [
+    "manifest"
+   ],
+   "setup": {
+    "release/.hidden": "x"
+   },
+   "repo_files": {},
+   "env": {},
+   "compare_stderr": true,
+   "exit": 1,
+   "stdout": "",
+   "stderr": "{\"ok\": false, \"error\": {\"code\": \"invalid_release_artifact_name\", \"message\": \"Release artifact filename is not manifest-safe: .hidden\", \"hint\": null, \"details\": null}}\n",
+   "files": {}
+  },
+  {
+   "name": "manifest-generate-bad-version",
+   "script": "release_manifest.py",
+   "args": [
+    "generate",
+    "--release-dir",
+    "release",
+    "--version",
+    "1.2"
+   ],
+   "rust": [
+    "manifest"
+   ],
+   "setup": {
+    "release/kassiber-cli-linux-x64.tar.gz": "app",
+    "release/kassiber-linux-x64.AppImage": "desktop"
+   },
+   "repo_files": {},
+   "env": {},
+   "compare_stderr": true,
+   "exit": 1,
+   "stdout": "",
+   "stderr": "{\"ok\": false, \"error\": {\"code\": \"invalid_release_version\", \"message\": \"Invalid release version: 1.2\", \"hint\": null, \"details\": null}}\n",
+   "files": {}
+  },
+  {
+   "name": "verify-artifacts",
+   "script": "release_manifest.py",
+   "args": [
+    "verify-artifacts",
+    "--release-dir",
+    "release",
+    "--manifest",
+    "release/kassiber-1.2.3-manifest.txt"
+   ],
+   "rust": [
+    "manifest"
+   ],
+   "setup": {
+    "release/kassiber-cli-linux-x64.tar.gz": "app",
+    "release/kassiber-linux-x64.AppImage": "desktop",
+    "release/kassiber-1.2.3-manifest.txt": "# Kassiber release manifest v1\n# Version: 1.2.3\na172cedcae47474b615c54d510a5d84a8dea3032e958587430b413538be3f333  kassiber-cli-linux-x64.tar.gz\n68693d02ab4fbb2331b8cc39915322e48e61f06d4d1b31e7d19913202857bc8a  kassiber-linux-x64.AppImage\n"
+   },
+   "repo_files": {},
+   "env": {},
+   "compare_stderr": true,
+   "exit": 0,
+   "stdout": "{\"ok\": true, \"verified\": true, \"artifact_count\": 2, \"complete\": true, \"manifest\": \"kassiber-1.2.3-manifest.txt\"}\n",
+   "stderr": "",
+   "files": {}
+  },
+  {
+   "name": "verify-artifacts-subset",
+   "script": "release_manifest.py",
+   "args": [
+    "verify-artifacts",
+    "--release-dir",
+    "release",
+    "--manifest",
+    "release/kassiber-1.2.3-manifest.txt",
+    "--allow-subset"
+   ],
+   "rust": [
+    "manifest"
+   ],
+   "setup": {
+    "release/kassiber-linux-x64.AppImage": "desktop",
+    "release/kassiber-1.2.3-manifest.txt": "# Kassiber release manifest v1\n# Version: 1.2.3\na172cedcae47474b615c54d510a5d84a8dea3032e958587430b413538be3f333  kassiber-cli-linux-x64.tar.gz\n68693d02ab4fbb2331b8cc39915322e48e61f06d4d1b31e7d19913202857bc8a  kassiber-linux-x64.AppImage\n"
+   },
+   "repo_files": {},
+   "env": {},
+   "compare_stderr": true,
+   "exit": 0,
+   "stdout": "{\"ok\": true, \"verified\": true, \"artifact_count\": 1, \"complete\": false, \"manifest\": \"kassiber-1.2.3-manifest.txt\"}\n",
+   "stderr": "",
+   "files": {}
+  },
+  {
+   "name": "verify-artifacts-tampered",
+   "script": "release_manifest.py",
+   "args": [
+    "verify-artifacts",
+    "--release-dir",
+    "release",
+    "--manifest",
+    "release/kassiber-1.2.3-manifest.txt"
+   ],
+   "rust": [
+    "manifest"
+   ],
+   "setup": {
+    "release/kassiber-cli-linux-x64.tar.gz": "app",
+    "release/kassiber-linux-x64.AppImage": "evil",
+    "release/kassiber-1.2.3-manifest.txt": "# Kassiber release manifest v1\n# Version: 1.2.3\na172cedcae47474b615c54d510a5d84a8dea3032e958587430b413538be3f333  kassiber-cli-linux-x64.tar.gz\n68693d02ab4fbb2331b8cc39915322e48e61f06d4d1b31e7d19913202857bc8a  kassiber-linux-x64.AppImage\n"
+   },
+   "repo_files": {},
+   "env": {},
+   "compare_stderr": true,
+   "exit": 1,
+   "stdout": "",
+   "stderr": "{\"ok\": false, \"error\": {\"code\": \"release_artifact_hash_mismatch\", \"message\": \"SHA-256 mismatch for kassiber-linux-x64.AppImage\", \"hint\": \"Do not install or run this file. Delete it and download the release again.\", \"details\": {\"artifact\": \"kassiber-linux-x64.AppImage\", \"expected_sha256\": \"68693d02ab4fbb2331b8cc39915322e48e61f06d4d1b31e7d19913202857bc8a\", \"actual_sha256\": \"b5c1fb2efc6d6b4674c2fdcc48ce01b43a3b7c03763c0c3355de0099ee0f8c73\"}}}\n",
+   "files": {}
+  },
+  {
+   "name": "verify-artifacts-extra",
+   "script": "release_manifest.py",
+   "args": [
+    "verify-artifacts",
+    "--release-dir",
+    "release",
+    "--manifest",
+    "release/kassiber-1.2.3-manifest.txt"
+   ],
+   "rust": [
+    "manifest"
+   ],
+   "setup": {
+    "release/kassiber-cli-linux-x64.tar.gz": "app",
+    "release/kassiber-linux-x64.AppImage": "desktop",
+    "release/extra.txt": "x",
+    "release/kassiber-1.2.3-manifest.txt": "# Kassiber release manifest v1\n# Version: 1.2.3\na172cedcae47474b615c54d510a5d84a8dea3032e958587430b413538be3f333  kassiber-cli-linux-x64.tar.gz\n68693d02ab4fbb2331b8cc39915322e48e61f06d4d1b31e7d19913202857bc8a  kassiber-linux-x64.AppImage\n"
+   },
+   "repo_files": {},
+   "env": {},
+   "compare_stderr": true,
+   "exit": 1,
+   "stdout": "",
+   "stderr": "{\"ok\": false, \"error\": {\"code\": \"release_artifact_set_mismatch\", \"message\": \"Release assets do not exactly match the authenticated manifest\", \"hint\": \"Do not publish this release.\", \"details\": {\"missing\": [], \"unexpected\": [\"extra.txt\"]}}}\n",
+   "files": {}
+  },
+  {
+   "name": "verify-artifacts-outside",
+   "script": "release_manifest.py",
+   "args": [
+    "verify-artifacts",
+    "--release-dir",
+    "release",
+    "--manifest",
+    "kassiber-1.2.3-manifest.txt"
+   ],
+   "rust": [
+    "manifest"
+   ],
+   "setup": {
+    "release/kassiber-cli-linux-x64.tar.gz": "app",
+    "release/kassiber-linux-x64.AppImage": "desktop",
+    "kassiber-1.2.3-manifest.txt": "# Kassiber release manifest v1\n# Version: 1.2.3\na172cedcae47474b615c54d510a5d84a8dea3032e958587430b413538be3f333  kassiber-cli-linux-x64.tar.gz\n68693d02ab4fbb2331b8cc39915322e48e61f06d4d1b31e7d19913202857bc8a  kassiber-linux-x64.AppImage\n"
+   },
+   "repo_files": {},
+   "env": {},
+   "compare_stderr": true,
+   "exit": 1,
+   "stdout": "",
+   "stderr": "{\"ok\": false, \"error\": {\"code\": \"release_artifact_set_mismatch\", \"message\": \"Release manifest must be inside the release directory\", \"hint\": null, \"details\": null}}\n",
+   "files": {}
+  },
+  {
+   "name": "verify-artifacts-version",
+   "script": "release_manifest.py",
+   "args": [
+    "verify-artifacts",
+    "--release-dir",
+    "release",
+    "--manifest",
+    "release/kassiber-1.2.4-manifest.txt"
+   ],
+   "rust": [
+    "manifest"
+   ],
+   "setup": {
+    "release/kassiber-cli-linux-x64.tar.gz": "app",
+    "release/kassiber-linux-x64.AppImage": "desktop",
+    "release/kassiber-1.2.4-manifest.txt": "# Kassiber release manifest v1\n# Version: 1.2.3\na172cedcae47474b615c54d510a5d84a8dea3032e958587430b413538be3f333  kassiber-cli-linux-x64.tar.gz\n68693d02ab4fbb2331b8cc39915322e48e61f06d4d1b31e7d19913202857bc8a  kassiber-linux-x64.AppImage\n"
+   },
+   "repo_files": {},
+   "env": {},
+   "compare_stderr": true,
+   "exit": 1,
+   "stdout": "",
+   "stderr": "{\"ok\": false, \"error\": {\"code\": \"release_manifest_version_mismatch\", \"message\": \"Signed release version does not match the manifest filename\", \"hint\": \"Do not install or run artifacts from this release.\", \"details\": {\"path\": \"release/kassiber-1.2.4-manifest.txt\", \"expected_version\": \"1.2.4\", \"signed_version\": \"1.2.3\"}}}\n",
+   "files": {}
+  },
+  {
+   "name": "verify-release",
+   "script": "release_manifest.py",
+   "args": [
+    "verify-release",
+    "--release-dir",
+    "release",
+    "--manifest",
+    "release/kassiber-1.2.3-manifest.txt",
+    "--signature",
+    "release/kassiber-1.2.3-manifest.txt.sig",
+    "--public-key",
+    "keys/fixture.pub",
+    "--fingerprint",
+    "SHA256:XSI7SYRltV/2CXfupPLvCNddcraU20X7OqGD+XsYVHQ"
+   ],
+   "rust": [
+    "manifest"
+   ],
+   "setup": {
+    "release/kassiber-cli-linux-x64.tar.gz": "app",
+    "release/kassiber-linux-x64.AppImage": "desktop",
+    "release/kassiber-1.2.3-manifest.txt": "# Kassiber release manifest v1\n# Version: 1.2.3\na172cedcae47474b615c54d510a5d84a8dea3032e958587430b413538be3f333  kassiber-cli-linux-x64.tar.gz\n68693d02ab4fbb2331b8cc39915322e48e61f06d4d1b31e7d19913202857bc8a  kassiber-linux-x64.AppImage\n",
+    "release/kassiber-1.2.3-manifest.txt.sig": "-----BEGIN SSH SIGNATURE-----\nU1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAgY3zXEIMt0z4aUxk4zVWNtAe5JI\nqXaZiihi8AKEVeNPcAAAAQa2Fzc2liZXItcmVsZWFzZQAAAAAAAAAGc2hhNTEyAAAAUwAA\nAAtzc2gtZWQyNTUxOQAAAECrg8Fwbz1Zy/mNTLVswkygcaMJyTWe3EK/5OqsafgA+DtSXX\nPMo+Y6fs/r+FSTy9JgjIdbf8q9uMb/VNBggecM\n-----END SSH SIGNATURE-----\n",
+    "keys/fixture.pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGN81xCDLdM+GlMZOM1VjbQHuSSKl2mYooYvAChFXjT3 fixture\n"
+   },
+   "repo_files": {},
+   "env": {},
+   "compare_stderr": true,
+   "exit": 0,
+   "stdout": "{\"ok\": true, \"verified\": true, \"artifact_count\": 2, \"complete\": true, \"manifest\": \"kassiber-1.2.3-manifest.txt\", \"signature\": \"kassiber-1.2.3-manifest.txt.sig\", \"signer_fingerprint\": \"SHA256:XSI7SYRltV/2CXfupPLvCNddcraU20X7OqGD+XsYVHQ\", \"signer_principal\": \"release@kassiber\", \"signature_namespace\": \"kassiber-release\"}\n",
+   "stderr": "",
+   "files": {}
+  },
+  {
+   "name": "verify-release-wrong-key",
+   "script": "release_manifest.py",
+   "args": [
+    "verify-release",
+    "--release-dir",
+    "release",
+    "--manifest",
+    "release/kassiber-1.2.3-manifest.txt",
+    "--signature",
+    "release/kassiber-1.2.3-manifest.txt.sig",
+    "--public-key",
+    "keys/fixture.pub",
+    "--fingerprint",
+    "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+   ],
+   "rust": [
+    "manifest"
+   ],
+   "setup": {
+    "release/kassiber-cli-linux-x64.tar.gz": "app",
+    "release/kassiber-linux-x64.AppImage": "desktop",
+    "release/kassiber-1.2.3-manifest.txt": "# Kassiber release manifest v1\n# Version: 1.2.3\na172cedcae47474b615c54d510a5d84a8dea3032e958587430b413538be3f333  kassiber-cli-linux-x64.tar.gz\n68693d02ab4fbb2331b8cc39915322e48e61f06d4d1b31e7d19913202857bc8a  kassiber-linux-x64.AppImage\n",
+    "release/kassiber-1.2.3-manifest.txt.sig": "-----BEGIN SSH SIGNATURE-----\nU1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAgY3zXEIMt0z4aUxk4zVWNtAe5JI\nqXaZiihi8AKEVeNPcAAAAQa2Fzc2liZXItcmVsZWFzZQAAAAAAAAAGc2hhNTEyAAAAUwAA\nAAtzc2gtZWQyNTUxOQAAAECrg8Fwbz1Zy/mNTLVswkygcaMJyTWe3EK/5OqsafgA+DtSXX\nPMo+Y6fs/r+FSTy9JgjIdbf8q9uMb/VNBggecM\n-----END SSH SIGNATURE-----\n",
+    "keys/fixture.pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGN81xCDLdM+GlMZOM1VjbQHuSSKl2mYooYvAChFXjT3 fixture\n"
+   },
+   "repo_files": {},
+   "env": {},
+   "compare_stderr": true,
+   "exit": 1,
+   "stdout": "",
+   "stderr": "{\"ok\": false, \"error\": {\"code\": \"release_fingerprint_mismatch\", \"message\": \"Release public key does not match the expected fingerprint\", \"hint\": \"Obtain the public key and full fingerprint again from independent trusted sources.\", \"details\": {\"expected_fingerprint\": \"SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"}}}\n",
+   "files": {}
+  },
+  {
+   "name": "verify-release-bad-fingerprint",
+   "script": "release_manifest.py",
+   "args": [
+    "verify-release",
+    "--release-dir",
+    "release",
+    "--manifest",
+    "release/kassiber-1.2.3-manifest.txt",
+    "--signature",
+    "release/kassiber-1.2.3-manifest.txt.sig",
+    "--public-key",
+    "keys/fixture.pub",
+    "--fingerprint",
+    "SHA256:short"
+   ],
+   "rust": [
+    "manifest"
+   ],
+   "setup": {
+    "release/kassiber-cli-linux-x64.tar.gz": "app",
+    "release/kassiber-linux-x64.AppImage": "desktop",
+    "release/kassiber-1.2.3-manifest.txt": "# Kassiber release manifest v1\n# Version: 1.2.3\na172cedcae47474b615c54d510a5d84a8dea3032e958587430b413538be3f333  kassiber-cli-linux-x64.tar.gz\n68693d02ab4fbb2331b8cc39915322e48e61f06d4d1b31e7d19913202857bc8a  kassiber-linux-x64.AppImage\n",
+    "release/kassiber-1.2.3-manifest.txt.sig": "-----BEGIN SSH SIGNATURE-----\nU1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAgY3zXEIMt0z4aUxk4zVWNtAe5JI\nqXaZiihi8AKEVeNPcAAAAQa2Fzc2liZXItcmVsZWFzZQAAAAAAAAAGc2hhNTEyAAAAUwAA\nAAtzc2gtZWQyNTUxOQAAAECrg8Fwbz1Zy/mNTLVswkygcaMJyTWe3EK/5OqsafgA+DtSXX\nPMo+Y6fs/r+FSTy9JgjIdbf8q9uMb/VNBggecM\n-----END SSH SIGNATURE-----\n",
+    "keys/fixture.pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGN81xCDLdM+GlMZOM1VjbQHuSSKl2mYooYvAChFXjT3 fixture\n"
+   },
+   "repo_files": {},
+   "env": {},
+   "compare_stderr": true,
+   "exit": 1,
+   "stdout": "",
+   "stderr": "{\"ok\": false, \"error\": {\"code\": \"invalid_release_fingerprint\", \"message\": \"Release-key fingerprint must be a complete OpenSSH SHA256 fingerprint\", \"hint\": \"Copy the complete SHA256:... Kassiber release-key fingerprint from an independent trusted source.\", \"details\": null}}\n",
+   "files": {}
+  },
+  {
+   "name": "verify-release-tampered",
+   "script": "release_manifest.py",
+   "args": [
+    "verify-release",
+    "--release-dir",
+    "release",
+    "--manifest",
+    "release/kassiber-1.2.3-manifest.txt",
+    "--signature",
+    "release/kassiber-1.2.3-manifest.txt.sig",
+    "--public-key",
+    "keys/fixture.pub",
+    "--fingerprint",
+    "SHA256:XSI7SYRltV/2CXfupPLvCNddcraU20X7OqGD+XsYVHQ"
+   ],
+   "rust": [
+    "manifest"
+   ],
+   "setup": {
+    "release/kassiber-cli-linux-x64.tar.gz": "app",
+    "release/kassiber-linux-x64.AppImage": "evil",
+    "release/kassiber-1.2.3-manifest.txt": "# Kassiber release manifest v1\n# Version: 1.2.3\na172cedcae47474b615c54d510a5d84a8dea3032e958587430b413538be3f333  kassiber-cli-linux-x64.tar.gz\n68693d02ab4fbb2331b8cc39915322e48e61f06d4d1b31e7d19913202857bc8a  kassiber-linux-x64.AppImage\n",
+    "release/kassiber-1.2.3-manifest.txt.sig": "-----BEGIN SSH SIGNATURE-----\nU1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAgY3zXEIMt0z4aUxk4zVWNtAe5JI\nqXaZiihi8AKEVeNPcAAAAQa2Fzc2liZXItcmVsZWFzZQAAAAAAAAAGc2hhNTEyAAAAUwAA\nAAtzc2gtZWQyNTUxOQAAAECrg8Fwbz1Zy/mNTLVswkygcaMJyTWe3EK/5OqsafgA+DtSXX\nPMo+Y6fs/r+FSTy9JgjIdbf8q9uMb/VNBggecM\n-----END SSH SIGNATURE-----\n",
+    "keys/fixture.pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGN81xCDLdM+GlMZOM1VjbQHuSSKl2mYooYvAChFXjT3 fixture\n"
+   },
+   "repo_files": {},
+   "env": {},
+   "compare_stderr": true,
+   "exit": 1,
+   "stdout": "",
+   "stderr": "{\"ok\": false, \"error\": {\"code\": \"release_artifact_hash_mismatch\", \"message\": \"SHA-256 mismatch for kassiber-linux-x64.AppImage\", \"hint\": \"Do not install or run this file. Delete it and download the release again.\", \"details\": {\"artifact\": \"kassiber-linux-x64.AppImage\", \"expected_sha256\": \"68693d02ab4fbb2331b8cc39915322e48e61f06d4d1b31e7d19913202857bc8a\", \"actual_sha256\": \"b5c1fb2efc6d6b4674c2fdcc48ce01b43a3b7c03763c0c3355de0099ee0f8c73\"}}}\n",
+   "files": {}
+  },
+  {
+   "name": "verify-release-bad-signature",
+   "script": "release_manifest.py",
+   "args": [
+    "verify-release",
+    "--release-dir",
+    "release",
+    "--manifest",
+    "release/kassiber-1.2.3-manifest.txt",
+    "--signature",
+    "release/kassiber-1.2.3-manifest.txt.sig",
+    "--public-key",
+    "keys/fixture.pub",
+    "--fingerprint",
+    "SHA256:XSI7SYRltV/2CXfupPLvCNddcraU20X7OqGD+XsYVHQ"
+   ],
+   "rust": [
+    "manifest"
+   ],
+   "setup": {
+    "release/kassiber-cli-linux-x64.tar.gz": "app",
+    "release/kassiber-linux-x64.AppImage": "desktop",
+    "release/kassiber-1.2.3-manifest.txt": "# Kassiber release manifest v1\n# Version: 1.2.3\na172cedcae47474b615c54d510a5d84a8dea3032e958587430b413538be3f333  kassiber-cli-linux-x64.tar.gz\n68693d02ab4fbb2331b8cc39915322e48e61f06d4d1b31e7d19913202857bc8a  kassiber-linux-x64.AppImage\n",
+    "release/kassiber-1.2.3-manifest.txt.sig": "not a signature",
+    "keys/fixture.pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGN81xCDLdM+GlMZOM1VjbQHuSSKl2mYooYvAChFXjT3 fixture\n"
+   },
+   "repo_files": {},
+   "env": {},
+   "compare_stderr": true,
+   "exit": 1,
+   "stdout": "",
+   "stderr": "{\"ok\": false, \"error\": {\"code\": \"release_signature_verification_failed\", \"message\": \"Release signature is not a detached OpenSSH signature\", \"hint\": \"Do not install or run the release artifact.\", \"details\": {\"expected_fingerprint\": \"SHA256:XSI7SYRltV/2CXfupPLvCNddcraU20X7OqGD+XsYVHQ\"}}}\n",
+   "files": {}
+  },
+  {
+   "name": "policy",
+   "script": "release_manifest.py",
+   "args": [
+    "policy",
+    "--policy",
+    "policy.json"
+   ],
+   "rust": [
+    "manifest"
+   ],
+   "setup": {
+    "policy.json": "{\"schema_version\": 2, \"enabled\": true, \"fingerprint\": \"SHA256:XSI7SYRltV/2CXfupPLvCNddcraU20X7OqGD+XsYVHQ\", \"namespace\": \"kassiber-release\", \"principal\": \"release@kassiber\", \"public_key_path\": \"release/fixture.pub\", \"allowed_signers_path\": \"release/allowed_signers\"}"
+   },
+   "repo_files": {
+    "release/fixture.pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGN81xCDLdM+GlMZOM1VjbQHuSSKl2mYooYvAChFXjT3 fixture\n",
+    "release/allowed_signers": "release@kassiber namespaces=\"kassiber-release\" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGN81xCDLdM+GlMZOM1VjbQHuSSKl2mYooYvAChFXjT3\n"
+   },
+   "env": {},
+   "compare_stderr": true,
+   "exit": 0,
+   "stdout": "{\"ok\": true, \"enabled\": true, \"fingerprint\": \"SHA256:XSI7SYRltV/2CXfupPLvCNddcraU20X7OqGD+XsYVHQ\", \"namespace\": \"kassiber-release\", \"principal\": \"release@kassiber\", \"public_key_path\": \"{repo}/release/fixture.pub\", \"allowed_signers_path\": \"{repo}/release/allowed_signers\"}\n",
+   "stderr": "",
+   "files": {}
+  },
+  {
+   "name": "policy-disabled",
+   "script": "release_manifest.py",
+   "args": [
+    "policy",
+    "--policy",
+    "policy.json"
+   ],
+   "rust": [
+    "manifest"
+   ],
+   "setup": {
+    "policy.json": "{\"schema_version\": 2, \"enabled\": false, \"fingerprint\": \"\", \"namespace\": \"kassiber-release\", \"principal\": \"release@kassiber\", \"public_key_path\": \"release/fixture.pub\", \"allowed_signers_path\": \"release/allowed_signers\"}"
+   },
+   "repo_files": {
+    "release/fixture.pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGN81xCDLdM+GlMZOM1VjbQHuSSKl2mYooYvAChFXjT3 fixture\n",
+    "release/allowed_signers": "release@kassiber namespaces=\"kassiber-release\" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGN81xCDLdM+GlMZOM1VjbQHuSSKl2mYooYvAChFXjT3\n"
+   },
+   "env": {},
+   "compare_stderr": true,
+   "exit": 0,
+   "stdout": "{\"ok\": true, \"enabled\": false, \"fingerprint\": \"\", \"namespace\": \"kassiber-release\", \"principal\": \"release@kassiber\", \"public_key_path\": \"{repo}/release/fixture.pub\", \"allowed_signers_path\": \"{repo}/release/allowed_signers\"}\n",
+   "stderr": "",
+   "files": {}
+  },
+  {
+   "name": "policy-disabled-fingerprint",
+   "script": "release_manifest.py",
+   "args": [
+    "policy",
+    "--policy",
+    "policy.json"
+   ],
+   "rust": [
+    "manifest"
+   ],
+   "setup": {
+    "policy.json": "{\"schema_version\": 2, \"enabled\": false, \"fingerprint\": \"SHA256:XSI7SYRltV/2CXfupPLvCNddcraU20X7OqGD+XsYVHQ\", \"namespace\": \"kassiber-release\", \"principal\": \"release@kassiber\", \"public_key_path\": \"release/fixture.pub\", \"allowed_signers_path\": \"release/allowed_signers\"}"
+   },
+   "repo_files": {
+    "release/fixture.pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGN81xCDLdM+GlMZOM1VjbQHuSSKl2mYooYvAChFXjT3 fixture\n",
+    "release/allowed_signers": "release@kassiber namespaces=\"kassiber-release\" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGN81xCDLdM+GlMZOM1VjbQHuSSKl2mYooYvAChFXjT3\n"
+   },
+   "env": {},
+   "compare_stderr": true,
+   "exit": 1,
+   "stdout": "",
+   "stderr": "{\"ok\": false, \"error\": {\"code\": \"invalid_release_signing_policy\", \"message\": \"Disabled release signing policy must not carry a fingerprint\", \"hint\": null, \"details\": null}}\n",
+   "files": {}
+  },
+  {
+   "name": "policy-mismatch",
+   "script": "release_manifest.py",
+   "args": [
+    "policy",
+    "--policy",
+    "policy.json"
+   ],
+   "rust": [
+    "manifest"
+   ],
+   "setup": {
+    "policy.json": "{\"schema_version\": 2, \"enabled\": true, \"fingerprint\": \"SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\", \"namespace\": \"kassiber-release\", \"principal\": \"release@kassiber\", \"public_key_path\": \"release/fixture.pub\", \"allowed_signers_path\": \"release/allowed_signers\"}"
+   },
+   "repo_files": {
+    "release/fixture.pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGN81xCDLdM+GlMZOM1VjbQHuSSKl2mYooYvAChFXjT3 fixture\n",
+    "release/allowed_signers": "release@kassiber namespaces=\"kassiber-release\" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGN81xCDLdM+GlMZOM1VjbQHuSSKl2mYooYvAChFXjT3\n"
+   },
+   "env": {},
+   "compare_stderr": true,
+   "exit": 1,
+   "stdout": "",
+   "stderr": "{\"ok\": false, \"error\": {\"code\": \"invalid_release_signing_policy\", \"message\": \"Release public key does not match the pinned policy fingerprint\", \"hint\": null, \"details\": {\"expected_fingerprint\": \"SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"}}}\n",
+   "files": {}
+  },
+  {
+   "name": "policy-escape",
+   "script": "release_manifest.py",
+   "args": [
+    "policy",
+    "--policy",
+    "policy.json"
+   ],
+   "rust": [
+    "manifest"
+   ],
+   "setup": {
+    "policy.json": "{\"schema_version\": 2, \"enabled\": true, \"fingerprint\": \"SHA256:XSI7SYRltV/2CXfupPLvCNddcraU20X7OqGD+XsYVHQ\", \"namespace\": \"kassiber-release\", \"principal\": \"release@kassiber\", \"public_key_path\": \"../outside.pub\", \"allowed_signers_path\": \"release/allowed_signers\"}"
+   },
+   "repo_files": {
+    "release/fixture.pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGN81xCDLdM+GlMZOM1VjbQHuSSKl2mYooYvAChFXjT3 fixture\n",
+    "release/allowed_signers": "release@kassiber namespaces=\"kassiber-release\" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGN81xCDLdM+GlMZOM1VjbQHuSSKl2mYooYvAChFXjT3\n"
+   },
+   "env": {},
+   "compare_stderr": true,
+   "exit": 1,
+   "stdout": "",
+   "stderr": "{\"ok\": false, \"error\": {\"code\": \"invalid_release_signing_policy\", \"message\": \"Release public key path escapes the repository\", \"hint\": null, \"details\": null}}\n",
+   "files": {}
+  },
+  {
+   "name": "policy-absolute",
+   "script": "release_manifest.py",
+   "args": [
+    "policy",
+    "--policy",
+    "policy.json"
+   ],
+   "rust": [
+    "manifest"
+   ],
+   "setup": {
+    "policy.json": "{\"schema_version\": 2, \"enabled\": true, \"fingerprint\": \"SHA256:XSI7SYRltV/2CXfupPLvCNddcraU20X7OqGD+XsYVHQ\", \"namespace\": \"kassiber-release\", \"principal\": \"release@kassiber\", \"public_key_path\": \"release/fixture.pub\", \"allowed_signers_path\": \"/etc/passwd\"}"
+   },
+   "repo_files": {
+    "release/fixture.pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGN81xCDLdM+GlMZOM1VjbQHuSSKl2mYooYvAChFXjT3 fixture\n",
+    "release/allowed_signers": "release@kassiber namespaces=\"kassiber-release\" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGN81xCDLdM+GlMZOM1VjbQHuSSKl2mYooYvAChFXjT3\n"
+   },
+   "env": {},
+   "compare_stderr": true,
+   "exit": 1,
+   "stdout": "",
+   "stderr": "{\"ok\": false, \"error\": {\"code\": \"invalid_release_signing_policy\", \"message\": \"Release allowed_signers path must be repository-relative\", \"hint\": null, \"details\": null}}\n",
+   "files": {}
+  },
+  {
+   "name": "policy-schema",
+   "script": "release_manifest.py",
+   "args": [
+    "policy",
+    "--policy",
+    "policy.json"
+   ],
+   "rust": [
+    "manifest"
+   ],
+   "setup": {
+    "policy.json": "{\"schema_version\": true, \"enabled\": true, \"fingerprint\": \"SHA256:XSI7SYRltV/2CXfupPLvCNddcraU20X7OqGD+XsYVHQ\", \"namespace\": \"kassiber-release\", \"principal\": \"release@kassiber\", \"public_key_path\": \"release/fixture.pub\", \"allowed_signers_path\": \"release/allowed_signers\"}"
+   },
+   "repo_files": {
+    "release/fixture.pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGN81xCDLdM+GlMZOM1VjbQHuSSKl2mYooYvAChFXjT3 fixture\n",
+    "release/allowed_signers": "release@kassiber namespaces=\"kassiber-release\" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGN81xCDLdM+GlMZOM1VjbQHuSSKl2mYooYvAChFXjT3\n"
+   },
+   "env": {},
+   "compare_stderr": true,
+   "exit": 1,
+   "stdout": "",
+   "stderr": "{\"ok\": false, \"error\": {\"code\": \"invalid_release_signing_policy\", \"message\": \"Release signing policy has no supported schema\", \"hint\": null, \"details\": null}}\n",
+   "files": {}
+  },
+  {
+   "name": "policy-namespace",
+   "script": "release_manifest.py",
+   "args": [
+    "policy",
+    "--policy",
+    "policy.json"
+   ],
+   "rust": [
+    "manifest"
+   ],
+   "setup": {
+    "policy.json": "{\"schema_version\": 2, \"enabled\": true, \"fingerprint\": \"SHA256:XSI7SYRltV/2CXfupPLvCNddcraU20X7OqGD+XsYVHQ\", \"namespace\": \"other\", \"principal\": \"release@kassiber\", \"public_key_path\": \"release/fixture.pub\", \"allowed_signers_path\": \"release/allowed_signers\"}"
+   },
+   "repo_files": {
+    "release/fixture.pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGN81xCDLdM+GlMZOM1VjbQHuSSKl2mYooYvAChFXjT3 fixture\n",
+    "release/allowed_signers": "release@kassiber namespaces=\"kassiber-release\" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGN81xCDLdM+GlMZOM1VjbQHuSSKl2mYooYvAChFXjT3\n"
+   },
+   "env": {},
+   "compare_stderr": true,
+   "exit": 1,
+   "stdout": "",
+   "stderr": "{\"ok\": false, \"error\": {\"code\": \"invalid_release_signing_policy\", \"message\": \"Release signing policy must use the Kassiber release namespace and principal\", \"hint\": null, \"details\": {\"expected_namespace\": \"kassiber-release\", \"expected_principal\": \"release@kassiber\"}}}\n",
+   "files": {}
+  },
+  {
+   "name": "policy-require-enabled",
+   "script": "release_manifest.py",
+   "args": [
+    "policy",
+    "--policy",
+    "policy.json",
+    "--require-enabled"
+   ],
+   "rust": [
+    "manifest"
+   ],
+   "setup": {
+    "policy.json": "{\"schema_version\": 2, \"enabled\": false, \"fingerprint\": \"\", \"namespace\": \"kassiber-release\", \"principal\": \"release@kassiber\", \"public_key_path\": \"release/fixture.pub\", \"allowed_signers_path\": \"release/allowed_signers\"}"
+   },
+   "repo_files": {
+    "release/fixture.pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGN81xCDLdM+GlMZOM1VjbQHuSSKl2mYooYvAChFXjT3 fixture\n",
+    "release/allowed_signers": "release@kassiber namespaces=\"kassiber-release\" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGN81xCDLdM+GlMZOM1VjbQHuSSKl2mYooYvAChFXjT3\n"
+   },
+   "env": {},
+   "compare_stderr": true,
+   "exit": 1,
+   "stdout": "",
+   "stderr": "{\"ok\": false, \"error\": {\"code\": \"release_signing_not_enabled\", \"message\": \"Signed release publication is not enabled\", \"hint\": \"Publish the release key and enable the code-reviewed signing policy first.\", \"details\": null}}\n",
+   "files": {}
+  },
+  {
+   "name": "policy-not-json",
+   "script": "release_manifest.py",
+   "args": [
+    "policy",
+    "--policy",
+    "policy.json"
+   ],
+   "rust": [
+    "manifest"
+   ],
+   "setup": {
+    "policy.json": "{"
+   },
+   "repo_files": {
+    "release/fixture.pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGN81xCDLdM+GlMZOM1VjbQHuSSKl2mYooYvAChFXjT3 fixture\n",
+    "release/allowed_signers": "release@kassiber namespaces=\"kassiber-release\" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGN81xCDLdM+GlMZOM1VjbQHuSSKl2mYooYvAChFXjT3\n"
+   },
+   "env": {},
+   "compare_stderr": true,
+   "exit": 1,
+   "stdout": "",
+   "stderr": "{\"ok\": false, \"error\": {\"code\": \"invalid_release_signing_policy\", \"message\": \"Release signing policy is not valid JSON\", \"hint\": null, \"details\": null}}\n",
+   "files": {}
+  },
+  {
+   "name": "policy-repository",
+   "script": "release_manifest.py",
+   "args": [
+    "policy",
+    "--policy",
+    "{repo}/packaging/release/signing-policy.json",
+    "--require-enabled"
+   ],
+   "rust": [
+    "manifest"
+   ],
+   "setup": {},
+   "repo_files": {},
+   "env": {},
+   "compare_stderr": true,
+   "exit": 0,
+   "stdout": "{\"ok\": true, \"enabled\": true, \"fingerprint\": \"SHA256:UzYeHzOEIbanmYDAylIaGhI6dGFvhNOkszPXwUgzo9M\", \"namespace\": \"kassiber-release\", \"principal\": \"release@kassiber\", \"public_key_path\": \"{repo}/packaging/release/kassiber-release.pub\", \"allowed_signers_path\": \"{repo}/packaging/release/allowed_signers\"}\n",
+   "stderr": "",
+   "files": {}
+  }
+ ]
+}

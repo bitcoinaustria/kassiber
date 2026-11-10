@@ -66,9 +66,16 @@ mkdir -p "$work" "$output"
 
 run "$ROOT/scripts/build-rust-cli.sh" --target "$TRIPLE" --channel "$channel" \
   --commit "$commit" --output "$work/dist"
+
+# The release tool (crates/release) writes BUILD_INFO.json and the manifest.
+release_tool="${KASSIBER_RELEASE_TOOL:-}"
+if [ -z "$release_tool" ]; then
+  run cargo build --locked --release -p kassiber-release --no-default-features --bin kassiber-release
+  release_tool="$ROOT/target/release/kassiber-release.exe"
+fi
 binary="$work/dist/kassiber.exe"
 
-run "$python" scripts/write_build_info.py --output "$work/BUILD_INFO.json" \
+run "$release_tool" build-info --output "$work/BUILD_INFO.json" \
   --version "$version" --commit "$commit" --ref "$(git rev-parse --abbrev-ref HEAD)" \
   --run-id local --channel "$channel"
 

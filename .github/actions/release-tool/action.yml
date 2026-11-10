@@ -1,0 +1,31 @@
+name: Build the release tool
+description: >-
+  Builds `kassiber-release` (crates/release, without the update check's
+  network and store crates) with the pinned toolchain and exports its path as
+  KASSIBER_RELEASE_TOOL. It replaces the Python release scripts
+  (docs/plan/22-python-removal.md, D3). Run it after checkout.
+inputs:
+  setup-rust:
+    description: '"false" when the job already ran .github/actions/setup-rust.'
+    required: false
+    default: "true"
+runs:
+  using: composite
+  steps:
+    - name: Set up the pinned Rust toolchain
+      if: inputs.setup-rust == 'true'
+      uses: ./.github/actions/setup-rust
+      with:
+        cache-key: release-tool
+        save-cache: "true"
+    - name: Build kassiber-release
+      shell: bash
+      run: |
+        set -euo pipefail
+        cargo build --locked --release -p kassiber-release --no-default-features --bin kassiber-release
+        tool="$PWD/target/release/kassiber-release"
+        if [ "${RUNNER_OS:-}" = "Windows" ]; then
+          tool="$tool.exe"
+        fi
+        "$tool" --help >/dev/null
+        echo "KASSIBER_RELEASE_TOOL=$tool" >> "$GITHUB_ENV"

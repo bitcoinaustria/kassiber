@@ -26,7 +26,7 @@
       "LiveChainObserverOracleTest": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "chain-sync", "reason": "calls kassiber.core.chain_observer, kassiber.db directly", "reviewed": false, "tests": 1}
     },
     "tests/integration/test_live_lightning_business_regtest.py": {
-      "LiveLightningBusinessRegtest": {"disposition": "subprocess-scenario", "flags": ["sql", "subprocess"], "group": "chain-sync", "reason": "spawns `python -m kassiber` (cli/daemon) but also calls kassiber.backends, kassiber.db", "reviewed": false, "tests": 1}
+      "LiveLightningBusinessRegtest": {"disposition": "boundary-fixture", "flags": ["sql", "subprocess"], "group": "chain-sync", "reason": "spawns `python -m kassiber` (cli/daemon) and checks its output only", "reviewed": false, "tests": 1}
     },
     "tests/integration/test_live_lwk_observer.py": {
       "LiveLwkObserverTest": {"disposition": "subprocess-scenario", "flags": ["sql", "subprocess"], "group": "chain-sync", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.db", "reviewed": false, "tests": 1}
@@ -35,20 +35,20 @@
       "LotOrderDeterminismTest": {"disposition": "boundary-fixture", "flags": ["sql", "subprocess"], "group": "journals", "reason": "spawns `python -m kassiber` (cli) and checks its output only", "reviewed": false, "tests": 2}
     },
     "tests/integration/test_regtest_demo_realism.py": {
-      "RegtestDemoRealismTests": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "chain-sync", "reason": "calls kassiber.core.silent_payments directly", "reviewed": false, "tests": 13},
-      "RegtestDemoRealismTests::test_native_operations_cannot_gain_authored_transfer_pairs": {"disposition": "subprocess-scenario", "flags": ["subprocess"], "group": "chain-sync", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.core.silent_payments", "reviewed": false, "tests": 1}
+      "RegtestDemoRealismTests": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "chain-sync", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 13},
+      "RegtestDemoRealismTests::test_native_operations_cannot_gain_authored_transfer_pairs": {"disposition": "boundary-fixture", "flags": ["subprocess"], "group": "chain-sync", "reason": "spawns `python -m kassiber` (cli) and checks its output only", "reviewed": false, "tests": 1}
     },
     "tests/integration/test_regtest_exchange_cases.py": {
-      "RegtestExchangeCasesTest": {"disposition": "rust-test", "flags": [], "group": "chain-sync", "reason": "calls kassiber.importers directly", "reviewed": false, "tests": 1},
-      "RegtestExchangeCasesTest::test_real_cli_partial_full_and_repeated_export_matches_independent_oracle": {"disposition": "subprocess-scenario", "flags": ["sql", "subprocess"], "group": "chain-sync", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.cli.handlers, kassiber.core.metadata", "reviewed": false, "tests": 1},
-      "RegtestExchangeRuntimeParityTest": {"disposition": "subprocess-scenario", "flags": ["sql", "subprocess"], "group": "chain-sync", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.cli.handlers, kassiber.core.metadata", "reviewed": false, "tests": 1}
+      "RegtestExchangeCasesTest": {"disposition": "boundary-fixture", "flags": ["sql", "subprocess"], "group": "chain-sync", "reason": "spawns `python -m kassiber` (cli/daemon) and checks its output only", "reviewed": false, "tests": 1},
+      "RegtestExchangeCasesTest::test_export_pages_preserve_execution_cost_and_distinct_account_fee": {"disposition": "rust-test", "flags": [], "group": "chain-sync", "reason": "calls kassiber.importers directly", "reviewed": false, "tests": 1},
+      "RegtestExchangeRuntimeParityTest": {"disposition": "boundary-fixture", "flags": ["sql", "subprocess"], "group": "chain-sync", "reason": "spawns `python -m kassiber` (cli/daemon) and checks its output only", "reviewed": false, "tests": 1}
     },
     "tests/integration/test_regtest_tape_cli.py": {
-      "RegtestTapeCliTest": {"disposition": "subprocess-scenario", "flags": ["sql", "tapes", "subprocess"], "group": "chain-sync", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.core.sync_backends", "reviewed": false, "tests": 3},
-      "RegtestTapeRuntimeParityTest": {"disposition": "subprocess-scenario", "flags": ["sql", "tapes", "subprocess"], "group": "chain-sync", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.core.sync_backends", "reviewed": false, "tests": 2}
+      "RegtestTapeCliTest": {"disposition": "boundary-fixture", "flags": ["sql", "tapes", "subprocess"], "group": "chain-sync", "reason": "spawns `python -m kassiber` (cli) and checks its output only", "reviewed": false, "tests": 3},
+      "RegtestTapeRuntimeParityTest": {"disposition": "boundary-fixture", "flags": ["sql", "tapes", "subprocess"], "group": "chain-sync", "reason": "spawns `python -m kassiber` (cli) and checks its output only", "reviewed": false, "tests": 2}
     },
     "tests/integration/test_runtime_shadow.py": {
-      "RuntimeShadowTest": {"disposition": "subprocess-scenario", "flags": ["sql", "subprocess"], "group": "journals", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.cli.handlers, kassiber.core.metadata", "reviewed": false, "tests": 1}
+      "RuntimeShadowTest": {"disposition": "boundary-fixture", "flags": ["sql", "subprocess"], "group": "journals", "reason": "spawns `python -m kassiber` (cli/daemon) and checks its output only", "reviewed": false, "tests": 1}
     },
     "tests/rust_port/test_contracts.py": {
       "test_wire_and_source_contracts_match_the_reviewed_snapshots": {"disposition": "oracle", "flags": ["subprocess"], "group": "packaging-ci", "reason": "pins generated Python boundary/source contracts for the Rust replacement", "reviewed": true, "tests": 1},
@@ -1795,8 +1795,8 @@
     },
     "tests/test_lightning_demo_backdate.py": {
       "AssignHistoricalDatesTests": {"disposition": "rust-test", "flags": [], "group": "chain-sync", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 9},
-      "RebucketForwardDayTests": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "chain-sync", "reason": "calls kassiber.core.lightning directly", "reviewed": false, "tests": 2},
-      "BackdateProfileScopeTests": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "chain-sync", "reason": "calls kassiber.db, kassiber.core.lightning directly", "reviewed": false, "tests": 3}
+      "RebucketForwardDayTests": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "chain-sync", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 2},
+      "BackdateProfileScopeTests": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "chain-sync", "reason": "calls kassiber.db directly", "reviewed": false, "tests": 3}
     },
     "tests/test_lightning_funding.py": {
       "LightningFundingTest": {"disposition": "rust-test", "flags": ["subprocess"], "group": "chain-sync", "reason": "runs helper processes without the product entry", "reviewed": false, "tests": 6}
@@ -2263,7 +2263,7 @@
       "RatesIncrementalTest": {"disposition": "rust-test", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "chain-sync", "reason": "calls kassiber.core.rates, kassiber.db directly", "reviewed": false, "tests": 1}
     },
     "tests/test_rates_kraken_csv.py": {
-      "KrakenCsvRatesTest": {"disposition": "rust-test", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "imports", "reason": "calls kassiber.core.rates, kassiber.db directly", "reviewed": false, "tests": 24},
+      "KrakenCsvRatesTest": {"disposition": "rust-test", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "imports", "reason": "calls kassiber.core.rates, kassiber.db directly", "reviewed": false, "tests": 23},
       "KrakenCsvRatesTest::test_ingests_kraken_csv_and_stores_ohlcvt": {"disposition": "subprocess-scenario", "flags": ["sql", "subprocess"], "group": "imports", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.core.rates", "reviewed": false, "tests": 1},
       "KrakenCsvRatesTest::test_reingest_is_idempotent": {"disposition": "boundary-fixture", "flags": ["sql", "subprocess"], "group": "imports", "reason": "spawns `python -m kassiber` (cli) and checks its output only", "reviewed": false, "tests": 1},
       "KrakenCsvRatesTest::test_desktop_daemon_import_payload_supports_incremental_archives": {"disposition": "subprocess-scenario", "flags": ["sql"], "group": "imports", "reason": "drives the daemon entry in process", "reviewed": false, "tests": 1},
@@ -2305,12 +2305,13 @@
       "RegtestBackendStackTest": {"disposition": "rust-test", "flags": ["mock"], "group": "packaging-ci", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 11}
     },
     "tests/test_regtest_exchange_api.py": {
-      "RegtestExchangeApiTest": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "chain-sync", "reason": "calls kassiber.core.accounts, kassiber.db directly", "reviewed": false, "tests": 3}
+      "RegtestExchangeApiTest": {"disposition": "rust-test", "flags": [], "group": "chain-sync", "reason": "calls kassiber.core.exchange_imports directly", "reviewed": false, "tests": 2},
+      "RegtestExchangeApiTest::test_real_signed_paginated_import_and_refresh_preserve_source_ledger": {"disposition": "subprocess-scenario", "flags": ["sql", "subprocess"], "group": "chain-sync", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.core.accounts, kassiber.db", "reviewed": false, "tests": 1}
     },
     "tests/test_regtest_harness.py": {
       "RegtestHarnessTest": {"disposition": "rust-test", "flags": ["mock", "mock-internal", "sql", "tapes"], "group": "chain-sync", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 34},
-      "RegtestHarnessTest::test_full_accounting_demo_ownership_proof_requires_derived_routes_before_manual_pairs": {"disposition": "subprocess-scenario", "flags": ["sql", "sql-seed", "subprocess"], "group": "chain-sync", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.core.rates, kassiber.core.silent_payments", "reviewed": false, "tests": 1},
-      "RegtestHarnessTest::test_full_accounting_demo_accepts_exact_recorded_fanout_proof": {"disposition": "subprocess-scenario", "flags": ["sql", "sql-seed", "subprocess"], "group": "chain-sync", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.core.rates, kassiber.core.silent_payments", "reviewed": false, "tests": 1}
+      "RegtestHarnessTest::test_full_accounting_demo_ownership_proof_requires_derived_routes_before_manual_pairs": {"disposition": "subprocess-scenario", "flags": ["sql", "sql-seed", "subprocess"], "group": "chain-sync", "reason": "spawns `python -m kassiber` (cli/daemon) but seeds raw SQLite state", "reviewed": false, "tests": 1},
+      "RegtestHarnessTest::test_full_accounting_demo_accepts_exact_recorded_fanout_proof": {"disposition": "subprocess-scenario", "flags": ["sql", "sql-seed", "subprocess"], "group": "chain-sync", "reason": "spawns `python -m kassiber` (cli/daemon) but seeds raw SQLite state", "reviewed": false, "tests": 1}
     },
     "tests/test_regtest_source_funds_seed.py": {
       "RegtestSourceFundsFixtureTest": {"disposition": "rust-test", "flags": ["subprocess"], "group": "source-funds", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 4}

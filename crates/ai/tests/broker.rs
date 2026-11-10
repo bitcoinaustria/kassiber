@@ -1,8 +1,9 @@
 //! Ports of `tests/test_ai_broker.py` (`BrokerClientTest`) and the broker
-//! classes of `tests/test_ai_fast_mode.py`, against the same fake brokers:
-//! Python scripts run as "Node", as `KASSIBER_AI_BROKER_NODE` and
-//! `KASSIBER_AI_PROVIDER_BROKER` install them for the Python suite. Every
-//! gate here arms the attempt observer, so each launch is counted.
+//! classes of `tests/test_ai_fast_mode.py`. The fake brokers are POSIX `sh`
+//! scripts run as "Node" (`/bin/sh <script>`), standing in for the Python
+//! fakes the pytest suite installed through `KASSIBER_AI_BROKER_NODE` and
+//! `KASSIBER_AI_PROVIDER_BROKER`. Every gate here arms the attempt observer,
+//! so each launch is counted.
 #![cfg(unix)]
 
 use std::path::{Path, PathBuf};
@@ -17,38 +18,73 @@ use kassiber_envelope::{dict, s, AppError};
 use kassiber_net::{BrokerProgram, Gate, Ledger, Offline, Operation};
 use kassiber_pyjson::Value;
 
+/// Shared helpers every fake starts with: `emit` writes one JSONL record,
+/// `field` reads a string field of the request, `require` fails the broker
+/// (exit 3, so the client sees no `done`) unless the request holds one of the
+/// given fragments, and `refuse` fails it when the request holds the fragment.
+const FAKE_PRELUDE: &str = r#"emit() { printf '%s\n' "$1"; }
+field() { printf '%s\n' "$2" | sed -n "s/.*\"$1\": \"\([^\"]*\)\".*/\1/p"; }
+require() {
+  for fragment in "$@"; do
+    case "$request" in *"$fragment"*) return 0 ;; esac
+  done
+  printf 'fake broker: request lacks %s\n' "$1" >&2
+  exit 3
+}
+refuse() {
+  case "$request" in
+    *"$1"*) printf 'fake broker: request holds %s\n' "$1" >&2; exit 3 ;;
+  esac
+}
+"#;
+
 const FAKE_BROKER: &str = r#"
-import json, sys, time
-request = json.loads(sys.stdin.readline())
-open(LOG, "a").write(json.dumps(request) + "\n")
-if request["command"] == "status":
-    print(json.dumps({"type":"result","data":[{"provider":"codex","state":"ready","models":[]}]}), flush=True)
-elif request["command"] == "models":
-    print(json.dumps({"type":"result","data":[{"id":"model-a"}]}), flush=True)
-elif request.get("model") == "wait":
-    time.sleep(30)
-elif request.get("model") == "sensitive":
-    assert request["options"] == {"sensitive_context": True, "reasoning_effort": "high"}
-    assert request["tools"] == []
-    print(json.dumps({"type":"delta","content":"selected only"}), flush=True)
-    print(json.dumps({"type":"done","finish_reason":"stop","provider_session_id":"must-not-retain"}), flush=True)
-elif request.get("model") == "stateless":
-    assert request["options"] == {"stateless_session": True, "reasoning_effort": "high"}
-    assert [tool["name"] for tool in request["tools"]] == ["ui_reports_tax_summary"]
-    print(json.dumps({"type":"delta","content":"unsaved"}), flush=True)
-    print(json.dumps({"type":"done","finish_reason":"stop","provider_session_id":"must-not-retain"}), flush=True)
-elif request.get("model") == "tool-call":
-    print(json.dumps({"type":"tool_call","call_id":"native-call-1","name":"ui_reports_tax_summary","arguments":{}}), flush=True)
-    reply = json.loads(sys.stdin.readline())
-    open(LOG, "a").write(json.dumps(reply) + "\n")
-    assert reply["command"] == "tool_results"
-    assert reply["results"][0]["call_id"] == "native-call-1"
-    print(json.dumps({"type":"delta","content":"report ready"}), flush=True)
-    print(json.dumps({"type":"done","finish_reason":"stop","provider_session_id":"native-session-1"}), flush=True)
-else:
-    print(json.dumps({"type":"delta","content":"hello "}), flush=True)
-    print(json.dumps({"type":"delta","content":"world"}), flush=True)
-    print(json.dumps({"type":"done","finish_reason":"stop","provider_session_id":"native-session-1"}), flush=True)
+IFS= read -r request
+printf '%s\n' "$request" >> "$LOG"
+case "$request" in
+  '{"command": "status"'*)
+    emit '{"type":"result","data":[{"provider":"codex","state":"ready","models":[]}]}'
+    exit 0
+    ;;
+  '{"command": "models"'*)
+    emit '{"type":"result","data":[{"id":"model-a"}]}'
+    exit 0
+    ;;
+esac
+case "$(field model "$request")" in
+  wait)
+    sleep 30
+    ;;
+  sensitive)
+    # Option order is not part of the contract; the set is.
+    require '"tools": [], "options": {"sensitive_context": true, "reasoning_effort": "high"}}' \
+      '"tools": [], "options": {"reasoning_effort": "high", "sensitive_context": true}}'
+    emit '{"type":"delta","content":"selected only"}'
+    emit '{"type":"done","finish_reason":"stop","provider_session_id":"must-not-retain"}'
+    ;;
+  stateless)
+    # Exactly one tool, by name, and exactly these options.
+    require '"tools": [{"name": "ui_reports_tax_summary", '
+    refuse '}, {"name": '
+    require '}], "options": {"stateless_session": true, "reasoning_effort": "high"}}' \
+      '}], "options": {"reasoning_effort": "high", "stateless_session": true}}'
+    emit '{"type":"delta","content":"unsaved"}'
+    emit '{"type":"done","finish_reason":"stop","provider_session_id":"must-not-retain"}'
+    ;;
+  tool-call)
+    emit '{"type":"tool_call","call_id":"native-call-1","name":"ui_reports_tax_summary","arguments":{}}'
+    IFS= read -r request
+    printf '%s\n' "$request" >> "$LOG"
+    require '{"command": "tool_results", "results": [{"call_id": "native-call-1", '
+    emit '{"type":"delta","content":"report ready"}'
+    emit '{"type":"done","finish_reason":"stop","provider_session_id":"native-session-1"}'
+    ;;
+  *)
+    emit '{"type":"delta","content":"hello "}'
+    emit '{"type":"delta","content":"world"}'
+    emit '{"type":"done","finish_reason":"stop","provider_session_id":"native-session-1"}'
+    ;;
+esac
 "#;
 
 /// A scratch directory under the system temporary directory, removed on drop.
@@ -77,8 +113,9 @@ impl Drop for Scratch {
     }
 }
 
-fn python() -> PathBuf {
-    kassiber_net::which("python3").expect("python3 on PATH for the fake brokers")
+/// The "Node" that runs the fake brokers.
+fn shell() -> PathBuf {
+    kassiber_net::which("sh").expect("sh on PATH for the fake brokers")
 }
 
 /// A fake broker under `scratch`, with `LOG` naming its request log.
@@ -92,13 +129,11 @@ struct Fake {
 impl Fake {
     fn new(body: &str) -> Self {
         let scratch = Scratch::new("fake");
-        let script = scratch.path().join("fake_broker.py");
+        let script = scratch.path().join("fake_broker.sh");
         let log = scratch.path().join("requests.jsonl");
-        std::fs::write(
-            &script,
-            format!("LOG = {:?}\n{body}", log.to_str().unwrap()),
-        )
-        .unwrap();
+        let log_path = log.to_str().unwrap();
+        assert!(!log_path.contains('\''), "{log_path}");
+        std::fs::write(&script, format!("LOG='{log_path}'\n{FAKE_PRELUDE}{body}")).unwrap();
         let gate = Gate::new(|| Offline::Online, Ledger::default())
             .with_test_observer(false)
             .with_broker_fixture(script.clone());
@@ -115,7 +150,7 @@ impl Fake {
     }
 
     fn locate(&self) -> Locate {
-        let program = BrokerProgram::new(Some(python()), self.script.clone());
+        let program = BrokerProgram::new(Some(shell()), self.script.clone());
         Arc::new(move || program.clone())
     }
 
@@ -248,7 +283,7 @@ fn cancel_is_latched_before_resolution_spawn_registration_and_send() {
 fn cancellation_does_not_wait_for_a_blocked_prompt_writer() {
     // The fake never reads its stdin, so a prompt larger than the pipe
     // buffer blocks the writer.
-    let fake = Fake::new("import time\ntime.sleep(30)\n");
+    let fake = Fake::new("sleep 30\n");
     let writing = Arc::new(AtomicBool::new(false));
     let flag = Arc::clone(&writing);
     let mut client =
@@ -442,22 +477,19 @@ fn hanging_probe(stubborn: bool) {
     let root_file = scratch.path().join("root.txt");
     // The stubborn one also has stdio of its own, so only the group kill
     // can end it; the other holds the broker's stdout open.
-    let (child, stdio) = if stubborn {
-        (
-            "import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(60)",
-            ", stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL",
-        )
+    // Signals ignored before `exec` stay ignored in `sleep`.
+    let child = if stubborn {
+        "( trap '' TERM; exec sleep 60 ) </dev/null >/dev/null 2>&1 &"
     } else {
-        ("import time; time.sleep(60)", "")
+        "sleep 60 &"
     };
     let body = format!(
-        "import os, subprocess, sys, time\n\
-         root = os.environ['KASSIBER_AI_BROKER_TMPDIR']\n\
-         open(os.path.join(root, 'session-log.jsonl'), 'w').write('{{}}')\n\
-         open({root:?}, 'w').write(root)\n\
-         child = subprocess.Popen([sys.executable, '-c', {child:?}]{stdio})\n\
-         open({pid:?}, 'w').write(str(child.pid))\n\
-         time.sleep(60)\n",
+        "root=\"$KASSIBER_AI_BROKER_TMPDIR\"\n\
+         printf '{{}}' > \"$root/session-log.jsonl\"\n\
+         printf '%s' \"$root\" > '{root}'\n\
+         {child}\n\
+         printf '%s' \"$!\" > '{pid}'\n\
+         sleep 60\n",
         root = root_file.to_str().unwrap(),
         pid = pid_file.to_str().unwrap(),
     );
@@ -685,7 +717,7 @@ fn cancel_terminates_active_broker_process_group() {
 
 #[test]
 fn a_silent_broker_is_killed_by_the_leg_watchdog() {
-    let fake = Fake::new("import sys, time\nsys.stdin.readline()\ntime.sleep(30)\n");
+    let fake = Fake::new("IFS= read -r request\nsleep 30\n");
     let mut client = BrokerClient::new(
         "codex-cli://default",
         Duration::from_secs(1),
@@ -709,9 +741,8 @@ fn a_silent_broker_is_killed_by_the_leg_watchdog() {
 
 #[test]
 fn a_broker_that_exits_without_done_fails_closed() {
-    let fake = Fake::new(
-        "import json, sys\nsys.stdin.readline()\nprint(json.dumps({'type':'delta','content':'half'}), flush=True)\n",
-    );
+    let fake =
+        Fake::new("IFS= read -r request\nemit '{\"type\":\"delta\",\"content\":\"half\"}'\n");
     let mut client = fake.client("codex-cli://default");
     let none = Value::Null;
     let mut chunks = Vec::new();
@@ -731,17 +762,16 @@ fn a_broker_that_exits_without_done_fails_closed() {
 #[test]
 fn broker_errors_map_like_python() {
     let fake = Fake::new(
-        r#"import json, sys
-request = json.loads(sys.stdin.readline())
-events = {
-    "auth": {"type": "error", "code": "authentication_required", "hint": "Run codex login."},
-    "missing": {"type": "error", "code": "missing_executable"},
-    "other": {"type": "error", "message": "model not found"},
-    "bare": {"type": "error"},
-}
-print("not json", flush=True)
-print("[1, 2]", flush=True)
-print(json.dumps(events[request.get("model") or request.get("provider")]), flush=True)
+        r#"IFS= read -r request
+emit "not json"
+emit "[1, 2]"
+case "$(field model "$request")" in
+  auth) emit '{"type": "error", "code": "authentication_required", "hint": "Run codex login."}' ;;
+  missing) emit '{"type": "error", "code": "missing_executable"}' ;;
+  other) emit '{"type": "error", "message": "model not found"}' ;;
+  bare) emit '{"type": "error"}' ;;
+  *) exit 3 ;;
+esac
 "#,
     );
     let none = Value::Null;
@@ -804,7 +834,7 @@ print(json.dumps(events[request.get("model") or request.get("provider")]), flush
 
 #[test]
 fn a_probe_without_a_result_or_with_broken_output_is_unavailable() {
-    let silent = Fake::new("import sys\nsys.stdin.readline()\nprint('{\"type\": \"other\"}')\n");
+    let silent = Fake::new("IFS= read -r request\nemit '{\"type\": \"other\"}'\n");
     let error = single_result(
         &silent.gate,
         &silent.locate(),
@@ -820,8 +850,7 @@ fn a_probe_without_a_result_or_with_broken_output_is_unavailable() {
             true
         )
     );
-    let broken =
-        Fake::new("import sys\nsys.stdin.readline()\nsys.stdout.buffer.write(b'\\xff\\n')\n");
+    let broken = Fake::new("IFS= read -r request\nprintf '\\377\\n'\n");
     let error = single_result(
         &broken.gate,
         &broken.locate(),
@@ -844,7 +873,7 @@ fn missing_node_reports_unavailable_without_credentials() {
     assert!(!error.message.to_lowercase().contains("token"));
     assert_eq!(fake.launches(), 0);
     let no_script: Locate =
-        Arc::new(|| BrokerProgram::new(Some(python()), PathBuf::from("/nonexistent/index.mjs")));
+        Arc::new(|| BrokerProgram::new(Some(shell()), PathBuf::from("/nonexistent/index.mjs")));
     let mut client = fake.client("codex-cli://default").with_locate(no_script);
     let none = Value::Null;
     let error = collect(&mut client, &chat(None, None, "m", &none, &[])).unwrap_err();
@@ -862,7 +891,7 @@ fn missing_node_reports_unavailable_without_credentials() {
 
 fn options_sent(options: &str) -> Value {
     let fake = Fake::new(
-        "import json, sys\nrequest = json.loads(sys.stdin.readline())\nopen(LOG, 'a').write(json.dumps(request) + '\\n')\nprint(json.dumps({'type':'delta','content':'ok'}), flush=True)\nprint(json.dumps({'type':'done','finish_reason':'stop'}), flush=True)\n",
+        "IFS= read -r request\nprintf '%s\\n' \"$request\" >> \"$LOG\"\nemit '{\"type\":\"delta\",\"content\":\"ok\"}'\nemit '{\"type\":\"done\",\"finish_reason\":\"stop\"}'\n",
     );
     let mut client = fake.client("codex-cli://default");
     let messages = messages("Reply with just: ok");
@@ -903,13 +932,12 @@ fn rejects_non_boolean_fast_mode_before_spawn() {
 #[test]
 fn broker_client_forwards_only_known_notices() {
     let fake = Fake::new(
-        r#"import json, sys
-request = json.loads(sys.stdin.readline())
-print(json.dumps({"type":"status","phase":"connecting","message":"Starting Claude"}), flush=True)
-print(json.dumps({"type":"status","phase":"fast_mode_unavailable","message":"ignored text"}), flush=True)
-print(json.dumps({"type":"status","phase":"provider_says_anything","message":"<b>x</b>"}), flush=True)
-print(json.dumps({"type":"delta","content":"ok"}), flush=True)
-print(json.dumps({"type":"done","finish_reason":"stop"}), flush=True)
+        r#"IFS= read -r request
+emit '{"type":"status","phase":"connecting","message":"Starting Claude"}'
+emit '{"type":"status","phase":"fast_mode_unavailable","message":"ignored text"}'
+emit '{"type":"status","phase":"provider_says_anything","message":"<b>x</b>"}'
+emit '{"type":"delta","content":"ok"}'
+emit '{"type":"done","finish_reason":"stop"}'
 "#,
     );
     let mut client = fake.client("claude-cli://default");
@@ -1041,12 +1069,19 @@ fn every_launch_is_seen_by_the_observer_and_a_strict_one_blocks_it() {
 #[test]
 fn the_broker_gets_only_node_and_script_and_a_private_root() {
     let fake = Fake::new(
-        r#"import json, os, stat, sys
-sys.stdin.readline()
-root = os.environ["KASSIBER_AI_BROKER_TMPDIR"]
-info = os.stat(root)
-open(LOG, "a").write(json.dumps({"argv": sys.argv[1:], "mode": stat.S_IMODE(info.st_mode), "dir": os.path.isdir(root), "name": os.path.basename(root)[:19], "group_leader": os.getpgid(0) == os.getpid()}) + "\n")
-print(json.dumps({"type": "result", "data": []}), flush=True)
+        r#"IFS= read -r request
+root="$KASSIBER_AI_BROKER_TMPDIR"
+# `ls -ld` is the portable way to read permission bits (no GNU/BSD stat split).
+case "$(ls -ld "$root" | cut -c1-10)" in
+  drwx------) mode=448 ;;
+  *) mode=-1 ;;
+esac
+if [ -d "$root" ]; then dir=true; else dir=false; fi
+name=$(basename "$root" | cut -c1-19)
+if [ "$(ps -o pgid= -p $$ | tr -d ' ')" = "$$" ]; then leader=true; else leader=false; fi
+printf '{"argv": [%s], "mode": %s, "dir": %s, "name": "%s", "group_leader": %s}\n' \
+  "$(for arg in "$@"; do printf '"%s", ' "$arg"; done)" "$mode" "$dir" "$name" "$leader" >> "$LOG"
+emit '{"type": "result", "data": []}'
 "#,
     );
     single_result(

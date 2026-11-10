@@ -2,11 +2,11 @@
  * Daemon transport selector.
  *
  * Two runtime modes:
- *   - "bridge" — Vite server bridge to the Python daemon for local browsers
+ *   - "bridge" — Vite server bridge to the daemon for local browsers
  *   - "tauri"  — JSONL over stdin/stdout via Rust supervisor (production)
  *
  * The Tauri mode calls the Rust shell command boundary, which forwards
- * whitelisted requests to the local Python daemon.
+ * whitelisted requests to the local daemon.
  */
 
 import { useUiStore } from "@/store/ui";

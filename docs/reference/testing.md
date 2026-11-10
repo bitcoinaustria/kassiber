@@ -500,7 +500,7 @@ mapped, not its child's.
 
 | Tier | Command | Docker | Purpose |
 | --- | --- | --- | --- |
-| FAST | `./scripts/integration-harness.sh fast` | no | Replays recorded regtest tapes through the real sync adapter, import, journal, report, and XLSX export path with `KASSIBER_NO_EGRESS=1`. Includes a baseline watch-only tape and an edge-case tape (multi-address wallet, immature vs. mature coinbase, dust, RBF-replaced conflict pair, same-wallet self-spend, mempool-pending receipt). The same tapes are also served by a strict loopback Core RPC fake to the real CLI (`tests/integration/test_regtest_tape_cli.py`), so the replay runs on whichever runtime `KASSIBER_RUNTIME` selects. |
+| FAST | `./scripts/integration-harness.sh fast` | no | Replays recorded regtest tapes through the real sync adapter, import, journal, report, and XLSX export path with `KASSIBER_NO_EGRESS=1`. Includes a baseline watch-only tape and an edge-case tape (multi-address wallet, immature vs. mature coinbase, dust, RBF-replaced conflict pair, same-wallet self-spend, mempool-pending receipt). The same tapes are also served by a strict loopback Core RPC fake to the real CLI (`tests/integration/test_regtest_tape_cli.py`), so the replay runs on the Rust binary the harness selects. |
 | SLOW | `./scripts/integration-harness.sh bitcoin-core` | yes, unless reusing a node | Starts or reuses the regtest Compose stack (Bitcoin Core, Elements, Bitcoin Fulcrum, plus local mempool/esplora-compatible loopback endpoints), creates real wallets and transactions (including coinbase maturity and a watched receive), drives the Core RPC sync/pricing/journal/report/export smoke, and compares a real Fulcrum/Electrum address-wallet sync against Core RPC for receipt, spend, incremental, and no-op sync parity. |
 | CHAIN OBSERVERS | `./scripts/integration-harness.sh chain-observers [all\|bitcoin\|liquid]` | yes, unless reusing nodes | Extends the same disposable Compose stack with an independent Core/Elements truth oracle. It records bounded mode-0600 manifests for descriptor/address families, receive/change and gap ownership, mempool/confirmation/RBF/reorg/restart transitions, Bitcoin and Liquid UTXOs, policy/issued-asset values, and protocol endpoint heights. It also proves observer state commits and rollback/restart behavior inside a temporary SQLCipher book with no dependency sidecar store. |
 | DEMO | `./scripts/integration-harness.sh demo-full` | yes, unless reusing a node | Builds the checked-in `full-accounting-v1` scenario: thirteen Kassiber wallets including 8–12-address Bitcoin wallets, legacy/nested-SegWit/bech32/taproot rotation targets, a Silent Payments wallet, a mining wallet, and descriptor-backed Liquid wallets synced from real `elementsd` transactions through the local Liquid Electrum endpoint; monthly EUR-denominated receipts, payments, payroll, rent, cloud, and other expenses converted through the bundled Kraken BTC/EUR rate for each cycle; a deterministic jittered clock with quiet and doubled activity months; era-sensitive fees, rare heavy-tail receipts, 2–3 outbound payments in busy regimes, five external counterparty clusters, threshold-driven working-capital/merchant/cold-reserve transfers, near-full Bitcoin rotations with an explicit bounded legacy reserve where required, a real Liquid treasury migration with a delayed-receipt catch-up sweep, three policy-selected UTXO consolidation windows, and assertions that deprecated wallets retain at most one fee-reserve UTXO; 2021–22 pool payouts plus one solo coinbase, scheduled batched/dust/PayJoin/RBF edge cases, closed and still-open collateralized loans, ownership-derived fan-out self-transfer matching, a mempool-pending receipt, local Bitcoin/Liquid Electrum and mempool-compatible backend rows, swap/peg bridge pairs, journals, reports, and transaction exports. The persistent `demo-up` variant also starts the Core Lightning and BTCPay overlays by default, seeding merchant Lightning, BTCPay connections, paid BTCPay invoice/payment-request examples, and reviewed commercial reconciliation unless explicitly disabled. |
@@ -525,37 +525,29 @@ export KASSIBER_REGTEST_RPC_PASSWORD=...
 
 ### Runtime selection
 
-Every lane starts the product through `tests/cli_runner.py`.
-`KASSIBER_RUNTIME=rust` points those children at the binary
-`KASSIBER_RUST_BIN` names (default `target/release/kassiber`) by exporting
-`KASSIBER_TEST_CLI`; unset or `python` keeps `python -m kassiber`, which CI
-uses. The harness's own scenario, seeding and probe helpers stay Python,
-including the few that open the book in-process (demo rate refresh,
-Lightning backdating, exchange fixture pricing).
+Every lane starts the product through `tests/cli_runner.py`, on the Rust
+binary `KASSIBER_RUST_BIN` names (default `target/release/kassiber`): the
+harness exports it as `KASSIBER_TEST_CLI` and refuses to start without it.
+There is no Python runtime or shadow mode any more. The harness's own
+scenario, seeding and probe helpers are standard-library Python run with
+`python3 -I`, with no uv environment and no `import kassiber`
+([plan 22](../plan/22-python-removal.md), D2). They read the plaintext demo
+books with `sqlite3` and edit them only where a fixture must (demo rate-cache
+cleanup, Lightning backdating) through `tests/integration/book.py`; exchange
+fixture pricing goes through the daemon's `ui.transactions.metadata.update`.
+Lanes that run Python test modules (`fast`, `chain-observers`, the
+`bitcoin-core` unittest suites, `sync-benchmark`) still need the uv
+environment until the Python test suite is ported or removed.
 
 ```bash
 cargo build -p kassiber --release
-KASSIBER_RUNTIME=rust ./scripts/integration-harness.sh fast
+./scripts/integration-harness.sh demo-full
 ```
 
 Every lane also points `KASSIBER_OFFLINE_PREFERENCE_FILE`, the agent-access
 and update files at `target/integration-harness/preferences/` unless they are
 already set: the product otherwise reads the account's default state root
 even with `--data-root`.
-
-`KASSIBER_RUNTIME=shadow` compares the runtimes inside a live lane, where
-each run creates new chain activity and two runs never see the same chain.
-Python drives the lane; `tests/integration/runtime_shadow.py` copies the
-book before every CLI step, runs the step on Python and then on Rust from
-the copy against the same services, compares envelopes and every manifest
-table, and appends one line with both timings to
-`$KASSIBER_RUNTIME_SHADOW_DIR/steps.jsonl` (default under
-`target/runtime-shadow/`). The lane continues on Python's answers. A second
-run sees the first's side effects on live services, so a step such as the
-first Core RPC sync legitimately differs in counters like
-`core_wallet_created`. `sync-benchmark --runtimes python,rust` times both
-runtimes on one chain, using the CLI's `journals process` as the journal
-step, and compares their final books.
 
 With `KASSIBER_RUST_BIN` set, `tests/integration/test_regtest_tape_cli.py`
 and `tests/integration/test_regtest_exchange_cases.py` also compare the two
@@ -1420,7 +1412,7 @@ Poke the node like BTCPayServer's `docker-bitcoin-cli.sh`:
 ```bash
 ./dev/regtest/bitcoin-cli.sh getblockchaininfo
 ./dev/regtest/bitcoin-cli.sh -generate 1
-uv run --locked python -m kassiber --data-root ~/.kassiber/regtest-demo/data reports summary
+target/release/kassiber --data-root ~/.kassiber/regtest-demo/data reports summary
 ```
 
 Tear-down is explicit: `demo-down` stops the node but keeps the chain volume

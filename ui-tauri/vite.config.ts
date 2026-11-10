@@ -20,6 +20,7 @@ import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { BridgeDataRoot, devDataRootSeed } from "./vite/bridgeDataRoot";
+import { resolveBridgeDaemonBinary } from "./vite/bridgeDaemonBinary";
 import { runImportProjectAction } from "./vite/importProject";
 
 const DAEMON_BRIDGE_PATH = "/__kassiber__/daemon";
@@ -36,62 +37,6 @@ const NODE_MODULES_REALPATH = (() => {
     ? realpathSync(nodeModulesPath)
     : nodeModulesPath;
 })();
-
-function commandWorks(command: string, args: string[] = ["--version"]) {
-  try {
-    execFileSync(command, args, { stdio: "ignore" });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function bridgePythonCommand(repoRoot: string) {
-  const configuredPython = process.env.KASSIBER_PYTHON?.trim();
-  if (configuredPython) {
-    if (commandWorks(configuredPython)) {
-      return {
-        command: configuredPython,
-        args: ["-m", "kassiber"],
-        label: `KASSIBER_PYTHON (${configuredPython})`,
-      };
-    }
-    console.warn(
-      `[kassiber bridge] ignoring unusable KASSIBER_PYTHON=${JSON.stringify(
-        configuredPython,
-      )}`,
-    );
-  }
-
-  const repoVenvPython = path.join(repoRoot, ".venv", "bin", "python");
-  if (existsSync(repoVenvPython)) {
-    return {
-      command: repoVenvPython,
-      args: ["-m", "kassiber"],
-      label: `repo virtualenv (${repoVenvPython})`,
-    };
-  }
-
-  if (commandWorks("uv")) {
-    return {
-      command: "uv",
-      args: ["run", "python", "-m", "kassiber"],
-      label: "uv",
-    };
-  }
-
-  for (const python of ["python3", "python"]) {
-    if (commandWorks(python)) {
-      return {
-        command: python,
-        args: ["-m", "kassiber"],
-        label: python,
-      };
-    }
-  }
-
-  return null;
-}
 
 const ALLOWED_BRIDGE_KINDS = new Set([
     "ui.chain_analysis.ai_context",
@@ -305,8 +250,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.connections.btcpay.discover",
   "ui.connections.btcpay.key_guide",
   "ui.connections.btcpay.test",
-  // Rust only (docs/reference/exchange-desktop.md); the Python daemon
-  // refuses them and the desktop explains that.
+  // Exchange connections: docs/reference/exchange-desktop.md.
   "ui.connections.exchange.status",
   "ui.connections.exchange.test",
   "ui.connections.exchange.create",
@@ -652,14 +596,12 @@ class DaemonBridgeSupervisor {
     }
 
     const repoRoot = path.resolve(__dirname, "..");
-    const runner = bridgePythonCommand(repoRoot);
-    if (!runner) {
-      const message =
-        "Kassiber bridge could not find uv, KASSIBER_PYTHON, repo .venv/bin/python, python3, or python. " +
-        "Install uv or run ./scripts/bootstrap-dev-env.sh and restart the preview.";
-      throw new Error(message);
+    const resolved = resolveBridgeDaemonBinary(repoRoot);
+    if (!resolved.ok) {
+      throw new Error(resolved.message);
     }
-    const args = this.dataRoot.daemonArgs(runner.args);
+    const runner = resolved.binary;
+    const args = this.dataRoot.daemonArgs();
     console.info(`[kassiber bridge] starting daemon with ${runner.label}`);
     const child = spawn(runner.command, args, {
       cwd: repoRoot,

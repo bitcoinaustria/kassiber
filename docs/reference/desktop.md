@@ -85,11 +85,15 @@ Current development modes:
   browser preview. In bridge mode, the
   Welcome screen can open existing local books through a dev-only loopback
   folder picker; the Vite bridge validates the selected Kassiber data root and
-  restarts its Python daemon with `--data-root` before the normal unlock/profile
+  restarts its daemon with `--data-root` before the normal unlock/profile
   picker flow continues in the browser. Leaving an imported folder restarts the
   daemon on the book the preview started with: `KASSIBER_DEV_DATA_ROOT` when
-  set, otherwise the default root.
-- `pnpm tauri:dev` runs the Tauri shell, starts `python -m kassiber daemon`,
+  set, otherwise the default root. The bridge starts the Rust binary named by
+  `KASSIBER_BIN`, else the checkout's `target/release/kassiber`, else
+  `target/debug/kassiber`. It only looks for those files; it never runs a
+  probe, and with no binary the preview shows an error naming the
+  `cargo build -p kassiber --bin kassiber` step.
+- `pnpm tauri:dev` runs the Tauri shell, starts `kassiber daemon`,
   and calls the Rust `daemon_invoke` boundary. The command allowlists the
   current UI data, export, and action kinds. Report exports write under the
   managed `exports/reports/` state directory, and the desktop shell exposes a
@@ -107,8 +111,9 @@ Current development modes:
   inside the encrypted database. macOS uses the system folder picker, Windows
   uses the system folder dialog through PowerShell/.NET, and Linux desktops use
   `zenity`, `kdialog`, or `yad` when one of those pickers is installed.
-  The supervisor uses `.venv/bin/python` when present, then `python3`, unless
-  `KASSIBER_PYTHON` is set. `KASSIBER_REPO_ROOT` can point a dev shell at a
+  Without a bundled sidecar, the debug shell starts the checkout's
+  `target/release/kassiber`, then `target/debug/kassiber`, unless
+  `KASSIBER_BIN` is set. `KASSIBER_REPO_ROOT` can point a dev shell at a
   different checkout.
 
 Release desktop packages bundle the Rust `kassiber` binary as a
@@ -128,10 +133,11 @@ directory on every launch, and macOS re-validates every bundled dylib's
 signature each time because that cache is keyed by inode (6s before the daemon
 answered, against 0.19s from a stable path).
 
-At runtime the supervisor prefers `KASSIBER_PYTHON` when it is explicitly set,
-then the bundled sidecar from the app resources (one-dir candidate first), then
-the development Python fallback above. The same `KASSIBER_PYTHON` override
-applies to installed-app CLI forwarding.
+At runtime the supervisor prefers `KASSIBER_BIN` when it is explicitly set,
+then the bundled sidecar from the app resources (one-dir candidate first), then,
+in debug builds only, the checkout build above. A missing binary is a
+`daemon_binary_missing` error, never a Python fallback. The same `KASSIBER_BIN`
+override applies to installed-app CLI forwarding.
 
 On macOS the window uses an overlay title bar, and the shell draws the row the
 traffic lights sit in: one 40px title bar carrying the nav toggle, history

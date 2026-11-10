@@ -185,7 +185,7 @@ Each step (`$APP/Contents/MacOS/kassiber-ui --cli --machine --data-root <book> â
 
 To finish the hardware run, add the Developer ID provisioning profile:
 1. Copy it to `Contents/embedded.provisionprofile`.
-2. Re-sign the app with the `scripts/macos_release.py` entitlements
+2. Re-sign the app with the release tool's entitlements (`kassiber-release macos`)
    (`com.apple.application-identifier`, `com.apple.developer.team-identifier`,
    `keychain-access-groups`).
 3. Run steps 2, 3 and 7 again. Expect `{"configured": true, "auth":

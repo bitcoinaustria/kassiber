@@ -201,7 +201,7 @@ describe("ExchangeApiSetupPanel", () => {
     await clickTest();
     const alert = screen.getByRole("alert");
     expect(alert.textContent).toContain("Exchange API connections need Kassiber's Rust backend.");
-    // The Python daemon's wording would only confuse here.
+    // The daemon's wording would only confuse here.
     expect(alert.textContent).not.toContain("not wired");
   });
 
