@@ -16,7 +16,7 @@ import stat
 import tempfile
 from typing import Callable
 
-from ..durable_sync import full_fsync
+from ..durable_sync import full_fsync, sync_file
 from ..errors import AppError
 
 JOURNAL = ".restore-pending.json"
@@ -71,8 +71,8 @@ def _tree_sync(path: Path, observe: Observer) -> None:
     for item in sorted(path.rglob("*")):
         _reject_links(item)
         if item.is_file():
-            with item.open("rb") as handle:
-                full_fsync(handle.fileno())
+            # Read-write on Windows, whose fsync refuses read-only handles.
+            sync_file(item)
             observe(f"restore.copy_sync.{item.relative_to(path).as_posix()}")
     for directory in sorted((p for p in path.rglob("*") if p.is_dir()), reverse=True):
         _sync(directory)

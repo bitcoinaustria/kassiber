@@ -103,6 +103,27 @@ def test_file_syncs_open_for_writing_only_on_windows(tmp_path, monkeypatch, plat
     assert target.read_bytes() == b"x"
 
 
+def test_restore_copy_syncs_open_files_for_writing_on_windows(tmp_path, monkeypatch):
+    from kassiber.backup import install
+
+    (tmp_path / "copy" / "data").mkdir(parents=True)
+    (tmp_path / "copy" / "data" / "kassiber.sqlite3").write_bytes(b"x")
+    files = []
+    real_open = os.open
+
+    def recording_open(path, flags, *args, **kwargs):
+        if Path(path).is_file():
+            files.append((Path(path).name, flags & (os.O_RDONLY | os.O_WRONLY | os.O_RDWR)))
+        return real_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(durable_sync, "_platform", lambda: "win32")
+    monkeypatch.setattr(durable_sync.os, "open", recording_open)
+    points = []
+    install._tree_sync(tmp_path / "copy", points.append)
+    assert files == [("kassiber.sqlite3", os.O_RDWR)]
+    assert points[0] == "restore.copy_sync.data/kassiber.sqlite3"
+
+
 def test_refused_full_fsync_falls_back_to_fsync(tmp_path, macos):
     macos.refuse = True
     target = tmp_path / "file"
