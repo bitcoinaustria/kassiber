@@ -1,0 +1,163 @@
+[
+  {
+    "id": "JA-nested-script",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "&nested[\"scriptpubkey\"]",
+    "replace": "&Value::Null",
+    "expect_failing": [
+      "prebuild_sources_branch_input_witnesses"
+    ],
+    "rule": "Read the nested scriptpubkey fallback when hex is missing."
+  },
+  {
+    "id": "JA-number-iterable",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "} else if v.as_number().is_some_and(|n| n.is_i64() || n.is_u64()) {",
+    "replace": "} else if false && v.as_number().is_some_and(|n| n.is_i64() || n.is_u64()) {",
+    "expect_failing": [
+      "prebuild_sources_branch_input_witnesses"
+    ],
+    "rule": "Preserve integer versus float iterable refusal messages."
+  },
+  {
+    "id": "JA-comma-addresses",
+    "file": "crates/journals/src/prebuild/sources.rs",
+    "find": ".split(',')",
+    "replace": ".split(';')",
+    "expect_failing": [
+      "prebuild_sources_branch_input_witnesses"
+    ],
+    "rule": "Split legacy address text on commas."
+  },
+  {
+    "id": "JA-boolean-addresses",
+    "file": "crates/journals/src/prebuild/sources.rs",
+    "find": "Py::Bool(_) => return Err(Refusal::new(\"TypeError\", \"'bool' object is not iterable\")),",
+    "replace": "Py::Bool(_) => return Err(Refusal::new(\"ValueError\", \"'bool' object is not iterable\")),",
+    "expect_failing": [
+      "prebuild_sources_branch_input_witnesses"
+    ],
+    "rule": "Preserve the boolean address-container exception family."
+  },
+  {
+    "id": "JA-empty-wallet-kind",
+    "file": "crates/journals/src/prebuild/sources.rs",
+    "find": "source.kind = \"address\".into();",
+    "replace": "source.kind = \"descriptor\".into();",
+    "expect_failing": [
+      "prebuild_sources_branch_input_witnesses"
+    ],
+    "rule": "Default an empty address-list wallet kind to address."
+  },
+  {
+    "id": "JA-checkpoint-boolean",
+    "file": "crates/journals/src/prebuild/sources.rs",
+    "find": "Value::Bool(b) => Some(i64::from(*b)),",
+    "replace": "Value::Bool(_) => None,",
+    "expect_failing": [
+      "prebuild_sources_branch_input_witnesses"
+    ],
+    "rule": "Accept a legacy boolean highest-used value as an integer."
+  },
+  {
+    "id": "JA-checkpoint-merge",
+    "file": "crates/journals/src/prebuild/sources.rs",
+    "find": ".and_modify(|v| *v = (*v).max(n).max(-1))",
+    "replace": ".and_modify(|_| ())",
+    "expect_failing": [
+      "prebuild_sources_branch_input_witnesses"
+    ],
+    "rule": "Extend an inventory horizon with the greater stored checkpoint."
+  },
+  {
+    "id": "JA-projection-refusal",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "\"unknown source-overlap result projection\",",
+    "replace": "\"ignored source-overlap result projection\",",
+    "expect_failing": [
+      "prebuild_sources_unknown_projection_refuses"
+    ],
+    "rule": "Reject unknown ordered result shapes explicitly."
+  },
+  {
+    "id": "JA-signaling-divide",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "    fn divide(&self, quantity: &Decimal, context: Context) -> Result<Self, Refusal> {\n        match self {\n            Self::Finite(d) => Ok(Self::Finite(d.div(quantity, &context).map_err(arithmetic)?)),\n            Self::Special(text) if text.contains(\"sNaN\") => Err(Refusal::new(\n                \"InvalidOperation\",\n                \"[<class 'decimal.InvalidOperation'>]\",\n            )),\n            Self::Special(text) => Ok(Self::Special(text.clone())),\n        }\n    }\n",
+    "replace": "    fn divide(&self, quantity: &Decimal, context: Context) -> Result<Self, Refusal> {\n        match self {\n            Self::Finite(d) => Ok(Self::Finite(d.div(quantity, &context).map_err(arithmetic)?)),\n            Self::Special(text) if false && text.contains(\"sNaN\") => Err(Refusal::new(\n                \"InvalidOperation\",\n                \"[<class 'decimal.InvalidOperation'>]\",\n            )),\n            Self::Special(text) => Ok(Self::Special(text.clone())),\n        }\n    }\n",
+    "expect_failing": [
+      "prebuild_pricing_special_division_and_date_witnesses"
+    ],
+    "rule": "Refuse signaling NaN during value-derived division."
+  },
+  {
+    "id": "JA-century-leap",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "year.is_multiple_of(400)",
+    "replace": "false",
+    "expect_failing": [
+      "prebuild_pricing_special_division_and_date_witnesses"
+    ],
+    "rule": "A year divisible by 400 remains a leap year when choosing datetime refusal precedence."
+  },
+  {
+    "id": "JA-missing-workspace",
+    "file": "crates/journals/src/prebuild/legacy.rs",
+    "find": "Refusal::new(\"KeyError\", \"workspace_id\")",
+    "replace": "Refusal::new(\"KeyError\", \"profile_id\")",
+    "expect_failing": [
+      "prebuild_legacy_missing_scope_refuses_before_callbacks_or_writes"
+    ],
+    "rule": "Refuse missing workspace scope before clock use or writes."
+  },
+  {
+    "id": "JA-xpub-evidence",
+    "file": "crates/journals/src/prebuild/sources.rs",
+    "find": "|| (!text(&c[\"xpub\"]).trim().is_empty() && truth(&c[\"script_types\"]));",
+    "replace": "|| false;",
+    "expect_failing": [
+      "prebuild_sources_branch_input_witnesses"
+    ],
+    "rule": "Include configured xpub source scripts in finite overlap evidence."
+  },
+  {
+    "id": "JA-review-identity",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "let id = if truth(&r[\"review_id\"]) { &r[\"review_id\"] } else { &r[\"component_id\"] };",
+    "replace": "let id = &r[\"component_id\"];",
+    "expect_failing": [
+      "prebuild_sources_branch_input_witnesses"
+    ],
+    "rule": "Retain the linked legacy review identity in active-review conflict warnings."
+  },
+  {
+    "id": "JA-profile-reload-refusal",
+    "file": "crates/journals/src/prebuild/legacy.rs",
+    "find": "\"journal profile disappeared during legacy refresh\",",
+    "replace": "\"journal profile was retained during legacy refresh\",",
+    "expect_failing": [
+      "prebuild_legacy_profile_reload_refusal_restores_callback_writes"
+    ],
+    "rule": "Refuse a missing scoped profile after successful legacy writes and restore callback writes."
+  },
+  {
+    "id": "JA-sqlite-family",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "ffi::SQLITE_CONSTRAINT | ffi::SQLITE_MISMATCH => \"IntegrityError\",",
+    "replace": "ffi::SQLITE_CONSTRAINT | ffi::SQLITE_MISMATCH => \"DatabaseError\",",
+    "expect_failing": [
+      "prebuild_sqlite_refusals_retain_python_families",
+      "prebuild_sources_late_sql_refusal_restores_all_tables"
+    ],
+    "rule": "Preserve the Python IntegrityError family for SQLite constraint failures."
+  },
+  {
+    "id": "JA-empty-index-warning",
+    "file": "crates/journals/src/prebuild/overlap.rs",
+    "find": "return Ok((None, None));",
+    "replace": "return Ok((None, Some(json!({}))));",
+    "expect_failing": [
+      "prebuild_pipeline_matches_complete_python_dumps_and_ordered_fields"
+    ],
+    "rule": "An unchanged source index without overlaps also has no warning."
+  }
+]

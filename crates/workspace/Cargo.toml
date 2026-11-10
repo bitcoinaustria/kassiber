@@ -1,0 +1,29 @@
+[package]
+name = "kassiber-workspace"
+description = "Workspace shell reads shared by the CLI and desktop: readiness, next actions, badges and overviews"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[dependencies]
+kassiber-tax-countries = { path = "../tax-countries" }
+kassiber-envelope = { path = "../envelope" }
+kassiber-pydecimal = { path = "../pydecimal" }
+kassiber-pyjson = { path = "../pyjson" }
+kassiber-pytext = { path = "../pytext" }
+kassiber-rates = { path = "../rates" }
+kassiber-reports = { path = "../reports" }
+kassiber-setup = { path = "../setup" }
+kassiber-store = { path = "../store" }
+kassiber-transactions = { path = "../transactions" }
+kassiber-transfers = { path = "../transfers" }
+kassiber-wallets = { path = "../wallets" }
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints.rust]
+unsafe_code = "forbid"

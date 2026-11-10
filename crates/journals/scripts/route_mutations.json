@@ -1,0 +1,58 @@
+[
+  {
+    "id": "JROUTE-auto-pair-registration",
+    "file": "crates/cli/src/run.rs",
+    "find": "    IMPLEMENTED.contains(&command)\n",
+    "replace": "    IMPLEMENTED.contains(&command)\n        && (command != \"journals.process\" || !args.flag(\"auto_pair\"))\n",
+    "expect_failing": ["journal_auto_pair_registration_forwards_flag_and_finishes_checkpoint", "the_probe_reports_implementation_without_running_the_command"],
+    "rule": "Admit automatic pairing through both ordinary CLI routing and the hybrid implementation probe."
+  },
+  {
+    "id": "JROUTE-auto-pair-forwarding",
+    "file": "crates/cli/src/run.rs",
+    "find": "            let auto_pair = namespace.flag(\"auto_pair\");",
+    "replace": "            let auto_pair = false;",
+    "expect_failing": ["journal_auto_pair_registration_forwards_flag_and_finishes_checkpoint"],
+    "rule": "Forward explicit automatic-pairing authority to the shared book service."
+  },
+  {
+    "id": "JROUTE-plain-registration",
+    "file": "crates/cli/src/describe.rs",
+    "find": "    \"journals.process\",",
+    "replace": "",
+    "expect_failing": ["journal_plain_registration_forwards_selectors_and_finishes_checkpoint"],
+    "rule": "Register the plain journal leaf before bootstrap."
+  },
+  {
+    "id": "JROUTE-plain-dispatch",
+    "file": "crates/cli/src/run.rs",
+    "find": "if operation == \"journals.process\" {",
+    "replace": "if operation == \"__disabled_journals.process\" {",
+    "expect_failing": ["journal_plain_registration_forwards_selectors_and_finishes_checkpoint"],
+    "rule": "Dispatch the registered leaf to the shared journal service."
+  },
+  {
+    "id": "JROUTE-plain-scope",
+    "file": "crates/cli/src/run.rs",
+    "find": "                    namespace.get(\"workspace\"),\n                    namespace.get(\"profile\"),",
+    "replace": "                    None,\n                    None,",
+    "expect_failing": ["journal_plain_registration_forwards_selectors_and_finishes_checkpoint"],
+    "rule": "Forward both explicit journal scope selectors."
+  },
+  {
+    "id": "JROUTE-plain-checkpoint",
+    "file": "crates/cli/src/run.rs",
+    "find": "            result.after_reply()?;\n            book.recount_transfer_candidates",
+    "replace": "            drop(result);\n            book.recount_transfer_candidates",
+    "expect_failing": ["journal_plain_registration_forwards_selectors_and_finishes_checkpoint"],
+    "rule": "A plain run completes the journal checkpoint before recounting review candidates and replying."
+  },
+  {
+    "id": "JROUTE-auto-pair-service",
+    "file": "crates/journals/src/service.rs",
+    "find": "        options,\n        &mut |phase| (progress.borrow_mut())(phase),",
+    "replace": "        process::RefreshOptions { auto_pair: false, ..options },\n        &mut |phase| (progress.borrow_mut())(phase),",
+    "expect_failing": ["refresh_service_resolves_explicit_scope_and_matches_pairing_books"],
+    "rule": "Carry the caller's pairing authority through the scoped production service."
+  }
+]

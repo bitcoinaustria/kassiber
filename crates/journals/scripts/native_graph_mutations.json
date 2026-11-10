@@ -1,0 +1,102 @@
+[
+  {
+    "id": "JR-native-graph-surrogate",
+    "file": "crates/journals/src/native/graph.rs",
+    "find": "            points.push(point);",
+    "replace": "            points.push(0xfffd);",
+    "expect_failing": [
+      "native_builder_matches_python_states_refusals_and_uuid_tapes"
+    ],
+    "rule": "Preserve actual surrogate code points during graph string normalization."
+  },
+  {
+    "id": "JR-native-graph-script-case",
+    "file": "crates/journals/src/native/graph.rs",
+    "find": "&lower(script)",
+    "replace": "&upper(script)",
+    "expect_failing": [
+      "native_builder_matches_python_states_refusals_and_uuid_tapes"
+    ],
+    "rule": "Apply Python lowercase to native script lookup keys."
+  },
+  {
+    "id": "JR-native-graph-amount",
+    "file": "crates/journals/src/native/ownership.rs",
+    "find": "int(field(output, \"value_sats\"))? * 1000",
+    "replace": "int(field(output, \"value_sats\"))? * 1001",
+    "expect_failing": [
+      "native_builder_matches_python_states_refusals_and_uuid_tapes"
+    ],
+    "rule": "Convert exact owned sats to msat without changing the scalar."
+  },
+  {
+    "id": "JR-native-graph-mapping-order",
+    "file": "crates/journals/src/native/ownership.rs",
+    "find": "text(required(row, key)?)",
+    "replace": "text(&scalar::decode(&scalar::encode(required(row, key)?).unwrap()).unwrap())",
+    "expect_failing": [
+      "native_builder_matches_python_states_refusals_and_uuid_tapes"
+    ],
+    "rule": "Stringify candidate mappings in their observed insertion order."
+  },
+  {
+    "id": "JR-native-graph-legacy-id",
+    "file": "crates/journals/src/native/ownership.rs",
+    "find": "let value = graph::empty_text(value);",
+    "replace": "let value = graph::strip(&graph::empty_text(value));",
+    "expect_failing": [
+      "native_builder_matches_python_states_refusals_and_uuid_tapes"
+    ],
+    "rule": "Keep whitespace significant in noncanonical legacy identities."
+  },
+  {
+    "id": "JR-native-graph-index-overflow",
+    "file": "crates/journals/src/native/graph/parsed.rs",
+    "find": "Err(e) if is(field(&e.0, \"family\"), \"OverflowError\") => Err(e),",
+    "replace": "Err(e) if is(field(&e.0, \"family\"), \"OverflowError\") => Ok(fallback.map(BigInt::from)),",
+    "expect_failing": [
+      "native_builder_matches_python_states_refusals_and_uuid_tapes"
+    ],
+    "rule": "Propagate overflow from graph indexes before fallback."
+  },
+  {
+    "id": "JR-native-graph-unknown-value",
+    "file": "crates/journals/src/native/graph/parsed.rs",
+    "find": "matches!(field(o, \"value_sats\"), Value::Null)",
+    "replace": "!matches!(field(o, \"value_sats\"), Value::Null)",
+    "expect_failing": [
+      "native_builder_matches_python_states_refusals_and_uuid_tapes"
+    ],
+    "rule": "Reject incomplete valued graphs before choosing legacy fallback."
+  },
+  {
+    "id": "JR-native-graph-int-refusal",
+    "file": "crates/journals/src/native/ownership.rs",
+    "find": "let Value::Int(n) = int_zero(value)? else {",
+    "replace": "let Value::Int(n) = int_zero(value).unwrap_or(Value::from(0)) else {",
+    "expect_failing": [
+      "native_builder_matches_python_states_refusals_and_uuid_tapes"
+    ],
+    "rule": "Preserve exact native inbound coercion refusals."
+  },
+  {
+    "id": "JR-native-graph-exact",
+    "file": "crates/journals/src/native/ownership.rs",
+    "find": "(exact, \"exact\")",
+    "replace": "(exact, \"strong\")",
+    "expect_failing": [
+      "native_builder_matches_python_states_refusals_and_uuid_tapes"
+    ],
+    "rule": "Keep exact graph proofs distinct from compatible amount candidates."
+  },
+  {
+    "id": "JR-native-graph-reason",
+    "file": "crates/journals/src/native/ownership.rs",
+    "find": "if downstream(entry.as_str().unwrap_or(\"\")) && !downstream(reason.as_str().unwrap_or(\"\")) {",
+    "replace": "if !downstream(entry.as_str().unwrap_or(\"\")) && !downstream(reason.as_str().unwrap_or(\"\")) {",
+    "expect_failing": [
+      "native_builder_matches_python_states_refusals_and_uuid_tapes"
+    ],
+    "rule": "Keep primary root-reason precedence during native review."
+  }
+]

@@ -1,0 +1,42 @@
+[
+  {
+    "id": "JR-probe-decoder",
+    "file": "crates/journals/examples/journal-render.rs",
+    "find": "    scalar::decode(text)",
+    "replace": "    serde_json::from_str::<serde_json::Value>(text).map_err(|e| kassiber_journals::Refusal::from(e.to_string())).and_then(|v| scalar::decode(&v.to_string()))",
+    "expect_failing": [
+      "lossless_probe_matches_python_states_refusals_and_uuid_consumption"
+    ],
+    "rule": "Decode raw operands losslessly before native consumption, including surrogate and nonfinite tokens."
+  },
+  {
+    "id": "JR-probe-state",
+    "file": "crates/journals/examples/journal-render.rs",
+    "find": "scalar::encode(&state.snapshot())",
+    "replace": "scalar::encode(&Value::Null)",
+    "expect_failing": [
+      "lossless_probe_matches_python_states_refusals_and_uuid_consumption"
+    ],
+    "rule": "Return complete native build-state bytes through the probe."
+  },
+  {
+    "id": "JR-probe-uuid",
+    "file": "crates/journals/examples/journal-render.rs",
+    "find": "            consumed += 1;",
+    "replace": "            consumed += 0;",
+    "expect_failing": [
+      "lossless_probe_matches_python_states_refusals_and_uuid_consumption"
+    ],
+    "rule": "Report exact UUID consumption on successful and refused probe replies."
+  },
+  {
+    "id": "JR-probe-refusal",
+    "file": "crates/journals/examples/journal-render.rs",
+    "find": "Err(error) => reply.push((\"error\".into(), error.0)),",
+    "replace": "Err(_error) => reply.push((\"error\".into(), Value::Null)),",
+    "expect_failing": [
+      "lossless_probe_matches_python_states_refusals_and_uuid_consumption"
+    ],
+    "rule": "Retain every native refusal field through the probe reply."
+  }
+]

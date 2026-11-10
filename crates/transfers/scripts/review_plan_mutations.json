@@ -1,0 +1,152 @@
+[
+  {
+    "id": "RVP-exact-operation-type",
+    "file": "crates/transfers/src/review_operations.rs",
+    "find": "Some(Value::Str(raw)) => raw.as_str().unwrap_or_default().to_owned(),",
+    "replace": "Some(Value::Str(raw)) => raw.as_str().unwrap_or(\"price_override\").to_owned(),",
+    "expect_failing": [
+      "review_plans_match_complete_python_mixed_metadata_effects_and_refusals"
+    ],
+    "rule": "Malformed Unicode operation types cannot alias supported operation names."
+  },
+  {
+    "id": "RVP-exact-transaction-reference",
+    "file": "crates/journals/src/review_simulation.rs",
+    "find": "review_support::reference_bind(&raw_id, 1)?",
+    "replace": "sql::bind(&s(text(operation, \"transaction_id\")), 1)?",
+    "expect_failing": [
+      "review_plans_match_complete_python_mixed_metadata_effects_and_refusals"
+    ],
+    "rule": "A malformed transaction identifier refuses UTF-8 binding without aliasing an existing row."
+  },
+  {
+    "id": "RVP-exact-pair-reference",
+    "file": "crates/journals/src/review_simulation.rs",
+    "find": "Some(Value::Str(raw)) => raw.clone(),",
+    "replace": "Some(Value::Str(_)) => text(row, key).into(),",
+    "expect_failing": [
+      "review_plans_preserve_confirmed_sibling_unpair_baselines"
+    ],
+    "rule": "Pair lookup and baseline membership retain every Unicode code point."
+  },
+  {
+    "id": "RVP-precheck-fingerprints",
+    "file": "crates/journals/src/review_simulation.rs",
+    "find": "            baseline.confirmed(operation)?;",
+    "replace": "            let _ = operation;",
+    "expect_failing": [
+      "review_plans_preserve_confirmed_sibling_unpair_baselines"
+    ],
+    "rule": "Every existing requested pair fingerprint is checked before any ordered operation."
+  },
+  {
+    "id": "RVP-sibling-baseline",
+    "file": "crates/journals/src/review_simulation.rs",
+    "find": "                if changed {",
+    "replace": "                if changed || true {",
+    "expect_failing": [
+      "review_plans_preserve_confirmed_sibling_unpair_baselines"
+    ],
+    "rule": "Sibling unpairs retain their confirmed baseline despite the batch's own allocation revisions."
+  },
+  {
+    "id": "RVP-refresh-fingerprints",
+    "file": "crates/journals/src/review_simulation.rs",
+    "find": "                    baseline = Baseline::read(conn, scope, &unpaired)?;",
+    "replace": "                    let _ = &unpaired;",
+    "expect_failing": [
+      "review_plans_refresh_state_and_fingerprints_after_intervening_operations"
+    ],
+    "rule": "An intervening non-unpair refreshes the baseline before the next confirmation."
+  },
+  {
+    "id": "RVP-refresh-canonical-decisions",
+    "file": "crates/journals/src/review_simulation.rs",
+    "find": "                    state = rebuild(conn)?;\n                    baseline = Baseline::read(conn, scope, &unpaired)?;",
+    "replace": "                    let _ = rebuild(conn)?;\n                    baseline = Baseline::read(conn, scope, &unpaired)?;",
+    "expect_failing": [
+      "intervening_metadata_requires_refreshed_canonical_suspense_decisions"
+    ],
+    "rule": "Unpair eligibility uses rebuilt canonical suspense decisions after intervening metadata."
+  },
+  {
+    "id": "RVP-suspense-provenance",
+    "file": "crates/journals/src/review_simulation.rs",
+    "find": "                if !state.holds_suspense(pair) {",
+    "replace": "                if false && !state.holds_suspense(pair) {",
+    "expect_failing": [
+      "review_plans_preserve_confirmed_sibling_unpair_baselines"
+    ],
+    "rule": "Only a pair's own canonical residual suspense can authorize its review unpair."
+  },
+  {
+    "id": "RVP-quarantine-target",
+    "file": "crates/journals/src/review_simulation.rs",
+    "find": "        if !cases.quarantined.contains(&id) {",
+    "replace": "        if false && !cases.quarantined.contains(&id) {",
+    "expect_failing": [
+      "review_plans_match_complete_python_mixed_metadata_effects_and_refusals"
+    ],
+    "rule": "Price and exclusion operations require a canonical initial quarantine case."
+  },
+  {
+    "id": "RVP-acquisition-custody-guard",
+    "file": "crates/journals/src/review_simulation.rs",
+    "find": "component.state='active'",
+    "replace": "component.state='superseded'",
+    "expect_failing": [
+      "review_plans_match_python_component_and_metadata_order"
+    ],
+    "rule": "An active authored custody interpretation blocks acquisition reclassification."
+  },
+  {
+    "id": "RVP-operation-order",
+    "file": "crates/journals/src/review_simulation.rs",
+    "find": "    let mut results = Vec::new();\n    for (index, operation) in operations.iter_mut().enumerate() {",
+    "replace": "    let mut results = Vec::new();\n    for (index, operation) in operations.iter_mut().rev().enumerate() {",
+    "expect_failing": [
+      "review_plans_match_python_component_and_metadata_order"
+    ],
+    "rule": "Mixed metadata and component proposals execute in their confirmed sequence."
+  },
+  {
+    "id": "RVP-input-version",
+    "file": "crates/journals/src/review_workflow.rs",
+    "find": "    review_support::require_input_version(&clone, scope, expected_input_version)?;",
+    "replace": "    let _ = expected_input_version;",
+    "expect_failing": [
+      "review_plans_match_complete_python_mixed_metadata_effects_and_refusals"
+    ],
+    "rule": "Planning checks exact nonnegative input version on the isolated current snapshot."
+  },
+  {
+    "id": "RVP-recomputed-artifact",
+    "file": "crates/journals/src/review_workflow.rs",
+    "find": "    if !review_artifact::equal(&fresh, artifact) {",
+    "replace": "    if !review_artifact::equal(&fresh, &fresh) {",
+    "expect_failing": [
+      "review_validation_recomputes_complete_artifacts_and_current_policy_and_evidence"
+    ],
+    "rule": "Consent validation recomputes and compares the entire artifact, including evidence and policy effects."
+  },
+  {
+    "id": "RVP-validation-scope",
+    "file": "crates/journals/src/review_workflow.rs",
+    "find": "        || value(artifact, \"profile_id\") != s(scope.profile_id)",
+    "replace": "        || false",
+    "expect_failing": [
+      "review_validation_recomputes_complete_artifacts_and_current_policy_and_evidence"
+    ],
+    "rule": "Profile scope refuses before recomputing another book's proposal."
+  },
+  {
+    "id": "RVP-write-transaction-refusal",
+    "file": "crates/journals/src/pipeline.rs",
+    "find": "    if conn.transaction_state(Some(\"main\"))? == TransactionState::Write {",
+    "replace": "    if conn.transaction_state(Some(\"main\"))? != TransactionState::Write {",
+    "expect_failing": [
+      "review_plans_match_complete_python_mixed_metadata_effects_and_refusals"
+    ],
+    "rule": "Planning admits autocommit and caller read snapshots while refusing pending writes."
+  }
+]

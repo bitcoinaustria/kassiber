@@ -1,0 +1,102 @@
+[
+  {
+    "id": "JR-native-workspace",
+    "file": "crates/journals/src/native.rs",
+    "find": "required(self.profile, \"workspace_id\")?.clone()",
+    "replace": "Value::Null",
+    "expect_failing": [
+      "native_ledger_matches_python_consumption_and_scalars"
+    ],
+    "rule": "Entry heads retain the native workspace scalar."
+  },
+  {
+    "id": "JR-native-description",
+    "file": "crates/journals/src/native.rs",
+    "find": "(\"description\", required(value, \"description\")?.clone())",
+    "replace": "(\"description\", Value::from(\"\"))",
+    "expect_failing": [
+      "native_ledger_matches_python_consumption_and_scalars"
+    ],
+    "rule": "Entry descriptions remain opaque values."
+  },
+  {
+    "id": "JR-native-provenance",
+    "file": "crates/journals/src/native.rs",
+    "find": ".map(|k| (Key::from(*k), field(row, k).clone()))",
+    "replace": ".map(|k| (Key::from(*k), Value::Null))",
+    "expect_failing": [
+      "native_ledger_matches_python_consumption_and_scalars"
+    ],
+    "rule": "Provenance retains each native pricing value."
+  },
+  {
+    "id": "JR-native-carry-rate",
+    "file": "crates/journals/src/native.rs",
+    "find": "(\"fiat_rate_exact\", rate.clone())",
+    "replace": "(\"fiat_rate_exact\", Value::Null)",
+    "expect_failing": [
+      "native_ledger_matches_python_consumption_and_scalars"
+    ],
+    "rule": "Carried pricing overlays retain their exact rate operand."
+  },
+  {
+    "id": "JR-native-uuid-order",
+    "file": "crates/journals/src/native.rs",
+    "find": "let id_value = ids();",
+    "replace": "let _workspace = required(self.profile, \"workspace_id\")?; let id_value = ids();",
+    "expect_failing": [
+      "native_ledger_matches_python_consumption_and_scalars"
+    ],
+    "rule": "The UUID is consumed before workspace refusal."
+  },
+  {
+    "id": "JR-native-decimal-family",
+    "file": "crates/journals/src/native.rs",
+    "find": "format!(\"not a canonical engine decimal: {}\", repr(value))",
+    "replace": "format!(\"not a canonical engine decimal: {}\", kind(value))",
+    "expect_failing": [
+      "native_ledger_matches_python_consumption_and_scalars"
+    ],
+    "rule": "Canonical decimal refusals include Python representation of the operand."
+  },
+  {
+    "id": "JR-native-holding-key",
+    "file": "crates/journals/src/native.rs",
+    "find": "BigInt::from(u8::from(*a)) == *b",
+    "replace": "BigInt::from(u8::from(*a)) != *b",
+    "expect_failing": [
+      "native_ledger_matches_python_consumption_and_scalars"
+    ],
+    "rule": "Boolean and integer holding tuple keys use Python equality."
+  },
+  {
+    "id": "JR-native-holding-subtotal",
+    "file": "crates/journals/src/native.rs",
+    "find": "add(&mut accounts, key, &q, &b)?;",
+    "replace": "add(&mut accounts, key, &Decimal::zero(), &b)?;",
+    "expect_failing": [
+      "native_ledger_matches_python_consumption_and_scalars"
+    ],
+    "rule": "Account holdings retain asset subtotal quantities."
+  },
+  {
+    "id": "JR-native-audit-amount",
+    "file": "crates/journals/src/native.rs",
+    "find": "Value::Float(render::float(&dec_field(value, \"sent\")?))",
+    "replace": "Value::Float(render::float(&dec_field(value, \"received\")?))",
+    "expect_failing": [
+      "native_ledger_matches_python_consumption_and_scalars"
+    ],
+    "rule": "Audit sent quantities remain distinct from received quantities."
+  },
+  {
+    "id": "JR-native-method",
+    "file": "crates/journals/src/native.rs",
+    "find": "let method = field(profile, \"gains_algorithm\");",
+    "replace": "let method = &Value::Null;",
+    "expect_failing": [
+      "native_ledger_matches_python_consumption_and_scalars"
+    ],
+    "rule": "Calculations retain the native profile method coercion."
+  }
+]

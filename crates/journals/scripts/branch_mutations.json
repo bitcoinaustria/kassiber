@@ -1,0 +1,1282 @@
+[
+  {
+    "id": "JRB-downstream-custody_basis_barrier",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "\"custody_basis_barrier\"",
+    "replace": "\"disabled-custody_basis_barrier\"",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "A root reason replaces this downstream reason."
+  },
+  {
+    "id": "JRB-downstream-transfer_pair_dependency_blocked",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "\"transfer_pair_dependency_blocked\"",
+    "replace": "\"disabled-transfer_pair_dependency_blocked\"",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "A root reason replaces this downstream reason."
+  },
+  {
+    "id": "JRB-downstream-basis_provenance_incomplete",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "\"basis_provenance_incomplete\"",
+    "replace": "\"disabled-basis_provenance_incomplete\"",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "A root reason replaces this downstream reason."
+  },
+  {
+    "id": "JRB-downstream-derived_transfer_group_blocked",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "\"derived_transfer_group_blocked\"",
+    "replace": "\"disabled-derived_transfer_group_blocked\"",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "A root reason replaces this downstream reason."
+  },
+  {
+    "id": "JRB-downstream-at_swap_basis_carry_unresolved",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "\"at_swap_basis_carry_unresolved\"",
+    "replace": "\"disabled-at_swap_basis_carry_unresolved\"",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "A root reason replaces this downstream reason."
+  },
+  {
+    "id": "JRB-downstream-bitcoin_rail_carry_basis_unresolved",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "\"bitcoin_rail_carry_basis_unresolved\"",
+    "replace": "\"disabled-bitcoin_rail_carry_basis_unresolved\"",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "A root reason replaces this downstream reason."
+  },
+  {
+    "id": "JRB-pairable-owned_fanout_unresolved",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "\"owned_fanout_unresolved\"\n",
+    "replace": "\"disabled-owned_fanout_unresolved\"\n",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "This root reason permits ownership review evidence."
+  },
+  {
+    "id": "JRB-pairable-ownership_transfer_destination_ambiguous",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "\"ownership_transfer_destination_ambiguous\"",
+    "replace": "\"disabled-ownership_transfer_destination_ambiguous\"",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "This root reason permits ownership review evidence."
+  },
+  {
+    "id": "JRB-pairable-ownership_transfer_source_ambiguous",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "| \"ownership_transfer_source_ambiguous\"\n    )",
+    "replace": "| \"disabled-ownership_transfer_source_ambiguous\"\n    )",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "This root reason permits ownership review evidence."
+  },
+  {
+    "id": "JRB-root-precedence",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "downstream(entry) && !downstream(&q.reason)",
+    "replace": "false",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "Root reasons supersede downstream reasons."
+  },
+  {
+    "id": "JRB-first-root",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "downstream(entry) && !downstream(&q.reason)",
+    "replace": "true",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "The first root reason remains primary."
+  },
+  {
+    "id": "JRB-source-anchor",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "fallback(&source[\"anchor_transaction_id\"], &source[\"transaction_id\"])",
+    "replace": "&source[\"transaction_id\"]",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "Source anchors take precedence over transaction ids."
+  },
+  {
+    "id": "JRB-sink-anchor",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "fallback(&sink[\"anchor_transaction_id\"], &sink[\"transaction_id\"])",
+    "replace": "&sink[\"transaction_id\"]",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "Destination anchors take precedence over transaction ids."
+  },
+  {
+    "id": "JRB-payout-exclusion",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "unavailable.insert(out);\n                continue;",
+    "replace": "let _ = out;\n                continue;",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "A component without a destination claims the source outright."
+  },
+  {
+    "id": "JRB-policy-exclusion",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "|| policy != \"carrying-value\"",
+    "replace": "|| false && policy != \"carrying-value\"",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "Conversion allocations cannot be reused by same-asset review."
+  },
+  {
+    "id": "JRB-kind-exclusion",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "|| !matches!(kind, \"manual\" | \"coinjoin\" | \"whirlpool\")",
+    "replace": "|| false && !matches!(kind, \"manual\" | \"coinjoin\" | \"whirlpool\")",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "Special component kinds exclude both row identities."
+  },
+  {
+    "id": "JRB-reusable-coinjoin",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "\"manual\" | \"coinjoin\" | \"whirlpool\"",
+    "replace": "\"manual\" | \"disabled\" | \"whirlpool\"",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "This reviewed kind permits disjoint same-asset reuse."
+  },
+  {
+    "id": "JRB-reusable-whirlpool",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "\"manual\" | \"coinjoin\" | \"whirlpool\"",
+    "replace": "\"manual\" | \"disabled\" | \"coinjoin\"",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "This reviewed kind permits disjoint same-asset reuse."
+  },
+  {
+    "id": "JRB-component-asset-exclusion",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "|| string(&o[\"asset\"]).to_uppercase() != string(&i[\"asset\"]).to_uppercase()",
+    "replace": "|| false && string(&o[\"asset\"]).to_uppercase() != string(&i[\"asset\"]).to_uppercase()",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "A cross-asset component occupies both row identities."
+  },
+  {
+    "id": "JRB-source-unavailable",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "if unavailable.contains(&id)",
+    "replace": "if false && unavailable.contains(&id)",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "Occupied source rows cannot offer review candidates."
+  },
+  {
+    "id": "JRB-source-direction",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "|| source[\"direction\"] != \"outbound\"",
+    "replace": "|| false && source[\"direction\"] != \"outbound\"",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "Only outbound source rows offer review candidates."
+  },
+  {
+    "id": "JRB-source-positive",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "|| int(&source[\"amount\"])? <= BigInt::from(0)",
+    "replace": "|| false && int(&source[\"amount\"])? <= BigInt::from(0)",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "Nonpositive source rows cannot offer review candidates."
+  },
+  {
+    "id": "JRB-inbound-unavailable",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "|| unavailable.contains(&iid)",
+    "replace": "|| false && unavailable.contains(&iid)",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "Occupied destination rows cannot offer review candidates."
+  },
+  {
+    "id": "JRB-active-pair",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "|| active.contains(&(id.clone(), iid.clone()))",
+    "replace": "|| false && active.contains(&(id.clone(), iid.clone()))",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "An active pair is never offered again."
+  },
+  {
+    "id": "JRB-strict-graph-values",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": ".all(|output| !output[\"value_sats\"].is_null())",
+    "replace": ".all(|_| true)",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Unknown output values decline the strict graph and permit only the recorded-fanout fallback."
+  },
+  {
+    "id": "JRB-graph-parse-refusal",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": ".map_err(|error| graph_refusal(error, &Value::Null))?",
+    "replace": ".unwrap_or(None)",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Stored graph parsing errors propagate before any review evidence is emitted."
+  },
+  {
+    "id": "JRB-graph-scope-refusal",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "graph_refusal(error, graph::scope_error_operand(parsed, c.owned_index))",
+    "replace": "Refusal::from(error)",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Scope inference retains the exact graph lookup refusal."
+  },
+  {
+    "id": "JRB-graph-output-refusal",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": ".map_err(|error| graph_refusal(error, &output[\"script\"]))?",
+    "replace": ".unwrap_or_default()",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Script owner lookup failures cannot become an unowned output."
+  },
+  {
+    "id": "JRB-graph-overflow-family",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "Refusal::new(\"OverflowError\", \"cannot convert float infinity to integer\")",
+    "replace": "Refusal::new(\"RuntimeError\", \"cannot convert float infinity to integer\")",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Graph index overflow retains its Python exception class."
+  },
+  {
+    "id": "JRB-graph-overflow-message",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "\"cannot convert float infinity to integer\"",
+    "replace": "\"invalid graph index\"",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Graph index overflow retains its Python exception message."
+  },
+  {
+    "id": "JRB-graph-attribute-family",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "\"AttributeError\",\n                format!",
+    "replace": "\"RuntimeError\",\n                format!",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Invalid script lookup retains AttributeError."
+  },
+  {
+    "id": "JRB-graph-error-outpoint-precedence",
+    "file": "crates/custody/src/journal_support.rs",
+    "find": "|| index.outpoint(&entry[\"outpoint\"], None).is_empty()",
+    "replace": "|| true",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Known input outpoints suppress unused malformed script lookups during scope refusal recovery."
+  },
+  {
+    "id": "JRB-owner-self-before-ambiguity",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "if owners.contains(&string(&source[\"wallet_id\"]))",
+    "replace": "if false && owners.contains(&string(&source[\"wallet_id\"]))",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Source-owned change is ignored before testing owner ambiguity."
+  },
+  {
+    "id": "JRB-owner-ambiguity",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "if owners.len() > 1 {",
+    "replace": "if owners.len() > 2 {",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Two destination owners invalidate the whole ownership proof."
+  },
+  {
+    "id": "JRB-owner-output-sum",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "*destinations.entry(owner.clone()).or_default() +=",
+    "replace": "*destinations.entry(owner.clone()).or_default() =",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Every uniquely owned destination output contributes its exact amount."
+  },
+  {
+    "id": "JRB-fallback-reason",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "} else if reason == \"owned_fanout_unresolved\" {",
+    "replace": "} else {",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Recorded grouping is reserved for fanout quarantine when no valued graph exists."
+  },
+  {
+    "id": "JRB-fallback-source-count",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "if outs.len() != 1 || outs[0][\"id\"] != source[\"id\"] {",
+    "replace": "if outs.is_empty() {",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "A recorded group with several sources cannot produce a one-to-one review card."
+  },
+  {
+    "id": "JRB-fallback-other-wallet",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "&& string(&inbound[\"wallet_id\"]) != string(&source[\"wallet_id\"])",
+    "replace": "&& true",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "A recorded fallback destination must be another wallet."
+  },
+  {
+    "id": "JRB-fallback-positive-inbound",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "if inbound[\"direction\"] == \"inbound\"\n                    && int(&inbound[\"amount\"])? > BigInt::from(0)",
+    "replace": "if inbound[\"direction\"] == \"inbound\"",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Nonpositive recorded inbound rows cannot establish a destination."
+  },
+  {
+    "id": "JRB-inbound-positive-index",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "if r[\"direction\"] == \"inbound\" && int(&r[\"amount\"])? > BigInt::from(0)",
+    "replace": "if r[\"direction\"] == \"inbound\"",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Only positive receipts enter the destination population."
+  },
+  {
+    "id": "JRB-destination-asset",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "if string(&inbound[\"asset\"]).to_uppercase()\n                    != string(&source[\"asset\"]).to_uppercase()",
+    "replace": "if false && string(&inbound[\"asset\"]).to_uppercase()\n                    != string(&source[\"asset\"]).to_uppercase()",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "A destination review card never crosses display assets."
+  },
+  {
+    "id": "JRB-tolerance-inclusive",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "if abs > tolerance {",
+    "replace": "if abs >= tolerance {",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "The exact tolerance boundary is inclusive in both directions."
+  },
+  {
+    "id": "JRB-tolerance-floor",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "BigInt::from(2_500_000)",
+    "replace": "BigInt::from(2_499_999)",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Small transfers use the exact 2500-sat floor."
+  },
+  {
+    "id": "JRB-tolerance-relative",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "magnitude / 100,",
+    "replace": "magnitude / 101,",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Large transfers use one percent of owned output amount."
+  },
+  {
+    "id": "JRB-scope-equality",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "if scope.is_some() && iscope.is_some() && scope != iscope {",
+    "replace": "if false && scope.is_some() && iscope.is_some() && scope != iscope {",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Known physical chain/network/txid/asset contradictions exclude receipts."
+  },
+  {
+    "id": "JRB-txid-exclusion",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "&& iscope.as_ref().is_some_and(|s| s.2 != txid)",
+    "replace": "&& false && iscope.as_ref().is_some_and(|s| s.2 != txid)",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "A canonical source txid excludes a provably different receipt even without a source scope."
+  },
+  {
+    "id": "JRB-txid-python-strip",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "kassiber_pytext::strip(&string(txid)).to_lowercase()",
+    "replace": "string(txid).trim().to_lowercase()",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Canonical txid exclusion uses Python whitespace stripping."
+  },
+  {
+    "id": "JRB-source-ambiguity-confidence",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "&& reason != \"ownership_transfer_source_ambiguous\"",
+    "replace": "&& true",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "An ambiguous source can offer only strong review evidence."
+  },
+  {
+    "id": "JRB-whole-source-confidence",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "&& int(&source[\"amount\"])? == amount",
+    "replace": "&& true",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Exact confidence requires the entire source amount."
+  },
+  {
+    "id": "JRB-whole-inbound-confidence",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "&& received == amount",
+    "replace": "&& true",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Exact confidence requires the entire destination amount."
+  },
+  {
+    "id": "JRB-scoped-inbound-confidence",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "&& iscope == scope",
+    "replace": "&& true",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "An unscoped receipt cannot receive exact confidence."
+  },
+  {
+    "id": "JRB-exact-precedence",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "let (selected, confidence) = if exact.is_empty()",
+    "replace": "let (selected, confidence) = if !compatible.is_empty()",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Whole-row exact receipts supersede amount-compatible receipts."
+  },
+  {
+    "id": "JRB-conflict-size",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "let size = selected.len();",
+    "replace": "let size = 1;",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Every candidate in a conflict set reports the complete selected population."
+  },
+  {
+    "id": "JRB-balance-equal",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "if a == b {",
+    "replace": "if false && a == b {",
+    "expect_failing": [
+      "balance_explanations_match_python"
+    ],
+    "rule": "Equal canonical/current balances produce no diagnostic difference."
+  },
+  {
+    "id": "JRB-balance-single-reason",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": ".filter(|r| r.len() == 1)",
+    "replace": ".filter(|r| !r.is_empty())",
+    "expect_failing": [
+      "balance_explanations_match_python"
+    ],
+    "rule": "Several distinct non-event reasons cannot be reduced to an arbitrary explanation."
+  },
+  {
+    "id": "JRB-balance-loan-id",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "if !leg[\"transaction_id\"].is_null() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "balance_explanations_match_python"
+    ],
+    "rule": "Loan non-event explanations apply to their transaction identities."
+  },
+  {
+    "id": "JRB-balance-channel-precedence",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "for (id, role) in roles {",
+    "replace": "for (id, role) in roles.iter().take(0) {",
+    "expect_failing": [
+      "balance_explanations_match_python"
+    ],
+    "rule": "Channel reasons replace an earlier loan explanation for the same transaction."
+  },
+  {
+    "id": "JRB-balance-suspense-zero",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "int(&component[\"validation\"][\"suspense_msat\"])? <= BigInt::from(0)",
+    "replace": "int(&component[\"validation\"][\"suspense_msat\"])? < BigInt::from(0)",
+    "expect_failing": [
+      "balance_explanations_match_python"
+    ],
+    "rule": "Zero suspense cannot establish a residual-suspense reason."
+  },
+  {
+    "id": "JRB-balance-suspense-positive",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "int(&component[\"validation\"][\"suspense_msat\"])? <= BigInt::from(0)",
+    "replace": "int(&component[\"validation\"][\"suspense_msat\"])? >= BigInt::from(0)",
+    "expect_failing": [
+      "balance_explanations_match_python"
+    ],
+    "rule": "Only positive suspense overrides earlier explanations."
+  },
+  {
+    "id": "JRB-balance-source-role",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "if leg[\"role\"] == \"source\" && truth(&leg[\"transaction_id\"])",
+    "replace": "if leg[\"role\"] != \"source\" && truth(&leg[\"transaction_id\"])",
+    "expect_failing": [
+      "balance_explanations_match_python"
+    ],
+    "rule": "Only source legs establish a residual-suspense explanation."
+  },
+  {
+    "id": "JRB-balance-order",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "for (wallet, asset) in keys {",
+    "replace": "for (wallet, asset) in keys.into_iter().rev() {",
+    "expect_failing": [
+      "balance_explanations_match_python"
+    ],
+    "rule": "Balance differences follow the sorted union of canonical and current keys."
+  },
+  {
+    "id": "JRB-review-source-order",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "for (id, reason) in blocked {",
+    "replace": "for (id, reason) in blocked.into_iter().rev() {",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Review source order follows sorted primary transaction identities."
+  },
+  {
+    "id": "JRB-review-destination-order",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "for (wallet, amount) in destinations {",
+    "replace": "for (wallet, amount) in destinations.into_iter().rev() {",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Destination order follows sorted wallet identities."
+  },
+  {
+    "id": "JRB-review-ambiguity-discards-prefix",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "if ambiguous {\n                continue;",
+    "replace": "if false && ambiguous {\n                continue;",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "An ambiguous later output invalidates earlier destination evidence."
+  },
+  {
+    "id": "JRB-review-missing-scope",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "let Some(s) = &scope else {\n                continue;\n            };",
+    "replace": "let default = (\"bitcoin\".into(), \"main\".into(), \"\".into(), \"BTC\".into());\n            let s = scope.as_ref().unwrap_or(&default);",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "Unknown or contradictory graph scope cannot be guessed from a default."
+  },
+  {
+    "id": "JRB-audit-regime",
+    "file": "crates/journals/src/render.rs",
+    "find": "if let Some(r) = a.at_regime {",
+    "replace": "if let Some(r) = a.at_regime.filter(|_| false) {",
+    "expect_failing": [
+      "audit_quarantine_and_entry_branches_match_python"
+    ],
+    "rule": "Present audit regimes remain in the rendered facts."
+  },
+  {
+    "id": "JRB-audit-flows",
+    "file": "crates/journals/src/render.rs",
+    "find": "if let Some(f) = &a.regime_flows {",
+    "replace": "if let Some(f) = a.regime_flows.as_ref().filter(|_| false) {",
+    "expect_failing": [
+      "audit_quarantine_and_entry_branches_match_python"
+    ],
+    "rule": "Present audit regime flows remain in the rendered facts."
+  },
+  {
+    "id": "JRB-audit-pool",
+    "file": "crates/journals/src/render.rs",
+    "find": "if !p.is_empty() {",
+    "replace": "if p.is_empty() {",
+    "expect_failing": [
+      "audit_quarantine_and_entry_branches_match_python"
+    ],
+    "rule": "Only nonempty optional pools appear in audit facts."
+  },
+  {
+    "id": "JRB-audit-group",
+    "file": "crates/journals/src/render.rs",
+    "find": "if truth(&pair[\"group_id\"]) {",
+    "replace": "if !truth(&pair[\"group_id\"]) {",
+    "expect_failing": [
+      "audit_quarantine_and_entry_branches_match_python"
+    ],
+    "rule": "Only nonempty group identities appear in audit facts."
+  },
+  {
+    "id": "JRB-audit-pair-lookup",
+    "file": "crates/journals/src/render.rs",
+    "find": ".get(a.pair)",
+    "replace": ".first()",
+    "expect_failing": [
+      "audit_quarantine_and_entry_branches_match_python"
+    ],
+    "rule": "Audit pair indexes must resolve the requested pair or refuse."
+  },
+  {
+    "id": "JRB-audit-source-lookup",
+    "file": "crates/journals/src/render.rs",
+    "find": ".find(|w| w[\"id\"] == out[\"wallet_id\"])",
+    "replace": ".find(|_| true)",
+    "expect_failing": [
+      "audit_quarantine_and_entry_branches_match_python"
+    ],
+    "rule": "A missing source wallet refuses instead of using a different wallet."
+  },
+  {
+    "id": "JRB-audit-destination-lookup",
+    "file": "crates/journals/src/render.rs",
+    "find": ".find(|w| w[\"id\"] == inbound[\"wallet_id\"])",
+    "replace": ".find(|_| true)",
+    "expect_failing": [
+      "audit_quarantine_and_entry_branches_match_python"
+    ],
+    "rule": "A missing destination wallet refuses instead of using a different wallet."
+  },
+  {
+    "id": "JRB-transfer-leg-direction",
+    "file": "crates/journals/src/render.rs",
+    "find": "let outbound = a.entry_type == EntryType::TransferOut;",
+    "replace": "let outbound = a.entry_type == EntryType::TransferIn;",
+    "expect_failing": [
+      "audit_quarantine_and_entry_branches_match_python"
+    ],
+    "rule": "Transfer direction selects the correct wallet, row and signed quantity."
+  },
+  {
+    "id": "JRB-quarantine-pricing-template",
+    "file": "crates/journals/src/render.rs",
+    "find": "for k in REVIEW {",
+    "replace": "for k in std::iter::empty::<&str>() {",
+    "expect_failing": [
+      "audit_quarantine_and_entry_branches_match_python"
+    ],
+    "rule": "Pricing review templates enrich every declared review field."
+  },
+  {
+    "id": "JRB-quarantine-hold-template",
+    "file": "crates/journals/src/render.rs",
+    "find": "DetailKind::Hold => {\n            enriched[\"external_id\"] = json!(if truth(&row[\"external_id\"])",
+    "replace": "DetailKind::Hold => {\n            enriched[\"ignored_external_id\"] = json!(if truth(&row[\"external_id\"])",
+    "expect_failing": [
+      "audit_quarantine_and_entry_branches_match_python"
+    ],
+    "rule": "Hold templates enrich the external transaction identity."
+  },
+  {
+    "id": "JRB-privacy-boundary-coinjoin",
+    "file": "crates/journals/src/render.rs",
+    "find": "\"coinjoin\" | \"collaborative\" | \"payjoin\" | \"payment_in_coinjoin\" | \"sweep\"",
+    "replace": "\"disabled\" | \"collaborative\" | \"payjoin\" | \"payment_in_coinjoin\" | \"sweep\"",
+    "expect_failing": [
+      "audit_quarantine_and_entry_branches_match_python"
+    ],
+    "rule": "This explicit privacy boundary enables privacy provenance enrichment."
+  },
+  {
+    "id": "JRB-privacy-boundary-collaborative",
+    "file": "crates/journals/src/render.rs",
+    "find": "\"coinjoin\" | \"collaborative\" | \"payjoin\" | \"payment_in_coinjoin\" | \"sweep\"",
+    "replace": "\"coinjoin\" | \"disabled\" | \"payjoin\" | \"payment_in_coinjoin\" | \"sweep\"",
+    "expect_failing": [
+      "audit_quarantine_and_entry_branches_match_python"
+    ],
+    "rule": "This explicit privacy boundary enables privacy provenance enrichment."
+  },
+  {
+    "id": "JRB-privacy-boundary-payjoin",
+    "file": "crates/journals/src/render.rs",
+    "find": "\"coinjoin\" | \"collaborative\" | \"payjoin\" | \"payment_in_coinjoin\" | \"sweep\"",
+    "replace": "\"coinjoin\" | \"collaborative\" | \"disabled\" | \"payment_in_coinjoin\" | \"sweep\"",
+    "expect_failing": [
+      "audit_quarantine_and_entry_branches_match_python"
+    ],
+    "rule": "This explicit privacy boundary enables privacy provenance enrichment."
+  },
+  {
+    "id": "JRB-privacy-boundary-payment_in_coinjoin",
+    "file": "crates/journals/src/render.rs",
+    "find": "\"coinjoin\" | \"collaborative\" | \"payjoin\" | \"payment_in_coinjoin\" | \"sweep\"",
+    "replace": "\"coinjoin\" | \"collaborative\" | \"payjoin\" | \"disabled\" | \"sweep\"",
+    "expect_failing": [
+      "audit_quarantine_and_entry_branches_match_python"
+    ],
+    "rule": "This explicit privacy boundary enables privacy provenance enrichment."
+  },
+  {
+    "id": "JRB-privacy-boundary-sweep",
+    "file": "crates/journals/src/render.rs",
+    "find": "\"coinjoin\" | \"collaborative\" | \"payjoin\" | \"payment_in_coinjoin\" | \"sweep\"",
+    "replace": "\"coinjoin\" | \"collaborative\" | \"payjoin\" | \"payment_in_coinjoin\" | \"disabled\"",
+    "expect_failing": [
+      "audit_quarantine_and_entry_branches_match_python"
+    ],
+    "rule": "This explicit privacy boundary enables privacy provenance enrichment."
+  },
+  {
+    "id": "JRB-privacy-key-islikelycoinjoin",
+    "file": "crates/journals/src/render.rs",
+    "find": "                    \"islikelycoinjoin\",",
+    "replace": "                    \"disabled\",",
+    "expect_failing": [
+      "audit_quarantine_and_entry_branches_match_python"
+    ],
+    "rule": "This historical likely-CoinJoin key participates in privacy enrichment."
+  },
+  {
+    "id": "JRB-privacy-key-is_likely_coinjoin",
+    "file": "crates/journals/src/render.rs",
+    "find": "                    \"is_likely_coinjoin\",",
+    "replace": "                    \"disabled\",",
+    "expect_failing": [
+      "audit_quarantine_and_entry_branches_match_python"
+    ],
+    "rule": "This historical likely-CoinJoin key participates in privacy enrichment."
+  },
+  {
+    "id": "JRB-privacy-key-isLikelyCoinJoin",
+    "file": "crates/journals/src/render.rs",
+    "find": "                    \"isLikelyCoinJoin\",",
+    "replace": "                    \"disabled\",",
+    "expect_failing": [
+      "audit_quarantine_and_entry_branches_match_python"
+    ],
+    "rule": "This historical likely-CoinJoin key participates in privacy enrichment."
+  },
+  {
+    "id": "JRB-privacy-key-likely_coinjoin",
+    "file": "crates/journals/src/render.rs",
+    "find": "                    \"likely_coinjoin\",",
+    "replace": "                    \"disabled\",",
+    "expect_failing": [
+      "audit_quarantine_and_entry_branches_match_python"
+    ],
+    "rule": "This historical likely-CoinJoin key participates in privacy enrichment."
+  },
+  {
+    "id": "JRB-privacy-key-likelyCoinJoin",
+    "file": "crates/journals/src/render.rs",
+    "find": "                    \"likelyCoinJoin\",",
+    "replace": "                    \"disabled\",",
+    "expect_failing": [
+      "audit_quarantine_and_entry_branches_match_python"
+    ],
+    "rule": "This historical likely-CoinJoin key participates in privacy enrichment."
+  },
+  {
+    "id": "JRB-privacy-bool-1",
+    "file": "crates/journals/src/render.rs",
+    "find": "\"1\" | \"true\" | \"yes\" | \"on\"",
+    "replace": "\"disabled\" | \"true\" | \"yes\" | \"on\"",
+    "expect_failing": [
+      "audit_quarantine_and_entry_branches_match_python"
+    ],
+    "rule": "This boolean text spelling is accepted by Python privacy enrichment."
+  },
+  {
+    "id": "JRB-privacy-bool-true",
+    "file": "crates/journals/src/render.rs",
+    "find": "\"1\" | \"true\" | \"yes\" | \"on\"",
+    "replace": "\"1\" | \"disabled\" | \"yes\" | \"on\"",
+    "expect_failing": [
+      "audit_quarantine_and_entry_branches_match_python"
+    ],
+    "rule": "This boolean text spelling is accepted by Python privacy enrichment."
+  },
+  {
+    "id": "JRB-privacy-bool-yes",
+    "file": "crates/journals/src/render.rs",
+    "find": "\"1\" | \"true\" | \"yes\" | \"on\"",
+    "replace": "\"1\" | \"true\" | \"disabled\" | \"on\"",
+    "expect_failing": [
+      "audit_quarantine_and_entry_branches_match_python"
+    ],
+    "rule": "This boolean text spelling is accepted by Python privacy enrichment."
+  },
+  {
+    "id": "JRB-privacy-bool-on",
+    "file": "crates/journals/src/render.rs",
+    "find": "\"1\" | \"true\" | \"yes\" | \"on\"",
+    "replace": "\"1\" | \"true\" | \"yes\" | \"disabled\"",
+    "expect_failing": [
+      "audit_quarantine_and_entry_branches_match_python"
+    ],
+    "rule": "This boolean text spelling is accepted by Python privacy enrichment."
+  },
+  {
+    "id": "JRB-enrichment-overwrite",
+    "file": "crates/journals/src/render.rs",
+    "find": "*old = value;",
+    "replace": "let _ = old;",
+    "expect_failing": [
+      "audit_quarantine_and_entry_branches_match_python"
+    ],
+    "rule": "Template enrichment overwrites an existing detail key."
+  },
+  {
+    "id": "JRB-enrichment-insert",
+    "file": "crates/journals/src/render.rs",
+    "find": "items.push((key, value));",
+    "replace": "let _ = (key, value);",
+    "expect_failing": [
+      "audit_quarantine_and_entry_branches_match_python"
+    ],
+    "rule": "Template enrichment inserts absent detail keys."
+  },
+  {
+    "id": "JRB-category-income_general",
+    "file": "crates/journals/src/render.rs",
+    "find": "\"income_general\" | \"income_capital_yield\" => Some(172)",
+    "replace": "\"disabled\" | \"income_capital_yield\" => Some(172)",
+    "expect_failing": [
+      "audit_quarantine_and_entry_branches_match_python"
+    ],
+    "rule": "This income category maps to Austrian Kennzahl 172."
+  },
+  {
+    "id": "JRB-category-income_capital_yield",
+    "file": "crates/journals/src/render.rs",
+    "find": "\"income_general\" | \"income_capital_yield\" => Some(172)",
+    "replace": "\"income_general\" | \"disabled\" => Some(172)",
+    "expect_failing": [
+      "audit_quarantine_and_entry_branches_match_python"
+    ],
+    "rule": "This income category maps to Austrian Kennzahl 172."
+  },
+  {
+    "id": "JRB-holdings-unknown-wallet",
+    "file": "crates/journals/src/render.rs",
+    "find": "labels.get(item.wallet.as_str())",
+    "replace": "labels.get(item.wallet.as_str()).or_else(|| labels.values().next())",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "Unknown-wallet holdings are ignored."
+  },
+  {
+    "id": "JRB-holdings-asset-order",
+    "file": "crates/journals/src/render.rs",
+    "find": "for item in assets.into_iter().flatten() {",
+    "replace": "for item in assets.into_iter().rev().flatten() {",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "Holdings retain asset insertion order."
+  },
+  {
+    "id": "JRB-error-family-ValueError",
+    "file": "crates/journals/src/boundary.rs",
+    "find": "\"ValueError\" => \"EngineValueError\",",
+    "replace": "\"ValueError\" => \"DisabledError\",",
+    "expect_failing": [
+      "refusal_mapping_matches_python"
+    ],
+    "rule": "This engine exception family retains the Python error mapping."
+  },
+  {
+    "id": "JRB-error-family-TypeError",
+    "file": "crates/journals/src/boundary.rs",
+    "find": "\"TypeError\" => \"EngineTypeError\",",
+    "replace": "\"TypeError\" => \"DisabledError\",",
+    "expect_failing": [
+      "refusal_mapping_matches_python"
+    ],
+    "rule": "This engine exception family retains the Python error mapping."
+  },
+  {
+    "id": "JRB-error-family-RuntimeError",
+    "file": "crates/journals/src/boundary.rs",
+    "find": "\"RuntimeError\" => \"EngineRuntimeError\",",
+    "replace": "\"RuntimeError\" => \"DisabledError\",",
+    "expect_failing": [
+      "refusal_mapping_matches_python"
+    ],
+    "rule": "This engine exception family retains the Python error mapping."
+  },
+  {
+    "id": "JRB-error-family-BuiltinValueError",
+    "file": "crates/journals/src/boundary.rs",
+    "find": "\"BuiltinValueError\" => \"ValueError\",",
+    "replace": "\"BuiltinValueError\" => \"DisabledError\",",
+    "expect_failing": [
+      "refusal_mapping_matches_python"
+    ],
+    "rule": "This engine exception family retains the Python error mapping."
+  },
+  {
+    "id": "JRB-error-family-AppError",
+    "file": "crates/journals/src/boundary.rs",
+    "find": "\"AppError\" => \"AppError\",",
+    "replace": "\"AppError\" => \"DisabledError\",",
+    "expect_failing": [
+      "refusal_mapping_matches_python"
+    ],
+    "rule": "This engine exception family retains the Python error mapping."
+  },
+  {
+    "id": "JRB-error-family-InvalidOperation",
+    "file": "crates/journals/src/boundary.rs",
+    "find": "\"InvalidOperation\" => \"InvalidOperation\",",
+    "replace": "\"InvalidOperation\" => \"DisabledError\",",
+    "expect_failing": [
+      "refusal_mapping_matches_python"
+    ],
+    "rule": "This engine exception family retains the Python error mapping."
+  },
+  {
+    "id": "JRB-error-family-DivisionByZero",
+    "file": "crates/journals/src/boundary.rs",
+    "find": "\"DivisionByZero\" => \"DivisionByZero\",",
+    "replace": "\"DivisionByZero\" => \"DisabledError\",",
+    "expect_failing": [
+      "refusal_mapping_matches_python"
+    ],
+    "rule": "This engine exception family retains the Python error mapping."
+  },
+  {
+    "id": "JRB-error-family-Overflow",
+    "file": "crates/journals/src/boundary.rs",
+    "find": "\"Overflow\" => \"Overflow\",",
+    "replace": "\"Overflow\" => \"DisabledError\",",
+    "expect_failing": [
+      "refusal_mapping_matches_python"
+    ],
+    "rule": "This engine exception family retains the Python error mapping."
+  },
+  {
+    "id": "JRB-error-family-unknown",
+    "file": "crates/journals/src/boundary.rs",
+    "find": "_ => \"EngineContractError\",",
+    "replace": "_ => \"EngineRuntimeError\",",
+    "expect_failing": [
+      "refusal_mapping_matches_python"
+    ],
+    "rule": "Unknown engine exception families retain a contract-error wrapper."
+  },
+  {
+    "id": "JRB-error-stage-request",
+    "file": "crates/journals/src/boundary.rs",
+    "find": "Some(\"request\" | \"unsupported\") => {",
+    "replace": "Some(\"disabled\" | \"unsupported\") => {",
+    "expect_failing": [
+      "refusal_mapping_matches_python"
+    ],
+    "rule": "This engine failure stage retains its exact Python wrapper and cause."
+  },
+  {
+    "id": "JRB-error-stage-unsupported",
+    "file": "crates/journals/src/boundary.rs",
+    "find": "Some(\"request\" | \"unsupported\") => {",
+    "replace": "Some(\"request\" | \"disabled\") => {",
+    "expect_failing": [
+      "refusal_mapping_matches_python"
+    ],
+    "rule": "This engine failure stage retains its exact Python wrapper and cause."
+  },
+  {
+    "id": "JRB-error-stage-validate",
+    "file": "crates/journals/src/boundary.rs",
+    "find": "Some(\"validate\" | \"compute_multi\" | \"compute\") => {",
+    "replace": "Some(\"disabled\" | \"compute_multi\" | \"compute\") => {",
+    "expect_failing": [
+      "refusal_mapping_matches_python"
+    ],
+    "rule": "This engine failure stage retains its exact Python wrapper and cause."
+  },
+  {
+    "id": "JRB-error-stage-compute_multi",
+    "file": "crates/journals/src/boundary.rs",
+    "find": "Some(\"validate\" | \"compute_multi\" | \"compute\") => {",
+    "replace": "Some(\"validate\" | \"disabled\" | \"compute\") => {",
+    "expect_failing": [
+      "refusal_mapping_matches_python"
+    ],
+    "rule": "This engine failure stage retains its exact Python wrapper and cause."
+  },
+  {
+    "id": "JRB-error-stage-compute",
+    "file": "crates/journals/src/boundary.rs",
+    "find": "Some(\"validate\" | \"compute_multi\" | \"compute\") => {",
+    "replace": "Some(\"validate\" | \"compute_multi\" | \"disabled\") => {",
+    "expect_failing": [
+      "refusal_mapping_matches_python"
+    ],
+    "rule": "This engine failure stage retains its exact Python wrapper and cause."
+  },
+  {
+    "id": "JRB-error-stage-prepare",
+    "file": "crates/journals/src/boundary.rs",
+    "find": "Some(\"prepare\" | \"classify\") => {",
+    "replace": "Some(\"disabled\" | \"classify\") => {",
+    "expect_failing": [
+      "refusal_mapping_matches_python"
+    ],
+    "rule": "This engine failure stage retains its exact Python wrapper and cause."
+  },
+  {
+    "id": "JRB-error-stage-classify",
+    "file": "crates/journals/src/boundary.rs",
+    "find": "Some(\"prepare\" | \"classify\") => {",
+    "replace": "Some(\"prepare\" | \"disabled\") => {",
+    "expect_failing": [
+      "refusal_mapping_matches_python"
+    ],
+    "rule": "This engine failure stage retains its exact Python wrapper and cause."
+  },
+  {
+    "id": "JRB-error-stage-unknown",
+    "file": "crates/journals/src/boundary.rs",
+    "find": "RequestError: unknown ledger failure stage",
+    "replace": "RequestError: disabled failure stage",
+    "expect_failing": [
+      "refusal_mapping_matches_python"
+    ],
+    "rule": "Unknown failure stages retain the explicit contract refusal."
+  },
+  {
+    "id": "JRB-privacy-boundary-python-strip",
+    "file": "crates/journals/src/render.rs",
+    "find": "kassiber_pytext::strip(&string(&row[\"privacy_boundary\"]))",
+    "replace": "string(&row[\"privacy_boundary\"]).trim()",
+    "expect_failing": [
+      "audit_quarantine_and_entry_branches_match_python"
+    ],
+    "rule": "Privacy boundary normalization uses Python whitespace."
+  },
+  {
+    "id": "JRB-privacy-bool-python-strip",
+    "file": "crates/journals/src/render.rs",
+    "find": "kassiber_pytext::strip(&string(v)).to_lowercase()",
+    "replace": "string(v).trim().to_lowercase()",
+    "expect_failing": [
+      "audit_quarantine_and_entry_branches_match_python"
+    ],
+    "rule": "Likely-CoinJoin booleans use Python whitespace."
+  },
+  {
+    "id": "JRB-audit-pair-refusal",
+    "file": "crates/journals/src/render.rs",
+    "find": "Refusal::new(\"IndexError\", \"tuple index out of range\")",
+    "replace": "Refusal::new(\"IndexError\", \"list index out of range\")",
+    "expect_failing": [
+      "audit_quarantine_and_entry_branches_match_python"
+    ],
+    "rule": "The finalized projection pair tuple retains its exact out-of-bounds refusal."
+  },
+  {
+    "id": "JRB-privacy-raw-mapping",
+    "file": "crates/journals/src/render.rs",
+    "find": "if row[\"raw_json\"].is_object() {",
+    "replace": "if false && row[\"raw_json\"].is_object() {",
+    "expect_failing": [
+      "audit_quarantine_and_entry_branches_match_python"
+    ],
+    "rule": "Privacy evidence accepts a stored raw mapping as well as JSON text."
+  },
+  {
+    "id": "JRB-privacy-source-fallback",
+    "file": "crates/journals/src/render.rs",
+    "find": "fallback(&raw[\"source\"], &json!(\"\"))",
+    "replace": "raw[\"source\"]",
+    "expect_failing": [
+      "audit_quarantine_and_entry_branches_match_python"
+    ],
+    "rule": "A falsey privacy source normalizes to empty text."
+  },
+  {
+    "id": "JRB-wallet-label-last",
+    "file": "crates/journals/src/render.rs",
+    "find": "labels.insert(row_key(label), wallet);",
+    "replace": "labels.entry(row_key(label)).or_insert(wallet);",
+    "expect_failing": [
+      "ledger_rendering_matches_python"
+    ],
+    "rule": "Duplicate wallet labels select the last reference."
+  },
+  {
+    "id": "JRB-wallet-label-empty",
+    "file": "crates/journals/src/render.rs",
+    "find": "if !label.is_null() && label != \"\" {",
+    "replace": "if !label.is_null() {",
+    "expect_failing": [
+      "audit_quarantine_and_entry_branches_match_python"
+    ],
+    "rule": "Empty labels are excluded from the label map."
+  },
+  {
+    "id": "JRB-payout-id",
+    "file": "crates/journals/src/render.rs",
+    "find": "if !truth(id) || !truth(out) {",
+    "replace": "if !truth(out) {",
+    "expect_failing": [
+      "legacy_boundary_values_and_refusal_order_match_python"
+    ],
+    "rule": "Compatibility payout admission preserves the Python metadata-only source selection."
+  },
+  {
+    "id": "JRB-payout-anchor",
+    "file": "crates/journals/src/render.rs",
+    "find": "if !truth(id) || !truth(out) {",
+    "replace": "if !truth(id) {",
+    "expect_failing": [
+      "legacy_boundary_values_and_refusal_order_match_python"
+    ],
+    "rule": "Compatibility payout admission preserves the Python metadata-only source selection."
+  },
+  {
+    "id": "JRB-payout-outbound",
+    "file": "crates/journals/src/render.rs",
+    "find": "truth(&r[\"journal_transaction_id\"]) && r[\"direction\"] == \"outbound\"",
+    "replace": "truth(&r[\"journal_transaction_id\"])",
+    "expect_failing": [
+      "audit_quarantine_and_entry_branches_match_python"
+    ],
+    "rule": "Compatibility payout admission preserves the Python metadata-only source selection."
+  },
+  {
+    "id": "JRB-payout-empty",
+    "file": "crates/journals/src/render.rs",
+    "find": "if inputs.direct_payout_records.is_empty() {",
+    "replace": "if !inputs.direct_payout_records.is_empty() {",
+    "expect_failing": [
+      "legacy_boundary_values_and_refusal_order_match_python"
+    ],
+    "rule": "Compatibility payout admission preserves the Python metadata-only source selection."
+  },
+  {
+    "id": "JRB-wallet-label-null",
+    "file": "crates/journals/src/render.rs",
+    "find": "if !label.is_null() && label != \"\" {",
+    "replace": "if label != \"\" {",
+    "expect_failing": [
+      "audit_quarantine_and_entry_branches_match_python"
+    ],
+    "rule": "Null wallet labels do not enter the label map."
+  },
+  {
+    "id": "JRB-category-null",
+    "file": "crates/journals/src/render.rs",
+    "find": "e.at_category = a.at_category.clone();",
+    "replace": "e.at_category = a.at_category.clone().or(Some(\"unknown\".into()));",
+    "expect_failing": [
+      "audit_quarantine_and_entry_branches_match_python"
+    ],
+    "rule": "An absent Austrian category omits both category and Kennzahl facts."
+  },
+  {
+    "id": "JRB-category-unknown",
+    "file": "crates/journals/src/render.rs",
+    "find": "\"alt_spekulation\" => Some(801),\n                    _ => None,",
+    "replace": "\"alt_spekulation\" => Some(801),\n                    _ => Some(172),",
+    "expect_failing": [
+      "audit_quarantine_and_entry_branches_match_python"
+    ],
+    "rule": "An unknown Austrian category retains an explicit null Kennzahl."
+  },
+  {
+    "id": "JRB-no-quarantines",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "if blocked.is_empty() {",
+    "replace": "if !blocked.is_empty() {",
+    "expect_failing": [
+      "component_exclusions_and_reason_precedence_match_python"
+    ],
+    "rule": "Empty quarantines skip review; nonempty quarantines must retain source selection."
+  },
+  {
+    "id": "JRB-unowned-output",
+    "file": "crates/journals/src/boundary/joins.rs",
+    "find": "if let Some(owner) = owners.first() {",
+    "replace": "let fallback_owner = String::from(\"wallet-b\");\n                if let Some(owner) = owners.first().or(Some(&fallback_owner)) {",
+    "expect_failing": [
+      "graph_scopes_owners_and_tolerances_match_python"
+    ],
+    "rule": "An unowned output cannot be attributed to a default wallet."
+  }
+]

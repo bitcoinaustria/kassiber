@@ -1,0 +1,195 @@
+[
+  {
+    "id": "RVC-raw-admission",
+    "file": "crates/journals/src/pipeline.rs",
+    "find": "Self::from_computed(crate::compute_loaded(snapshot, true).map_err(stage_error)?)",
+    "replace": "let typed = snapshot.typed().map_err(|message| Refusal::new(\"RuntimeError\", message))?; typed.validate().map_err(|message| Refusal::new(\"RuntimeError\", message))?; Self::from_snapshot(typed)",
+    "expect_failing": [
+      "review_assembler_preserves_raw_admission_and_refusal_ownership"
+    ],
+    "rule": "Preserve raw loader scalars until the consuming custody stage."
+  },
+  {
+    "id": "RVC-stage-refusal",
+    "file": "crates/journals/src/pipeline.rs",
+    "find": "Self::from_computed(crate::compute_loaded(snapshot, true).map_err(stage_error)?)",
+    "replace": "Self::from_computed(crate::compute_loaded(snapshot, true).map_err(|error| Refusal::new(\"RuntimeError\", error.message))?)",
+    "expect_failing": [
+      "review_assembler_preserves_raw_admission_and_refusal_ownership"
+    ],
+    "rule": "Preserve consuming-stage refusal families, codes and messages."
+  },
+  {
+    "id": "RVC-loaded-finalization",
+    "file": "crates/journals/src/compute.rs",
+    "find": "let stages = kassiber_custody::run_loaded(&snapshot, finalized)?;",
+    "replace": "let stages = kassiber_custody::run_loaded(&snapshot, false)?;",
+    "expect_failing": [
+      "review_plans_preserve_raw_loader_scalars_and_downstream_serialization_refusals"
+    ],
+    "rule": "The raw native composition includes finalized custody inputs."
+  },
+  {
+    "id": "RVC-fusion-bytes",
+    "file": "crates/journals/src/compute.rs",
+    "find": "    let projection =\n        kassiber_custody::journal_support::exact_operand(projection).map_err(|message| {\n            Refusal {\n                stage: \"fusion\",\n                code: \"ValueError\".into(),\n                message,\n                hint: None,\n                details: Value::Null,\n            }\n        })?;\n",
+    "replace": "    let text = kassiber_pyjson::dumps(projection, &kassiber_pyjson::Options::new()).unwrap();\n    let projection = codec::to_json(&codec::loads(&text).unwrap());\n",
+    "expect_failing": [
+      "fusion_preserves_unused_bytes_and_refuses_lossy_scalars_without_panicking"
+    ],
+    "rule": "Unused byte facts do not force a JSON serialization or panic in fusion."
+  },
+  {
+    "id": "RVC-lossless-conversion",
+    "file": "crates/custody/src/journal_support.rs",
+    "find": "if !codec::lossless(value)",
+    "replace": "if false && !codec::lossless(value)",
+    "expect_failing": [
+      "fusion_preserves_unused_bytes_and_refuses_lossy_scalars_without_panicking"
+    ],
+    "rule": "Lossy scalar conversion refuses rather than inventing replacement facts."
+  },
+  {
+    "id": "RVC-transactions-bytes",
+    "file": "crates/transactions/src/sql.rs",
+    "find": "ValueRef::Blob(raw) => Value::Bytes(raw.to_vec()),",
+    "replace": "ValueRef::Blob(_) => return Err(AppError::new(\"validation\", \"unexpected binary field\")),",
+    "expect_failing": [
+      "review_plans_preserve_raw_loader_scalars_and_downstream_serialization_refusals",
+      "review_apply_preserves_raw_loader_storage_classes_and_receipts"
+    ],
+    "rule": "Shared row readers retain bytes until the actual consuming operation."
+  },
+  {
+    "id": "RVC-transfers-bytes",
+    "file": "crates/transfers/src/sql.rs",
+    "find": "ValueRef::Blob(raw) => Value::Bytes(raw.to_vec()),",
+    "replace": "ValueRef::Blob(_) => return Err(AppError::new(\"validation\", \"unexpected binary field\")),",
+    "expect_failing": [
+      "review_plans_preserve_raw_loader_scalars_and_downstream_serialization_refusals",
+      "review_apply_preserves_raw_loader_storage_classes_and_receipts"
+    ],
+    "rule": "Shared row readers retain bytes until the actual consuming operation."
+  },
+  {
+    "id": "RVC-pricing-quantity",
+    "file": "crates/transactions/src/metadata/grouped.rs",
+    "find": "msat(&value(tx, \"amount\"))?",
+    "replace": "Decimal::from(int(tx, \"amount\"))",
+    "expect_failing": [
+      "review_plans_preserve_raw_loader_scalars_and_downstream_serialization_refusals",
+      "review_apply_preserves_raw_loader_storage_classes_and_receipts"
+    ],
+    "rule": "Reviewed pricing derives value and rate from Python-compatible exact integer quantities."
+  },
+  {
+    "id": "RVC-currency-precedence",
+    "file": "crates/transactions/src/metadata/grouped.rs",
+    "find": "kassiber_envelope::truthy(&value(tx, \"fiat_currency\"))",
+    "replace": "!text(tx, \"fiat_currency\").is_empty()",
+    "expect_failing": [
+      "review_plans_preserve_raw_loader_scalars_and_downstream_serialization_refusals"
+    ],
+    "rule": "A truthy invalid stored currency refuses before metadata comparison or fallback."
+  },
+  {
+    "id": "RVC-metadata-reason-limit",
+    "file": "crates/transactions/src/metadata/grouped.rs",
+    "find": "reason.code_points().count() > 1000",
+    "replace": "reason.code_points().count() > 2000",
+    "expect_failing": [
+      "review_plans_preserve_authoring_refusals_and_metadata_noop_ordering"
+    ],
+    "rule": "Delegated metadata validates its own reason limit even when the edit is a no-op."
+  },
+  {
+    "id": "RVC-metadata-reason-noop",
+    "file": "crates/transactions/src/metadata/grouped.rs",
+    "find": "    let mut changes = Vec::new();",
+    "replace": "    if let Some(reason) = &reason { if let Some(message) = kassiber_pytext::utf8_error(reason) { return Err(AppError::new(\"internal_error\", message)); } }\n    let mut changes = Vec::new();",
+    "expect_failing": [
+      "review_plans_preserve_authoring_refusals_and_metadata_noop_ordering"
+    ],
+    "rule": "SQLite encoding admission occurs only for an actual metadata write."
+  },
+  {
+    "id": "RVC-metadata-reason-identity",
+    "file": "crates/journals/src/review_simulation.rs",
+    "find": "            Some(Value::Str(reason)) => Some(reason.clone()),\n            _ => None,\n        },",
+    "replace": "            Some(Value::Str(reason)) => Some(kassiber_envelope::py_str(&Value::Str(reason.clone())).into()),\n            _ => None,\n        },",
+    "expect_failing": [
+      "review_plans_preserve_authoring_refusals_and_metadata_noop_ordering"
+    ],
+    "rule": "The shared metadata writer receives original authoring code points."
+  },
+  {
+    "id": "RVC-authoring-error",
+    "file": "crates/transfers/src/sql.rs",
+    "find": "kassiber_pytext::utf8_error(v).unwrap()",
+    "replace": "\"surrogates not allowed in SQLite text\"",
+    "expect_failing": [
+      "review_plans_preserve_authoring_refusals_and_metadata_noop_ordering"
+    ],
+    "rule": "Authoring refusals preserve exact UTF-8 character positions and runs."
+  },
+  {
+    "id": "RVC-source-noop",
+    "file": "crates/transactions/src/metadata/grouped.rs",
+    "find": "let source = history::source(&input.source)?;",
+    "replace": "let source = \"gui\".to_owned();",
+    "expect_failing": [
+      "review_apply_rejects_unsupported_metadata_authors_even_for_noops"
+    ],
+    "rule": "An unsupported author source refuses before a metadata no-op."
+  },
+  {
+    "id": "RVC-revision-preimage",
+    "file": "crates/transfers/src/component_review.rs",
+    "find": "    let new_id = uuid5(\n        preimage\n            .as_str()\n            .ok_or_else(|| internal(kassiber_pytext::utf8_error(&preimage).unwrap()))?,\n    );\n",
+    "replace": "    let new_id = uuid5(&py_str(&Value::Str(preimage)));\n",
+    "expect_failing": [
+      "review_plans_preserve_authoring_refusals_and_metadata_noop_ordering"
+    ],
+    "rule": "Revision digest admission preserves exact authoring text and full preimage character positions."
+  },
+  {
+    "id": "RVC-revision-reason-binding",
+    "file": "crates/transfers/src/component_review.rs",
+    "find": ".chain(raw_reason.code_points())",
+    "replace": ".chain(std::iter::empty())",
+    "expect_failing": [
+      "component_reviews_match_python_complete_database_rows_and_refusals"
+    ],
+    "rule": "Revision identities continue to commit to the complete reviewed reason."
+  },
+  {
+    "id": "RVC-placeholder-lookup",
+    "file": "crates/transfers/src/component_review.rs",
+    "find": "            if let Value::Str(label) = &untracked {\n                super::component_reads::reference_bind(\n                    &Value::Str(kassiber_pytext::strip_py(label)),\n                    1,\n                )?;\n            }\n",
+    "replace": "",
+    "expect_failing": [
+      "review_plans_preserve_authoring_refusals_and_metadata_noop_ordering"
+    ],
+    "rule": "An unencodable placeholder label refuses at the lookup before deterministic authoring."
+  },
+  {
+    "id": "RVC-stored-bytes",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "    if let Some(bytes) = kassiber_custody::codec::raw_bytes(v) {\n        return Ok(Sql::Blob(bytes));\n    }\n",
+    "replace": "    if kassiber_custody::codec::raw_bytes(v).is_some() {\n        return Err(Refusal::new(\"ProgrammingError\", \"unsupported SQLite binding\"));\n    }\n",
+    "expect_failing": [
+      "review_apply_preserves_raw_loader_storage_classes_and_receipts"
+    ],
+    "rule": "Canonical journal storage preserves byte-valued raw facts on both database bindings."
+  },
+  {
+    "id": "RVC-record-integer",
+    "file": "crates/transactions/src/metadata.rs",
+    "find": "(\"amount_msat\", Value::Int(integer(&value(tx, \"amount\"))?)),",
+    "replace": "(\"amount_msat\", value(tx, \"amount\")),",
+    "expect_failing": [
+      "grouped_raw_quantities_return_python_integers_without_rewriting_observations"
+    ],
+    "rule": "Shared metadata records serialize converted integer msat while preserving raw observations."
+  }
+]

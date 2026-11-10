@@ -1,0 +1,66 @@
+[
+  {
+    "id": "JR-nonfinite-canonical-sum",
+    "file": "crates/journals/src/native/builder.rs",
+    "find": "*total = Value::Float(float(total)? + float(amount)?);",
+    "replace": "*total = Value::Float(0.0);",
+    "expect_failing": ["nonfinite_operands_match_python_consumption_and_uuid_tapes"],
+    "rule": "Diagnostic sums retain nonfinite arithmetic, including opposing infinities and later operands."
+  },
+  {
+    "id": "JR-nonfinite-canonical-nan",
+    "file": "crates/journals/src/native/builder.rs",
+    "find": "if equal(&a, &Value::Int(b.clone())) {",
+    "replace": "if matches!(&a, Value::Float(v) if v.is_nan()) || equal(&a, &Value::Int(b.clone())) {",
+    "expect_failing": ["nonfinite_operands_match_python_consumption_and_uuid_tapes"],
+    "rule": "A NaN canonical total never equals the current integer balance."
+  },
+  {
+    "id": "JR-nonfinite-key-identity",
+    "file": "crates/journals/src/native.rs",
+    "find": "matches!((a, b), (Value::Float(a), Value::Float(b)) if a.is_nan() && b.is_nan())",
+    "replace": "false",
+    "expect_failing": ["nonfinite_operands_match_python_consumption_and_uuid_tapes"],
+    "rule": "Repeated JSON NaN keys share Python's constant identity in holdings tuples."
+  },
+  {
+    "id": "JR-nonfinite-wallet-mapping",
+    "file": "crates/journals/src/native.rs",
+    "find": ".find(|(key, _)| key_equal(&scalar::key_value(key), id))",
+    "replace": ".find(|(_, wallet)| key_equal(field(wallet, \"id\"), id))",
+    "expect_failing": ["nonfinite_operands_match_python_consumption_and_uuid_tapes"],
+    "rule": "Audit lookup uses the wallet mapping key even when its embedded identity is nonfinite."
+  },
+  {
+    "id": "JR-nonfinite-carry-admission",
+    "file": "crates/journals/src/native.rs",
+    "find": "Value::Float(float(rate)?)",
+    "replace": "Value::Float(if float(rate)?.is_finite() { float(rate)? } else { return Err(error(\"ValueError\", \"nonfinite carry\")); })",
+    "expect_failing": ["nonfinite_operands_match_python_consumption_and_uuid_tapes"],
+    "rule": "Carry float conversion admits Python NaN and infinities even on otherwise unused rows."
+  },
+  {
+    "id": "JR-nonfinite-decimal-admission",
+    "file": "crates/journals/src/native.rs",
+    "find": "fn decimal(value: &Value) -> Result<Decimal> {",
+    "replace": "fn decimal(value: &Value) -> Result<Decimal> { if matches!(value, Value::Float(_)) { return Ok(Decimal::zero()); }",
+    "expect_failing": ["nonfinite_operands_match_python_consumption_and_uuid_tapes"],
+    "rule": "Raw nonfinite floats do not become canonical engine decimals."
+  },
+  {
+    "id": "JR-nonfinite-ignored-holdings",
+    "file": "crates/journals/src/native.rs",
+    "find": "let Some(wallet) = reader.wallet(required(&value, \"wallet\")?, false)? else {",
+    "replace": "let _ = dec_field(&value, \"quantity\")?; let Some(wallet) = reader.wallet(required(&value, \"wallet\")?, false)? else {",
+    "expect_failing": ["nonfinite_operands_match_python_consumption_and_uuid_tapes"],
+    "rule": "Unknown-wallet holding decimals are ignored before canonical conversion."
+  },
+  {
+    "id": "JR-nonfinite-detail-retention",
+    "file": "crates/journals/src/native.rs",
+    "find": "Value::List(items) => Value::List(items.iter().map(detail).collect::<Result<_>>()?),",
+    "replace": "Value::List(items) => Value::List(items.iter().map(detail).collect::<Result<_>>()?), Value::Float(_) => Value::Null,",
+    "expect_failing": ["nonfinite_operands_match_python_consumption_and_uuid_tapes"],
+    "rule": "Recursive quarantine details retain raw nonfinite floats with Python JSON spelling."
+  }
+]

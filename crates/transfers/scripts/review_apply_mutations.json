@@ -1,0 +1,192 @@
+[
+  {
+    "id": "RVA-admit-before-writer",
+    "file": "crates/journals/src/review_apply.rs",
+    "find": "let normalized = review_artifact::admit(artifact, scope, request.idempotency_key)?;",
+    "replace": "let normalized = review_operations::normalize(&value(artifact, \"operations\"))?;",
+    "expect_failing": [
+      "review_apply_admission_and_version_checks_precede_domain_writes"
+    ],
+    "rule": "Validate portable content before acquiring or using the writer."
+  },
+  {
+    "id": "RVA-writer-reservation",
+    "file": "crates/journals/src/review_apply.rs",
+    "find": "    conn.execute(\n        \"UPDATE profiles SET journal_input_version=journal_input_version WHERE id=?\",\n        [scope.profile_id],\n    )\n    .map_err(sql::error)?;",
+    "replace": "",
+    "expect_failing": [
+      "review_apply_reserves_writer_before_historical_lookup_for_deferred_callers"
+    ],
+    "rule": "Reserve the writer before historical lookup even in a caller-owned deferred transaction."
+  },
+  {
+    "id": "RVA-historical-first",
+    "file": "crates/journals/src/review_apply.rs",
+    "find": "if let Some(existing) = existing.first() {",
+    "replace": "if let Some(existing) = existing.first().filter(|_| false) {",
+    "expect_failing": [
+      "review_apply_historical_retries_precede_freshness_and_conflicting_keys"
+    ],
+    "rule": "Return the historical receipt before freshness or canonical reconstruction."
+  },
+  {
+    "id": "RVA-key-conflict",
+    "file": "crates/journals/src/review_apply.rs",
+    "find": "if value(existing, \"artifact_digest\") != value(artifact, \"digest\") {",
+    "replace": "if false && value(existing, \"artifact_digest\") != value(artifact, \"digest\") {",
+    "expect_failing": [
+      "review_apply_historical_retries_precede_freshness_and_conflicting_keys"
+    ],
+    "rule": "A retry key cannot authorize another artifact."
+  },
+  {
+    "id": "RVA-version",
+    "file": "crates/journals/src/review_apply.rs",
+    "find": "        review_support::require_input_version(conn, scope, &value(artifact, \"base_input_version\"))?;\n",
+    "replace": "",
+    "expect_failing": [
+      "review_apply_admission_and_version_checks_precede_domain_writes"
+    ],
+    "rule": "Require the exact reviewed input version for a new execution."
+  },
+  {
+    "id": "RVA-before-effects",
+    "file": "crates/journals/src/review_apply.rs",
+    "find": "        if !review_artifact::equal(\n            &review_effects::effects(&state, conn, scope, &normalized, sources)?,\n            &value(artifact, \"before\"),\n        ) {",
+    "replace": "        if false {",
+    "expect_failing": [
+      "review_apply_refuses_changed_before_and_after_effects_and_rolls_back"
+    ],
+    "rule": "Rebuild and compare before effects while holding the writer."
+  },
+  {
+    "id": "RVA-after-effects",
+    "file": "crates/journals/src/review_apply.rs",
+    "find": "if !review_artifact::equal(&effects, &value(artifact, \"after\")) {",
+    "replace": "if false && !review_artifact::equal(&effects, &value(artifact, \"after\")) {",
+    "expect_failing": [
+      "review_apply_refuses_changed_before_and_after_effects_and_rolls_back"
+    ],
+    "rule": "Refuse changed effects and roll back ordered writes before storage."
+  },
+  {
+    "id": "RVA-canonical-store",
+    "file": "crates/journals/src/review_apply.rs",
+    "find": "            &state,\n            &sources.now(conn)?,",
+    "replace": "            &before.review_state(conn, derived_ids())?,\n            &sources.now(conn)?,",
+    "expect_failing": [
+      "review_apply_matches_python_receipts_authorship_and_complete_database_rows"
+    ],
+    "rule": "Store the canonical after state and its exact freshness and quantities."
+  },
+  {
+    "id": "RVA-receipt-anchors",
+    "file": "crates/journals/src/review_apply.rs",
+    "find": "let affected = transaction_ids(&results);",
+    "replace": "let affected = Value::List(vec![]);",
+    "expect_failing": [
+      "review_apply_matches_python_receipts_authorship_and_complete_database_rows"
+    ],
+    "rule": "Receipts retain all affected transaction anchors from every operation."
+  },
+  {
+    "id": "RVA-receipt-source",
+    "file": "crates/journals/src/review_apply.rs",
+    "find": "(\"authored_source\", s(request.authored_source)),",
+    "replace": "(\"authored_source\", s(\"user\")),",
+    "expect_failing": [
+      "review_apply_matches_python_receipts_authorship_and_complete_database_rows"
+    ],
+    "rule": "Persist the actual execution author in receipts."
+  },
+  {
+    "id": "RVA-operation-source",
+    "file": "crates/journals/src/review_apply.rs",
+    "find": "            request.authored_source,\n            false,\n            review_simulation::Cases::from_state(&state),",
+    "replace": "            \"user\",\n            false,\n            review_simulation::Cases::from_state(&state),",
+    "expect_failing": [
+      "review_apply_matches_python_receipts_authorship_and_complete_database_rows"
+    ],
+    "rule": "Delegate the execution author to metadata and custody writers."
+  },
+  {
+    "id": "RVA-caller-commit",
+    "file": "crates/journals/src/review_apply.rs",
+    "find": "        if self.commit {",
+    "replace": "        if true {",
+    "expect_failing": [
+      "review_apply_success_and_late_failures_preserve_caller_transactions_and_cache"
+    ],
+    "rule": "A successful commit-false execution remains pending for its caller."
+  },
+  {
+    "id": "RVA-caller-rollback",
+    "file": "crates/journals/src/review_apply.rs",
+    "find": "ROLLBACK TO SAVEPOINT review_workflow_apply; RELEASE SAVEPOINT review_workflow_apply",
+    "replace": "RELEASE SAVEPOINT review_workflow_apply",
+    "expect_failing": [
+      "review_apply_success_and_late_failures_preserve_caller_transactions_and_cache"
+    ],
+    "rule": "A failure rolls back review writes while preserving earlier caller writes."
+  },
+  {
+    "id": "RVA-late-commit-rollback",
+    "file": "crates/journals/src/review_apply.rs",
+    "find": "if self.owns || (self.released && self.commit) {",
+    "replace": "if self.owns && !self.released {",
+    "expect_failing": [
+      "review_apply_commit_failure_rolls_back_after_receipt_and_savepoint_release"
+    ],
+    "rule": "Commit failure after savepoint release rolls back journals and the receipt."
+  },
+  {
+    "id": "RVA-cache-restoration",
+    "file": "crates/journals/src/review_apply.rs",
+    "find": "let _cache = RebuildCache::enter(conn).map_err(sql::error)?;",
+    "replace": "let _cache = RebuildCache::enter(conn).map_err(sql::error)?;\n    std::mem::forget(_cache);",
+    "expect_failing": [
+      "review_apply_success_and_late_failures_preserve_caller_transactions_and_cache"
+    ],
+    "rule": "Restore the exact connection-local cache on success and every failure."
+  },
+  {
+    "id": "RVA-grouped-write",
+    "file": "crates/transactions/src/metadata/grouped.rs",
+    "find": "            if !updates.is_empty() {",
+    "replace": "            for (column, value) in &updates {\n                conn.execute(&format!(\"UPDATE transactions SET {column}=? WHERE id=?\"), params![cursor::bind(value)?, text(&tx, \"id\")]).map_err(error)?;\n            }\n            if false && !updates.is_empty() {",
+    "expect_failing": [
+      "review_apply_matches_python_receipts_authorship_and_complete_database_rows"
+    ],
+    "rule": "A grouped metadata edit advances observation-index triggers once per transaction."
+  },
+  {
+    "id": "RVA-component-author",
+    "file": "crates/transfers/src/component_store.rs",
+    "find": "super::component_rows::authored_source(&s(source))?",
+    "replace": "s(source)",
+    "expect_failing": [
+      "review_apply_matches_python_receipts_authorship_and_complete_database_rows"
+    ],
+    "rule": "New sibling custody revisions validate the authored source before persistence."
+  },
+  {
+    "id": "RVA-receipt-durability",
+    "file": "crates/journals/src/review_apply.rs",
+    "find": "VALUES(?,?,?,?,?,?,?)",
+    "replace": "SELECT ?,?,?,?,?,?,? WHERE 0",
+    "expect_failing": [
+      "review_apply_matches_python_receipts_authorship_and_complete_database_rows"
+    ],
+    "rule": "A verified execution stores its historical receipt in the same transaction."
+  },
+  {
+    "id": "RVA-filed-readiness",
+    "file": "crates/journals/src/persistence.rs",
+    "find": "let filed_report_impacts_resolved = if !truth(state.custody_component_blockers)",
+    "replace": "let filed_report_impacts_resolved = if true || !truth(state.custody_component_blockers)",
+    "expect_failing": [
+      "review_apply_filed_impacts_resolve_only_after_report_ready_storage_and_roll_back_late"
+    ],
+    "rule": "Filed and saved report impacts resolve only from a report-ready canonical journal."
+  }
+]

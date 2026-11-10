@@ -1,0 +1,152 @@
+[
+  {
+    "id": "RV-read-transaction",
+    "file": "crates/journals/src/loader/direct.rs",
+    "find": "if conn.is_autocommit() {",
+    "replace": "if !conn.is_autocommit() {",
+    "expect_failing": [
+      "review_loader_preserves_read_and_writer_snapshots_without_writes"
+    ],
+    "rule": "A review loader requires and preserves the caller-owned read or writer snapshot."
+  },
+  {
+    "id": "RV-clone-write-refusal",
+    "file": "crates/journals/src/pipeline.rs",
+    "find": "if conn.transaction_state(Some(\"main\"))? == TransactionState::Write {",
+    "replace": "if false && conn.transaction_state(Some(\"main\"))? == TransactionState::Write {",
+    "expect_failing": [
+      "review_memory_snapshot_refuses_pending_writes_without_committing_or_consuming_a_key"
+    ],
+    "rule": "Planning refuses pending source writes before backup and leaves them rollbackable."
+  },
+  {
+    "id": "RV-clone-key",
+    "file": "crates/journals/src/pipeline.rs",
+    "find": "if encrypted == \"1\" {",
+    "replace": "if encrypted == \"0\" {",
+    "expect_failing": [
+      "review_memory_snapshots_preserve_sqlcipher_and_plaintext_values_without_source_writes"
+    ],
+    "rule": "An encrypted source requires a freshly keyed in-memory destination on the same SQLCipher binding."
+  },
+  {
+    "id": "RV-clone-temp-store",
+    "file": "crates/journals/src/pipeline.rs",
+    "find": "PRAGMA temp_store=MEMORY",
+    "replace": "PRAGMA temp_store=FILE",
+    "expect_failing": [
+      "review_memory_snapshots_preserve_sqlcipher_and_plaintext_values_without_source_writes"
+    ],
+    "rule": "Planning keeps backup temporary storage in RAM."
+  },
+  {
+    "id": "RV-clone-foreign-keys",
+    "file": "crates/journals/src/pipeline.rs",
+    "find": "PRAGMA foreign_keys=ON",
+    "replace": "PRAGMA foreign_keys=OFF",
+    "expect_failing": [
+      "review_memory_snapshots_preserve_sqlcipher_and_plaintext_values_without_source_writes"
+    ],
+    "rule": "The isolated planning connection enforces foreign keys."
+  },
+  {
+    "id": "RV-clone-backup",
+    "file": "crates/journals/src/pipeline.rs",
+    "find": "        loop {\n            match backup.step(128)? {",
+    "replace": "        for _ in 0..0 {\n            match backup.step(128)? {",
+    "expect_failing": [
+      "review_memory_snapshots_preserve_sqlcipher_and_plaintext_values_without_source_writes"
+    ],
+    "rule": "An isolated snapshot preserves every source row and exact SQLite scalar."
+  },
+  {
+    "id": "RV-finalization",
+    "file": "crates/journals/src/pipeline.rs",
+    "find": "crate::compute_snapshot(snapshot, true)",
+    "replace": "crate::compute_snapshot(snapshot, false)",
+    "expect_failing": [
+      "review_builds_match_complete_python_states"
+    ],
+    "rule": "Review builds consume finalized custody rather than an incomplete decision projection."
+  },
+  {
+    "id": "RV-transfer-basis",
+    "file": "crates/custody/src/journal_support.rs",
+    "find": "        eligible,",
+    "replace": "        &eligible.iter().map(|decision| decision[\"source\"].clone()).collect::<Vec<_>>(),",
+    "expect_failing": [
+      "review_builds_match_complete_python_states"
+    ],
+    "rule": "Transfer basis eligibility compares complete arbitrated decisions, preserving reviewed custody slice provenance."
+  },
+  {
+    "id": "RV-rate-precedence",
+    "file": "crates/journals/src/pipeline.rs",
+    "find": ".get(exact)\n                .filter(|value| !value.is_null())\n                .or_else(|| row.get(legacy).filter(|value| !value.is_null()))",
+    "replace": ".get(legacy)\n                .filter(|value| !value.is_null())\n                .or_else(|| row.get(exact).filter(|value| !value.is_null()))",
+    "expect_failing": [
+      "review_rates_and_warnings_preserve_reference_precedence_and_exactness"
+    ],
+    "rule": "Exact rate and value columns take precedence over legacy REAL values, including authored zero."
+  },
+  {
+    "id": "RV-rate-first",
+    "file": "crates/journals/src/pipeline.rs",
+    "find": "if rates.contains_key(&asset) {",
+    "replace": "if false && rates.contains_key(&asset) {",
+    "expect_failing": [
+      "review_rates_and_warnings_preserve_reference_precedence_and_exactness"
+    ],
+    "rule": "The first available rate wins in native loader order."
+  },
+  {
+    "id": "RV-rate-msat",
+    "file": "crates/journals/src/pipeline.rs",
+    "find": "Decimal::from(100_000_000_000i64)",
+    "replace": "Decimal::from(100_000_000i64)",
+    "expect_failing": [
+      "review_rates_and_warnings_preserve_reference_precedence_and_exactness"
+    ],
+    "rule": "Derived transaction rates divide value by exact BTC converted from integer msat."
+  },
+  {
+    "id": "RV-warning-order",
+    "file": "crates/journals/src/pipeline.rs",
+    "find": "        ids.sort();",
+    "replace": "        ids.sort_by(|a, b| b.cmp(a));",
+    "expect_failing": [
+      "review_rates_and_warnings_preserve_reference_precedence_and_exactness"
+    ],
+    "rule": "Duplicate-label warning wallet IDs retain Python sorted order."
+  },
+  {
+    "id": "RV-warning-ownership",
+    "file": "crates/journals/src/pipeline.rs",
+    "find": "        ownership\n            .iter()",
+    "replace": "        ownership\n            .iter().take(0)",
+    "expect_failing": [
+      "review_rates_and_warnings_preserve_reference_precedence_and_exactness"
+    ],
+    "rule": "Ownership warnings remain visible beside duplicate-label warnings."
+  },
+  {
+    "id": "RV-quarantine-live",
+    "file": "crates/journals/src/pipeline.rs",
+    "find": ".filter(|row| live.contains(&crate::string(&row.transaction_id)))",
+    "replace": ".filter(|row| live.contains(&crate::string(&row.transaction_id)) || true)",
+    "expect_failing": [
+      "review_builds_keep_primary_reasons_and_only_live_profile_anchors"
+    ],
+    "rule": "Synthetic or foreign-profile anchors cannot become actionable review cases."
+  },
+  {
+    "id": "RV-quarantine-primary",
+    "file": "crates/journals/src/pipeline.rs",
+    "find": "crate::persistence::dedupe_quarantines(&state.quarantines)?",
+    "replace": "state.quarantines.clone()",
+    "expect_failing": [
+      "review_builds_keep_primary_reasons_and_only_live_profile_anchors"
+    ],
+    "rule": "Review states use the canonical primary-reason deduplication before filtering live anchors."
+  }
+]

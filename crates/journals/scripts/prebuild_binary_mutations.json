@@ -1,0 +1,192 @@
+[
+  {
+    "id": "JB-decimal-refusal",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "Sql::Blob(bytes) => bytes_repr(bytes),",
+    "replace": "Sql::Blob(_) => return Err(Refusal::new(\"TypeError\", \"binary journal pricing is unsupported\")),",
+    "expect_failing": [
+      "prebuild_pricing_binary_numeric_refusals_and_special_values"
+    ],
+    "rule": "Binary numeric storage retains the Python chained decimal refusal instead of a native type refusal."
+  },
+  {
+    "id": "JB-quote-choice",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "    let quote = if bytes.contains(&b'\\'') && !bytes.contains(&b'\"') {",
+    "replace": "    let quote = if false {",
+    "expect_failing": [
+      "prebuild_pricing_binary_numeric_refusals_and_special_values"
+    ],
+    "rule": "Python bytes representation chooses double quotes when only single quotes occur."
+  },
+  {
+    "id": "JB-prefix",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "format!(\"b{}\", char::from(quote))",
+    "replace": "format!(\"{}\", char::from(quote))",
+    "expect_failing": [
+      "prebuild_pricing_binary_numeric_refusals_and_special_values"
+    ],
+    "rule": "The invalid decimal diagnostic retains the bytes prefix."
+  },
+  {
+    "id": "JB-backslash",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "            b'\\\\' => text.push_str(\"\\\\\\\\\"),",
+    "replace": "",
+    "expect_failing": [
+      "prebuild_pricing_binary_numeric_refusals_and_special_values"
+    ],
+    "rule": "Python bytes diagnostics retain backslash escaping."
+  },
+  {
+    "id": "JB-tab",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "            b'\\t' => text.push_str(\"\\\\t\"),",
+    "replace": "",
+    "expect_failing": [
+      "prebuild_pricing_binary_numeric_refusals_and_special_values"
+    ],
+    "rule": "Python bytes diagnostics retain tab escaping."
+  },
+  {
+    "id": "JB-newline",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "            b'\\n' => text.push_str(\"\\\\n\"),",
+    "replace": "",
+    "expect_failing": [
+      "prebuild_pricing_binary_numeric_refusals_and_special_values"
+    ],
+    "rule": "Python bytes diagnostics retain newline escaping."
+  },
+  {
+    "id": "JB-carriage-return",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "            b'\\r' => text.push_str(\"\\\\r\"),",
+    "replace": "",
+    "expect_failing": [
+      "prebuild_pricing_binary_numeric_refusals_and_special_values"
+    ],
+    "rule": "Python bytes diagnostics retain carriage-return escaping."
+  },
+  {
+    "id": "JB-quote-escape",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "                text.push('\\\\');",
+    "replace": "                text.push('_');",
+    "expect_failing": [
+      "prebuild_pricing_binary_numeric_refusals_and_special_values"
+    ],
+    "rule": "Quotes inside binary diagnostics retain their Python backslash escape."
+  },
+  {
+    "id": "JB-printable",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "32..=126 => text.push(char::from(byte)),",
+    "replace": "33..=126 => text.push(char::from(byte)),",
+    "expect_failing": [
+      "prebuild_pricing_binary_numeric_refusals_and_special_values"
+    ],
+    "rule": "Printable ASCII spaces remain literal in bytes diagnostics."
+  },
+  {
+    "id": "JB-hex-case",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "format!(\"\\\\x{byte:02x}\")",
+    "replace": "format!(\"\\\\x{byte:02X}\")",
+    "expect_failing": [
+      "prebuild_pricing_binary_numeric_refusals_and_special_values"
+    ],
+    "rule": "Binary diagnostics encode nonprintable bytes with lowercase hex."
+  },
+  {
+    "id": "JB-closing-quote",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "    text.push(char::from(quote));\n    text",
+    "replace": "    text",
+    "expect_failing": [
+      "prebuild_pricing_binary_numeric_refusals_and_special_values"
+    ],
+    "rule": "Binary diagnostics retain the closing quote."
+  },
+  {
+    "id": "JB-empty-bytes",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "Sql::Blob(bytes) => bytes_repr(bytes),",
+    "replace": "Sql::Blob(bytes) if bytes.is_empty() => continue,\n            Sql::Blob(bytes) => bytes_repr(bytes),",
+    "expect_failing": [
+      "prebuild_pricing_binary_numeric_refusals_and_special_values"
+    ],
+    "rule": "Empty bytes are an invalid decimal value, not a missing price."
+  },
+  {
+    "id": "JB-positive-infinity",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "Self::Special(_) => f64::INFINITY,",
+    "replace": "Self::Special(_) => f64::NEG_INFINITY,",
+    "expect_failing": [
+      "prebuild_pricing_binary_numeric_refusals_and_special_values"
+    ],
+    "rule": "Positive infinity keeps its exact and legacy REAL signs."
+  },
+  {
+    "id": "JB-negative-infinity",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "Self::Special(text) if text.starts_with('-') => f64::NEG_INFINITY,",
+    "replace": "Self::Special(text) if text.starts_with('-') => f64::INFINITY,",
+    "expect_failing": [
+      "prebuild_pricing_binary_numeric_refusals_and_special_values"
+    ],
+    "rule": "Negative infinity keeps its exact and legacy REAL signs."
+  },
+  {
+    "id": "JB-signaling-nan",
+    "file": "crates/journals/src/prebuild/pricing.rs",
+    "find": "cannot convert signaling NaN to float",
+    "replace": "cannot convert quiet NaN to float",
+    "expect_failing": [
+      "prebuild_pricing_binary_numeric_refusals_and_special_values"
+    ],
+    "rule": "A signaling NaN without quantity retains the exact Python float-conversion refusal."
+  },
+  {
+    "id": "JB-python-real-encode",
+    "file": "tests/rust_port/journal_persistence_oracle.py",
+    "find": "if isinstance(value, float) and not math.isfinite(value):",
+    "replace": "if False:",
+    "expect_failing": [
+      "tests/test_journal_prebuild_campaign.py::test_prebuild_dumps_round_trip_nonfinite_sqlite_values"
+    ],
+    "rule": "Infinite stored REALs must have a strict JSON bit tag instead of a nonstandard JSON float."
+  },
+  {
+    "id": "JB-python-real-decode",
+    "file": "tests/rust_port/journal_persistence_oracle.py",
+    "find": "return struct.unpack('>d', bytes.fromhex(value['$real_bits']))[0]",
+    "replace": "return None",
+    "expect_failing": [
+      "tests/test_journal_prebuild_campaign.py::test_prebuild_dumps_round_trip_nonfinite_sqlite_values"
+    ],
+    "rule": "Restoring an infinite REAL must preserve its value and storage class instead of null."
+  },
+  {
+    "id": "JB-native-real-decode",
+    "file": "crates/journals/tests/support/mod.rs",
+    "find": "        Value::Object(o) if o.len() == 1 && o.contains_key(\"$real_bits\") => Sql::Real(\n            f64::from_bits(u64::from_str_radix(o[\"$real_bits\"].as_str().unwrap(), 16).unwrap()),\n        ),\n",
+    "replace": "",
+    "expect_failing": [
+      "complete_dumps_round_trip_infinite_reals_without_null_substitution"
+    ],
+    "rule": "Native fixture restoration must decode infinite REAL bits without substituting null."
+  },
+  {
+    "id": "JB-native-real-encode",
+    "file": "crates/journals/tests/support/mod.rs",
+    "find": "ValueRef::Real(n) if !n.is_finite()=>json!({\"$real_bits\":format!(\"{:016x}\", n.to_bits())}),",
+    "replace": "",
+    "expect_failing": [
+      "complete_dumps_round_trip_infinite_reals_without_null_substitution"
+    ],
+    "rule": "The native complete dump must preserve infinite REAL bits rather than JSON null."
+  }
+]

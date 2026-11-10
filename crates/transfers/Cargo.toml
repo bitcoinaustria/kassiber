@@ -1,0 +1,39 @@
+[package]
+name = "kassiber-transfers"
+description = "Stored custody review projections and local transfer authoring services"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[features]
+test-harness = []
+
+[[example]]
+name = "review-cases"
+required-features = ["test-harness"]
+
+[dependencies]
+kassiber-tax-countries = { path = "../tax-countries" }
+kassiber-envelope = { path = "../envelope" }
+kassiber-pyjson = { path = "../pyjson" }
+kassiber-pytext = { path = "../pytext" }
+kassiber-store = { path = "../store" }
+# Transaction references resolve through the one shared lookup.
+kassiber-transactions = { path = "../transactions" }
+# Reuse the ported custody validator and exact decimal/JSON boundaries. UUIDv5
+# identities require SHA-1, supplied by the already locked Bitcoin hash library.
+kassiber-custody = { path = "../custody" }
+kassiber-pydecimal = { path = "../pydecimal" }
+bitcoin_hashes = "0.14"
+serde_json = { version = "1", features = ["arbitrary_precision", "float_roundtrip"] }
+
+[dev-dependencies]
+# Review composition lives above transfers to avoid a runtime dependency cycle.
+kassiber-journals = { path = "../journals", features = ["test-harness"] }
+tempfile = "3"
+
+[lints.rust]
+unsafe_code = "forbid"

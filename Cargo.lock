@@ -2562,6 +2562,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "kassiber-journals"
+version = "0.1.0"
+dependencies = [
+ "bitcoin_hashes",
+ "kassiber-custody",
+ "kassiber-envelope",
+ "kassiber-pydecimal",
+ "kassiber-pyjson",
+ "kassiber-pytext",
+ "kassiber-rates",
+ "kassiber-reports",
+ "kassiber-setup",
+ "kassiber-store",
+ "kassiber-tax-core",
+ "kassiber-tax-countries",
+ "kassiber-transactions",
+ "kassiber-transfers",
+ "kassiber-wallets",
+ "kassiber-workspace",
+ "nix 0.30.1",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "kassiber-net"
 version = "0.1.0"
 dependencies = [
@@ -2786,6 +2811,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "kassiber-transfers"
+version = "0.1.0"
+dependencies = [
+ "bitcoin_hashes",
+ "kassiber-custody",
+ "kassiber-envelope",
+ "kassiber-journals",
+ "kassiber-pydecimal",
+ "kassiber-pyjson",
+ "kassiber-pytext",
+ "kassiber-store",
+ "kassiber-tax-countries",
+ "kassiber-transactions",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "kassiber-wallets"
 version = "0.1.0"
 dependencies = [
@@ -2816,6 +2859,25 @@ dependencies = [
  "regex",
  "serde_json",
  "sha2 0.11.1",
+]
+
+[[package]]
+name = "kassiber-workspace"
+version = "0.1.0"
+dependencies = [
+ "kassiber-envelope",
+ "kassiber-pydecimal",
+ "kassiber-pyjson",
+ "kassiber-pytext",
+ "kassiber-rates",
+ "kassiber-reports",
+ "kassiber-setup",
+ "kassiber-store",
+ "kassiber-tax-countries",
+ "kassiber-transactions",
+ "kassiber-transfers",
+ "kassiber-wallets",
+ "tempfile",
 ]
 
 [[package]]

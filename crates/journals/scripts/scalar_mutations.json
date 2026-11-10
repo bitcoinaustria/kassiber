@@ -1,0 +1,152 @@
+[
+  {
+    "id": "JR-scalar-string-text",
+    "file": "crates/journals/src/scalar.rs",
+    "find": "Value::Str(v) => v.clone(),",
+    "replace": "Value::Str(v) => kassiber_pytext::repr_py(v).into(),",
+    "expect_failing": [
+      "lossless_scalars_match_python_bytes_and_types"
+    ],
+    "rule": "String coercion preserves actual text without quotes or surrogate replacement."
+  },
+  {
+    "id": "JR-scalar-nan-truth",
+    "file": "crates/journals/src/scalar.rs",
+    "find": "Value::Float(v) => *v != 0.0,",
+    "replace": "Value::Float(v) => v.is_finite() && *v != 0.0,",
+    "expect_failing": [
+      "lossless_scalars_match_python_bytes_and_types"
+    ],
+    "rule": "NaN and infinities are truthy Python floats."
+  },
+  {
+    "id": "JR-scalar-big-integer",
+    "file": "crates/journals/src/scalar.rs",
+    "find": "Value::Int(v) => v.to_string(),",
+    "replace": "Value::Int(v) => v.to_string().parse::<f64>().unwrap().to_string(),",
+    "expect_failing": [
+      "lossless_scalars_match_python_bytes_and_types"
+    ],
+    "rule": "Integers retain arbitrary precision during Python string coercion."
+  },
+  {
+    "id": "JR-scalar-sort-keys",
+    "file": "crates/journals/src/scalar.rs",
+    "find": "&Options::new().sort_keys(true).compact()",
+    "replace": "&Options::new().sort_keys(false).compact()",
+    "expect_failing": [
+      "lossless_scalars_match_python_bytes_and_types"
+    ],
+    "rule": "Canonical raw encoding sorts surrogate-capable dictionary keys by Python code points."
+  },
+  {
+    "id": "JR-scalar-nonfinite-admission",
+    "file": "crates/journals/src/scalar.rs",
+    "find": "Json::Number(serde_json::Number::from_f64(*v)?)",
+    "replace": "serde_json::Number::from_f64(*v).map(Json::Number).unwrap_or(Json::Null)",
+    "expect_failing": [
+      "lossless_scalars_match_python_bytes_and_types"
+    ],
+    "rule": "Checked serde conversion refuses nonfinite floats rather than replacing them with null."
+  },
+  {
+    "id": "JR-scalar-surrogate-admission",
+    "file": "crates/journals/src/scalar.rs",
+    "find": "Json::String(v.as_str()?.into())",
+    "replace": "Json::String(v.as_str().unwrap_or(\"\\u{fffd}\").into())",
+    "expect_failing": [
+      "lossless_scalars_match_python_bytes_and_types"
+    ],
+    "rule": "Checked serde conversion refuses actual surrogate text without replacement characters."
+  },
+  {
+    "id": "JR-scalar-container-coercion",
+    "file": "crates/journals/src/lib.rs",
+    "find": "Value::Array(_) | Value::Object(_) => scalar::repr(\n            &kassiber_custody::codec::from_json(value).expect(\"JSON scalar conversion\"),\n        ),",
+    "replace": "Value::Array(_) | Value::Object(_) => kassiber_custody::codec::pystr(value),",
+    "expect_failing": [
+      "scalar_coercions_match_python_rendering"
+    ],
+    "rule": "Compound anchors and profile methods use Python repr rather than JSON scalar spelling."
+  },
+  {
+    "id": "JR-scalar-map-order",
+    "file": "crates/journals/src/scalar.rs",
+    "find": "previous >= key",
+    "replace": "previous == key",
+    "expect_failing": [
+      "lossless_scalars_match_python_bytes_and_types"
+    ],
+    "rule": "Checked serde conversion refuses to discard dictionary insertion order."
+  },
+  {
+    "id": "JR-scalar-nonfinite-snapshot",
+    "file": "crates/journals/src/scalar.rs",
+    "find": "dict([(\"$float\", Value::from(kassiber_pyjson::float_repr(*v)))])",
+    "replace": "Value::Null",
+    "expect_failing": [
+      "lossless_scalars_match_python_bytes_and_types"
+    ],
+    "rule": "Oracle encoding retains the identity of native nonfinite scalar values."
+  },
+  {
+    "id": "JR-scalar-decoder-error-family",
+    "file": "crates/journals/src/scalar.rs",
+    "find": "kassiber_pytext::JsonErrorKind::Decode { .. } => \"JSONDecodeError\",",
+    "replace": "kassiber_pytext::JsonErrorKind::Decode { .. } => \"ValueError\",",
+    "expect_failing": [
+      "lossless_scalar_decode_refusals_match_python"
+    ],
+    "rule": "Malformed raw JSON retains Python decoder refusal family and complete message."
+  },
+  {
+    "id": "JR-scalar-bytes-kind",
+    "file": "crates/journals/src/scalar.rs",
+    "find": "Value::Bytes(_) => \"bytes\",",
+    "replace": "Value::Bytes(_) => \"str\",",
+    "expect_failing": [
+      "byte_scalars_keep_python_identity_and_serialization_refusal"
+    ],
+    "rule": "BLOB values keep the Python bytes type."
+  },
+  {
+    "id": "JR-scalar-bytes-truth",
+    "file": "crates/journals/src/scalar.rs",
+    "find": "Value::Bytes(v) => !v.is_empty(),",
+    "replace": "Value::Bytes(_) => false,",
+    "expect_failing": [
+      "byte_scalars_keep_python_identity_and_serialization_refusal"
+    ],
+    "rule": "Nonempty BLOBs retain Python truth."
+  },
+  {
+    "id": "JR-scalar-bytes-repr",
+    "file": "crates/journals/src/scalar.rs",
+    "find": "Value::Bytes(v) => kassiber_pyjson::bytes_repr(v),",
+    "replace": "Value::Bytes(_) => String::new(),",
+    "expect_failing": [
+      "byte_scalars_keep_python_identity_and_serialization_refusal"
+    ],
+    "rule": "Byte representations retain escapes and raw identity."
+  },
+  {
+    "id": "JR-scalar-bytes-serde",
+    "file": "crates/journals/src/scalar.rs",
+    "find": "Value::Decimal(_) | Value::Bytes(_) => return None,",
+    "replace": "Value::Decimal(_) => return None,\n        Value::Bytes(_) => Json::Null,",
+    "expect_failing": [
+      "byte_scalars_keep_python_identity_and_serialization_refusal"
+    ],
+    "rule": "A raw BLOB cannot enter the serde carrier as null."
+  },
+  {
+    "id": "JR-scalar-bytes-snapshot",
+    "file": "crates/journals/src/scalar.rs",
+    "find": "Value::from(\n                v.iter()\n                    .map(|byte| format!(\"{byte:02x}\"))\n                    .collect::<String>(),\n            ),",
+    "replace": "Value::from(\"\"),",
+    "expect_failing": [
+      "byte_scalars_keep_python_identity_and_serialization_refusal"
+    ],
+    "rule": "Oracle byte snapshots retain every byte."
+  }
+]

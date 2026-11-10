@@ -1,0 +1,82 @@
+[
+  {
+    "id": "JR-builder-rates",
+    "file": "crates/journals/src/native/builder.rs",
+    "find": "(\"latest_rates\", field(self.custody, \"rates\"))",
+    "replace": "(\"latest_rates\", &Value::Null)",
+    "expect_failing": [
+      "native_builder_matches_python_states_refusals_and_uuid_tapes"
+    ],
+    "rule": "Preserve pass-through native rates in the assembled state."
+  },
+  {
+    "id": "JR-builder-canonical-amount",
+    "file": "crates/journals/src/native/builder.rs",
+    "find": "(Value::Int(total), Value::Int(amount)) => *total += amount,",
+    "replace": "(Value::Int(total), Value::Int(amount)) => *total -= amount,",
+    "expect_failing": [
+      "native_builder_matches_python_states_refusals_and_uuid_tapes"
+    ],
+    "rule": "Sum exact canonical postings before comparing wallet totals."
+  },
+  {
+    "id": "JR-builder-wallet-key",
+    "file": "crates/journals/src/native/builder.rs",
+    "find": "current.insert((text(&key[0]), text(&key[3])), amount);",
+    "replace": "current.insert((repr(&key[0]).into(), text(&key[3])), amount);",
+    "expect_failing": [
+      "native_builder_matches_python_states_refusals_and_uuid_tapes"
+    ],
+    "rule": "Current balance identities use Python stringification including actual surrogates."
+  },
+  {
+    "id": "JR-builder-suspense",
+    "file": "crates/journals/src/native/builder.rs",
+    "find": "\"custody_component_residual_suspense\".into()",
+    "replace": "\"loan_principal_non_event\".into()",
+    "expect_failing": [
+      "native_builder_matches_python_states_refusals_and_uuid_tapes"
+    ],
+    "rule": "Residual suspense supersedes prior loan and channel explanations."
+  },
+  {
+    "id": "JR-builder-one-reason",
+    "file": "crates/journals/src/native/builder.rs",
+    "find": ".filter(|r| r.len() == 1)",
+    "replace": ".filter(|r| !r.is_empty())",
+    "expect_failing": [
+      "native_builder_matches_python_states_refusals_and_uuid_tapes"
+    ],
+    "rule": "Only a unique explanation names a balance difference."
+  },
+  {
+    "id": "JR-builder-reconciliation",
+    "file": "crates/journals/src/native/builder.rs",
+    "find": "s.is(\"$type\")",
+    "replace": "s.is(\"$other_type\")",
+    "expect_failing": [
+      "native_builder_matches_python_states_refusals_and_uuid_tapes"
+    ],
+    "rule": "Dataclass reconciliation projections omit their oracle type marker."
+  },
+  {
+    "id": "JR-builder-quantity",
+    "file": "crates/journals/src/native.rs",
+    "find": "crate::JournalQuantity::Finite(value) => Value::Decimal(value.0)",
+    "replace": "crate::JournalQuantity::Finite(value) => Value::from(value.0.to_string())",
+    "expect_failing": [
+      "native_builder_matches_python_states_refusals_and_uuid_tapes"
+    ],
+    "rule": "Finite transfer quantities remain native decimals through the builder."
+  },
+  {
+    "id": "JR-builder-tuple-refusal",
+    "file": "crates/journals/src/native.rs",
+    "find": "Value::from(\"tuple index out of range\")",
+    "replace": "Value::from(\"list index out of range\")",
+    "expect_failing": [
+      "native_builder_matches_python_states_refusals_and_uuid_tapes"
+    ],
+    "rule": "Audit pair indexes retain the finalized projection tuple refusal."
+  }
+]

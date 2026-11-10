@@ -1,0 +1,62 @@
+[
+ {
+  "id": "graph-foreign-asset-id",
+  "file": "crates/journals/src/transaction_graph.rs",
+  "find": "    set(node, \"assetId\", asset.map_or(Value::Null, s));\n",
+  "replace": "",
+  "expect_failing": [
+   "foreign_asset_nodes_carry_the_full_asset_id_beside_the_label"
+  ],
+  "rule": "A foreign-asset node carries the full asset id beside its shortened label."
+ },
+ {
+  "id": "graph-coinjoin-input-entry-value",
+  "file": "crates/journals/src/transaction_graph.rs",
+  "find": "output_value_sats(prevout).or_else(|| output_value_sats(item)),",
+  "replace": "output_value_sats(prevout),",
+  "expect_failing": [
+   "collaborative_shapes_match_python_for_every_vector"
+  ],
+  "rule": "The transaction graph reads an input value beside a valueless prevout."
+ },
+ {
+  "id": "graph-coinjoin-nested-script",
+  "file": "crates/journals/src/transaction_graph.rs",
+  "find": "    if *script == Value::Null && matches!(nested, Value::Str(_)) {\n        script = nested;\n    }\n",
+  "replace": "",
+  "expect_failing": [
+   "collaborative_shapes_match_python_for_every_vector"
+  ],
+  "rule": "A string scriptPubKey is an input script for the shape rule."
+ },
+ {
+  "id": "graph-coinjoin-fromhex-whitespace",
+  "file": "crates/journals/src/transaction_graph.rs",
+  "find": "' ' | '\\t' | '\\n' | '\\r' | '\\x0b' | '\\x0c'",
+  "replace": "' ' | '\\t' | '\\n' | '\\r' | '\\x0c'",
+  "expect_failing": [
+   "collaborative_shapes_match_python_for_every_vector"
+  ],
+  "rule": "bytes.fromhex skips vertical tabs between bytes."
+ },
+ {
+  "id": "graph-coinjoin-shape-call",
+  "file": "crates/journals/src/transaction_graph.rs",
+  "find": "coinjoin_shape::shape(vin.len(), &inputs, &outputs).is_some()",
+  "replace": "coinjoin_shape::shape(inputs.len(), &inputs, &outputs).is_some()",
+  "expect_failing": [
+   "collaborative_shapes_match_python_for_every_vector"
+  ],
+  "rule": "An unreadable input entry leaves the ratio unavailable in the graph too."
+ },
+ {
+  "id": "graph-coinjoin-op-return-reader",
+  "file": "crates/journals/src/transaction_graph.rs",
+  "find": "shape_script(item).is_some_and(|s| s.starts_with(\"6a\"))",
+  "replace": "string_or_none(&output_script(item)).is_some_and(|s| s.starts_with(\"6a\"))",
+  "expect_failing": [
+   "collaborative_shapes_match_python_for_every_vector"
+  ],
+  "rule": "The OP_RETURN skip reads only the script keys Python reads."
+ }
+]
