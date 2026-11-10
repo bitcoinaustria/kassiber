@@ -43,8 +43,8 @@ Everything else the backend needs is compiled in with `include_str!` /
 `include_bytes!`: the book schema and migrations, the Typst report template and
 its fonts (`crates/pdf/fonts`: DM Sans, JetBrains Mono, Liberation Sans), the
 bundled Kraken BTC/EUR and BTC/USD hourly and daily rates
-(`kassiber/data/rates/kraken`, about 15 MB of the binary), the AI skill
-references (`kassiber/ai/skill_references`), the pairing-service catalog, the
+(`crates/rates/data/kraken`, about 15 MB of the binary), the AI skill
+references (`crates/ai/skill_references`), the pairing-service catalog, the
 OCR prompt, and the WebPKI roots used when the host has no CA bundle. Three
 things are not compiled in:
 

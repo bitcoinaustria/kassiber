@@ -60,12 +60,3 @@ include-package-data = true
 where = ["."]
 include = ["kassiber*"]
 
-[tool.setuptools.package-data]
-kassiber = [
-  "ai/provider_broker/*.mjs",
-  "ai/skill_references/*.md",
-  "data/rates/kraken/btc_daily/*.csv",
-  "data/rates/kraken/btc_daily/README.md",
-  "data/rates/kraken/btc_hourly/*.csv",
-  "data/rates/kraken/btc_hourly/README.md",
-]

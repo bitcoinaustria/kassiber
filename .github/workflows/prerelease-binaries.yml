@@ -7,7 +7,7 @@ on:
       - ".github/workflows/finalize-signed-release.yml"
       - "pyproject.toml"
       # Embedded into the Rust binary with include_str!.
-      - "kassiber/ai/skill_references/**"
+      - "crates/ai/skill_references/**"
       - "kassiber/data/**"
       - "scripts/build-rust-cli.sh"
       - "scripts/check-linux-glibc-floor.sh"
@@ -171,8 +171,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -s kassiber/ai/provider_broker/index.mjs
-          echo "broker bundle: $(wc -c < kassiber/ai/provider_broker/index.mjs) bytes"
+          test -s ui-tauri/provider-broker/dist/index.mjs
+          echo "broker bundle: $(wc -c < ui-tauri/provider-broker/dist/index.mjs) bytes"
 
       - name: Install Linux RPM tooling
         if: runner.os == 'Linux'
@@ -287,7 +287,7 @@ jobs:
         run: |
           set -euo pipefail
           package_name="kassiber-cli-${{ matrix.target }}"
-          broker=kassiber/ai/provider_broker/index.mjs
+          broker=ui-tauri/provider-broker/dist/index.mjs
           scripts/package-cli-archive.sh \
             --binary "dist/kassiber${{ matrix.exe_ext }}" \
             --broker "$broker" \
@@ -343,7 +343,7 @@ jobs:
           cp "dist/kassiber${{ matrix.exe_ext }}" \
             "$sidecar_dir/kassiber-cli-${{ matrix.triple }}${{ matrix.exe_ext }}"
           chmod 755 "$sidecar_dir/kassiber-cli-${{ matrix.triple }}${{ matrix.exe_ext }}"
-          cp kassiber/ai/provider_broker/index.mjs "$sidecar_dir/provider_broker/index.mjs"
+          cp ui-tauri/provider-broker/dist/index.mjs "$sidecar_dir/provider_broker/index.mjs"
           # The macOS signer requires embedded build provenance in the app;
           # the Python sidecar carried it inside its payload.
           cp build/BUILD_INFO.json "$sidecar_dir/BUILD_INFO.json"

@@ -159,7 +159,7 @@ def _broker_script() -> Path:
     configured = os.environ.get("KASSIBER_AI_PROVIDER_BROKER")
     if configured:
         return Path(configured).expanduser()
-    return Path(__file__).with_name("provider_broker") / "index.mjs"
+    return Path(__file__).resolve().parents[2] / "ui-tauri" / "provider-broker" / "dist" / "index.mjs"
 
 
 _RAM_FILESYSTEMS = frozenset({"tmpfs", "ramfs"})

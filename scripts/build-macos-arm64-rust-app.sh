@@ -179,7 +179,7 @@ run "$ROOT/scripts/smoke-packaged-cli.sh" --cli "$RUST_BIN" --scratch "$smoke_ro
 # it (<executable dir>/provider_broker/index.mjs).
 run pnpm --dir ui-tauri install --frozen-lockfile
 run pnpm --dir ui-tauri run broker:build
-test -s "$ROOT/kassiber/ai/provider_broker/index.mjs"
+test -s "$ROOT/ui-tauri/provider-broker/dist/index.mjs"
 
 # Same one-dir location and file name the Python sidecar uses: the supervisor,
 # the CLI launcher, and the Touch ID helper's identity check all look there.
@@ -190,7 +190,7 @@ rm -rf "${BINARIES_DIR:?}/kassiber-cli" "${BINARIES_DIR:?}/provider_broker"
 mkdir -p "$BINARIES_DIR/kassiber-cli/provider_broker"
 run cp "$RUST_BIN" "$BINARIES_DIR/kassiber-cli/$SIDECAR_NAME"
 run chmod 755 "$BINARIES_DIR/kassiber-cli/$SIDECAR_NAME"
-run cp "$ROOT/kassiber/ai/provider_broker/index.mjs" "$BINARIES_DIR/kassiber-cli/provider_broker/index.mjs"
+run cp "$ROOT/ui-tauri/provider-broker/dist/index.mjs" "$BINARIES_DIR/kassiber-cli/provider_broker/index.mjs"
 
 TAURI_CONFIG_DIR="$(mktemp -d "${TMPDIR:-/tmp}/kassiber-tauri-config.XXXXXX")"
 trap 'rm -rf "$smoke_root" "$TAURI_CONFIG_DIR"' EXIT

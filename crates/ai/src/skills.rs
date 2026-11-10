@@ -1,6 +1,6 @@
 //! `read_skill_reference(name)` (`kassiber/ai/tools.py:4049`): only the
 //! allowlisted references, embedded at build time from
-//! `kassiber/ai/skill_references/`. Nothing is read from disk, and never
+//! `crates/ai/skill_references/`. Nothing is read from disk, and never
 //! from the working directory, which under MCP is an agent's untrusted
 //! repository.
 
@@ -27,43 +27,43 @@ pub const SKILL_REFERENCE_NAMES: [&str; 11] = [
 const REFERENCES: [(&str, &str); 10] = [
     (
         "command-templates",
-        include_str!("../../../kassiber/ai/skill_references/command-templates.md"),
+        include_str!("../skill_references/command-templates.md"),
     ),
     (
         "journal-processing",
-        include_str!("../../../kassiber/ai/skill_references/journal-processing.md"),
+        include_str!("../skill_references/journal-processing.md"),
     ),
     (
         "metadata",
-        include_str!("../../../kassiber/ai/skill_references/metadata.md"),
+        include_str!("../skill_references/metadata.md"),
     ),
     (
         "onboarding",
-        include_str!("../../../kassiber/ai/skill_references/onboarding.md"),
+        include_str!("../skill_references/onboarding.md"),
     ),
     (
         "reports",
-        include_str!("../../../kassiber/ai/skill_references/reports.md"),
+        include_str!("../skill_references/reports.md"),
     ),
     (
         "secrets-and-backup",
-        include_str!("../../../kassiber/ai/skill_references/secrets-and-backup.md"),
+        include_str!("../skill_references/secrets-and-backup.md"),
     ),
     (
         "swap-matching",
-        include_str!("../../../kassiber/ai/skill_references/swap-matching.md"),
+        include_str!("../skill_references/swap-matching.md"),
     ),
     (
         "troubleshooting",
-        include_str!("../../../kassiber/ai/skill_references/troubleshooting.md"),
+        include_str!("../skill_references/troubleshooting.md"),
     ),
     (
         "verification",
-        include_str!("../../../kassiber/ai/skill_references/verification.md"),
+        include_str!("../skill_references/verification.md"),
     ),
     (
         "wallets-backends",
-        include_str!("../../../kassiber/ai/skill_references/wallets-backends.md"),
+        include_str!("../skill_references/wallets-backends.md"),
     ),
 ];
 

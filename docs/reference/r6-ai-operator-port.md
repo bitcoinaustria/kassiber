@@ -668,7 +668,7 @@ Two runs:
   stale-context check.
 - **The auto-read planner and context trimming.**
 - **Provenance and the privacy receipt.**
-- **Skill references,** embedded from `kassiber/ai/skill_references/`.
+- **Skill references,** embedded from `crates/ai/skill_references/`.
 - **The projections** in §1.7. The `ca-ref:` handles reuse the existing
   registry.
 - **The custody AI audit writer.**

@@ -305,7 +305,7 @@ end-to-end and to pass the drift test.
 8. **Docs, in the same change:**
    - `docs/reference/imports.md` — a "## <DisplayName>" section (supported-paths
      bullet, format-reference link, behavior list, CLI example).
-   - `kassiber/ai/skill_references/wallets-backends.md` — add the import example.
+   - `crates/ai/skill_references/wallets-backends.md` — add the import example.
    - Keep importer inventories out of `README.md` and `AGENTS.md`; they link
      to the owning reference instead.
 

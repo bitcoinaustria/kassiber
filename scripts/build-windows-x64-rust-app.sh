@@ -74,7 +74,7 @@ run "$python" scripts/write_build_info.py --output "$work/BUILD_INFO.json" \
 
 run pnpm --dir ui-tauri install --frozen-lockfile
 run pnpm --dir ui-tauri run broker:build
-broker="$ROOT/kassiber/ai/provider_broker/index.mjs"
+broker="$ROOT/ui-tauri/provider-broker/dist/index.mjs"
 test -s "$broker"
 
 run "$ROOT/scripts/smoke-packaged-cli.sh" --cli "$binary" --scratch "$work/smoke" \

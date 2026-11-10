@@ -28,10 +28,10 @@ ROOT = Path(__file__).resolve().parent.parent
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 XBTEUR_FIXTURE = FIXTURES / "XBTEUR_1.csv"
 BUNDLED_KRAKEN_BTC_DAILY = (
-    ROOT / "kassiber" / "data" / "rates" / "kraken" / "btc_daily"
+    ROOT / "crates" / "rates" / "data" / "kraken" / "btc_daily"
 )
 BUNDLED_KRAKEN_BTC_HOURLY = (
-    ROOT / "kassiber" / "data" / "rates" / "kraken" / "btc_hourly"
+    ROOT / "crates" / "rates" / "data" / "kraken" / "btc_hourly"
 )
 
 XBTUSD_CSV = """1714521600,65000.00,65010.00,64990.00,65005.50,0.5000,10
@@ -789,16 +789,6 @@ class KrakenCsvRatesTest(unittest.TestCase):
                 ),
             ],
         )
-
-    def test_package_data_includes_bundled_kraken_rate_fixtures(self):
-        pyproject_text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
-        for relpath in (
-            "data/rates/kraken/btc_daily/*.csv",
-            "data/rates/kraken/btc_daily/README.md",
-            "data/rates/kraken/btc_hourly/*.csv",
-            "data/rates/kraken/btc_hourly/README.md",
-        ):
-            self.assertIn(f'"{relpath}"', pyproject_text)
 
     def test_desktop_daemon_imports_bundled_kraken_btc_hourly_seed(self):
         conn = open_db(str(self.data_root))

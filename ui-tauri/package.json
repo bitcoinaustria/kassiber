@@ -11,7 +11,7 @@
     "dev:bridge": "VITE_DAEMON=bridge vite",
     "dev:demo": "VITE_DAEMON=bridge KASSIBER_DEV_DATA_ROOT=\"${KASSIBER_REGTEST_DEMO_HOME:-$HOME/.kassiber/regtest-demo}/data\" vite",
     "dev:shell": "tauri dev",
-    "broker:build": "tsc -p provider-broker/tsconfig.json && esbuild provider-broker/src/index.ts --bundle --platform=node --format=esm --target=node20 --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" --outfile=../kassiber/ai/provider_broker/index.mjs",
+    "broker:build": "tsc -p provider-broker/tsconfig.json && esbuild provider-broker/src/index.ts --bundle --platform=node --format=esm --target=node20 --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" --outfile=provider-broker/dist/index.mjs",
     "build": "pnpm broker:build && tsc -b && vite build",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",

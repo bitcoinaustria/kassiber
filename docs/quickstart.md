@@ -258,7 +258,7 @@ the configured live market-rate provider for automatic latest-price refresh and
 default pricing-cache rebuilds; Coinbase Exchange remains the default when no
 provider is configured.
 The repository also ships a BTC-only Kraken offline history bundle for EUR and
-USD hourly values under `kassiber/data/rates/kraken/btc_hourly`, which
+USD hourly values under `crates/rates/data/kraken/btc_hourly`, which
 freshness/rate-coverage jobs seed automatically when missing. It can also be
 imported with the same `kraken-csv` path flow, and Desktop Settings → Market
 data exposes it as Kraken offline history → `Bundled hourly values` for offline

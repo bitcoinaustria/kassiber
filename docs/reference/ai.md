@@ -281,7 +281,7 @@ Fixed external CLI locators route through the bundled Node/TypeScript broker in
 
 ### Building the broker from a source checkout
 
-The broker ships as a single bundled `kassiber/ai/provider_broker/index.mjs`,
+The broker ships as a single bundled `ui-tauri/provider-broker/dist/index.mjs`,
 built by esbuild from `ui-tauri/provider-broker/src`. It is **not committed** —
 release builds produce it before packaging. In a source checkout the CLI-backed
 providers report `ai_unavailable` until you build it once:
@@ -1684,7 +1684,7 @@ matter across tool additions:
   or rule pairing. A bounded review packet may omit competing rows: use
   `conflict_set_id` and the full cluster before approving a choice. Candidate
   evidence retains contradictions and exact declared amounts so a `strong`
-  result is explainable. [Swap matching](../../kassiber/ai/skill_references/swap-matching.md)
+  result is explainable. [Swap matching](../../crates/ai/skill_references/swap-matching.md)
   owns the review procedure and filter semantics.
 - Loan open-lock hints remain heuristics, never liquidation proof or automatic
   marks. Bounded lists must disclose full counts and truncation.
@@ -1743,7 +1743,7 @@ unmatched output is "not matched", never "external".
 `read_skill_reference` is a virtual tool. `read_skill_reference("index")`
 returns a compact routing document derived from the Kassiber skill concepts and
 points the model to deeper allowlisted references. The deeper references are
-restricted to packaged files under `kassiber/ai/skill_references/`:
+restricted to packaged files under `crates/ai/skill_references/`:
 `command-templates`,
 `journal-processing`, `metadata`, `onboarding`, `reports`,
 `secrets-and-backup`, `swap-matching`, `troubleshooting`, `verification`, and

@@ -7,7 +7,7 @@ description: Use this skill when the user wants to use the Kassiber CLI for loca
 
 Use this skill for Kassiber CLI workflows. Kassiber has its own command surface, so agents should not guess flags or reuse commands from analogous tools.
 
-This checked-in skill uses the shared reference files under `kassiber/ai/skill_references/`; keep those repository-relative links intact. Its own helper scripts and intake references live beside this file. Resolve `<skill-dir>` before using `<skill-dir>/scripts/verify-state.sh`.
+This checked-in skill uses the shared reference files under `crates/ai/skill_references/`; keep those repository-relative links intact. Its own helper scripts and intake references live beside this file. Resolve `<skill-dir>` before using `<skill-dir>/scripts/verify-state.sh`.
 
 Kassiber accounts are wallet/reporting buckets, not a double-entry chart of accounts. Keep explanations simple unless the user explicitly asks for accounting theory.
 
@@ -47,7 +47,7 @@ If a fast-path command returns a structured error, inspect the envelope and take
 3. When the chat includes pasted Kassiber output or docs, identify the live user request separately from the quoted material before running commands.
 4. Use fast paths for common read-only workflows. For wallet sync or other operations that contact configured backends, read the relevant reference first and avoid feeding raw command output into remote AI context unless it is documented as public-safe.
 5. Before concluding a reference is missing, verify that you resolved it from `<skill-dir>` rather than the repo root or the current working directory.
-6. If a Kassiber command fails with `unrecognized arguments`, stop and check `--help` or [command templates](../../kassiber/ai/skill_references/command-templates.md) before retrying. Do not keep guessing positional versus flagged forms.
+6. If a Kassiber command fails with `unrecognized arguments`, stop and check `--help` or [command templates](../../crates/ai/skill_references/command-templates.md) before retrying. Do not keep guessing positional versus flagged forms.
 7. `--machine`, `--format`, and `--output` are global flags and must come before the subcommand tree, for example `kassiber --format plain reports balance-sheet`.
 8. Use `--machine` whenever the output needs to be parsed or piped into later steps.
 9. Use `--format plain` when the user wants report output shown in the terminal. Let Kassiber format financial values; do not recompute or restyle them.
@@ -76,7 +76,7 @@ If a fast-path command returns a structured error, inspect the envelope and take
 32. For rate coverage, do not infer the covered time window from `samples` or `days` alone. Use `kassiber rates range` with RFC3339 timestamps around the missing transactions.
 33. Treat wallet accounts as reporting buckets. Kassiber has no double-entry general ledger; never reinterpret wallet buckets or tax journals as ledger accounts or postings.
 34. For planning or codebase work, treat `TODO.md` as the executable backlog and `docs/plan/` as orientation/guardrails. Verify current behavior against code before acting on a plan doc.
-35. Never ask for, receive, or relay the database passphrase. If a command returns `interaction_required` with `error.details.reason` `database_passphrase` or `operator_lease_required`, the book is encrypted: check `kassiber --machine operator status`, ask the user to run `kassiber operator unlock` in their own terminal (`--capability read` for read-only work), then retry. For MCP, `agent_pairing_required` means the user must click Allow for this server in Kassiber (Settings, AI, External agents). Under a brokered lease pass `--workspace` and `--profile` explicitly; `fresh_local_authentication` means the user must run that admin command themselves. There is no `--db-passphrase <value>` flag and there will not be one. See [secrets and backup](../../kassiber/ai/skill_references/secrets-and-backup.md#encrypted-books-and-agent-sessions).
+35. Never ask for, receive, or relay the database passphrase. If a command returns `interaction_required` with `error.details.reason` `database_passphrase` or `operator_lease_required`, the book is encrypted: check `kassiber --machine operator status`, ask the user to run `kassiber operator unlock` in their own terminal (`--capability read` for read-only work), then retry. For MCP, `agent_pairing_required` means the user must click Allow for this server in Kassiber (Settings, AI, External agents). Under a brokered lease pass `--workspace` and `--profile` explicitly; `fresh_local_authentication` means the user must run that admin command themselves. There is no `--db-passphrase <value>` flag and there will not be one. See [secrets and backup](../../crates/ai/skill_references/secrets-and-backup.md#encrypted-books-and-agent-sessions).
 36. `kassiber secrets init` is a one-time migration from plaintext to SQLCipher. After it runs, the original plaintext file is preserved as `kassiber.pre-encryption.sqlite3.bak`; Kassiber refuses to overwrite an existing rollback file at that path. Advise the user to verify the encrypted DB opens (`kassiber secrets verify`) and then `rm` the `.bak` themselves once they trust the new file. Forgetting the passphrase means data loss — there is no recovery path and `.kassiber` backups do not help.
 37. `.kassiber` backup files are `tar | age` envelopes that wrap a SQLCipher copy of the DB plus the attachments tree and `backends.env`. They are recoverable with stock `age` + `tar` + `sqlcipher` even without Kassiber installed. Backup decryption uses an outer age passphrase (`--backup-passphrase-fd`) that is independent of the DB passphrase.
 38. The dotenv bootstrap (`backends.env`) is for non-secret addressing only: URLs, `KIND`, chain, network, batch sizes. Tokens, passwords, auth headers, and basic-auth usernames belong in the encrypted DB. If Kassiber warns at startup that the dotenv still has plaintext secrets, run `kassiber secrets migrate-credentials` (or `--dry-run` first) to lift them into the encrypted backends table; the file is rewritten with non-secret rows preserved and a `.pre-credentials-migration-<ts>.bak` snapshot is saved.
@@ -133,18 +133,18 @@ Related notes:
 
 ## Workflow Routing
 
-- For fragile CLI command shapes and safe invocation patterns, read [command templates](../../kassiber/ai/skill_references/command-templates.md).
-- For first-run setup, roots, context, and books creation, read [onboarding](../../kassiber/ai/skill_references/onboarding.md).
-- For wallet kinds, descriptor setup, backend selection, and imports, read [wallets and backends](../../kassiber/ai/skill_references/wallets-backends.md).
+- For fragile CLI command shapes and safe invocation patterns, read [command templates](../../crates/ai/skill_references/command-templates.md).
+- For first-run setup, roots, context, and books creation, read [onboarding](../../crates/ai/skill_references/onboarding.md).
+- For wallet kinds, descriptor setup, backend selection, and imports, read [wallets and backends](../../crates/ai/skill_references/wallets-backends.md).
 - For onboarding a brand-new exchange / broker / custodial platform Kassiber does not support yet (the structured intake interview plus the importer implementation checklist), read [references/add-exchange.md](references/add-exchange.md). The user-facing entry point is the `/add-exchange` command. Most requests do not need an importer at all: `kassiber wallets analyze-file --file <export>` then `wallets import-ledger --column-map` reads the export as the platform wrote it, and `imports rollback` undoes a wrong mapping. Try that before proposing code.
 - For researching, drafting, and publishing a Kassiber GitHub feature request, read [references/feature-request.md](references/feature-request.md).
-- For journal processing, quarantine handling, and transfer pairing, read [journal processing](../../kassiber/ai/skill_references/journal-processing.md).
-- For swap-candidate matching (Lightning ↔ Liquid, BTC ↔ LBTC peg, Boltz submarine swaps), the auto-pair rules engine, and saved review-queue views, read [swap matching](../../kassiber/ai/skill_references/swap-matching.md).
-- For notes, tags, exclusions, BIP329 labels, and attachments, read [metadata](../../kassiber/ai/skill_references/metadata.md).
-- For balance sheet, portfolio, capital gains, balance history, PDF export, and rates, read [reports](../../kassiber/ai/skill_references/reports.md).
-- For quick state checks and smoke validation, read [verification](../../kassiber/ai/skill_references/verification.md) and use `scripts/verify-state.sh` when helpful.
-- For common failure modes and path confusion, read [troubleshooting](../../kassiber/ai/skill_references/troubleshooting.md).
-- For SQLCipher encryption (`kassiber secrets ...`), `tar | age` backups (`kassiber backup ...`), passphrase entry, and the `--*-stdin` / `--*-fd` secret-input channels, read [secrets and backup](../../kassiber/ai/skill_references/secrets-and-backup.md).
+- For journal processing, quarantine handling, and transfer pairing, read [journal processing](../../crates/ai/skill_references/journal-processing.md).
+- For swap-candidate matching (Lightning ↔ Liquid, BTC ↔ LBTC peg, Boltz submarine swaps), the auto-pair rules engine, and saved review-queue views, read [swap matching](../../crates/ai/skill_references/swap-matching.md).
+- For notes, tags, exclusions, BIP329 labels, and attachments, read [metadata](../../crates/ai/skill_references/metadata.md).
+- For balance sheet, portfolio, capital gains, balance history, PDF export, and rates, read [reports](../../crates/ai/skill_references/reports.md).
+- For quick state checks and smoke validation, read [verification](../../crates/ai/skill_references/verification.md) and use `scripts/verify-state.sh` when helpful.
+- For common failure modes and path confusion, read [troubleshooting](../../crates/ai/skill_references/troubleshooting.md).
+- For SQLCipher encryption (`kassiber secrets ...`), `tar | age` backups (`kassiber backup ...`), passphrase entry, and the `--*-stdin` / `--*-fd` secret-input channels, read [secrets and backup](../../crates/ai/skill_references/secrets-and-backup.md).
 - For the local regtest integration harness and persistent demo book, read [../../docs/reference/testing.md](../../docs/reference/testing.md).
 
 ## Report Selection

@@ -126,7 +126,7 @@ run python3 scripts/write_build_info.py --output "$work/BUILD_INFO.json" \
 
 run pnpm --dir ui-tauri install --frozen-lockfile
 run pnpm --dir ui-tauri run broker:build
-broker="$ROOT/kassiber/ai/provider_broker/index.mjs"
+broker="$ROOT/ui-tauri/provider-broker/dist/index.mjs"
 test -s "$broker"
 
 smoke_root="$(mktemp -d "${TMPDIR:-/tmp}/kassiber-linux-smoke.XXXXXX")"

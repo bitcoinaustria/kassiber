@@ -22,8 +22,8 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_KRAKEN_ROOT = Path("/Users/dev/Downloads/Kraken Data")
-DAILY_DIR = ROOT / "kassiber" / "data" / "rates" / "kraken" / "btc_daily"
-OUTPUT_DIR = ROOT / "kassiber" / "data" / "rates" / "kraken" / "btc_hourly"
+DAILY_DIR = ROOT / "crates" / "rates" / "data" / "kraken" / "btc_daily"
+OUTPUT_DIR = ROOT / "crates" / "rates" / "data" / "kraken" / "btc_hourly"
 INTERVAL_SECONDS = 60 * 60
 DAY_SECONDS = 24 * INTERVAL_SECONDS
 PAIRS = {

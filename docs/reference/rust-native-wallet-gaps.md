@@ -230,7 +230,7 @@ type the planner builds, so the plan no longer refuses `freshness_source`.
   transaction-need sync without idle warming. `bundled_seed.path` is the
   compiled-in seed directory with `..` resolved
   (`kassiber_rates::bundled_seed_path`); Python reports its package's
-  `kassiber/data/rates/kraken/btc_hourly`, the same directory in a source
+  `crates/rates/data/kraken/btc_hourly`, the same directory in a source
   checkout. That stored path is environment-specific in both and is masked
   in the parity tests.
 

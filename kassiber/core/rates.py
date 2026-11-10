@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import csv
 import io
-from importlib import resources
 import json
 import logging
 from pathlib import Path
@@ -51,8 +50,8 @@ _KRAKEN_STABLECOIN_QUOTES = {"DAI", "USDC", "USDT"}
 _KRAKEN_SUPPORTED_QUOTES = {"EUR", "USD"}
 _KRAKEN_BATCH_SIZE = 10_000
 _COINBASE_MAX_CANDLES = 300
-_BUNDLED_KRAKEN_BTC_DAILY_PATH = "data/rates/kraken/btc_daily"
-_BUNDLED_KRAKEN_BTC_HOURLY_PATH = "data/rates/kraken/btc_hourly"
+_BUNDLED_KRAKEN_BTC_DAILY_PATH = "crates/rates/data/kraken/btc_daily"
+_BUNDLED_KRAKEN_BTC_HOURLY_PATH = "crates/rates/data/kraken/btc_hourly"
 
 
 _RATE_UPSERT_SQL = """
@@ -1919,11 +1918,11 @@ def _sync_rates_kraken_csv(conn, pair=None, path=None, commit=True):
 
 
 def bundled_kraken_btc_daily_path():
-    return resources.files("kassiber").joinpath(_BUNDLED_KRAKEN_BTC_DAILY_PATH)
+    return Path(__file__).resolve().parents[2].joinpath(_BUNDLED_KRAKEN_BTC_DAILY_PATH)
 
 
 def bundled_kraken_btc_hourly_path():
-    return resources.files("kassiber").joinpath(_BUNDLED_KRAKEN_BTC_HOURLY_PATH)
+    return Path(__file__).resolve().parents[2].joinpath(_BUNDLED_KRAKEN_BTC_HOURLY_PATH)
 
 
 def _sync_bundled_kraken_resource(conn, resource, *, pair=None, commit=True, tmp_prefix):

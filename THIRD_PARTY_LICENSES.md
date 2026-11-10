@@ -192,7 +192,7 @@ daily OHLCVT values used as local fallback pricing data.
 
 | Data | Files | Role | License / redistribution status |
 | --- | --- | --- | --- |
-| Kraken BTC daily OHLCVT history | `kassiber/data/rates/kraken/btc_daily/*.csv` | Offline fallback rates for `BTC-EUR` and `BTC-USD` | Unknown / not specified in the local export; review before public release redistribution |
+| Kraken BTC daily OHLCVT history | `crates/rates/data/kraken/btc_daily/*.csv` | Offline fallback rates for `BTC-EUR` and `BTC-USD` | Unknown / not specified in the local export; review before public release redistribution |
 | Report fonts | `crates/pdf/fonts/*.ttf`, `crates/pdf/fonts/*.otf` | DM Sans 4.004 (googlefonts/dm-fonts) and JetBrains Mono 2.304 (JetBrains release), unmodified, with Liberation Sans as glyph fallback and Noto Sans JP 2.004 Regular (notofonts/noto-cjk release `Sans2.004`, the Japanese subset OTF) for kana and kanji, embedded in Rust PDF reports; source URLs, versions and SHA-256 in `crates/pdf/fonts/README.md` | SIL OFL 1.1 |
 
 ## Development and test infrastructure

@@ -98,7 +98,7 @@ its helper scripts and intake references form one bundle. The
 [regtest skill](skills/kassiber-regtest-mode/SKILL.md) covers the integration harness.
 Installed external skills may also be available; verify their commands against
 this checkout. The in-product AI's allowlisted references live separately in
-[kassiber/ai/skill_references/](kassiber/ai/skill_references/).
+[crates/ai/skill_references/](crates/ai/skill_references/).
 
 Keep shared instructions here, subsystem rules in scoped `AGENTS.md` files,
 and procedures in references or skills. `CLAUDE.md` adapters import these files.

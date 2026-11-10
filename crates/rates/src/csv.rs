@@ -451,7 +451,7 @@ fn ingest(
 pub fn bundled_path(hourly: bool) -> PathBuf {
     Path::new(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../kassiber/data/rates/kraken"
+        "/data/kraken"
     ))
     .join(if hourly { "btc_hourly" } else { "btc_daily" })
 }
@@ -461,22 +461,22 @@ pub fn sync_bundled(conn: &Connection, pair: Option<&str>, hourly: bool) -> Resu
         [
             (
                 "XBTEUR_60.csv",
-                include_str!("../../../kassiber/data/rates/kraken/btc_hourly/XBTEUR_60.csv"),
+                include_str!("../data/kraken/btc_hourly/XBTEUR_60.csv"),
             ),
             (
                 "XBTUSD_60.csv",
-                include_str!("../../../kassiber/data/rates/kraken/btc_hourly/XBTUSD_60.csv"),
+                include_str!("../data/kraken/btc_hourly/XBTUSD_60.csv"),
             ),
         ]
     } else {
         [
             (
                 "XBTEUR_1440.csv",
-                include_str!("../../../kassiber/data/rates/kraken/btc_daily/XBTEUR_1440.csv"),
+                include_str!("../data/kraken/btc_daily/XBTEUR_1440.csv"),
             ),
             (
                 "XBTUSD_1440.csv",
-                include_str!("../../../kassiber/data/rates/kraken/btc_daily/XBTUSD_1440.csv"),
+                include_str!("../data/kraken/btc_daily/XBTUSD_1440.csv"),
             ),
         ]
     };
