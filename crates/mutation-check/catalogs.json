@@ -1074,7 +1074,12 @@
     "-p",
     "kassiber-cli",
     "--lib"
-   ]
+   ],
+   "package_features": {
+    "kassiber": [
+     "test-harness"
+    ]
+   }
   },
   {
    "name": "wallets-exchange",
