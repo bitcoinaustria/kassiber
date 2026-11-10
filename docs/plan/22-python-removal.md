@@ -180,6 +180,78 @@ Facts that drive D1:
 - **Parity time dominates:** 26,349 of 30,992 local test-seconds. Python runs
   at least 4 times slower than Rust, so most of that time is Python.
 
+## Session replay
+
+Step 3 records every Rust process a parity test starts, once, at the base
+where Rust and Python agree, and replays them against the Rust binary
+(`crates/session-replay`). A session holds the argv, the kept environment,
+stdin with its timing, the descriptors it was handed, stdout, stderr, the exit,
+the network tape, and the state roots before and after. Recordings live on
+the test-data branch, never in the tree.
+
+Recording and storage rules:
+- **Synthetic secrets only.** A passphrase or token enters a recording only
+  if it is a literal of the checked-in test sources (the allowlist the
+  recorder generates). A session handing over any other passphrase is
+  refused; a secret-named variable with any other value is dropped.
+- **Encrypted books are stored decrypted** with their passphrase, page size
+  and page count. A replay encrypts them again with the product's
+  `encrypt_plaintext`, then checks that the product opens the result with
+  the recorded passphrase, that page size and count match, and that the
+  decrypted contents equal the recording; any mismatch fails the session.
+  About 20 sessions covering unlock, rekey, wrong passphrase and crash
+  recovery keep their original ciphertext.
+- **Shared pages.** Files over 64 KiB are stored as 4 KiB content-addressed
+  pages, so books that differ in a few pages share the rest.
+- **Exact-path dedupe.** Of the sessions that replay identically twice, one
+  is kept per coverage signature (the set of Rust basic blocks it executes);
+  there is no fallback to a smaller greedy cover.
+- **Deterministic ids.** Test builds seed SQLite's id generator from
+  `KASSIBER_TEST_SQLITE_SEED`, mixed with the process arguments
+  (`kassiber_store::seed_test_prng`). The recorder hands each process a fresh
+  seed and keeps it, so random row ids and hashes over them replay
+  identically. Product builds compile the hook away;
+  `scripts/check-no-test-tape.sh` checks that the marker is absent from them,
+  as it does for the network tape.
+
+### Comparison rules
+
+A replay compares its stdout, stderr, exit, every file in the state roots,
+and every book row by row. Before comparing, both sides go through the same
+rewrite. Each rule below covers a value that differs between two correct runs.
+
+| Rule | Why it is safe |
+| --- | --- |
+| uuid4 and `uuid4().hex` values become `<gen:N>`, numbered by first appearance | random by construction. The numbering is a bijection: equal values share a number and different values get different ones, so a row pointing at the wrong id still differs. |
+| uuid5 values become `<gen:N>` unless an input names them or both runs printed them | a uuid5 over a random uuid4 differs between runs. A uuid5 over inputs only is printed identically by both runs, so it stays literal. |
+| `chat-…-<32 hex>` request ids and 43-character url-safe `*_token` values become `<gen:N>` | random request ids and document tokens. Ids the test echoes back on stdin are translated to the replay's own. |
+| Values that came in through argv, the environment, stdin or the starting state are pinned | they are inputs and must stay literal. Stdin ids the process printed first are echoes, not inputs. |
+| Clock readings inside the run's window (±5 s, the recording's window plus 10 minutes of lookback) become `<time>` | wall-clock reads. ISO, compact (`20261110T120000Z`) and epoch forms. |
+| The same at whole hours up to 72 h away, or at 7, 14, 30, 60, 90, 180 or 365 days | expiries derived from the clock, such as a 90-day dismissal. Arbitrary offsets stay literal, so a fixture dated 10 days after the run compares exactly. |
+| Never a clock reading: a number under a figure key (amount, msat, sat, price, fee, gain, loss, basis, proceeds, tax, cost, value, quantity, balance, total, fiat, income, rate) | an msat amount can look like a millisecond epoch. |
+| `just now` and `N min ago` style ages become a placeholder | relative to the clock. |
+| Durations (`*elapsed*`, `*duration*` keys or columns, `{"type":"duration_ms","value":N}` log records, fractional `seconds`/`user`/`sys` and `*_seconds`/`*_user`/`*_sys`) compare as present, not by value | they measure run time. Whole numbers under `seconds`/`user`/`sys` stay literal. |
+| JSON arrays of objects keyed by a generated id compare sorted by shape | their order follows random ids. |
+| Rows of a book table compare in shape order, with generated values collapsed for the sort | their insertion order follows random ids; every row and value is still compared. |
+| Daemon output is grouped by `request_id`, each request's records in order | concurrent requests interleave freely. |
+| A book is dumped after applying its WAL; `-wal`, `-shm`, `-journal` and lock files are not compared | the WAL state is in the dump; ownership locks name the live process. |
+| Artifact file names are compared by shape | they embed generated ids or times. |
+
+No rule touches amounts, msat values, prices, tax figures, the dates of tax
+events, or any stored column other than random ids and clock readings.
+`crates/session-replay/tests/figures.rs` enforces this. It runs the tax-country
+vectors, the tax-engine fixtures, and the journal and report vectors through
+the rewrite, and fails if any figure field changes. A synthetic envelope
+checks figures that look like clock readings. A third test checks that the
+numbering stays a bijection.
+
+### Dropped sessions
+
+A session that does not replay identically twice is dropped. Each dropped
+session is listed with its reason and the Rust functions only it covered, in
+`dropped.tsv` beside the recordings. A dropped session that is the only
+coverage of a tax, export or stored-data path gets fixed, not dropped.
+
 ## Harnesses
 
 The regtest and demo harnesses are Python:
