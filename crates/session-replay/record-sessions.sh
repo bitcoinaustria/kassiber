@@ -31,6 +31,10 @@ for path in pathlib.Path(sys.argv[1]).rglob("*.py"):
         if isinstance(node, ast.Constant) and isinstance(node.value, (str, bytes)):
             value = node.value.decode("utf-8", "replace") if isinstance(node.value, bytes) else node.value
             if 0 < len(value) <= 200 and "\n" not in value:
+                try:
+                    value.encode("utf-8")
+                except UnicodeEncodeError:
+                    continue  # a lone surrogate: never a passphrase a process receives
                 literals.add(value)
 pathlib.Path(sys.argv[2]).write_text("\n".join(sorted(literals)) + "\n", encoding="utf-8")
 PY
@@ -117,7 +121,8 @@ for pair in ANALYSIS_ANALYTICS_BIN=analysis_analytics_fixture ANALYSIS_DATASETS_
   SOF_CASE_SERVICE_BIN=source_funds_cases RUST_FRESHNESS_FIXTURE=freshness_fixture \
   RUST_FRESHNESS_SYNC_FIXTURE=freshness_sync_fixture RUST_GRAPH_FIXTURE=graph_fixture \
   DOCUMENT_FIXTURE=document_fixture RUST_AI_BROKER_EXAMPLE=broker_stream \
-  TEST_CUSTODY_LOADER_BIN=custody-load TEST_JOURNAL_PROCESS_BIN=journal-process; do
+  TEST_CUSTODY_LOADER_BIN=custody-load TEST_JOURNAL_PROCESS_BIN=journal-process \
+  STORE_PROBE_BIN=kassiber-store-probe; do
   [ -e "$ex/${pair#*=}" ] && export "KASSIBER_${pair%%=*}=$ex/${pair#*=}"
 done
 export TMPDIR=/mnt/tmp KASSIBER_OFFLINE_PREFERENCE_FILE=/mnt/tmp/offline-preference.json

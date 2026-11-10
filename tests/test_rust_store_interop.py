@@ -41,6 +41,10 @@ def _sweep_session_owner_locks(tmp_path_factory):
 
 @pytest.fixture(scope="module")
 def probe():
+    # The session recorder supplies a prebuilt probe behind its shim
+    # (crates/session-replay/record-sessions.sh).
+    if os.environ.get("KASSIBER_STORE_PROBE_BIN"):
+        return Path(os.environ["KASSIBER_STORE_PROBE_BIN"])
     cargo = ["mise", "exec", "rust@1.99.1", "--", "cargo"] if shutil.which("mise") else ["cargo"]
     result = subprocess.run(
         [*cargo, "build", "--locked", "--offline", "--example", "kassiber-store-probe", "--features", "kassiber-secrets/native-keyring"],
