@@ -198,7 +198,6 @@
     "crates/journals/scripts/mutations.json",
     "crates/journals/scripts/branch_mutations.json",
     "crates/journals/scripts/builder_mutations.json",
-    "crates/journals/scripts/desktop_mutations.json",
     "crates/journals/scripts/legacy_mutations.json",
     "crates/journals/scripts/loader_blob_mutations.json",
     "crates/journals/scripts/native_graph_mutations.json",
@@ -229,6 +228,21 @@
    "test_args": [
     "--test-threads=1"
    ]
+  },
+  {
+   "name": "journals-desktop",
+   "catalogs": [
+    "crates/journals/scripts/desktop_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber",
+    "--features",
+    "test-harness"
+   ],
+   "resolve_target": {
+    "tests_dir": "crates/kassiber/tests"
+   }
   },
   {
    "name": "journals-review",
@@ -719,7 +733,6 @@
     "crates/wallets/scripts/mutations.json",
     "crates/store/scripts/mutations.json",
     "crates/reports/scripts/mutations.json",
-    "crates/journals/scripts/mutations.json",
     "crates/transactions/scripts/mutations.json",
     "crates/rates/scripts/mutations.json"
    ],

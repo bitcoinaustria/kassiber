@@ -1,0 +1,15 @@
+## session 1
+> {"kind": "status", "request_id": "open"}
+< {"kind":"status","schema_version":1,"data":{"version":"$VERSION","schema_version":1,"auth":{"mode":"local","authenticated":true},"database_encrypted":false,"state_root":"$BASE","data_root":"$BASE/data","database":"$BASE/data/kassiber.sqlite3","project_id":null,"project_name":null,"project_root":null,"config_root":"$BASE/config","settings_file":"$BASE/config/settings.json","exports_root":"$BASE/exports","attachments_root":"$BASE/attachments","current_workspace":"Main","current_profile":"Book","workspaces":1,"profiles":1,"accounts":0,"wallets":2,"transactions":2,"journal_entries":0,"quarantines":0,"default_backend":"fulcrum","env_file":"$BASE/config/backends.env"},"request_id":"open"}
+> {"kind": "test.freshness.select", "request_id": "select", "args": {"kind": "ui.journals.process", "args": null, "request_id": "process"}}
+< {"kind":"test.freshness.select","schema_version":1,"data":{"supported":true},"request_id":"select"}
+> {"kind": "ui.journals.process", "request_id": "process"}
+< {"kind":"ui.journals.process.progress","schema_version":1,"data":{"phase":"auto_pair"},"request_id":"process"}
+< {"kind":"ui.journals.process.progress","schema_version":1,"data":{"phase":"preparing"},"request_id":"process"}
+< {"kind":"ui.journals.process.progress","schema_version":1,"data":{"phase":"repairing"},"request_id":"process"}
+< {"kind":"ui.journals.process.progress","schema_version":1,"data":{"phase":"pricing"},"request_id":"process"}
+< {"kind":"ui.journals.process.progress","schema_version":1,"data":{"phase":"building"},"request_id":"process"}
+< {"kind":"ui.journals.process.progress","schema_version":1,"data":{"phase":"storing"},"request_id":"process"}
+< {"kind":"error","schema_version":1,"error":{"code":"cancelled","message":"Wallet discovery was cancelled","hint":null,"details":null,"retryable":false,"debug":null},"request_id":"process"}
+> {"request_id": "stop", "kind": "daemon.shutdown"}
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}

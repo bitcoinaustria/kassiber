@@ -1,0 +1,30 @@
+## session 1
+> {"kind": "status", "request_id": "open"}
+< {"kind":"status","schema_version":1,"data":{"version":"$VERSION","schema_version":1,"auth":{"mode":"local","authenticated":true},"database_encrypted":false,"state_root":"$BASE","data_root":"$BASE/data","database":"$BASE/data/kassiber.sqlite3","project_id":null,"project_name":null,"project_root":null,"config_root":"$BASE/config","settings_file":"$BASE/config/settings.json","exports_root":"$BASE/exports","attachments_root":"$BASE/attachments","current_workspace":"W","current_profile":"P","workspaces":1,"profiles":1,"accounts":0,"wallets":1,"transactions":5,"journal_entries":3,"quarantines":3,"default_backend":"fulcrum","env_file":"$BASE/config/backends.env"},"request_id":"open"}
+> {"kind": "ui.journals.quarantine.resolve", "request_id": "r0", "args": {"transaction": " ext-a ", "reason": " reviewed receipt ", "reprocess": false, "action": "price_override", "fiat_rate": 41234.5}}
+< {"kind":"ui.journals.quarantine.resolve","schema_version":1,"data":{"transaction_id":"a","group_id":null,"action":"price_override","resolution":{"transaction_id":"a","resolution":"price-override","fiat_rate":41234.5,"fiat_value":41234.5,"fiat_rate_exact":"41234.5","fiat_value_exact":"41234.5","pricing_source_kind":"manual_override","history_event_id":"<uuid>","note":"Run `kassiber journals process` to regenerate entries."},"reprocessed":false,"journal_process":null,"cleared":true,"remaining_quarantine":null,"dependents_cleared":null,"quarantine_delta":{"status":"not_measured","reason":"journals_not_reprocessed","dependents_before":1,"remediation":{"action":"process_journals","tool":"ui.journals.process","target":{},"desktop_only":false}}},"request_id":"r0"}
+> {"request_id": "stop", "kind": "daemon.shutdown"}
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+## tables after session 1
+- chain_index_clock (1, 32)
++ chain_index_clock (1, 35)
+- chain_index_dirty ("profiles", -1, 31)
++ chain_index_dirty ("profiles", -1, 35)
+- chain_index_dirty ("transactions", 1, 32)
++ chain_index_dirty ("transactions", 1, 33)
+- journal_quarantines ("a", "w", "p", "missing_spot_price", "{\"asset\":\"BTC\",\"direction\":\"inbound\",\"required_for\":\"acquisition\",\"wallet\":\"Wallet\"}", "<now>")
+- profiles ("p", "w", "P", "EUR", "generic", 365, "fifo", 0, 1, "global", 0, 0, 10, 10, "2026-10-31T12:00:00Z", 5, "{\"by_reason\": {}, \"total\": 0}", "2020", 0)
++ profiles ("p", "w", "P", "EUR", "generic", 365, "fifo", 0, 1, "global", 1, 0, 10, 0, NULL, 0, NULL, "2020", 0)
++ transaction_edit_events ("<uuid>", "w", "p", "a", "wallet", "ext-a", "<now>", "gui", "reviewed receipt", "<now>", 0, 1, 0, "<now>", 5)
++ transaction_edit_fields ("<uuid>", "<uuid>", "fiat_price_source", "null", "\"manual\"", "{}")
++ transaction_edit_fields ("<uuid>", "<uuid>", "fiat_rate", "null", "\"41234.5\"", "{}")
++ transaction_edit_fields ("<uuid>", "<uuid>", "fiat_value", "null", "\"41234.5\"", "{}")
++ transaction_edit_fields ("<uuid>", "<uuid>", "pricing_fetched_at", "null", "\"<now>\"", "{}")
++ transaction_edit_fields ("<uuid>", "<uuid>", "pricing_granularity", "null", "\"exact\"", "{}")
++ transaction_edit_fields ("<uuid>", "<uuid>", "pricing_method", "null", "\"quarantine_price_override\"", "{}")
++ transaction_edit_fields ("<uuid>", "<uuid>", "pricing_pair", "null", "\"BTC-EUR\"", "{}")
++ transaction_edit_fields ("<uuid>", "<uuid>", "pricing_provider", "\"reviewed-receipt\"", "\"manual\"", "{}")
++ transaction_edit_fields ("<uuid>", "<uuid>", "pricing_source_kind", "\"manual\"", "\"manual_override\"", "{}")
++ transaction_edit_fields ("<uuid>", "<uuid>", "pricing_timestamp", "null", "\"<now>\"", "{}")
++ transactions ("a", "w", "p", "wallet", "ext-a", NULL, "a", "<now>", NULL, "inbound", "BTC", 100000000000, 0, 0, "EUR", 41234.5, 41234.5, "manual", "41234.5", "41234.5", "manual_override", "manual", "BTC-EUR", "<now>", <now>, "exact", "quarantine_price_override", NULL, "exact", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, "buy", NULL, NULL, NULL, 0, "{}", NULL, NULL, NULL, NULL, "2020")
+- transactions ("a", "w", "p", "wallet", "ext-a", NULL, "a", "<now>", NULL, "inbound", "BTC", 100000000000, 0, 0, "EUR", NULL, NULL, NULL, NULL, NULL, "manual", "reviewed-receipt", NULL, NULL, NULL, NULL, NULL, NULL, "exact", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, "buy", NULL, NULL, NULL, 0, "{}", NULL, NULL, NULL, NULL, "2020")
