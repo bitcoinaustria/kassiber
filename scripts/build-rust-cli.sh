@@ -102,6 +102,17 @@ if [ "$platform" = macos ]; then
 else
   build_env+=(CARGO_PROFILE_RELEASE_STRIP=symbols)
 fi
+if [ "$platform" = windows ] && [ -z "${OPENSSL_SRC_PERL:-}" ]; then
+  # Vendored OpenSSL's Configure needs a full Perl. Git Bash puts its own
+  # first on PATH, which lacks Locale::Maketext::Simple ("Can't locate
+  # Locale/Maketext/Simple.pm"); hosted Windows runners ship Strawberry Perl.
+  strawberry="C:/Strawberry/perl/bin/perl.exe"
+  if [ -x "$strawberry" ]; then
+    build_env+=(OPENSSL_SRC_PERL="$strawberry")
+  else
+    echo "warning: no Strawberry Perl at $strawberry; set OPENSSL_SRC_PERL to a full Perl if OpenSSL's Configure fails" >&2
+  fi
+fi
 
 echo "Building kassiber $version ($channel, commit $short_commit) for $target"
 # Production binary: no test-harness feature, so no fake store, test kinds,
