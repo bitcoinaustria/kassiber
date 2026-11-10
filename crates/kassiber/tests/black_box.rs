@@ -14,14 +14,22 @@ mod cli_leaves;
 #[path = "black_box/desktop.rs"]
 mod desktop;
 
+#[path = "black_box/ai_chat.rs"]
+mod ai_chat;
+#[path = "black_box/ai_document.rs"]
+mod ai_document;
 #[path = "black_box/ai_tools.rs"]
 mod ai_tools;
 #[path = "black_box/audit_package.rs"]
 mod audit_package;
+#[path = "black_box/cli_proxy.rs"]
+mod cli_proxy;
 #[path = "black_box/evidence_summary.rs"]
 mod evidence_summary;
 #[path = "black_box/maintenance_run.rs"]
 mod maintenance_run;
+#[path = "black_box/mcp.rs"]
+mod mcp;
 #[path = "black_box/privacy_mirror.rs"]
 mod privacy_mirror;
 #[path = "black_box/projects.rs"]

@@ -462,6 +462,11 @@ impl Transcript {
         }
     }
 
+    /// The raw transcript text, for recorders outside this module.
+    pub fn text_mut(&mut self) -> &mut String {
+        &mut self.text
+    }
+
     /// Mask readings later than the run as `<later>`: for books without
     /// future fixture dates whose expiries count from the wall clock.
     pub fn future_is_generated(&mut self) -> &mut Self {
@@ -1130,6 +1135,23 @@ impl Live {
             .unwrap_or_else(|e| panic!("reply is not JSON ({e}): {line}"));
         self.records.push(record.clone());
         record
+    }
+
+    /// Write one request line as is.
+    pub fn write(&mut self, request: &serde_json::Value) {
+        let stdin = self.stdin.as_mut().unwrap();
+        stdin.write_all(request.to_string().as_bytes()).unwrap();
+        stdin.write_all(b"\n").unwrap();
+        stdin.flush().unwrap();
+    }
+
+    /// Read the next line the daemon prints.
+    pub fn read(&mut self) -> String {
+        use std::io::BufRead as _;
+        let mut line = String::new();
+        let read = self.stdout.read_line(&mut line).unwrap();
+        assert!(read > 0, "the daemon closed its output");
+        line.trim_end_matches('\n').to_owned()
     }
 
     /// Close stdin; the daemon must exit 0 with nothing on stderr.

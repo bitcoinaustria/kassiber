@@ -1,0 +1,68 @@
+[
+ {
+  "occurred_at": "2026-01-02",
+  "direction": "inbound",
+  "asset": "BTC",
+  "amount_btc": "0.01000000",
+  "fee_btc": "0",
+  "fiat_currency": "EUR",
+  "fiat_value": "500.00",
+  "counterparty": "OTC Desk",
+  "description": "Receipt row",
+  "confidence": 0.94,
+  "cell_confidences": {
+   "counterparty": 0.99,
+   "fee_btc": 0.99,
+   "fiat_rate": 0.99,
+   "amount_btc": 0.99,
+   "description": 0.99,
+   "asset": 0.99,
+   "occurred_at": 0.99,
+   "fiat_currency": 0.99,
+   "direction": 0.99,
+   "fiat_value": 0.99
+  },
+  "source_region": {
+   "page": 1,
+   "x": 0.1,
+   "y": 0.2,
+   "width": 0.7,
+   "height": 0.1,
+   "unit": "relative"
+  },
+  "evidence_text": "02.01.2026 BTC 0.01000000 EUR 500 OTC Desk"
+ },
+ {
+  "occurred_at": "2026-01-02",
+  "direction": "inbound",
+  "asset": "BTC",
+  "amount_btc": "x",
+  "fee_btc": "0",
+  "fiat_currency": "EUR",
+  "fiat_value": "500.00",
+  "counterparty": "OTC Desk",
+  "description": "Receipt row",
+  "confidence": 0.2,
+  "cell_confidences": {
+   "counterparty": 0.99,
+   "fee_btc": 0.99,
+   "fiat_rate": 0.99,
+   "amount_btc": 0.99,
+   "description": 0.99,
+   "asset": 0.99,
+   "occurred_at": 0.99,
+   "fiat_currency": 0.99,
+   "direction": 0.99,
+   "fiat_value": 0.99
+  },
+  "source_region": {
+   "page": 1,
+   "x": 0.1,
+   "y": 0.2,
+   "width": 0.7,
+   "height": 0.1,
+   "unit": "relative"
+  },
+  "evidence_text": "02.01.2026 BTC 0.01000000 EUR 500 OTC Desk"
+ }
+]
