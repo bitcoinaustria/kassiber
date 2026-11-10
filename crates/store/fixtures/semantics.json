@@ -1,0 +1,116 @@
+[
+  {
+    "name": "journal-calculation-semantics-adoption-v1",
+    "affected": "last_processed_at IS NOT NULL OR EXISTS (\n        SELECT 1 FROM journal_entries WHERE profile_id = profiles.id\n    )",
+    "impact": {
+      "affected_profile_count": 0,
+      "explanation": "Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.",
+      "migration": "journal-calculation-semantics-adoption-v1",
+      "required_journal_semantics_version": 1,
+      "schema_version": 1
+    },
+    "source_sha256": "b8a87e46c80c613a9486d3f9e2f144a87297737c0d7dada5e2d6483a1cf7ddab"
+  },
+  {
+    "name": "wages-acquisition-semantics-v1",
+    "affected": null,
+    "impact": {
+      "changes": [
+        {
+          "affected_profile_count": 0,
+          "affected_transaction_count": 0,
+          "after": {
+            "journal_treatment": "basis_bearing_acquisition"
+          },
+          "before": {
+            "journal_treatment": "employment_income"
+          },
+          "explanation": "Marks wage-bearing journal projections stale so they are rebuilt without employment-income or Kennzahl 172 rows.",
+          "name": "wages_acquisition_semantics"
+        }
+      ],
+      "migration": "wages-acquisition-semantics-v1",
+      "schema_version": 1
+    },
+    "source_sha256": "d329fd9017472cb4c33cddb1715e1c95f52d4a411f8f1ba3ef78623ab45bd296"
+  },
+  {
+    "name": "rp2-pool-basis-semantics-v1",
+    "affected": "\n        (lower(trim(coalesce(tax_country, ''))) = 'at'\n         OR lower(trim(coalesce(gains_algorithm, ''))) = 'moving_average')\n        AND (last_processed_at IS NOT NULL OR EXISTS (\n            SELECT 1 FROM journal_entries WHERE profile_id = profiles.id\n        ))\n    ",
+    "impact": {
+      "changes": [
+        {
+          "affected_profile_count": 0,
+          "explanation": "Marks previously processed pool journals stale to rebuild holdings with report-cutoff basis; retained journals are unchanged.",
+          "name": "report_cutoff_pool_basis"
+        }
+      ],
+      "migration": "rp2-pool-basis-semantics-v1",
+      "schema_version": 1
+    },
+    "source_sha256": "9822dc76c560ab8bb918bf16f6a066e0b8b3bb57208f3425616174184f0306e0"
+  },
+  {
+    "name": "custody-fail-closed-holds-v1",
+    "affected": "\n        last_processed_at IS NOT NULL OR EXISTS (\n            SELECT 1 FROM journal_entries WHERE profile_id = profiles.id\n        )\n    ",
+    "impact": {
+      "changes": [
+        {
+          "affected_profile_count": 0,
+          "explanation": "Marks processed journals stale so unscoped, fan-out, pending and replaced spends are held on the next rebuild; retained journals are unchanged until then.",
+          "name": "pre_arbitration_custody_holds"
+        }
+      ],
+      "migration": "custody-fail-closed-holds-v1",
+      "schema_version": 1
+    },
+    "source_sha256": "4807c999ed6ec5bc13dc85f493f9bb646c76f67d7fbf025b47ab7b3af79b5c4b"
+  },
+  {
+    "name": "kassiber-tax-engine-v1",
+    "affected": "\n        last_processed_at IS NOT NULL OR EXISTS (\n            SELECT 1 FROM journal_entries WHERE profile_id = profiles.id\n        )\n    ",
+    "impact": {
+      "changes": [
+        {
+          "affected_profile_count": 0,
+          "explanation": "Marks processed journals stale so the next rebuild uses Kassiber's own tax engine at one fixed decimal precision; retained journals are unchanged until then.",
+          "name": "kassiber_tax_engine"
+        }
+      ],
+      "migration": "kassiber-tax-engine-v1",
+      "schema_version": 1
+    },
+    "source_sha256": "dd5e929cec66c2601b5e9f076f10c863304d2d3f96ab07421ac4b2fcb9dfe686"
+  },
+  {
+    "name": "at-outflow-consumed-regime-v2",
+    "affected": "lower(trim(tax_country)) = 'at' AND EXISTS (\n        SELECT 1 FROM journal_entries WHERE profile_id = profiles.id\n        AND entry_type IN ('disposal', 'fee', 'transfer_fee'))",
+    "impact": {
+      "affected_profile_count": 0,
+      "migration": "at-outflow-consumed-regime-v2",
+      "required_journal_semantics_version": 2,
+      "schema_version": 1
+    },
+    "source_sha256": "4531dc46249fd27815dfd65243b10d8dca61705a652a9205bf2e70d7ed9ef282"
+  },
+  {
+    "name": "at-acquisition-valuation-support-v1",
+    "affected": "\n        lower(trim(tax_country)) = 'at'\n        AND (last_processed_at IS NOT NULL OR EXISTS (\n            SELECT 1 FROM journal_entries WHERE profile_id = profiles.id))\n        AND EXISTS (SELECT 1 FROM transactions t WHERE t.profile_id = profiles.id\n            AND t.direction = 'inbound' AND coalesce(t.excluded,0) = 0\n            AND replace(replace(lower(trim(coalesce(nullif(t.kind_override,''),t.kind,''))),'-','_'),' ','_')\n                IN ('airdrop','hardfork','hard_fork'))\n    ",
+    "impact": {
+      "schema_version": 1,
+      "affected_profile_count": 0,
+      "explanation": "Rebuild Austrian airdrop/hardfork journals with the explicit unsupported-valuation barrier."
+    },
+    "source_sha256": "d495b796c3d3041945255c718c9c70b60d9a5e16f99fb1c5b8146b76f77c4848"
+  },
+  {
+    "name": "custody-partial-payout-pricing-v1",
+    "affected": null,
+    "impact": {
+      "affected_profile_count": 0,
+      "migration": "custody-partial-payout-pricing-v1",
+      "schema_version": 1
+    },
+    "source_sha256": "58cb4f62b9fb15eb5bb617d59eba8269afd25ee609ba7b5a1334c013357e7dbe"
+  }
+]

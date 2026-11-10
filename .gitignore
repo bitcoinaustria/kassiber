@@ -37,12 +37,6 @@ kassiber/ai/provider_broker/*.mjs
 /crates/pytext/tests/data/lower.txt
 /crates/pytext/tests/data/upper.txt
 /crates/pytext/tests/data/vectors.txt
-/crates/store/fixtures/compat.json
-/crates/store/fixtures/creation.json
-/crates/store/fixtures/current-schema.json
-/crates/store/fixtures/legacy-ledger-triggers.json
-/crates/store/fixtures/retired.json
-/crates/store/fixtures/semantics.json
 /tests/fixtures/btcpay_bark/0.13.0/invoice.4kA2cCQDoB29RhTSKEMMK1.payment-methods.accounted.json
 /tests/fixtures/btcpay_bark/0.13.0/invoice.6zTrmwy5tNVt5gzCBmCXvy.payment-methods.accounted.json
 /tests/fixtures/btcpay_bark/0.13.0/invoice.E5mxtedvENirbwt55k2V1m.payment-methods.accounted.json
