@@ -19,6 +19,11 @@ use std::process::{Command, Stdio};
 use kassiber_store::rusqlite::types::ValueRef;
 use kassiber_store::rusqlite::{self, Connection};
 
+/// The fixed identity and clock the seeding opens stamp, so migration
+/// audits and instance ids read the same every run.
+pub const IDENTITY: &str = "0123456789abcdef0123456789abcdef";
+pub const TIMESTAMP: &str = "2026-01-02T03:04:05.678Z";
+
 /// The repository root: children run from it, as the CLI tests ran from it.
 pub fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -56,6 +61,7 @@ pub struct Sandbox {
 impl Sandbox {
     /// A sandbox whose data root does not exist yet.
     pub fn empty() -> Self {
+        process_start();
         let dir = tempfile::Builder::new()
             .prefix("kassiber-black-box-")
             .tempdir()
@@ -117,10 +123,16 @@ impl Sandbox {
     }
 
     fn create(&self, sql: &str) {
-        let book = kassiber_store::Book::create(&self.root, self.passphrase.as_deref())
-            .unwrap_or_else(|e| panic!("create the book: {e:?}"));
-        book.connection().execute_batch(sql).unwrap();
+        let book = kassiber_store::test_hooks::create(
+            &self.root,
+            self.passphrase.as_deref(),
+            IDENTITY,
+            TIMESTAMP,
+            &mut |_| Ok(()),
+        )
+        .unwrap_or_else(|e| panic!("create the book: {e:?}"));
         book.close().map_err(|e| e.error).unwrap();
+        self.sql(sql);
     }
 
     /// Set (or override) a variable for every later child.
@@ -145,31 +157,44 @@ impl Sandbox {
         self.base.join(sub)
     }
 
-    /// The database, opened directly (keyed when encrypted).
-    pub fn connection(&self) -> Connection {
-        let conn = Connection::open(self.root.join("kassiber.sqlite3")).unwrap();
-        if let Some(passphrase) = &self.passphrase {
-            conn.pragma_update(None, "key", passphrase).unwrap();
+    /// The book as the store opens it (keyed when encrypted); `migrate`
+    /// runs the open-time compatibility pass, as Python's `open_db` did.
+    pub fn with_book<T>(&self, migrate: bool, f: impl FnOnce(&Connection) -> T) -> T {
+        let options = kassiber_store::OpenOptions {
+            passphrase: self.passphrase.as_deref(),
+            expected_database_identity: None,
+            expected_project: None,
+        };
+        let book = if migrate {
+            kassiber_store::Book::open_migrating_with_sources(
+                &self.root, options, true, IDENTITY, TIMESTAMP,
+            )
+        } else {
+            kassiber_store::Book::open(&self.root, options)
         }
-        conn
+        .unwrap_or_else(|e| panic!("open the book: {e:?}"));
+        let value = f(book.connection());
+        book.close().map_err(|e| e.error).unwrap();
+        value
     }
 
-    /// Apply `sql` and close the connection.
+    /// Apply `sql` on a migrating open, then open once more so open-time
+    /// backfills see the new rows (the Python harness's `change`).
     pub fn sql(&self, sql: &str) {
-        let conn = self.connection();
-        conn.execute_batch(sql).unwrap();
-        conn.close().map_err(|(_, e)| e).unwrap();
+        self.with_book(true, |conn| conn.execute_batch(sql).unwrap());
+        self.with_book(true, |_| ());
     }
 
     pub fn query_strings(&self, sql: &str) -> Vec<String> {
-        let conn = self.connection();
-        let mut statement = conn.prepare(sql).unwrap();
-        let rows = statement
-            .query_map([], |row| row.get::<_, String>(0))
-            .unwrap()
-            .collect::<Result<Vec<_>, _>>()
-            .unwrap();
-        rows
+        self.with_book(false, |conn| {
+            let mut statement = conn.prepare(sql).unwrap();
+            let rows = statement
+                .query_map([], |row| row.get::<_, String>(0))
+                .unwrap()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap();
+            rows
+        })
     }
 
     pub fn command(&self) -> Command {
@@ -266,8 +291,25 @@ impl Sandbox {
 
     /// Every table, rows sorted, one line per row; empty tables are counted.
     pub fn dump(&self) -> String {
-        let conn = self.connection();
-        dump(&conn)
+        self.with_book(false, dump)
+    }
+
+    /// The plaintext database dumped without the store's open (which
+    /// refuses schema drift).
+    pub fn dump_raw(&self) -> String {
+        assert!(self.passphrase.is_none());
+        let conn = Connection::open(self.root.join("kassiber.sqlite3")).unwrap();
+        let text = dump(&conn);
+        conn.close().map_err(|(_, e)| e).unwrap();
+        text
+    }
+
+    /// Apply `sql` on a raw plaintext connection, outside the store.
+    pub fn sql_raw(&self, sql: &str) {
+        assert!(self.passphrase.is_none());
+        let conn = Connection::open(self.root.join("kassiber.sqlite3")).unwrap();
+        conn.execute_batch(sql).unwrap();
+        conn.close().map_err(|(_, e)| e).unwrap();
     }
 
     /// The text with this sandbox's paths replaced by placeholders.
@@ -374,11 +416,14 @@ fn value(value: ValueRef<'_>) -> String {
     }
 }
 
+type Mask = Box<dyn Fn(&str) -> String>;
+
 /// What a test observed, compared with (or blessed into) its golden file.
 pub struct Transcript {
     name: String,
     text: String,
     start: i64,
+    masks: Vec<Mask>,
 }
 
 impl Transcript {
@@ -386,8 +431,16 @@ impl Transcript {
         Self {
             name: name.to_owned(),
             text: String::new(),
-            start: now_us(),
+            start: process_start(),
+            masks: Vec::new(),
         }
+    }
+
+    /// A further rewrite of the whole transcript before it is compared,
+    /// for values a run legitimately generates differently each time.
+    pub fn mask(&mut self, mask: impl Fn(&str) -> String + 'static) -> &mut Self {
+        self.masks.push(Box::new(mask));
+        self
     }
 
     pub fn note(&mut self, line: &str) {
@@ -468,12 +521,19 @@ impl Transcript {
     /// rows first, then added ones, each sorted.
     pub fn changes(&mut self, sandbox: &Sandbox, before: &str, title: &str) {
         let after = sandbox.dump();
+        // Rows compare without their generated ids and clocks, which a
+        // rewrite may restamp within the same run.
+        let (start, now) = (self.start, now_us());
+        let key = |line: &str| mask_generated(&blank_uuids(line), start, now, &mut Vec::new());
         let mut removed: Vec<&str> = before.lines().collect();
+        let mut keys: Vec<String> = removed.iter().map(|l| key(l)).collect();
         let mut added = Vec::new();
         for line in after.lines() {
-            match removed.iter().position(|l| *l == line) {
+            let wanted = key(line);
+            match keys.iter().position(|k| *k == wanted) {
                 Some(index) => {
                     removed.remove(index);
+                    keys.remove(index);
                 }
                 None => added.push(line),
             }
@@ -494,6 +554,11 @@ impl Transcript {
     /// Compare with the golden, or rewrite it under `KASSIBER_BLESS=1`.
     pub fn finish(mut self) {
         self.text = mask_generated(&self.text, self.start, now_us(), &mut Vec::new());
+        for mask in &self.masks {
+            self.text = mask(&self.text);
+        }
+        let full = std::mem::take(&mut self.text);
+        self.text = digest_long_lines(&digest_blocks(&full));
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/black_box/golden")
             .join(format!("{}.txt", self.name));
@@ -505,27 +570,48 @@ impl Transcript {
         let expected = std::fs::read_to_string(&path)
             .unwrap_or_else(|e| panic!("{}: {e}; bless it with KASSIBER_BLESS=1", path.display()));
         if expected != self.text {
+            let actual = Path::new(env!("CARGO_TARGET_TMPDIR"))
+                .join("black_box")
+                .join(format!("{}.actual.txt", self.name));
+            std::fs::create_dir_all(actual.parent().unwrap()).unwrap();
+            std::fs::write(&actual, &full).unwrap();
+            eprintln!(
+                "the whole transcript, long lines kept: {}",
+                actual.display()
+            );
             let first = expected
                 .lines()
                 .zip(self.text.lines())
                 .position(|(a, b)| a != b)
                 .unwrap_or_else(|| expected.lines().count().min(self.text.lines().count()));
-            let context = |text: &str| {
-                text.lines()
-                    .skip(first.saturating_sub(3))
-                    .take(8)
-                    .collect::<Vec<_>>()
-                    .join("\n")
+            let want = expected.lines().nth(first).unwrap_or("<end>");
+            let have = self.text.lines().nth(first).unwrap_or("<end>");
+            let at = want
+                .char_indices()
+                .zip(have.chars())
+                .find(|((_, a), b)| a != b)
+                .map_or(want.len().min(have.len()), |((i, _), _)| i);
+            let window = |line: &str| {
+                let start = line.floor_char_boundary(at.saturating_sub(150));
+                let end = line.ceil_char_boundary((at + 250).min(line.len()));
+                line[start..end].to_owned()
             };
             panic!(
-                "{} differs from its golden at line {}\n--- expected\n{}\n--- actual\n{}",
+                "{} differs from its golden at line {}, byte {at}\n--- expected\n{}\n--- actual\n{}",
                 self.name,
                 first + 1,
-                context(&expected),
-                context(&self.text)
+                window(want),
+                window(have)
             );
         }
     }
+}
+
+/// When this test process first asked: every run-generated reading falls
+/// after it.
+pub fn process_start() -> i64 {
+    static START: std::sync::OnceLock<i64> = std::sync::OnceLock::new();
+    *START.get_or_init(now_us)
 }
 
 /// Microseconds since the epoch.
@@ -659,6 +745,147 @@ pub fn mask_generated(text: &str, start: i64, end: i64, seen: &mut Vec<String>) 
         let ch = text[at..].chars().next().unwrap();
         out.push(ch);
         at += ch.len_utf8();
+    }
+    out
+}
+
+/// Replace every `prefix` followed by `len` lowercase hex digits with
+/// `prefix#n`, numbered by first appearance.
+pub fn number_hex(text: &str, prefix: &str, len: usize) -> String {
+    let mut seen: Vec<String> = Vec::new();
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(at) = rest.find(prefix) {
+        out.push_str(&rest[..at]);
+        let after = &rest[at + prefix.len()..];
+        let hex = after.get(..len).filter(|h| {
+            h.bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        });
+        match hex {
+            Some(hex) => {
+                let number = match seen.iter().position(|s| s == hex) {
+                    Some(n) => n,
+                    None => {
+                        seen.push(hex.to_owned());
+                        seen.len() - 1
+                    }
+                };
+                let _ = write!(out, "{prefix}#{number}");
+                rest = &after[len..];
+            }
+            None => {
+                out.push_str(prefix);
+                rest = after;
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// Replace the digits after each `"key":` (or `"key": `) with `<n>`.
+pub fn mask_number(text: &str, key: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    let needle = format!("\"{key}\":");
+    while let Some(at) = rest.find(&needle) {
+        out.push_str(&rest[..at + needle.len()]);
+        let mut after = &rest[at + needle.len()..];
+        if let Some(stripped) = after.strip_prefix(' ') {
+            out.push(' ');
+            after = stripped;
+        }
+        let digits = after.bytes().take_while(u8::is_ascii_digit).count();
+        if digits > 0 {
+            out.push_str("<n>");
+        }
+        rest = &after[digits..];
+    }
+    out.push_str(rest);
+    out
+}
+
+/// Lines longer than this are kept as their length, digest and head.
+pub const LONG_LINE: usize = 1200;
+
+/// FNV-1a, 128 bits: a stable fingerprint of a long line.
+pub fn fnv128(bytes: &[u8]) -> u128 {
+    let mut hash: u128 = 0x6c62272e07bb014262b821756295c58d;
+    for byte in bytes {
+        hash ^= u128::from(*byte);
+        hash = hash.wrapping_mul(0x0000000001000000000000000000013B);
+    }
+    hash
+}
+
+/// Each line over `LONG_LINE` bytes becomes `<head>… [<len> bytes fnv128
+/// <digest>]`, so large payloads pin every byte without filling the golden.
+pub fn digest_long_lines(text: &str) -> String {
+    let mut out = String::with_capacity(text.len().min(1 << 20));
+    for line in text.split_inclusive('\n') {
+        let body = line.strip_suffix('\n').unwrap_or(line);
+        if body.len() > LONG_LINE {
+            let head = &body[..body.floor_char_boundary(240)];
+            let _ = write!(
+                out,
+                "{head}… [{} bytes fnv128 {:032x}]",
+                body.len(),
+                fnv128(body.as_bytes())
+            );
+            if line.ends_with('\n') {
+                out.push('\n');
+            }
+        } else {
+            out.push_str(line);
+        }
+    }
+    out
+}
+
+/// Blocks (a command's stdout or stderr, a section) larger than this keep
+/// their first lines and a digest of the rest.
+pub const LARGE_BLOCK: usize = 2500;
+const BLOCK_HEAD: usize = 12;
+
+fn starts_entry(line: &str) -> bool {
+    ["$ ", "exit ", "--- ", "=== ", "# "]
+        .iter()
+        .any(|p| line.starts_with(p))
+}
+
+/// Every block over `LARGE_BLOCK` bytes becomes its first lines and
+/// `… [<len> bytes, <n> lines fnv128 <digest>]` over the whole block.
+pub fn digest_blocks(text: &str) -> String {
+    let lines: Vec<&str> = text.split_inclusive('\n').collect();
+    let mut out = String::with_capacity(text.len().min(1 << 20));
+    let mut at = 0;
+    while at < lines.len() {
+        let line = lines[at];
+        out.push_str(line);
+        at += 1;
+        if !(line.starts_with("--- ") || line.starts_with("=== ")) {
+            continue;
+        }
+        let end = (at..lines.len())
+            .find(|&i| starts_entry(lines[i]))
+            .unwrap_or(lines.len());
+        let block: String = lines[at..end].concat();
+        if block.len() > LARGE_BLOCK {
+            for kept in &lines[at..at + BLOCK_HEAD.min(end - at)] {
+                out.push_str(kept);
+            }
+            let _ = writeln!(
+                out,
+                "… [{} bytes, {} lines fnv128 {:032x}]",
+                block.len(),
+                end - at,
+                fnv128(block.as_bytes())
+            );
+        } else {
+            out.push_str(&block);
+        }
+        at = end;
     }
     out
 }

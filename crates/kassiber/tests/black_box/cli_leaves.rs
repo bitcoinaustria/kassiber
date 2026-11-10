@@ -1125,7 +1125,7 @@ fn ledger_book(extra_sql: &str) -> Sandbox {
         }
     }
     sql.push_str(extra_sql);
-    sandbox.sql(&sql);
+    sandbox.sql_raw(&sql);
     sandbox
 }
 
@@ -1181,10 +1181,10 @@ fn test_unshipped_ledger_trigger_refuses_where_python_opens() {
         "CREATE TRIGGER gl_evidence_guard BEFORE DELETE ON gl_evidence BEGIN SELECT 1; END;",
     ] {
         let sandbox = ledger_book(trigger);
-        let before = sandbox.dump();
+        let before = sandbox.dump_raw();
         let out = sandbox.machine(&["maintenance", "purge-legacy-ledger", "--confirm"]);
         assert_eq!(out.code, 1);
         assert_eq!(out.json()["error"]["code"], "requires_python_migration");
-        assert_eq!(sandbox.dump(), before);
+        assert_eq!(sandbox.dump_raw(), before);
     }
 }
