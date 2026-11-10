@@ -175,6 +175,7 @@ pub(crate) fn create(
         durable::create_new(&database)?
     };
     observer("schema.after_file_create")?;
+    crate::seed_test_prng();
     let mut conn = Connection::open_with_flags(
         &database,
         OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,

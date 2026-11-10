@@ -23,6 +23,47 @@ pub use write_lock::{
     begin_write_savepoint, debug_assert_no_write, write_savepoint, write_transaction,
 };
 
+/// Seed SQLite's random generator (`randomblob`, which every random row id
+/// comes from) from `KASSIBER_TEST_SQLITE_SEED`, once per process, so a
+/// recorded test session replays with the very ids it generated
+/// (crates/session-replay). Only with the `test-hooks` feature; a product
+/// build compiles this to nothing and never reads the variable.
+pub fn seed_test_prng() {
+    #[cfg(feature = "test-hooks")]
+    {
+        static ONCE: std::sync::Once = std::sync::Once::new();
+        ONCE.call_once(|| {
+            let Some(base) = std::env::var("KASSIBER_TEST_SQLITE_SEED")
+                .ok()
+                .and_then(|v| v.parse::<u32>().ok())
+                .filter(|s| *s != 0)
+            else {
+                return;
+            };
+            // A process this one starts inherits the variable; mixing in the
+            // arguments keeps the two from drawing the same ids.
+            let mut hash: u32 = 0x811c_9dc5 ^ base;
+            for byte in std::env::args_os().flat_map(|a| {
+                let mut bytes = a.into_encoded_bytes();
+                bytes.push(0);
+                bytes
+            }) {
+                hash = (hash ^ u32::from(byte)).wrapping_mul(0x0100_0193);
+            }
+            let seed = (hash & 0x7fff_ffff).max(1) as i32;
+            // SAFETY: SQLITE_TESTCTRL_PRNG_SEED takes (int, sqlite3*); a null
+            // handle selects the integer seed. It only sets the PRNG seed.
+            unsafe {
+                rusqlite::ffi::sqlite3_test_control(
+                    rusqlite::ffi::SQLITE_TESTCTRL_PRNG_SEED,
+                    seed as std::os::raw::c_int,
+                    std::ptr::null_mut::<rusqlite::ffi::sqlite3>(),
+                );
+            }
+        });
+    }
+}
+
 /// Development-only deterministic sources and file-layer fault injection.
 /// No product command reads test environment variables or enables this feature.
 #[cfg(feature = "test-hooks")]
@@ -70,6 +111,7 @@ pub mod test_hooks {
                 "invalid deterministic identity",
             ));
         }
+        crate::seed_test_prng();
         let mut conn = Connection::open_with_flags(
             kassiber_paths::resolve_database_path(root),
             OpenFlags::SQLITE_OPEN_READ_WRITE,
@@ -124,6 +166,7 @@ pub mod test_hooks {
                 "invalid deterministic identity",
             ));
         }
+        crate::seed_test_prng();
         let mut conn = Connection::open_with_flags(
             kassiber_paths::resolve_database_path(root),
             OpenFlags::SQLITE_OPEN_READ_WRITE,
@@ -149,6 +192,7 @@ pub mod test_hooks {
         timestamp: Option<&str>,
         observer: &mut impl FnMut(&str) -> Result<()>,
     ) -> Result<()> {
+        crate::seed_test_prng();
         let mut conn = Connection::open_with_flags(
             kassiber_paths::resolve_database_path(root),
             OpenFlags::SQLITE_OPEN_READ_WRITE,
@@ -168,6 +212,7 @@ pub mod test_hooks {
         crate::compat::backfills::step(&mut conn, name, observer)
     }
     pub fn graph(root: &Path) -> Result<()> {
+        crate::seed_test_prng();
         let mut conn = Connection::open_with_flags(
             kassiber_paths::resolve_database_path(root),
             OpenFlags::SQLITE_OPEN_READ_WRITE,
@@ -177,6 +222,7 @@ pub mod test_hooks {
         crate::compat::install_graph(&mut conn)
     }
     pub fn msat(root: &Path, observer: &mut impl FnMut(&str) -> Result<()>) -> Result<()> {
+        crate::seed_test_prng();
         let mut conn = Connection::open_with_flags(
             kassiber_paths::resolve_database_path(root),
             OpenFlags::SQLITE_OPEN_READ_WRITE,
@@ -210,6 +256,7 @@ pub mod test_hooks {
         observer: &mut impl FnMut(&str) -> Result<()>,
     ) -> Result<()> {
         let database = kassiber_paths::resolve_database_path(root);
+        crate::seed_test_prng();
         let mut conn = Connection::open_with_flags(&database, OpenFlags::SQLITE_OPEN_READ_WRITE)
             .map_err(map_sqlite_error)?;
         if let Some(pass) = passphrase {
@@ -258,6 +305,7 @@ pub mod test_hooks {
         observer: &mut impl FnMut(&str) -> Result<()>,
     ) -> Result<()> {
         let database = kassiber_paths::resolve_database_path(root);
+        crate::seed_test_prng();
         let mut conn = Connection::open_with_flags(database, OpenFlags::SQLITE_OPEN_READ_WRITE)
             .map_err(map_sqlite_error)?;
         if let Some(pass) = passphrase {
@@ -431,6 +479,7 @@ impl Book {
             }
             _ => (),
         }
+        crate::seed_test_prng();
         let mut connection = Connection::open_with_flags(
             &database,
             OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,

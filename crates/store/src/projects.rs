@@ -123,6 +123,7 @@ fn workspace_count(path: &Path) -> Result<Option<i64>> {
         return Ok(None);
     }
     // This probe never keys, migrates, or sets journal_mode on the source.
+    crate::seed_test_prng();
     let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE)
         .map_err(map_sqlite_error)?;
     let exists: bool = conn

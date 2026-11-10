@@ -48,6 +48,8 @@ fn main() -> ExitCode {
     // Arm the process-wide attempt observer before dispatch. Service clients
     // supply their own fresh offline preference reader and exact-action grant.
     let _gate = Gate::new(|| Offline::Unavailable, Ledger::process());
+    // Test builds only: a recorded session's SQLite seed (no-op otherwise).
+    kassiber_store::seed_test_prng();
     // BIP329 label matching reads the derived ownership index, which lives
     // above the metadata service it serves.
     kassiber_wallets::identify::register_bip329_ownership();

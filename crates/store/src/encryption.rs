@@ -65,6 +65,7 @@ pub(crate) fn create_empty_with_observer(
         &state.encrypted_temp_path,
     )?)?);
     observer("empty.after_candidate_create")?;
+    crate::seed_test_prng();
     let conn = Connection::open(&state.encrypted_temp_path).map_err(map_sqlite_error)?;
     apply_keying(&conn, passphrase)?;
     conn.execute_batch("CREATE TABLE IF NOT EXISTS kassiber_init_marker(x INTEGER); DROP TABLE kassiber_init_marker;")
@@ -84,6 +85,7 @@ pub(crate) fn create_empty_with_observer(
     {
         return Err(verification());
     }
+    crate::seed_test_prng();
     let fresh = Connection::open_with_flags(
         &state.encrypted_temp_path,
         OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
@@ -209,6 +211,7 @@ pub fn open_backup_container(path: &Path, pass: &str) -> Result<Connection> {
 
 fn open_container_inner(path: &Path, pass: Option<&str>, backup: bool) -> Result<Connection> {
     validate(path)?;
+    crate::seed_test_prng();
     let conn = Connection::open_with_flags(
         path,
         OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
@@ -290,6 +293,7 @@ pub fn backup_encrypted(source: &Path, destination: &Path, passphrase: &str) -> 
         options.mode(0o600);
     }
     options.open(destination).map_err(Error::io)?;
+    crate::seed_test_prng();
     let mut target = Connection::open(destination).map_err(map_sqlite_error)?;
     apply_keying(&target, passphrase)?;
     crate::backup_connection(&source, &mut target)?;
