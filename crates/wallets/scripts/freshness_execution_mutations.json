@@ -5,7 +5,8 @@
     "find": "attempts=attempts+1",
     "replace": "attempts=attempts",
     "expect_failing": [
-      "tests/test_rust_freshness_execution.py::test_freshness_execution_success_checkpoint_and_progress"
+      "tests/test_rust_freshness_execution.py::test_freshness_execution_success_checkpoint_and_progress",
+      "test_freshness_execution_success_checkpoint_and_progress"
     ],
     "rule": "Each dispatched job records an attempt before the handler runs."
   },
@@ -15,7 +16,8 @@
     "find": "value @ Value::Dict(_) => value,",
     "replace": "value @ Value::Dict(_) => { let _ = value; &Value::Null },",
     "expect_failing": [
-      "tests/test_rust_freshness_execution.py::test_freshness_execution_success_checkpoint_and_progress"
+      "tests/test_rust_freshness_execution.py::test_freshness_execution_success_checkpoint_and_progress",
+      "test_freshness_execution_success_checkpoint_and_progress"
     ],
     "rule": "A successful source retains its private checkpoint outside the public result."
   },
@@ -25,7 +27,8 @@
     "find": "if partial { \"partially_stale\" } else { \"fresh\" }",
     "replace": "if partial { \"fresh\" } else { \"fresh\" }",
     "expect_failing": [
-      "tests/test_rust_freshness_execution.py::test_freshness_execution_success_checkpoint_and_progress"
+      "tests/test_rust_freshness_execution.py::test_freshness_execution_success_checkpoint_and_progress",
+      "test_freshness_execution_success_checkpoint_and_progress"
     ],
     "rule": "Partial success stays stale and retains report blocking."
   },
@@ -35,7 +38,8 @@
     "find": "if let Ok(seconds) = integer(after) {",
     "replace": "if let Ok(seconds) = integer(&Value::from(1)) {",
     "expect_failing": [
-      "tests/test_rust_freshness_execution.py::test_freshness_execution_retry_after_matches_python"
+      "tests/test_rust_freshness_execution.py::test_freshness_execution_retry_after_matches_python",
+      "test_freshness_execution_retry_after_matches_python"
     ],
     "rule": "Provider retry-after values determine their own cooldown."
   },
@@ -45,7 +49,8 @@
     "find": ".min(21600);",
     "replace": ".min(30);",
     "expect_failing": [
-      "tests/test_rust_freshness_execution.py::test_freshness_execution_exponential_backoff"
+      "tests/test_rust_freshness_execution.py::test_freshness_execution_exponential_backoff",
+      "test_freshness_execution_exponential_backoff"
     ],
     "rule": "Exponential backoff grows to the Python six-hour cap."
   },
@@ -55,7 +60,8 @@
     "find": "u16::from_be_bytes([digest[0], digest[1]])",
     "replace": "u16::from_be_bytes([digest[1], digest[0]])",
     "expect_failing": [
-      "tests/test_rust_freshness_execution.py::test_freshness_execution_exponential_backoff"
+      "tests/test_rust_freshness_execution.py::test_freshness_execution_exponential_backoff",
+      "test_freshness_execution_exponential_backoff"
     ],
     "rule": "Retry jitter uses the first two SHA256 digest bytes in big-endian order."
   },
@@ -65,7 +71,8 @@
     "find": "                    rollback(conn)?;",
     "replace": "                    let _ = conn;",
     "expect_failing": [
-      "tests/test_rust_freshness_execution.py::test_freshness_execution_database_busy_rolls_back_and_retries"
+      "tests/test_rust_freshness_execution.py::test_freshness_execution_database_busy_rolls_back_and_retries",
+      "test_freshness_execution_database_busy_rolls_back_and_retries"
     ],
     "rule": "Database contention rolls back unfinished handler writes before scheduling a retry."
   },
@@ -75,7 +82,8 @@
     "find": "if truthy(field(&row, \"cancel_requested\")) || field(&row, \"status\") == &s(\"cancelled\") {",
     "replace": "if false && (truthy(field(&row, \"cancel_requested\")) || field(&row, \"status\") == &s(\"cancelled\")) {",
     "expect_failing": [
-      "tests/test_rust_freshness_execution.py::test_freshness_execution_cancellation_checked_before_and_after_handler"
+      "tests/test_rust_freshness_execution.py::test_freshness_execution_cancellation_checked_before_and_after_handler",
+      "test_freshness_execution_cancellation_checked_before_and_after_handler"
     ],
     "rule": "Cancellation is checked before dispatch work and before success publication."
   },
@@ -85,7 +93,8 @@
     "find": "            rollback(conn)?;\n            if missing_ok {",
     "replace": "            let _ = conn;\n            if missing_ok {",
     "expect_failing": [
-      "tests/test_rust_freshness_execution.py::test_freshness_execution_removed_job_never_resurrects_source"
+      "tests/test_rust_freshness_execution.py::test_freshness_execution_removed_job_never_resurrects_source",
+      "test_freshness_execution_removed_job_never_resurrects_source"
     ],
     "rule": "A disappeared exact job discards uncommitted handler writes without recreating its source."
   },
@@ -95,7 +104,8 @@
     "find": "Queue::new(conn, sources).dispatchable(profile, &id)?",
     "replace": "Queue::new(conn, sources).job(&id).ok()",
     "expect_failing": [
-      "tests/test_rust_freshness_execution.py::test_freshness_execution_requested_dispatch_rechecks_controls"
+      "tests/test_rust_freshness_execution.py::test_freshness_execution_requested_dispatch_rechecks_controls",
+      "test_freshness_execution_requested_dispatch_rechecks_controls"
     ],
     "rule": "Selected jobs must remain dispatchable after earlier handlers change pause or cooldown controls."
   },
@@ -105,7 +115,8 @@
     "find": "Value::Bool(field(job, \"job_type\") != &s(\"wallet_graph_references\"))",
     "replace": "Value::Bool(false)",
     "expect_failing": [
-      "tests/test_rust_freshness_execution.py::test_freshness_execution_generic_failure_and_handler_not_found"
+      "tests/test_rust_freshness_execution.py::test_freshness_execution_generic_failure_and_handler_not_found",
+      "test_freshness_execution_generic_failure_and_handler_not_found"
     ],
     "rule": "Failed wallet jobs block final reports."
   },
@@ -115,7 +126,8 @@
     "find": "\"onchain_wallet_history\",\n                \"btcpay_wallet_source\",\n                \"btcpay_provenance\",",
     "replace": "\"onchain_wallet_history\",\n                \"btcpay_wallet_source\",\n                \"btcpay_provenance\",\n                \"journal_refresh\",",
     "expect_failing": [
-      "tests/test_rust_freshness_execution.py::test_freshness_execution_aggregation_matches_daemon"
+      "tests/test_rust_freshness_execution.py::test_freshness_execution_aggregation_matches_daemon",
+      "test_freshness_execution_aggregation_matches_daemon"
     ],
     "rule": "Wallet results exclude local journal jobs."
   },
@@ -125,7 +137,8 @@
     "find": "format!(\"<backend-url>{}\", &raw[trimmed.len()..])",
     "replace": "format!(\"{}{}\", trimmed, &raw[trimmed.len()..])",
     "expect_failing": [
-      "tests/test_rust_freshness_execution.py::test_freshness_execution_errors_and_ui_redaction"
+      "tests/test_rust_freshness_execution.py::test_freshness_execution_errors_and_ui_redaction",
+      "test_freshness_execution_errors_and_ui_redaction"
     ],
     "rule": "The UI snapshot removes full backend URLs inside free-text errors."
   },
@@ -135,7 +148,8 @@
     "find": "&host.replace_all(&scrubbed, \"host=<backend-host>\")",
     "replace": "&scrubbed",
     "expect_failing": [
-      "tests/test_rust_freshness_execution.py::test_freshness_execution_errors_and_ui_redaction"
+      "tests/test_rust_freshness_execution.py::test_freshness_execution_errors_and_ui_redaction",
+      "test_freshness_execution_errors_and_ui_redaction"
     ],
     "rule": "Schemeless host keyword errors do not disclose backend hosts."
   },
@@ -185,7 +199,8 @@
     "find": "\"SELECT id FROM freshness_jobs WHERE id=?\"",
     "replace": "\"SELECT id FROM freshness_jobs WHERE id=? AND 0\"",
     "expect_failing": [
-      "tests/test_rust_freshness_execution.py::test_freshness_execution_generic_failure_and_handler_not_found"
+      "tests/test_rust_freshness_execution.py::test_freshness_execution_generic_failure_and_handler_not_found",
+      "test_freshness_execution_generic_failure_and_handler_not_found"
     ],
     "rule": "A handler removal-shaped AppError remains a failed job when the exact job still exists."
   }

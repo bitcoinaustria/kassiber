@@ -65,7 +65,8 @@
     "find": ".compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)",
     "replace": ".compare_exchange(false, false, Ordering::AcqRel, Ordering::Acquire)",
     "expect_failing": [
-      "tests/test_rust_freshness_admission.py::test_freshness_admission_execution_slot_released_after_refusal_and_drop"
+      "tests/test_rust_freshness_admission.py::test_freshness_admission_execution_slot_released_after_refusal_and_drop",
+      "test_freshness_admission_execution_slot_released_after_refusal_and_drop"
     ],
     "rule": "One foreground slot excludes a competing refresh while a journal job is running."
   }

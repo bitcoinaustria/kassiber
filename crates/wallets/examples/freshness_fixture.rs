@@ -103,16 +103,22 @@ impl Handler for Script<'_> {
     }
 }
 fn main() {
-    let gate = kassiber_net::Gate::new(
-        || kassiber_net::Offline::Unavailable,
-        kassiber_net::Ledger::default(),
-    );
     let mut raw = String::new();
     std::io::stdin()
         .take(64 * 1024 * 1024)
         .read_to_string(&mut raw)
         .unwrap();
-    let input = kassiber_pytext::loads(&raw).unwrap();
+    println!("{}", run(&raw));
+}
+
+/// One fixture invocation: the JSON input a test hands the binary, and the
+/// line it prints. The freshness tests also call this in process.
+pub fn run(raw: &str) -> String {
+    let gate = kassiber_net::Gate::new(
+        || kassiber_net::Offline::Unavailable,
+        kassiber_net::Ledger::default(),
+    );
+    let input = kassiber_pytext::loads(raw).unwrap();
     let mut conn = Connection::open(text(&input, "book")).unwrap();
     conn.execute_batch("PRAGMA foreign_keys=ON").unwrap();
     let mut sources = Fixed { id: 0, now: 0 };
@@ -419,12 +425,9 @@ fn main() {
         assert!(gate.attempts().records.is_empty());
         assert!(gate.ledger().snapshot(0, 100).records.is_empty());
     }
-    println!(
-        "{}",
-        kassiber_pyjson::dumps(
-            &dict([("results", Value::List(results))]),
-            &Options::new().sort_keys(true)
-        )
-        .unwrap()
-    );
+    kassiber_pyjson::dumps(
+        &dict([("results", Value::List(results))]),
+        &Options::new().sort_keys(true),
+    )
+    .unwrap()
 }
