@@ -53,12 +53,13 @@ def test_pre_fix_historical_book_requires_rebuild(tmp_path):
     import base64
     import gzip
     import sqlite3
+    from contextlib import closing
     from pathlib import Path
 
     fixture = Path(__file__).parent / 'fixtures/historical/pre_partial_payout_ca9a672f.sqlite3.gz.b64'
     database = tmp_path / 'kassiber.sqlite3'
     database.write_bytes(gzip.decompress(base64.decodebytes(fixture.read_bytes())))
-    with sqlite3.connect(database) as before:
+    with closing(sqlite3.connect(database)) as before, before:
         assert before.execute("SELECT last_processed_at FROM profiles WHERE id='profile'").fetchone()[0]
         assert sum(Decimal(row[0]) for row in before.execute("SELECT proceeds_exact FROM journal_entries WHERE entry_type='disposal'")) == 20
     conn = open_db(tmp_path)

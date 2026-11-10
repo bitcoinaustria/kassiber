@@ -8,6 +8,7 @@ import base64
 import gzip
 import json
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -55,7 +56,7 @@ def _authored(conn, columns=None):
 def test_base_code_pair_is_blocked_and_audited_once_without_rewriting_economics(tmp_path):
     root = tmp_path / "book"
     path = _restore(root)
-    with sqlite3.connect(path) as original:
+    with closing(sqlite3.connect(path)) as original, original:
         columns = _columns(original)
         before = _authored(original, columns)
     for _ in range(2):
@@ -117,7 +118,7 @@ def test_older_binary_rebuild_cannot_clear_pair_fee_review_requirement(tmp_path)
 def test_pair_fee_audit_and_invalidation_roll_back_together_on_interruption(tmp_path):
     root = tmp_path / "book"
     path = _restore(root)
-    with sqlite3.connect(path) as conn:
+    with closing(sqlite3.connect(path)) as conn, conn:
         # Interrupt the pair fee review's own invalidation, after main's.
         conn.execute("""CREATE TRIGGER stop_pair_fee_migration BEFORE UPDATE ON profiles
             WHEN NEW.journal_input_version != OLD.journal_input_version
@@ -126,7 +127,7 @@ def test_pair_fee_audit_and_invalidation_roll_back_together_on_interruption(tmp_
             .replace("?", str(PAIR_FEE_INPUT_VERSION - 1)))
     with pytest.raises(Exception, match="injected migration interruption"):
         open_db(root)
-    with sqlite3.connect(path) as conn:
+    with closing(sqlite3.connect(path)) as conn, conn:
         assert conn.execute("SELECT 1 FROM schema_migration_audits WHERE migration_name=?", (MIGRATION,)).fetchone() is None
         assert conn.execute("SELECT journal_input_version FROM profiles").fetchone()[0] == PAIR_FEE_INPUT_VERSION - 1
         conn.execute("DROP TRIGGER stop_pair_fee_migration")
