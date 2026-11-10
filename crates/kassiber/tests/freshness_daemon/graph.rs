@@ -231,21 +231,10 @@ pub fn test_native_graph_closed_output_joins_worker_before_exit() {
     start_graph(&live, &mut daemon, Some(""));
     daemon.close_output();
     live.release();
-    let Daemon { mut child, .. } = daemon;
-    let deadline = std::time::Instant::now() + Duration::from_secs(30);
-    let status = loop {
-        if let Some(status) = child.try_wait().unwrap() {
-            break status;
-        }
-        assert!(
-            std::time::Instant::now() < deadline,
-            "the daemon did not exit"
-        );
-        std::thread::sleep(Duration::from_millis(10));
-    };
+    let status = crate::session::wait_child(&mut daemon.child, Duration::from_secs(30));
     assert!(!status.success());
     let mut stderr = String::new();
-    std::io::Read::read_to_string(&mut child.stderr.take().unwrap(), &mut stderr).unwrap();
+    std::io::Read::read_to_string(&mut daemon.child.stderr.take().unwrap(), &mut stderr).unwrap();
     assert_eq!(stderr, "");
     assert_eq!(
         live.count("SELECT count(*) FROM freshness_jobs WHERE status='running'"),

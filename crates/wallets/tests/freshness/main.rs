@@ -68,6 +68,18 @@ fn replay_child() {
     std::fs::write(dir.join("stdout"), printed).unwrap();
 }
 
+/// A child process killed when dropped unfinished.
+struct Reaped(std::process::Child);
+
+impl Drop for Reaped {
+    fn drop(&mut self) {
+        if matches!(self.0.try_wait(), Ok(None)) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+}
+
 /// Run one taped call in a child process, acting on `hold` when it fires.
 fn run_taped(
     golden: &Golden,
@@ -115,12 +127,15 @@ fn run_taped(
     for (key, item) in golden::entries(value(call, "env")) {
         command.env(key, scratch.place(&py_str(item)));
     }
-    let mut child = command
+    let child = command
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::fs::File::create(dir.join("stderr")).unwrap())
         .spawn()
         .unwrap();
+    // Killed if the replay fails or a mutant keeps it running.
+    let mut child = Reaped(child);
+    let child = &mut child.0;
     if let Some(hold) = hold {
         let deadline = Instant::now() + Duration::from_secs(60);
         while !dir.join("hold/held").exists() {
@@ -133,27 +148,39 @@ fn run_taped(
         (hold.act)(book);
         std::fs::write(dir.join("hold/release"), b"").unwrap();
     }
-    let status = child.wait().unwrap();
+    let deadline = Instant::now() + Duration::from_secs(900);
+    let status = loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            break status;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "the taped fixture did not finish"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    };
     assert!(
         status.success(),
         "the taped fixture failed: {status}\n{}",
         std::fs::read_to_string(dir.join("stderr")).unwrap_or_default()
     );
-    // No request the recording's chain did not receive (the pytest tests
-    // counted its hits).
-    let recorded = std::fs::read_to_string(dir.join("net.tape"))
+    // Every request was one the recording's chain received, byte for byte
+    // and no more often (the pytest tests counted and inspected its hits).
+    let mut recorded: Vec<String> = std::fs::read_to_string(dir.join("net.tape"))
         .unwrap()
         .lines()
-        .filter(|line| line.starts_with("w\t"))
-        .count();
-    let replayed = std::fs::read_to_string(dir.join("net.writes"))
-        .unwrap_or_default()
-        .lines()
-        .count();
-    assert!(
-        replayed <= recorded,
-        "{replayed} requests, recorded {recorded}"
-    );
+        .filter_map(|line| {
+            let parts: Vec<&str> = line.split('\t').collect();
+            (parts.first() == Some(&"w") && parts.len() >= 4).then(|| parts[3].to_owned())
+        })
+        .collect();
+    let replayed = std::fs::read_to_string(dir.join("net.writes")).unwrap_or_default();
+    for (index, request) in replayed.lines().enumerate() {
+        let at = recorded.iter().position(|r| r == request);
+        let at =
+            at.unwrap_or_else(|| panic!("request {index} was not recorded (or not that often)"));
+        recorded.swap_remove(at);
+    }
     std::fs::read_to_string(dir.join("stdout")).unwrap()
 }
 

@@ -251,12 +251,12 @@ impl Daemon {
 
     pub fn wait(mut self) -> (std::process::ExitStatus, String, Vec<Value>) {
         while self.next(Duration::from_secs(60)).is_some() {}
-        let status = self.child.wait().unwrap();
+        let status = wait_child(&mut self.child, Duration::from_secs(60));
         let mut stderr = String::new();
         if let Some(mut pipe) = self.child.stderr.take() {
             let _ = std::io::Read::read_to_string(&mut pipe, &mut stderr);
         }
-        (status, stderr, self.rows)
+        (status, stderr, std::mem::take(&mut self.rows))
     }
 
     pub fn wait_success(self) -> Vec<Value> {
@@ -264,6 +264,33 @@ impl Daemon {
         assert!(status.success(), "daemon exit {status}: {stderr}");
         assert_eq!(stderr, "", "the daemon wrote to stderr");
         rows
+    }
+}
+
+/// A daemon a failing test leaves behind is killed, never orphaned.
+impl Drop for Daemon {
+    fn drop(&mut self) {
+        if matches!(self.child.try_wait(), Ok(None)) {
+            let _ = self.child.kill();
+            let _ = self.child.wait();
+        }
+    }
+}
+
+/// The child's exit within `timeout`; past it the child is killed and the
+/// test fails, so a mutant that keeps a daemon alive cannot hang a run.
+pub fn wait_child(child: &mut Child, timeout: Duration) -> std::process::ExitStatus {
+    let deadline = Instant::now() + timeout;
+    loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            return status;
+        }
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("the daemon did not exit within {timeout:?}");
+        }
+        std::thread::sleep(Duration::from_millis(10));
     }
 }
 
@@ -417,12 +444,7 @@ pub fn replay_session(
         .map(|text| kassiber_pytext::loads(&py_str(&text)).unwrap())
         .collect();
     assert_same_rows(name, &rows, expected);
-    let recorded = recorded_requests(&prepared.tape, "");
-    let replayed = replayed_requests(&prepared.tape, "");
-    assert!(
-        replayed <= recorded,
-        "{name}: {replayed} requests, recorded {recorded}"
-    );
+    assert_requests_recorded(name, &prepared.tape);
     let after = value(session, "after");
     if !matches!(after, Value::Null) {
         assert_same_book(
@@ -488,4 +510,31 @@ pub fn replayed_requests(tape: &Path, needle: &str) -> usize {
         .lines()
         .map(|line| occurrences(&base64(line), needle))
         .sum()
+}
+
+/// Every request the replays from `tape` made is one the recording made,
+/// byte for byte and no more often: the pytest tests counted and inspected
+/// what their chain received. A different request fails like an extra one.
+/// The replay may stop earlier than the recording did.
+pub fn assert_requests_recorded(name: &str, tape: &Path) {
+    let mut recorded: Vec<String> = std::fs::read_to_string(tape)
+        .unwrap()
+        .lines()
+        .filter_map(|line| {
+            let parts: Vec<&str> = line.split('\t').collect();
+            (parts.first() == Some(&"w") && parts.len() >= 4).then(|| parts[3].to_owned())
+        })
+        .collect();
+    let replayed = std::fs::read_to_string(tape.with_extension("writes")).unwrap_or_default();
+    for (index, request) in replayed.lines().enumerate() {
+        match recorded.iter().position(|r| r == request) {
+            Some(at) => {
+                recorded.swap_remove(at);
+            }
+            None => panic!(
+                "{name}: request {index} was not recorded (or not that often): {:?}",
+                String::from_utf8_lossy(&base64(request))
+            ),
+        }
+    }
 }

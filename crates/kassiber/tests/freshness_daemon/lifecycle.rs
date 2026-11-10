@@ -127,25 +127,11 @@ pub fn test_live_freshness_closed_output_stops_and_joins_the_request() {
     );
     daemon.close_output();
     live.release();
-    let Daemon { mut child, .. } = daemon;
-    let status = wait_timeout(&mut child);
+    let mut daemon = daemon;
+    let status = crate::session::wait_child(&mut daemon.child, Duration::from_secs(30));
     assert_eq!(status.code(), Some(1));
     unpublished(&live);
     crate::live::no_extra_requests(&live);
-}
-
-fn wait_timeout(child: &mut std::process::Child) -> std::process::ExitStatus {
-    let deadline = std::time::Instant::now() + Duration::from_secs(30);
-    loop {
-        if let Some(status) = child.try_wait().unwrap() {
-            return status;
-        }
-        assert!(
-            std::time::Instant::now() < deadline,
-            "the daemon did not exit"
-        );
-        std::thread::sleep(Duration::from_millis(10));
-    }
 }
 
 pub fn test_live_freshness_eof_joins_the_request_before_exit() {

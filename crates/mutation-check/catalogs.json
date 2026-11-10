@@ -1096,7 +1096,8 @@
      "freshness": "crates/wallets/tests/freshness/main.rs",
      "freshness_daemon": "crates/kassiber/tests/freshness_daemon/main.rs"
     }
-   }
+   },
+   "timeout_secs": 1200
   },
   {
    "name": "wallets-lwk",
