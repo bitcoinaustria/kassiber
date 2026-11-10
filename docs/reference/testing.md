@@ -569,7 +569,14 @@ The required PR workflow is fail-fast without reducing the test inventory:
    with class/module scope. Isolated `serial-network`, `serial-daemon`,
    `serial-regressions`, and `serial-integration` jobs own
    socket-, listener-, broad-regression-, OS-process-, and opt-in
-   integration-sensitive modules.
+   integration-sensitive modules. The `Rust test binaries` job builds the
+   parity suite's binaries once (`scripts/build-rust-test-binaries.sh`: the
+   `kassiber` test-harness build, its example fixtures, and the release
+   journal probes); every Python and shadow lane downloads them and runs
+   with `KASSIBER_RUST_BIN` set, so no parity test skips. `serial-daemon`,
+   which holds hours of subprocess parity tests, runs as several jobs, each
+   with `--part K/N`: a test belongs to the part its node id's CRC-32 picks
+   (`tests/conftest.py`), so the parts are disjoint and complete.
 3. The CLI smoke lane checks the broad argparse help surface in-process and
    keeps only status/health/next-actions, command discovery, and daemon EOF as
    real subprocess probes. TypeScript, ESLint, and Vitest run together in an
