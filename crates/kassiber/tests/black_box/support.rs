@@ -252,7 +252,7 @@ impl Sandbox {
     /// One daemon session: each request a JSON line, then `daemon.shutdown`.
     /// Returns the response lines after `daemon.ready`.
     pub fn daemon(&self, requests: &[serde_json::Value]) -> Vec<String> {
-        let mut wire = Vec::new();
+        let root = self.root.to_string_lossy().into_owned();
         let mut all = requests.to_vec();
         if let Some(passphrase) = &self.passphrase {
             all.insert(
@@ -261,16 +261,20 @@ impl Sandbox {
                     "args": {"auth_response": {"passphrase_secret": passphrase}}}),
             );
         }
+        self.daemon_argv(&["--machine", "--data-root", &root, "daemon"], &all)
+    }
+
+    /// A daemon started with exactly `argv`, fed `requests` and then
+    /// `daemon.shutdown`; the response lines after `daemon.ready`.
+    pub fn daemon_argv(&self, argv: &[&str], requests: &[serde_json::Value]) -> Vec<String> {
+        let mut wire = Vec::new();
+        let mut all = requests.to_vec();
         all.push(serde_json::json!({"request_id": "stop", "kind": "daemon.shutdown"}));
         for request in &all {
             wire.extend_from_slice(request.to_string().as_bytes());
             wire.push(b'\n');
         }
-        let root = self.root.to_string_lossy().into_owned();
-        let args: Vec<String> = ["--machine", "--data-root", &root, "daemon"]
-            .iter()
-            .map(|s| (*s).to_owned())
-            .collect();
+        let args: Vec<String> = argv.iter().map(|s| (*s).to_owned()).collect();
         let output = self.raw(&args, Some(&wire));
         assert_eq!(
             (
@@ -342,6 +346,20 @@ fn spawn(mut command: Command, stdin: Option<&[u8]>) -> Output {
         stdout: output.stdout,
         stderr: output.stderr,
     }
+}
+
+/// The book at `root` dumped through the store's open.
+pub fn dump_at(root: &Path, passphrase: Option<&str>) -> String {
+    let options = kassiber_store::OpenOptions {
+        passphrase,
+        expected_database_identity: None,
+        expected_project: None,
+    };
+    let book = kassiber_store::Book::open(root, options)
+        .unwrap_or_else(|e| panic!("open {}: {e:?}", root.display()));
+    let text = dump(book.connection());
+    book.close().map_err(|e| e.error).unwrap();
+    text
 }
 
 pub fn dump(conn: &Connection) -> String {
@@ -510,6 +528,59 @@ impl Transcript {
             .iter()
             .map(|line| serde_json::from_str(line).unwrap())
             .collect()
+    }
+
+    /// A daemon started with `argv`: each request and its response line.
+    pub fn daemon_argv(
+        &mut self,
+        sandbox: &Sandbox,
+        argv: &[&str],
+        requests: &[serde_json::Value],
+    ) -> Vec<serde_json::Value> {
+        let lines = sandbox.daemon_argv(argv, requests);
+        let _ = writeln!(self.text, "$ {}", sandbox.scrub(&argv.join(" ")));
+        for (index, line) in lines.iter().enumerate() {
+            let request = requests
+                .get(index)
+                .map_or_else(|| "<shutdown>".to_owned(), ToString::to_string);
+            let _ = writeln!(self.text, "> {}", sandbox.scrub(&request));
+            let _ = writeln!(self.text, "< {}", sandbox.scrub(line));
+        }
+        lines[..lines.len() - 1]
+            .iter()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect()
+    }
+
+    /// One daemon session whose responses `normalize` rewrites before they
+    /// are recorded (for per-process clocks and byte counts).
+    pub fn daemon_normalized(
+        &mut self,
+        sandbox: &Sandbox,
+        requests: &[serde_json::Value],
+        normalize: impl Fn(&mut serde_json::Value),
+    ) -> Vec<serde_json::Value> {
+        let lines = sandbox.daemon(requests);
+        let offset = usize::from(sandbox.passphrase.is_some());
+        let _ = writeln!(self.text, "$ daemon");
+        let mut responses = Vec::new();
+        for (index, line) in lines.iter().enumerate() {
+            let request = if index < offset {
+                "<unlock>".to_owned()
+            } else {
+                requests
+                    .get(index - offset)
+                    .map_or_else(|| "<shutdown>".to_owned(), ToString::to_string)
+            };
+            let mut value: serde_json::Value = serde_json::from_str(line).unwrap();
+            normalize(&mut value);
+            let _ = writeln!(self.text, "> {}", sandbox.scrub(&request));
+            let _ = writeln!(self.text, "< {}", sandbox.scrub(&value.to_string()));
+            responses.push(value);
+        }
+        responses.truncate(responses.len() - 1);
+        responses.drain(..offset);
+        responses
     }
 
     pub fn dump(&mut self, sandbox: &Sandbox, title: &str) {
@@ -887,5 +958,46 @@ pub fn digest_blocks(text: &str) -> String {
         }
         at = end;
     }
+    out
+}
+
+/// Replace the `len` characters after each `prefix` with `placeholder`.
+pub fn mask_after(text: &str, prefix: &str, len: usize, placeholder: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(at) = rest.find(prefix) {
+        let end = at + prefix.len();
+        out.push_str(&rest[..end]);
+        let after = &rest[end..];
+        match after.char_indices().nth(len) {
+            Some((cut, _)) => {
+                out.push_str(placeholder);
+                rest = &after[cut..];
+            }
+            None => {
+                rest = after;
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// Replace what follows each `prefix` up to (not including) the next
+/// `terminator` with `placeholder`, when the terminator comes within 40
+/// characters.
+pub fn mask_until(text: &str, prefix: &str, terminator: &str, placeholder: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(at) = rest.find(prefix) {
+        let end = at + prefix.len();
+        out.push_str(&rest[..end]);
+        rest = &rest[end..];
+        if let Some(stop) = rest.find(terminator).filter(|stop| *stop <= 40) {
+            out.push_str(placeholder);
+            rest = &rest[stop..];
+        }
+    }
+    out.push_str(rest);
     out
 }

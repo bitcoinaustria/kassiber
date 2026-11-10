@@ -1,0 +1,44 @@
+$ daemon
+> {"args":{"project_id":"foreign","require_existing_project":true},"kind":"ui.projects.select","request_id":0}
+< {"kind":"error","schema_version":1,"error":{"code":"invalid_project_database","message":"database does not contain a Kassiber project schema","hint":"Choose an existing Kassiber project database, not an empty or unrelated SQLite file.","details":{"database":"<SANDBOX>/foreign/data/kassiber.sqlite3"},"retryable":false,"debug":null},"request_id":0}
+> {"args":{},"kind":"status","request_id":1}
+< {"kind":"status","schema_version":1,"data":{"version":"0.22.78","schema_version":1,"auth":{"mode":"local","authenticated":true},"database_encrypted":false,"state_root":"<SANDBOX>/xdg-data/kassiber/projects/default","data_root":"<SANDBOX>/xdg-data/kassiber/projects/default/data","database":"<SANDBOX>/xdg-data/kassiber/projects/default/data/kassiber.sqlite3","project_id":"default","project_name":"Default","project_root":"<SANDBOX>/xdg-data/kassiber/projects/default","config_root":"<SANDBOX>/xdg-data/kassiber/projects/default/config","settings_file":"<SANDBOX>/xdg-data/kassiber/projects/default/config/settings.json","exports_root":"<SANDBOX>/xdg-data/kassiber/projects/default/exports","attachments_root":"<SANDBOX>/xdg-data/kassiber/projects/default/attachments","current_workspace":"","current_profile":"","workspaces":0,"profiles":0,"accounts":0,"wallets":0,"transactions":0,"journal_entries":0,"quarantines":0,"default_backend":"fulcrum","env_file":"<SANDBOX>/xdg-data/kassiber/projects/default/config/backends.env"},"request_id":1}
+> {"args":{},"kind":"ui.projects.list","request_id":2}
+< {"kind":"ui.projects.list","schema_version":1,"data":{"selected_project_id":"default","projects":[{"id":"default","name":"Default","path":"<SANDBOX>/xdg-data/kassiber/projects/default","data_root":"<SANDBOX>/xdg-data/kassiber/projects/default/data","database":"<SANDBOX>/xdg-data/kassiber/projects/default/data/kassiber.sqlite3","encrypted":false,"last_opened_at":"2030-01-02T03:04:05Z","selected":true},{"id":"foreign","name":"Foreign","path":"<SANDBOX>/foreign","data_root":"<SANDBOX>/foreign/data","database":"<SANDBOX>/foreign/data/kassiber.sqlite3","encrypted":false,"last_opened_at":null,"selected":false}]},"request_id":2}
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== catalog
+{
+  "projects": [
+    {
+      "encrypted": false,
+      "id": "default",
+      "last_opened_at": "2030-01-02T03:04:05Z",
+      "name": "Default",
+      "path": "<SANDBOX>/xdg-data/kassiber/projects/default"
+    },
+    {
+      "encrypted": false,
+      "id": "foreign",
+      "last_opened_at": null,
+      "name": "Foreign",
+      "path": "<SANDBOX>/foreign"
+    }
+  ],
+  "schema_version": 1,
+  "selected_project_id": "default"
+}
+=== project default
+chain_index_clock: id=i:1 | revision=i:14
+chain_index_dirty: source_table=t:"book_network_bindings" | source_key=i:-1 | revision=i:13
+chain_index_dirty: source_table=t:"chain_analysis_acquisition_grants" | source_key=i:-1 | revision=i:14
+chain_index_dirty: source_table=t:"chain_analysis_dataset_claims" | source_key=i:-1 | revision=i:12
+chain_index_dirty: source_table=t:"chain_analysis_datasets" | source_key=i:-1 | revision=i:11
+chain_index_dirty: source_table=t:"chain_analysis_labels" | source_key=i:-1 | revision=i:10
+chain_index_dirty: source_table=t:"chain_analysis_observations" | source_key=i:-1 | revision=i:4
+chain_index_dirty: source_table=t:"chain_analysis_reference_assertions" | source_key=i:-1 | revision=i:5
+chain_index_dirty: source_table=t:"journal_custody_decisions" | source_key=i:-1 | revision=i:8
+chain_index_dirty: source_table=t:"journal_custody_economic_relations" | source_key=i:-1 | revision=i:9
+chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:7
+chain_index_dirty: source_table=t:"transaction_graph_cache" | source_key=i:-1 | revision=i:2
+… [6367 bytes, 29 lines fnv128 14a5f1c75accc4a059426ff447f7e0f6]

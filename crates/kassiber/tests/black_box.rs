@@ -22,12 +22,18 @@ mod evidence_summary;
 mod maintenance_run;
 #[path = "black_box/privacy_mirror.rs"]
 mod privacy_mirror;
+#[path = "black_box/projects.rs"]
+mod projects;
+#[path = "black_box/release_cli.rs"]
+mod release_cli;
 #[path = "black_box/report_blockers.rs"]
 mod report_blockers;
 #[path = "black_box/report_read_sync.rs"]
 mod report_read_sync;
 #[path = "black_box/review_context.rs"]
 mod review_context;
+#[path = "black_box/shell.rs"]
+mod shell;
 #[path = "black_box/transaction_dashboard.rs"]
 mod transaction_dashboard;
 #[path = "black_box/transaction_graph.rs"]

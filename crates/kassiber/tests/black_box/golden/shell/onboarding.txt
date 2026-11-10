@@ -1,0 +1,213 @@
+# custom
+$ daemon
+> {"args":[1],"kind":"ui.onboarding.complete","request_id":0}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"daemon args must be an object","hint":null,"details":{"type":"list"},"retryable":false,"debug":null},"request_id":0}
+> {"args":{},"kind":"ui.onboarding.complete","request_id":1}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Books set name is required.","hint":"Enter a books set name.","details":null,"retryable":false,"debug":null},"request_id":1}
+> {"args":{"profile_label":"Book","workspace_label":5},"kind":"ui.onboarding.complete","request_id":2}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"workspace_label must be a string","hint":null,"details":null,"retryable":false,"debug":null},"request_id":2}
+> {"args":{"profile_label":" ","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":3}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Book name is required.","hint":"Enter a book name.","details":null,"retryable":false,"debug":null},"request_id":3}
+> {"args":{"profile_label":"Book","tax_long_term_days":"x","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":4}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"tax_long_term_days must be an integer","hint":null,"details":null,"retryable":false,"debug":null},"request_id":4}
+> {"args":{"backend_setup_mode":"odd","profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":5}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"backend_setup_mode must be default, custom, or skip","hint":null,"details":null,"retryable":false,"debug":null},"request_id":5}
+> {"args":{"backend":{},"backend_setup_mode":"skip","profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":6}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Custom backend setup requires one backend; other modes must not include one","hint":null,"details":null,"retryable":false,"debug":null},"request_id":6}
+> {"args":{"include_liquid_backends":1,"profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":7}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"include_liquid_backends must be a boolean","hint":null,"details":null,"retryable":false,"debug":null},"request_id":7}
+> {"args":{"backend":[],"profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":8}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"backend must be an object","hint":null,"details":null,"retryable":false,"debug":null},"request_id":8}
+> {"args":{"backend":{"name":"x"},"profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":9}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"backend requires name, kind, and url","hint":null,"details":null,"retryable":false,"debug":null},"request_id":9}
+> {"args":{"backend":{"kind":"Gopher","name":"x","url":"u"},"profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":10}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Unsupported backend kind 'Gopher'","hint":"Choose one of: binance, bitcoinrpc, bitpanda, btcpay, coinbase, coreln, custom, electrum, esplora, kraken, liquid-esplora, lnd, mempool","details":null,"retryable":false,"debug":null},"request_id":10}
+> {"args":{"backend":{},"profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":11}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Custom backend setup requires name, kind, and url","hint":null,"details":null,"retryable":false,"debug":null},"request_id":11}
+> {"args":{"backend":{"certificate":" cert ","chain":"bitcoin","insecure":0,"kind":"ESPLORA","name":" Node ","network":"regtest","notes":"n","url":"http://127.0.0.1:9"},"profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":12}
+< {"kind":"ui.onboarding.complete","schema_version":1,"data":{"workspace":{"id":"<uuid#1>","name":"Main"},"profile":{"id":"<uuid#2>","name":"Book"},"defaults":{"fiat_currency":"EUR","tax_country":"generic","tax_long_term_days":365,"gains_al… [1352 bytes fnv128 ee8f53b99962ef0e91beca4741597f18]
+> {"args":{"backend":{"certificate":" cert ","chain":"bitcoin","insecure":0,"kind":"ESPLORA","name":" Node ","network":"regtest","notes":"n","url":"http://127.0.0.1:9"},"profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":13}
+< {"kind":"error","schema_version":1,"error":{"code":"conflict","message":"Onboarding has already been completed.","hint":"Use Books and Backend settings to add or change an existing installation.","details":null,"retryable":false,"debug":null},"request_id":13}
+> {"args":{},"kind":"status","request_id":14}
+< {"kind":"status","schema_version":1,"data":{"version":"0.22.78","schema_version":1,"auth":{"mode":"local","authenticated":true},"database_encrypted":false,"state_root":"<SANDBOX>","data_root":"<SANDBOX>/data","database":"<SANDBOX>/data/kassiber.sqlite3","project_id":null,"project_name":null,"project_root":null,"config_root":"<SANDBOX>/config","settings_file":"<SANDBOX>/config/settings.json","exports_root":"<SANDBOX>/exports","attachments_root":"<SANDBOX>/attachments","current_workspace":"Main","current_profile":"Book","workspaces":1,"profiles":1,"accounts":1,"wallets":0,"transactions":0,"journal_entries":0,"quarantines":0,"default_backend":"node","env_file":"<SANDBOX>/config/backends.env"},"request_id":14}
+> {"args":{},"kind":"ui.profiles.snapshot","request_id":15}
+< {"kind":"ui.profiles.snapshot","schema_version":1,"data":{"workspaces":[{"id":"<uuid#1>","name":"Main","currency":"EUR","jurisdiction":"GENERIC","created":"2026-01-01","profiles":[{"id":"<uuid#2>","name":"Book","taxPolicy":"Generic - FIFO - EUR - 365 day long-term","fiatCurrency":"EUR","taxCountry":"generic","taxLongTermDays":365,"gainsAlgorithm":"FIFO","costBasisPoolScope":"global","allowedCostBasisPoolScopes":["global"],"accounts":1,"wallets":0,"lastOpened":"Just now","active":true}]}],"activeWorkspaceId":"<uuid#1>","activeProfileId":"<uuid#2>"},"request_id":15}
+> {"args":{},"kind":"ui.workspace.health","request_id":16}
+< {"kind":"ui.workspace.health","schema_version":1,"data":{"workspace":{"id":"<uuid#1>","label":"Main"},"profile":{"id":"<uuid#2>","label":"Book","fiat_currency":"EUR","tax_country":"generic","tax_long_term_days":365,"gains_algorithm":"FIFO… [2143 bytes fnv128 f19d4c599f5225910631f64e6b79a1dc]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the session
+- chain_index_clock: id=i:1 | revision=i:14
+- chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:7
+- settings: key=t:"bootstrap_default_backend" | value=t:"fulcrum"
+- settings: key=t:"default_backend" | value=t:"fulcrum"
+- (116 tables, 111 empty)
++ accounts: id=t:"<uuid#3>" | workspace_id=t:"<uuid#1>" | profile_id=t:"<uuid#2>" | code=t:"treasury" | label=t:"Treasury" | account_type=t:"asset" | asset=t:"BTC" | created_at=t:"2026-01-01T00:00:00Z"
++ backends: name=t:"node" | kind=t:"esplora" | chain=t:"bitcoin" | network=t:"regtest" | url=t:"http://127.0.0.1:9" | auth_header=NULL | token=NULL | batch_size=NULL | timeout=NULL | tor_proxy=NULL | config_json=t:"{\"certificate\": \"cert\", \"insecure\": false}" | notes=t:"n" | created_at=t:"2026-01-01T00:00:00Z" | updated_at=t:"2026-01-01T00:00:00Z"
++ chain_index_clock: id=i:1 | revision=i:15
++ chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:15
++ profiles: id=t:"<uuid#2>" | workspace_id=t:"<uuid#1>" | label=t:"Book" | fiat_currency=t:"EUR" | tax_country=t:"generic" | tax_long_term_days=i:365 | gains_algorithm=t:"FIFO" | require_coarse_review=i:0 | bitcoin_rail_carrying_value=i:1 | cost_basis_pool_scope=t:"global" | journal_input_version=i:0 | last_processed_input_version=i:0 | required_journal_semantics_version=i:0 | journal_semantics_version=i:0 | last_processed_at=NULL | last_processed_tx_count=i:0 | ownership_review_counts_json=NULL | created_at=t:"2026-01-01T00:00:00Z" | swap_candidate_count=NULL
++ settings: key=t:"backend_bootstrap_mode" | value=t:"manual"
++ settings: key=t:"bootstrap_backend_tombstones" | value=t:"[\"fulcrum\", \"liquid\", \"liquid-blockstream\", \"mempool\"]"
++ settings: key=t:"context_profile" | value=t:"<uuid#2>"
++ settings: key=t:"context_workspace" | value=t:"<uuid#1>"
++ settings: key=t:"default_backend" | value=t:"node"
++ workspaces: id=t:"<uuid#1>" | label=t:"Main" | created_at=t:"2026-01-01T00:00:00Z"
++ (116 tables, 108 empty)
+# default
+$ daemon
+> {"args":[1],"kind":"ui.onboarding.complete","request_id":0}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"daemon args must be an object","hint":null,"details":{"type":"list"},"retryable":false,"debug":null},"request_id":0}
+> {"args":{},"kind":"ui.onboarding.complete","request_id":1}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Books set name is required.","hint":"Enter a books set name.","details":null,"retryable":false,"debug":null},"request_id":1}
+> {"args":{"profile_label":"Book","workspace_label":5},"kind":"ui.onboarding.complete","request_id":2}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"workspace_label must be a string","hint":null,"details":null,"retryable":false,"debug":null},"request_id":2}
+> {"args":{"profile_label":" ","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":3}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Book name is required.","hint":"Enter a book name.","details":null,"retryable":false,"debug":null},"request_id":3}
+> {"args":{"profile_label":"Book","tax_long_term_days":"x","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":4}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"tax_long_term_days must be an integer","hint":null,"details":null,"retryable":false,"debug":null},"request_id":4}
+> {"args":{"backend_setup_mode":"odd","profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":5}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"backend_setup_mode must be default, custom, or skip","hint":null,"details":null,"retryable":false,"debug":null},"request_id":5}
+> {"args":{"backend":{},"backend_setup_mode":"skip","profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":6}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Custom backend setup requires one backend; other modes must not include one","hint":null,"details":null,"retryable":false,"debug":null},"request_id":6}
+> {"args":{"include_liquid_backends":1,"profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":7}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"include_liquid_backends must be a boolean","hint":null,"details":null,"retryable":false,"debug":null},"request_id":7}
+> {"args":{"backend":[],"profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":8}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"backend must be an object","hint":null,"details":null,"retryable":false,"debug":null},"request_id":8}
+> {"args":{"backend":{"name":"x"},"profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":9}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"backend requires name, kind, and url","hint":null,"details":null,"retryable":false,"debug":null},"request_id":9}
+> {"args":{"backend":{"kind":"Gopher","name":"x","url":"u"},"profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":10}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Unsupported backend kind 'Gopher'","hint":"Choose one of: binance, bitcoinrpc, bitpanda, btcpay, coinbase, coreln, custom, electrum, esplora, kraken, liquid-esplora, lnd, mempool","details":null,"retryable":false,"debug":null},"request_id":10}
+> {"args":{"backend":{},"profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":11}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Custom backend setup requires name, kind, and url","hint":null,"details":null,"retryable":false,"debug":null},"request_id":11}
+> {"args":{"fiat_currency":"eur","profile_label":"Book","tax_country":"at","tax_long_term_days":"400","workspace_label":" Main "},"kind":"ui.onboarding.complete","request_id":12}
+< {"kind":"ui.onboarding.complete","schema_version":1,"data":{"workspace":{"id":"<uuid#1>","name":"Main"},"profile":{"id":"<uuid#2>","name":"Book"},"defaults":{"fiat_currency":"EUR","tax_country":"at","tax_long_term_days":9223372036854775807,"gains_algorithm":"MOVING_AVERAGE_AT"},"backend":null,"default_backend":"fulcrum","backend_setup_mode":"default","include_liquid_backends":false,"profiles":{"workspaces":[{"id":"<uuid#1>","name":"Main","currency":"EUR","jurisdiction":"Austria","created":"2026-01-01","profiles":[{"id":"<uuid#2>","name":"Book","taxPolicy":"Austria - ATM - EUR","fiatCurrency":"EUR","taxCountry":"at","taxLongTermDays":9223372036854775807,"gainsAlgorithm":"MOVING_AVERAGE_AT","costBasisPoolScope":"global","allowedCostBasisPoolScopes":["global"],"accounts":1,"wallets":0,"lastOpened":"Just now","active":true}]}],"activeWorkspaceId":"<uuid#1>","activeProfileId":"<uuid#2>"}},"request_id":12}
+> {"args":{"fiat_currency":"eur","profile_label":"Book","tax_country":"at","tax_long_term_days":"400","workspace_label":" Main "},"kind":"ui.onboarding.complete","request_id":13}
+< {"kind":"error","schema_version":1,"error":{"code":"conflict","message":"Onboarding has already been completed.","hint":"Use Books and Backend settings to add or change an existing installation.","details":null,"retryable":false,"debug":null},"request_id":13}
+> {"args":{},"kind":"status","request_id":14}
+< {"kind":"status","schema_version":1,"data":{"version":"0.22.78","schema_version":1,"auth":{"mode":"local","authenticated":true},"database_encrypted":false,"state_root":"<SANDBOX>","data_root":"<SANDBOX>/data","database":"<SANDBOX>/data/kassiber.sqlite3","project_id":null,"project_name":null,"project_root":null,"config_root":"<SANDBOX>/config","settings_file":"<SANDBOX>/config/settings.json","exports_root":"<SANDBOX>/exports","attachments_root":"<SANDBOX>/attachments","current_workspace":"Main","current_profile":"Book","workspaces":1,"profiles":1,"accounts":1,"wallets":0,"transactions":0,"journal_entries":0,"quarantines":0,"default_backend":"fulcrum","env_file":"<SANDBOX>/config/backends.env"},"request_id":14}
+> {"args":{},"kind":"ui.profiles.snapshot","request_id":15}
+< {"kind":"ui.profiles.snapshot","schema_version":1,"data":{"workspaces":[{"id":"<uuid#1>","name":"Main","currency":"EUR","jurisdiction":"Austria","created":"2026-01-01","profiles":[{"id":"<uuid#2>","name":"Book","taxPolicy":"Austria - ATM - EUR","fiatCurrency":"EUR","taxCountry":"at","taxLongTermDays":9223372036854775807,"gainsAlgorithm":"MOVING_AVERAGE_AT","costBasisPoolScope":"global","allowedCostBasisPoolScopes":["global"],"accounts":1,"wallets":0,"lastOpened":"Just now","active":true}]}],"activeWorkspaceId":"<uuid#1>","activeProfileId":"<uuid#2>"},"request_id":15}
+> {"args":{},"kind":"ui.workspace.health","request_id":16}
+< {"kind":"ui.workspace.health","schema_version":1,"data":{"workspace":{"id":"<uuid#1>","label":"Main"},"profile":{"id":"<uuid#2>","label":"Book","fiat_currency":"EUR","tax_country":"at","tax_long_term_days":9223372036854775807,"gains_algor… [2167 bytes fnv128 2df1421ca7e0c1d6c4e711022e1b5570]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the session
+- chain_index_clock: id=i:1 | revision=i:14
+- chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:7
+- (116 tables, 111 empty)
++ accounts: id=t:"<uuid#3>" | workspace_id=t:"<uuid#1>" | profile_id=t:"<uuid#2>" | code=t:"treasury" | label=t:"Treasury" | account_type=t:"asset" | asset=t:"BTC" | created_at=t:"2026-01-01T00:00:00Z"
++ chain_index_clock: id=i:1 | revision=i:15
++ chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:15
++ profiles: id=t:"<uuid#2>" | workspace_id=t:"<uuid#1>" | label=t:"Book" | fiat_currency=t:"EUR" | tax_country=t:"at" | tax_long_term_days=i:9223372036854775807 | gains_algorithm=t:"MOVING_AVERAGE_AT" | require_coarse_review=i:0 | bitcoin_rail_carrying_value=i:1 | cost_basis_pool_scope=t:"global" | journal_input_version=i:0 | last_processed_input_version=i:0 | required_journal_semantics_version=i:0 | journal_semantics_version=i:0 | last_processed_at=NULL | last_processed_tx_count=i:0 | ownership_review_counts_json=NULL | created_at=t:"2026-01-01T00:00:00Z" | swap_candidate_count=NULL
++ settings: key=t:"backend_bootstrap_mode" | value=t:"public"
++ settings: key=t:"bootstrap_backend_tombstones" | value=t:"[\"liquid\", \"liquid-blockstream\"]"
++ settings: key=t:"context_profile" | value=t:"<uuid#2>"
++ settings: key=t:"context_workspace" | value=t:"<uuid#1>"
++ workspaces: id=t:"<uuid#1>" | label=t:"Main" | created_at=t:"2026-01-01T00:00:00Z"
++ (116 tables, 108 empty)
+# liquid
+$ daemon
+> {"args":[1],"kind":"ui.onboarding.complete","request_id":0}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"daemon args must be an object","hint":null,"details":{"type":"list"},"retryable":false,"debug":null},"request_id":0}
+> {"args":{},"kind":"ui.onboarding.complete","request_id":1}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Books set name is required.","hint":"Enter a books set name.","details":null,"retryable":false,"debug":null},"request_id":1}
+> {"args":{"profile_label":"Book","workspace_label":5},"kind":"ui.onboarding.complete","request_id":2}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"workspace_label must be a string","hint":null,"details":null,"retryable":false,"debug":null},"request_id":2}
+> {"args":{"profile_label":" ","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":3}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Book name is required.","hint":"Enter a book name.","details":null,"retryable":false,"debug":null},"request_id":3}
+> {"args":{"profile_label":"Book","tax_long_term_days":"x","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":4}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"tax_long_term_days must be an integer","hint":null,"details":null,"retryable":false,"debug":null},"request_id":4}
+> {"args":{"backend_setup_mode":"odd","profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":5}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"backend_setup_mode must be default, custom, or skip","hint":null,"details":null,"retryable":false,"debug":null},"request_id":5}
+> {"args":{"backend":{},"backend_setup_mode":"skip","profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":6}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Custom backend setup requires one backend; other modes must not include one","hint":null,"details":null,"retryable":false,"debug":null},"request_id":6}
+> {"args":{"include_liquid_backends":1,"profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":7}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"include_liquid_backends must be a boolean","hint":null,"details":null,"retryable":false,"debug":null},"request_id":7}
+> {"args":{"backend":[],"profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":8}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"backend must be an object","hint":null,"details":null,"retryable":false,"debug":null},"request_id":8}
+> {"args":{"backend":{"name":"x"},"profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":9}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"backend requires name, kind, and url","hint":null,"details":null,"retryable":false,"debug":null},"request_id":9}
+> {"args":{"backend":{"kind":"Gopher","name":"x","url":"u"},"profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":10}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Unsupported backend kind 'Gopher'","hint":"Choose one of: binance, bitcoinrpc, bitpanda, btcpay, coinbase, coreln, custom, electrum, esplora, kraken, liquid-esplora, lnd, mempool","details":null,"retryable":false,"debug":null},"request_id":10}
+> {"args":{"backend":{},"profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":11}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Custom backend setup requires name, kind, and url","hint":null,"details":null,"retryable":false,"debug":null},"request_id":11}
+> {"args":{"gains_algorithm":"hifo","include_liquid_backends":true,"profile_label":"Book","tax_long_term_days":7.9,"workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":12}
+< {"kind":"ui.onboarding.complete","schema_version":1,"data":{"workspace":{"id":"<uuid#1>","name":"Main"},"profile":{"id":"<uuid#2>","name":"Book"},"defaults":{"fiat_currency":"EUR","tax_country":"generic","tax_long_term_days":7,"gains_algorithm":"HIFO"},"backend":null,"default_backend":"fulcrum","backend_setup_mode":"default","include_liquid_backends":true,"profiles":{"workspaces":[{"id":"<uuid#1>","name":"Main","currency":"EUR","jurisdiction":"GENERIC","created":"2026-01-01","profiles":[{"id":"<uuid#2>","name":"Book","taxPolicy":"Generic - HIFO - EUR - 7 day long-term","fiatCurrency":"EUR","taxCountry":"generic","taxLongTermDays":7,"gainsAlgorithm":"HIFO","costBasisPoolScope":"global","allowedCostBasisPoolScopes":["global"],"accounts":1,"wallets":0,"lastOpened":"Just now","active":true}]}],"activeWorkspaceId":"<uuid#1>","activeProfileId":"<uuid#2>"}},"request_id":12}
+> {"args":{"gains_algorithm":"hifo","include_liquid_backends":true,"profile_label":"Book","tax_long_term_days":7.9,"workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":13}
+< {"kind":"error","schema_version":1,"error":{"code":"conflict","message":"Onboarding has already been completed.","hint":"Use Books and Backend settings to add or change an existing installation.","details":null,"retryable":false,"debug":null},"request_id":13}
+> {"args":{},"kind":"status","request_id":14}
+< {"kind":"status","schema_version":1,"data":{"version":"0.22.78","schema_version":1,"auth":{"mode":"local","authenticated":true},"database_encrypted":false,"state_root":"<SANDBOX>","data_root":"<SANDBOX>/data","database":"<SANDBOX>/data/kassiber.sqlite3","project_id":null,"project_name":null,"project_root":null,"config_root":"<SANDBOX>/config","settings_file":"<SANDBOX>/config/settings.json","exports_root":"<SANDBOX>/exports","attachments_root":"<SANDBOX>/attachments","current_workspace":"Main","current_profile":"Book","workspaces":1,"profiles":1,"accounts":1,"wallets":0,"transactions":0,"journal_entries":0,"quarantines":0,"default_backend":"fulcrum","env_file":"<SANDBOX>/config/backends.env"},"request_id":14}
+> {"args":{},"kind":"ui.profiles.snapshot","request_id":15}
+< {"kind":"ui.profiles.snapshot","schema_version":1,"data":{"workspaces":[{"id":"<uuid#1>","name":"Main","currency":"EUR","jurisdiction":"GENERIC","created":"2026-01-01","profiles":[{"id":"<uuid#2>","name":"Book","taxPolicy":"Generic - HIFO - EUR - 7 day long-term","fiatCurrency":"EUR","taxCountry":"generic","taxLongTermDays":7,"gainsAlgorithm":"HIFO","costBasisPoolScope":"global","allowedCostBasisPoolScopes":["global"],"accounts":1,"wallets":0,"lastOpened":"Just now","active":true}]}],"activeWorkspaceId":"<uuid#1>","activeProfileId":"<uuid#2>"},"request_id":15}
+> {"args":{},"kind":"ui.workspace.health","request_id":16}
+< {"kind":"ui.workspace.health","schema_version":1,"data":{"workspace":{"id":"<uuid#1>","label":"Main"},"profile":{"id":"<uuid#2>","label":"Book","fiat_currency":"EUR","tax_country":"generic","tax_long_term_days":7,"gains_algorithm":"HIFO"}… [2141 bytes fnv128 01340fc3f61b5b98f283f03636681f1d]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the session
+- chain_index_clock: id=i:1 | revision=i:14
+- chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:7
+- (116 tables, 111 empty)
++ accounts: id=t:"<uuid#3>" | workspace_id=t:"<uuid#1>" | profile_id=t:"<uuid#2>" | code=t:"treasury" | label=t:"Treasury" | account_type=t:"asset" | asset=t:"BTC" | created_at=t:"2026-01-01T00:00:00Z"
++ chain_index_clock: id=i:1 | revision=i:15
++ chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:15
++ profiles: id=t:"<uuid#2>" | workspace_id=t:"<uuid#1>" | label=t:"Book" | fiat_currency=t:"EUR" | tax_country=t:"generic" | tax_long_term_days=i:7 | gains_algorithm=t:"HIFO" | require_coarse_review=i:0 | bitcoin_rail_carrying_value=i:1 | cost_basis_pool_scope=t:"global" | journal_input_version=i:0 | last_processed_input_version=i:0 | required_journal_semantics_version=i:0 | journal_semantics_version=i:0 | last_processed_at=NULL | last_processed_tx_count=i:0 | ownership_review_counts_json=NULL | created_at=t:"2026-01-01T00:00:00Z" | swap_candidate_count=NULL
++ settings: key=t:"backend_bootstrap_mode" | value=t:"public"
++ settings: key=t:"context_profile" | value=t:"<uuid#2>"
++ settings: key=t:"context_workspace" | value=t:"<uuid#1>"
++ workspaces: id=t:"<uuid#1>" | label=t:"Main" | created_at=t:"2026-01-01T00:00:00Z"
++ (116 tables, 108 empty)
+# skip
+$ daemon
+> {"args":[1],"kind":"ui.onboarding.complete","request_id":0}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"daemon args must be an object","hint":null,"details":{"type":"list"},"retryable":false,"debug":null},"request_id":0}
+> {"args":{},"kind":"ui.onboarding.complete","request_id":1}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Books set name is required.","hint":"Enter a books set name.","details":null,"retryable":false,"debug":null},"request_id":1}
+> {"args":{"profile_label":"Book","workspace_label":5},"kind":"ui.onboarding.complete","request_id":2}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"workspace_label must be a string","hint":null,"details":null,"retryable":false,"debug":null},"request_id":2}
+> {"args":{"profile_label":" ","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":3}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Book name is required.","hint":"Enter a book name.","details":null,"retryable":false,"debug":null},"request_id":3}
+> {"args":{"profile_label":"Book","tax_long_term_days":"x","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":4}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"tax_long_term_days must be an integer","hint":null,"details":null,"retryable":false,"debug":null},"request_id":4}
+> {"args":{"backend_setup_mode":"odd","profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":5}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"backend_setup_mode must be default, custom, or skip","hint":null,"details":null,"retryable":false,"debug":null},"request_id":5}
+> {"args":{"backend":{},"backend_setup_mode":"skip","profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":6}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Custom backend setup requires one backend; other modes must not include one","hint":null,"details":null,"retryable":false,"debug":null},"request_id":6}
+> {"args":{"include_liquid_backends":1,"profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":7}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"include_liquid_backends must be a boolean","hint":null,"details":null,"retryable":false,"debug":null},"request_id":7}
+> {"args":{"backend":[],"profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":8}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"backend must be an object","hint":null,"details":null,"retryable":false,"debug":null},"request_id":8}
+> {"args":{"backend":{"name":"x"},"profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":9}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"backend requires name, kind, and url","hint":null,"details":null,"retryable":false,"debug":null},"request_id":9}
+> {"args":{"backend":{"kind":"Gopher","name":"x","url":"u"},"profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":10}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Unsupported backend kind 'Gopher'","hint":"Choose one of: binance, bitcoinrpc, bitpanda, btcpay, coinbase, coreln, custom, electrum, esplora, kraken, liquid-esplora, lnd, mempool","details":null,"retryable":false,"debug":null},"request_id":10}
+> {"args":{"backend":{},"profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":11}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Custom backend setup requires name, kind, and url","hint":null,"details":null,"retryable":false,"debug":null},"request_id":11}
+> {"args":{"backend_setup_mode":"skip","profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":12}
+< {"kind":"ui.onboarding.complete","schema_version":1,"data":{"workspace":{"id":"<uuid#1>","name":"Main"},"profile":{"id":"<uuid#2>","name":"Book"},"defaults":{"fiat_currency":"EUR","tax_country":"generic","tax_long_term_days":365,"gains_algorithm":"FIFO"},"backend":null,"default_backend":null,"backend_setup_mode":"skip","include_liquid_backends":false,"profiles":{"workspaces":[{"id":"<uuid#1>","name":"Main","currency":"EUR","jurisdiction":"GENERIC","created":"2026-01-01","profiles":[{"id":"<uuid#2>","name":"Book","taxPolicy":"Generic - FIFO - EUR - 365 day long-term","fiatCurrency":"EUR","taxCountry":"generic","taxLongTermDays":365,"gainsAlgorithm":"FIFO","costBasisPoolScope":"global","allowedCostBasisPoolScopes":["global"],"accounts":1,"wallets":0,"lastOpened":"Just now","active":true}]}],"activeWorkspaceId":"<uuid#1>","activeProfileId":"<uuid#2>"}},"request_id":12}
+> {"args":{"backend_setup_mode":"skip","profile_label":"Book","workspace_label":"Main"},"kind":"ui.onboarding.complete","request_id":13}
+< {"kind":"error","schema_version":1,"error":{"code":"conflict","message":"Onboarding has already been completed.","hint":"Use Books and Backend settings to add or change an existing installation.","details":null,"retryable":false,"debug":null},"request_id":13}
+> {"args":{},"kind":"status","request_id":14}
+< {"kind":"status","schema_version":1,"data":{"version":"0.22.78","schema_version":1,"auth":{"mode":"local","authenticated":true},"database_encrypted":false,"state_root":"<SANDBOX>","data_root":"<SANDBOX>/data","database":"<SANDBOX>/data/kassiber.sqlite3","project_id":null,"project_name":null,"project_root":null,"config_root":"<SANDBOX>/config","settings_file":"<SANDBOX>/config/settings.json","exports_root":"<SANDBOX>/exports","attachments_root":"<SANDBOX>/attachments","current_workspace":"Main","current_profile":"Book","workspaces":1,"profiles":1,"accounts":1,"wallets":0,"transactions":0,"journal_entries":0,"quarantines":0,"default_backend":"","env_file":"<SANDBOX>/config/backends.env"},"request_id":14}
+> {"args":{},"kind":"ui.profiles.snapshot","request_id":15}
+< {"kind":"ui.profiles.snapshot","schema_version":1,"data":{"workspaces":[{"id":"<uuid#1>","name":"Main","currency":"EUR","jurisdiction":"GENERIC","created":"2026-01-01","profiles":[{"id":"<uuid#2>","name":"Book","taxPolicy":"Generic - FIFO - EUR - 365 day long-term","fiatCurrency":"EUR","taxCountry":"generic","taxLongTermDays":365,"gainsAlgorithm":"FIFO","costBasisPoolScope":"global","allowedCostBasisPoolScopes":["global"],"accounts":1,"wallets":0,"lastOpened":"Just now","active":true}]}],"activeWorkspaceId":"<uuid#1>","activeProfileId":"<uuid#2>"},"request_id":15}
+> {"args":{},"kind":"ui.workspace.health","request_id":16}
+< {"kind":"ui.workspace.health","schema_version":1,"data":{"workspace":{"id":"<uuid#1>","label":"Main"},"profile":{"id":"<uuid#2>","label":"Book","fiat_currency":"EUR","tax_country":"generic","tax_long_term_days":365,"gains_algorithm":"FIFO… [2143 bytes fnv128 f19d4c599f5225910631f64e6b79a1dc]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the session
+- chain_index_clock: id=i:1 | revision=i:14
+- chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:7
+- settings: key=t:"bootstrap_default_backend" | value=t:"fulcrum"
+- settings: key=t:"default_backend" | value=t:"fulcrum"
+- (116 tables, 111 empty)
++ accounts: id=t:"<uuid#3>" | workspace_id=t:"<uuid#1>" | profile_id=t:"<uuid#2>" | code=t:"treasury" | label=t:"Treasury" | account_type=t:"asset" | asset=t:"BTC" | created_at=t:"2026-01-01T00:00:00Z"
++ chain_index_clock: id=i:1 | revision=i:15
++ chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:15
++ profiles: id=t:"<uuid#2>" | workspace_id=t:"<uuid#1>" | label=t:"Book" | fiat_currency=t:"EUR" | tax_country=t:"generic" | tax_long_term_days=i:365 | gains_algorithm=t:"FIFO" | require_coarse_review=i:0 | bitcoin_rail_carrying_value=i:1 | cost_basis_pool_scope=t:"global" | journal_input_version=i:0 | last_processed_input_version=i:0 | required_journal_semantics_version=i:0 | journal_semantics_version=i:0 | last_processed_at=NULL | last_processed_tx_count=i:0 | ownership_review_counts_json=NULL | created_at=t:"2026-01-01T00:00:00Z" | swap_candidate_count=NULL
++ settings: key=t:"backend_bootstrap_mode" | value=t:"manual"
++ settings: key=t:"bootstrap_backend_tombstones" | value=t:"[\"fulcrum\", \"liquid\", \"liquid-blockstream\", \"mempool\"]"
++ settings: key=t:"context_profile" | value=t:"<uuid#2>"
++ settings: key=t:"context_workspace" | value=t:"<uuid#1>"
++ workspaces: id=t:"<uuid#1>" | label=t:"Main" | created_at=t:"2026-01-01T00:00:00Z"
++ (116 tables, 108 empty)

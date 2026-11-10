@@ -1,0 +1,330 @@
+# empty
+$ daemon
+> {"args":{},"kind":"ui.overview.snapshot","request_id":0}
+< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":0.0,"priceUsd":0.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":null,"timestamp":null,"source":null,"fetchedAt":null,"granularity":null,"method":null},"connections":[],"txs":[],"balanceSeries":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"portfolioSeries":[],"fiat":{"fiatCurrency":"EUR","eurBalance":0.0,"eurCostBasis":0.0,"eurUnrealized":0.0,"eurRealizedYTD":0.0,"completeness":{"state":"unavailable","costBasisComplete":false,"reasons":[],"quarantineCount":0,"quarantinedInboundMsat":0,"quarantinedOutboundMsat":0,"basisCoveredMsat":null,"basisUncoveredMsat":null,"earliestIncompleteAt":null,"missingPriceCount":0,"marketRateMissing":false}},"taxFreeBalance":null,"status":{"workspace":null,"profile":null,"transactionCount":0,"needsJournals":false,"quarantines":0}},"request_id":0}
+> {"args":[1],"kind":"ui.overview.snapshot","request_id":1}
+< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":0.0,"priceUsd":0.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":null,"timestamp":null,"source":null,"fetchedAt":null,"granularity":null,"method":null},"connections":[],"txs":[],"balanceSeries":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"portfolioSeries":[],"fiat":{"fiatCurrency":"EUR","eurBalance":0.0,"eurCostBasis":0.0,"eurUnrealized":0.0,"eurRealizedYTD":0.0,"completeness":{"state":"unavailable","costBasisComplete":false,"reasons":[],"quarantineCount":0,"quarantinedInboundMsat":0,"quarantinedOutboundMsat":0,"basisCoveredMsat":null,"basisUncoveredMsat":null,"earliestIncompleteAt":null,"missingPriceCount":0,"marketRateMissing":false}},"taxFreeBalance":null,"status":{"workspace":null,"profile":null,"transactionCount":0,"needsJournals":false,"quarantines":0}},"request_id":1}
+> {"args":{"workspace_id":" w "},"kind":"ui.workspace.overview.snapshot","request_id":2}
+< {"kind":"error","schema_version":1,"error":{"code":"not_found","message":"Book set 'w' was not found","hint":null,"details":null,"retryable":false,"debug":null},"request_id":2}
+> {"args":{"workspace_id":"missing"},"kind":"ui.workspace.overview.snapshot","request_id":3}
+< {"kind":"error","schema_version":1,"error":{"code":"not_found","message":"Book set 'missing' was not found","hint":null,"details":null,"retryable":false,"debug":null},"request_id":3}
+> {"args":{"another":2,"extra":1,"workspace_id":"w"},"kind":"ui.workspace.overview.snapshot","request_id":4}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.workspace.overview.snapshot received unsupported arguments","hint":null,"details":{"unknown":["another","extra"]},"retryable":false,"debug":null},"request_id":4}
+> {"args":{"workspace_id":" "},"kind":"ui.workspace.overview.snapshot","request_id":5}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.workspace.overview.snapshot requires args.workspace_id","hint":null,"details":null,"retryable":false,"debug":null},"request_id":5}
+> {"args":[],"kind":"ui.workspace.overview.snapshot","request_id":6}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui snapshot args must be an object","hint":null,"details":{"type":"list"},"retryable":false,"debug":null},"request_id":6}
+> {"args":null,"kind":"ui.workspace.overview.snapshot","request_id":7}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.workspace.overview.snapshot requires args.workspace_id","hint":null,"details":null,"retryable":false,"debug":null},"request_id":7}
+> {"args":{},"kind":"ui.workspace.health","request_id":8}
+< {"kind":"ui.workspace.health","schema_version":1,"data":{"workspace":null,"profile":null,"counts":{"wallets":0,"transactions":0,"active_transactions":0,"journal_entries":0,"quarantines":0,"rate_pairs":0},"journals":{"status":"no_profile","needs_processing":false,"last_processed_at":null,"last_processed_tx_count":0,"journal_input_version":0,"last_processed_input_version":0,"active_transaction_count":0,"journal_entry_count":0,"quarantine_count":0,"reason":"no active profile"},"reports":{"ready":false,"hints":["Create or select a workspace and profile first."]}},"request_id":8}
+> {"args":"ignored","kind":"ui.workspace.health","request_id":9}
+< {"kind":"ui.workspace.health","schema_version":1,"data":{"workspace":null,"profile":null,"counts":{"wallets":0,"transactions":0,"active_transactions":0,"journal_entries":0,"quarantines":0,"rate_pairs":0},"journals":{"status":"no_profile","needs_processing":false,"last_processed_at":null,"last_processed_tx_count":0,"journal_input_version":0,"last_processed_input_version":0,"active_transaction_count":0,"journal_entry_count":0,"quarantine_count":0,"reason":"no active profile"},"reports":{"ready":false,"hints":["Create or select a workspace and profile first."]}},"request_id":9}
+> {"args":{},"kind":"ui.next_actions","request_id":10}
+< {"kind":"ui.next_actions","schema_version":1,"data":{"health":{"workspace":null,"profile":null,"counts":{"wallets":0,"transactions":0,"active_transactions":0,"journal_entries":0,"quarantines":0,"rate_pairs":0},"journals":{"status":"no_profile","needs_processing":false,"last_processed_at":null,"last_processed_tx_count":0,"journal_input_version":0,"last_processed_input_version":0,"active_transaction_count":0,"journal_entry_count":0,"quarantine_count":0,"reason":"no active profile"},"reports":{"ready":false,"hints":["Create or select a workspace and profile first."]}},"suggestions":[{"id":"create_workspace_profile","title":"Create a workspace and profile","reason":"Kassiber needs an active accounting scope before sources or reports.","mutating":true,"requires_consent":true}]},"request_id":10}
+> {"args":{"ignored":true},"kind":"ui.review.badges","request_id":11}
+< {"kind":"ui.review.badges","schema_version":1,"data":{"quarantine":0,"quarantine_attention":0,"journals_needs_processing":false,"swaps":null,"review":0,"definitions":{"quarantine":"Every quarantined row in the active book; equals ui.journals.quarantine summary.count.","quarantine_attention":"Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.","journals_needs_processing":"True when journal inputs changed since the last processing; quarantine counts then describe that last processing.","swaps":"Transfer/swap candidates cached by the last matcher run; null until it has run.","review":"What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."}},"request_id":11}
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the session
+(unchanged)
+# unprocessed
+$ daemon
+> {"args":{},"kind":"ui.overview.snapshot","request_id":0}
+< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":0.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":null,"timestamp":null,"source":null,"fetchedAt":null,"granularity":null,"meth… [15088 bytes fnv128 9d0ad5ed4daf04850dcbb6eb4d10c8ad]
+> {"args":[1],"kind":"ui.overview.snapshot","request_id":1}
+< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":0.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":null,"timestamp":null,"source":null,"fetchedAt":null,"granularity":null,"meth… [15088 bytes fnv128 9d0ad5f049af04850dcbb6eb4d12f128]
+> {"args":{"workspace_id":" w "},"kind":"ui.workspace.overview.snapshot","request_id":2}
+< {"kind":"ui.workspace.overview.snapshot","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"scope":{"kind":"workspace","label":"Book set"},"books":[{"profile":{"id":"p","label":"Book","fiatCurrency":"EUR","taxCountry":"at",… [40502 bytes fnv128 81b8e70146a2f8768c750a07b96a3f3b]
+> {"args":{"workspace_id":"missing"},"kind":"ui.workspace.overview.snapshot","request_id":3}
+< {"kind":"error","schema_version":1,"error":{"code":"not_found","message":"Book set 'missing' was not found","hint":null,"details":null,"retryable":false,"debug":null},"request_id":3}
+> {"args":{"another":2,"extra":1,"workspace_id":"w"},"kind":"ui.workspace.overview.snapshot","request_id":4}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.workspace.overview.snapshot received unsupported arguments","hint":null,"details":{"unknown":["another","extra"]},"retryable":false,"debug":null},"request_id":4}
+> {"args":{"workspace_id":" "},"kind":"ui.workspace.overview.snapshot","request_id":5}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.workspace.overview.snapshot requires args.workspace_id","hint":null,"details":null,"retryable":false,"debug":null},"request_id":5}
+> {"args":[],"kind":"ui.workspace.overview.snapshot","request_id":6}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui snapshot args must be an object","hint":null,"details":{"type":"list"},"retryable":false,"debug":null},"request_id":6}
+> {"args":null,"kind":"ui.workspace.overview.snapshot","request_id":7}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.workspace.overview.snapshot requires args.workspace_id","hint":null,"details":null,"retryable":false,"debug":null},"request_id":7}
+> {"args":{},"kind":"ui.workspace.health","request_id":8}
+< {"kind":"ui.workspace.health","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"profile":{"id":"p","label":"Book","fiat_currency":"EUR","tax_country":"at","tax_long_term_days":365,"gains_algorithm":"FIFO"},"counts":{"walle… [2204 bytes fnv128 7dd3f66bf868cce7e1a54338f046fad3]
+> {"args":"ignored","kind":"ui.workspace.health","request_id":9}
+< {"kind":"ui.workspace.health","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"profile":{"id":"p","label":"Book","fiat_currency":"EUR","tax_country":"at","tax_long_term_days":365,"gains_algorithm":"FIFO"},"counts":{"walle… [2204 bytes fnv128 7dd3f66dfc68cce7e1a54338f047f226]
+> {"args":{},"kind":"ui.next_actions","request_id":10}
+< {"kind":"ui.next_actions","schema_version":1,"data":{"health":{"workspace":{"id":"w","label":"Main"},"profile":{"id":"p","label":"Book","fiat_currency":"EUR","tax_country":"at","tax_long_term_days":365,"gains_algorithm":"FIFO"},"counts":{… [2606 bytes fnv128 5a720c13040ae1da0e7ff835d5c8bd1d]
+> {"args":{"ignored":true},"kind":"ui.review.badges","request_id":11}
+< {"kind":"ui.review.badges","schema_version":1,"data":{"quarantine":1,"quarantine_attention":1,"journals_needs_processing":true,"swaps":null,"review":1,"definitions":{"quarantine":"Every quarantined row in the active book; equals ui.journals.quarantine summary.count.","quarantine_attention":"Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.","journals_needs_processing":"True when journal inputs changed since the last processing; quarantine counts then describe that last processing.","swaps":"Transfer/swap candidates cached by the last matcher run; null until it has run.","review":"What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."}},"request_id":11}
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the session
+(unchanged)
+# current
+$ daemon
+> {"args":{},"kind":"ui.overview.snapshot","request_id":0}
+< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":0.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":null,"timestamp":null,"source":null,"fetchedAt":null,"granularity":null,"meth… [15088 bytes fnv128 9d0ad5ed4daf04850dcbb6eb4d10c8ad]
+> {"args":[1],"kind":"ui.overview.snapshot","request_id":1}
+< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":0.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":null,"timestamp":null,"source":null,"fetchedAt":null,"granularity":null,"meth… [15088 bytes fnv128 9d0ad5f049af04850dcbb6eb4d12f128]
+> {"args":{"workspace_id":" w "},"kind":"ui.workspace.overview.snapshot","request_id":2}
+< {"kind":"ui.workspace.overview.snapshot","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"scope":{"kind":"workspace","label":"Book set"},"books":[{"profile":{"id":"p","label":"Book","fiatCurrency":"EUR","taxCountry":"at",… [40496 bytes fnv128 8a8c61df44171b0c5168fbbfb3e377c8]
+> {"args":{"workspace_id":"missing"},"kind":"ui.workspace.overview.snapshot","request_id":3}
+< {"kind":"error","schema_version":1,"error":{"code":"not_found","message":"Book set 'missing' was not found","hint":null,"details":null,"retryable":false,"debug":null},"request_id":3}
+> {"args":{"another":2,"extra":1,"workspace_id":"w"},"kind":"ui.workspace.overview.snapshot","request_id":4}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.workspace.overview.snapshot received unsupported arguments","hint":null,"details":{"unknown":["another","extra"]},"retryable":false,"debug":null},"request_id":4}
+> {"args":{"workspace_id":" "},"kind":"ui.workspace.overview.snapshot","request_id":5}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.workspace.overview.snapshot requires args.workspace_id","hint":null,"details":null,"retryable":false,"debug":null},"request_id":5}
+> {"args":[],"kind":"ui.workspace.overview.snapshot","request_id":6}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui snapshot args must be an object","hint":null,"details":{"type":"list"},"retryable":false,"debug":null},"request_id":6}
+> {"args":null,"kind":"ui.workspace.overview.snapshot","request_id":7}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.workspace.overview.snapshot requires args.workspace_id","hint":null,"details":null,"retryable":false,"debug":null},"request_id":7}
+> {"args":{},"kind":"ui.workspace.health","request_id":8}
+< {"kind":"ui.workspace.health","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"profile":{"id":"p","label":"Book","fiat_currency":"EUR","tax_country":"at","tax_long_term_days":365,"gains_algorithm":"FIFO"},"counts":{"walle… [2204 bytes fnv128 7dd3f66bf868cce7e1a54338f046fad3]
+> {"args":"ignored","kind":"ui.workspace.health","request_id":9}
+< {"kind":"ui.workspace.health","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"profile":{"id":"p","label":"Book","fiat_currency":"EUR","tax_country":"at","tax_long_term_days":365,"gains_algorithm":"FIFO"},"counts":{"walle… [2204 bytes fnv128 7dd3f66dfc68cce7e1a54338f047f226]
+> {"args":{},"kind":"ui.next_actions","request_id":10}
+< {"kind":"ui.next_actions","schema_version":1,"data":{"health":{"workspace":{"id":"w","label":"Main"},"profile":{"id":"p","label":"Book","fiat_currency":"EUR","tax_country":"at","tax_long_term_days":365,"gains_algorithm":"FIFO"},"counts":{… [2606 bytes fnv128 5a720c13040ae1da0e7ff835d5c8bd1d]
+> {"args":{"ignored":true},"kind":"ui.review.badges","request_id":11}
+< {"kind":"ui.review.badges","schema_version":1,"data":{"quarantine":1,"quarantine_attention":1,"journals_needs_processing":true,"swaps":null,"review":1,"definitions":{"quarantine":"Every quarantined row in the active book; equals ui.journals.quarantine summary.count.","quarantine_attention":"Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.","journals_needs_processing":"True when journal inputs changed since the last processing; quarantine counts then describe that last processing.","swaps":"Transfer/swap candidates cached by the last matcher run; null until it has run.","review":"What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."}},"request_id":11}
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the session
+(unchanged)
+# semantics_built
+$ daemon
+> {"args":{},"kind":"ui.overview.snapshot","request_id":0}
+< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":0.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":null,"timestamp":null,"source":null,"fetchedAt":null,"granularity":null,"meth… [15019 bytes fnv128 6a6a752fce1089eb3bb1c5c2f47edc9f]
+> {"args":[1],"kind":"ui.overview.snapshot","request_id":1}
+< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":0.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":null,"timestamp":null,"source":null,"fetchedAt":null,"granularity":null,"meth… [15019 bytes fnv128 6a6a7531d21089eb3bb1c5c2f47fd3f2]
+> {"args":{"workspace_id":" w "},"kind":"ui.workspace.overview.snapshot","request_id":2}
+< {"kind":"ui.workspace.overview.snapshot","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"scope":{"kind":"workspace","label":"Book set"},"books":[{"profile":{"id":"p","label":"Book","fiatCurrency":"EUR","taxCountry":"at",… [40286 bytes fnv128 32b22fa8d3f69d6c9e633f291d1b206b]
+> {"args":{"workspace_id":"missing"},"kind":"ui.workspace.overview.snapshot","request_id":3}
+< {"kind":"error","schema_version":1,"error":{"code":"not_found","message":"Book set 'missing' was not found","hint":null,"details":null,"retryable":false,"debug":null},"request_id":3}
+> {"args":{"another":2,"extra":1,"workspace_id":"w"},"kind":"ui.workspace.overview.snapshot","request_id":4}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.workspace.overview.snapshot received unsupported arguments","hint":null,"details":{"unknown":["another","extra"]},"retryable":false,"debug":null},"request_id":4}
+> {"args":{"workspace_id":" "},"kind":"ui.workspace.overview.snapshot","request_id":5}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.workspace.overview.snapshot requires args.workspace_id","hint":null,"details":null,"retryable":false,"debug":null},"request_id":5}
+> {"args":[],"kind":"ui.workspace.overview.snapshot","request_id":6}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui snapshot args must be an object","hint":null,"details":{"type":"list"},"retryable":false,"debug":null},"request_id":6}
+> {"args":null,"kind":"ui.workspace.overview.snapshot","request_id":7}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.workspace.overview.snapshot requires args.workspace_id","hint":null,"details":null,"retryable":false,"debug":null},"request_id":7}
+> {"args":{},"kind":"ui.workspace.health","request_id":8}
+< {"kind":"ui.workspace.health","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"profile":{"id":"p","label":"Book","fiat_currency":"EUR","tax_country":"at","tax_long_term_days":365,"gains_algorithm":"FIFO"},"counts":{"walle… [2151 bytes fnv128 2373ffd5ca5593c1d56d5066986ae52a]
+> {"args":"ignored","kind":"ui.workspace.health","request_id":9}
+< {"kind":"ui.workspace.health","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"profile":{"id":"p","label":"Book","fiat_currency":"EUR","tax_country":"at","tax_long_term_days":365,"gains_algorithm":"FIFO"},"counts":{"walle… [2151 bytes fnv128 2373ffd2c65593c1d56d50669868b2d7]
+> {"args":{},"kind":"ui.next_actions","request_id":10}
+< {"kind":"ui.next_actions","schema_version":1,"data":{"health":{"workspace":{"id":"w","label":"Main"},"profile":{"id":"p","label":"Book","fiat_currency":"EUR","tax_country":"at","tax_long_term_days":365,"gains_algorithm":"FIFO"},"counts":{… [2348 bytes fnv128 0667582c26c976014361b2357bd54313]
+> {"args":{"ignored":true},"kind":"ui.review.badges","request_id":11}
+< {"kind":"ui.review.badges","schema_version":1,"data":{"quarantine":0,"quarantine_attention":0,"journals_needs_processing":true,"swaps":null,"review":0,"definitions":{"quarantine":"Every quarantined row in the active book; equals ui.journals.quarantine summary.count.","quarantine_attention":"Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.","journals_needs_processing":"True when journal inputs changed since the last processing; quarantine counts then describe that last processing.","swaps":"Transfer/swap candidates cached by the last matcher run; null until it has run.","review":"What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."}},"request_id":11}
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the session
+(unchanged)
+# cycle
+$ daemon
+> {"args":{},"kind":"ui.overview.snapshot","request_id":0}
+< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":0.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":null,"timestamp":null,"source":null,"fetchedAt":null,"granularity":null,"meth… [15288 bytes fnv128 2e756558cbef13c1b6db01b99c8ea5a8]
+> {"args":[1],"kind":"ui.overview.snapshot","request_id":1}
+< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":0.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":null,"timestamp":null,"source":null,"fetchedAt":null,"granularity":null,"meth… [15288 bytes fnv128 2e756555cfef13c1b6db01b99c8c7d2d]
+> {"args":{"workspace_id":" w "},"kind":"ui.workspace.overview.snapshot","request_id":2}
+< {"kind":"ui.workspace.overview.snapshot","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"scope":{"kind":"workspace","label":"Book set"},"books":[{"profile":{"id":"p","label":"Book","fiatCurrency":"EUR","taxCountry":"at",… [40896 bytes fnv128 b05ce83bc41fbaa60f1fefb423145675]
+> {"args":{"workspace_id":"missing"},"kind":"ui.workspace.overview.snapshot","request_id":3}
+< {"kind":"error","schema_version":1,"error":{"code":"not_found","message":"Book set 'missing' was not found","hint":null,"details":null,"retryable":false,"debug":null},"request_id":3}
+> {"args":{"another":2,"extra":1,"workspace_id":"w"},"kind":"ui.workspace.overview.snapshot","request_id":4}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.workspace.overview.snapshot received unsupported arguments","hint":null,"details":{"unknown":["another","extra"]},"retryable":false,"debug":null},"request_id":4}
+> {"args":{"workspace_id":" "},"kind":"ui.workspace.overview.snapshot","request_id":5}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.workspace.overview.snapshot requires args.workspace_id","hint":null,"details":null,"retryable":false,"debug":null},"request_id":5}
+> {"args":[],"kind":"ui.workspace.overview.snapshot","request_id":6}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui snapshot args must be an object","hint":null,"details":{"type":"list"},"retryable":false,"debug":null},"request_id":6}
+> {"args":null,"kind":"ui.workspace.overview.snapshot","request_id":7}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.workspace.overview.snapshot requires args.workspace_id","hint":null,"details":null,"retryable":false,"debug":null},"request_id":7}
+> {"args":{},"kind":"ui.workspace.health","request_id":8}
+< {"kind":"ui.workspace.health","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"profile":{"id":"p","label":"Book","fiat_currency":"EUR","tax_country":"at","tax_long_term_days":365,"gains_algorithm":"FIFO"},"counts":{"walle… [2204 bytes fnv128 6ba9af47f4d32c3af681a4263dd60f8b]
+> {"args":"ignored","kind":"ui.workspace.health","request_id":9}
+< {"kind":"ui.workspace.health","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"profile":{"id":"p","label":"Book","fiat_currency":"EUR","tax_country":"at","tax_long_term_days":365,"gains_algorithm":"FIFO"},"counts":{"walle… [2204 bytes fnv128 6ba9af49f8d32c3af681a4263dd706de]
+> {"args":{},"kind":"ui.next_actions","request_id":10}
+< {"kind":"ui.next_actions","schema_version":1,"data":{"health":{"workspace":{"id":"w","label":"Main"},"profile":{"id":"p","label":"Book","fiat_currency":"EUR","tax_country":"at","tax_long_term_days":365,"gains_algorithm":"FIFO"},"counts":{… [2606 bytes fnv128 d698b07e45958bc537cd7d60c0d20dab]
+> {"args":{"ignored":true},"kind":"ui.review.badges","request_id":11}
+< {"kind":"ui.review.badges","schema_version":1,"data":{"quarantine":3,"quarantine_attention":3,"journals_needs_processing":true,"swaps":null,"review":3,"definitions":{"quarantine":"Every quarantined row in the active book; equals ui.journals.quarantine summary.count.","quarantine_attention":"Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.","journals_needs_processing":"True when journal inputs changed since the last processing; quarantine counts then describe that last processing.","swaps":"Transfer/swap candidates cached by the last matcher run; null until it has run.","review":"What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."}},"request_id":11}
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the session
+(unchanged)
+# ov_journal_rates
+$ daemon
+> {"args":{},"kind":"ui.overview.snapshot","request_id":0}
+< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":100000.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":0.0,"timestamp":"2025-02-15T00:00:00Z","source":"coinbase","fetchedAt":"… [15504 bytes fnv128 77b9224053272a547d3ffbc4ae6fe235]
+> {"args":[1],"kind":"ui.overview.snapshot","request_id":1}
+< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":100000.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":0.0,"timestamp":"2025-02-15T00:00:00Z","source":"coinbase","fetchedAt":"… [15504 bytes fnv128 77b922424f272a547d3ffbc4ae70cfb0]
+> {"args":{"workspace_id":" w "},"kind":"ui.workspace.overview.snapshot","request_id":2}
+< {"kind":"ui.workspace.overview.snapshot","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"scope":{"kind":"workspace","label":"Book set"},"books":[{"profile":{"id":"p","label":"Book","fiatCurrency":"EUR","taxCountry":"at",… [40862 bytes fnv128 a2f494cd14f63ceac2ca6f0a6ab52eaa]
+> {"args":{"workspace_id":"missing"},"kind":"ui.workspace.overview.snapshot","request_id":3}
+< {"kind":"error","schema_version":1,"error":{"code":"not_found","message":"Book set 'missing' was not found","hint":null,"details":null,"retryable":false,"debug":null},"request_id":3}
+> {"args":{"another":2,"extra":1,"workspace_id":"w"},"kind":"ui.workspace.overview.snapshot","request_id":4}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.workspace.overview.snapshot received unsupported arguments","hint":null,"details":{"unknown":["another","extra"]},"retryable":false,"debug":null},"request_id":4}
+> {"args":{"workspace_id":" "},"kind":"ui.workspace.overview.snapshot","request_id":5}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.workspace.overview.snapshot requires args.workspace_id","hint":null,"details":null,"retryable":false,"debug":null},"request_id":5}
+> {"args":[],"kind":"ui.workspace.overview.snapshot","request_id":6}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui snapshot args must be an object","hint":null,"details":{"type":"list"},"retryable":false,"debug":null},"request_id":6}
+> {"args":null,"kind":"ui.workspace.overview.snapshot","request_id":7}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.workspace.overview.snapshot requires args.workspace_id","hint":null,"details":null,"retryable":false,"debug":null},"request_id":7}
+> {"args":{},"kind":"ui.workspace.health","request_id":8}
+< {"kind":"ui.workspace.health","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"profile":{"id":"p","label":"Book","fiat_currency":"EUR","tax_country":"at","tax_long_term_days":365,"gains_algorithm":"FIFO"},"counts":{"walle… [2204 bytes fnv128 d57151a2a1dd925f8b7af3b3e605fcc5]
+> {"args":"ignored","kind":"ui.workspace.health","request_id":9}
+< {"kind":"ui.workspace.health","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"profile":{"id":"p","label":"Book","fiat_currency":"EUR","tax_country":"at","tax_long_term_days":365,"gains_algorithm":"FIFO"},"counts":{"walle… [2204 bytes fnv128 d57151a49ddd925f8b7af3b3e606ea40]
+> {"args":{},"kind":"ui.next_actions","request_id":10}
+< {"kind":"ui.next_actions","schema_version":1,"data":{"health":{"workspace":{"id":"w","label":"Main"},"profile":{"id":"p","label":"Book","fiat_currency":"EUR","tax_country":"at","tax_long_term_days":365,"gains_algorithm":"FIFO"},"counts":{… [2606 bytes fnv128 735cdcb8e09545c10e1b0e5113f05623]
+> {"args":{"ignored":true},"kind":"ui.review.badges","request_id":11}
+< {"kind":"ui.review.badges","schema_version":1,"data":{"quarantine":1,"quarantine_attention":1,"journals_needs_processing":true,"swaps":null,"review":1,"definitions":{"quarantine":"Every quarantined row in the active book; equals ui.journals.quarantine summary.count.","quarantine_attention":"Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.","journals_needs_processing":"True when journal inputs changed since the last processing; quarantine counts then describe that last processing.","swaps":"Transfer/swap candidates cached by the last matcher run; null until it has run.","review":"What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."}},"request_id":11}
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the session
+(unchanged)
+# ov_canonical_issues
+$ daemon
+> {"args":{},"kind":"ui.overview.snapshot","request_id":0}
+< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":100000.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":0.0,"timestamp":"2025-02-15T00:00:00Z","source":"coinbase","fetchedAt":"… [15525 bytes fnv128 ecf9bb0fbb03cb77e261c18cea956b50]
+> {"args":[1],"kind":"ui.overview.snapshot","request_id":1}
+< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":100000.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":0.0,"timestamp":"2025-02-15T00:00:00Z","source":"coinbase","fetchedAt":"… [15525 bytes fnv128 ecf9bb0cbf03cb77e261c18cea9342d5]
+> {"args":{"workspace_id":" w "},"kind":"ui.workspace.overview.snapshot","request_id":2}
+< {"kind":"ui.workspace.overview.snapshot","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"scope":{"kind":"workspace","label":"Book set"},"books":[{"profile":{"id":"p","label":"Book","fiatCurrency":"EUR","taxCountry":"at",… [40987 bytes fnv128 b7de9b0f938e34c87d7c971dc4183e53]
+> {"args":{"workspace_id":"missing"},"kind":"ui.workspace.overview.snapshot","request_id":3}
+< {"kind":"error","schema_version":1,"error":{"code":"not_found","message":"Book set 'missing' was not found","hint":null,"details":null,"retryable":false,"debug":null},"request_id":3}
+> {"args":{"another":2,"extra":1,"workspace_id":"w"},"kind":"ui.workspace.overview.snapshot","request_id":4}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.workspace.overview.snapshot received unsupported arguments","hint":null,"details":{"unknown":["another","extra"]},"retryable":false,"debug":null},"request_id":4}
+> {"args":{"workspace_id":" "},"kind":"ui.workspace.overview.snapshot","request_id":5}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.workspace.overview.snapshot requires args.workspace_id","hint":null,"details":null,"retryable":false,"debug":null},"request_id":5}
+> {"args":[],"kind":"ui.workspace.overview.snapshot","request_id":6}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui snapshot args must be an object","hint":null,"details":{"type":"list"},"retryable":false,"debug":null},"request_id":6}
+> {"args":null,"kind":"ui.workspace.overview.snapshot","request_id":7}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.workspace.overview.snapshot requires args.workspace_id","hint":null,"details":null,"retryable":false,"debug":null},"request_id":7}
+> {"args":{},"kind":"ui.workspace.health","request_id":8}
+< {"kind":"ui.workspace.health","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"profile":{"id":"p","label":"Book","fiat_currency":"EUR","tax_country":"at","tax_long_term_days":365,"gains_algorithm":"FIFO"},"counts":{"walle… [2204 bytes fnv128 d57151a2a1dd925f8b7af3b3e605fcc5]
+> {"args":"ignored","kind":"ui.workspace.health","request_id":9}
+< {"kind":"ui.workspace.health","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"profile":{"id":"p","label":"Book","fiat_currency":"EUR","tax_country":"at","tax_long_term_days":365,"gains_algorithm":"FIFO"},"counts":{"walle… [2204 bytes fnv128 d57151a49ddd925f8b7af3b3e606ea40]
+> {"args":{},"kind":"ui.next_actions","request_id":10}
+< {"kind":"ui.next_actions","schema_version":1,"data":{"health":{"workspace":{"id":"w","label":"Main"},"profile":{"id":"p","label":"Book","fiat_currency":"EUR","tax_country":"at","tax_long_term_days":365,"gains_algorithm":"FIFO"},"counts":{… [2606 bytes fnv128 735cdcb8e09545c10e1b0e5113f05623]
+> {"args":{"ignored":true},"kind":"ui.review.badges","request_id":11}
+< {"kind":"ui.review.badges","schema_version":1,"data":{"quarantine":1,"quarantine_attention":1,"journals_needs_processing":true,"swaps":null,"review":1,"definitions":{"quarantine":"Every quarantined row in the active book; equals ui.journals.quarantine summary.count.","quarantine_attention":"Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.","journals_needs_processing":"True when journal inputs changed since the last processing; quarantine counts then describe that last processing.","swaps":"Transfer/swap candidates cached by the last matcher run; null until it has run.","review":"What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."}},"request_id":11}
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the session
+(unchanged)
+# ov_inventory_current
+$ daemon
+> {"args":{},"kind":"ui.overview.snapshot","request_id":0}
+< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":100000.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":0.0,"timestamp":"2025-02-15T00:00:00Z","source":"coinbase","fetchedAt":"… [15586 bytes fnv128 62b71a3962d71d910d072506988f1127]
+> {"args":[1],"kind":"ui.overview.snapshot","request_id":1}
+< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":100000.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":0.0,"timestamp":"2025-02-15T00:00:00Z","source":"coinbase","fetchedAt":"… [15586 bytes fnv128 62b71a3c66d71d910d0725069891437a]
+> {"args":{"workspace_id":" w "},"kind":"ui.workspace.overview.snapshot","request_id":2}
+< {"kind":"ui.workspace.overview.snapshot","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"scope":{"kind":"workspace","label":"Book set"},"books":[{"profile":{"id":"p","label":"Book","fiatCurrency":"EUR","taxCountry":"at",… [40985 bytes fnv128 a85824607f691c169c9cf0963a3148ca]
+> {"args":{"workspace_id":"missing"},"kind":"ui.workspace.overview.snapshot","request_id":3}
+< {"kind":"error","schema_version":1,"error":{"code":"not_found","message":"Book set 'missing' was not found","hint":null,"details":null,"retryable":false,"debug":null},"request_id":3}
+> {"args":{"another":2,"extra":1,"workspace_id":"w"},"kind":"ui.workspace.overview.snapshot","request_id":4}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.workspace.overview.snapshot received unsupported arguments","hint":null,"details":{"unknown":["another","extra"]},"retryable":false,"debug":null},"request_id":4}
+> {"args":{"workspace_id":" "},"kind":"ui.workspace.overview.snapshot","request_id":5}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.workspace.overview.snapshot requires args.workspace_id","hint":null,"details":null,"retryable":false,"debug":null},"request_id":5}
+> {"args":[],"kind":"ui.workspace.overview.snapshot","request_id":6}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui snapshot args must be an object","hint":null,"details":{"type":"list"},"retryable":false,"debug":null},"request_id":6}
+> {"args":null,"kind":"ui.workspace.overview.snapshot","request_id":7}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.workspace.overview.snapshot requires args.workspace_id","hint":null,"details":null,"retryable":false,"debug":null},"request_id":7}
+> {"args":{},"kind":"ui.workspace.health","request_id":8}
+< {"kind":"ui.workspace.health","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"profile":{"id":"p","label":"Book","fiat_currency":"EUR","tax_country":"at","tax_long_term_days":365,"gains_algorithm":"FIFO"},"counts":{"walle… [2204 bytes fnv128 d57151a2a1dd925f8b7af3b3e605fcc5]
+> {"args":"ignored","kind":"ui.workspace.health","request_id":9}
+< {"kind":"ui.workspace.health","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"profile":{"id":"p","label":"Book","fiat_currency":"EUR","tax_country":"at","tax_long_term_days":365,"gains_algorithm":"FIFO"},"counts":{"walle… [2204 bytes fnv128 d57151a49ddd925f8b7af3b3e606ea40]
+> {"args":{},"kind":"ui.next_actions","request_id":10}
+< {"kind":"ui.next_actions","schema_version":1,"data":{"health":{"workspace":{"id":"w","label":"Main"},"profile":{"id":"p","label":"Book","fiat_currency":"EUR","tax_country":"at","tax_long_term_days":365,"gains_algorithm":"FIFO"},"counts":{… [2606 bytes fnv128 735cdcb8e09545c10e1b0e5113f05623]
+> {"args":{"ignored":true},"kind":"ui.review.badges","request_id":11}
+< {"kind":"ui.review.badges","schema_version":1,"data":{"quarantine":1,"quarantine_attention":1,"journals_needs_processing":true,"swaps":null,"review":1,"definitions":{"quarantine":"Every quarantined row in the active book; equals ui.journals.quarantine summary.count.","quarantine_attention":"Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.","journals_needs_processing":"True when journal inputs changed since the last processing; quarantine counts then describe that last processing.","swaps":"Transfer/swap candidates cached by the last matcher run; null until it has run.","review":"What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."}},"request_id":11}
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the session
+(unchanged)
+# ov_pairs
+$ daemon
+> {"args":{},"kind":"ui.overview.snapshot","request_id":0}
+< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":0.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":null,"timestamp":null,"source":null,"fetchedAt":null,"granularity":null,"meth… [15338 bytes fnv128 84d5c755f32ea8f97e424260cba4dc46]
+> {"args":[1],"kind":"ui.overview.snapshot","request_id":1}
+< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":0.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":null,"timestamp":null,"source":null,"fetchedAt":null,"granularity":null,"meth… [15338 bytes fnv128 84d5c752ef2ea8f97e424260cba2a9f3]
+> {"args":{"workspace_id":" w "},"kind":"ui.workspace.overview.snapshot","request_id":2}
+< {"kind":"ui.workspace.overview.snapshot","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"scope":{"kind":"workspace","label":"Book set"},"books":[{"profile":{"id":"p","label":"Book","fiatCurrency":"EUR","taxCountry":"at",… [40863 bytes fnv128 fe3f68a6829f82aee3495e0628f97dbb]
+> {"args":{"workspace_id":"missing"},"kind":"ui.workspace.overview.snapshot","request_id":3}
+< {"kind":"error","schema_version":1,"error":{"code":"not_found","message":"Book set 'missing' was not found","hint":null,"details":null,"retryable":false,"debug":null},"request_id":3}
+> {"args":{"another":2,"extra":1,"workspace_id":"w"},"kind":"ui.workspace.overview.snapshot","request_id":4}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.workspace.overview.snapshot received unsupported arguments","hint":null,"details":{"unknown":["another","extra"]},"retryable":false,"debug":null},"request_id":4}
+> {"args":{"workspace_id":" "},"kind":"ui.workspace.overview.snapshot","request_id":5}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.workspace.overview.snapshot requires args.workspace_id","hint":null,"details":null,"retryable":false,"debug":null},"request_id":5}
+> {"args":[],"kind":"ui.workspace.overview.snapshot","request_id":6}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui snapshot args must be an object","hint":null,"details":{"type":"list"},"retryable":false,"debug":null},"request_id":6}
+> {"args":null,"kind":"ui.workspace.overview.snapshot","request_id":7}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.workspace.overview.snapshot requires args.workspace_id","hint":null,"details":null,"retryable":false,"debug":null},"request_id":7}
+> {"args":{},"kind":"ui.workspace.health","request_id":8}
+< {"kind":"ui.workspace.health","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"profile":{"id":"p","label":"Book","fiat_currency":"EUR","tax_country":"at","tax_long_term_days":365,"gains_algorithm":"FIFO"},"counts":{"walle… [2206 bytes fnv128 08d10a7e453eb9b3419cd5b36ad6e5ef]
+> {"args":"ignored","kind":"ui.workspace.health","request_id":9}
+< {"kind":"ui.workspace.health","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"profile":{"id":"p","label":"Book","fiat_currency":"EUR","tax_country":"at","tax_long_term_days":365,"gains_algorithm":"FIFO"},"counts":{"walle… [2206 bytes fnv128 08d10a80493eb9b3419cd5b36ad7dd42]
+> {"args":{},"kind":"ui.next_actions","request_id":10}
+< {"kind":"ui.next_actions","schema_version":1,"data":{"health":{"workspace":{"id":"w","label":"Main"},"profile":{"id":"p","label":"Book","fiat_currency":"EUR","tax_country":"at","tax_long_term_days":365,"gains_algorithm":"FIFO"},"counts":{… [2608 bytes fnv128 1cee322efa6773f772f5ffa9b99e5bb5]
+> {"args":{"ignored":true},"kind":"ui.review.badges","request_id":11}
+< {"kind":"ui.review.badges","schema_version":1,"data":{"quarantine":1,"quarantine_attention":1,"journals_needs_processing":true,"swaps":null,"review":1,"definitions":{"quarantine":"Every quarantined row in the active book; equals ui.journals.quarantine summary.count.","quarantine_attention":"Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.","journals_needs_processing":"True when journal inputs changed since the last processing; quarantine counts then describe that last processing.","swaps":"Transfer/swap candidates cached by the last matcher run; null until it has run.","review":"What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."}},"request_id":11}
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the session
+(unchanged)
+# ov_books_current
+$ daemon
+> {"args":{},"kind":"ui.overview.snapshot","request_id":0}
+< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":0.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":null,"timestamp":null,"source":null,"fetchedAt":null,"granularity":null,"meth… [15404 bytes fnv128 dfbb03c8e51f6835636bc0d159b4142c]
+> {"args":[1],"kind":"ui.overview.snapshot","request_id":1}
+< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":0.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":null,"timestamp":null,"source":null,"fetchedAt":null,"granularity":null,"meth… [15404 bytes fnv128 dfbb03c5e91f6835636bc0d159b1ebb1]
+> {"args":{"workspace_id":" w "},"kind":"ui.workspace.overview.snapshot","request_id":2}
+< {"kind":"ui.workspace.overview.snapshot","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"scope":{"kind":"workspace","label":"Book set"},"books":[{"profile":{"id":"p","label":"Book","fiatCurrency":"EUR","taxCountry":"at",… [50232 bytes fnv128 38599b35fae7c9e0809c2784ab6f1f60]
+> {"args":{"workspace_id":"missing"},"kind":"ui.workspace.overview.snapshot","request_id":3}
+< {"kind":"error","schema_version":1,"error":{"code":"not_found","message":"Book set 'missing' was not found","hint":null,"details":null,"retryable":false,"debug":null},"request_id":3}
+> {"args":{"another":2,"extra":1,"workspace_id":"w"},"kind":"ui.workspace.overview.snapshot","request_id":4}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.workspace.overview.snapshot received unsupported arguments","hint":null,"details":{"unknown":["another","extra"]},"retryable":false,"debug":null},"request_id":4}
+> {"args":{"workspace_id":" "},"kind":"ui.workspace.overview.snapshot","request_id":5}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.workspace.overview.snapshot requires args.workspace_id","hint":null,"details":null,"retryable":false,"debug":null},"request_id":5}
+> {"args":[],"kind":"ui.workspace.overview.snapshot","request_id":6}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui snapshot args must be an object","hint":null,"details":{"type":"list"},"retryable":false,"debug":null},"request_id":6}
+> {"args":null,"kind":"ui.workspace.overview.snapshot","request_id":7}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.workspace.overview.snapshot requires args.workspace_id","hint":null,"details":null,"retryable":false,"debug":null},"request_id":7}
+> {"args":{},"kind":"ui.workspace.health","request_id":8}
+< {"kind":"ui.workspace.health","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"profile":{"id":"p","label":"Book","fiat_currency":"EUR","tax_country":"at","tax_long_term_days":365,"gains_algorithm":"FIFO"},"counts":{"walle… [2206 bytes fnv128 08d10a7e453eb9b3419cd5b36ad6e5ef]
+> {"args":"ignored","kind":"ui.workspace.health","request_id":9}
+< {"kind":"ui.workspace.health","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"profile":{"id":"p","label":"Book","fiat_currency":"EUR","tax_country":"at","tax_long_term_days":365,"gains_algorithm":"FIFO"},"counts":{"walle… [2206 bytes fnv128 08d10a80493eb9b3419cd5b36ad7dd42]
+> {"args":{},"kind":"ui.next_actions","request_id":10}
+< {"kind":"ui.next_actions","schema_version":1,"data":{"health":{"workspace":{"id":"w","label":"Main"},"profile":{"id":"p","label":"Book","fiat_currency":"EUR","tax_country":"at","tax_long_term_days":365,"gains_algorithm":"FIFO"},"counts":{… [2608 bytes fnv128 1cee322efa6773f772f5ffa9b99e5bb5]
+> {"args":{"ignored":true},"kind":"ui.review.badges","request_id":11}
+< {"kind":"ui.review.badges","schema_version":1,"data":{"quarantine":1,"quarantine_attention":1,"journals_needs_processing":true,"swaps":null,"review":1,"definitions":{"quarantine":"Every quarantined row in the active book; equals ui.journals.quarantine summary.count.","quarantine_attention":"Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.","journals_needs_processing":"True when journal inputs changed since the last processing; quarantine counts then describe that last processing.","swaps":"Transfer/swap candidates cached by the last matcher run; null until it has run.","review":"What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."}},"request_id":11}
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the session
+(unchanged)
+# ov_generic
+$ daemon
+> {"args":{},"kind":"ui.overview.snapshot","request_id":0}
+< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":100000.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":0.0,"timestamp":"2025-02-15T00:00:00Z","source":"coinbase","fetchedAt":"… [14637 bytes fnv128 d1cdf10efc607c97cb6331a02f726a7c]
+> {"args":[1],"kind":"ui.overview.snapshot","request_id":1}
+< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":100000.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":0.0,"timestamp":"2025-02-15T00:00:00Z","source":"coinbase","fetchedAt":"… [14637 bytes fnv128 d1cdf10d00607c97cb6331a02f717d01]
+> {"args":{"workspace_id":" w "},"kind":"ui.workspace.overview.snapshot","request_id":2}
+< {"kind":"ui.workspace.overview.snapshot","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"scope":{"kind":"workspace","label":"Book set"},"books":[{"profile":{"id":"p","label":"Book","fiatCurrency":"EUR","taxCountry":"gene… [39982 bytes fnv128 a4c93e8629dd844417a5d98479c886ef]
+> {"args":{"workspace_id":"missing"},"kind":"ui.workspace.overview.snapshot","request_id":3}
+< {"kind":"error","schema_version":1,"error":{"code":"not_found","message":"Book set 'missing' was not found","hint":null,"details":null,"retryable":false,"debug":null},"request_id":3}
+> {"args":{"another":2,"extra":1,"workspace_id":"w"},"kind":"ui.workspace.overview.snapshot","request_id":4}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.workspace.overview.snapshot received unsupported arguments","hint":null,"details":{"unknown":["another","extra"]},"retryable":false,"debug":null},"request_id":4}
+> {"args":{"workspace_id":" "},"kind":"ui.workspace.overview.snapshot","request_id":5}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.workspace.overview.snapshot requires args.workspace_id","hint":null,"details":null,"retryable":false,"debug":null},"request_id":5}
+> {"args":[],"kind":"ui.workspace.overview.snapshot","request_id":6}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui snapshot args must be an object","hint":null,"details":{"type":"list"},"retryable":false,"debug":null},"request_id":6}
+> {"args":null,"kind":"ui.workspace.overview.snapshot","request_id":7}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.workspace.overview.snapshot requires args.workspace_id","hint":null,"details":null,"retryable":false,"debug":null},"request_id":7}
+> {"args":{},"kind":"ui.workspace.health","request_id":8}
+< {"kind":"ui.workspace.health","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"profile":{"id":"p","label":"Book","fiat_currency":"","tax_country":"generic","tax_long_term_days":365,"gains_algorithm":"FIFO"},"counts":{"wal… [2206 bytes fnv128 0d59b9e9aa723b252cb91fe73b65b519]
+> {"args":"ignored","kind":"ui.workspace.health","request_id":9}
+< {"kind":"ui.workspace.health","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"profile":{"id":"p","label":"Book","fiat_currency":"","tax_country":"generic","tax_long_term_days":365,"gains_algorithm":"FIFO"},"counts":{"wal… [2206 bytes fnv128 0d59b9eca6723b252cb91fe73b67dd94]
+> {"args":{},"kind":"ui.next_actions","request_id":10}
+< {"kind":"ui.next_actions","schema_version":1,"data":{"health":{"workspace":{"id":"w","label":"Main"},"profile":{"id":"p","label":"Book","fiat_currency":"","tax_country":"generic","tax_long_term_days":365,"gains_algorithm":"FIFO"},"counts"… [2608 bytes fnv128 270f6f5cc0cfeebc8e5f7d8d10f3e007]
+> {"args":{"ignored":true},"kind":"ui.review.badges","request_id":11}
+< {"kind":"ui.review.badges","schema_version":1,"data":{"quarantine":1,"quarantine_attention":1,"journals_needs_processing":true,"swaps":null,"review":1,"definitions":{"quarantine":"Every quarantined row in the active book; equals ui.journals.quarantine summary.count.","quarantine_attention":"Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.","journals_needs_processing":"True when journal inputs changed since the last processing; quarantine counts then describe that last processing.","swaps":"Transfer/swap candidates cached by the last matcher run; null until it has run.","review":"What the Review screen asks the user to decide: quarantine_attention plus swaps. Stale journals are flagged, not counted."}},"request_id":11}
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the session
+(unchanged)

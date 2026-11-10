@@ -1,0 +1,70 @@
+$ daemon
+> {"args":{"name":"Occupied"},"kind":"ui.projects.create","request_id":0}
+< {"kind":"error","schema_version":1,"error":{"code":"database_exists","message":"refusing to create a project over existing database at <SANDBOX>/xdg-data/kassiber/projects/occupied/data/kassiber.sqlite3","hint":null,"details":{"database":"<SANDBOX>/xdg-data/kassiber/projects/occupied/data/kassiber.sqlite3"},"retryable":false,"debug":null},"request_id":0}
+> {"args":{},"kind":"ui.projects.list","request_id":1}
+< {"kind":"ui.projects.list","schema_version":1,"data":{"selected_project_id":"default","projects":[{"id":"default","name":"Default","path":"<SANDBOX>/xdg-data/kassiber/projects/default","data_root":"<SANDBOX>/xdg-data/kassiber/projects/default/data","database":"<SANDBOX>/xdg-data/kassiber/projects/default/data/kassiber.sqlite3","encrypted":false,"last_opened_at":null,"selected":true}]},"request_id":1}
+> {"args":{},"kind":"daemon.lock","request_id":2}
+< {"kind":"daemon.lock","schema_version":1,"data":{"locked":true},"request_id":2}
+> {"args":{"project_id":"default"},"kind":"ui.projects.select","request_id":3}
+< {"kind":"ui.projects.select","schema_version":1,"data":{"project":{"id":"default","name":"Default","path":"<SANDBOX>/xdg-data/kassiber/projects/default","data_root":"<SANDBOX>/xdg-data/kassiber/projects/default/data","database":"<SANDBOX>… [1366 bytes fnv128 e5ab2ae59c419019f69766021a540802]
+> {"args":{"name":"Next","select":false},"kind":"ui.projects.create","request_id":4}
+< {"kind":"ui.projects.create","schema_version":1,"data":{"project":{"id":"next","name":"Next","path":"<SANDBOX>/xdg-data/kassiber/projects/next","data_root":"<SANDBOX>/xdg-data/kassiber/projects/next/data","database":"<SANDBOX>/xdg-data/kassiber/projects/next/data/kassiber.sqlite3","encrypted":false,"last_opened_at":null},"selected_project_id":"default","unlocked":false},"request_id":4}
+> {"args":{"id":"next","require_existing_project":true},"kind":"ui.projects.select","request_id":5}
+< {"kind":"error","schema_version":1,"error":{"code":"invalid_project_database","message":"database does not contain a Kassiber project schema","hint":"Choose an existing Kassiber project database, not an empty or missing database file.","details":{"database":"<SANDBOX>/xdg-data/kassiber/projects/next/data/kassiber.sqlite3"},"retryable":false,"debug":null},"request_id":5}
+> {"args":{"id":"next"},"kind":"ui.projects.select","request_id":6}
+< {"kind":"ui.projects.select","schema_version":1,"data":{"project":{"id":"next","name":"Next","path":"<SANDBOX>/xdg-data/kassiber/projects/next","data_root":"<SANDBOX>/xdg-data/kassiber/projects/next/data","database":"<SANDBOX>/xdg-data/ka… [1318 bytes fnv128 e2041fc23a0b283d0ff164b3448fa0db]
+> {"args":{"id":"default"},"kind":"ui.projects.select","request_id":7}
+< {"kind":"ui.projects.select","schema_version":1,"data":{"project":{"id":"default","name":"Default","path":"<SANDBOX>/xdg-data/kassiber/projects/default","data_root":"<SANDBOX>/xdg-data/kassiber/projects/default/data","database":"<SANDBOX>… [1366 bytes fnv128 e5ab2aef9c419019f69766021a5a479e]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== catalog
+{
+  "projects": [
+    {
+      "encrypted": false,
+      "id": "default",
+      "last_opened_at": "2030-01-02T03:04:05Z",
+      "name": "Default",
+      "path": "<SANDBOX>/xdg-data/kassiber/projects/default"
+    },
+    {
+      "encrypted": false,
+      "id": "next",
+      "last_opened_at": "2030-01-02T03:04:05Z",
+      "name": "Next",
+      "path": "<SANDBOX>/xdg-data/kassiber/projects/next"
+    }
+  ],
+  "schema_version": 1,
+  "selected_project_id": "default"
+}
+=== project default
+chain_index_clock: id=i:1 | revision=i:14
+chain_index_dirty: source_table=t:"book_network_bindings" | source_key=i:-1 | revision=i:13
+chain_index_dirty: source_table=t:"chain_analysis_acquisition_grants" | source_key=i:-1 | revision=i:14
+chain_index_dirty: source_table=t:"chain_analysis_dataset_claims" | source_key=i:-1 | revision=i:12
+chain_index_dirty: source_table=t:"chain_analysis_datasets" | source_key=i:-1 | revision=i:11
+chain_index_dirty: source_table=t:"chain_analysis_labels" | source_key=i:-1 | revision=i:10
+chain_index_dirty: source_table=t:"chain_analysis_observations" | source_key=i:-1 | revision=i:4
+chain_index_dirty: source_table=t:"chain_analysis_reference_assertions" | source_key=i:-1 | revision=i:5
+chain_index_dirty: source_table=t:"journal_custody_decisions" | source_key=i:-1 | revision=i:8
+chain_index_dirty: source_table=t:"journal_custody_economic_relations" | source_key=i:-1 | revision=i:9
+chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:7
+chain_index_dirty: source_table=t:"transaction_graph_cache" | source_key=i:-1 | revision=i:2
+… [6367 bytes, 29 lines fnv128 14a5f1c75accc4a059426ff447f7e0f6]
+=== project next
+chain_index_clock: id=i:1 | revision=i:14
+chain_index_dirty: source_table=t:"book_network_bindings" | source_key=i:-1 | revision=i:13
+chain_index_dirty: source_table=t:"chain_analysis_acquisition_grants" | source_key=i:-1 | revision=i:14
+chain_index_dirty: source_table=t:"chain_analysis_dataset_claims" | source_key=i:-1 | revision=i:12
+chain_index_dirty: source_table=t:"chain_analysis_datasets" | source_key=i:-1 | revision=i:11
+chain_index_dirty: source_table=t:"chain_analysis_labels" | source_key=i:-1 | revision=i:10
+chain_index_dirty: source_table=t:"chain_analysis_observations" | source_key=i:-1 | revision=i:4
+chain_index_dirty: source_table=t:"chain_analysis_reference_assertions" | source_key=i:-1 | revision=i:5
+chain_index_dirty: source_table=t:"journal_custody_decisions" | source_key=i:-1 | revision=i:8
+chain_index_dirty: source_table=t:"journal_custody_economic_relations" | source_key=i:-1 | revision=i:9
+chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:7
+chain_index_dirty: source_table=t:"transaction_graph_cache" | source_key=i:-1 | revision=i:2
+… [6367 bytes, 29 lines fnv128 14a5f1c75accc4a059426ff447f7e0f6]
+=== project occupied
+[110, 111, 116, 32, 97, 32, 100, 97, 116, 97, 98, 97, 115, 101]

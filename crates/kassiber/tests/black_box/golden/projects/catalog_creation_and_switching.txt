@@ -1,0 +1,190 @@
+$ daemon
+> {"args":{},"kind":"ui.projects.list","request_id":0}
+< {"kind":"ui.projects.list","schema_version":1,"data":{"selected_project_id":"default","projects":[{"id":"default","name":"Default","path":"<SANDBOX>/xdg-data/kassiber/projects/default","data_root":"<SANDBOX>/xdg-data/kassiber/projects/default/data","database":"<SANDBOX>/xdg-data/kassiber/projects/default/data/kassiber.sqlite3","encrypted":false,"last_opened_at":null,"selected":true}]},"request_id":0}
+> {"args":[1],"kind":"ui.projects.list","request_id":1}
+< {"kind":"ui.projects.list","schema_version":1,"data":{"selected_project_id":"default","projects":[{"id":"default","name":"Default","path":"<SANDBOX>/xdg-data/kassiber/projects/default","data_root":"<SANDBOX>/xdg-data/kassiber/projects/default/data","database":"<SANDBOX>/xdg-data/kassiber/projects/default/data/kassiber.sqlite3","encrypted":false,"last_opened_at":null,"selected":true}]},"request_id":1}
+> {"args":[],"kind":"ui.projects.create","request_id":2}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"daemon args must be an object","hint":null,"details":{"type":"list"},"retryable":false,"debug":null},"request_id":2}
+> {"args":{"name":" \t"},"kind":"ui.projects.create","request_id":3}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.projects.create requires a non-empty name","hint":null,"details":null,"retryable":false,"debug":null},"request_id":3}
+> {"args":{"name":7},"kind":"ui.projects.create","request_id":4}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.projects.create requires a non-empty name","hint":null,"details":null,"retryable":false,"debug":null},"request_id":4}
+> {"args":{"name":"Alpha","project_id":5},"kind":"ui.projects.create","request_id":5}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.projects.create project_id must be a string","hint":null,"details":null,"retryable":false,"debug":null},"request_id":5}
+> {"args":{"auth_response":{"passphrase_secret":"short"},"name":"Alpha"},"kind":"ui.projects.create","request_id":6}
+< {"kind":"error","schema_version":1,"error":{"code":"invalid_passphrase","message":"database passphrase must be at least 12 characters long","hint":"Pick a long passphrase from a password manager.","details":null,"retryable":false,"debug":null},"request_id":6}
+> {"args":{"name":" Alpha "},"kind":"ui.projects.create","request_id":7}
+< {"kind":"ui.projects.create","schema_version":1,"data":{"project":{"id":"alpha","name":"Alpha","path":"<SANDBOX>/xdg-data/kassiber/projects/alpha","data_root":"<SANDBOX>/xdg-data/kassiber/projects/alpha/data","database":"<SANDBOX>/xdg-data/kassiber/projects/alpha/data/kassiber.sqlite3","encrypted":false,"last_opened_at":null},"selected_project_id":"alpha","unlocked":true},"request_id":7}
+> {"args":{},"kind":"status","request_id":8}
+< {"kind":"status","schema_version":1,"data":{"version":"0.22.78","schema_version":1,"auth":{"mode":"local","authenticated":true},"database_encrypted":false,"state_root":"<SANDBOX>/xdg-data/kassiber/projects/alpha","data_root":"<SANDBOX>/xdg-data/kassiber/projects/alpha/data","database":"<SANDBOX>/xdg-data/kassiber/projects/alpha/data/kassiber.sqlite3","project_id":"alpha","project_name":"Alpha","project_root":"<SANDBOX>/xdg-data/kassiber/projects/alpha","config_root":"<SANDBOX>/xdg-data/kassiber/projects/alpha/config","settings_file":"<SANDBOX>/xdg-data/kassiber/projects/alpha/config/settings.json","exports_root":"<SANDBOX>/xdg-data/kassiber/projects/alpha/exports","attachments_root":"<SANDBOX>/xdg-data/kassiber/projects/alpha/attachments","current_workspace":"","current_profile":"","workspaces":0,"profiles":0,"accounts":0,"wallets":0,"transactions":0,"journal_entries":0,"quarantines":0,"default_backend":"fulcrum","env_file":"<SANDBOX>/xdg-data/kassiber/projects/alpha/config/backends.env"},"request_id":8}
+> {"args":null,"kind":"ui.projects.list","request_id":9}
+< {"kind":"ui.projects.list","schema_version":1,"data":{"selected_project_id":"alpha","projects":[{"id":"default","name":"Default","path":"<SANDBOX>/xdg-data/kassiber/projects/default","data_root":"<SANDBOX>/xdg-data/kassiber/projects/default/data","database":"<SANDBOX>/xdg-data/kassiber/projects/default/data/kassiber.sqlite3","encrypted":false,"last_opened_at":null,"selected":false},{"id":"alpha","name":"Alpha","path":"<SANDBOX>/xdg-data/kassiber/projects/alpha","data_root":"<SANDBOX>/xdg-data/kassiber/projects/alpha/data","database":"<SANDBOX>/xdg-data/kassiber/projects/alpha/data/kassiber.sqlite3","encrypted":false,"last_opened_at":"2030-01-02T03:04:05Z","selected":true}]},"request_id":9}
+> {"args":{"name":"ALPHA"},"kind":"ui.projects.create","request_id":10}
+< {"kind":"error","schema_version":1,"error":{"code":"project_exists","message":"project 'alpha' already exists","hint":null,"details":{"project_id":"alpha","project_root":"<SANDBOX>/xdg-data/kassiber/projects/alpha"},"retryable":false,"debug":null},"request_id":10}
+> {"args":{"name":"Beta","select":false},"kind":"ui.projects.create","request_id":11}
+< {"kind":"ui.projects.create","schema_version":1,"data":{"project":{"id":"beta","name":"Beta","path":"<SANDBOX>/xdg-data/kassiber/projects/beta","data_root":"<SANDBOX>/xdg-data/kassiber/projects/beta/data","database":"<SANDBOX>/xdg-data/kassiber/projects/beta/data/kassiber.sqlite3","encrypted":false,"last_opened_at":null},"selected_project_id":"alpha","unlocked":false},"request_id":11}
+> {"args":{"name":"Gamma","project_id":"","select":0},"kind":"ui.projects.create","request_id":12}
+< {"kind":"ui.projects.create","schema_version":1,"data":{"project":{"id":"gamma","name":"Gamma","path":"<SANDBOX>/xdg-data/kassiber/projects/gamma","data_root":"<SANDBOX>/xdg-data/kassiber/projects/gamma/data","database":"<SANDBOX>/xdg-data/kassiber/projects/gamma/data/kassiber.sqlite3","encrypted":false,"last_opened_at":null},"selected_project_id":"gamma","unlocked":true},"request_id":12}
+> {"args":{"auth_response":{"passphrase_secret":"R5 project synthetic '🔑"},"name":"Vault","project_id":"Vault Book","select":false},"kind":"ui.projects.create","request_id":13}
+< {"kind":"ui.projects.create","schema_version":1,"data":{"project":{"id":"vault-book","name":"Vault","path":"<SANDBOX>/xdg-data/kassiber/projects/vault-book","data_root":"<SANDBOX>/xdg-data/kassiber/projects/vault-book/data","database":"<SANDBOX>/xdg-data/kassiber/projects/vault-book/data/kassiber.sqlite3","encrypted":true,"last_opened_at":null},"selected_project_id":"gamma","unlocked":false},"request_id":13}
+> {"args":{},"kind":"ui.projects.list","request_id":14}
+< {"kind":"ui.projects.list","schema_version":1,"data":{"selected_project_id":"gamma","projects":[{"id":"default","name":"Default","path":"<SANDBOX>/xdg-data/kassiber/projects/default","data_root":"<SANDBOX>/xdg-data/kassiber/projects/defau… [1570 bytes fnv128 f2b7abf1f17fe6569384a00d7f8ca606]
+> {"args":{},"kind":"ui.projects.select","request_id":15}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.projects.select requires project_id","hint":null,"details":null,"retryable":false,"debug":null},"request_id":15}
+> {"args":{"project_id":" "},"kind":"ui.projects.select","request_id":16}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.projects.select requires project_id","hint":null,"details":null,"retryable":false,"debug":null},"request_id":16}
+> {"args":{"project_id":3},"kind":"ui.projects.select","request_id":17}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.projects.select requires project_id","hint":null,"details":null,"retryable":false,"debug":null},"request_id":17}
+> {"args":{"project_id":"missing"},"kind":"ui.projects.select","request_id":18}
+< {"kind":"error","schema_version":1,"error":{"code":"project_not_found","message":"project 'missing' is not registered","hint":null,"details":{"project_id":"missing"},"retryable":false,"debug":null},"request_id":18}
+> {"args":{"id":"BETA","project_id":""},"kind":"ui.projects.select","request_id":19}
+< {"kind":"ui.projects.select","schema_version":1,"data":{"project":{"id":"beta","name":"Beta","path":"<SANDBOX>/xdg-data/kassiber/projects/beta","data_root":"<SANDBOX>/xdg-data/kassiber/projects/beta/data","database":"<SANDBOX>/xdg-data/ka… [1319 bytes fnv128 b550c01cee3fe85c1650ce90f099878f]
+> {"args":{},"kind":"status","request_id":20}
+< {"kind":"status","schema_version":1,"data":{"version":"0.22.78","schema_version":1,"auth":{"mode":"local","authenticated":true},"database_encrypted":false,"state_root":"<SANDBOX>/xdg-data/kassiber/projects/beta","data_root":"<SANDBOX>/xdg-data/kassiber/projects/beta/data","database":"<SANDBOX>/xdg-data/kassiber/projects/beta/data/kassiber.sqlite3","project_id":"beta","project_name":"Beta","project_root":"<SANDBOX>/xdg-data/kassiber/projects/beta","config_root":"<SANDBOX>/xdg-data/kassiber/projects/beta/config","settings_file":"<SANDBOX>/xdg-data/kassiber/projects/beta/config/settings.json","exports_root":"<SANDBOX>/xdg-data/kassiber/projects/beta/exports","attachments_root":"<SANDBOX>/xdg-data/kassiber/projects/beta/attachments","current_workspace":"","current_profile":"","workspaces":0,"profiles":0,"accounts":0,"wallets":0,"transactions":0,"journal_entries":0,"quarantines":0,"default_backend":"fulcrum","env_file":"<SANDBOX>/xdg-data/kassiber/projects/beta/config/backends.env"},"request_id":20}
+> {"args":{"project_id":"beta"},"kind":"ui.projects.select","request_id":21}
+< {"kind":"ui.projects.select","schema_version":1,"data":{"project":{"id":"beta","name":"Beta","path":"<SANDBOX>/xdg-data/kassiber/projects/beta","data_root":"<SANDBOX>/xdg-data/kassiber/projects/beta/data","database":"<SANDBOX>/xdg-data/ka… [1319 bytes fnv128 b550b381273fe85c1650ce90eba2ebea]
+> {"args":{"project_id":"vault-book"},"kind":"ui.projects.select","request_id":22}
+< {"kind":"auth_required","schema_version":1,"data":{"scope":"unlock_project","label":"Enter the SQLCipher passphrase for project 'Vault'.","project":{"id":"vault-book","name":"Vault","path":"<SANDBOX>/xdg-data/kassiber/projects/vault-book","data_root":"<SANDBOX>/xdg-data/kassiber/projects/vault-book/data","database":"<SANDBOX>/xdg-data/kassiber/projects/vault-book/data/kassiber.sqlite3","encrypted":true,"last_opened_at":null}},"request_id":22}
+> {"args":{"auth_response":{"passphrase_secret":"wrong passphrase value"},"project_id":"vault-book"},"kind":"ui.projects.select","request_id":23}
+< {"kind":"error","schema_version":1,"error":{"code":"local_auth_denied","message":"passphrase verification failed","hint":null,"details":null,"retryable":true,"debug":null},"request_id":23}
+> {"args":{"auth_response":{"passphrase_secret":"R5 project synthetic '🔑"},"project_id":"vault-book"},"kind":"ui.projects.select","request_id":24}
+< {"kind":"ui.projects.select","schema_version":1,"data":{"project":{"id":"vault-book","name":"Vault","path":"<SANDBOX>/xdg-data/kassiber/projects/vault-book","data_root":"<SANDBOX>/xdg-data/kassiber/projects/vault-book/data","database":"<S… [1403 bytes fnv128 e65d747fb0cb28be2e64d096a8b936c5]
+> {"args":{},"kind":"status","request_id":25}
+< {"kind":"status","schema_version":1,"data":{"version":"0.22.78","schema_version":1,"auth":{"mode":"local","authenticated":true},"database_encrypted":true,"state_root":"<SANDBOX>/xdg-data/kassiber/projects/vault-book","data_root":"<SANDBOX>/xdg-data/kassiber/projects/vault-book/data","database":"<SANDBOX>/xdg-data/kassiber/projects/vault-book/data/kassiber.sqlite3","project_id":"vault-book","project_name":"Vault","project_root":"<SANDBOX>/xdg-data/kassiber/projects/vault-book","config_root":"<SANDBOX>/xdg-data/kassiber/projects/vault-book/config","settings_file":"<SANDBOX>/xdg-data/kassiber/projects/vault-book/config/settings.json","exports_root":"<SANDBOX>/xdg-data/kassiber/projects/vault-book/exports","attachments_root":"<SANDBOX>/xdg-data/kassiber/projects/vault-book/attachments","current_workspace":"","current_profile":"","workspaces":0,"profiles":0,"accounts":0,"wallets":0,"transactions":0,"journal_entries":0,"quarantines":0,"default_backend":"fulcrum","env_file":"<SANDBOX>/xdg-data/kassiber/projects/vault-book/config/backends.env"},"request_id":25}
+> {"args":{"project_id":"vault-book"},"kind":"ui.projects.select","request_id":26}
+< {"kind":"ui.projects.select","schema_version":1,"data":{"project":{"id":"vault-book","name":"Vault","path":"<SANDBOX>/xdg-data/kassiber/projects/vault-book","data_root":"<SANDBOX>/xdg-data/kassiber/projects/vault-book/data","database":"<S… [1403 bytes fnv128 e65d747aaccb28be2e64d096a8b6120b]
+> {"args":{},"kind":"daemon.lock","request_id":27}
+< {"kind":"daemon.lock","schema_version":1,"data":{"locked":true},"request_id":27}
+> {"args":{"project_id":"vault-book"},"kind":"ui.projects.select","request_id":28}
+< {"kind":"auth_required","schema_version":1,"data":{"scope":"unlock_project","label":"Enter the SQLCipher passphrase for project 'Vault'.","project":{"id":"vault-book","name":"Vault","path":"<SANDBOX>/xdg-data/kassiber/projects/vault-book","data_root":"<SANDBOX>/xdg-data/kassiber/projects/vault-book/data","database":"<SANDBOX>/xdg-data/kassiber/projects/vault-book/data/kassiber.sqlite3","encrypted":true,"last_opened_at":"2030-01-02T03:04:05Z"}},"request_id":28}
+> {"args":{"auth_response":{"passphrase_secret":"R5 project synthetic '🔑"},"project_id":"vault-book","require_existing_project":true},"kind":"ui.projects.select","request_id":29}
+< {"kind":"ui.projects.select","schema_version":1,"data":{"project":{"id":"vault-book","name":"Vault","path":"<SANDBOX>/xdg-data/kassiber/projects/vault-book","data_root":"<SANDBOX>/xdg-data/kassiber/projects/vault-book/data","database":"<S… [1403 bytes fnv128 e65d748baccb28be2e64d096a8c063dc]
+> {"args":{"auth_response":{"passphrase_secret":"R5 project synthetic '🔑"},"name":"Delta"},"kind":"ui.projects.create","request_id":30}
+< {"kind":"ui.projects.create","schema_version":1,"data":{"project":{"id":"delta","name":"Delta","path":"<SANDBOX>/xdg-data/kassiber/projects/delta","data_root":"<SANDBOX>/xdg-data/kassiber/projects/delta/data","database":"<SANDBOX>/xdg-data/kassiber/projects/delta/data/kassiber.sqlite3","encrypted":true,"last_opened_at":"2030-01-02T03:04:05Z"},"selected_project_id":"delta","unlocked":true},"request_id":30}
+> {"args":{},"kind":"status","request_id":31}
+< {"kind":"status","schema_version":1,"data":{"version":"0.22.78","schema_version":1,"auth":{"mode":"local","authenticated":true},"database_encrypted":true,"state_root":"<SANDBOX>/xdg-data/kassiber/projects/delta","data_root":"<SANDBOX>/xdg-data/kassiber/projects/delta/data","database":"<SANDBOX>/xdg-data/kassiber/projects/delta/data/kassiber.sqlite3","project_id":"delta","project_name":"Delta","project_root":"<SANDBOX>/xdg-data/kassiber/projects/delta","config_root":"<SANDBOX>/xdg-data/kassiber/projects/delta/config","settings_file":"<SANDBOX>/xdg-data/kassiber/projects/delta/config/settings.json","exports_root":"<SANDBOX>/xdg-data/kassiber/projects/delta/exports","attachments_root":"<SANDBOX>/xdg-data/kassiber/projects/delta/attachments","current_workspace":"","current_profile":"","workspaces":0,"profiles":0,"accounts":0,"wallets":0,"transactions":0,"journal_entries":0,"quarantines":0,"default_backend":"fulcrum","env_file":"<SANDBOX>/xdg-data/kassiber/projects/delta/config/backends.env"},"request_id":31}
+> {"args":{"project_id":"alpha"},"kind":"ui.projects.select","request_id":32}
+< {"kind":"ui.projects.select","schema_version":1,"data":{"project":{"id":"alpha","name":"Alpha","path":"<SANDBOX>/xdg-data/kassiber/projects/alpha","data_root":"<SANDBOX>/xdg-data/kassiber/projects/alpha/data","database":"<SANDBOX>/xdg-dat… [1335 bytes fnv128 485e4edf48edccf058eb924fcc6bc32e]
+> {"args":{},"kind":"ui.projects.list","request_id":33}
+< {"kind":"ui.projects.list","schema_version":1,"data":{"selected_project_id":"alpha","projects":[{"id":"default","name":"Default","path":"<SANDBOX>/xdg-data/kassiber/projects/default","data_root":"<SANDBOX>/xdg-data/kassiber/projects/defau… [1902 bytes fnv128 78f0f92cb9188e6eb1c784e065c4048c]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== catalog
+{
+  "projects": [
+    {
+      "encrypted": false,
+      "id": "default",
+      "last_opened_at": null,
+      "name": "Default",
+      "path": "<SANDBOX>/xdg-data/kassiber/projects/default"
+    },
+    {
+      "encrypted": false,
+      "id": "alpha",
+      "last_opened_at": "2030-01-02T03:04:05Z",
+      "name": "Alpha",
+      "path": "<SANDBOX>/xdg-data/kassiber/projects/alpha"
+    },
+    {
+      "encrypted": false,
+      "id": "beta",
+      "last_opened_at": "2030-01-02T03:04:05Z",
+      "name": "Beta",
+      "path": "<SANDBOX>/xdg-data/kassiber/projects/beta"
+    },
+    {
+      "encrypted": false,
+      "id": "gamma",
+      "last_opened_at": "2030-01-02T03:04:05Z",
+      "name": "Gamma",
+      "path": "<SANDBOX>/xdg-data/kassiber/projects/gamma"
+    },
+    {
+      "encrypted": true,
+      "id": "vault-book",
+      "last_opened_at": "2030-01-02T03:04:05Z",
+      "name": "Vault",
+      "path": "<SANDBOX>/xdg-data/kassiber/projects/vault-book"
+    },
+    {
+      "encrypted": true,
+      "id": "delta",
+      "last_opened_at": "2030-01-02T03:04:05Z",
+      "name": "Delta",
+      "path": "<SANDBOX>/xdg-data/kassiber/projects/delta"
+    }
+  ],
+  "schema_version": 1,
+  "selected_project_id": "alpha"
+}
+=== project alpha
+chain_index_clock: id=i:1 | revision=i:14
+chain_index_dirty: source_table=t:"book_network_bindings" | source_key=i:-1 | revision=i:13
+chain_index_dirty: source_table=t:"chain_analysis_acquisition_grants" | source_key=i:-1 | revision=i:14
+chain_index_dirty: source_table=t:"chain_analysis_dataset_claims" | source_key=i:-1 | revision=i:12
+chain_index_dirty: source_table=t:"chain_analysis_datasets" | source_key=i:-1 | revision=i:11
+chain_index_dirty: source_table=t:"chain_analysis_labels" | source_key=i:-1 | revision=i:10
+chain_index_dirty: source_table=t:"chain_analysis_observations" | source_key=i:-1 | revision=i:4
+chain_index_dirty: source_table=t:"chain_analysis_reference_assertions" | source_key=i:-1 | revision=i:5
+chain_index_dirty: source_table=t:"journal_custody_decisions" | source_key=i:-1 | revision=i:8
+chain_index_dirty: source_table=t:"journal_custody_economic_relations" | source_key=i:-1 | revision=i:9
+chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:7
+chain_index_dirty: source_table=t:"transaction_graph_cache" | source_key=i:-1 | revision=i:2
+… [6367 bytes, 29 lines fnv128 14a5f1c75accc4a059426ff447f7e0f6]
+=== project beta
+chain_index_clock: id=i:1 | revision=i:14
+chain_index_dirty: source_table=t:"book_network_bindings" | source_key=i:-1 | revision=i:13
+chain_index_dirty: source_table=t:"chain_analysis_acquisition_grants" | source_key=i:-1 | revision=i:14
+chain_index_dirty: source_table=t:"chain_analysis_dataset_claims" | source_key=i:-1 | revision=i:12
+chain_index_dirty: source_table=t:"chain_analysis_datasets" | source_key=i:-1 | revision=i:11
+chain_index_dirty: source_table=t:"chain_analysis_labels" | source_key=i:-1 | revision=i:10
+chain_index_dirty: source_table=t:"chain_analysis_observations" | source_key=i:-1 | revision=i:4
+chain_index_dirty: source_table=t:"chain_analysis_reference_assertions" | source_key=i:-1 | revision=i:5
+chain_index_dirty: source_table=t:"journal_custody_decisions" | source_key=i:-1 | revision=i:8
+chain_index_dirty: source_table=t:"journal_custody_economic_relations" | source_key=i:-1 | revision=i:9
+chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:7
+chain_index_dirty: source_table=t:"transaction_graph_cache" | source_key=i:-1 | revision=i:2
+… [6367 bytes, 29 lines fnv128 14a5f1c75accc4a059426ff447f7e0f6]
+=== project delta
+chain_index_clock: id=i:1 | revision=i:14
+chain_index_dirty: source_table=t:"book_network_bindings" | source_key=i:-1 | revision=i:13
+chain_index_dirty: source_table=t:"chain_analysis_acquisition_grants" | source_key=i:-1 | revision=i:14
+chain_index_dirty: source_table=t:"chain_analysis_dataset_claims" | source_key=i:-1 | revision=i:12
+chain_index_dirty: source_table=t:"chain_analysis_datasets" | source_key=i:-1 | revision=i:11
+chain_index_dirty: source_table=t:"chain_analysis_labels" | source_key=i:-1 | revision=i:10
+chain_index_dirty: source_table=t:"chain_analysis_observations" | source_key=i:-1 | revision=i:4
+chain_index_dirty: source_table=t:"chain_analysis_reference_assertions" | source_key=i:-1 | revision=i:5
+chain_index_dirty: source_table=t:"journal_custody_decisions" | source_key=i:-1 | revision=i:8
+chain_index_dirty: source_table=t:"journal_custody_economic_relations" | source_key=i:-1 | revision=i:9
+chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:7
+chain_index_dirty: source_table=t:"transaction_graph_cache" | source_key=i:-1 | revision=i:2
+… [6367 bytes, 29 lines fnv128 14a5f1c75accc4a059426ff447f7e0f6]
+=== project gamma
+chain_index_clock: id=i:1 | revision=i:14
+chain_index_dirty: source_table=t:"book_network_bindings" | source_key=i:-1 | revision=i:13
+chain_index_dirty: source_table=t:"chain_analysis_acquisition_grants" | source_key=i:-1 | revision=i:14
+chain_index_dirty: source_table=t:"chain_analysis_dataset_claims" | source_key=i:-1 | revision=i:12
+chain_index_dirty: source_table=t:"chain_analysis_datasets" | source_key=i:-1 | revision=i:11
+chain_index_dirty: source_table=t:"chain_analysis_labels" | source_key=i:-1 | revision=i:10
+chain_index_dirty: source_table=t:"chain_analysis_observations" | source_key=i:-1 | revision=i:4
+chain_index_dirty: source_table=t:"chain_analysis_reference_assertions" | source_key=i:-1 | revision=i:5
+chain_index_dirty: source_table=t:"journal_custody_decisions" | source_key=i:-1 | revision=i:8
+chain_index_dirty: source_table=t:"journal_custody_economic_relations" | source_key=i:-1 | revision=i:9
+chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:7
+chain_index_dirty: source_table=t:"transaction_graph_cache" | source_key=i:-1 | revision=i:2
+… [6367 bytes, 29 lines fnv128 14a5f1c75accc4a059426ff447f7e0f6]
+=== project vault-book
+chain_index_clock: id=i:1 | revision=i:14
+chain_index_dirty: source_table=t:"book_network_bindings" | source_key=i:-1 | revision=i:13
+chain_index_dirty: source_table=t:"chain_analysis_acquisition_grants" | source_key=i:-1 | revision=i:14
+chain_index_dirty: source_table=t:"chain_analysis_dataset_claims" | source_key=i:-1 | revision=i:12
+chain_index_dirty: source_table=t:"chain_analysis_datasets" | source_key=i:-1 | revision=i:11
+chain_index_dirty: source_table=t:"chain_analysis_labels" | source_key=i:-1 | revision=i:10
+chain_index_dirty: source_table=t:"chain_analysis_observations" | source_key=i:-1 | revision=i:4
+chain_index_dirty: source_table=t:"chain_analysis_reference_assertions" | source_key=i:-1 | revision=i:5
+chain_index_dirty: source_table=t:"journal_custody_decisions" | source_key=i:-1 | revision=i:8
+chain_index_dirty: source_table=t:"journal_custody_economic_relations" | source_key=i:-1 | revision=i:9
+chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:7
+chain_index_dirty: source_table=t:"transaction_graph_cache" | source_key=i:-1 | revision=i:2
+… [6367 bytes, 29 lines fnv128 14a5f1c75accc4a059426ff447f7e0f6]

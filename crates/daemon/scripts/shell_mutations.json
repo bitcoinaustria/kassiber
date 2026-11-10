@@ -5,7 +5,8 @@
     "find": "let select = get(args, \"select\") != Some(&Value::Bool(false));",
     "replace": "let select = get(args, \"select\").map_or(true, truthy);",
     "expect_failing": [
-      "tests/test_rust_project_desktop.py::test_project_catalog_creation_and_switching_match_python"
+      "tests/test_rust_project_desktop.py::test_project_catalog_creation_and_switching_match_python",
+      "kassiber/black_box:test_project_catalog_creation_and_switching_match_python"
     ],
     "rule": "Only a literal false declines selection after creation; other falsy values still select."
   },
@@ -15,7 +16,8 @@
     "find": "let selected = daemon.project_id.as_deref() == Some(field(&entry, \"id\").as_str());",
     "replace": "let selected = daemon.project_id.as_deref() != Some(field(&entry, \"id\").as_str());",
     "expect_failing": [
-      "tests/test_rust_project_desktop.py::test_project_catalog_creation_and_switching_match_python"
+      "tests/test_rust_project_desktop.py::test_project_catalog_creation_and_switching_match_python",
+      "kassiber/black_box:test_project_catalog_creation_and_switching_match_python"
     ],
     "rule": "The list marks the daemon's open project as selected."
   },
@@ -25,7 +27,8 @@
     "find": "if text.code_points().count() < MIN_PASSPHRASE_CHARS {",
     "replace": "if text.code_points().count() <= MIN_PASSPHRASE_CHARS {",
     "expect_failing": [
-      "tests/test_rust_project_desktop.py::test_explicit_root_switches_to_encrypted_project_and_reunlocks"
+      "tests/test_rust_project_desktop.py::test_explicit_root_switches_to_encrypted_project_and_reunlocks",
+      "kassiber/black_box:test_explicit_root_switches_to_encrypted_project_and_reunlocks"
     ],
     "rule": "A new database passphrase of exactly twelve characters is accepted."
   },
@@ -35,7 +38,8 @@
     "find": "            stamp: select,\n",
     "replace": "            stamp: true,\n",
     "expect_failing": [
-      "tests/test_rust_project_desktop.py::test_project_catalog_creation_and_switching_match_python"
+      "tests/test_rust_project_desktop.py::test_project_catalog_creation_and_switching_match_python",
+      "kassiber/black_box:test_project_catalog_creation_and_switching_match_python"
     ],
     "rule": "An unselected encrypted project refreshes its metadata without a last-opened stamp."
   },
@@ -45,7 +49,8 @@
     "find": "let root = if switching {",
     "replace": "let root = if !switching {",
     "expect_failing": [
-      "tests/test_rust_project_desktop.py::test_project_catalog_creation_and_switching_match_python"
+      "tests/test_rust_project_desktop.py::test_project_catalog_creation_and_switching_match_python",
+      "kassiber/black_box:test_project_catalog_creation_and_switching_match_python"
     ],
     "rule": "A switch verifies the passphrase against the target project's database."
   },
@@ -55,7 +60,8 @@
     "find": "        let p = context()?\n            .resolve_for_bootstrap(&ResolveOptions {\n                data_root: Some(PathBuf::from(&self.data_root)),",
     "replace": "        let p = context()?\n            .resolve(&ResolveOptions {\n                data_root: Some(PathBuf::from(&self.data_root)),",
     "expect_failing": [
-      "tests/test_rust_project_desktop.py::test_project_catalog_creation_and_switching_match_python"
+      "tests/test_rust_project_desktop.py::test_project_catalog_creation_and_switching_match_python",
+      "kassiber/black_box:test_project_catalog_creation_and_switching_match_python"
     ],
     "rule": "Status reads paths without requiring the layout a new desktop project does not have yet."
   },
@@ -65,7 +71,8 @@
     "find": "            if require_existing_schema {\n                return Err(invalid_project_database(",
     "replace": "            if false {\n                return Err(invalid_project_database(",
     "expect_failing": [
-      "tests/test_rust_project_desktop.py::test_project_creation_refuses_existing_databases_and_unlocked_lock_cycle"
+      "tests/test_rust_project_desktop.py::test_project_creation_refuses_existing_databases_and_unlocked_lock_cycle",
+      "kassiber/black_box:test_project_creation_refuses_existing_databases_and_unlocked_lock_cycle"
     ],
     "rule": "Requiring an existing project refuses a missing database with Python's typed error."
   },
@@ -75,7 +82,8 @@
     "find": "if require_existing_schema && !has_core_schema(&connection)? {",
     "replace": "if false && !has_core_schema(&connection)? {",
     "expect_failing": [
-      "tests/test_rust_project_desktop.py::test_require_existing_refuses_unrelated_sqlite_without_migrating_it"
+      "tests/test_rust_project_desktop.py::test_require_existing_refuses_unrelated_sqlite_without_migrating_it",
+      "kassiber/black_box:test_require_existing_refuses_unrelated_sqlite_without_migrating_it"
     ],
     "rule": "Requiring an existing project refuses an unrelated SQLite file instead of migrating it."
   },
@@ -205,7 +213,8 @@
     "find": "                if include_liquid {",
     "replace": "                if false {",
     "expect_failing": [
-      "tests/test_rust_workspace_shell.py::test_onboarding_matches_python_wire_and_all_tables"
+      "tests/test_rust_workspace_shell.py::test_onboarding_matches_python_wire_and_all_tables",
+      "kassiber/black_box:test_onboarding_matches_python_wire_and_all_tables"
     ],
     "rule": "Choosing Liquid presets during onboarding restores them instead of omitting them."
   },
@@ -215,7 +224,8 @@
     "find": "                removed.extend(BUILTINS.iter().map(|n| (*n).to_owned()));",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_workspace_shell.py::test_onboarding_matches_python_wire_and_all_tables"
+      "tests/test_rust_workspace_shell.py::test_onboarding_matches_python_wire_and_all_tables",
+      "kassiber/black_box:test_onboarding_matches_python_wire_and_all_tables"
     ],
     "rule": "Custom and skipped backend setup tombstones every bundled preset."
   },
@@ -225,7 +235,8 @@
     "find": "kassiber_pyjson::Key::Str(key) if !key.is(\"workspace_id\") => Some(key.clone()),",
     "replace": "kassiber_pyjson::Key::Str(key) if false && !key.is(\"workspace_id\") => Some(key.clone()),",
     "expect_failing": [
-      "tests/test_rust_workspace_shell.py::test_workspace_reads_match_python_bytes_and_leave_books_unchanged"
+      "tests/test_rust_workspace_shell.py::test_workspace_reads_match_python_bytes_and_leave_books_unchanged",
+      "kassiber/black_box:test_workspace_reads_match_python_bytes_and_leave_books_unchanged"
     ],
     "rule": "The book-set overview refuses arguments other than workspace_id."
   },
@@ -235,7 +246,8 @@
     "find": "if get(&args, \"migrate_credentials\") != Some(&Value::Bool(false)) {",
     "replace": "if get(&args, \"migrate_credentials\") == Some(&Value::Bool(true)) {",
     "expect_failing": [
-      "tests/test_rust_workspace_shell.py::test_secrets_init_matches_python_and_migrates_dotenv_credentials"
+      "tests/test_rust_workspace_shell.py::test_secrets_init_matches_python_and_migrates_dotenv_credentials",
+      "kassiber/black_box:test_secrets_init_matches_python_and_migrates_dotenv_credentials"
     ],
     "rule": "Desktop encryption migrates dotenv credentials unless the request opts out with false."
   },
@@ -245,7 +257,8 @@
     "find": "            (\"already_encrypted\", Value::Bool(true)),",
     "replace": "            (\"already_encrypted\", Value::Bool(false)),",
     "expect_failing": [
-      "tests/test_rust_workspace_shell.py::test_secrets_init_matches_python_and_migrates_dotenv_credentials"
+      "tests/test_rust_workspace_shell.py::test_secrets_init_matches_python_and_migrates_dotenv_credentials",
+      "kassiber/black_box:test_secrets_init_matches_python_and_migrates_dotenv_credentials"
     ],
     "rule": "Re-initializing an encrypted book only verifies and unlocks it."
   },
@@ -285,7 +298,8 @@
     "find": "                !matches!(kind, Some(Value::Str(k)) if diagnostics::KINDS.iter().any(|d| k.is(d)));",
     "replace": "                { let _ = &kind; true };",
     "expect_failing": [
-      "tests/test_rust_daemon_diagnostics.py::test_snapshots_match_python_on_plaintext_book"
+      "tests/test_rust_daemon_diagnostics.py::test_snapshots_match_python_on_plaintext_book",
+      "kassiber/black_box:test_snapshots_match_python_on_plaintext_book"
     ],
     "rule": "The two snapshot kinds are not logged."
   },
@@ -295,7 +309,8 @@
     "find": "    let complete = inputs.ai_providers.is_some();",
     "replace": "    let complete = true;",
     "expect_failing": [
-      "tests/test_rust_daemon_diagnostics.py::test_snapshots_match_python_on_plaintext_book"
+      "tests/test_rust_daemon_diagnostics.py::test_snapshots_match_python_on_plaintext_book",
+      "kassiber/black_box:test_snapshots_match_python_on_plaintext_book"
     ],
     "rule": "The allowlist is complete only while a book is open."
   },
@@ -305,7 +320,8 @@
     "find": "            None => match &self.egress_backends {",
     "replace": "            None => match &None::<Value> {",
     "expect_failing": [
-      "tests/test_rust_daemon_diagnostics.py::test_snapshots_match_python_on_plaintext_book"
+      "tests/test_rust_daemon_diagnostics.py::test_snapshots_match_python_on_plaintext_book",
+      "kassiber/black_box:test_snapshots_match_python_on_plaintext_book"
     ],
     "rule": "A locked daemon keeps reporting the last merged backend view."
   },
@@ -315,7 +331,8 @@
     "find": ".is_some_and(|v| [\"1\", \"true\", \"yes\"].contains(&strip(&v)));",
     "replace": ".is_some_and(|v| [\"1\", \"true\"].contains(&strip(&v)));",
     "expect_failing": [
-      "tests/test_rust_release_cli.py::test_update_preferences_and_refusals_match_python_without_contacting_github"
+      "tests/test_rust_release_cli.py::test_update_preferences_and_refusals_match_python_without_contacting_github",
+      "kassiber/black_box:test_update_preferences_and_refusals_match_python_without_contacting_github"
     ],
     "rule": "KASSIBER_DISABLE_UPDATE_CHECK accepts 1, true and yes."
   },
@@ -325,7 +342,8 @@
     "find": "        && get(&payload, \"schema_version\") == Some(&Value::Int(1.into()))",
     "replace": "        && get(&payload, \"schema_version\").is_some_and(truthy)",
     "expect_failing": [
-      "tests/test_rust_release_cli.py::test_update_preferences_and_refusals_match_python_without_contacting_github"
+      "tests/test_rust_release_cli.py::test_update_preferences_and_refusals_match_python_without_contacting_github",
+      "kassiber/black_box:test_update_preferences_and_refusals_match_python_without_contacting_github"
     ],
     "rule": "Update consent requires an integer schema_version of exactly 1."
   },
@@ -335,7 +353,8 @@
     "find": "    if offline_enabled(context)? {",
     "replace": "    if false && offline_enabled(context)? {",
     "expect_failing": [
-      "tests/test_rust_release_cli.py::test_update_preferences_and_refusals_match_python_without_contacting_github"
+      "tests/test_rust_release_cli.py::test_update_preferences_and_refusals_match_python_without_contacting_github",
+      "kassiber/black_box:test_update_preferences_and_refusals_match_python_without_contacting_github"
     ],
     "rule": "Offline mode refuses an update check before the consent check."
   },
@@ -345,7 +364,8 @@
     "find": "    if fingerprint(&blob) != expected {",
     "replace": "    if false {",
     "expect_failing": [
-      "tests/test_rust_release_cli.py::test_verify_download_matches_python_for_success_and_every_refusal"
+      "tests/test_rust_release_cli.py::test_verify_download_matches_python_for_success_and_every_refusal",
+      "kassiber/black_box:test_verify_download_matches_python_for_success_and_every_refusal"
     ],
     "rule": "The supplied public key must hash to the pinned fingerprint before the signature is checked."
   },
@@ -355,7 +375,8 @@
     "find": "    if actual != *digest {",
     "replace": "    if false {",
     "expect_failing": [
-      "tests/test_rust_release_cli.py::test_verify_download_matches_python_for_success_and_every_refusal"
+      "tests/test_rust_release_cli.py::test_verify_download_matches_python_for_success_and_every_refusal",
+      "kassiber/black_box:test_verify_download_matches_python_for_success_and_every_refusal"
     ],
     "rule": "A tampered artifact fails its manifest digest."
   },
@@ -365,7 +386,8 @@
     "find": "    if lines[1] != format!(\"{MANIFEST_VERSION_PREFIX}{expected}\") {",
     "replace": "    if false {",
     "expect_failing": [
-      "tests/test_rust_release_cli.py::test_verify_download_matches_python_for_success_and_every_refusal"
+      "tests/test_rust_release_cli.py::test_verify_download_matches_python_for_success_and_every_refusal",
+      "kassiber/black_box:test_verify_download_matches_python_for_success_and_every_refusal"
     ],
     "rule": "The signed version must match the manifest filename."
   },
@@ -375,7 +397,8 @@
     "find": "        options.custom_flags(nix::libc::O_NOFOLLOW);",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_release_cli.py::test_verify_download_matches_python_for_success_and_every_refusal"
+      "tests/test_rust_release_cli.py::test_verify_download_matches_python_for_success_and_every_refusal",
+      "kassiber/black_box:test_verify_download_matches_python_for_success_and_every_refusal"
     ],
     "rule": "Release inputs are never read through a final symlink."
   },
