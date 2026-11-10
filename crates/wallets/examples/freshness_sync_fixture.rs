@@ -61,7 +61,13 @@ fn main() {
         .take(64 * 1024 * 1024)
         .read_to_string(&mut raw)
         .unwrap();
-    let input: Value = serde_json::from_str(&raw).unwrap();
+    println!("{}", run(&raw));
+}
+
+/// One fixture invocation: the JSON input a test hands the binary, and the
+/// line it prints. The freshness replays also call this.
+pub fn run(raw: &str) -> String {
+    let input: Value = serde_json::from_str(raw).unwrap();
     let mut conn = Connection::open(input["book"].as_str().unwrap()).unwrap();
     conn.execute_batch("PRAGMA foreign_keys=ON").unwrap();
     let offline = input["offline"] == true;
@@ -154,7 +160,16 @@ fn main() {
             &gate,
             (input["consent"] != false).then_some(&proof),
             &cancel,
-            Instant::now() + Duration::from_secs(60),
+            // The replays run this in a debug test binary, often beside
+            // other tests; a large wallet's rescan needs more than a minute
+            // there (`KASSIBER_FRESHNESS_FIXTURE_BUDGET_SECS`).
+            Instant::now()
+                + Duration::from_secs(
+                    std::env::var("KASSIBER_FRESHNESS_FIXTURE_BUDGET_SECS")
+                        .ok()
+                        .and_then(|v| v.parse().ok())
+                        .unwrap_or(60),
+                ),
             input["start_time"].as_u64().unwrap_or(1_700_000_000),
             input["version"].as_str().unwrap(),
             // No saved BTCPay backends: these fixtures plan no BTCPay route.
@@ -174,14 +189,11 @@ fn main() {
         Ok(value) => success("freshness.sync", value),
         Err(error) => error.envelope(None),
     };
-    println!(
-        "{}",
-        kassiber_pyjson::dumps(
-            &dict([("envelope", envelope), ("events", Py::List(events))]),
-            &Options::new().sort_keys(true)
-        )
-        .unwrap()
-    );
+    let printed = kassiber_pyjson::dumps(
+        &dict([("envelope", envelope), ("events", Py::List(events))]),
+        &Options::new().sort_keys(true),
+    )
+    .unwrap();
     if input["consent"] == false
         || input["cancel"] == true
         || input["revoke"] == true
@@ -194,4 +206,5 @@ fn main() {
         assert!(gate.attempts().records.is_empty());
         assert!(gate.ledger().snapshot(0, 100).records.is_empty());
     }
+    printed
 }

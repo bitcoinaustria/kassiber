@@ -30,7 +30,13 @@ fn main() {
         .take(1024 * 1024)
         .read_to_string(&mut raw)
         .unwrap();
-    let input: Value = serde_json::from_str(&raw).unwrap();
+    println!("{}", run(&raw));
+}
+
+/// One fixture invocation: the JSON input a test hands the binary, and the
+/// line it prints. The freshness replays also call this.
+pub fn run(raw: &str) -> String {
+    let input: Value = serde_json::from_str(raw).unwrap();
     let mut conn = Connection::open(input["book"].as_str().unwrap()).unwrap();
     conn.execute_batch("PRAGMA foreign_keys=ON").unwrap();
     let gate = Gate::new(|| Offline::Online, Ledger::default());
@@ -68,10 +74,8 @@ fn main() {
         Ok(result) => success("graph.followup", result.unwrap_or(Py::Null)),
         Err(error) => error.envelope(None),
     };
-    println!(
-        "{}",
-        kassiber_pyjson::dumps(&dict([("envelope", envelope)]), &Default::default()).unwrap()
-    );
+    let printed =
+        kassiber_pyjson::dumps(&dict([("envelope", envelope)]), &Default::default()).unwrap();
     if input["revoke"] == true
         || input["stop"] == true
         || input["before_sql"].is_string()
@@ -80,4 +84,5 @@ fn main() {
         assert!(gate.attempts().records.is_empty());
         assert!(gate.ledger().snapshot(0, 100).records.is_empty());
     }
+    printed
 }
