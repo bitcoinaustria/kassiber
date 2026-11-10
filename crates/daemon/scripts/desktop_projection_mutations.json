@@ -39,7 +39,7 @@
     "replace": "        if false {",
     "expect_failing": [
       "tests/test_rust_report_blockers.py::RustReportBlockersTest::test_every_barrier_matches_wire_bytes",
-      "kassiber/black_box:test_every_barrier_matches_wire_bytes"
+      "stale_journals_block_reports_with_their_edit_history"
     ],
     "rule": "Stale journals block reports and carry the edit history."
   },
