@@ -23,6 +23,7 @@ use sha2::{Digest, Sha256};
 
 pub mod compare;
 pub mod dbdump;
+pub mod encrypted;
 pub mod replay;
 
 pub const SESSION_FORMAT: &str = "kassiber-process-session/1";
@@ -54,6 +55,9 @@ pub enum Entry {
         mode: u32,
         blob: String,
         size: u64,
+        /// An encrypted book, stored decrypted (`blob` is the plaintext).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        encryption: Option<encrypted::Encryption>,
     },
     Symlink {
         path: String,
@@ -106,6 +110,56 @@ pub struct Session {
     /// descriptor number to base64 content. Test passphrases only.
     #[serde(default)]
     pub fds: BTreeMap<i32, String>,
+}
+
+/// Passphrases a session hands its process: inherited descriptors and the
+/// passphrase fields of stdin requests.
+pub fn passphrase_candidates(fds: &[Vec<u8>], stdin: &[u8]) -> Vec<String> {
+    use std::sync::OnceLock;
+    static FIELD: OnceLock<regex::Regex> = OnceLock::new();
+    let field = FIELD.get_or_init(|| {
+        regex::Regex::new(r#""(?:new_)?passphrase(?:_secret)?"\s*:\s*"((?:[^"\\]|\\.)*)""#).unwrap()
+    });
+    let mut found = Vec::new();
+    for bytes in fds {
+        let text = String::from_utf8_lossy(bytes);
+        let text = text.strip_suffix('\n').unwrap_or(&text).to_owned();
+        if !text.is_empty() && !found.contains(&text) {
+            found.push(text);
+        }
+    }
+    for caps in field.captures_iter(&String::from_utf8_lossy(stdin)) {
+        let value: String = serde_json::from_str(&format!("\"{}\"", &caps[1])).unwrap_or_default();
+        if !value.is_empty() && !found.contains(&value) {
+            found.push(value);
+        }
+    }
+    found
+}
+
+/// Replace each encrypted book in `entries` by its plaintext, stored with
+/// the passphrase that opened it (decision B); the ciphertext stays
+/// referenced until a selection drops it.
+pub fn decrypt_books(entries: &mut [Entry], candidates: &[String], blobs: &Blobs, scratch: &Path) {
+    for entry in entries.iter_mut() {
+        let Entry::File {
+            blob, encryption, ..
+        } = entry
+        else {
+            continue;
+        };
+        if encryption.is_some() {
+            continue;
+        }
+        let Ok(bytes) = blobs.get(blob) else { continue };
+        if let Some((plaintext, mut found)) = encrypted::decrypt(&bytes, candidates, scratch) {
+            if let Ok(plain) = blobs.put(&plaintext) {
+                found.ciphertext = Some(blob.clone());
+                *blob = plain;
+                *encryption = Some(found);
+            }
+        }
+    }
 }
 
 /// The descriptor numbers argv hands over with a `--...-fd N` (or
@@ -176,6 +230,10 @@ pub struct Blobs {
     dir: PathBuf,
 }
 
+/// Blobs this large are stored as pages; the SQLCipher and SQLite page size.
+pub const PAGED_MIN: usize = 64 * 1024;
+const PAGE: usize = 4096;
+
 impl Blobs {
     pub fn new(dir: &Path) -> Self {
         Self {
@@ -187,34 +245,90 @@ impl Blobs {
         self.dir.join(&hash[..2]).join(hash)
     }
 
-    /// Store `bytes` gzip-compressed under their sha256 (books, which most
-    /// blobs are, shrink about 25 times).
+    /// Store `bytes` under their sha256. Small blobs are one gzip file;
+    /// files of `PAGED_MIN` bytes or more (books) are split into 4 KiB pages,
+    /// each stored once by its own hash, plus a list of page hashes, since
+    /// most of a book's pages recur across sessions.
     pub fn put(&self, bytes: &[u8]) -> io::Result<String> {
-        use flate2::write::GzEncoder;
         let hash = hex(&Sha256::digest(bytes));
-        let path = self.path(&hash).with_extension("gz");
-        if !path.exists() && !self.path(&hash).exists() {
-            fs::create_dir_all(path.parent().unwrap())?;
-            let tmp = path.with_extension(format!("tmp{}", std::process::id()));
-            let mut encoder = GzEncoder::new(Vec::new(), flate2::Compression::new(6));
-            io::Write::write_all(&mut encoder, bytes)?;
-            fs::write(&tmp, encoder.finish()?)?;
-            fs::rename(&tmp, &path)?;
+        if bytes.len() < PAGED_MIN {
+            self.put_raw(&hash, bytes)?;
+            return Ok(hash);
+        }
+        let list = self.path(&hash).with_extension("pages");
+        if !list.exists() {
+            let mut hashes = Vec::with_capacity(bytes.len() / PAGE * 32);
+            for page in bytes.chunks(PAGE) {
+                let digest = Sha256::digest(page);
+                self.put_raw(&hex(&digest), page)?;
+                hashes.extend_from_slice(&digest);
+            }
+            self.write_compressed(&list, &hashes)?;
         }
         Ok(hash)
     }
 
+    fn put_raw(&self, hash: &str, bytes: &[u8]) -> io::Result<()> {
+        let path = self.path(hash).with_extension("gz");
+        if path.exists() || self.path(hash).exists() {
+            return Ok(());
+        }
+        self.write_compressed(&path, bytes)
+    }
+
+    fn write_compressed(&self, path: &Path, bytes: &[u8]) -> io::Result<()> {
+        use flate2::write::GzEncoder;
+        fs::create_dir_all(path.parent().unwrap())?;
+        let tmp = path.with_extension(format!("tmp{}", std::process::id()));
+        let mut encoder = GzEncoder::new(Vec::new(), flate2::Compression::new(9));
+        io::Write::write_all(&mut encoder, bytes)?;
+        fs::write(&tmp, encoder.finish()?)?;
+        fs::rename(&tmp, path)
+    }
+
+    fn read_compressed(path: &Path) -> io::Result<Vec<u8>> {
+        let mut out = Vec::new();
+        io::Read::read_to_end(
+            &mut flate2::read::GzDecoder::new(fs::File::open(path)?),
+            &mut out,
+        )?;
+        Ok(out)
+    }
+
     pub fn get(&self, hash: &str) -> io::Result<Vec<u8>> {
-        let compressed = self.path(hash).with_extension("gz");
-        if compressed.exists() {
-            let mut out = Vec::new();
-            io::Read::read_to_end(
-                &mut flate2::read::GzDecoder::new(fs::File::open(compressed)?),
-                &mut out,
-            )?;
+        let list = self.path(hash).with_extension("pages");
+        if list.exists() {
+            let hashes = Self::read_compressed(&list)?;
+            let mut out = Vec::with_capacity(hashes.len() / 32 * PAGE);
+            for digest in hashes.chunks(32) {
+                out.extend(self.get(&hex(digest))?);
+            }
             return Ok(out);
         }
+        let compressed = self.path(hash).with_extension("gz");
+        if compressed.exists() {
+            return Self::read_compressed(&compressed);
+        }
         fs::read(self.path(hash))
+    }
+
+    /// The blob files a stored blob consists of (itself, or its page list and
+    /// pages), for copying a selection of sessions into a smaller store.
+    pub fn files(&self, hash: &str) -> io::Result<Vec<PathBuf>> {
+        let list = self.path(hash).with_extension("pages");
+        if list.exists() {
+            let mut files = vec![list.clone()];
+            for digest in Self::read_compressed(&list)?.chunks(32) {
+                files.push(self.path(&hex(digest)).with_extension("gz"));
+            }
+            return Ok(files);
+        }
+        let compressed = self.path(hash).with_extension("gz");
+        Ok(vec![if compressed.exists() {
+            compressed
+        } else {
+            self.path(hash)
+        }])
     }
 
     /// The stored (compressed) size of a blob.
@@ -249,6 +363,7 @@ pub fn snapshot(root: &Path, blobs: &Blobs) -> io::Result<Vec<Entry>> {
             mode,
             size: bytes.len() as u64,
             blob: blobs.put(&bytes)?,
+            encryption: None,
         });
         return Ok(entries);
     }
@@ -287,6 +402,7 @@ pub fn snapshot(root: &Path, blobs: &Blobs) -> io::Result<Vec<Entry>> {
                     mode,
                     size: bytes.len() as u64,
                     blob: blobs.put(&bytes)?,
+                    encryption: None,
                 });
             }
         }
@@ -431,6 +547,24 @@ mod tests {
         assert_eq!(snapshot(&copy, &blobs).unwrap(), entries);
         assert_eq!(fs::read(copy.join("a/f.txt")).unwrap(), b"one");
         assert!(copy.join("a/empty").is_dir());
+    }
+
+    #[test]
+    fn large_blobs_are_stored_as_shared_pages() {
+        let dir = tempfile::tempdir().unwrap();
+        let blobs = Blobs::new(dir.path());
+        let mut first = vec![7u8; PAGED_MIN + 100];
+        let a = blobs.put(&first).unwrap();
+        first[5] = 8;
+        let b = blobs.put(&first).unwrap();
+        assert_ne!(a, b);
+        assert_eq!(blobs.get(&b).unwrap(), first);
+        // The two share every page but the first.
+        let files_a = blobs.files(&a).unwrap();
+        let files_b = blobs.files(&b).unwrap();
+        let shared = files_a.iter().filter(|f| files_b.contains(f)).count();
+        assert!(shared >= files_a.len() - 2, "{shared} of {}", files_a.len());
+        assert_eq!(blobs.get(&blobs.put(b"small").unwrap()).unwrap(), b"small");
     }
 
     #[test]

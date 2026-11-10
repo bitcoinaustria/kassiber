@@ -105,8 +105,17 @@ fn artifacts(
         let text = match entry {
             Entry::Dir { mode, .. } => format!("dir {mode:o}"),
             Entry::Symlink { target, .. } => format!("symlink {}", canon.rewrite(target, true)),
-            Entry::File { blob, mode, .. } => {
+            Entry::File {
+                blob,
+                mode,
+                encryption,
+                ..
+            } => {
                 let bytes = blobs.get(blob).unwrap_or_default();
+                let sealed = encryption
+                    .as_ref()
+                    .map(|e| format!("encrypted book, {}-byte pages\n", e.page_size))
+                    .unwrap_or_default();
                 let body = if dbdump::is_sqlite(&bytes) {
                     // A disposable copy with its write-ahead log beside it.
                     let file = root.join(".dump.sqlite");
@@ -142,7 +151,7 @@ fn artifacts(
                     // Binary content (an encrypted book, an archive): its size.
                     format!("binary {} bytes", bytes.len())
                 };
-                format!("file {mode:o}\n{body}")
+                format!("file {mode:o}\n{sealed}{body}")
             }
         };
         // Names that carry generated values (an attachment's uuid, an
@@ -160,6 +169,88 @@ fn back(paths: Option<&Paths>, text: &str) -> String {
     paths
         .map(|p| p.back(text))
         .unwrap_or_else(|| text.to_owned())
+}
+
+/// Every passphrase a session hands over or recorded a book under.
+fn session_passphrases(session: &Session, blobs: &Blobs) -> Vec<String> {
+    let fds: Vec<Vec<u8>> = session
+        .fds
+        .values()
+        .map(|d| {
+            base64::engine::general_purpose::STANDARD
+                .decode(d)
+                .unwrap_or_default()
+        })
+        .collect();
+    let stdin: Vec<u8> = session
+        .stdin
+        .iter()
+        .filter_map(|c| c.data.as_ref())
+        .flat_map(|d| {
+            base64::engine::general_purpose::STANDARD
+                .decode(d)
+                .unwrap_or_default()
+        })
+        .collect();
+    let mut found = crate::passphrase_candidates(&fds, &stdin);
+    for root in &session.roots {
+        for entry in root.before.iter().chain(&root.after) {
+            if let Entry::File {
+                encryption: Some(e),
+                ..
+            } = entry
+            {
+                if !found.contains(&e.passphrase) {
+                    found.push(e.passphrase.clone());
+                }
+            }
+        }
+    }
+    let _ = blobs;
+    found
+}
+
+/// Encrypt the restored books again (decision B): with their original
+/// ciphertext where the recording kept it, otherwise through the product's
+/// encryption, verified (`encrypted::encrypt`). A failure fails the replay.
+fn encrypt_books(
+    root: &Path,
+    file: bool,
+    entries: &[Entry],
+    blobs: &Blobs,
+    scratch: &Path,
+) -> Result<(), String> {
+    for entry in entries {
+        let Entry::File {
+            path,
+            blob,
+            encryption: Some(encryption),
+            ..
+        } = entry
+        else {
+            continue;
+        };
+        let target = if file {
+            root.to_path_buf()
+        } else {
+            root.join(path)
+        };
+        let bytes = match encryption
+            .ciphertext
+            .as_ref()
+            .and_then(|c| blobs.get(c).ok())
+        {
+            Some(ciphertext) => ciphertext,
+            None => {
+                let plaintext = blobs.get(blob).map_err(|e| format!("{path}: {e}"))?;
+                crate::encrypted::encrypt(&plaintext, encryption, scratch)
+                    .map_err(|e| format!("{path}: {e}"))?
+            }
+        };
+        fs::write(&target, bytes).map_err(|e| format!("{path}: {e}"))?;
+    }
+    let _ = fs::remove_dir_all(scratch);
+    Ok(())
 }
 
 /// Files that are never compared: SQLite's transient journals and lock files.
@@ -257,6 +348,13 @@ pub fn replay(
         }
         restore(&on_disk, root.file, &root.before, blobs)
             .map_err(|e| format!("restore {}: {e}", root.path))?;
+        encrypt_books(
+            &on_disk,
+            root.file,
+            &root.before,
+            blobs,
+            &scratch.join("encrypt"),
+        )?;
     }
     paths.add(&session.repo, &repo.to_string_lossy());
     if !namespaced {
@@ -542,13 +640,21 @@ pub fn replay(
         differences.push(first_difference("stderr", &a, &b));
     }
     let scan_blobs = Blobs::new(&scratch.join("after-store"));
+    let passphrases = session_passphrases(session, blobs);
     for (index, root) in session.roots.iter().enumerate() {
         let new = disk_path(scratch, index, &root.path, namespaced);
-        let after = if new.exists() {
+        let mut after = if new.exists() {
             crate::snapshot(&new, &scan_blobs).map_err(|e| e.to_string())?
         } else {
             Vec::new()
         };
+        // Encrypted books this run left compare decrypted, like the recording.
+        crate::decrypt_books(
+            &mut after,
+            &passphrases,
+            &scan_blobs,
+            &scratch.join("decrypt"),
+        );
         let dump_dir = scratch.join("dump");
         fs::create_dir_all(&dump_dir).map_err(|e| e.to_string())?;
         let recorded = artifacts(&dump_dir, &root.after, blobs, &mut left, None);

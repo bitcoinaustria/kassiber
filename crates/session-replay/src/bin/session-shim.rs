@@ -96,6 +96,8 @@ struct Config {
     /// Where the recording's pytest plugin writes `<pid>`: the node id each
     /// worker is running.
     current_dir: Option<String>,
+    /// Synthetic passphrases: one literal of the test sources per line.
+    passphrase_allowlist: Option<String>,
 }
 
 /// The test a pytest ancestor of this process is running.
@@ -398,7 +400,7 @@ fn main() {
     if let (Some(dir), Some(blobs)) = (record, blobs) {
         let (state_roots, before) = std::mem::take(&mut *known.lock().unwrap());
         let after = capture(&state_roots, &blobs);
-        let roots = before
+        let mut roots: Vec<Root> = before
             .into_iter()
             .zip(after)
             .map(|((path, file, before), (_, file_after, after))| Root {
@@ -408,6 +410,56 @@ fn main() {
                 after,
             })
             .collect();
+        // Passphrases the test handed over: only synthetic ones (literals
+        // of the test sources) may enter a recording; otherwise the session
+        // is refused, never written. Encrypted books are kept decrypted.
+        let stdin_bytes: Vec<u8> = stdin_log
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|c| c.data.as_ref())
+            .flat_map(|d| {
+                base64::engine::general_purpose::STANDARD
+                    .decode(d)
+                    .unwrap_or_default()
+            })
+            .collect();
+        let fd_bytes: Vec<Vec<u8>> = fds
+            .values()
+            .map(|d| {
+                base64::engine::general_purpose::STANDARD
+                    .decode(d)
+                    .unwrap_or_default()
+            })
+            .collect();
+        let candidates = kassiber_session_replay::passphrase_candidates(&fd_bytes, &stdin_bytes);
+        let allowlist = kassiber_session_replay::encrypted::Allowlist::load(Path::new(
+            config
+                .passphrase_allowlist
+                .as_deref()
+                .unwrap_or("/nonexistent"),
+        ));
+        let refused: Vec<&String> = candidates.iter().filter(|p| !allowlist.allows(p)).collect();
+        if !refused.is_empty() {
+            let _ = fs::create_dir_all(dir.join("refused"));
+            let _ = fs::write(
+                dir.join("refused")
+                    .join(format!("{started}-{}-{name}.txt", std::process::id())),
+                format!(
+                    "{} passphrase(s) not in the synthetic allowlist\n",
+                    refused.len()
+                ),
+            );
+            finish(signal, status.code());
+        }
+        let scratch = dir
+            .join("decrypt-scratch")
+            .join(std::process::id().to_string());
+        for root in &mut roots {
+            kassiber_session_replay::decrypt_books(&mut root.before, &candidates, &blobs, &scratch);
+            kassiber_session_replay::decrypt_books(&mut root.after, &candidates, &blobs, &scratch);
+        }
+        let _ = fs::remove_dir_all(&scratch);
         let count = SIGNAL_COUNT.load(Ordering::SeqCst).min(MAX_SIGNALS);
         let signals = (0..count)
             .map(|i| SignalEvent {
@@ -461,6 +513,11 @@ fn main() {
             let _ = fs::write(file, text);
         }
     }
+    finish(signal, status.code());
+}
+
+/// Exit as the child did: with its status, or by its signal.
+fn finish(signal: Option<i32>, code: Option<i32>) -> ! {
     if let Some(signal) = signal {
         // SAFETY: restore the default action and die the way the child did.
         unsafe {
@@ -468,5 +525,5 @@ fn main() {
             libc::raise(signal);
         }
     }
-    std::process::exit(status.code().unwrap_or(1));
+    std::process::exit(code.unwrap_or(1));
 }

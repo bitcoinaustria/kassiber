@@ -21,14 +21,28 @@ rec="$1"; run="$2"; shift 2
 target="$(realpath target)"
 shims="$target/shims"
 mkdir -p "$shims" "$rec" "$run/bt" "$run/tmp"
-python3 -I - "$shims" "$target" "$rec" "$ROOT" <<'PY'
+# Synthetic passphrases: only literals of the checked-in test sources may
+# enter a recording (the shim refuses a session that hands over another).
+python3 -I - "$ROOT/tests" "$run/passphrase-allowlist.txt" <<'PY'
+import ast, pathlib, sys
+literals = set()
+for path in pathlib.Path(sys.argv[1]).rglob("*.py"):
+    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+        if isinstance(node, ast.Constant) and isinstance(node.value, (str, bytes)):
+            value = node.value.decode("utf-8", "replace") if isinstance(node.value, bytes) else node.value
+            if 0 < len(value) <= 200 and "\n" not in value:
+                literals.add(value)
+pathlib.Path(sys.argv[2]).write_text("\n".join(sorted(literals)) + "\n", encoding="utf-8")
+PY
+python3 -I - "$shims" "$target" "$rec" "$ROOT" "$run/passphrase-allowlist.txt" <<'PY'
 import json, os, re, shutil, sys
-shims, target, rec, repo = sys.argv[1:5]
+shims, target, rec, repo, allowlist = sys.argv[1:6]
 # Tests often start children with a minimal environment; the recording
 # settings therefore live beside the shims. Paths under /mnt are the same
 # inside the recording namespace.
 config = {"record_dir": rec, "root_prefixes": ["/mnt/bt", "/mnt/tmp"], "repo": repo,
-          "examples_dir": f"{target}/debug/examples", "current_dir": "/mnt/current"}
+          "examples_dir": f"{target}/debug/examples", "current_dir": "/mnt/current",
+          "passphrase_allowlist": allowlist}
 shim = f"{target}/debug/session-shim"
 examples = f"{target}/debug/examples"
 # Hard links, not symlinks: tests resolve KASSIBER_RUST_BIN and look for

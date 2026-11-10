@@ -18,7 +18,11 @@ base64 = "0.22"
 flate2 = { version = "=1.1.9", default-features = false, features = ["rust_backend"] }
 libc = "0.2"
 regex = "1"
-rusqlite = { version = "=0.40.1", features = ["bundled-sqlcipher"] }
+rusqlite = { version = "=0.40.1", features = ["bundled-sqlcipher", "backup"] }
+# The product's own SQLCipher keying and encryption for recorded books.
+kassiber-store = { path = "../store" }
+kassiber-ownership = { path = "../ownership" }
+kassiber-paths = { path = "../paths" }
 
 [dev-dependencies]
 tempfile = "3"
