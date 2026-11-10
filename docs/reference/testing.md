@@ -1657,6 +1657,26 @@ only `kassiber-custody` in a disposable scratch tree.
 and without custody's unified JSON features; the Rust CI lane and local gate
 run it.
 
+### Custody recordings
+
+The local custody recordings (whole raw-fact requests recorded from test
+runs; they stay on the machine that recorded them) are replayed by Rust from
+frozen goldens. Each `*.replay.json` holds the exact requests one recording
+sends to the engine, the recorded request and its permutation, and the
+response Rust gave while the Python reference compared every stage with it
+and found no difference. They were frozen once, at the last commit with the
+Python reference, from a clean `check-rust --permuted` pass.
+
+```bash
+cargo run --release -p kassiber-custody --example custody-replay -- [--self-test] DIR
+KASSIBER_CUSTODY_REPLAY_DIR=DIR ./scripts/quality-gate.sh
+```
+
+The replay requires every response byte for byte; `--self-test` first proves
+a changed golden is reported. After a reviewed custody change,
+`KASSIBER_GOLDEN_WRITE=1` rewrites the responses instead of comparing (it is
+refused under `CI`); diff the goldens, explain every change, and keep them
+only with the owner's sign-off when tax or stored results move.
 
 ## Generated test data
 
