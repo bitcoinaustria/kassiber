@@ -1,0 +1,384 @@
+$ --machine wallets reveal-descriptor --wallet desc
+exit 0
+--- stdout
+{
+  "kind": "wallets.reveal-descriptor",
+  "schema_version": 1,
+  "data": {
+    "id": "desc",
+    "label": "Descriptor",
+    "kind": "descriptor",
+    "wallet_material": "wpkh([d34db33f/84h/0h/0h]xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/0/*)\nwpkh([d34db33f/84h/0h/0h]xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/1/*)",
+    "descriptor": "wpkh([d34db33f/84h/0h/0h]xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/0/*)",
+    "change_descriptor": "wpkh([d34db33f/84h/0h/0h]xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/1/*)",
+    "sp_descriptor": null,
+    "blinding_key": null,
+    "addresses": null,
+    "config": {
+      "descriptor": "wpkh([d34db33f/84h/0h/0h]xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/0/*)",
+      "change_descriptor": "wpkh([d34db33f/84h/0h/0h]xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/1/*)",
+      "network": "bitcoin",
+      "blinding_key": null,
+      "gap_limit": 5
+    }
+  }
+}
+$ --machine wallets reveal-descriptor --wallet desc --material-only
+exit 0
+--- stdout
+wpkh([d34db33f/84h/0h/0h]xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/0/*)
+wpkh([d34db33f/84h/0h/0h]xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/1/*)
+$ --machine wallets reveal-descriptor --wallet Descriptor
+exit 0
+--- stdout
+{
+  "kind": "wallets.reveal-descriptor",
+  "schema_version": 1,
+  "data": {
+    "id": "desc",
+    "label": "Descriptor",
+    "kind": "descriptor",
+    "wallet_material": "wpkh([d34db33f/84h/0h/0h]xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/0/*)\nwpkh([d34db33f/84h/0h/0h]xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/1/*)",
+    "descriptor": "wpkh([d34db33f/84h/0h/0h]xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/0/*)",
+    "change_descriptor": "wpkh([d34db33f/84h/0h/0h]xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/1/*)",
+    "sp_descriptor": null,
+    "blinding_key": null,
+    "addresses": null,
+    "config": {
+      "descriptor": "wpkh([d34db33f/84h/0h/0h]xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/0/*)",
+      "change_descriptor": "wpkh([d34db33f/84h/0h/0h]xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/1/*)",
+      "network": "bitcoin",
+      "blinding_key": null,
+      "gap_limit": 5
+    }
+  }
+}
+$ --machine wallets reveal-descriptor --wallet Descriptor --material-only
+exit 0
+--- stdout
+wpkh([d34db33f/84h/0h/0h]xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/0/*)
+wpkh([d34db33f/84h/0h/0h]xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/1/*)
+$ --machine wallets reveal-descriptor --wallet Watch list
+exit 0
+--- stdout
+{
+  "kind": "wallets.reveal-descriptor",
+  "schema_version": 1,
+  "data": {
+    "id": "list",
+    "label": "Watch list",
+    "kind": "address",
+    "wallet_material": "",
+    "descriptor": null,
+    "change_descriptor": null,
+    "sp_descriptor": null,
+    "blinding_key": null,
+    "addresses": [
+      "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+    ],
+    "config": {
+      "addresses": [
+        "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+      ],
+      "chain": "bitcoin"
+    }
+  }
+}
+$ --machine wallets reveal-descriptor --wallet Watch list --material-only
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Wallet 'Watch list' does not have a descriptor configured",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine wallets reveal-descriptor --wallet sp
+exit 0
+--- stdout
+{
+  "kind": "wallets.reveal-descriptor",
+  "schema_version": 1,
+  "data": {
+    "id": "sp",
+    "label": "Silent",
+    "kind": "silent-payment",
+    "wallet_material": "sp(raw-test)",
+    "descriptor": null,
+    "change_descriptor": null,
+    "sp_descriptor": "  sp(raw-test)  ",
+    "blinding_key": null,
+    "addresses": null,
+    "config": {
+      "sp_descriptor": "  sp(raw-test)  "
+    }
+  }
+}
+$ --machine wallets reveal-descriptor --wallet sp --material-only
+exit 0
+--- stdout
+sp(raw-test)
+$ --machine wallets reveal-descriptor --wallet wallet
+exit 0
+--- stdout
+{
+  "kind": "wallets.reveal-descriptor",
+  "schema_version": 1,
+  "data": {
+    "id": "wallet",
+    "label": "Wallet",
+    "kind": "manual",
+    "wallet_material": "",
+    "descriptor": null,
+    "change_descriptor": null,
+    "sp_descriptor": null,
+    "blinding_key": null,
+    "addresses": null,
+    "config": {}
+  }
+}
+$ --machine wallets reveal-descriptor --wallet wallet --material-only
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Wallet 'wallet' does not have a descriptor configured",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine wallets reveal-descriptor --wallet odd
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "internal_error",
+    "message": "'list' object has no attribute 'get'",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine wallets reveal-descriptor --wallet odd --material-only
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "internal_error",
+    "message": "'list' object has no attribute 'get'",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine wallets reveal-descriptor --wallet Twin
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Wallet label 'Twin' is ambiguous",
+    "hint": "Use the wallet id instead of the non-unique label.",
+    "details": {
+      "matches": [
+        {
+          "id": "twin1",
+          "label": "Twin",
+          "account_code": null
+        },
+        {
+          "id": "twin2",
+          "label": "twin",
+          "account_code": null
+        }
+      ]
+    },
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine wallets reveal-descriptor --wallet Twin --material-only
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Wallet label 'Twin' is ambiguous",
+    "hint": "Use the wallet id instead of the non-unique label.",
+    "details": {
+      "matches": [
+        {
+          "id": "twin1",
+          "label": "Twin",
+          "account_code": null
+        },
+        {
+          "id": "twin2",
+          "label": "twin",
+          "account_code": null
+        }
+      ]
+    },
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine wallets reveal-descriptor --wallet missing
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "not_found",
+    "message": "Wallet 'missing' not found",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine wallets reveal-descriptor --wallet missing --material-only
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "not_found",
+    "message": "Wallet 'missing' not found",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine wallets reveal-descriptor --wallet 
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "not_found",
+    "message": "Wallet '' not found",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine wallets reveal-descriptor --wallet  --material-only
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "not_found",
+    "message": "Wallet '' not found",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine wallets reveal-descriptor --wallet desc --profile missing
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "not_found",
+    "message": "Profile 'missing' not found in the selected workspace",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --format table wallets reveal-descriptor --wallet desc
+exit 0
+--- stdout
+field              value                                                                                                                                                                                                                                                                                                                                                                                            
+-----------------  -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+id                 desc                                                                                                                                                                                                                                                                                                                                                                                             
+label              Descriptor                                                                                                                                                                                                                                                                                                                                                                                       
+kind               descriptor                                                                                                                                                                                                                                                                                                                                                                                       
+wallet_material    wpkh([d34db33f/84h/0h/0h]xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/0/*)
+wpkh([d34db33f/84h/0h/0h]xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/1/*)                                                                                                      
+descriptor         wpkh([d34db33f/84h/0h/0h]xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/0/*)                                                                                                                                                                                                                                                    
+change_descriptor  wpkh([d34db33f/84h/0h/0h]xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/1/*)                                                                                                                                                                                                                                                    
+sp_descriptor                                                                                                                                                                                                                                                                                                                                                                                                       
+blinding_key                                                                                                                                                                                                                                                                                                                                                                                                        
+addresses                                                                                                                                                                                                                                                                                                                                                                                                           
+config             {'descriptor': 'wpkh([d34db33f/84h/0h/0h]xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/0/*)', 'change_descriptor': 'wpkh([d34db33f/84h/0h/0h]xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/1/*)', 'network': 'bitcoin', 'blinding_key': None, 'gap_limit': 5}
+$ --format plain wallets reveal-descriptor --wallet desc
+exit 0
+--- stdout
+id: desc
+label: Descriptor
+kind: descriptor
+wallet_material: wpkh([d34db33f/84h/0h/0h]xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/0/*)
+wpkh([d34db33f/84h/0h/0h]xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/1/*)
+descriptor: wpkh([d34db33f/84h/0h/0h]xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/0/*)
+change_descriptor: wpkh([d34db33f/84h/0h/0h]xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/1/*)
+sp_descriptor: 
+blinding_key: 
+addresses: 
+config: {"descriptor": "wpkh([d34db33f/84h/0h/0h]xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/0/*)", "change_descriptor": "wpkh([d34db33f/84h/0h/0h]xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/1/*)", "network": "bitcoin", "blinding_key": null, "gap_limit": 5}
+$ --format csv wallets reveal-descriptor --wallet desc
+exit 0
+--- stdout
+id,label,kind,wallet_material,descriptor,change_descriptor,sp_descriptor,blinding_key,addresses,config
+desc,Descriptor,descriptor,"wpkh([d34db33f/84h/0h/0h]xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/0/*)
+wpkh([d34db33f/84h/0h/0h]xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/1/*)",wpkh([d34db33f/84h/0h/0h]xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/0/*),wpkh([d34db33f/84h/0h/0h]xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/1/*),,,,"{""descriptor"": ""wpkh([d34db33f/84h/0h/0h]xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/0/*)"", ""change_descriptor"": ""wpkh([d34db33f/84h/0h/0h]xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/1/*)"", ""network"": ""bitcoin"", ""blinding_key"": null, ""gap_limit"": 5}"
+$ --format json wallets reveal-descriptor --wallet desc
+exit 0
+--- stdout
+{
+  "kind": "wallets.reveal-descriptor",
+  "schema_version": 1,
+  "data": {
+    "id": "desc",
+    "label": "Descriptor",
+    "kind": "descriptor",
+    "wallet_material": "wpkh([d34db33f/84h/0h/0h]xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/0/*)\nwpkh([d34db33f/84h/0h/0h]xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/1/*)",
+    "descriptor": "wpkh([d34db33f/84h/0h/0h]xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/0/*)",
+    "change_descriptor": "wpkh([d34db33f/84h/0h/0h]xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/1/*)",
+    "sp_descriptor": null,
+    "blinding_key": null,
+    "addresses": null,
+    "config": {
+      "descriptor": "wpkh([d34db33f/84h/0h/0h]xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/0/*)",
+      "change_descriptor": "wpkh([d34db33f/84h/0h/0h]xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/1/*)",
+      "network": "bitcoin",
+      "blinding_key": null,
+      "gap_limit": 5
+    }
+  }
+}
+$ --machine --output <SANDBOX>/material.txt wallets reveal-descriptor --wallet desc --material-only
+exit 0

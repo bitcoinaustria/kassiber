@@ -1,0 +1,708 @@
+$ --machine journals quarantine resolve price-override --transaction a --fiat-rate 41234.5
+exit 0
+--- stdout
+{
+  "kind": "journals.quarantine.resolve.price-override",
+  "schema_version": 1,
+  "data": {
+    "transaction_id": "a",
+    "resolution": "price-override",
+    "fiat_rate": 41234.5,
+    "fiat_value": 41234.5,
+    "fiat_rate_exact": "41234.5",
+    "fiat_value_exact": "41234.5",
+    "pricing_source_kind": "manual_override",
+    "history_event_id": "<uuid#1>",
+    "note": "Run `kassiber journals process` to regenerate entries."
+  }
+}
+=== book changes after the resolution
+- chain_index_clock: id=i:1 | revision=i:31
+- chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:31
+- chain_index_dirty: source_table=t:"transactions" | source_key=i:1 | revision=i:26
+- journal_quarantines: transaction_id=t:"a" | workspace_id=t:"w" | profile_id=t:"p" | reason=t:"missing_spot_price" | detail_json=t:"{}" | created_at=t:"2024-05-01T00:00:00Z"
+- profiles: id=t:"p" | workspace_id=t:"w" | label=t:"P" | fiat_currency=t:"eur" | tax_country=t:"generic" | tax_long_term_days=i:365 | gains_algorithm=t:"fifo" | require_coarse_review=i:0 | bitcoin_rail_carrying_value=i:1 | cost_basis_pool_scope=t:"global" | journal_input_version=i:0 | last_processed_input_version=i:0 | required_journal_semantics_version=i:10 | journal_semantics_version=i:10 | last_processed_at=t:"2026-10-31T12:00:00Z" | last_processed_tx_count=i:5 | ownership_review_counts_json=t:"{\"by_reason\": {}, \"total\": 0}" | created_at=t:"2020" | swap_candidate_count=i:0
+- transactions: id=t:"a" | workspace_id=t:"w" | profile_id=t:"p" | wallet_id=t:"wallet" | external_id=t:"ext-a" | external_id_kind=NULL | fingerprint=t:"a" | occurred_at=t:"2024-01-01T00:00:00Z" | confirmed_at=NULL | direction=t:"inbound" | asset=t:"BTC" | amount=i:100000000000 | fee=i:0 | amount_includes_fee=i:0 | fiat_currency=t:"EUR" | fiat_rate=r:10000.0 | fiat_value=NULL | fiat_price_source=NULL | fiat_rate_exact=t:"10000" | fiat_value_exact=NULL | pricing_source_kind=t:"manual" | pricing_provider=t:"reviewed-receipt" | pricing_pair=NULL | pricing_timestamp=NULL | pricing_fetched_at=NULL | pricing_granularity=NULL | pricing_method=NULL | pricing_external_ref=NULL | pricing_quality=t:"exact" | pricing_review_accepted_price=NULL | commercial_applied_link_id=NULL | review_status=NULL | taxability_override=NULL | at_regime_override=NULL | at_category_override=NULL | kind_override=NULL | privacy_boundary=NULL | kind=t:"buy" | description=NULL | counterparty=NULL | note=NULL | excluded=i:0 | raw_json=t:"{}" | payment_hash=NULL | payment_hash_source=NULL | swap_refund_funding_txid=NULL | swap_refund_funding_vout=NULL | created_at=t:"2020"
+- (116 tables, 100 empty)
++ chain_index_clock: id=i:1 | revision=i:34
++ chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:34
++ chain_index_dirty: source_table=t:"transactions" | source_key=i:1 | revision=i:32
++ profiles: id=t:"p" | workspace_id=t:"w" | label=t:"P" | fiat_currency=t:"eur" | tax_country=t:"generic" | tax_long_term_days=i:365 | gains_algorithm=t:"fifo" | require_coarse_review=i:0 | bitcoin_rail_carrying_value=i:1 | cost_basis_pool_scope=t:"global" | journal_input_version=i:1 | last_processed_input_version=i:0 | required_journal_semantics_version=i:10 | journal_semantics_version=i:0 | last_processed_at=NULL | last_processed_tx_count=i:0 | ownership_review_counts_json=NULL | created_at=t:"2020" | swap_candidate_count=i:0
++ transaction_edit_events: id=t:"<uuid#1>" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"a" | wallet_id=t:"wallet" | transaction_external_id=t:"ext-a" | transaction_occurred_at=t:"2024-01-01T00:00:00Z" | source=t:"cli" | reason=t:"Resolved quarantine with manual pricing override" | changed_at=t:"<now>" | journal_input_version=i:0 | journal_input_version_after=i:1 | last_processed_input_version=i:0 | last_processed_at=t:"2026-10-31T12:00:00Z" | last_processed_tx_count=i:5
++ transaction_edit_fields: id=t:"<uuid#2>" | event_id=t:"<uuid#1>" | field=t:"fiat_price_source" | before_value=t:"null" | after_value=t:"\"manual\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#3>" | event_id=t:"<uuid#1>" | field=t:"fiat_rate" | before_value=t:"\"10000\"" | after_value=t:"\"41234.5\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#4>" | event_id=t:"<uuid#1>" | field=t:"fiat_value" | before_value=t:"null" | after_value=t:"\"41234.5\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#5>" | event_id=t:"<uuid#1>" | field=t:"pricing_fetched_at" | before_value=t:"null" | after_value=t:"\"<now>\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#6>" | event_id=t:"<uuid#1>" | field=t:"pricing_granularity" | before_value=t:"null" | after_value=t:"\"exact\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#7>" | event_id=t:"<uuid#1>" | field=t:"pricing_method" | before_value=t:"null" | after_value=t:"\"quarantine_price_override\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#8>" | event_id=t:"<uuid#1>" | field=t:"pricing_pair" | before_value=t:"null" | after_value=t:"\"BTC-EUR\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#9>" | event_id=t:"<uuid#1>" | field=t:"pricing_provider" | before_value=t:"\"reviewed-receipt\"" | after_value=t:"\"manual\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#10>" | event_id=t:"<uuid#1>" | field=t:"pricing_source_kind" | before_value=t:"\"manual\"" | after_value=t:"\"manual_override\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#11>" | event_id=t:"<uuid#1>" | field=t:"pricing_timestamp" | before_value=t:"null" | after_value=t:"\"2024-01-01T00:00:00Z\"" | diff_json=t:"{}"
++ transactions: id=t:"a" | workspace_id=t:"w" | profile_id=t:"p" | wallet_id=t:"wallet" | external_id=t:"ext-a" | external_id_kind=NULL | fingerprint=t:"a" | occurred_at=t:"2024-01-01T00:00:00Z" | confirmed_at=NULL | direction=t:"inbound" | asset=t:"BTC" | amount=i:100000000000 | fee=i:0 | amount_includes_fee=i:0 | fiat_currency=t:"EUR" | fiat_rate=r:41234.5 | fiat_value=r:41234.5 | fiat_price_source=t:"manual" | fiat_rate_exact=t:"41234.5" | fiat_value_exact=t:"41234.5" | pricing_source_kind=t:"manual_override" | pricing_provider=t:"manual" | pricing_pair=t:"BTC-EUR" | pricing_timestamp=t:"2024-01-01T00:00:00Z" | pricing_fetched_at=t:"<now>" | pricing_granularity=t:"exact" | pricing_method=t:"quarantine_price_override" | pricing_external_ref=NULL | pricing_quality=t:"exact" | pricing_review_accepted_price=NULL | commercial_applied_link_id=NULL | review_status=NULL | taxability_override=NULL | at_regime_override=NULL | at_category_override=NULL | kind_override=NULL | privacy_boundary=NULL | kind=t:"buy" | description=NULL | counterparty=NULL | note=NULL | excluded=i:0 | raw_json=t:"{}" | payment_hash=NULL | payment_hash_source=NULL | swap_refund_funding_txid=NULL | swap_refund_funding_vout=NULL | created_at=t:"2020"
++ (116 tables, 98 empty)
+$ --machine journals quarantine resolve price-override --transaction ext-a --fiat-value 4123.45678901234567890123456789
+exit 0
+--- stdout
+{
+  "kind": "journals.quarantine.resolve.price-override",
+  "schema_version": 1,
+  "data": {
+    "transaction_id": "a",
+    "resolution": "price-override",
+    "fiat_rate": 4123.456789012345,
+    "fiat_value": 4123.456789012345,
+    "fiat_rate_exact": "4123.45678901234567890123456789",
+    "fiat_value_exact": "4123.45678901234567890123456789",
+    "pricing_source_kind": "manual_override",
+    "history_event_id": "<uuid#12>",
+    "note": "Run `kassiber journals process` to regenerate entries."
+  }
+}
+=== book changes after the resolution
+- chain_index_clock: id=i:1 | revision=i:31
+- chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:31
+- chain_index_dirty: source_table=t:"transactions" | source_key=i:1 | revision=i:26
+- journal_quarantines: transaction_id=t:"a" | workspace_id=t:"w" | profile_id=t:"p" | reason=t:"missing_spot_price" | detail_json=t:"{}" | created_at=t:"2024-05-01T00:00:00Z"
+- profiles: id=t:"p" | workspace_id=t:"w" | label=t:"P" | fiat_currency=t:"eur" | tax_country=t:"generic" | tax_long_term_days=i:365 | gains_algorithm=t:"fifo" | require_coarse_review=i:0 | bitcoin_rail_carrying_value=i:1 | cost_basis_pool_scope=t:"global" | journal_input_version=i:0 | last_processed_input_version=i:0 | required_journal_semantics_version=i:10 | journal_semantics_version=i:10 | last_processed_at=t:"2026-10-31T12:00:00Z" | last_processed_tx_count=i:5 | ownership_review_counts_json=t:"{\"by_reason\": {}, \"total\": 0}" | created_at=t:"2020" | swap_candidate_count=i:0
+- transactions: id=t:"a" | workspace_id=t:"w" | profile_id=t:"p" | wallet_id=t:"wallet" | external_id=t:"ext-a" | external_id_kind=NULL | fingerprint=t:"a" | occurred_at=t:"2024-01-01T00:00:00Z" | confirmed_at=NULL | direction=t:"inbound" | asset=t:"BTC" | amount=i:100000000000 | fee=i:0 | amount_includes_fee=i:0 | fiat_currency=t:"EUR" | fiat_rate=r:10000.0 | fiat_value=NULL | fiat_price_source=NULL | fiat_rate_exact=t:"10000" | fiat_value_exact=NULL | pricing_source_kind=t:"manual" | pricing_provider=t:"reviewed-receipt" | pricing_pair=NULL | pricing_timestamp=NULL | pricing_fetched_at=NULL | pricing_granularity=NULL | pricing_method=NULL | pricing_external_ref=NULL | pricing_quality=t:"exact" | pricing_review_accepted_price=NULL | commercial_applied_link_id=NULL | review_status=NULL | taxability_override=NULL | at_regime_override=NULL | at_category_override=NULL | kind_override=NULL | privacy_boundary=NULL | kind=t:"buy" | description=NULL | counterparty=NULL | note=NULL | excluded=i:0 | raw_json=t:"{}" | payment_hash=NULL | payment_hash_source=NULL | swap_refund_funding_txid=NULL | swap_refund_funding_vout=NULL | created_at=t:"2020"
+- (116 tables, 100 empty)
++ chain_index_clock: id=i:1 | revision=i:34
++ chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:34
++ chain_index_dirty: source_table=t:"transactions" | source_key=i:1 | revision=i:32
++ profiles: id=t:"p" | workspace_id=t:"w" | label=t:"P" | fiat_currency=t:"eur" | tax_country=t:"generic" | tax_long_term_days=i:365 | gains_algorithm=t:"fifo" | require_coarse_review=i:0 | bitcoin_rail_carrying_value=i:1 | cost_basis_pool_scope=t:"global" | journal_input_version=i:1 | last_processed_input_version=i:0 | required_journal_semantics_version=i:10 | journal_semantics_version=i:0 | last_processed_at=NULL | last_processed_tx_count=i:0 | ownership_review_counts_json=NULL | created_at=t:"2020" | swap_candidate_count=i:0
++ transaction_edit_events: id=t:"<uuid#12>" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"a" | wallet_id=t:"wallet" | transaction_external_id=t:"ext-a" | transaction_occurred_at=t:"2024-01-01T00:00:00Z" | source=t:"cli" | reason=t:"Resolved quarantine with manual pricing override" | changed_at=t:"<now>" | journal_input_version=i:0 | journal_input_version_after=i:1 | last_processed_input_version=i:0 | last_processed_at=t:"2026-10-31T12:00:00Z" | last_processed_tx_count=i:5
++ transaction_edit_fields: id=t:"<uuid#13>" | event_id=t:"<uuid#12>" | field=t:"fiat_price_source" | before_value=t:"null" | after_value=t:"\"manual\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#14>" | event_id=t:"<uuid#12>" | field=t:"fiat_rate" | before_value=t:"\"10000\"" | after_value=t:"\"4123.45678901234567890123456789\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#15>" | event_id=t:"<uuid#12>" | field=t:"fiat_value" | before_value=t:"null" | after_value=t:"\"4123.45678901234567890123456789\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#16>" | event_id=t:"<uuid#12>" | field=t:"pricing_fetched_at" | before_value=t:"null" | after_value=t:"\"<now>\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#17>" | event_id=t:"<uuid#12>" | field=t:"pricing_granularity" | before_value=t:"null" | after_value=t:"\"exact\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#18>" | event_id=t:"<uuid#12>" | field=t:"pricing_method" | before_value=t:"null" | after_value=t:"\"quarantine_price_override\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#19>" | event_id=t:"<uuid#12>" | field=t:"pricing_pair" | before_value=t:"null" | after_value=t:"\"BTC-EUR\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#20>" | event_id=t:"<uuid#12>" | field=t:"pricing_provider" | before_value=t:"\"reviewed-receipt\"" | after_value=t:"\"manual\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#21>" | event_id=t:"<uuid#12>" | field=t:"pricing_source_kind" | before_value=t:"\"manual\"" | after_value=t:"\"manual_override\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#22>" | event_id=t:"<uuid#12>" | field=t:"pricing_timestamp" | before_value=t:"null" | after_value=t:"\"2024-01-01T00:00:00Z\"" | diff_json=t:"{}"
++ transactions: id=t:"a" | workspace_id=t:"w" | profile_id=t:"p" | wallet_id=t:"wallet" | external_id=t:"ext-a" | external_id_kind=NULL | fingerprint=t:"a" | occurred_at=t:"2024-01-01T00:00:00Z" | confirmed_at=NULL | direction=t:"inbound" | asset=t:"BTC" | amount=i:100000000000 | fee=i:0 | amount_includes_fee=i:0 | fiat_currency=t:"EUR" | fiat_rate=r:4123.456789012345 | fiat_value=r:4123.456789012345 | fiat_price_source=t:"manual" | fiat_rate_exact=t:"4123.45678901234567890123456789" | fiat_value_exact=t:"4123.45678901234567890123456789" | pricing_source_kind=t:"manual_override" | pricing_provider=t:"manual" | pricing_pair=t:"BTC-EUR" | pricing_timestamp=t:"2024-01-01T00:00:00Z" | pricing_fetched_at=t:"<now>" | pricing_granularity=t:"exact" | pricing_method=t:"quarantine_price_override" | pricing_external_ref=NULL | pricing_quality=t:"exact" | pricing_review_accepted_price=NULL | commercial_applied_link_id=NULL | review_status=NULL | taxability_override=NULL | at_regime_override=NULL | at_category_override=NULL | kind_override=NULL | privacy_boundary=NULL | kind=t:"buy" | description=NULL | counterparty=NULL | note=NULL | excluded=i:0 | raw_json=t:"{}" | payment_hash=NULL | payment_hash_source=NULL | swap_refund_funding_txid=NULL | swap_refund_funding_vout=NULL | created_at=t:"2020"
++ (116 tables, 98 empty)
+$ --machine journals quarantine resolve price-override --transaction a --fiat-rate 10 --fiat-value 2
+exit 0
+--- stdout
+{
+  "kind": "journals.quarantine.resolve.price-override",
+  "schema_version": 1,
+  "data": {
+    "transaction_id": "a",
+    "resolution": "price-override",
+    "fiat_rate": 10.0,
+    "fiat_value": 2.0,
+    "fiat_rate_exact": "10",
+    "fiat_value_exact": "2",
+    "pricing_source_kind": "manual_override",
+    "history_event_id": "<uuid#23>",
+    "note": "Run `kassiber journals process` to regenerate entries."
+  }
+}
+=== book changes after the resolution
+- chain_index_clock: id=i:1 | revision=i:31
+- chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:31
+- chain_index_dirty: source_table=t:"transactions" | source_key=i:1 | revision=i:26
+- journal_quarantines: transaction_id=t:"a" | workspace_id=t:"w" | profile_id=t:"p" | reason=t:"missing_spot_price" | detail_json=t:"{}" | created_at=t:"2024-05-01T00:00:00Z"
+- profiles: id=t:"p" | workspace_id=t:"w" | label=t:"P" | fiat_currency=t:"eur" | tax_country=t:"generic" | tax_long_term_days=i:365 | gains_algorithm=t:"fifo" | require_coarse_review=i:0 | bitcoin_rail_carrying_value=i:1 | cost_basis_pool_scope=t:"global" | journal_input_version=i:0 | last_processed_input_version=i:0 | required_journal_semantics_version=i:10 | journal_semantics_version=i:10 | last_processed_at=t:"2026-10-31T12:00:00Z" | last_processed_tx_count=i:5 | ownership_review_counts_json=t:"{\"by_reason\": {}, \"total\": 0}" | created_at=t:"2020" | swap_candidate_count=i:0
+- transactions: id=t:"a" | workspace_id=t:"w" | profile_id=t:"p" | wallet_id=t:"wallet" | external_id=t:"ext-a" | external_id_kind=NULL | fingerprint=t:"a" | occurred_at=t:"2024-01-01T00:00:00Z" | confirmed_at=NULL | direction=t:"inbound" | asset=t:"BTC" | amount=i:100000000000 | fee=i:0 | amount_includes_fee=i:0 | fiat_currency=t:"EUR" | fiat_rate=r:10000.0 | fiat_value=NULL | fiat_price_source=NULL | fiat_rate_exact=t:"10000" | fiat_value_exact=NULL | pricing_source_kind=t:"manual" | pricing_provider=t:"reviewed-receipt" | pricing_pair=NULL | pricing_timestamp=NULL | pricing_fetched_at=NULL | pricing_granularity=NULL | pricing_method=NULL | pricing_external_ref=NULL | pricing_quality=t:"exact" | pricing_review_accepted_price=NULL | commercial_applied_link_id=NULL | review_status=NULL | taxability_override=NULL | at_regime_override=NULL | at_category_override=NULL | kind_override=NULL | privacy_boundary=NULL | kind=t:"buy" | description=NULL | counterparty=NULL | note=NULL | excluded=i:0 | raw_json=t:"{}" | payment_hash=NULL | payment_hash_source=NULL | swap_refund_funding_txid=NULL | swap_refund_funding_vout=NULL | created_at=t:"2020"
+- (116 tables, 100 empty)
++ chain_index_clock: id=i:1 | revision=i:34
++ chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:34
++ chain_index_dirty: source_table=t:"transactions" | source_key=i:1 | revision=i:32
++ profiles: id=t:"p" | workspace_id=t:"w" | label=t:"P" | fiat_currency=t:"eur" | tax_country=t:"generic" | tax_long_term_days=i:365 | gains_algorithm=t:"fifo" | require_coarse_review=i:0 | bitcoin_rail_carrying_value=i:1 | cost_basis_pool_scope=t:"global" | journal_input_version=i:1 | last_processed_input_version=i:0 | required_journal_semantics_version=i:10 | journal_semantics_version=i:0 | last_processed_at=NULL | last_processed_tx_count=i:0 | ownership_review_counts_json=NULL | created_at=t:"2020" | swap_candidate_count=i:0
++ transaction_edit_events: id=t:"<uuid#23>" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"a" | wallet_id=t:"wallet" | transaction_external_id=t:"ext-a" | transaction_occurred_at=t:"2024-01-01T00:00:00Z" | source=t:"cli" | reason=t:"Resolved quarantine with manual pricing override" | changed_at=t:"<now>" | journal_input_version=i:0 | journal_input_version_after=i:1 | last_processed_input_version=i:0 | last_processed_at=t:"2026-10-31T12:00:00Z" | last_processed_tx_count=i:5
++ transaction_edit_fields: id=t:"<uuid#24>" | event_id=t:"<uuid#23>" | field=t:"fiat_price_source" | before_value=t:"null" | after_value=t:"\"manual\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#25>" | event_id=t:"<uuid#23>" | field=t:"fiat_rate" | before_value=t:"\"10000\"" | after_value=t:"\"10\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#26>" | event_id=t:"<uuid#23>" | field=t:"fiat_value" | before_value=t:"null" | after_value=t:"\"2\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#27>" | event_id=t:"<uuid#23>" | field=t:"pricing_fetched_at" | before_value=t:"null" | after_value=t:"\"<now>\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#28>" | event_id=t:"<uuid#23>" | field=t:"pricing_granularity" | before_value=t:"null" | after_value=t:"\"exact\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#29>" | event_id=t:"<uuid#23>" | field=t:"pricing_method" | before_value=t:"null" | after_value=t:"\"quarantine_price_override\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#30>" | event_id=t:"<uuid#23>" | field=t:"pricing_pair" | before_value=t:"null" | after_value=t:"\"BTC-EUR\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#31>" | event_id=t:"<uuid#23>" | field=t:"pricing_provider" | before_value=t:"\"reviewed-receipt\"" | after_value=t:"\"manual\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#32>" | event_id=t:"<uuid#23>" | field=t:"pricing_source_kind" | before_value=t:"\"manual\"" | after_value=t:"\"manual_override\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#33>" | event_id=t:"<uuid#23>" | field=t:"pricing_timestamp" | before_value=t:"null" | after_value=t:"\"2024-01-01T00:00:00Z\"" | diff_json=t:"{}"
++ transactions: id=t:"a" | workspace_id=t:"w" | profile_id=t:"p" | wallet_id=t:"wallet" | external_id=t:"ext-a" | external_id_kind=NULL | fingerprint=t:"a" | occurred_at=t:"2024-01-01T00:00:00Z" | confirmed_at=NULL | direction=t:"inbound" | asset=t:"BTC" | amount=i:100000000000 | fee=i:0 | amount_includes_fee=i:0 | fiat_currency=t:"EUR" | fiat_rate=r:10.0 | fiat_value=r:2.0 | fiat_price_source=t:"manual" | fiat_rate_exact=t:"10" | fiat_value_exact=t:"2" | pricing_source_kind=t:"manual_override" | pricing_provider=t:"manual" | pricing_pair=t:"BTC-EUR" | pricing_timestamp=t:"2024-01-01T00:00:00Z" | pricing_fetched_at=t:"<now>" | pricing_granularity=t:"exact" | pricing_method=t:"quarantine_price_override" | pricing_external_ref=NULL | pricing_quality=t:"exact" | pricing_review_accepted_price=NULL | commercial_applied_link_id=NULL | review_status=NULL | taxability_override=NULL | at_regime_override=NULL | at_category_override=NULL | kind_override=NULL | privacy_boundary=NULL | kind=t:"buy" | description=NULL | counterparty=NULL | note=NULL | excluded=i:0 | raw_json=t:"{}" | payment_hash=NULL | payment_hash_source=NULL | swap_refund_funding_txid=NULL | swap_refund_funding_vout=NULL | created_at=t:"2020"
++ (116 tables, 98 empty)
+$ --machine journals quarantine resolve price-override --transaction a --fiat-rate 1E+3 --fiat-value 0
+exit 0
+--- stdout
+{
+  "kind": "journals.quarantine.resolve.price-override",
+  "schema_version": 1,
+  "data": {
+    "transaction_id": "a",
+    "resolution": "price-override",
+    "fiat_rate": 1000.0,
+    "fiat_value": 0.0,
+    "fiat_rate_exact": "1000",
+    "fiat_value_exact": "0",
+    "pricing_source_kind": "manual_override",
+    "history_event_id": "<uuid#34>",
+    "note": "Run `kassiber journals process` to regenerate entries."
+  }
+}
+=== book changes after the resolution
+- chain_index_clock: id=i:1 | revision=i:31
+- chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:31
+- chain_index_dirty: source_table=t:"transactions" | source_key=i:1 | revision=i:26
+- journal_quarantines: transaction_id=t:"a" | workspace_id=t:"w" | profile_id=t:"p" | reason=t:"missing_spot_price" | detail_json=t:"{}" | created_at=t:"2024-05-01T00:00:00Z"
+- profiles: id=t:"p" | workspace_id=t:"w" | label=t:"P" | fiat_currency=t:"eur" | tax_country=t:"generic" | tax_long_term_days=i:365 | gains_algorithm=t:"fifo" | require_coarse_review=i:0 | bitcoin_rail_carrying_value=i:1 | cost_basis_pool_scope=t:"global" | journal_input_version=i:0 | last_processed_input_version=i:0 | required_journal_semantics_version=i:10 | journal_semantics_version=i:10 | last_processed_at=t:"2026-10-31T12:00:00Z" | last_processed_tx_count=i:5 | ownership_review_counts_json=t:"{\"by_reason\": {}, \"total\": 0}" | created_at=t:"2020" | swap_candidate_count=i:0
+- transactions: id=t:"a" | workspace_id=t:"w" | profile_id=t:"p" | wallet_id=t:"wallet" | external_id=t:"ext-a" | external_id_kind=NULL | fingerprint=t:"a" | occurred_at=t:"2024-01-01T00:00:00Z" | confirmed_at=NULL | direction=t:"inbound" | asset=t:"BTC" | amount=i:100000000000 | fee=i:0 | amount_includes_fee=i:0 | fiat_currency=t:"EUR" | fiat_rate=r:10000.0 | fiat_value=NULL | fiat_price_source=NULL | fiat_rate_exact=t:"10000" | fiat_value_exact=NULL | pricing_source_kind=t:"manual" | pricing_provider=t:"reviewed-receipt" | pricing_pair=NULL | pricing_timestamp=NULL | pricing_fetched_at=NULL | pricing_granularity=NULL | pricing_method=NULL | pricing_external_ref=NULL | pricing_quality=t:"exact" | pricing_review_accepted_price=NULL | commercial_applied_link_id=NULL | review_status=NULL | taxability_override=NULL | at_regime_override=NULL | at_category_override=NULL | kind_override=NULL | privacy_boundary=NULL | kind=t:"buy" | description=NULL | counterparty=NULL | note=NULL | excluded=i:0 | raw_json=t:"{}" | payment_hash=NULL | payment_hash_source=NULL | swap_refund_funding_txid=NULL | swap_refund_funding_vout=NULL | created_at=t:"2020"
+- (116 tables, 100 empty)
++ chain_index_clock: id=i:1 | revision=i:34
++ chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:34
++ chain_index_dirty: source_table=t:"transactions" | source_key=i:1 | revision=i:32
++ profiles: id=t:"p" | workspace_id=t:"w" | label=t:"P" | fiat_currency=t:"eur" | tax_country=t:"generic" | tax_long_term_days=i:365 | gains_algorithm=t:"fifo" | require_coarse_review=i:0 | bitcoin_rail_carrying_value=i:1 | cost_basis_pool_scope=t:"global" | journal_input_version=i:1 | last_processed_input_version=i:0 | required_journal_semantics_version=i:10 | journal_semantics_version=i:0 | last_processed_at=NULL | last_processed_tx_count=i:0 | ownership_review_counts_json=NULL | created_at=t:"2020" | swap_candidate_count=i:0
++ transaction_edit_events: id=t:"<uuid#34>" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"a" | wallet_id=t:"wallet" | transaction_external_id=t:"ext-a" | transaction_occurred_at=t:"2024-01-01T00:00:00Z" | source=t:"cli" | reason=t:"Resolved quarantine with manual pricing override" | changed_at=t:"<now>" | journal_input_version=i:0 | journal_input_version_after=i:1 | last_processed_input_version=i:0 | last_processed_at=t:"2026-10-31T12:00:00Z" | last_processed_tx_count=i:5
++ transaction_edit_fields: id=t:"<uuid#35>" | event_id=t:"<uuid#34>" | field=t:"fiat_price_source" | before_value=t:"null" | after_value=t:"\"manual\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#36>" | event_id=t:"<uuid#34>" | field=t:"fiat_rate" | before_value=t:"\"10000\"" | after_value=t:"\"1000\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#37>" | event_id=t:"<uuid#34>" | field=t:"fiat_value" | before_value=t:"null" | after_value=t:"\"0\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#38>" | event_id=t:"<uuid#34>" | field=t:"pricing_fetched_at" | before_value=t:"null" | after_value=t:"\"<now>\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#39>" | event_id=t:"<uuid#34>" | field=t:"pricing_granularity" | before_value=t:"null" | after_value=t:"\"exact\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#40>" | event_id=t:"<uuid#34>" | field=t:"pricing_method" | before_value=t:"null" | after_value=t:"\"quarantine_price_override\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#41>" | event_id=t:"<uuid#34>" | field=t:"pricing_pair" | before_value=t:"null" | after_value=t:"\"BTC-EUR\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#42>" | event_id=t:"<uuid#34>" | field=t:"pricing_provider" | before_value=t:"\"reviewed-receipt\"" | after_value=t:"\"manual\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#43>" | event_id=t:"<uuid#34>" | field=t:"pricing_source_kind" | before_value=t:"\"manual\"" | after_value=t:"\"manual_override\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#44>" | event_id=t:"<uuid#34>" | field=t:"pricing_timestamp" | before_value=t:"null" | after_value=t:"\"2024-01-01T00:00:00Z\"" | diff_json=t:"{}"
++ transactions: id=t:"a" | workspace_id=t:"w" | profile_id=t:"p" | wallet_id=t:"wallet" | external_id=t:"ext-a" | external_id_kind=NULL | fingerprint=t:"a" | occurred_at=t:"2024-01-01T00:00:00Z" | confirmed_at=NULL | direction=t:"inbound" | asset=t:"BTC" | amount=i:100000000000 | fee=i:0 | amount_includes_fee=i:0 | fiat_currency=t:"EUR" | fiat_rate=r:1000.0 | fiat_value=r:0.0 | fiat_price_source=t:"manual" | fiat_rate_exact=t:"1000" | fiat_value_exact=t:"0" | pricing_source_kind=t:"manual_override" | pricing_provider=t:"manual" | pricing_pair=t:"BTC-EUR" | pricing_timestamp=t:"2024-01-01T00:00:00Z" | pricing_fetched_at=t:"<now>" | pricing_granularity=t:"exact" | pricing_method=t:"quarantine_price_override" | pricing_external_ref=NULL | pricing_quality=t:"exact" | pricing_review_accepted_price=NULL | commercial_applied_link_id=NULL | review_status=NULL | taxability_override=NULL | at_regime_override=NULL | at_category_override=NULL | kind_override=NULL | privacy_boundary=NULL | kind=t:"buy" | description=NULL | counterparty=NULL | note=NULL | excluded=i:0 | raw_json=t:"{}" | payment_hash=NULL | payment_hash_source=NULL | swap_refund_funding_txid=NULL | swap_refund_funding_vout=NULL | created_at=t:"2020"
++ (116 tables, 98 empty)
+$ --machine journals quarantine resolve exclude --transaction t
+exit 0
+--- stdout
+{
+  "kind": "journals.quarantine.resolve.exclude",
+  "schema_version": 1,
+  "data": {
+    "transaction_id": "t",
+    "resolution": "exclude",
+    "excluded": true,
+    "history_event_id": "<uuid#45>",
+    "note": "Run `kassiber journals process` to regenerate entries."
+  }
+}
+=== book changes after the resolution
+- chain_index_clock: id=i:1 | revision=i:31
+- chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:31
+- chain_index_dirty: source_table=t:"transactions" | source_key=i:5 | revision=i:30
+- journal_quarantines: transaction_id=t:"t" | workspace_id=t:"w" | profile_id=t:"p" | reason=t:"insufficient_lots" | detail_json=t:"{\"asset\": \"BTC\"}" | created_at=t:"2024-05-01T00:00:00Z"
+- profiles: id=t:"p" | workspace_id=t:"w" | label=t:"P" | fiat_currency=t:"eur" | tax_country=t:"generic" | tax_long_term_days=i:365 | gains_algorithm=t:"fifo" | require_coarse_review=i:0 | bitcoin_rail_carrying_value=i:1 | cost_basis_pool_scope=t:"global" | journal_input_version=i:0 | last_processed_input_version=i:0 | required_journal_semantics_version=i:10 | journal_semantics_version=i:10 | last_processed_at=t:"2026-10-31T12:00:00Z" | last_processed_tx_count=i:5 | ownership_review_counts_json=t:"{\"by_reason\": {}, \"total\": 0}" | created_at=t:"2020" | swap_candidate_count=i:0
+- transactions: id=t:"t" | workspace_id=t:"w" | profile_id=t:"p" | wallet_id=t:"wallet" | external_id=t:"ext-t" | external_id_kind=NULL | fingerprint=t:"t" | occurred_at=t:"2024-04-01T00:00:00Z" | confirmed_at=NULL | direction=t:"outbound" | asset=t:"BTC" | amount=i:20000000000 | fee=i:0 | amount_includes_fee=i:0 | fiat_currency=t:"EUR" | fiat_rate=r:31000.5 | fiat_value=NULL | fiat_price_source=NULL | fiat_rate_exact=t:"31000.5" | fiat_value_exact=NULL | pricing_source_kind=t:"manual" | pricing_provider=t:"reviewed-receipt" | pricing_pair=NULL | pricing_timestamp=NULL | pricing_fetched_at=NULL | pricing_granularity=NULL | pricing_method=NULL | pricing_external_ref=NULL | pricing_quality=t:"exact" | pricing_review_accepted_price=NULL | commercial_applied_link_id=NULL | review_status=NULL | taxability_override=NULL | at_regime_override=NULL | at_category_override=NULL | kind_override=NULL | privacy_boundary=NULL | kind=t:"sell" | description=NULL | counterparty=NULL | note=NULL | excluded=i:0 | raw_json=t:"{}" | payment_hash=NULL | payment_hash_source=NULL | swap_refund_funding_txid=NULL | swap_refund_funding_vout=NULL | created_at=t:"2020"
+- (116 tables, 100 empty)
++ chain_index_clock: id=i:1 | revision=i:34
++ chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:34
++ chain_index_dirty: source_table=t:"transactions" | source_key=i:5 | revision=i:32
++ profiles: id=t:"p" | workspace_id=t:"w" | label=t:"P" | fiat_currency=t:"eur" | tax_country=t:"generic" | tax_long_term_days=i:365 | gains_algorithm=t:"fifo" | require_coarse_review=i:0 | bitcoin_rail_carrying_value=i:1 | cost_basis_pool_scope=t:"global" | journal_input_version=i:1 | last_processed_input_version=i:0 | required_journal_semantics_version=i:10 | journal_semantics_version=i:0 | last_processed_at=NULL | last_processed_tx_count=i:0 | ownership_review_counts_json=NULL | created_at=t:"2020" | swap_candidate_count=i:0
++ transaction_edit_events: id=t:"<uuid#45>" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"t" | wallet_id=t:"wallet" | transaction_external_id=t:"ext-t" | transaction_occurred_at=t:"2024-04-01T00:00:00Z" | source=t:"cli" | reason=t:"Resolved quarantine by excluding transaction" | changed_at=t:"<now>" | journal_input_version=i:0 | journal_input_version_after=i:1 | last_processed_input_version=i:0 | last_processed_at=t:"2026-10-31T12:00:00Z" | last_processed_tx_count=i:5
++ transaction_edit_fields: id=t:"<uuid#46>" | event_id=t:"<uuid#45>" | field=t:"excluded" | before_value=t:"false" | after_value=t:"true" | diff_json=t:"{}"
++ transactions: id=t:"t" | workspace_id=t:"w" | profile_id=t:"p" | wallet_id=t:"wallet" | external_id=t:"ext-t" | external_id_kind=NULL | fingerprint=t:"t" | occurred_at=t:"2024-04-01T00:00:00Z" | confirmed_at=NULL | direction=t:"outbound" | asset=t:"BTC" | amount=i:20000000000 | fee=i:0 | amount_includes_fee=i:0 | fiat_currency=t:"EUR" | fiat_rate=r:31000.5 | fiat_value=NULL | fiat_price_source=NULL | fiat_rate_exact=t:"31000.5" | fiat_value_exact=NULL | pricing_source_kind=t:"manual" | pricing_provider=t:"reviewed-receipt" | pricing_pair=NULL | pricing_timestamp=NULL | pricing_fetched_at=NULL | pricing_granularity=NULL | pricing_method=NULL | pricing_external_ref=NULL | pricing_quality=t:"exact" | pricing_review_accepted_price=NULL | commercial_applied_link_id=NULL | review_status=NULL | taxability_override=NULL | at_regime_override=NULL | at_category_override=NULL | kind_override=NULL | privacy_boundary=NULL | kind=t:"sell" | description=NULL | counterparty=NULL | note=NULL | excluded=i:1 | raw_json=t:"{}" | payment_hash=NULL | payment_hash_source=NULL | swap_refund_funding_txid=NULL | swap_refund_funding_vout=NULL | created_at=t:"2020"
++ (116 tables, 98 empty)
+$ --machine journals quarantine resolve price-override --group-id root:a --fiat-rate 10000
+exit 0
+--- stdout
+{
+  "kind": "journals.quarantine.resolve.price-override",
+  "schema_version": 1,
+  "data": {
+    "transaction_id": "a",
+    "resolution": "price-override",
+    "fiat_rate": 10000.0,
+    "fiat_value": 10000.0,
+    "fiat_rate_exact": "10000",
+    "fiat_value_exact": "10000",
+    "pricing_source_kind": "manual_override",
+    "history_event_id": "<uuid#47>",
+    "note": "Run `kassiber journals process` to regenerate entries.",
+    "group_id": "root:a",
+    "reprocessed": false,
+    "dependents_cleared": null,
+    "quarantine_delta": {
+      "status": "not_measured",
+      "reason": "journals_not_reprocessed",
+      "dependents_before": 2,
+      "remediation": {
+        "action": "process_journals",
+        "tool": "ui.journals.process",
+        "target": {},
+        "desktop_only": false
+      }
+    }
+  }
+}
+=== book changes after the resolution
+- chain_index_clock: id=i:1 | revision=i:31
+- chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:31
+- chain_index_dirty: source_table=t:"transactions" | source_key=i:1 | revision=i:26
+- journal_quarantines: transaction_id=t:"a" | workspace_id=t:"w" | profile_id=t:"p" | reason=t:"missing_spot_price" | detail_json=t:"{}" | created_at=t:"2024-05-01T00:00:00Z"
+- profiles: id=t:"p" | workspace_id=t:"w" | label=t:"P" | fiat_currency=t:"eur" | tax_country=t:"generic" | tax_long_term_days=i:365 | gains_algorithm=t:"fifo" | require_coarse_review=i:0 | bitcoin_rail_carrying_value=i:1 | cost_basis_pool_scope=t:"global" | journal_input_version=i:0 | last_processed_input_version=i:0 | required_journal_semantics_version=i:10 | journal_semantics_version=i:10 | last_processed_at=t:"2026-10-31T12:00:00Z" | last_processed_tx_count=i:5 | ownership_review_counts_json=t:"{\"by_reason\": {}, \"total\": 0}" | created_at=t:"2020" | swap_candidate_count=i:0
+- transactions: id=t:"a" | workspace_id=t:"w" | profile_id=t:"p" | wallet_id=t:"wallet" | external_id=t:"ext-a" | external_id_kind=NULL | fingerprint=t:"a" | occurred_at=t:"2024-01-01T00:00:00Z" | confirmed_at=NULL | direction=t:"inbound" | asset=t:"BTC" | amount=i:100000000000 | fee=i:0 | amount_includes_fee=i:0 | fiat_currency=t:"EUR" | fiat_rate=r:10000.0 | fiat_value=NULL | fiat_price_source=NULL | fiat_rate_exact=t:"10000" | fiat_value_exact=NULL | pricing_source_kind=t:"manual" | pricing_provider=t:"reviewed-receipt" | pricing_pair=NULL | pricing_timestamp=NULL | pricing_fetched_at=NULL | pricing_granularity=NULL | pricing_method=NULL | pricing_external_ref=NULL | pricing_quality=t:"exact" | pricing_review_accepted_price=NULL | commercial_applied_link_id=NULL | review_status=NULL | taxability_override=NULL | at_regime_override=NULL | at_category_override=NULL | kind_override=NULL | privacy_boundary=NULL | kind=t:"buy" | description=NULL | counterparty=NULL | note=NULL | excluded=i:0 | raw_json=t:"{}" | payment_hash=NULL | payment_hash_source=NULL | swap_refund_funding_txid=NULL | swap_refund_funding_vout=NULL | created_at=t:"2020"
+- (116 tables, 100 empty)
++ chain_index_clock: id=i:1 | revision=i:34
++ chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:34
++ chain_index_dirty: source_table=t:"transactions" | source_key=i:1 | revision=i:32
++ profiles: id=t:"p" | workspace_id=t:"w" | label=t:"P" | fiat_currency=t:"eur" | tax_country=t:"generic" | tax_long_term_days=i:365 | gains_algorithm=t:"fifo" | require_coarse_review=i:0 | bitcoin_rail_carrying_value=i:1 | cost_basis_pool_scope=t:"global" | journal_input_version=i:1 | last_processed_input_version=i:0 | required_journal_semantics_version=i:10 | journal_semantics_version=i:0 | last_processed_at=NULL | last_processed_tx_count=i:0 | ownership_review_counts_json=NULL | created_at=t:"2020" | swap_candidate_count=i:0
++ transaction_edit_events: id=t:"<uuid#47>" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"a" | wallet_id=t:"wallet" | transaction_external_id=t:"ext-a" | transaction_occurred_at=t:"2024-01-01T00:00:00Z" | source=t:"cli" | reason=t:"Resolved quarantine with manual pricing override" | changed_at=t:"<now>" | journal_input_version=i:0 | journal_input_version_after=i:1 | last_processed_input_version=i:0 | last_processed_at=t:"2026-10-31T12:00:00Z" | last_processed_tx_count=i:5
++ transaction_edit_fields: id=t:"<uuid#48>" | event_id=t:"<uuid#47>" | field=t:"fiat_price_source" | before_value=t:"null" | after_value=t:"\"manual\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#49>" | event_id=t:"<uuid#47>" | field=t:"fiat_value" | before_value=t:"null" | after_value=t:"\"10000\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#50>" | event_id=t:"<uuid#47>" | field=t:"pricing_fetched_at" | before_value=t:"null" | after_value=t:"\"<now>\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#51>" | event_id=t:"<uuid#47>" | field=t:"pricing_granularity" | before_value=t:"null" | after_value=t:"\"exact\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#52>" | event_id=t:"<uuid#47>" | field=t:"pricing_method" | before_value=t:"null" | after_value=t:"\"quarantine_price_override\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#53>" | event_id=t:"<uuid#47>" | field=t:"pricing_pair" | before_value=t:"null" | after_value=t:"\"BTC-EUR\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#54>" | event_id=t:"<uuid#47>" | field=t:"pricing_provider" | before_value=t:"\"reviewed-receipt\"" | after_value=t:"\"manual\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#55>" | event_id=t:"<uuid#47>" | field=t:"pricing_source_kind" | before_value=t:"\"manual\"" | after_value=t:"\"manual_override\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#56>" | event_id=t:"<uuid#47>" | field=t:"pricing_timestamp" | before_value=t:"null" | after_value=t:"\"2024-01-01T00:00:00Z\"" | diff_json=t:"{}"
++ transactions: id=t:"a" | workspace_id=t:"w" | profile_id=t:"p" | wallet_id=t:"wallet" | external_id=t:"ext-a" | external_id_kind=NULL | fingerprint=t:"a" | occurred_at=t:"2024-01-01T00:00:00Z" | confirmed_at=NULL | direction=t:"inbound" | asset=t:"BTC" | amount=i:100000000000 | fee=i:0 | amount_includes_fee=i:0 | fiat_currency=t:"EUR" | fiat_rate=r:10000.0 | fiat_value=r:10000.0 | fiat_price_source=t:"manual" | fiat_rate_exact=t:"10000" | fiat_value_exact=t:"10000" | pricing_source_kind=t:"manual_override" | pricing_provider=t:"manual" | pricing_pair=t:"BTC-EUR" | pricing_timestamp=t:"2024-01-01T00:00:00Z" | pricing_fetched_at=t:"<now>" | pricing_granularity=t:"exact" | pricing_method=t:"quarantine_price_override" | pricing_external_ref=NULL | pricing_quality=t:"exact" | pricing_review_accepted_price=NULL | commercial_applied_link_id=NULL | review_status=NULL | taxability_override=NULL | at_regime_override=NULL | at_category_override=NULL | kind_override=NULL | privacy_boundary=NULL | kind=t:"buy" | description=NULL | counterparty=NULL | note=NULL | excluded=i:0 | raw_json=t:"{}" | payment_hash=NULL | payment_hash_source=NULL | swap_refund_funding_txid=NULL | swap_refund_funding_vout=NULL | created_at=t:"2020"
++ (116 tables, 98 empty)
+$ --machine journals quarantine resolve price-override --group-id root:a --fiat-value 100 --reprocess
+exit 0
+--- stdout
+{
+  "kind": "journals.quarantine.resolve.price-override",
+  "schema_version": 1,
+  "data": {
+    "transaction_id": "a",
+    "resolution": "price-override",
+    "fiat_rate": 100.0,
+    "fiat_value": 100.0,
+    "fiat_rate_exact": "100",
+    "fiat_value_exact": "100",
+    "pricing_source_kind": "manual_override",
+    "history_event_id": "<uuid#57>",
+    "group_id": "root:a",
+    "reprocessed": true,
+    "journal_process": {
+      "profile": "P",
+      "entries_created": 6,
+      "quarantined": 0,
+      "transfers_detected": 0,
+      "cross_asset_pairs": 0,
+      "auto_priced": 0,
+      "processed_transactions": 5,
+      "processed_at": "2026-10-31T12:00:00Z",
+      "custody_quantity": {
+        "postings": 11,
+        "issues": 0,
+        "balances": 4,
+        "decisions": 0,
+        "economic_relations": 0,
+        "differences": 0,
+        "blocked": false,
+        "blocked_from": null
+      }
+    },
+    "cleared": true,
+    "remaining_reason": null,
+    "dependents_cleared": {
+      "count": 2,
+      "transaction_ids": [
+        "b",
+        "s"
+      ],
+      "truncated": false
+    },
+    "quarantine_delta": {
+      "status": "measured",
+      "dependents_before": 2,
+      "dependents_cleared": {
+        "count": 2,
+        "transaction_ids": [
+          "b",
+          "s"
+        ],
+        "truncated": false
+      },
+      "dependents_still_quarantined": {
+        "count": 0,
+        "transaction_ids": [],
+        "truncated": false
+      },
+      "other_rows_cleared": {
+        "count": 2,
+        "transaction_ids": [
+          "i",
+          "t"
+        ],
+        "truncated": false
+      },
+      "newly_quarantined": {
+        "count": 0,
+        "transaction_ids": [],
+        "truncated": false
+      },
+      "count_before": 5,
+      "count_after": 0
+    }
+  }
+}
+=== book changes after the resolution
+- chain_index_clock: id=i:1 | revision=i:31
+- chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:31
+- chain_index_dirty: source_table=t:"transactions" | source_key=i:1 | revision=i:26
+- journal_custody_gap_inputs: workspace_id=t:"w" | profile_id=t:"p" | input_version=i:0 | ignored_ids_json=t:"[]" | accounting_ignored_ids_json=t:"[]" | created_at=t:"2026-10-31T12:00:00Z"
+- journal_entries: id=t:"31144205-3dea-8534-91e9-b8cfd4f332b3" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"s" | wallet_id=t:"wallet" | account_id=NULL | occurred_at=t:"2024-03-01T00:00:00Z" | entry_type=t:"disposal" | asset=t:"BTC" | quantity=i:-150001000000 | fiat_value=r:45000.0 | unit_cost=r:0.0 | cost_basis=r:20000.2 | proceeds=r:45000.0 | gain_loss=r:24999.8 | fiat_value_exact=t:"45000.000000000000000000000000000" | unit_cost_exact=t:"0" | cost_basis_exact=t:"20000.20000" | proceeds_exact=t:"45000.000000000000000000000000000" | gain_loss_exact=t:"24999.800000000000000000000000000" | calculation_json=NULL | calculation_compact=t:"[2,\"kassiber_tax\",\"fifo\",[[\"s\",\"custody-tax:cbc7d7d74b92589f89ae059d61adc05a1994f598b5940d02f4400291b59d64d2:0:150000000000:external\",\"2024-03-01T00:00:00+00:00\",\"BTC\",\"30000\",\"0.30000\",1000000,\"EUR\",null,\"30000\",null,null,null,null,null,\"reviewed-receipt\",\"exact\",\"manual\",null],[\"a\",\"custody-tax:9180c4dbe8bb79327cd22a837c8cf76abaf8bc55833493fa9afe528011f0a7c4:0:100000000000:inbound\",\"2024-01-01T00:00:00+00:00\",\"BTC\",\"10000\",\"0\",0,\"EUR\",null,\"10000\",null,null,null,null,null,\"reviewed-receipt\",\"exact\",\"manual\",null],[\"b\",\"custody-tax:f537fad8d079470efc89e3bd67c2cc261af9870f939ce3b6a5e72a2d760fe0fe:0:100000000000:inbound\",\"2024-02-01T00:00:00+00:00\",\"BTC\",\"20000\",\"0\",0,\"EUR\",null,\"20000\",null,null,null,null,null,\"reviewed-receipt\",\"exact\",\"manual\",null]],[[100000000000,\"10000\",\"29999.800001333324444503703308645\",\"19999.800001333324444503703308645\",null,\"acquired_lot\",\"10000\",100000000000,0,1],[50001000000,\"10000.20000\",\"15000.199998666675555496296691355\",\"4999.999998666675555496296691355\",null,\"acquired_lot\",\"20000\",100000000000,0,2]]]" | pricing_source_kind=t:"manual" | pricing_quality=t:"exact" | description=t:"sell" | at_category=NULL | at_kennzahl=NULL | capital_gains_type=t:"short" | created_at=t:"2026-10-31T12:00:00Z"
+- journal_entries: id=t:"7094e0de-d003-89b8-a630-14241e5a99a9" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"a" | wallet_id=t:"wallet" | account_id=NULL | occurred_at=t:"2024-01-01T00:00:00Z" | entry_type=t:"acquisition" | asset=t:"BTC" | quantity=i:100000000000 | fiat_value=r:10000.0 | unit_cost=r:10000.0 | cost_basis=NULL | proceeds=NULL | gain_loss=NULL | fiat_value_exact=t:"10000" | unit_cost_exact=t:"10000" | cost_basis_exact=NULL | proceeds_exact=NULL | gain_loss_exact=NULL | calculation_json=NULL | calculation_compact=NULL | pricing_source_kind=t:"manual" | pricing_quality=t:"exact" | description=t:"buy" | at_category=NULL | at_kennzahl=NULL | capital_gains_type=NULL | created_at=t:"2026-10-31T12:00:00Z"
+- journal_entries: id=t:"7fab83c9-9fb4-8814-bfc2-fc216d37eaeb" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"t" | wallet_id=t:"wallet" | account_id=NULL | occurred_at=t:"2024-04-01T00:00:00Z" | entry_type=t:"disposal" | asset=t:"BTC" | quantity=i:-20000000000 | fiat_value=r:6200.1 | unit_cost=r:0.0 | cost_basis=r:4000.0 | proceeds=r:6200.1 | gain_loss=r:2200.1 | fiat_value_exact=t:"6200.10" | unit_cost_exact=t:"0" | cost_basis_exact=t:"4000.0" | proceeds_exact=t:"6200.10" | gain_loss_exact=t:"2200.10" | calculation_json=NULL | calculation_compact=t:"[2,\"kassiber_tax\",\"fifo\",[[\"t\",\"custody-tax:eecbc5e69663c646b2fd56c37ffd4b86970391e54f5028001411709fb2307d02:0:20000000000:external\",\"2024-04-01T00:00:00+00:00\",\"BTC\",\"31000.5\",\"0.0\",0,\"EUR\",null,\"31000.5\",null,null,null,null,null,\"reviewed-receipt\",\"exact\",\"manual\",null],[\"b\",\"custody-tax:f537fad8d079470efc89e3bd67c2cc261af9870f939ce3b6a5e72a2d760fe0fe:0:100000000000:inbound\",\"2024-02-01T00:00:00+00:00\",\"BTC\",\"20000\",\"0\",0,\"EUR\",null,\"20000\",null,null,null,null,null,\"reviewed-receipt\",\"exact\",\"manual\",null]],[[20000000000,\"4000.0\",\"6200.10\",\"2200.10\",null,\"acquired_lot\",\"20000\",100000000000,0,1]]]" | pricing_source_kind=t:"manual" | pricing_quality=t:"exact" | description=t:"sell" | at_category=NULL | at_kennzahl=NULL | capital_gains_type=t:"short" | created_at=t:"2026-10-31T12:00:00Z"
+- journal_entries: id=t:"94b8628d-6e50-8b47-87ac-683f894cf736" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"i" | wallet_id=t:"wallet" | account_id=NULL | occurred_at=t:"2024-03-02T00:00:00Z" | entry_type=t:"income" | asset=t:"BTC" | quantity=i:1000000000 | fiat_value=r:300.0 | unit_cost=r:0.0 | cost_basis=r:0.0 | proceeds=r:300.0 | gain_loss=r:300.0 | fiat_value_exact=t:"300.00" | unit_cost_exact=t:"0" | cost_basis_exact=t:"0" | proceeds_exact=t:"300.00" | gain_loss_exact=t:"300.00" | calculation_json=NULL | calculation_compact=t:"[2,\"kassiber_tax\",\"fifo\",[[\"i\",\"custody-tax:3e72bf71eafd5b5fe2c7e4d7eeff238325fa136ec1ece69767803bce3c289282:0:1000000000:inbound\",\"2024-03-02T00:00:00+00:00\",\"BTC\",\"30000\",\"0\",0,\"EUR\",null,\"30000\",null,null,null,null,null,\"reviewed-receipt\",\"exact\",\"manual\",null]],[[1000000000,\"0\",\"300.00\",\"300.00\",null,\"income\",null,null,0,null]]]" | pricing_source_kind=t:"manual" | pricing_quality=t:"exact" | description=t:"interest" | at_category=NULL | at_kennzahl=NULL | capital_gains_type=t:"short" | created_at=t:"2026-10-31T12:00:00Z"
+- journal_quantity_postings: posting_id=t:"decision:cbc7d7d74b92589f89ae059d61adc05a1994f598b5940d02f4400291b59d64d2:0:150000000000" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"s" | observation_hash=t:"cbc7d7d74b92589f89ae059d61adc05a1994f598b5940d02f4400291b59d64d2" | occurred_at=t:"2024-03-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"external" | location_id=t:"unmatched_outbound_default" | amount_msat=i:150000000000 | state=t:"external_presumed" | created_at=t:"2026-10-31T12:00:00Z"
+- journal_quantity_postings: posting_id=t:"decision:eecbc5e69663c646b2fd56c37ffd4b86970391e54f5028001411709fb2307d02:0:20000000000" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"t" | observation_hash=t:"eecbc5e69663c646b2fd56c37ffd4b86970391e54f5028001411709fb2307d02" | occurred_at=t:"2024-04-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"external" | location_id=t:"unmatched_outbound_default" | amount_msat=i:20000000000 | state=t:"external_presumed" | created_at=t:"2026-10-31T12:00:00Z"
+- journal_quantity_postings: posting_id=t:"fee:cbc7d7d74b92589f89ae059d61adc05a1994f598b5940d02f4400291b59d64d2" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"s" | observation_hash=t:"cbc7d7d74b92589f89ae059d61adc05a1994f598b5940d02f4400291b59d64d2" | occurred_at=t:"2024-03-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"fee" | location_id=t:"network_fee" | amount_msat=i:1000000 | state=t:"external_confirmed" | created_at=t:"2026-10-31T12:00:00Z"
+- journal_quantity_postings: posting_id=t:"observed:3e72bf71eafd5b5fe2c7e4d7eeff238325fa136ec1ece69767803bce3c289282" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"i" | observation_hash=t:"3e72bf71eafd5b5fe2c7e4d7eeff238325fa136ec1ece69767803bce3c289282" | occurred_at=t:"2024-03-02T00:00:00Z" | asset=t:"BTC" | location_kind=t:"wallet" | location_id=t:"wallet" | amount_msat=i:1000000000 | state=t:"observed" | created_at=t:"2026-10-31T12:00:00Z"
+- journal_quantity_postings: posting_id=t:"observed:9180c4dbe8bb79327cd22a837c8cf76abaf8bc55833493fa9afe528011f0a7c4" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"a" | observation_hash=t:"9180c4dbe8bb79327cd22a837c8cf76abaf8bc55833493fa9afe528011f0a7c4" | occurred_at=t:"2024-01-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"wallet" | location_id=t:"wallet" | amount_msat=i:100000000000 | state=t:"observed" | created_at=t:"2026-10-31T12:00:00Z"
+- journal_quantity_postings: posting_id=t:"observed:cbc7d7d74b92589f89ae059d61adc05a1994f598b5940d02f4400291b59d64d2" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"s" | observation_hash=t:"cbc7d7d74b92589f89ae059d61adc05a1994f598b5940d02f4400291b59d64d2" | occurred_at=t:"2024-03-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"wallet" | location_id=t:"wallet" | amount_msat=i:-150001000000 | state=t:"observed" | created_at=t:"2026-10-31T12:00:00Z"
+- journal_quantity_postings: posting_id=t:"observed:eecbc5e69663c646b2fd56c37ffd4b86970391e54f5028001411709fb2307d02" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"t" | observation_hash=t:"eecbc5e69663c646b2fd56c37ffd4b86970391e54f5028001411709fb2307d02" | occurred_at=t:"2024-04-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"wallet" | location_id=t:"wallet" | amount_msat=i:-20000000000 | state=t:"observed" | created_at=t:"2026-10-31T12:00:00Z"
+- journal_quantity_postings: posting_id=t:"observed:f537fad8d079470efc89e3bd67c2cc261af9870f939ce3b6a5e72a2d760fe0fe" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"b" | observation_hash=t:"f537fad8d079470efc89e3bd67c2cc261af9870f939ce3b6a5e72a2d760fe0fe" | occurred_at=t:"2024-02-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"wallet" | location_id=t:"wallet" | amount_msat=i:100000000000 | state=t:"observed" | created_at=t:"2026-10-31T12:00:00Z"
+- journal_quantity_postings: posting_id=t:"origin:3e72bf71eafd5b5fe2c7e4d7eeff238325fa136ec1ece69767803bce3c289282:0:1000000000" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"i" | observation_hash=t:"3e72bf71eafd5b5fe2c7e4d7eeff238325fa136ec1ece69767803bce3c289282" | occurred_at=t:"2024-03-02T00:00:00Z" | asset=t:"BTC" | location_kind=t:"external_origin" | location_id=t:"unclassified_origin" | amount_msat=i:-1000000000 | state=t:"unclassified_origin" | created_at=t:"2026-10-31T12:00:00Z"
+- journal_quantity_postings: posting_id=t:"origin:9180c4dbe8bb79327cd22a837c8cf76abaf8bc55833493fa9afe528011f0a7c4:0:100000000000" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"a" | observation_hash=t:"9180c4dbe8bb79327cd22a837c8cf76abaf8bc55833493fa9afe528011f0a7c4" | occurred_at=t:"2024-01-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"external_origin" | location_id=t:"unclassified_origin" | amount_msat=i:-100000000000 | state=t:"unclassified_origin" | created_at=t:"2026-10-31T12:00:00Z"
+- journal_quantity_postings: posting_id=t:"origin:f537fad8d079470efc89e3bd67c2cc261af9870f939ce3b6a5e72a2d760fe0fe:0:100000000000" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"b" | observation_hash=t:"f537fad8d079470efc89e3bd67c2cc261af9870f939ce3b6a5e72a2d760fe0fe" | occurred_at=t:"2024-02-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"external_origin" | location_id=t:"unclassified_origin" | amount_msat=i:-100000000000 | state=t:"unclassified_origin" | created_at=t:"2026-10-31T12:00:00Z"
+- journal_quarantines: transaction_id=t:"a" | workspace_id=t:"w" | profile_id=t:"p" | reason=t:"missing_spot_price" | detail_json=t:"{}" | created_at=t:"2024-05-01T00:00:00Z"
+- journal_quarantines: transaction_id=t:"b" | workspace_id=t:"w" | profile_id=t:"p" | reason=t:"transfer_pair_dependency_blocked" | detail_json=t:"{\"blocked_by_transaction_ids\": [\"a\"]}" | created_at=t:"2024-05-01T00:00:00Z"
+- journal_quarantines: transaction_id=t:"i" | workspace_id=t:"w" | profile_id=t:"p" | reason=t:"basis_provenance_incomplete" | detail_json=t:"{}" | created_at=t:"2024-05-01T00:00:00Z"
+- journal_quarantines: transaction_id=t:"s" | workspace_id=t:"w" | profile_id=t:"p" | reason=t:"custody_basis_barrier" | detail_json=t:"{\"root_transaction_ids\": [\"a\", \"missing\"]}" | created_at=t:"2024-05-01T00:00:00Z"
+- journal_quarantines: transaction_id=t:"t" | workspace_id=t:"w" | profile_id=t:"p" | reason=t:"insufficient_lots" | detail_json=t:"{\"asset\": \"BTC\"}" | created_at=t:"2024-05-01T00:00:00Z"
+- journal_tax_summary: id=t:"<uuid#58>" | workspace_id=t:"w" | profile_id=t:"p" | year=i:2024 | asset=t:"BTC" | transaction_type=t:"sell" | capital_gains_type=t:"short" | quantity=i:170001000000 | proceeds=r:51200.1 | cost_basis=r:24000.2 | gain_loss=r:27199.9 | created_at=t:"2026-10-31T12:00:00Z"
+- profiles: id=t:"p" | workspace_id=t:"w" | label=t:"P" | fiat_currency=t:"eur" | tax_country=t:"generic" | tax_long_term_days=i:365 | gains_algorithm=t:"fifo" | require_coarse_review=i:0 | bitcoin_rail_carrying_value=i:1 | cost_basis_pool_scope=t:"global" | journal_input_version=i:0 | last_processed_input_version=i:0 | required_journal_semantics_version=i:10 | journal_semantics_version=i:10 | last_processed_at=t:"2026-10-31T12:00:00Z" | last_processed_tx_count=i:5 | ownership_review_counts_json=t:"{\"by_reason\": {}, \"total\": 0}" | created_at=t:"2020" | swap_candidate_count=i:0
+- transactions: id=t:"a" | workspace_id=t:"w" | profile_id=t:"p" | wallet_id=t:"wallet" | external_id=t:"ext-a" | external_id_kind=NULL | fingerprint=t:"a" | occurred_at=t:"2024-01-01T00:00:00Z" | confirmed_at=NULL | direction=t:"inbound" | asset=t:"BTC" | amount=i:100000000000 | fee=i:0 | amount_includes_fee=i:0 | fiat_currency=t:"EUR" | fiat_rate=r:10000.0 | fiat_value=NULL | fiat_price_source=NULL | fiat_rate_exact=t:"10000" | fiat_value_exact=NULL | pricing_source_kind=t:"manual" | pricing_provider=t:"reviewed-receipt" | pricing_pair=NULL | pricing_timestamp=NULL | pricing_fetched_at=NULL | pricing_granularity=NULL | pricing_method=NULL | pricing_external_ref=NULL | pricing_quality=t:"exact" | pricing_review_accepted_price=NULL | commercial_applied_link_id=NULL | review_status=NULL | taxability_override=NULL | at_regime_override=NULL | at_category_override=NULL | kind_override=NULL | privacy_boundary=NULL | kind=t:"buy" | description=NULL | counterparty=NULL | note=NULL | excluded=i:0 | raw_json=t:"{}" | payment_hash=NULL | payment_hash_source=NULL | swap_refund_funding_txid=NULL | swap_refund_funding_vout=NULL | created_at=t:"2020"
+- (116 tables, 100 empty)
++ chain_index_clock: id=i:1 | revision=i:37
++ chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:37
++ chain_index_dirty: source_table=t:"transactions" | source_key=i:1 | revision=i:32
++ journal_custody_gap_inputs: workspace_id=t:"w" | profile_id=t:"p" | input_version=i:1 | ignored_ids_json=t:"[]" | accounting_ignored_ids_json=t:"[]" | created_at=t:"2026-10-31T12:00:00Z"
++ journal_entries: id=t:"31144205-3dea-8534-91e9-b8cfd4f332b3" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"s" | wallet_id=t:"wallet" | account_id=NULL | occurred_at=t:"2024-03-01T00:00:00Z" | entry_type=t:"disposal" | asset=t:"BTC" | quantity=i:-150001000000 | fiat_value=r:45000.0 | unit_cost=r:0.0 | cost_basis=r:10100.2 | proceeds=r:45000.0 | gain_loss=r:34899.8 | fiat_value_exact=t:"45000.000000000000000000000000000" | unit_cost_exact=t:"0" | cost_basis_exact=t:"10100.20000" | proceeds_exact=t:"45000.000000000000000000000000000" | gain_loss_exact=t:"34899.800000000000000000000000000" | calculation_json=NULL | calculation_compact=t:"[2,\"kassiber_tax\",\"fifo\",[[\"s\",\"custody-tax:a2228015987dd7e78ac94707e875d1495a2b68924f873298a2e21cb16155c5e0:0:150000000000:external\",\"2024-03-01T00:00:00+00:00\",\"BTC\",\"30000\",\"0.30000\",1000000,\"EUR\",null,\"30000\",null,null,null,null,null,\"reviewed-receipt\",\"exact\",\"manual\",null],[\"a\",\"custody-tax:d8924859cbcac7ce59f26610b394cd6929fba52924234a798e758435b1ad59ff:0:100000000000:inbound\",\"2024-01-01T00:00:00+00:00\",\"BTC\",\"100\",\"0\",0,\"EUR\",\"manual\",\"100\",null,\"<now>\",\"exact\",\"quarantine_price_override\",\"BTC-EUR\",\"manual\",\"exact\",\"manual_override\",\"2024-01-01T00:00:00Z\"],[\"b\",\"custody-tax:2e2d3eb723c1d7a0243bd0f745c614d16e4fe0beb3809764e29c4373060fc712:0:100000000000:inbound\",\"2024-02-01T00:00:00+00:00\",\"BTC\",\"20000\",\"0\",0,\"EUR\",null,\"20000\",null,null,null,null,null,\"reviewed-receipt\",\"exact\",\"manual\",null]],[[100000000000,\"100\",\"29999.800001333324444503703308645\",\"29899.800001333324444503703308645\",null,\"acquired_lot\",\"100\",100000000000,0,1],[50001000000,\"10000.20000\",\"15000.199998666675555496296691355\",\"4999.999998666675555496296691355\",null,\"acquired_lot\",\"20000\",100000000000,0,2]]]" | pricing_source_kind=t:"manual" | pricing_quality=t:"exact" | description=t:"sell" | at_category=NULL | at_kennzahl=NULL | capital_gains_type=t:"short" | created_at=t:"2026-10-31T12:00:00Z"
++ journal_entries: id=t:"7094e0de-d003-89b8-a630-14241e5a99a9" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"a" | wallet_id=t:"wallet" | account_id=NULL | occurred_at=t:"2024-01-01T00:00:00Z" | entry_type=t:"acquisition" | asset=t:"BTC" | quantity=i:100000000000 | fiat_value=r:100.0 | unit_cost=r:100.0 | cost_basis=NULL | proceeds=NULL | gain_loss=NULL | fiat_value_exact=t:"100" | unit_cost_exact=t:"100" | cost_basis_exact=NULL | proceeds_exact=NULL | gain_loss_exact=NULL | calculation_json=NULL | calculation_compact=NULL | pricing_source_kind=t:"manual_override" | pricing_quality=t:"exact" | description=t:"buy" | at_category=NULL | at_kennzahl=NULL | capital_gains_type=NULL | created_at=t:"2026-10-31T12:00:00Z"
++ journal_entries: id=t:"7fab83c9-9fb4-8814-bfc2-fc216d37eaeb" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"t" | wallet_id=t:"wallet" | account_id=NULL | occurred_at=t:"2024-04-01T00:00:00Z" | entry_type=t:"disposal" | asset=t:"BTC" | quantity=i:-20000000000 | fiat_value=r:6200.1 | unit_cost=r:0.0 | cost_basis=r:4000.0 | proceeds=r:6200.1 | gain_loss=r:2200.1 | fiat_value_exact=t:"6200.10" | unit_cost_exact=t:"0" | cost_basis_exact=t:"4000.0" | proceeds_exact=t:"6200.10" | gain_loss_exact=t:"2200.10" | calculation_json=NULL | calculation_compact=t:"[2,\"kassiber_tax\",\"fifo\",[[\"t\",\"custody-tax:5830363ce0139ec6d44e9eae3ac7e617c195463fb10db2f4eaa7b346fd75a8ee:0:20000000000:external\",\"2024-04-01T00:00:00+00:00\",\"BTC\",\"31000.5\",\"0.0\",0,\"EUR\",null,\"31000.5\",null,null,null,null,null,\"reviewed-receipt\",\"exact\",\"manual\",null],[\"b\",\"custody-tax:2e2d3eb723c1d7a0243bd0f745c614d16e4fe0beb3809764e29c4373060fc712:0:100000000000:inbound\",\"2024-02-01T00:00:00+00:00\",\"BTC\",\"20000\",\"0\",0,\"EUR\",null,\"20000\",null,null,null,null,null,\"reviewed-receipt\",\"exact\",\"manual\",null]],[[20000000000,\"4000.0\",\"6200.10\",\"2200.10\",null,\"acquired_lot\",\"20000\",100000000000,0,1]]]" | pricing_source_kind=t:"manual" | pricing_quality=t:"exact" | description=t:"sell" | at_category=NULL | at_kennzahl=NULL | capital_gains_type=t:"short" | created_at=t:"2026-10-31T12:00:00Z"
++ journal_entries: id=t:"94b8628d-6e50-8b47-87ac-683f894cf736" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"i" | wallet_id=t:"wallet" | account_id=NULL | occurred_at=t:"2024-03-02T00:00:00Z" | entry_type=t:"income" | asset=t:"BTC" | quantity=i:1000000000 | fiat_value=r:300.0 | unit_cost=r:0.0 | cost_basis=r:0.0 | proceeds=r:300.0 | gain_loss=r:300.0 | fiat_value_exact=t:"300.00" | unit_cost_exact=t:"0" | cost_basis_exact=t:"0" | proceeds_exact=t:"300.00" | gain_loss_exact=t:"300.00" | calculation_json=NULL | calculation_compact=t:"[2,\"kassiber_tax\",\"fifo\",[[\"i\",\"custody-tax:c47df1ba19abbf05efb7dc76c4dbdf05661faaa1dd6e7101baad27ca3b43a864:0:1000000000:inbound\",\"2024-03-02T00:00:00+00:00\",\"BTC\",\"30000\",\"0\",0,\"EUR\",null,\"30000\",null,null,null,null,null,\"reviewed-receipt\",\"exact\",\"manual\",null]],[[1000000000,\"0\",\"300.00\",\"300.00\",null,\"income\",null,null,0,null]]]" | pricing_source_kind=t:"manual" | pricing_quality=t:"exact" | description=t:"interest" | at_category=NULL | at_kennzahl=NULL | capital_gains_type=t:"short" | created_at=t:"2026-10-31T12:00:00Z"
++ journal_quantity_postings: posting_id=t:"decision:5830363ce0139ec6d44e9eae3ac7e617c195463fb10db2f4eaa7b346fd75a8ee:0:20000000000" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"t" | observation_hash=t:"5830363ce0139ec6d44e9eae3ac7e617c195463fb10db2f4eaa7b346fd75a8ee" | occurred_at=t:"2024-04-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"external" | location_id=t:"unmatched_outbound_default" | amount_msat=i:20000000000 | state=t:"external_presumed" | created_at=t:"2026-10-31T12:00:00Z"
++ journal_quantity_postings: posting_id=t:"decision:a2228015987dd7e78ac94707e875d1495a2b68924f873298a2e21cb16155c5e0:0:150000000000" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"s" | observation_hash=t:"a2228015987dd7e78ac94707e875d1495a2b68924f873298a2e21cb16155c5e0" | occurred_at=t:"2024-03-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"external" | location_id=t:"unmatched_outbound_default" | amount_msat=i:150000000000 | state=t:"external_presumed" | created_at=t:"2026-10-31T12:00:00Z"
++ journal_quantity_postings: posting_id=t:"fee:a2228015987dd7e78ac94707e875d1495a2b68924f873298a2e21cb16155c5e0" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"s" | observation_hash=t:"a2228015987dd7e78ac94707e875d1495a2b68924f873298a2e21cb16155c5e0" | occurred_at=t:"2024-03-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"fee" | location_id=t:"network_fee" | amount_msat=i:1000000 | state=t:"external_confirmed" | created_at=t:"2026-10-31T12:00:00Z"
++ journal_quantity_postings: posting_id=t:"observed:2e2d3eb723c1d7a0243bd0f745c614d16e4fe0beb3809764e29c4373060fc712" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"b" | observation_hash=t:"2e2d3eb723c1d7a0243bd0f745c614d16e4fe0beb3809764e29c4373060fc712" | occurred_at=t:"2024-02-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"wallet" | location_id=t:"wallet" | amount_msat=i:100000000000 | state=t:"observed" | created_at=t:"2026-10-31T12:00:00Z"
++ journal_quantity_postings: posting_id=t:"observed:5830363ce0139ec6d44e9eae3ac7e617c195463fb10db2f4eaa7b346fd75a8ee" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"t" | observation_hash=t:"5830363ce0139ec6d44e9eae3ac7e617c195463fb10db2f4eaa7b346fd75a8ee" | occurred_at=t:"2024-04-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"wallet" | location_id=t:"wallet" | amount_msat=i:-20000000000 | state=t:"observed" | created_at=t:"2026-10-31T12:00:00Z"
++ journal_quantity_postings: posting_id=t:"observed:a2228015987dd7e78ac94707e875d1495a2b68924f873298a2e21cb16155c5e0" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"s" | observation_hash=t:"a2228015987dd7e78ac94707e875d1495a2b68924f873298a2e21cb16155c5e0" | occurred_at=t:"2024-03-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"wallet" | location_id=t:"wallet" | amount_msat=i:-150001000000 | state=t:"observed" | created_at=t:"2026-10-31T12:00:00Z"
++ journal_quantity_postings: posting_id=t:"observed:c47df1ba19abbf05efb7dc76c4dbdf05661faaa1dd6e7101baad27ca3b43a864" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"i" | observation_hash=t:"c47df1ba19abbf05efb7dc76c4dbdf05661faaa1dd6e7101baad27ca3b43a864" | occurred_at=t:"2024-03-02T00:00:00Z" | asset=t:"BTC" | location_kind=t:"wallet" | location_id=t:"wallet" | amount_msat=i:1000000000 | state=t:"observed" | created_at=t:"2026-10-31T12:00:00Z"
++ journal_quantity_postings: posting_id=t:"observed:d8924859cbcac7ce59f26610b394cd6929fba52924234a798e758435b1ad59ff" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"a" | observation_hash=t:"d8924859cbcac7ce59f26610b394cd6929fba52924234a798e758435b1ad59ff" | occurred_at=t:"2024-01-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"wallet" | location_id=t:"wallet" | amount_msat=i:100000000000 | state=t:"observed" | created_at=t:"2026-10-31T12:00:00Z"
++ journal_quantity_postings: posting_id=t:"origin:2e2d3eb723c1d7a0243bd0f745c614d16e4fe0beb3809764e29c4373060fc712:0:100000000000" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"b" | observation_hash=t:"2e2d3eb723c1d7a0243bd0f745c614d16e4fe0beb3809764e29c4373060fc712" | occurred_at=t:"2024-02-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"external_origin" | location_id=t:"unclassified_origin" | amount_msat=i:-100000000000 | state=t:"unclassified_origin" | created_at=t:"2026-10-31T12:00:00Z"
++ journal_quantity_postings: posting_id=t:"origin:c47df1ba19abbf05efb7dc76c4dbdf05661faaa1dd6e7101baad27ca3b43a864:0:1000000000" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"i" | observation_hash=t:"c47df1ba19abbf05efb7dc76c4dbdf05661faaa1dd6e7101baad27ca3b43a864" | occurred_at=t:"2024-03-02T00:00:00Z" | asset=t:"BTC" | location_kind=t:"external_origin" | location_id=t:"unclassified_origin" | amount_msat=i:-1000000000 | state=t:"unclassified_origin" | created_at=t:"2026-10-31T12:00:00Z"
++ journal_quantity_postings: posting_id=t:"origin:d8924859cbcac7ce59f26610b394cd6929fba52924234a798e758435b1ad59ff:0:100000000000" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"a" | observation_hash=t:"d8924859cbcac7ce59f26610b394cd6929fba52924234a798e758435b1ad59ff" | occurred_at=t:"2024-01-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"external_origin" | location_id=t:"unclassified_origin" | amount_msat=i:-100000000000 | state=t:"unclassified_origin" | created_at=t:"2026-10-31T12:00:00Z"
++ journal_tax_summary: id=t:"<uuid#58>" | workspace_id=t:"w" | profile_id=t:"p" | year=i:2024 | asset=t:"BTC" | transaction_type=t:"sell" | capital_gains_type=t:"short" | quantity=i:170001000000 | proceeds=r:51200.1 | cost_basis=r:14100.2 | gain_loss=r:37099.9 | created_at=t:"2026-10-31T12:00:00Z"
++ profiles: id=t:"p" | workspace_id=t:"w" | label=t:"P" | fiat_currency=t:"eur" | tax_country=t:"generic" | tax_long_term_days=i:365 | gains_algorithm=t:"fifo" | require_coarse_review=i:0 | bitcoin_rail_carrying_value=i:1 | cost_basis_pool_scope=t:"global" | journal_input_version=i:1 | last_processed_input_version=i:1 | required_journal_semantics_version=i:10 | journal_semantics_version=i:10 | last_processed_at=t:"2026-10-31T12:00:00Z" | last_processed_tx_count=i:5 | ownership_review_counts_json=t:"{\"by_reason\": {}, \"total\": 0}" | created_at=t:"2020" | swap_candidate_count=i:0
++ transaction_edit_events: id=t:"<uuid#57>" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"a" | wallet_id=t:"wallet" | transaction_external_id=t:"ext-a" | transaction_occurred_at=t:"2024-01-01T00:00:00Z" | source=t:"cli" | reason=t:"Resolved quarantine with manual pricing override" | changed_at=t:"<now>" | journal_input_version=i:0 | journal_input_version_after=i:1 | last_processed_input_version=i:0 | last_processed_at=t:"2026-10-31T12:00:00Z" | last_processed_tx_count=i:5
++ transaction_edit_fields: id=t:"<uuid#59>" | event_id=t:"<uuid#57>" | field=t:"fiat_price_source" | before_value=t:"null" | after_value=t:"\"manual\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#60>" | event_id=t:"<uuid#57>" | field=t:"fiat_rate" | before_value=t:"\"10000\"" | after_value=t:"\"100\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#61>" | event_id=t:"<uuid#57>" | field=t:"fiat_value" | before_value=t:"null" | after_value=t:"\"100\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#62>" | event_id=t:"<uuid#57>" | field=t:"pricing_fetched_at" | before_value=t:"null" | after_value=t:"\"<now>\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#63>" | event_id=t:"<uuid#57>" | field=t:"pricing_granularity" | before_value=t:"null" | after_value=t:"\"exact\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#64>" | event_id=t:"<uuid#57>" | field=t:"pricing_method" | before_value=t:"null" | after_value=t:"\"quarantine_price_override\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#65>" | event_id=t:"<uuid#57>" | field=t:"pricing_pair" | before_value=t:"null" | after_value=t:"\"BTC-EUR\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#66>" | event_id=t:"<uuid#57>" | field=t:"pricing_provider" | before_value=t:"\"reviewed-receipt\"" | after_value=t:"\"manual\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#67>" | event_id=t:"<uuid#57>" | field=t:"pricing_source_kind" | before_value=t:"\"manual\"" | after_value=t:"\"manual_override\"" | diff_json=t:"{}"
++ transaction_edit_fields: id=t:"<uuid#68>" | event_id=t:"<uuid#57>" | field=t:"pricing_timestamp" | before_value=t:"null" | after_value=t:"\"2024-01-01T00:00:00Z\"" | diff_json=t:"{}"
++ transactions: id=t:"a" | workspace_id=t:"w" | profile_id=t:"p" | wallet_id=t:"wallet" | external_id=t:"ext-a" | external_id_kind=NULL | fingerprint=t:"a" | occurred_at=t:"2024-01-01T00:00:00Z" | confirmed_at=NULL | direction=t:"inbound" | asset=t:"BTC" | amount=i:100000000000 | fee=i:0 | amount_includes_fee=i:0 | fiat_currency=t:"EUR" | fiat_rate=r:100.0 | fiat_value=r:100.0 | fiat_price_source=t:"manual" | fiat_rate_exact=t:"100" | fiat_value_exact=t:"100" | pricing_source_kind=t:"manual_override" | pricing_provider=t:"manual" | pricing_pair=t:"BTC-EUR" | pricing_timestamp=t:"2024-01-01T00:00:00Z" | pricing_fetched_at=t:"<now>" | pricing_granularity=t:"exact" | pricing_method=t:"quarantine_price_override" | pricing_external_ref=NULL | pricing_quality=t:"exact" | pricing_review_accepted_price=NULL | commercial_applied_link_id=NULL | review_status=NULL | taxability_override=NULL | at_regime_override=NULL | at_category_override=NULL | kind_override=NULL | privacy_boundary=NULL | kind=t:"buy" | description=NULL | counterparty=NULL | note=NULL | excluded=i:0 | raw_json=t:"{}" | payment_hash=NULL | payment_hash_source=NULL | swap_refund_funding_txid=NULL | swap_refund_funding_vout=NULL | created_at=t:"2020"
++ (116 tables, 99 empty)
+$ --machine journals quarantine resolve exclude --group-id root:t
+exit 0
+--- stdout
+{
+  "kind": "journals.quarantine.resolve.exclude",
+  "schema_version": 1,
+  "data": {
+    "transaction_id": "t",
+    "resolution": "exclude",
+    "excluded": true,
+    "history_event_id": "<uuid#69>",
+    "note": "Run `kassiber journals process` to regenerate entries.",
+    "group_id": "root:t",
+    "reprocessed": false,
+    "dependents_cleared": null,
+    "quarantine_delta": {
+      "status": "not_measured",
+      "reason": "journals_not_reprocessed",
+      "dependents_before": 0,
+      "remediation": {
+        "action": "process_journals",
+        "tool": "ui.journals.process",
+        "target": {},
+        "desktop_only": false
+      }
+    }
+  }
+}
+=== book changes after the resolution
+- chain_index_clock: id=i:1 | revision=i:31
+- chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:31
+- chain_index_dirty: source_table=t:"transactions" | source_key=i:5 | revision=i:30
+- journal_quarantines: transaction_id=t:"t" | workspace_id=t:"w" | profile_id=t:"p" | reason=t:"insufficient_lots" | detail_json=t:"{\"asset\": \"BTC\"}" | created_at=t:"2024-05-01T00:00:00Z"
+- profiles: id=t:"p" | workspace_id=t:"w" | label=t:"P" | fiat_currency=t:"eur" | tax_country=t:"generic" | tax_long_term_days=i:365 | gains_algorithm=t:"fifo" | require_coarse_review=i:0 | bitcoin_rail_carrying_value=i:1 | cost_basis_pool_scope=t:"global" | journal_input_version=i:0 | last_processed_input_version=i:0 | required_journal_semantics_version=i:10 | journal_semantics_version=i:10 | last_processed_at=t:"2026-10-31T12:00:00Z" | last_processed_tx_count=i:5 | ownership_review_counts_json=t:"{\"by_reason\": {}, \"total\": 0}" | created_at=t:"2020" | swap_candidate_count=i:0
+- transactions: id=t:"t" | workspace_id=t:"w" | profile_id=t:"p" | wallet_id=t:"wallet" | external_id=t:"ext-t" | external_id_kind=NULL | fingerprint=t:"t" | occurred_at=t:"2024-04-01T00:00:00Z" | confirmed_at=NULL | direction=t:"outbound" | asset=t:"BTC" | amount=i:20000000000 | fee=i:0 | amount_includes_fee=i:0 | fiat_currency=t:"EUR" | fiat_rate=r:31000.5 | fiat_value=NULL | fiat_price_source=NULL | fiat_rate_exact=t:"31000.5" | fiat_value_exact=NULL | pricing_source_kind=t:"manual" | pricing_provider=t:"reviewed-receipt" | pricing_pair=NULL | pricing_timestamp=NULL | pricing_fetched_at=NULL | pricing_granularity=NULL | pricing_method=NULL | pricing_external_ref=NULL | pricing_quality=t:"exact" | pricing_review_accepted_price=NULL | commercial_applied_link_id=NULL | review_status=NULL | taxability_override=NULL | at_regime_override=NULL | at_category_override=NULL | kind_override=NULL | privacy_boundary=NULL | kind=t:"sell" | description=NULL | counterparty=NULL | note=NULL | excluded=i:0 | raw_json=t:"{}" | payment_hash=NULL | payment_hash_source=NULL | swap_refund_funding_txid=NULL | swap_refund_funding_vout=NULL | created_at=t:"2020"
+- (116 tables, 100 empty)
++ chain_index_clock: id=i:1 | revision=i:34
++ chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:34
++ chain_index_dirty: source_table=t:"transactions" | source_key=i:5 | revision=i:32
++ profiles: id=t:"p" | workspace_id=t:"w" | label=t:"P" | fiat_currency=t:"eur" | tax_country=t:"generic" | tax_long_term_days=i:365 | gains_algorithm=t:"fifo" | require_coarse_review=i:0 | bitcoin_rail_carrying_value=i:1 | cost_basis_pool_scope=t:"global" | journal_input_version=i:1 | last_processed_input_version=i:0 | required_journal_semantics_version=i:10 | journal_semantics_version=i:0 | last_processed_at=NULL | last_processed_tx_count=i:0 | ownership_review_counts_json=NULL | created_at=t:"2020" | swap_candidate_count=i:0
++ transaction_edit_events: id=t:"<uuid#69>" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"t" | wallet_id=t:"wallet" | transaction_external_id=t:"ext-t" | transaction_occurred_at=t:"2024-04-01T00:00:00Z" | source=t:"cli" | reason=t:"Resolved quarantine by excluding transaction" | changed_at=t:"<now>" | journal_input_version=i:0 | journal_input_version_after=i:1 | last_processed_input_version=i:0 | last_processed_at=t:"2026-10-31T12:00:00Z" | last_processed_tx_count=i:5
++ transaction_edit_fields: id=t:"<uuid#70>" | event_id=t:"<uuid#69>" | field=t:"excluded" | before_value=t:"false" | after_value=t:"true" | diff_json=t:"{}"
++ transactions: id=t:"t" | workspace_id=t:"w" | profile_id=t:"p" | wallet_id=t:"wallet" | external_id=t:"ext-t" | external_id_kind=NULL | fingerprint=t:"t" | occurred_at=t:"2024-04-01T00:00:00Z" | confirmed_at=NULL | direction=t:"outbound" | asset=t:"BTC" | amount=i:20000000000 | fee=i:0 | amount_includes_fee=i:0 | fiat_currency=t:"EUR" | fiat_rate=r:31000.5 | fiat_value=NULL | fiat_price_source=NULL | fiat_rate_exact=t:"31000.5" | fiat_value_exact=NULL | pricing_source_kind=t:"manual" | pricing_provider=t:"reviewed-receipt" | pricing_pair=NULL | pricing_timestamp=NULL | pricing_fetched_at=NULL | pricing_granularity=NULL | pricing_method=NULL | pricing_external_ref=NULL | pricing_quality=t:"exact" | pricing_review_accepted_price=NULL | commercial_applied_link_id=NULL | review_status=NULL | taxability_override=NULL | at_regime_override=NULL | at_category_override=NULL | kind_override=NULL | privacy_boundary=NULL | kind=t:"sell" | description=NULL | counterparty=NULL | note=NULL | excluded=i:1 | raw_json=t:"{}" | payment_hash=NULL | payment_hash_source=NULL | swap_refund_funding_txid=NULL | swap_refund_funding_vout=NULL | created_at=t:"2020"
++ (116 tables, 98 empty)
+$ --machine journals quarantine resolve exclude --transaction t --reprocess
+exit 0
+--- stdout
+{
+  "kind": "journals.quarantine.resolve.exclude",
+  "schema_version": 1,
+  "data": {
+    "transaction_id": "t",
+    "resolution": "exclude",
+    "excluded": true,
+    "history_event_id": "<uuid#71>",
+    "group_id": null,
+    "reprocessed": true,
+    "journal_process": {
+      "profile": "P",
+      "entries_created": 5,
+      "quarantined": 0,
+      "transfers_detected": 0,
+      "cross_asset_pairs": 0,
+      "auto_priced": 0,
+      "processed_transactions": 4,
+      "processed_at": "2026-10-31T12:00:00Z",
+      "custody_quantity": {
+        "postings": 9,
+        "issues": 0,
+        "balances": 4,
+        "decisions": 0,
+        "economic_relations": 0,
+        "differences": 0,
+        "blocked": false,
+        "blocked_from": null
+      }
+    },
+    "cleared": true,
+    "remaining_reason": null,
+    "dependents_cleared": {
+      "count": 0,
+      "transaction_ids": [],
+      "truncated": false
+    },
+    "quarantine_delta": {
+      "status": "measured",
+      "dependents_before": 0,
+      "dependents_cleared": {
+        "count": 0,
+        "transaction_ids": [],
+        "truncated": false
+      },
+      "dependents_still_quarantined": {
+        "count": 0,
+        "transaction_ids": [],
+        "truncated": false
+      },
+      "other_rows_cleared": {
+        "count": 4,
+        "transaction_ids": [
+          "a",
+          "b",
+          "i",
+          "s"
+        ],
+        "truncated": false
+      },
+      "newly_quarantined": {
+        "count": 0,
+        "transaction_ids": [],
+        "truncated": false
+      },
+      "count_before": 5,
+      "count_after": 0
+    }
+  }
+}
+=== book changes after the resolution
+- chain_index_clock: id=i:1 | revision=i:31
+- chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:31
+- chain_index_dirty: source_table=t:"transactions" | source_key=i:5 | revision=i:30
+- journal_account_holdings: id=t:"<uuid#72>" | workspace_id=t:"w" | profile_id=t:"p" | account_id=NULL | account_code=t:"treasury" | account_label=t:"Treasury" | asset=t:"BTC" | quantity=i:30999000000 | cost_basis=r:6299.8 | created_at=t:"2026-10-31T12:00:00Z"
+- journal_custody_gap_inputs: workspace_id=t:"w" | profile_id=t:"p" | input_version=i:0 | ignored_ids_json=t:"[]" | accounting_ignored_ids_json=t:"[]" | created_at=t:"2026-10-31T12:00:00Z"
+- journal_entries: id=t:"31144205-3dea-8534-91e9-b8cfd4f332b3" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"s" | wallet_id=t:"wallet" | account_id=NULL | occurred_at=t:"2024-03-01T00:00:00Z" | entry_type=t:"disposal" | asset=t:"BTC" | quantity=i:-150001000000 | fiat_value=r:45000.0 | unit_cost=r:0.0 | cost_basis=r:20000.2 | proceeds=r:45000.0 | gain_loss=r:24999.8 | fiat_value_exact=t:"45000.000000000000000000000000000" | unit_cost_exact=t:"0" | cost_basis_exact=t:"20000.20000" | proceeds_exact=t:"45000.000000000000000000000000000" | gain_loss_exact=t:"24999.800000000000000000000000000" | calculation_json=NULL | calculation_compact=t:"[2,\"kassiber_tax\",\"fifo\",[[\"s\",\"custody-tax:cbc7d7d74b92589f89ae059d61adc05a1994f598b5940d02f4400291b59d64d2:0:150000000000:external\",\"2024-03-01T00:00:00+00:00\",\"BTC\",\"30000\",\"0.30000\",1000000,\"EUR\",null,\"30000\",null,null,null,null,null,\"reviewed-receipt\",\"exact\",\"manual\",null],[\"a\",\"custody-tax:9180c4dbe8bb79327cd22a837c8cf76abaf8bc55833493fa9afe528011f0a7c4:0:100000000000:inbound\",\"2024-01-01T00:00:00+00:00\",\"BTC\",\"10000\",\"0\",0,\"EUR\",null,\"10000\",null,null,null,null,null,\"reviewed-receipt\",\"exact\",\"manual\",null],[\"b\",\"custody-tax:f537fad8d079470efc89e3bd67c2cc261af9870f939ce3b6a5e72a2d760fe0fe:0:100000000000:inbound\",\"2024-02-01T00:00:00+00:00\",\"BTC\",\"20000\",\"0\",0,\"EUR\",null,\"20000\",null,null,null,null,null,\"reviewed-receipt\",\"exact\",\"manual\",null]],[[100000000000,\"10000\",\"29999.800001333324444503703308645\",\"19999.800001333324444503703308645\",null,\"acquired_lot\",\"10000\",100000000000,0,1],[50001000000,\"10000.20000\",\"15000.199998666675555496296691355\",\"4999.999998666675555496296691355\",null,\"acquired_lot\",\"20000\",100000000000,0,2]]]" | pricing_source_kind=t:"manual" | pricing_quality=t:"exact" | description=t:"sell" | at_category=NULL | at_kennzahl=NULL | capital_gains_type=t:"short" | created_at=t:"2026-10-31T12:00:00Z"
+- journal_entries: id=t:"7fab83c9-9fb4-8814-bfc2-fc216d37eaeb" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"t" | wallet_id=t:"wallet" | account_id=NULL | occurred_at=t:"2024-04-01T00:00:00Z" | entry_type=t:"disposal" | asset=t:"BTC" | quantity=i:-20000000000 | fiat_value=r:6200.1 | unit_cost=r:0.0 | cost_basis=r:4000.0 | proceeds=r:6200.1 | gain_loss=r:2200.1 | fiat_value_exact=t:"6200.10" | unit_cost_exact=t:"0" | cost_basis_exact=t:"4000.0" | proceeds_exact=t:"6200.10" | gain_loss_exact=t:"2200.10" | calculation_json=NULL | calculation_compact=t:"[2,\"kassiber_tax\",\"fifo\",[[\"t\",\"custody-tax:eecbc5e69663c646b2fd56c37ffd4b86970391e54f5028001411709fb2307d02:0:20000000000:external\",\"2024-04-01T00:00:00+00:00\",\"BTC\",\"31000.5\",\"0.0\",0,\"EUR\",null,\"31000.5\",null,null,null,null,null,\"reviewed-receipt\",\"exact\",\"manual\",null],[\"b\",\"custody-tax:f537fad8d079470efc89e3bd67c2cc261af9870f939ce3b6a5e72a2d760fe0fe:0:100000000000:inbound\",\"2024-02-01T00:00:00+00:00\",\"BTC\",\"20000\",\"0\",0,\"EUR\",null,\"20000\",null,null,null,null,null,\"reviewed-receipt\",\"exact\",\"manual\",null]],[[20000000000,\"4000.0\",\"6200.10\",\"2200.10\",null,\"acquired_lot\",\"20000\",100000000000,0,1]]]" | pricing_source_kind=t:"manual" | pricing_quality=t:"exact" | description=t:"sell" | at_category=NULL | at_kennzahl=NULL | capital_gains_type=t:"short" | created_at=t:"2026-10-31T12:00:00Z"
+- journal_entries: id=t:"94b8628d-6e50-8b47-87ac-683f894cf736" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"i" | wallet_id=t:"wallet" | account_id=NULL | occurred_at=t:"2024-03-02T00:00:00Z" | entry_type=t:"income" | asset=t:"BTC" | quantity=i:1000000000 | fiat_value=r:300.0 | unit_cost=r:0.0 | cost_basis=r:0.0 | proceeds=r:300.0 | gain_loss=r:300.0 | fiat_value_exact=t:"300.00" | unit_cost_exact=t:"0" | cost_basis_exact=t:"0" | proceeds_exact=t:"300.00" | gain_loss_exact=t:"300.00" | calculation_json=NULL | calculation_compact=t:"[2,\"kassiber_tax\",\"fifo\",[[\"i\",\"custody-tax:3e72bf71eafd5b5fe2c7e4d7eeff238325fa136ec1ece69767803bce3c289282:0:1000000000:inbound\",\"2024-03-02T00:00:00+00:00\",\"BTC\",\"30000\",\"0\",0,\"EUR\",null,\"30000\",null,null,null,null,null,\"reviewed-receipt\",\"exact\",\"manual\",null]],[[1000000000,\"0\",\"300.00\",\"300.00\",null,\"income\",null,null,0,null]]]" | pricing_source_kind=t:"manual" | pricing_quality=t:"exact" | description=t:"interest" | at_category=NULL | at_kennzahl=NULL | capital_gains_type=t:"short" | created_at=t:"2026-10-31T12:00:00Z"
+- journal_quantity_balances: workspace_id=t:"w" | profile_id=t:"p" | location_kind=t:"external" | location_id=t:"unmatched_outbound_default" | asset=t:"BTC" | amount_msat=i:170000000000 | created_at=t:"2026-10-31T12:00:00Z"
+- journal_quantity_balances: workspace_id=t:"w" | profile_id=t:"p" | location_kind=t:"wallet" | location_id=t:"wallet" | asset=t:"BTC" | amount_msat=i:30999000000 | created_at=t:"2026-10-31T12:00:00Z"
+- journal_quantity_postings: posting_id=t:"decision:cbc7d7d74b92589f89ae059d61adc05a1994f598b5940d02f4400291b59d64d2:0:150000000000" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"s" | observation_hash=t:"cbc7d7d74b92589f89ae059d61adc05a1994f598b5940d02f4400291b59d64d2" | occurred_at=t:"2024-03-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"external" | location_id=t:"unmatched_outbound_default" | amount_msat=i:150000000000 | state=t:"external_presumed" | created_at=t:"2026-10-31T12:00:00Z"
+- journal_quantity_postings: posting_id=t:"decision:eecbc5e69663c646b2fd56c37ffd4b86970391e54f5028001411709fb2307d02:0:20000000000" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"t" | observation_hash=t:"eecbc5e69663c646b2fd56c37ffd4b86970391e54f5028001411709fb2307d02" | occurred_at=t:"2024-04-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"external" | location_id=t:"unmatched_outbound_default" | amount_msat=i:20000000000 | state=t:"external_presumed" | created_at=t:"2026-10-31T12:00:00Z"
+- journal_quantity_postings: posting_id=t:"fee:cbc7d7d74b92589f89ae059d61adc05a1994f598b5940d02f4400291b59d64d2" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"s" | observation_hash=t:"cbc7d7d74b92589f89ae059d61adc05a1994f598b5940d02f4400291b59d64d2" | occurred_at=t:"2024-03-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"fee" | location_id=t:"network_fee" | amount_msat=i:1000000 | state=t:"external_confirmed" | created_at=t:"2026-10-31T12:00:00Z"
+- journal_quantity_postings: posting_id=t:"observed:3e72bf71eafd5b5fe2c7e4d7eeff238325fa136ec1ece69767803bce3c289282" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"i" | observation_hash=t:"3e72bf71eafd5b5fe2c7e4d7eeff238325fa136ec1ece69767803bce3c289282" | occurred_at=t:"2024-03-02T00:00:00Z" | asset=t:"BTC" | location_kind=t:"wallet" | location_id=t:"wallet" | amount_msat=i:1000000000 | state=t:"observed" | created_at=t:"2026-10-31T12:00:00Z"
+- journal_quantity_postings: posting_id=t:"observed:9180c4dbe8bb79327cd22a837c8cf76abaf8bc55833493fa9afe528011f0a7c4" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"a" | observation_hash=t:"9180c4dbe8bb79327cd22a837c8cf76abaf8bc55833493fa9afe528011f0a7c4" | occurred_at=t:"2024-01-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"wallet" | location_id=t:"wallet" | amount_msat=i:100000000000 | state=t:"observed" | created_at=t:"2026-10-31T12:00:00Z"
+- journal_quantity_postings: posting_id=t:"observed:cbc7d7d74b92589f89ae059d61adc05a1994f598b5940d02f4400291b59d64d2" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"s" | observation_hash=t:"cbc7d7d74b92589f89ae059d61adc05a1994f598b5940d02f4400291b59d64d2" | occurred_at=t:"2024-03-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"wallet" | location_id=t:"wallet" | amount_msat=i:-150001000000 | state=t:"observed" | created_at=t:"2026-10-31T12:00:00Z"
+- journal_quantity_postings: posting_id=t:"observed:eecbc5e69663c646b2fd56c37ffd4b86970391e54f5028001411709fb2307d02" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"t" | observation_hash=t:"eecbc5e69663c646b2fd56c37ffd4b86970391e54f5028001411709fb2307d02" | occurred_at=t:"2024-04-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"wallet" | location_id=t:"wallet" | amount_msat=i:-20000000000 | state=t:"observed" | created_at=t:"2026-10-31T12:00:00Z"
+- journal_quantity_postings: posting_id=t:"observed:f537fad8d079470efc89e3bd67c2cc261af9870f939ce3b6a5e72a2d760fe0fe" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"b" | observation_hash=t:"f537fad8d079470efc89e3bd67c2cc261af9870f939ce3b6a5e72a2d760fe0fe" | occurred_at=t:"2024-02-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"wallet" | location_id=t:"wallet" | amount_msat=i:100000000000 | state=t:"observed" | created_at=t:"2026-10-31T12:00:00Z"
+- journal_quantity_postings: posting_id=t:"origin:3e72bf71eafd5b5fe2c7e4d7eeff238325fa136ec1ece69767803bce3c289282:0:1000000000" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"i" | observation_hash=t:"3e72bf71eafd5b5fe2c7e4d7eeff238325fa136ec1ece69767803bce3c289282" | occurred_at=t:"2024-03-02T00:00:00Z" | asset=t:"BTC" | location_kind=t:"external_origin" | location_id=t:"unclassified_origin" | amount_msat=i:-1000000000 | state=t:"unclassified_origin" | created_at=t:"2026-10-31T12:00:00Z"
+- journal_quantity_postings: posting_id=t:"origin:9180c4dbe8bb79327cd22a837c8cf76abaf8bc55833493fa9afe528011f0a7c4:0:100000000000" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"a" | observation_hash=t:"9180c4dbe8bb79327cd22a837c8cf76abaf8bc55833493fa9afe528011f0a7c4" | occurred_at=t:"2024-01-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"external_origin" | location_id=t:"unclassified_origin" | amount_msat=i:-100000000000 | state=t:"unclassified_origin" | created_at=t:"2026-10-31T12:00:00Z"
+- journal_quantity_postings: posting_id=t:"origin:f537fad8d079470efc89e3bd67c2cc261af9870f939ce3b6a5e72a2d760fe0fe:0:100000000000" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"b" | observation_hash=t:"f537fad8d079470efc89e3bd67c2cc261af9870f939ce3b6a5e72a2d760fe0fe" | occurred_at=t:"2024-02-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"external_origin" | location_id=t:"unclassified_origin" | amount_msat=i:-100000000000 | state=t:"unclassified_origin" | created_at=t:"2026-10-31T12:00:00Z"
+- journal_quarantines: transaction_id=t:"a" | workspace_id=t:"w" | profile_id=t:"p" | reason=t:"missing_spot_price" | detail_json=t:"{}" | created_at=t:"2024-05-01T00:00:00Z"
+- journal_quarantines: transaction_id=t:"b" | workspace_id=t:"w" | profile_id=t:"p" | reason=t:"transfer_pair_dependency_blocked" | detail_json=t:"{\"blocked_by_transaction_ids\": [\"a\"]}" | created_at=t:"2024-05-01T00:00:00Z"
+- journal_quarantines: transaction_id=t:"i" | workspace_id=t:"w" | profile_id=t:"p" | reason=t:"basis_provenance_incomplete" | detail_json=t:"{}" | created_at=t:"2024-05-01T00:00:00Z"
+- journal_quarantines: transaction_id=t:"s" | workspace_id=t:"w" | profile_id=t:"p" | reason=t:"custody_basis_barrier" | detail_json=t:"{\"root_transaction_ids\": [\"a\", \"missing\"]}" | created_at=t:"2024-05-01T00:00:00Z"
+- journal_quarantines: transaction_id=t:"t" | workspace_id=t:"w" | profile_id=t:"p" | reason=t:"insufficient_lots" | detail_json=t:"{\"asset\": \"BTC\"}" | created_at=t:"2024-05-01T00:00:00Z"
+- journal_tax_summary: id=t:"<uuid#58>" | workspace_id=t:"w" | profile_id=t:"p" | year=i:2024 | asset=t:"BTC" | transaction_type=t:"sell" | capital_gains_type=t:"short" | quantity=i:170001000000 | proceeds=r:51200.1 | cost_basis=r:24000.2 | gain_loss=r:27199.9 | created_at=t:"2026-10-31T12:00:00Z"
+- journal_wallet_holdings: id=t:"<uuid#73>" | workspace_id=t:"w" | profile_id=t:"p" | wallet_id=t:"wallet" | wallet_label=t:"Wallet" | account_code=t:"treasury" | asset=t:"BTC" | quantity=i:30999000000 | cost_basis=r:6299.8 | created_at=t:"2026-10-31T12:00:00Z"
+- profiles: id=t:"p" | workspace_id=t:"w" | label=t:"P" | fiat_currency=t:"eur" | tax_country=t:"generic" | tax_long_term_days=i:365 | gains_algorithm=t:"fifo" | require_coarse_review=i:0 | bitcoin_rail_carrying_value=i:1 | cost_basis_pool_scope=t:"global" | journal_input_version=i:0 | last_processed_input_version=i:0 | required_journal_semantics_version=i:10 | journal_semantics_version=i:10 | last_processed_at=t:"2026-10-31T12:00:00Z" | last_processed_tx_count=i:5 | ownership_review_counts_json=t:"{\"by_reason\": {}, \"total\": 0}" | created_at=t:"2020" | swap_candidate_count=i:0
+- transactions: id=t:"t" | workspace_id=t:"w" | profile_id=t:"p" | wallet_id=t:"wallet" | external_id=t:"ext-t" | external_id_kind=NULL | fingerprint=t:"t" | occurred_at=t:"2024-04-01T00:00:00Z" | confirmed_at=NULL | direction=t:"outbound" | asset=t:"BTC" | amount=i:20000000000 | fee=i:0 | amount_includes_fee=i:0 | fiat_currency=t:"EUR" | fiat_rate=r:31000.5 | fiat_value=NULL | fiat_price_source=NULL | fiat_rate_exact=t:"31000.5" | fiat_value_exact=NULL | pricing_source_kind=t:"manual" | pricing_provider=t:"reviewed-receipt" | pricing_pair=NULL | pricing_timestamp=NULL | pricing_fetched_at=NULL | pricing_granularity=NULL | pricing_method=NULL | pricing_external_ref=NULL | pricing_quality=t:"exact" | pricing_review_accepted_price=NULL | commercial_applied_link_id=NULL | review_status=NULL | taxability_override=NULL | at_regime_override=NULL | at_category_override=NULL | kind_override=NULL | privacy_boundary=NULL | kind=t:"sell" | description=NULL | counterparty=NULL | note=NULL | excluded=i:0 | raw_json=t:"{}" | payment_hash=NULL | payment_hash_source=NULL | swap_refund_funding_txid=NULL | swap_refund_funding_vout=NULL | created_at=t:"2020"
+- (116 tables, 100 empty)
++ chain_index_clock: id=i:1 | revision=i:37
++ chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:37
++ chain_index_dirty: source_table=t:"transactions" | source_key=i:5 | revision=i:32
++ journal_account_holdings: id=t:"<uuid#72>" | workspace_id=t:"w" | profile_id=t:"p" | account_id=NULL | account_code=t:"treasury" | account_label=t:"Treasury" | asset=t:"BTC" | quantity=i:50999000000 | cost_basis=r:10299.8 | created_at=t:"2026-10-31T12:00:00Z"
++ journal_custody_gap_inputs: workspace_id=t:"w" | profile_id=t:"p" | input_version=i:1 | ignored_ids_json=t:"[]" | accounting_ignored_ids_json=t:"[]" | created_at=t:"2026-10-31T12:00:00Z"
++ journal_entries: id=t:"31144205-3dea-8534-91e9-b8cfd4f332b3" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"s" | wallet_id=t:"wallet" | account_id=NULL | occurred_at=t:"2024-03-01T00:00:00Z" | entry_type=t:"disposal" | asset=t:"BTC" | quantity=i:-150001000000 | fiat_value=r:45000.0 | unit_cost=r:0.0 | cost_basis=r:20000.2 | proceeds=r:45000.0 | gain_loss=r:24999.8 | fiat_value_exact=t:"45000.000000000000000000000000000" | unit_cost_exact=t:"0" | cost_basis_exact=t:"20000.20000" | proceeds_exact=t:"45000.000000000000000000000000000" | gain_loss_exact=t:"24999.800000000000000000000000000" | calculation_json=NULL | calculation_compact=t:"[2,\"kassiber_tax\",\"fifo\",[[\"s\",\"custody-tax:a2228015987dd7e78ac94707e875d1495a2b68924f873298a2e21cb16155c5e0:0:150000000000:external\",\"2024-03-01T00:00:00+00:00\",\"BTC\",\"30000\",\"0.30000\",1000000,\"EUR\",null,\"30000\",null,null,null,null,null,\"reviewed-receipt\",\"exact\",\"manual\",null],[\"a\",\"custody-tax:d8924859cbcac7ce59f26610b394cd6929fba52924234a798e758435b1ad59ff:0:100000000000:inbound\",\"2024-01-01T00:00:00+00:00\",\"BTC\",\"10000\",\"0\",0,\"EUR\",null,\"10000\",null,null,null,null,null,\"reviewed-receipt\",\"exact\",\"manual\",null],[\"b\",\"custody-tax:2e2d3eb723c1d7a0243bd0f745c614d16e4fe0beb3809764e29c4373060fc712:0:100000000000:inbound\",\"2024-02-01T00:00:00+00:00\",\"BTC\",\"20000\",\"0\",0,\"EUR\",null,\"20000\",null,null,null,null,null,\"reviewed-receipt\",\"exact\",\"manual\",null]],[[100000000000,\"10000\",\"29999.800001333324444503703308645\",\"19999.800001333324444503703308645\",null,\"acquired_lot\",\"10000\",100000000000,0,1],[50001000000,\"10000.20000\",\"15000.199998666675555496296691355\",\"4999.999998666675555496296691355\",null,\"acquired_lot\",\"20000\",100000000000,0,2]]]" | pricing_source_kind=t:"manual" | pricing_quality=t:"exact" | description=t:"sell" | at_category=NULL | at_kennzahl=NULL | capital_gains_type=t:"short" | created_at=t:"2026-10-31T12:00:00Z"
++ journal_entries: id=t:"94b8628d-6e50-8b47-87ac-683f894cf736" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"i" | wallet_id=t:"wallet" | account_id=NULL | occurred_at=t:"2024-03-02T00:00:00Z" | entry_type=t:"income" | asset=t:"BTC" | quantity=i:1000000000 | fiat_value=r:300.0 | unit_cost=r:0.0 | cost_basis=r:0.0 | proceeds=r:300.0 | gain_loss=r:300.0 | fiat_value_exact=t:"300.00" | unit_cost_exact=t:"0" | cost_basis_exact=t:"0" | proceeds_exact=t:"300.00" | gain_loss_exact=t:"300.00" | calculation_json=NULL | calculation_compact=t:"[2,\"kassiber_tax\",\"fifo\",[[\"i\",\"custody-tax:c47df1ba19abbf05efb7dc76c4dbdf05661faaa1dd6e7101baad27ca3b43a864:0:1000000000:inbound\",\"2024-03-02T00:00:00+00:00\",\"BTC\",\"30000\",\"0\",0,\"EUR\",null,\"30000\",null,null,null,null,null,\"reviewed-receipt\",\"exact\",\"manual\",null]],[[1000000000,\"0\",\"300.00\",\"300.00\",null,\"income\",null,null,0,null]]]" | pricing_source_kind=t:"manual" | pricing_quality=t:"exact" | description=t:"interest" | at_category=NULL | at_kennzahl=NULL | capital_gains_type=t:"short" | created_at=t:"2026-10-31T12:00:00Z"
++ journal_quantity_balances: workspace_id=t:"w" | profile_id=t:"p" | location_kind=t:"external" | location_id=t:"unmatched_outbound_default" | asset=t:"BTC" | amount_msat=i:150000000000 | created_at=t:"2026-10-31T12:00:00Z"
++ journal_quantity_balances: workspace_id=t:"w" | profile_id=t:"p" | location_kind=t:"wallet" | location_id=t:"wallet" | asset=t:"BTC" | amount_msat=i:50999000000 | created_at=t:"2026-10-31T12:00:00Z"
++ journal_quantity_postings: posting_id=t:"decision:a2228015987dd7e78ac94707e875d1495a2b68924f873298a2e21cb16155c5e0:0:150000000000" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"s" | observation_hash=t:"a2228015987dd7e78ac94707e875d1495a2b68924f873298a2e21cb16155c5e0" | occurred_at=t:"2024-03-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"external" | location_id=t:"unmatched_outbound_default" | amount_msat=i:150000000000 | state=t:"external_presumed" | created_at=t:"2026-10-31T12:00:00Z"
++ journal_quantity_postings: posting_id=t:"fee:a2228015987dd7e78ac94707e875d1495a2b68924f873298a2e21cb16155c5e0" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"s" | observation_hash=t:"a2228015987dd7e78ac94707e875d1495a2b68924f873298a2e21cb16155c5e0" | occurred_at=t:"2024-03-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"fee" | location_id=t:"network_fee" | amount_msat=i:1000000 | state=t:"external_confirmed" | created_at=t:"2026-10-31T12:00:00Z"
++ journal_quantity_postings: posting_id=t:"observed:2e2d3eb723c1d7a0243bd0f745c614d16e4fe0beb3809764e29c4373060fc712" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"b" | observation_hash=t:"2e2d3eb723c1d7a0243bd0f745c614d16e4fe0beb3809764e29c4373060fc712" | occurred_at=t:"2024-02-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"wallet" | location_id=t:"wallet" | amount_msat=i:100000000000 | state=t:"observed" | created_at=t:"2026-10-31T12:00:00Z"
++ journal_quantity_postings: posting_id=t:"observed:a2228015987dd7e78ac94707e875d1495a2b68924f873298a2e21cb16155c5e0" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"s" | observation_hash=t:"a2228015987dd7e78ac94707e875d1495a2b68924f873298a2e21cb16155c5e0" | occurred_at=t:"2024-03-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"wallet" | location_id=t:"wallet" | amount_msat=i:-150001000000 | state=t:"observed" | created_at=t:"2026-10-31T12:00:00Z"
++ journal_quantity_postings: posting_id=t:"observed:c47df1ba19abbf05efb7dc76c4dbdf05661faaa1dd6e7101baad27ca3b43a864" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"i" | observation_hash=t:"c47df1ba19abbf05efb7dc76c4dbdf05661faaa1dd6e7101baad27ca3b43a864" | occurred_at=t:"2024-03-02T00:00:00Z" | asset=t:"BTC" | location_kind=t:"wallet" | location_id=t:"wallet" | amount_msat=i:1000000000 | state=t:"observed" | created_at=t:"2026-10-31T12:00:00Z"
++ journal_quantity_postings: posting_id=t:"observed:d8924859cbcac7ce59f26610b394cd6929fba52924234a798e758435b1ad59ff" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"a" | observation_hash=t:"d8924859cbcac7ce59f26610b394cd6929fba52924234a798e758435b1ad59ff" | occurred_at=t:"2024-01-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"wallet" | location_id=t:"wallet" | amount_msat=i:100000000000 | state=t:"observed" | created_at=t:"2026-10-31T12:00:00Z"
++ journal_quantity_postings: posting_id=t:"origin:2e2d3eb723c1d7a0243bd0f745c614d16e4fe0beb3809764e29c4373060fc712:0:100000000000" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"b" | observation_hash=t:"2e2d3eb723c1d7a0243bd0f745c614d16e4fe0beb3809764e29c4373060fc712" | occurred_at=t:"2024-02-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"external_origin" | location_id=t:"unclassified_origin" | amount_msat=i:-100000000000 | state=t:"unclassified_origin" | created_at=t:"2026-10-31T12:00:00Z"
++ journal_quantity_postings: posting_id=t:"origin:c47df1ba19abbf05efb7dc76c4dbdf05661faaa1dd6e7101baad27ca3b43a864:0:1000000000" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"i" | observation_hash=t:"c47df1ba19abbf05efb7dc76c4dbdf05661faaa1dd6e7101baad27ca3b43a864" | occurred_at=t:"2024-03-02T00:00:00Z" | asset=t:"BTC" | location_kind=t:"external_origin" | location_id=t:"unclassified_origin" | amount_msat=i:-1000000000 | state=t:"unclassified_origin" | created_at=t:"2026-10-31T12:00:00Z"
++ journal_quantity_postings: posting_id=t:"origin:d8924859cbcac7ce59f26610b394cd6929fba52924234a798e758435b1ad59ff:0:100000000000" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"a" | observation_hash=t:"d8924859cbcac7ce59f26610b394cd6929fba52924234a798e758435b1ad59ff" | occurred_at=t:"2024-01-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"external_origin" | location_id=t:"unclassified_origin" | amount_msat=i:-100000000000 | state=t:"unclassified_origin" | created_at=t:"2026-10-31T12:00:00Z"
++ journal_tax_summary: id=t:"<uuid#58>" | workspace_id=t:"w" | profile_id=t:"p" | year=i:2024 | asset=t:"BTC" | transaction_type=t:"sell" | capital_gains_type=t:"short" | quantity=i:150001000000 | proceeds=r:45000.0 | cost_basis=r:20000.2 | gain_loss=r:24999.8 | created_at=t:"2026-10-31T12:00:00Z"
++ journal_wallet_holdings: id=t:"<uuid#73>" | workspace_id=t:"w" | profile_id=t:"p" | wallet_id=t:"wallet" | wallet_label=t:"Wallet" | account_code=t:"treasury" | asset=t:"BTC" | quantity=i:50999000000 | cost_basis=r:10299.8 | created_at=t:"2026-10-31T12:00:00Z"
++ profiles: id=t:"p" | workspace_id=t:"w" | label=t:"P" | fiat_currency=t:"eur" | tax_country=t:"generic" | tax_long_term_days=i:365 | gains_algorithm=t:"fifo" | require_coarse_review=i:0 | bitcoin_rail_carrying_value=i:1 | cost_basis_pool_scope=t:"global" | journal_input_version=i:1 | last_processed_input_version=i:1 | required_journal_semantics_version=i:10 | journal_semantics_version=i:10 | last_processed_at=t:"2026-10-31T12:00:00Z" | last_processed_tx_count=i:4 | ownership_review_counts_json=t:"{\"by_reason\": {}, \"total\": 0}" | created_at=t:"2020" | swap_candidate_count=i:0
++ transaction_edit_events: id=t:"<uuid#71>" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"t" | wallet_id=t:"wallet" | transaction_external_id=t:"ext-t" | transaction_occurred_at=t:"2024-04-01T00:00:00Z" | source=t:"cli" | reason=t:"Resolved quarantine by excluding transaction" | changed_at=t:"<now>" | journal_input_version=i:0 | journal_input_version_after=i:1 | last_processed_input_version=i:0 | last_processed_at=t:"2026-10-31T12:00:00Z" | last_processed_tx_count=i:5
++ transaction_edit_fields: id=t:"<uuid#74>" | event_id=t:"<uuid#71>" | field=t:"excluded" | before_value=t:"false" | after_value=t:"true" | diff_json=t:"{}"
++ transactions: id=t:"t" | workspace_id=t:"w" | profile_id=t:"p" | wallet_id=t:"wallet" | external_id=t:"ext-t" | external_id_kind=NULL | fingerprint=t:"t" | occurred_at=t:"2024-04-01T00:00:00Z" | confirmed_at=NULL | direction=t:"outbound" | asset=t:"BTC" | amount=i:20000000000 | fee=i:0 | amount_includes_fee=i:0 | fiat_currency=t:"EUR" | fiat_rate=r:31000.5 | fiat_value=NULL | fiat_price_source=NULL | fiat_rate_exact=t:"31000.5" | fiat_value_exact=NULL | pricing_source_kind=t:"manual" | pricing_provider=t:"reviewed-receipt" | pricing_pair=NULL | pricing_timestamp=NULL | pricing_fetched_at=NULL | pricing_granularity=NULL | pricing_method=NULL | pricing_external_ref=NULL | pricing_quality=t:"exact" | pricing_review_accepted_price=NULL | commercial_applied_link_id=NULL | review_status=NULL | taxability_override=NULL | at_regime_override=NULL | at_category_override=NULL | kind_override=NULL | privacy_boundary=NULL | kind=t:"sell" | description=NULL | counterparty=NULL | note=NULL | excluded=i:1 | raw_json=t:"{}" | payment_hash=NULL | payment_hash_source=NULL | swap_refund_funding_txid=NULL | swap_refund_funding_vout=NULL | created_at=t:"2020"
++ (116 tables, 99 empty)
+$ --machine journals quarantine resolve exclude --transaction i --reprocess
+exit 0
+--- stdout
+{
+  "kind": "journals.quarantine.resolve.exclude",
+  "schema_version": 1,
+  "data": {
+    "transaction_id": "i",
+    "resolution": "exclude",
+    "excluded": true,
+    "history_event_id": "<uuid#75>",
+    "group_id": null,
+    "reprocessed": true,
+    "journal_process": {
+      "profile": "P",
+      "entries_created": 4,
+      "quarantined": 0,
+      "transfers_detected": 0,
+      "cross_asset_pairs": 0,
+      "auto_priced": 0,
+      "processed_transactions": 4,
+      "processed_at": "2026-10-31T12:00:00Z",
+      "custody_quantity": {
+        "postings": 9,
+        "issues": 0,
+        "balances": 4,
+        "decisions": 0,
+        "economic_relations": 0,
+        "differences": 0,
+        "blocked": false,
+        "blocked_from": null
+      }
+    },
+    "cleared": true,
+    "remaining_reason": null,
+    "dependents_cleared": {
+      "count": 0,
+      "transaction_ids": [],
+      "truncated": false
+    },
+    "quarantine_delta": {
+      "status": "measured",
+      "dependents_before": 0,
+      "dependents_cleared": {
+        "count": 0,
+        "transaction_ids": [],
+        "truncated": false
+      },
+      "dependents_still_quarantined": {
+        "count": 0,
+        "transaction_ids": [],
+        "truncated": false
+      },
+      "other_rows_cleared": {
+        "count": 4,
+        "transaction_ids": [
+          "a",
+          "b",
+          "s",
+          "t"
+        ],
+        "truncated": false
+      },
+      "newly_quarantined": {
+        "count": 0,
+        "transaction_ids": [],
+        "truncated": false
+      },
+      "count_before": 5,
+      "count_after": 0
+    }
+  }
+}
+=== book changes after the resolution
+- chain_index_clock: id=i:1 | revision=i:31
+- chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:31
+- chain_index_dirty: source_table=t:"transactions" | source_key=i:4 | revision=i:29
+- journal_account_holdings: id=t:"<uuid#72>" | workspace_id=t:"w" | profile_id=t:"p" | account_id=NULL | account_code=t:"treasury" | account_label=t:"Treasury" | asset=t:"BTC" | quantity=i:30999000000 | cost_basis=r:6299.8 | created_at=t:"2026-10-31T12:00:00Z"
+- journal_custody_gap_inputs: workspace_id=t:"w" | profile_id=t:"p" | input_version=i:0 | ignored_ids_json=t:"[]" | accounting_ignored_ids_json=t:"[]" | created_at=t:"2026-10-31T12:00:00Z"
+- journal_entries: id=t:"2954c95a-4c0d-81a7-a5bf-1c4b110601ab" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"i" | wallet_id=t:"wallet" | account_id=NULL | occurred_at=t:"2024-03-02T00:00:00Z" | entry_type=t:"acquisition" | asset=t:"BTC" | quantity=i:1000000000 | fiat_value=r:300.0 | unit_cost=r:30000.0 | cost_basis=NULL | proceeds=NULL | gain_loss=NULL | fiat_value_exact=t:"300.00" | unit_cost_exact=t:"30000" | cost_basis_exact=NULL | proceeds_exact=NULL | gain_loss_exact=NULL | calculation_json=NULL | calculation_compact=NULL | pricing_source_kind=t:"manual" | pricing_quality=t:"exact" | description=t:"interest" | at_category=NULL | at_kennzahl=NULL | capital_gains_type=NULL | created_at=t:"2026-10-31T12:00:00Z"
+- journal_entries: id=t:"31144205-3dea-8534-91e9-b8cfd4f332b3" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"s" | wallet_id=t:"wallet" | account_id=NULL | occurred_at=t:"2024-03-01T00:00:00Z" | entry_type=t:"disposal" | asset=t:"BTC" | quantity=i:-150001000000 | fiat_value=r:45000.0 | unit_cost=r:0.0 | cost_basis=r:20000.2 | proceeds=r:45000.0 | gain_loss=r:24999.8 | fiat_value_exact=t:"45000.000000000000000000000000000" | unit_cost_exact=t:"0" | cost_basis_exact=t:"20000.20000" | proceeds_exact=t:"45000.000000000000000000000000000" | gain_loss_exact=t:"24999.800000000000000000000000000" | calculation_json=NULL | calculation_compact=t:"[2,\"kassiber_tax\",\"fifo\",[[\"s\",\"custody-tax:cbc7d7d74b92589f89ae059d61adc05a1994f598b5940d02f4400291b59d64d2:0:150000000000:external\",\"2024-03-01T00:00:00+00:00\",\"BTC\",\"30000\",\"0.30000\",1000000,\"EUR\",null,\"30000\",null,null,null,null,null,\"reviewed-receipt\",\"exact\",\"manual\",null],[\"a\",\"custody-tax:9180c4dbe8bb79327cd22a837c8cf76abaf8bc55833493fa9afe528011f0a7c4:0:100000000000:inbound\",\"2024-01-01T00:00:00+00:00\",\"BTC\",\"10000\",\"0\",0,\"EUR\",null,\"10000\",null,null,null,null,null,\"reviewed-receipt\",\"exact\",\"manual\",null],[\"b\",\"custody-tax:f537fad8d079470efc89e3bd67c2cc261af9870f939ce3b6a5e72a2d760fe0fe:0:100000000000:inbound\",\"2024-02-01T00:00:00+00:00\",\"BTC\",\"20000\",\"0\",0,\"EUR\",null,\"20000\",null,null,null,null,null,\"reviewed-receipt\",\"exact\",\"manual\",null]],[[100000000000,\"10000\",\"29999.800001333324444503703308645\",\"19999.800001333324444503703308645\",null,\"acquired_lot\",\"10000\",100000000000,0,1],[50001000000,\"10000.20000\",\"15000.199998666675555496296691355\",\"4999.999998666675555496296691355\",null,\"acquired_lot\",\"20000\",100000000000,0,2]]]" | pricing_source_kind=t:"manual" | pricing_quality=t:"exact" | description=t:"sell" | at_category=NULL | at_kennzahl=NULL | capital_gains_type=t:"short" | created_at=t:"2026-10-31T12:00:00Z"
+- journal_entries: id=t:"7fab83c9-9fb4-8814-bfc2-fc216d37eaeb" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"t" | wallet_id=t:"wallet" | account_id=NULL | occurred_at=t:"2024-04-01T00:00:00Z" | entry_type=t:"disposal" | asset=t:"BTC" | quantity=i:-20000000000 | fiat_value=r:6200.1 | unit_cost=r:0.0 | cost_basis=r:4000.0 | proceeds=r:6200.1 | gain_loss=r:2200.1 | fiat_value_exact=t:"6200.10" | unit_cost_exact=t:"0" | cost_basis_exact=t:"4000.0" | proceeds_exact=t:"6200.10" | gain_loss_exact=t:"2200.10" | calculation_json=NULL | calculation_compact=t:"[2,\"kassiber_tax\",\"fifo\",[[\"t\",\"custody-tax:eecbc5e69663c646b2fd56c37ffd4b86970391e54f5028001411709fb2307d02:0:20000000000:external\",\"2024-04-01T00:00:00+00:00\",\"BTC\",\"31000.5\",\"0.0\",0,\"EUR\",null,\"31000.5\",null,null,null,null,null,\"reviewed-receipt\",\"exact\",\"manual\",null],[\"b\",\"custody-tax:f537fad8d079470efc89e3bd67c2cc261af9870f939ce3b6a5e72a2d760fe0fe:0:100000000000:inbound\",\"2024-02-01T00:00:00+00:00\",\"BTC\",\"20000\",\"0\",0,\"EUR\",null,\"20000\",null,null,null,null,null,\"reviewed-receipt\",\"exact\",\"manual\",null]],[[20000000000,\"4000.0\",\"6200.10\",\"2200.10\",null,\"acquired_lot\",\"20000\",100000000000,0,1]]]" | pricing_source_kind=t:"manual" | pricing_quality=t:"exact" | description=t:"sell" | at_category=NULL | at_kennzahl=NULL | capital_gains_type=t:"short" | created_at=t:"2026-10-31T12:00:00Z"
+- journal_entries: id=t:"94b8628d-6e50-8b47-87ac-683f894cf736" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"i" | wallet_id=t:"wallet" | account_id=NULL | occurred_at=t:"2024-03-02T00:00:00Z" | entry_type=t:"income" | asset=t:"BTC" | quantity=i:1000000000 | fiat_value=r:300.0 | unit_cost=r:0.0 | cost_basis=r:0.0 | proceeds=r:300.0 | gain_loss=r:300.0 | fiat_value_exact=t:"300.00" | unit_cost_exact=t:"0" | cost_basis_exact=t:"0" | proceeds_exact=t:"300.00" | gain_loss_exact=t:"300.00" | calculation_json=NULL | calculation_compact=t:"[2,\"kassiber_tax\",\"fifo\",[[\"i\",\"custody-tax:3e72bf71eafd5b5fe2c7e4d7eeff238325fa136ec1ece69767803bce3c289282:0:1000000000:inbound\",\"2024-03-02T00:00:00+00:00\",\"BTC\",\"30000\",\"0\",0,\"EUR\",null,\"30000\",null,null,null,null,null,\"reviewed-receipt\",\"exact\",\"manual\",null]],[[1000000000,\"0\",\"300.00\",\"300.00\",null,\"income\",null,null,0,null]]]" | pricing_source_kind=t:"manual" | pricing_quality=t:"exact" | description=t:"interest" | at_category=NULL | at_kennzahl=NULL | capital_gains_type=t:"short" | created_at=t:"2026-10-31T12:00:00Z"
+- journal_quantity_balances: workspace_id=t:"w" | profile_id=t:"p" | location_kind=t:"external_origin" | location_id=t:"unclassified_origin" | asset=t:"BTC" | amount_msat=i:-201000000000 | created_at=t:"2026-10-31T12:00:00Z"
+- journal_quantity_balances: workspace_id=t:"w" | profile_id=t:"p" | location_kind=t:"wallet" | location_id=t:"wallet" | asset=t:"BTC" | amount_msat=i:30999000000 | created_at=t:"2026-10-31T12:00:00Z"
+- journal_quantity_postings: posting_id=t:"decision:cbc7d7d74b92589f89ae059d61adc05a1994f598b5940d02f4400291b59d64d2:0:150000000000" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"s" | observation_hash=t:"cbc7d7d74b92589f89ae059d61adc05a1994f598b5940d02f4400291b59d64d2" | occurred_at=t:"2024-03-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"external" | location_id=t:"unmatched_outbound_default" | amount_msat=i:150000000000 | state=t:"external_presumed" | created_at=t:"2026-10-31T12:00:00Z"
+- journal_quantity_postings: posting_id=t:"decision:eecbc5e69663c646b2fd56c37ffd4b86970391e54f5028001411709fb2307d02:0:20000000000" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"t" | observation_hash=t:"eecbc5e69663c646b2fd56c37ffd4b86970391e54f5028001411709fb2307d02" | occurred_at=t:"2024-04-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"external" | location_id=t:"unmatched_outbound_default" | amount_msat=i:20000000000 | state=t:"external_presumed" | created_at=t:"2026-10-31T12:00:00Z"
+- journal_quantity_postings: posting_id=t:"fee:cbc7d7d74b92589f89ae059d61adc05a1994f598b5940d02f4400291b59d64d2" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"s" | observation_hash=t:"cbc7d7d74b92589f89ae059d61adc05a1994f598b5940d02f4400291b59d64d2" | occurred_at=t:"2024-03-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"fee" | location_id=t:"network_fee" | amount_msat=i:1000000 | state=t:"external_confirmed" | created_at=t:"2026-10-31T12:00:00Z"
+- journal_quantity_postings: posting_id=t:"observed:3e72bf71eafd5b5fe2c7e4d7eeff238325fa136ec1ece69767803bce3c289282" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"i" | observation_hash=t:"3e72bf71eafd5b5fe2c7e4d7eeff238325fa136ec1ece69767803bce3c289282" | occurred_at=t:"2024-03-02T00:00:00Z" | asset=t:"BTC" | location_kind=t:"wallet" | location_id=t:"wallet" | amount_msat=i:1000000000 | state=t:"observed" | created_at=t:"2026-10-31T12:00:00Z"
+- journal_quantity_postings: posting_id=t:"observed:9180c4dbe8bb79327cd22a837c8cf76abaf8bc55833493fa9afe528011f0a7c4" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"a" | observation_hash=t:"9180c4dbe8bb79327cd22a837c8cf76abaf8bc55833493fa9afe528011f0a7c4" | occurred_at=t:"2024-01-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"wallet" | location_id=t:"wallet" | amount_msat=i:100000000000 | state=t:"observed" | created_at=t:"2026-10-31T12:00:00Z"
+- journal_quantity_postings: posting_id=t:"observed:cbc7d7d74b92589f89ae059d61adc05a1994f598b5940d02f4400291b59d64d2" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"s" | observation_hash=t:"cbc7d7d74b92589f89ae059d61adc05a1994f598b5940d02f4400291b59d64d2" | occurred_at=t:"2024-03-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"wallet" | location_id=t:"wallet" | amount_msat=i:-150001000000 | state=t:"observed" | created_at=t:"2026-10-31T12:00:00Z"
+- journal_quantity_postings: posting_id=t:"observed:eecbc5e69663c646b2fd56c37ffd4b86970391e54f5028001411709fb2307d02" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"t" | observation_hash=t:"eecbc5e69663c646b2fd56c37ffd4b86970391e54f5028001411709fb2307d02" | occurred_at=t:"2024-04-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"wallet" | location_id=t:"wallet" | amount_msat=i:-20000000000 | state=t:"observed" | created_at=t:"2026-10-31T12:00:00Z"
+- journal_quantity_postings: posting_id=t:"observed:f537fad8d079470efc89e3bd67c2cc261af9870f939ce3b6a5e72a2d760fe0fe" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"b" | observation_hash=t:"f537fad8d079470efc89e3bd67c2cc261af9870f939ce3b6a5e72a2d760fe0fe" | occurred_at=t:"2024-02-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"wallet" | location_id=t:"wallet" | amount_msat=i:100000000000 | state=t:"observed" | created_at=t:"2026-10-31T12:00:00Z"
+- journal_quantity_postings: posting_id=t:"origin:3e72bf71eafd5b5fe2c7e4d7eeff238325fa136ec1ece69767803bce3c289282:0:1000000000" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"i" | observation_hash=t:"3e72bf71eafd5b5fe2c7e4d7eeff238325fa136ec1ece69767803bce3c289282" | occurred_at=t:"2024-03-02T00:00:00Z" | asset=t:"BTC" | location_kind=t:"external_origin" | location_id=t:"unclassified_origin" | amount_msat=i:-1000000000 | state=t:"unclassified_origin" | created_at=t:"2026-10-31T12:00:00Z"
+- journal_quantity_postings: posting_id=t:"origin:9180c4dbe8bb79327cd22a837c8cf76abaf8bc55833493fa9afe528011f0a7c4:0:100000000000" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"a" | observation_hash=t:"9180c4dbe8bb79327cd22a837c8cf76abaf8bc55833493fa9afe528011f0a7c4" | occurred_at=t:"2024-01-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"external_origin" | location_id=t:"unclassified_origin" | amount_msat=i:-100000000000 | state=t:"unclassified_origin" | created_at=t:"2026-10-31T12:00:00Z"
+- journal_quantity_postings: posting_id=t:"origin:f537fad8d079470efc89e3bd67c2cc261af9870f939ce3b6a5e72a2d760fe0fe:0:100000000000" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"b" | observation_hash=t:"f537fad8d079470efc89e3bd67c2cc261af9870f939ce3b6a5e72a2d760fe0fe" | occurred_at=t:"2024-02-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"external_origin" | location_id=t:"unclassified_origin" | amount_msat=i:-100000000000 | state=t:"unclassified_origin" | created_at=t:"2026-10-31T12:00:00Z"
+- journal_quarantines: transaction_id=t:"a" | workspace_id=t:"w" | profile_id=t:"p" | reason=t:"missing_spot_price" | detail_json=t:"{}" | created_at=t:"2024-05-01T00:00:00Z"
+- journal_quarantines: transaction_id=t:"b" | workspace_id=t:"w" | profile_id=t:"p" | reason=t:"transfer_pair_dependency_blocked" | detail_json=t:"{\"blocked_by_transaction_ids\": [\"a\"]}" | created_at=t:"2024-05-01T00:00:00Z"
+- journal_quarantines: transaction_id=t:"i" | workspace_id=t:"w" | profile_id=t:"p" | reason=t:"basis_provenance_incomplete" | detail_json=t:"{}" | created_at=t:"2024-05-01T00:00:00Z"
+- journal_quarantines: transaction_id=t:"s" | workspace_id=t:"w" | profile_id=t:"p" | reason=t:"custody_basis_barrier" | detail_json=t:"{\"root_transaction_ids\": [\"a\", \"missing\"]}" | created_at=t:"2024-05-01T00:00:00Z"
+- journal_quarantines: transaction_id=t:"t" | workspace_id=t:"w" | profile_id=t:"p" | reason=t:"insufficient_lots" | detail_json=t:"{\"asset\": \"BTC\"}" | created_at=t:"2024-05-01T00:00:00Z"
+- journal_tax_summary: id=t:"<uuid#76>" | workspace_id=t:"w" | profile_id=t:"p" | year=i:2024 | asset=t:"BTC" | transaction_type=t:"interest" | capital_gains_type=t:"short" | quantity=i:1000000000 | proceeds=r:300.0 | cost_basis=r:0.0 | gain_loss=r:300.0 | created_at=t:"2026-10-31T12:00:00Z"
+- journal_tax_summary: id=t:"<uuid#58>" | workspace_id=t:"w" | profile_id=t:"p" | year=i:2024 | asset=t:"BTC" | transaction_type=t:"sell" | capital_gains_type=t:"short" | quantity=i:170001000000 | proceeds=r:51200.1 | cost_basis=r:24000.2 | gain_loss=r:27199.9 | created_at=t:"2026-10-31T12:00:00Z"
+- journal_wallet_holdings: id=t:"<uuid#73>" | workspace_id=t:"w" | profile_id=t:"p" | wallet_id=t:"wallet" | wallet_label=t:"Wallet" | account_code=t:"treasury" | asset=t:"BTC" | quantity=i:30999000000 | cost_basis=r:6299.8 | created_at=t:"2026-10-31T12:00:00Z"
+- profiles: id=t:"p" | workspace_id=t:"w" | label=t:"P" | fiat_currency=t:"eur" | tax_country=t:"generic" | tax_long_term_days=i:365 | gains_algorithm=t:"fifo" | require_coarse_review=i:0 | bitcoin_rail_carrying_value=i:1 | cost_basis_pool_scope=t:"global" | journal_input_version=i:0 | last_processed_input_version=i:0 | required_journal_semantics_version=i:10 | journal_semantics_version=i:10 | last_processed_at=t:"2026-10-31T12:00:00Z" | last_processed_tx_count=i:5 | ownership_review_counts_json=t:"{\"by_reason\": {}, \"total\": 0}" | created_at=t:"2020" | swap_candidate_count=i:0
+- transactions: id=t:"i" | workspace_id=t:"w" | profile_id=t:"p" | wallet_id=t:"wallet" | external_id=t:"ext-i" | external_id_kind=NULL | fingerprint=t:"i" | occurred_at=t:"2024-03-02T00:00:00Z" | confirmed_at=NULL | direction=t:"inbound" | asset=t:"BTC" | amount=i:1000000000 | fee=i:0 | amount_includes_fee=i:0 | fiat_currency=t:"EUR" | fiat_rate=r:30000.0 | fiat_value=NULL | fiat_price_source=NULL | fiat_rate_exact=t:"30000" | fiat_value_exact=NULL | pricing_source_kind=t:"manual" | pricing_provider=t:"reviewed-receipt" | pricing_pair=NULL | pricing_timestamp=NULL | pricing_fetched_at=NULL | pricing_granularity=NULL | pricing_method=NULL | pricing_external_ref=NULL | pricing_quality=t:"exact" | pricing_review_accepted_price=NULL | commercial_applied_link_id=NULL | review_status=NULL | taxability_override=NULL | at_regime_override=NULL | at_category_override=NULL | kind_override=NULL | privacy_boundary=NULL | kind=t:"interest" | description=NULL | counterparty=NULL | note=NULL | excluded=i:0 | raw_json=t:"{}" | payment_hash=NULL | payment_hash_source=NULL | swap_refund_funding_txid=NULL | swap_refund_funding_vout=NULL | created_at=t:"2020"
+- (116 tables, 100 empty)
++ chain_index_clock: id=i:1 | revision=i:37
++ chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:37
++ chain_index_dirty: source_table=t:"transactions" | source_key=i:4 | revision=i:32
++ journal_account_holdings: id=t:"<uuid#58>" | workspace_id=t:"w" | profile_id=t:"p" | account_id=NULL | account_code=t:"treasury" | account_label=t:"Treasury" | asset=t:"BTC" | quantity=i:29999000000 | cost_basis=r:5999.8 | created_at=t:"2026-10-31T12:00:00Z"
++ journal_custody_gap_inputs: workspace_id=t:"w" | profile_id=t:"p" | input_version=i:1 | ignored_ids_json=t:"[]" | accounting_ignored_ids_json=t:"[]" | created_at=t:"2026-10-31T12:00:00Z"
++ journal_entries: id=t:"31144205-3dea-8534-91e9-b8cfd4f332b3" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"s" | wallet_id=t:"wallet" | account_id=NULL | occurred_at=t:"2024-03-01T00:00:00Z" | entry_type=t:"disposal" | asset=t:"BTC" | quantity=i:-150001000000 | fiat_value=r:45000.0 | unit_cost=r:0.0 | cost_basis=r:20000.2 | proceeds=r:45000.0 | gain_loss=r:24999.8 | fiat_value_exact=t:"45000.000000000000000000000000000" | unit_cost_exact=t:"0" | cost_basis_exact=t:"20000.20000" | proceeds_exact=t:"45000.000000000000000000000000000" | gain_loss_exact=t:"24999.800000000000000000000000000" | calculation_json=NULL | calculation_compact=t:"[2,\"kassiber_tax\",\"fifo\",[[\"s\",\"custody-tax:a2228015987dd7e78ac94707e875d1495a2b68924f873298a2e21cb16155c5e0:0:150000000000:external\",\"2024-03-01T00:00:00+00:00\",\"BTC\",\"30000\",\"0.30000\",1000000,\"EUR\",null,\"30000\",null,null,null,null,null,\"reviewed-receipt\",\"exact\",\"manual\",null],[\"a\",\"custody-tax:d8924859cbcac7ce59f26610b394cd6929fba52924234a798e758435b1ad59ff:0:100000000000:inbound\",\"2024-01-01T00:00:00+00:00\",\"BTC\",\"10000\",\"0\",0,\"EUR\",null,\"10000\",null,null,null,null,null,\"reviewed-receipt\",\"exact\",\"manual\",null],[\"b\",\"custody-tax:2e2d3eb723c1d7a0243bd0f745c614d16e4fe0beb3809764e29c4373060fc712:0:100000000000:inbound\",\"2024-02-01T00:00:00+00:00\",\"BTC\",\"20000\",\"0\",0,\"EUR\",null,\"20000\",null,null,null,null,null,\"reviewed-receipt\",\"exact\",\"manual\",null]],[[100000000000,\"10000\",\"29999.800001333324444503703308645\",\"19999.800001333324444503703308645\",null,\"acquired_lot\",\"10000\",100000000000,0,1],[50001000000,\"10000.20000\",\"15000.199998666675555496296691355\",\"4999.999998666675555496296691355\",null,\"acquired_lot\",\"20000\",100000000000,0,2]]]" | pricing_source_kind=t:"manual" | pricing_quality=t:"exact" | description=t:"sell" | at_category=NULL | at_kennzahl=NULL | capital_gains_type=t:"short" | created_at=t:"2026-10-31T12:00:00Z"
++ journal_entries: id=t:"7fab83c9-9fb4-8814-bfc2-fc216d37eaeb" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"t" | wallet_id=t:"wallet" | account_id=NULL | occurred_at=t:"2024-04-01T00:00:00Z" | entry_type=t:"disposal" | asset=t:"BTC" | quantity=i:-20000000000 | fiat_value=r:6200.1 | unit_cost=r:0.0 | cost_basis=r:4000.0 | proceeds=r:6200.1 | gain_loss=r:2200.1 | fiat_value_exact=t:"6200.10" | unit_cost_exact=t:"0" | cost_basis_exact=t:"4000.0" | proceeds_exact=t:"6200.10" | gain_loss_exact=t:"2200.10" | calculation_json=NULL | calculation_compact=t:"[2,\"kassiber_tax\",\"fifo\",[[\"t\",\"custody-tax:5830363ce0139ec6d44e9eae3ac7e617c195463fb10db2f4eaa7b346fd75a8ee:0:20000000000:external\",\"2024-04-01T00:00:00+00:00\",\"BTC\",\"31000.5\",\"0.0\",0,\"EUR\",null,\"31000.5\",null,null,null,null,null,\"reviewed-receipt\",\"exact\",\"manual\",null],[\"b\",\"custody-tax:2e2d3eb723c1d7a0243bd0f745c614d16e4fe0beb3809764e29c4373060fc712:0:100000000000:inbound\",\"2024-02-01T00:00:00+00:00\",\"BTC\",\"20000\",\"0\",0,\"EUR\",null,\"20000\",null,null,null,null,null,\"reviewed-receipt\",\"exact\",\"manual\",null]],[[20000000000,\"4000.0\",\"6200.10\",\"2200.10\",null,\"acquired_lot\",\"20000\",100000000000,0,1]]]" | pricing_source_kind=t:"manual" | pricing_quality=t:"exact" | description=t:"sell" | at_category=NULL | at_kennzahl=NULL | capital_gains_type=t:"short" | created_at=t:"2026-10-31T12:00:00Z"
++ journal_quantity_balances: workspace_id=t:"w" | profile_id=t:"p" | location_kind=t:"external_origin" | location_id=t:"unclassified_origin" | asset=t:"BTC" | amount_msat=i:-200000000000 | created_at=t:"2026-10-31T12:00:00Z"
++ journal_quantity_balances: workspace_id=t:"w" | profile_id=t:"p" | location_kind=t:"wallet" | location_id=t:"wallet" | asset=t:"BTC" | amount_msat=i:29999000000 | created_at=t:"2026-10-31T12:00:00Z"
++ journal_quantity_postings: posting_id=t:"decision:5830363ce0139ec6d44e9eae3ac7e617c195463fb10db2f4eaa7b346fd75a8ee:0:20000000000" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"t" | observation_hash=t:"5830363ce0139ec6d44e9eae3ac7e617c195463fb10db2f4eaa7b346fd75a8ee" | occurred_at=t:"2024-04-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"external" | location_id=t:"unmatched_outbound_default" | amount_msat=i:20000000000 | state=t:"external_presumed" | created_at=t:"2026-10-31T12:00:00Z"
++ journal_quantity_postings: posting_id=t:"decision:a2228015987dd7e78ac94707e875d1495a2b68924f873298a2e21cb16155c5e0:0:150000000000" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"s" | observation_hash=t:"a2228015987dd7e78ac94707e875d1495a2b68924f873298a2e21cb16155c5e0" | occurred_at=t:"2024-03-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"external" | location_id=t:"unmatched_outbound_default" | amount_msat=i:150000000000 | state=t:"external_presumed" | created_at=t:"2026-10-31T12:00:00Z"
++ journal_quantity_postings: posting_id=t:"fee:a2228015987dd7e78ac94707e875d1495a2b68924f873298a2e21cb16155c5e0" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"s" | observation_hash=t:"a2228015987dd7e78ac94707e875d1495a2b68924f873298a2e21cb16155c5e0" | occurred_at=t:"2024-03-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"fee" | location_id=t:"network_fee" | amount_msat=i:1000000 | state=t:"external_confirmed" | created_at=t:"2026-10-31T12:00:00Z"
++ journal_quantity_postings: posting_id=t:"observed:2e2d3eb723c1d7a0243bd0f745c614d16e4fe0beb3809764e29c4373060fc712" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"b" | observation_hash=t:"2e2d3eb723c1d7a0243bd0f745c614d16e4fe0beb3809764e29c4373060fc712" | occurred_at=t:"2024-02-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"wallet" | location_id=t:"wallet" | amount_msat=i:100000000000 | state=t:"observed" | created_at=t:"2026-10-31T12:00:00Z"
++ journal_quantity_postings: posting_id=t:"observed:5830363ce0139ec6d44e9eae3ac7e617c195463fb10db2f4eaa7b346fd75a8ee" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"t" | observation_hash=t:"5830363ce0139ec6d44e9eae3ac7e617c195463fb10db2f4eaa7b346fd75a8ee" | occurred_at=t:"2024-04-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"wallet" | location_id=t:"wallet" | amount_msat=i:-20000000000 | state=t:"observed" | created_at=t:"2026-10-31T12:00:00Z"
++ journal_quantity_postings: posting_id=t:"observed:a2228015987dd7e78ac94707e875d1495a2b68924f873298a2e21cb16155c5e0" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"s" | observation_hash=t:"a2228015987dd7e78ac94707e875d1495a2b68924f873298a2e21cb16155c5e0" | occurred_at=t:"2024-03-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"wallet" | location_id=t:"wallet" | amount_msat=i:-150001000000 | state=t:"observed" | created_at=t:"2026-10-31T12:00:00Z"
++ journal_quantity_postings: posting_id=t:"observed:d8924859cbcac7ce59f26610b394cd6929fba52924234a798e758435b1ad59ff" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"a" | observation_hash=t:"d8924859cbcac7ce59f26610b394cd6929fba52924234a798e758435b1ad59ff" | occurred_at=t:"2024-01-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"wallet" | location_id=t:"wallet" | amount_msat=i:100000000000 | state=t:"observed" | created_at=t:"2026-10-31T12:00:00Z"
++ journal_quantity_postings: posting_id=t:"origin:2e2d3eb723c1d7a0243bd0f745c614d16e4fe0beb3809764e29c4373060fc712:0:100000000000" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"b" | observation_hash=t:"2e2d3eb723c1d7a0243bd0f745c614d16e4fe0beb3809764e29c4373060fc712" | occurred_at=t:"2024-02-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"external_origin" | location_id=t:"unclassified_origin" | amount_msat=i:-100000000000 | state=t:"unclassified_origin" | created_at=t:"2026-10-31T12:00:00Z"
++ journal_quantity_postings: posting_id=t:"origin:d8924859cbcac7ce59f26610b394cd6929fba52924234a798e758435b1ad59ff:0:100000000000" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"a" | observation_hash=t:"d8924859cbcac7ce59f26610b394cd6929fba52924234a798e758435b1ad59ff" | occurred_at=t:"2024-01-01T00:00:00Z" | asset=t:"BTC" | location_kind=t:"external_origin" | location_id=t:"unclassified_origin" | amount_msat=i:-100000000000 | state=t:"unclassified_origin" | created_at=t:"2026-10-31T12:00:00Z"
++ journal_tax_summary: id=t:"<uuid#76>" | workspace_id=t:"w" | profile_id=t:"p" | year=i:2024 | asset=t:"BTC" | transaction_type=t:"sell" | capital_gains_type=t:"short" | quantity=i:170001000000 | proceeds=r:51200.1 | cost_basis=r:24000.2 | gain_loss=r:27199.9 | created_at=t:"2026-10-31T12:00:00Z"
++ journal_wallet_holdings: id=t:"<uuid#72>" | workspace_id=t:"w" | profile_id=t:"p" | wallet_id=t:"wallet" | wallet_label=t:"Wallet" | account_code=t:"treasury" | asset=t:"BTC" | quantity=i:29999000000 | cost_basis=r:5999.8 | created_at=t:"2026-10-31T12:00:00Z"
++ profiles: id=t:"p" | workspace_id=t:"w" | label=t:"P" | fiat_currency=t:"eur" | tax_country=t:"generic" | tax_long_term_days=i:365 | gains_algorithm=t:"fifo" | require_coarse_review=i:0 | bitcoin_rail_carrying_value=i:1 | cost_basis_pool_scope=t:"global" | journal_input_version=i:1 | last_processed_input_version=i:1 | required_journal_semantics_version=i:10 | journal_semantics_version=i:10 | last_processed_at=t:"2026-10-31T12:00:00Z" | last_processed_tx_count=i:4 | ownership_review_counts_json=t:"{\"by_reason\": {}, \"total\": 0}" | created_at=t:"2020" | swap_candidate_count=i:0
++ transaction_edit_events: id=t:"<uuid#75>" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=t:"i" | wallet_id=t:"wallet" | transaction_external_id=t:"ext-i" | transaction_occurred_at=t:"2024-03-02T00:00:00Z" | source=t:"cli" | reason=t:"Resolved quarantine by excluding transaction" | changed_at=t:"<now>" | journal_input_version=i:0 | journal_input_version_after=i:1 | last_processed_input_version=i:0 | last_processed_at=t:"2026-10-31T12:00:00Z" | last_processed_tx_count=i:5
++ transaction_edit_fields: id=t:"<uuid#77>" | event_id=t:"<uuid#75>" | field=t:"excluded" | before_value=t:"false" | after_value=t:"true" | diff_json=t:"{}"
++ transactions: id=t:"i" | workspace_id=t:"w" | profile_id=t:"p" | wallet_id=t:"wallet" | external_id=t:"ext-i" | external_id_kind=NULL | fingerprint=t:"i" | occurred_at=t:"2024-03-02T00:00:00Z" | confirmed_at=NULL | direction=t:"inbound" | asset=t:"BTC" | amount=i:1000000000 | fee=i:0 | amount_includes_fee=i:0 | fiat_currency=t:"EUR" | fiat_rate=r:30000.0 | fiat_value=NULL | fiat_price_source=NULL | fiat_rate_exact=t:"30000" | fiat_value_exact=NULL | pricing_source_kind=t:"manual" | pricing_provider=t:"reviewed-receipt" | pricing_pair=NULL | pricing_timestamp=NULL | pricing_fetched_at=NULL | pricing_granularity=NULL | pricing_method=NULL | pricing_external_ref=NULL | pricing_quality=t:"exact" | pricing_review_accepted_price=NULL | commercial_applied_link_id=NULL | review_status=NULL | taxability_override=NULL | at_regime_override=NULL | at_category_override=NULL | kind_override=NULL | privacy_boundary=NULL | kind=t:"interest" | description=NULL | counterparty=NULL | note=NULL | excluded=i:1 | raw_json=t:"{}" | payment_hash=NULL | payment_hash_source=NULL | swap_refund_funding_txid=NULL | swap_refund_funding_vout=NULL | created_at=t:"2020"
++ (116 tables, 99 empty)
