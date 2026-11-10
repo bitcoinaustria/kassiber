@@ -467,8 +467,14 @@ fn main() {
             .collect();
         let mut candidates =
             kassiber_session_replay::passphrase_candidates(&fd_bytes, &stdin_bytes);
+        // A synthetic passphrase the test put in the environment opens the
+        // books too (test switches such as `..._SECRET_STORE` are no
+        // passphrases).
         for (name, value) in &env {
-            if kassiber_session_replay::secret_name(name) && !candidates.contains(value) {
+            if keeps_secret_env(name, value, &allowlist)
+                && !keeps_env(name)
+                && !candidates.contains(value)
+            {
                 candidates.push(value.clone());
             }
         }
