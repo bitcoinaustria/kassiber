@@ -15,9 +15,10 @@ name = "kassiber_tax"
 crate-type = ["cdylib"]
 
 [dependencies]
+kassiber-custody = { path = "../../crates/custody" }
 kassiber-tax-core = { path = "../core" }
-# 0.25 was the newest line that built with plan 20's Rust 1.77; moving to a
-# newer line is its own change now that the toolchain is newer. >= 0.24.1 is
+# 0.25 dates from plan 20's Rust 1.77 pin, which the shared 1.99 toolchain
+# replaced; moving to a newer line is its own change. >= 0.24.1 is
 # required for RUSTSEC-2025-0020. abi3-py310 builds one wheel for every
 # supported CPython (requires-python >= 3.10).
 pyo3 = { version = "0.25.1", default-features = false, features = ["macros", "abi3-py310"] }

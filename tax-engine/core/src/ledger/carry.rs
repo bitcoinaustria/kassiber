@@ -42,20 +42,20 @@
 //! links ([`super::swaplinks`]).
 
 use std::borrow::Cow;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use serde_json::{Map, Value};
 
 use crate::decimal::{Context, Decimal};
 use crate::error::{EngineError, EngineResult};
 use crate::manifest::{DetailKind, QuarantineReason, RAIL_QUARANTINE_REASON};
-use crate::model::ConfigSpec;
+use crate::model::{AssetOutput, ConfigSpec};
 use crate::num;
 
 use super::normalize::{btc, Quarantine};
 use super::request::{Country, CrossAssetPair, DecimalText, LedgerRequest, Row};
 use super::response::{Stage, StagedError};
-use super::run::{compute, lot_inputs, prepare_assets, Book, Pass, Stages};
+use super::run::{compute, lot_assets, prepare_assets, Book, Pass, Stages};
 use super::swaplinks::{blocked_rows, link_id, or_else, LegReasons, CARRYING_VALUE};
 
 /// The reason code of a blocked pair whose out leg has no basis and no
@@ -71,7 +71,7 @@ pub(crate) struct Carried {
 }
 
 /// What the carry leaves the final pass.
-#[derive(Clone, Debug, Default)]
+#[derive(Default)]
 pub(crate) struct Carry {
     /// Each row a pass priced, by index, at its last carried pricing.
     pub carried: BTreeMap<usize, Carried>,
@@ -82,6 +82,18 @@ pub(crate) struct Carry {
     pub quarantines: Vec<Quarantine>,
     /// The passes it ran.
     pub passes: usize,
+    /// The last pass, when the carry settled: what it prepared and computed.
+    pub settled: Option<Settled>,
+}
+
+/// A pass after which the carry changed nothing: its inputs (the carried
+/// pricing it read and the rows it left out) and what it prepared and
+/// computed. A final pass with the same inputs repeats it.
+pub(crate) struct Settled {
+    pub carried: BTreeMap<usize, Carried>,
+    pub excluded: HashSet<usize>,
+    pub stages: Vec<Stages>,
+    pub outputs: Vec<AssetOutput>,
 }
 
 impl Carry {
@@ -96,6 +108,15 @@ impl Carry {
     ) -> Result<Cow<'r, LedgerRequest>, StagedError> {
         carried_request(request, &self.carried)
             .map_err(|error| StagedError::new(Stage::Prepare, error))
+    }
+
+    /// The settled pass, when it read the pricing the carry left: the final
+    /// pass's first prepare pass and lot engine repeat it when it also
+    /// left out the same rows.
+    pub fn take_settled(&mut self) -> Option<Settled> {
+        self.settled
+            .take()
+            .filter(|settled| settled.carried == self.carried)
     }
 }
 
@@ -161,8 +182,8 @@ pub(crate) fn carry(book: &Book, config: &ConfigSpec) -> Result<Carry, CarryFail
                 stages,
             });
         }
-        let basis = match computed_basis(&pass_book, &stages) {
-            Ok(basis) => basis,
+        let (basis, outputs) = match computed_basis(&pass_book, &stages) {
+            Ok(computed) => computed,
             Err(error) => return Err(CarryFailure { error, stages }),
         };
         let mut reasons = LegReasons::new(pass_book.rows);
@@ -203,9 +224,16 @@ pub(crate) fn carry(book: &Book, config: &ConfigSpec) -> Result<Carry, CarryFail
         if !overrides.is_empty() && rows_changed {
             carry.carried.extend(overrides);
         }
-        if !rows_changed && !blocks_changed {
-            break;
+        if rows_changed || blocks_changed {
+            continue;
         }
+        carry.settled = Some(Settled {
+            carried: carry.carried.clone(),
+            excluded: pass.excluded,
+            stages,
+            outputs,
+        });
+        break;
     }
     for &(pair, out, inbound) in &eligible {
         if let Some(reason_code) = reasons_by_key.get(&link_id(pair)) {
@@ -220,10 +248,15 @@ pub(crate) fn carry(book: &Book, config: &ConfigSpec) -> Result<Carry, CarryFail
 /// One pass's lot engine over its walked assets, and each taxable event's
 /// fragment basis, summed from `Decimal("0")` in the lot engine's order, by
 /// the event's unique id (its row's id; a move's out leg's)
-/// (`_computed_cost_basis_by_transaction_id`).
-fn computed_basis(book: &Book, stages: &[Stages]) -> Result<HashMap<String, Decimal>, StagedError> {
-    let inputs = lot_inputs(book, stages);
-    let outputs = compute(book, &inputs)?;
+/// (`_computed_cost_basis_by_transaction_id`), with the lot engine's
+/// results.
+fn computed_basis(
+    book: &Book,
+    stages: &[Stages],
+) -> Result<(HashMap<String, Decimal>, Vec<AssetOutput>), StagedError> {
+    let span = crate::timing::span("carry_compute");
+    let outputs = compute(book, lot_assets(book, stages))?;
+    drop(span);
     let bare = |error| StagedError::new(Stage::Prepare, error);
     let mut basis: HashMap<String, Decimal> = HashMap::new();
     let computed = stages
@@ -231,8 +264,9 @@ fn computed_basis(book: &Book, stages: &[Stages]) -> Result<HashMap<String, Deci
         .filter_map(|stages| stages.walked.as_ref()?.entries.as_ref());
     for (entries, output) in computed.zip(&outputs) {
         let events: HashMap<i64, &str> = entries
+            .entries
             .iter()
-            .map(|built| (built.entry.row, built.entry.unique_id.as_str()))
+            .map(|entry| (entry.row, entry.unique_id.as_str()))
             .collect();
         for gain_loss in &output.gain_losses {
             let unique_id = events.get(&gain_loss.event.row).ok_or_else(|| {
@@ -249,7 +283,7 @@ fn computed_basis(book: &Book, stages: &[Stages]) -> Result<HashMap<String, Deci
             *sum = num::add(sum, &gain_loss.fiat_cost_basis.0).map_err(bare)?;
         }
     }
-    Ok(basis)
+    Ok((basis, outputs))
 }
 
 /// `_with_carried_fiat_value`'s value and rate: the basis, and the basis

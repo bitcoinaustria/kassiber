@@ -1,0 +1,33 @@
+{
+  "evidence": [
+    "receipt_success",
+    "receipt_deprecated",
+    "receipt_priority",
+    "receipt_label",
+    "receipt_id",
+    "duplicate_slot",
+    "tampered_graph",
+    "tampered_quantity",
+    "nonaddress_overcount"
+  ],
+  "components": [],
+  "samourai": [],
+  "recorded": [],
+  "fanout": [
+    "zero_source"
+  ],
+  "graph": [],
+  "pipeline": [],
+  "safety": [
+    "privacy_unknown"
+  ],
+  "channels": [
+    "missing_funding",
+    "loan_unknown_role"
+  ],
+  "native": [],
+  "reconciliation": [],
+  "gaps": [
+    "large_empty"
+  ]
+}

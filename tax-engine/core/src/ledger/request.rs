@@ -14,13 +14,15 @@
 //! every stored request), so a builder that drifts fails loudly instead of
 //! being half-understood.
 
+use std::fmt;
+
 use serde::de::{self, Deserializer};
 use serde::ser::Serializer;
 use serde::{Deserialize, Serialize};
 
 use crate::decimal::Decimal;
 use crate::error::{EngineError, EngineResult, ErrorClass};
-use crate::model::{ConfigSpec, MethodName, TsInput};
+use crate::model::{ConfigSpec, Dec, MethodName, TsInput};
 
 /// The only schema version the ledger operations read and write.
 pub const SCHEMA_VERSION: u32 = 2;
@@ -125,6 +127,10 @@ pub struct Policy {
     pub method_label: String,
     /// The profile opted into reviewing coarse pricing.
     pub require_coarse_review: bool,
+    /// Where disposals take their lots from; `global` when absent (and
+    /// left out when global, so existing requests read back unchanged).
+    #[serde(default, skip_serializing_if = "crate::model::PoolScope::is_global")]
+    pub pool_scope: crate::model::PoolScope,
 }
 
 /// The country rules.
@@ -136,6 +142,10 @@ pub enum Country {
     Generic { long_term_days: u64 },
     /// Austria.
     At {},
+    /// The United States (`docs/reference/tax-country-us.md`).
+    Us {},
+    /// A country whose rules the registry states one by one.
+    Rules(crate::model::RulesSpec),
 }
 
 /// An accounting method.
@@ -148,6 +158,10 @@ pub enum Method {
     Lofo,
     MovingAverage,
     MovingAverageAt,
+    MovingAverageFifoPeriod,
+    UkShareMatching,
+    JpTotalAverage,
+    JpMovingAverage,
 }
 
 impl Method {
@@ -160,6 +174,10 @@ impl Method {
             Method::Lofo => MethodName::Lofo,
             Method::MovingAverage => MethodName::MovingAverage,
             Method::MovingAverageAt => MethodName::MovingAverageAt,
+            Method::MovingAverageFifoPeriod => MethodName::MovingAverageFifoPeriod,
+            Method::UkShareMatching => MethodName::UkShareMatching,
+            Method::JpTotalAverage => MethodName::JpTotalAverage,
+            Method::JpMovingAverage => MethodName::JpMovingAverage,
         }
     }
 }
@@ -194,11 +212,19 @@ pub struct Wallet {
 }
 
 /// The direction of a projection row.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Direction {
+    #[default]
     Inbound,
     Outbound,
+}
+
+impl Direction {
+    /// Whether this is the inbound direction (a country rule's default).
+    pub fn is_inbound(&self) -> bool {
+        *self == Direction::Inbound
+    }
 }
 
 /// An Austrian regime the user chose for a row.
@@ -281,6 +307,11 @@ pub struct Row {
     pub hold: Option<Hold>,
     #[serde(deserialize_with = "nullable")]
     pub chain_order: Option<ChainOrder>,
+    /// The market value of the row's units when the row records one apart
+    /// from its own value; only a rules country's `below_market` reads it.
+    /// Absent (and left out) otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub market_value: Option<Dec>,
 }
 
 /// A row's timestamp: what `timestamp_fields` returned for `occurred_at`.
@@ -420,7 +451,7 @@ fn is_non_finite_text(text: &str) -> bool {
 impl Serialize for DecimalText {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         match self {
-            DecimalText::Finite(value) => serializer.serialize_str(&value.to_canonical()),
+            DecimalText::Finite(value) => Dec(value.clone()).serialize(serializer),
             DecimalText::NonFinite(text) => serializer.serialize_str(text),
         }
     }
@@ -428,16 +459,40 @@ impl Serialize for DecimalText {
 
 impl<'de> Deserialize<'de> for DecimalText {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let text = String::deserialize(deserializer)?;
-        if let Ok(value) = Decimal::from_canonical(&text) {
+        deserializer.deserialize_string(DecimalTextVisitor)
+    }
+}
+
+/// Reads a [`DecimalText`] from a string as `String::deserialize` reads the
+/// string, keeping it only when it is non-finite text.
+struct DecimalTextVisitor;
+
+impl de::Visitor<'_> for DecimalTextVisitor {
+    type Value = DecimalText;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // `String`'s own expectation, so a value of another type fails
+        // with its message.
+        formatter.write_str("a string")
+    }
+
+    fn visit_str<E: de::Error>(self, text: &str) -> Result<DecimalText, E> {
+        if let Ok(value) = Decimal::from_canonical(text) {
             return Ok(DecimalText::Finite(value));
         }
-        if is_non_finite_text(&text) {
-            return Ok(DecimalText::NonFinite(text));
+        if is_non_finite_text(text) {
+            return Ok(DecimalText::NonFinite(text.to_owned()));
         }
-        Err(de::Error::custom(format!(
+        Err(E::custom(format!(
             "not a canonical or non-finite decimal: {text:?}"
         )))
+    }
+
+    fn visit_bytes<E: de::Error>(self, bytes: &[u8]) -> Result<DecimalText, E> {
+        match std::str::from_utf8(bytes) {
+            Ok(text) => self.visit_str(text),
+            Err(_) => Err(E::invalid_value(de::Unexpected::Bytes(bytes), &self)),
+        }
     }
 }
 

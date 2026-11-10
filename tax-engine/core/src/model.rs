@@ -5,12 +5,15 @@
 //! unknown fields so a drifting caller fails loudly instead of being
 //! half-understood. `docs/reference/tax-engine.md` documents the format.
 
+use std::fmt;
+
 use serde::de::{self, Deserializer};
 use serde::ser::Serializer;
 use serde::{Deserialize, Serialize};
 
 use crate::decimal::Decimal;
 use crate::error::ErrorClass;
+use crate::ledger::request::Direction;
 
 /// The only schema version this engine reads and writes.
 pub const SCHEMA_VERSION: u32 = 1;
@@ -21,16 +24,51 @@ pub struct Dec(pub Decimal);
 
 impl Serialize for Dec {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(&self.0.to_canonical())
+        // The canonical text needs no escaping, so this writes what
+        // `serialize_str` of `to_canonical()` writes, without the string.
+        serializer.collect_str(&Canonical(&self.0))
+    }
+}
+
+/// [`Decimal::to_canonical`] as a `Display`.
+struct Canonical<'a>(&'a Decimal);
+
+impl fmt::Display for Canonical<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.write_canonical(f)
     }
 }
 
 impl<'de> Deserialize<'de> for Dec {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let text = String::deserialize(deserializer)?;
-        Decimal::from_canonical(&text)
+        deserializer.deserialize_string(DecVisitor)
+    }
+}
+
+/// Reads a canonical decimal from a string as `String::deserialize` reads
+/// the string, without keeping it.
+struct DecVisitor;
+
+impl de::Visitor<'_> for DecVisitor {
+    type Value = Dec;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // `String`'s own expectation, so a value of another type fails
+        // with its message.
+        formatter.write_str("a string")
+    }
+
+    fn visit_str<E: de::Error>(self, text: &str) -> Result<Dec, E> {
+        Decimal::from_canonical(text)
             .map(Dec)
-            .map_err(|_| de::Error::custom(format!("not a canonical decimal: {text:?}")))
+            .map_err(|_| E::custom(format!("not a canonical decimal: {text:?}")))
+    }
+
+    fn visit_bytes<E: de::Error>(self, bytes: &[u8]) -> Result<Dec, E> {
+        match std::str::from_utf8(bytes) {
+            Ok(text) => self.visit_str(text),
+            Err(_) => Err(E::invalid_value(de::Unexpected::Bytes(bytes), &self)),
+        }
     }
 }
 
@@ -153,6 +191,22 @@ pub struct EntryInput {
     /// duplicate-entry messages.
     #[serde(default)]
     pub text: String,
+    /// What a rules country's ledger walk adds; never read from a request.
+    #[serde(skip)]
+    pub country: CountryFacts,
+}
+
+/// The facts a rules country's ledger walk gives an entry beyond RP2's
+/// arguments (`docs/reference/tax-engine.md#rules-countries`). Every other
+/// entry has the defaults.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CountryFacts {
+    /// An acquisition at zero cost without income (the country's
+    /// `zero_cost_kinds`): its price and basis are zero.
+    pub zero_cost: bool,
+    /// Why a sale's value is not its price (the country's `below_market`):
+    /// `market_value` or `seventy_percent`.
+    pub valuation: Option<&'static str>,
 }
 
 /// The configuration's known names, for RP2's membership checks.
@@ -198,6 +252,266 @@ pub enum CountrySpec {
     Generic { long_term_days: u64 },
     /// Austria: never long-term (`sys.maxsize` days).
     At {},
+    /// The United States: long-term once held more than one year by UTC
+    /// calendar date (`docs/reference/tax-country-us.md`).
+    Us {},
+    /// A country whose rules the registry states one by one.
+    Rules(RulesSpec),
+}
+
+/// The rules of a registry country (`docs/reference/tax-countries.md`): each
+/// field is one shared engine feature, and an absent one is the generic
+/// rule, so a country names only what it changes.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RulesSpec {
+    /// The IANA zone whose local dates count holding periods (a zone of
+    /// the registry's calendar).
+    pub timezone: String,
+    pub holding: Holding,
+    /// The tax year's first day, `MM-DD` in the zone; the calendar year
+    /// (`01-01`) when absent. The yearly totals and the tax summary are by
+    /// the tax year it starts, named by its first day's year.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tax_year_start: Option<String>,
+    /// The only pool scope the country allows (Germany's per-wallet order of
+    /// use, the United Kingdom's single pool); any when absent. A request
+    /// on the other scope fails rather than compute the wrong pool.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pool_scope: Option<PoolScope>,
+    /// What paying a fee in the asset is.
+    #[serde(default, skip_serializing_if = "FeeUnits::is_basis")]
+    pub fee_units: FeeUnits,
+    /// The values of a taxable exchange of one asset for another.
+    #[serde(default, skip_serializing_if = "SwapValues::is_own")]
+    pub swap_values: SwapValues,
+    /// What giving an asset away is (an outbound kind with `gift`).
+    #[serde(default, skip_serializing_if = "Given::is_quarantine")]
+    pub gifts_given: Given,
+    /// What donating an asset is (an outbound kind with `donat`).
+    #[serde(default, skip_serializing_if = "Given::is_quarantine")]
+    pub donations_given: Given,
+    /// What receiving a gift is (an inbound kind with `gift`).
+    #[serde(default, skip_serializing_if = "Received::is_acquisition")]
+    pub gifts_received: Received,
+    /// Whether a gift's or donation's loss counts.
+    #[serde(default, skip_serializing_if = "GiftLosses::is_deductible")]
+    pub gift_losses: GiftLosses,
+    /// Kinds the country does not book until a reviewer settles them
+    /// (Germany's unclassified airdrops, a hard fork's cost split, Spain's
+    /// lost coins): each such row is quarantined with the country's code,
+    /// and taints the asset's later disposals.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub refused_receipts: Vec<RefusedReceipt>,
+    /// Inbound kinds booked as acquisitions at zero cost, with no income
+    /// (ledger only).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub zero_cost_kinds: Vec<String>,
+    /// What a sale or payment below the market value its row records is
+    /// worth (ledger only).
+    #[serde(default, skip_serializing_if = "BelowMarket::is_price")]
+    pub below_market: BelowMarket,
+}
+
+/// Kinds a country refuses, with its fail-closed code.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RefusedReceipt {
+    /// `inbound` (absent): normalized kinds, compared exactly, held as
+    /// `acquisition_valuation_unsupported`. `outbound`: tokens of the row's
+    /// kind (`lost` matches `lost_keys`), each a non-sale disposal token,
+    /// held as `non_sale_disposal_kind`.
+    #[serde(default, skip_serializing_if = "Direction::is_inbound")]
+    pub direction: Direction,
+    pub kinds: Vec<String>,
+    /// The country's code (`airdrop_classification_required`).
+    pub code: String,
+    /// Why, for the quarantine's detail.
+    pub detail: String,
+}
+
+impl RulesSpec {
+    /// The refusal of a row of `kind` in `direction`, if the country has one.
+    pub fn refused_receipt(&self, direction: Direction, kind: &str) -> Option<&RefusedReceipt> {
+        self.refused_receipts.iter().find(|refused| {
+            refused.direction == direction
+                && match direction {
+                    Direction::Inbound => refused.kinds.iter().any(|k| k == kind),
+                    // `kind_has_token`'s test.
+                    Direction::Outbound => {
+                        !kind.is_empty() && refused.kinds.iter().any(|k| kind.contains(k.as_str()))
+                    }
+                }
+        })
+    }
+}
+
+/// What a sale or payment below market value is worth.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BelowMarket {
+    /// The row's own value (the generic rule).
+    #[default]
+    Price,
+    /// The market value when it is higher (Spain, art. 35.2 LIRPF).
+    MarketValue,
+    /// 70 % of the market value when the value is below that; exactly 70 %
+    /// is not below (Japan, NTA FAQ 2-10).
+    SeventyPercent,
+}
+
+impl BelowMarket {
+    /// Whether this is the generic rule.
+    pub fn is_price(&self) -> bool {
+        *self == BelowMarket::Price
+    }
+}
+
+/// What an outbound gift or donation is.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Given {
+    /// Quarantined as `non_sale_disposal_kind` (the generic rule).
+    #[default]
+    Quarantine,
+    /// A disposal at its value (Spain, Ireland, Japan, ...).
+    MarketValue,
+}
+
+impl Given {
+    /// Whether this is the generic rule.
+    pub fn is_quarantine(&self) -> bool {
+        *self == Given::Quarantine
+    }
+}
+
+/// What an inbound gift is.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Received {
+    /// An acquisition at its value (the generic rule).
+    #[default]
+    Acquisition,
+    /// Quarantined as `acquisition_valuation_unsupported`: the donor's
+    /// acquisition date and cost carry over, and the book has neither
+    /// (Germany's § 23 Abs. 1 Satz 3 EStG).
+    Quarantine,
+}
+
+impl Received {
+    /// Whether this is the generic rule.
+    pub fn is_acquisition(&self) -> bool {
+        *self == Received::Acquisition
+    }
+}
+
+/// Whether the loss of a gift or donation counts.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GiftLosses {
+    #[default]
+    Deductible,
+    /// The loss is reported but marked not deductible (Spain, art. 33.5.c
+    /// LIRPF).
+    NotDeductible,
+}
+
+impl GiftLosses {
+    /// Whether this is the generic rule.
+    pub fn is_deductible(&self) -> bool {
+        *self == GiftLosses::Deductible
+    }
+}
+
+/// The values of a taxable cross-asset exchange: the proceeds of the asset
+/// given and the cost of the asset received. When one leg has no value,
+/// every mode but `own` takes the other leg's for both.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SwapValues {
+    /// Each leg at its own value (the generic rule).
+    #[default]
+    Own,
+    /// Proceeds are the received asset's value, and its cost the given
+    /// asset's (Germany, the United Kingdom).
+    ReceivedGiven,
+    /// Proceeds and cost are the received asset's value (Ireland, Japan).
+    Received,
+    /// Proceeds and cost are the higher of the two values (Spain).
+    Higher,
+}
+
+impl SwapValues {
+    /// Whether this is the generic rule.
+    pub fn is_own(&self) -> bool {
+        *self == SwapValues::Own
+    }
+}
+
+/// What fee units paid in the asset are.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FeeUnits {
+    /// Kassiber's generic rule: their basis leaves the book without a gain
+    /// (a fee entry's proceeds are its basis), and a sale's fee units are
+    /// part of the sale.
+    #[default]
+    Basis,
+    /// Disposals at their value (the sale's spot), with a gain or loss; a
+    /// sale's fee units stay part of the sale, whose proceeds are its price
+    /// (Spain's and Ireland's single row).
+    Disposal,
+    /// Disposals at their value, and a sale's fee units are a disposal of
+    /// their own, taken before the sale's other units; the sale's fragments
+    /// carry the fee's value as expenses, split by quantity (Germany's
+    /// Werbungskosten, the United Kingdom's allowable cost).
+    DisposalBeforeSale,
+}
+
+impl FeeUnits {
+    /// Whether this is the generic rule.
+    pub fn is_basis(&self) -> bool {
+        *self == FeeUnits::Basis
+    }
+
+    /// Whether fee entries realize their gain.
+    pub fn realize(self) -> bool {
+        self != FeeUnits::Basis
+    }
+}
+
+/// How the holding period divides gains.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Holding {
+    /// No holding period: every gain is short-term.
+    Never,
+    /// Long-term once held more than one year by local date: the period
+    /// runs from the day after acquisition through the disposal's day, so
+    /// a disposal on the anniversary is still short-term, and 29 February's
+    /// anniversary is 28 February (the United States' rule, and Germany's
+    /// one-year period read the other way round).
+    MoreThanOneYear,
+}
+
+/// Where a disposal may take its lots from.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PoolScope {
+    /// Every lot of the asset, whatever wallet holds it (RP2's universal
+    /// application).
+    #[default]
+    Global,
+    /// Only the lots the disposing wallet holds; a move carries the lots it
+    /// takes, with their basis and acquisition time, to its destination.
+    Wallet,
+}
+
+impl PoolScope {
+    /// Whether this is the default, universal scope.
+    pub fn is_global(&self) -> bool {
+        *self == PoolScope::Global
+    }
 }
 
 /// The accounting method.
@@ -210,6 +524,18 @@ pub enum MethodName {
     Lofo,
     MovingAverage,
     MovingAverageAt,
+    /// Germany's FIFO holding period at the wallet's moving average cost (a
+    /// matching method, `crate::matching`).
+    MovingAverageFifoPeriod,
+    /// The United Kingdom's share matching: same day, then the next 30
+    /// days, then the section 104 pool (a matching method,
+    /// `crate::share_matching`).
+    UkShareMatching,
+    /// Japan's total average (総平均法) per tax year (a matching method).
+    JpTotalAverage,
+    /// Japan's moving average (移動平均法), the book value left after a
+    /// disposal rounded up to the yen (a matching method).
+    JpMovingAverage,
 }
 
 impl MethodName {
@@ -222,6 +548,10 @@ impl MethodName {
             MethodName::Lofo => "lofo",
             MethodName::MovingAverage => "moving_average",
             MethodName::MovingAverageAt => "moving_average_at",
+            MethodName::MovingAverageFifoPeriod => "moving_average_fifo_period",
+            MethodName::UkShareMatching => "uk_share_matching",
+            MethodName::JpTotalAverage => "jp_total_average",
+            MethodName::JpMovingAverage => "jp_moving_average",
         }
     }
 }
@@ -242,6 +572,9 @@ pub struct ComputeRequest {
     pub operation: Operation,
     pub country: CountrySpec,
     pub method: MethodName,
+    /// `global` when absent.
+    #[serde(default)]
+    pub pool_scope: PoolScope,
     pub assets: Vec<AssetInput>,
 }
 
@@ -318,6 +651,10 @@ pub struct GainLossOut {
     pub fiat_gain: Dec,
     pub unit_cost_basis_override: Option<Dec>,
     pub long_term: bool,
+    /// Costs of the disposal deducted from its gain: a sale's fee value
+    /// when its fee units are a disposal of their own; absent otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expenses: Option<Dec>,
     /// The Austrian disposal category, on Austrian books only.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub at_category: Option<String>,
@@ -336,6 +673,9 @@ pub struct YearlyOut {
     pub fiat_amount: Dec,
     pub fiat_cost_basis: Dec,
     pub fiat_gain_loss: Dec,
+    /// The sum of the fragments' expenses, when any has them.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expenses: Option<Dec>,
 }
 
 /// One open-position lot.
@@ -373,6 +713,20 @@ pub struct AssetOutput {
     pub open_positions: Vec<OpenPositionOut>,
     /// In RP2's order (by `"<exchange>_<holder>"`).
     pub balances: Vec<BalanceOut>,
+    /// Under the wallet pool scope, each wallet's remaining units and their
+    /// own basis, by exchange label; absent under the global scope, whose
+    /// holdings are an allocation at the asset's average basis.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wallet_holdings: Option<Vec<WalletHoldingOut>>,
+}
+
+/// One wallet's remaining units of an asset under the wallet pool scope.
+#[derive(Clone, Debug, Serialize)]
+pub struct WalletHoldingOut {
+    pub exchange: String,
+    pub holder: String,
+    pub quantity: Dec,
+    pub cost_basis: Dec,
 }
 
 /// The response to a successful `compute`, `compute_multi`, or `validate`.

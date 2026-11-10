@@ -26,7 +26,7 @@ use crate::entry::Entry;
 use crate::error::{EngineError, EngineResult, ErrorClass};
 use crate::ledger::request::{self as v2, LedgerRequest, ManifestRequest};
 use crate::ledger::response::{
-    ErrorResponse as V2ErrorResponse, ManifestResponse, PrepareFailure, StagedError,
+    ErrorResponse as V2ErrorResponse, LedgerResponse, ManifestResponse, PrepareFailure, StagedError,
 };
 use crate::ledger::run;
 use crate::manifest::manifest;
@@ -118,7 +118,7 @@ pub fn compute(request: &str) -> String {
 fn compute_inner(request: &str) -> EngineResult<ComputeResponse> {
     let request: ComputeRequest = parse(request)?;
     check_version(request.schema_version)?;
-    let country = Country::from_spec(&request.country);
+    let country = Country::from_spec(&request.country)?;
     let response = |handled: Option<bool>, assets: Option<Vec<AssetOutput>>| ComputeResponse {
         schema_version: SCHEMA_VERSION,
         ok: true,
@@ -133,8 +133,15 @@ fn compute_inner(request: &str) -> EngineResult<ComputeResponse> {
                     request.assets.len()
                 )));
             };
-            let output = compute_asset(asset, country, request.method)?;
+            let output = compute_asset(asset, country, request.method, request.pool_scope)?;
             Ok(response(None, Some(vec![output])))
+        }
+        Operation::Validate | Operation::ComputeMulti
+            if request.pool_scope == crate::model::PoolScope::Wallet =>
+        {
+            Err(EngineError::request(
+                "the Austrian swap runner has no wallet pool scope",
+            ))
         }
         Operation::Validate => {
             swaps::validate(&request.assets, country)?;
@@ -155,7 +162,39 @@ pub fn ledger(request: &str) -> String {
     }
 }
 
+pub fn ledger_typed(request: &LedgerRequest) -> Result<LedgerResponse, StagedError> {
+    if request.schema_version != v2::SCHEMA_VERSION {
+        return Err(StagedError::contract(EngineError::request(format!(
+            "unsupported schema_version {}; the ledger operations read {}",
+            request.schema_version,
+            v2::SCHEMA_VERSION
+        ))));
+    }
+    if request.operation != v2::Operation::Ledger {
+        return Err(StagedError::contract(EngineError::request(
+            "ledger_typed requires operation ledger",
+        )));
+    }
+    run::ledger(request)
+}
+
 fn ledger_inner(request: &str) -> Result<String, StagedError> {
+    // A document that reads whole as a ledger or prepare request of this
+    // schema version has the version and operation the head reads below
+    // would give, so it is read once. Any other document takes those reads,
+    // and fails as they fail.
+    let span = crate::timing::span("parse");
+    let whole = v2::parse::<LedgerRequest>(request).ok().filter(|parsed| {
+        parsed.schema_version == v2::SCHEMA_VERSION
+            && matches!(
+                parsed.operation,
+                v2::Operation::Ledger | v2::Operation::Prepare
+            )
+    });
+    drop(span);
+    if let Some(parsed) = whole {
+        return run_parsed(parsed);
+    }
     match v2::operation(request).map_err(StagedError::contract)? {
         v2::Operation::Manifest => {
             let _: ManifestRequest = v2::parse(request).map_err(StagedError::contract)?;
@@ -179,25 +218,39 @@ fn ledger_inner(request: &str) -> Result<String, StagedError> {
                     ))
                 }
             };
-            match run::prepare(&request) {
-                Ok(response) => v2_json(&response),
-                Err(failure) => v2_json(&failure),
-            }
+            run_parsed(request)
         }
         v2::Operation::Ledger => {
             let request: LedgerRequest = v2::parse(request).map_err(StagedError::contract)?;
-            v2_json(&run::ledger(&request)?)
+            run_parsed(request)
+        }
+    }
+}
+
+/// Runs a `ledger` or `prepare` request that was read whole.
+fn run_parsed(request: LedgerRequest) -> Result<String, StagedError> {
+    match request.operation {
+        v2::Operation::Prepare => match run::prepare(&request) {
+            Ok(response) => v2_json(&response),
+            Err(failure) => v2_json(&failure),
+        },
+        _ => {
+            let response = ledger_typed(&request)?;
+            let _serialize = crate::timing::span("serialize");
+            response.to_json().map_err(serialization_failed)
         }
     }
 }
 
 fn v2_json<T: Serialize>(value: &T) -> Result<String, StagedError> {
-    serde_json::to_string(value).map_err(|error| {
-        StagedError::contract(EngineError::new(
-            ErrorClass::RuntimeError,
-            format!("Internal error: response serialization failed: {error}"),
-        ))
-    })
+    serde_json::to_string(value).map_err(serialization_failed)
+}
+
+fn serialization_failed(error: serde_json::Error) -> StagedError {
+    StagedError::contract(EngineError::new(
+        ErrorClass::RuntimeError,
+        format!("Internal error: response serialization failed: {error}"),
+    ))
 }
 
 fn v2_error_json(error: StagedError) -> String {

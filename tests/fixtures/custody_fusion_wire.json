@@ -1,0 +1,221 @@
+[
+  {
+    "case": "base",
+    "input": {
+      "profile": {
+        "label": "Default",
+        "tax_country": "generic",
+        "fiat_currency": "EUR",
+        "gains_algorithm": "FIFO"
+      },
+      "projection": {
+        "$type": "FinalizedTaxProjection",
+        "rows": [
+          {
+            "custody_finalized_tax_projection": true,
+            "id": "custody-tax:1",
+            "journal_transaction_id": "anchor",
+            "wallet_id": "w",
+            "asset": "BTC",
+            "direction": "inbound",
+            "amount": 1,
+            "fee": 0,
+            "occurred_at": "2024-01-01T00:00:00Z"
+          }
+        ],
+        "intra_pairs": [],
+        "cross_asset_pairs": [],
+        "quarantines": [],
+        "selected_move_ids": []
+      },
+      "wallets": [
+        [
+          "w",
+          {
+            "id": "w",
+            "label": "Wallet"
+          }
+        ]
+      ]
+    },
+    "request_text": "{\"schema_version\":2,\"operation\":\"ledger\",\"policy\":{\"country\":{\"kind\":\"generic\",\"long_term_days\":365},\"method\":\"fifo\",\"method_label\":\"FIFO\",\"require_coarse_review\":false},\"config\":{\"assets\":[\"BTC\"],\"exchanges\":[\"Wallet\"],\"holders\":[\"Default\"]},\"holder\":\"Default\",\"wallets\":[{\"id\":\"w\",\"label\":\"Wallet\"}],\"rows\":[{\"id\":\"custody-tax:1\",\"anchor\":\"anchor\",\"asset\":\"BTC\",\"wallet_id\":\"w\",\"direction\":\"inbound\",\"ts\":{\"raw\":\"2024-01-01T00:00:00Z\",\"us\":1704067200000000,\"offset_s\":0,\"date\":\"2024-01-01\",\"year\":2024,\"vienna_date\":\"2024-01-01\",\"display\":\"2024-01-01 00:00:00+00:00\",\"iso\":\"2024-01-01T00:00:00+00:00\"},\"cutoff_instant\":{\"us\":1704067200000000},\"amount_msat\":1,\"fee_msat\":0,\"rate\":null,\"value\":null,\"coarse\":false,\"kind\":\"\",\"text\":null,\"regime_override\":null,\"category_override\":null,\"taxability_off\":false,\"privacy_hop\":false,\"hold\":null,\"chain_order\":null}],\"intra_pairs\":[],\"cross_asset_pairs\":[]}"
+  },
+  {
+    "case": "row-amount-4",
+    "input": {
+      "profile": {
+        "label": "Default",
+        "tax_country": "generic",
+        "fiat_currency": "EUR",
+        "gains_algorithm": "FIFO"
+      },
+      "projection": {
+        "$type": "FinalizedTaxProjection",
+        "rows": [
+          {
+            "custody_finalized_tax_projection": true,
+            "id": "custody-tax:1",
+            "journal_transaction_id": "anchor",
+            "wallet_id": "w",
+            "asset": "BTC",
+            "direction": "inbound",
+            "amount": 1267650600228229401496703205376,
+            "fee": 0,
+            "occurred_at": "2024-01-01T00:00:00Z"
+          }
+        ],
+        "intra_pairs": [],
+        "cross_asset_pairs": [],
+        "quarantines": [],
+        "selected_move_ids": []
+      },
+      "wallets": [
+        [
+          "w",
+          {
+            "id": "w",
+            "label": "Wallet"
+          }
+        ]
+      ]
+    },
+    "request_text": "{\"schema_version\":2,\"operation\":\"ledger\",\"policy\":{\"country\":{\"kind\":\"generic\",\"long_term_days\":365},\"method\":\"fifo\",\"method_label\":\"FIFO\",\"require_coarse_review\":false},\"config\":{\"assets\":[\"BTC\"],\"exchanges\":[\"Wallet\"],\"holders\":[\"Default\"]},\"holder\":\"Default\",\"wallets\":[{\"id\":\"w\",\"label\":\"Wallet\"}],\"rows\":[{\"id\":\"custody-tax:1\",\"anchor\":\"anchor\",\"asset\":\"BTC\",\"wallet_id\":\"w\",\"direction\":\"inbound\",\"ts\":{\"raw\":\"2024-01-01T00:00:00Z\",\"us\":1704067200000000,\"offset_s\":0,\"date\":\"2024-01-01\",\"year\":2024,\"vienna_date\":\"2024-01-01\",\"display\":\"2024-01-01 00:00:00+00:00\",\"iso\":\"2024-01-01T00:00:00+00:00\"},\"cutoff_instant\":{\"us\":1704067200000000},\"amount_msat\":1267650600228229401496703205376,\"fee_msat\":0,\"rate\":null,\"value\":null,\"coarse\":false,\"kind\":\"\",\"text\":null,\"regime_override\":null,\"category_override\":null,\"taxability_off\":false,\"privacy_hop\":false,\"hold\":null,\"chain_order\":null}],\"intra_pairs\":[],\"cross_asset_pairs\":[]}"
+  },
+  {
+    "case": "row-occurred_at-0",
+    "input": {
+      "profile": {
+        "label": "Default",
+        "tax_country": "generic",
+        "fiat_currency": "EUR",
+        "gains_algorithm": "FIFO"
+      },
+      "projection": {
+        "$type": "FinalizedTaxProjection",
+        "rows": [
+          {
+            "custody_finalized_tax_projection": true,
+            "id": "custody-tax:1",
+            "journal_transaction_id": "anchor",
+            "wallet_id": "w",
+            "asset": "BTC",
+            "direction": "inbound",
+            "amount": 1,
+            "fee": 0,
+            "occurred_at": null
+          }
+        ],
+        "intra_pairs": [],
+        "cross_asset_pairs": [],
+        "quarantines": [],
+        "selected_move_ids": []
+      },
+      "wallets": [
+        [
+          "w",
+          {
+            "id": "w",
+            "label": "Wallet"
+          }
+        ]
+      ]
+    },
+    "request_text": "{\"schema_version\":2,\"operation\":\"ledger\",\"policy\":{\"country\":{\"kind\":\"generic\",\"long_term_days\":365},\"method\":\"fifo\",\"method_label\":\"FIFO\",\"require_coarse_review\":false},\"config\":{\"assets\":[\"BTC\"],\"exchanges\":[\"Wallet\"],\"holders\":[\"Default\"]},\"holder\":\"Default\",\"wallets\":[{\"id\":\"w\",\"label\":\"Wallet\"}],\"rows\":[{\"id\":\"custody-tax:1\",\"anchor\":\"anchor\",\"asset\":\"BTC\",\"wallet_id\":\"w\",\"direction\":\"inbound\",\"ts\":{\"raw\":\"None\",\"error\":\"Parameter 'timestamp' has non-string value None\",\"error_class\":\"TypeError\"},\"cutoff_instant\":{\"error\":\"Invalid isoformat string: 'None'\"},\"amount_msat\":1,\"fee_msat\":0,\"rate\":null,\"value\":null,\"coarse\":false,\"kind\":\"\",\"text\":null,\"regime_override\":null,\"category_override\":null,\"taxability_off\":false,\"privacy_hop\":false,\"hold\":null,\"chain_order\":null}],\"intra_pairs\":[],\"cross_asset_pairs\":[]}"
+  },
+  {
+    "case": "row-occurred_at-7",
+    "input": {
+      "profile": {
+        "label": "Default",
+        "tax_country": "generic",
+        "fiat_currency": "EUR",
+        "gains_algorithm": "FIFO"
+      },
+      "projection": {
+        "$type": "FinalizedTaxProjection",
+        "rows": [
+          {
+            "custody_finalized_tax_projection": true,
+            "id": "custody-tax:1",
+            "journal_transaction_id": "anchor",
+            "wallet_id": "w",
+            "asset": "BTC",
+            "direction": "inbound",
+            "amount": 1,
+            "fee": 0,
+            "occurred_at": "2024-01-01T\u4f60\u4f60"
+          }
+        ],
+        "intra_pairs": [],
+        "cross_asset_pairs": [],
+        "quarantines": [],
+        "selected_move_ids": []
+      },
+      "wallets": [
+        [
+          "w",
+          {
+            "id": "w",
+            "label": "Wallet"
+          }
+        ]
+      ]
+    },
+    "request_text": "{\"schema_version\":2,\"operation\":\"ledger\",\"policy\":{\"country\":{\"kind\":\"generic\",\"long_term_days\":365},\"method\":\"fifo\",\"method_label\":\"FIFO\",\"require_coarse_review\":false},\"config\":{\"assets\":[\"BTC\"],\"exchanges\":[\"Wallet\"],\"holders\":[\"Default\"]},\"holder\":\"Default\",\"wallets\":[{\"id\":\"w\",\"label\":\"Wallet\"}],\"rows\":[{\"id\":\"custody-tax:1\",\"anchor\":\"anchor\",\"asset\":\"BTC\",\"wallet_id\":\"w\",\"direction\":\"inbound\",\"ts\":{\"raw\":\"2024-01-01T\u4f60\u4f60\",\"error\":\"Error parsing parameter 'timestamp': Unknown string format: 2024-01-01T\u4f60\u4f60\"},\"cutoff_instant\":{\"error\":\"Invalid isoformat string: '2024-01-01T\u4f60\u4f60'\"},\"amount_msat\":1,\"fee_msat\":0,\"rate\":null,\"value\":null,\"coarse\":false,\"kind\":\"\",\"text\":null,\"regime_override\":null,\"category_override\":null,\"taxability_off\":false,\"privacy_hop\":false,\"hold\":null,\"chain_order\":null}],\"intra_pairs\":[],\"cross_asset_pairs\":[]}"
+  },
+  {
+    "case": "row-closed-confirmed",
+    "input": {
+      "profile": {
+        "label": "Default",
+        "tax_country": "generic",
+        "fiat_currency": "EUR",
+        "gains_algorithm": "FIFO"
+      },
+      "projection": {
+        "$type": "FinalizedTaxProjection",
+        "rows": [
+          {
+            "custody_finalized_tax_projection": true,
+            "id": "custody-tax:1",
+            "journal_transaction_id": "anchor",
+            "wallet_id": "w",
+            "asset": "BTC",
+            "direction": "inbound",
+            "amount": 1,
+            "fee": 0,
+            "occurred_at": "2024-01-01T00:00:00Z",
+            "external_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "raw_json": "{\"chain\": \"bitcoin\", \"network\": \"main\", \"txid\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\", \"status\": {\"confirmed\": false}, \"vin\": [{\"txid\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\", \"vout\": 1, \"prevout\": {\"value_sats\": 13, \"scriptpubkey\": \"00141111111111111111111111111111111111111111\"}}], \"vout\": [{\"n\": 0, \"value_sats\": 10, \"scriptpubkey\": \"00142222222222222222222222222222222222222222\"}]}",
+            "_closed_confirmation_observation": {
+              "$type": "ChainConfirmationObservation",
+              "physical_scope": [
+                "bitcoin",
+                "main",
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              ],
+              "observed_at": {
+                "$datetime": "2024-01-01T00:00:00+00:00"
+              },
+              "confirmed": true
+            }
+          }
+        ],
+        "intra_pairs": [],
+        "cross_asset_pairs": [],
+        "quarantines": [],
+        "selected_move_ids": []
+      },
+      "wallets": [
+        [
+          "w",
+          {
+            "id": "w",
+            "label": "Wallet"
+          }
+        ]
+      ]
+    },
+    "request_text": "{\"schema_version\":2,\"operation\":\"ledger\",\"policy\":{\"country\":{\"kind\":\"generic\",\"long_term_days\":365},\"method\":\"fifo\",\"method_label\":\"FIFO\",\"require_coarse_review\":false},\"config\":{\"assets\":[\"BTC\"],\"exchanges\":[\"Wallet\"],\"holders\":[\"Default\"]},\"holder\":\"Default\",\"wallets\":[{\"id\":\"w\",\"label\":\"Wallet\"}],\"rows\":[{\"id\":\"custody-tax:1\",\"anchor\":\"anchor\",\"asset\":\"BTC\",\"wallet_id\":\"w\",\"direction\":\"inbound\",\"ts\":{\"raw\":\"2024-01-01T00:00:00Z\",\"us\":1704067200000000,\"offset_s\":0,\"date\":\"2024-01-01\",\"year\":2024,\"vienna_date\":\"2024-01-01\",\"display\":\"2024-01-01 00:00:00+00:00\",\"iso\":\"2024-01-01T00:00:00+00:00\"},\"cutoff_instant\":{\"us\":1704067200000000},\"amount_msat\":1,\"fee_msat\":0,\"rate\":null,\"value\":null,\"coarse\":false,\"kind\":\"\",\"text\":null,\"regime_override\":null,\"category_override\":null,\"taxability_off\":false,\"privacy_hop\":false,\"hold\":null,\"chain_order\":null}],\"intra_pairs\":[],\"cross_asset_pairs\":[]}"
+  }
+]

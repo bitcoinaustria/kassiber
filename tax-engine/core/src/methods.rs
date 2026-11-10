@@ -162,6 +162,14 @@ pub(crate) fn lot_method<'a>(
         MethodName::Lofo => Box::new(Ranked::new(Rank::Lofo)),
         MethodName::MovingAverage => Box::new(MovingAverage::default()),
         MethodName::MovingAverageAt => Box::new(MovingAverageAt::new(entries, lots)),
+        // `compute_parsed` and the swap runner hand a matching method to
+        // `crate::matching` before they ask for a lot method.
+        MethodName::MovingAverageFifoPeriod
+        | MethodName::UkShareMatching
+        | MethodName::JpTotalAverage
+        | MethodName::JpMovingAverage => {
+            unreachable!("a matching method has no lot-method form")
+        }
     }
 }
 

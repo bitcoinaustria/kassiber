@@ -1,0 +1,12 @@
+[package]
+name = "kassiber-tax-countries"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "Kassiber's tax-country registry: each country's policy, preview state and legal sources"
+
+[dependencies]
+serde_json = "1"

@@ -79,6 +79,7 @@ changing their subsystem.
 | Task | Reference |
 | --- | --- |
 | Tax normalization, transfers, tax engine | [Tax and journals](docs/reference/tax.md), [tax engine](docs/reference/tax-engine.md), [Austrian handoff](docs/austrian-handoff.md) |
+| Tax countries (registry, preview countries, country reports) | [Tax countries](docs/reference/tax-countries.md), the country's `docs/reference/tax-country-<code>.md` |
 | Custody review and allocations | [Components](docs/reference/custody-components.md), [resolution](docs/reference/custody-resolution.md) |
 | Wallet observation and network scope | [Chain observers](docs/reference/chain-observers.md), [book networks](docs/reference/book-networks.md) |
 | Local graph analysis or acquisition | [Chain analysis](docs/reference/local-chain-analysis.md), [recurring acquisition](docs/reference/recurring-chain-acquisition.md) |

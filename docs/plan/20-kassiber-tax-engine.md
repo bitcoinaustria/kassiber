@@ -250,7 +250,7 @@ Recorded 2026-10-01, from the behavioral specs written before implementation:
 - **Decimal.** Fixed-size Rust decimals hold about 28 digits and normalize
   exponents, so the engine has its own decimal type over `num-bigint` that
   matches CPython's `decimal` exactly, checked against generated CPython
-  vectors.
+  vectors. [Plan 21](21-rust-backend.md) moved it to `crates/pydecimal`.
 - **Precision.** Importing RP2 set 32-digit precision only on the importing
   thread, so the same book was stored with different values depending on
   whether the CLI, the daemon's main thread, or its background worker processed

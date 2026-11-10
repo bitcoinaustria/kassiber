@@ -1,0 +1,437 @@
+{
+  "active_lineage_conflict": [
+    "code",
+    "message",
+    "conflicts"
+  ],
+  "active_transaction_membership_conflict": [
+    "code",
+    "message",
+    "conflicts",
+    "remediation",
+    "transaction_id",
+    "component_ids"
+  ],
+  "allocation_chronology_mismatch": [
+    "code",
+    "message",
+    "allocation_id",
+    "source_leg_id",
+    "sink_leg_id",
+    "source_occurred_at",
+    "sink_occurred_at"
+  ],
+  "allocation_leg_invalid": [
+    "code",
+    "allocation_id"
+  ],
+  "allocation_network_mismatch": [
+    "code",
+    "allocation_id",
+    "source_leg_id",
+    "sink_leg_id",
+    "source_network_domain",
+    "sink_network_domain",
+    "source_scope",
+    "sink_scope"
+  ],
+  "allocation_network_scope_invalid": [
+    "code",
+    "allocation_id",
+    "source_leg_id",
+    "sink_leg_id",
+    "source_scope",
+    "sink_scope"
+  ],
+  "allocation_quantity_mismatch": [
+    "code",
+    "allocation_id",
+    "source_leg_id",
+    "sink_leg_id"
+  ],
+  "allocation_required": [
+    "code",
+    "message",
+    "source_leg_ids",
+    "sink_leg_ids"
+  ],
+  "allocation_sink_coverage_mismatch": [
+    "code",
+    "leg_id",
+    "expected_msat",
+    "covered_msat"
+  ],
+  "allocation_source_coverage_mismatch": [
+    "code",
+    "leg_id",
+    "expected_msat",
+    "covered_msat"
+  ],
+  "anchor_asset_mismatch": [
+    "code",
+    "leg_id",
+    "transaction_id",
+    "leg_asset",
+    "transaction_asset"
+  ],
+  "anchor_chain_mismatch": [
+    "code",
+    "leg_id",
+    "transaction_id",
+    "leg_chain",
+    "transaction_chain"
+  ],
+  "anchor_coverage_mismatch": [
+    "code",
+    "transaction_id",
+    "direction",
+    "partial_review",
+    "raw_economic_msat",
+    "reviewed_component_msat",
+    "reviewed_minus_raw_msat"
+  ],
+  "anchor_network_mismatch": [
+    "code",
+    "leg_id",
+    "transaction_id",
+    "leg_network",
+    "transaction_network"
+  ],
+  "anchor_observer_chronology_changed": [
+    "code",
+    "severity",
+    "review_required",
+    "message",
+    "authority_version",
+    "application_revision",
+    "leg_id",
+    "transaction_id",
+    "leg_occurred_at",
+    "transaction_occurred_at"
+  ],
+  "anchor_occurred_at_mismatch": [
+    "code",
+    "leg_id",
+    "transaction_id",
+    "leg_occurred_at",
+    "transaction_occurred_at"
+  ],
+  "anchor_rail_mismatch": [
+    "code",
+    "leg_id",
+    "transaction_id",
+    "leg_rail",
+    "transaction_rail"
+  ],
+  "anchor_transaction_excluded": [
+    "code",
+    "message",
+    "transaction_id"
+  ],
+  "anchor_transaction_identity_mismatch": [
+    "code",
+    "leg_id",
+    "transaction_id",
+    "anchor_transaction_id"
+  ],
+  "anchor_transaction_missing": [
+    "code",
+    "transaction_id"
+  ],
+  "anchor_transaction_retracted": [
+    "code",
+    "message",
+    "leg_id",
+    "transaction_id"
+  ],
+  "anchor_wallet_mismatch": [
+    "code",
+    "leg_id",
+    "transaction_id",
+    "leg_wallet_id",
+    "transaction_wallet_id"
+  ],
+  "component_allocation_count_mismatch": [
+    "code",
+    "expected",
+    "actual"
+  ],
+  "component_content_commitment_missing": [
+    "code",
+    "message"
+  ],
+  "component_economic_term_count_mismatch": [
+    "code",
+    "expected",
+    "actual"
+  ],
+  "component_evidence_commitment_invalid": [
+    "code",
+    "message",
+    "status",
+    "expected",
+    "actual"
+  ],
+  "component_leg_count_mismatch": [
+    "code",
+    "expected",
+    "actual"
+  ],
+  "component_native_support_contradicted": [
+    "code",
+    "message",
+    "supported_boundaries",
+    "contradicted_boundaries"
+  ],
+  "conversion_fee_quantity_mismatch": [
+    "code",
+    "allocation_id",
+    "source_leg_id",
+    "fee_leg_id",
+    "source_amount_msat",
+    "fee_amount_msat"
+  ],
+  "conversion_fee_valuation_mismatch": [
+    "code",
+    "allocation_id",
+    "source_leg_id",
+    "fee_leg_id"
+  ],
+  "conversion_not_reviewed": [
+    "code",
+    "message"
+  ],
+  "conversion_policy_missing": [
+    "code",
+    "message"
+  ],
+  "conversion_retained_quantity_mismatch": [
+    "code",
+    "message",
+    "allocation_ids"
+  ],
+  "conversion_topology_unsupported": [
+    "code",
+    "message",
+    "source_leg_ids",
+    "destination_leg_ids"
+  ],
+  "conversion_valuation_missing": [
+    "code",
+    "message",
+    "ordinals"
+  ],
+  "custody_component_fee_orphaned": [
+    "code",
+    "message",
+    "source_leg_ids"
+  ],
+  "custody_component_leg_role_unknown": [
+    "code",
+    "message",
+    "roles"
+  ],
+  "custody_component_value_only_loss_unsupported": [
+    "code",
+    "message",
+    "leg_ids"
+  ],
+  "custody_location_continuity_mismatch": [
+    "code",
+    "message",
+    "wallet_id",
+    "exposure",
+    "conservation_unit",
+    "source_leg_id",
+    "available_msat",
+    "source_msat"
+  ],
+  "custody_network_scope_laundering": [
+    "code",
+    "message",
+    "network_domains",
+    "leg_ids_by_domain",
+    "component_ids"
+  ],
+  "custody_suspense_allocation_required": [
+    "code",
+    "message"
+  ],
+  "custody_suspense_anchor_invalid": [
+    "code",
+    "message",
+    "leg_id",
+    "fields"
+  ],
+  "custody_suspense_asset_mismatch": [
+    "code",
+    "message",
+    "allocation_id",
+    "source_leg_id",
+    "suspense_leg_id"
+  ],
+  "custody_suspense_fee_coverage_mismatch": [
+    "code",
+    "message",
+    "source_leg_id",
+    "transaction_id",
+    "observed_fee_msat",
+    "allocated_fee_msat"
+  ],
+  "custody_suspense_network_mismatch": [
+    "code",
+    "message",
+    "source_scope",
+    "suspense_scope",
+    "allocation_id",
+    "source_leg_id",
+    "suspense_leg_id"
+  ],
+  "custody_suspense_observed_source_required": [
+    "code",
+    "message",
+    "allocation_id",
+    "source_leg_id",
+    "suspense_leg_id"
+  ],
+  "custody_suspense_occurred_at_missing": [
+    "code",
+    "message",
+    "leg_id"
+  ],
+  "custody_suspense_quantity_mismatch": [
+    "code",
+    "message",
+    "allocation_id",
+    "source_leg_id",
+    "suspense_leg_id"
+  ],
+  "custody_suspense_quantity_mode_required": [
+    "code",
+    "message"
+  ],
+  "custody_suspense_review_required": [
+    "code",
+    "message"
+  ],
+  "custody_suspense_time_mismatch": [
+    "code",
+    "message",
+    "source_occurred_at",
+    "suspense_occurred_at",
+    "allocation_id",
+    "source_leg_id",
+    "suspense_leg_id"
+  ],
+  "destination_anchor_direction_mismatch": [
+    "code",
+    "leg_id",
+    "transaction_id",
+    "direction"
+  ],
+  "fee_source_asset_mismatch": [
+    "code",
+    "allocation_id",
+    "source_leg_id",
+    "fee_leg_id",
+    "source_asset",
+    "fee_asset"
+  ],
+  "fee_source_scope_mismatch": [
+    "code",
+    "allocation_id",
+    "source_leg_id",
+    "fee_leg_id",
+    "source_scope",
+    "fee_scope"
+  ],
+  "fee_source_wallet_mismatch": [
+    "code",
+    "allocation_id",
+    "source_leg_id",
+    "fee_leg_id",
+    "source_wallet_id",
+    "fee_wallet_id"
+  ],
+  "leg_occurred_at_invalid": [
+    "code",
+    "message",
+    "ordinals",
+    "leg_id",
+    "transaction_id"
+  ],
+  "leg_occurred_at_missing": [
+    "code",
+    "message",
+    "ordinals",
+    "leg_id",
+    "role"
+  ],
+  "legacy_pair_fee_allocation_review_required": [
+    "code",
+    "message",
+    "source_leg_id",
+    "fee_leg_id",
+    "review_required"
+  ],
+  "loss_anchor_direction_mismatch": [
+    "code",
+    "leg_id",
+    "transaction_id",
+    "direction",
+    "role"
+  ],
+  "missing_owned_destination": [
+    "code",
+    "message"
+  ],
+  "missing_source": [
+    "code",
+    "message"
+  ],
+  "no_legs": [
+    "code",
+    "message"
+  ],
+  "owned_leg_wallet_missing": [
+    "code",
+    "leg_id",
+    "role"
+  ],
+  "revision_link_invalid": [
+    "code",
+    "field",
+    "target_component_id",
+    "target_revision"
+  ],
+  "revision_link_missing": [
+    "code",
+    "field",
+    "target_component_id"
+  ],
+  "source_anchor_direction_mismatch": [
+    "code",
+    "leg_id",
+    "transaction_id",
+    "direction"
+  ],
+  "transaction_anchor_missing": [
+    "code",
+    "message"
+  ],
+  "transactionless_leg_wallet_missing": [
+    "code",
+    "leg_id",
+    "role"
+  ],
+  "unbalanced_conversion_valuation": [
+    "code",
+    "message",
+    "groups"
+  ],
+  "unbalanced_quantity": [
+    "code",
+    "message",
+    "groups"
+  ]
+}

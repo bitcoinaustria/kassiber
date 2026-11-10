@@ -21,7 +21,9 @@ Do not use Kassiber as the sole basis for filings or financial decisions.
 - Transaction notes, attachments, transfer review, quarantine, and audit history.
 - Encrypted backup and restore of a book container, from the desktop or the CLI.
 - Local tax calculations in Kassiber's own tax engine, including Austrian
-  Alt/Neu rules and E 1kv exports.
+  Alt/Neu rules and E 1kv exports. The Rust backend adds preview rules for
+  the United States, Germany, Switzerland, Spain, Ireland, the United
+  Kingdom and Japan, labelled preview until a tax professional reviews each.
 - An optional AI assistant using local or explicitly authorized remote providers.
 
 ## Install

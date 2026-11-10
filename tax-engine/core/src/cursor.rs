@@ -29,6 +29,9 @@ pub(crate) struct Fragment {
     pub lot: Option<usize>,
     pub crypto_amount: Decimal,
     pub unit_cost_basis_override: Option<Decimal>,
+    /// The fragment's whole basis, set by a matching method that prices a
+    /// disposal as a whole (Japan's averages); it replaces the lot's share.
+    pub cost_override: Option<Decimal>,
 }
 
 /// What consuming one taxable event produced.
@@ -120,6 +123,7 @@ impl<'a> Cursor<'a> {
                 lot: None,
                 crypto_amount: amount,
                 unit_cost_basis_override: None,
+                cost_override: None,
             });
             self.next += 1;
             return Ok(Some(EventComputation {
@@ -177,6 +181,7 @@ impl<'a> Cursor<'a> {
                 lot: Some(lot),
                 crypto_amount: amount,
                 unit_cost_basis_override: selection.unit_cost_basis_override,
+                cost_override: None,
             });
             match ordering {
                 Ordering::Equal => {
@@ -233,7 +238,7 @@ fn check_non_negative(name: &str, value: &Decimal) -> EngineResult<()> {
 
 /// The checks RP2's `GainLoss` constructor runs. On the paths the cursor
 /// takes they only fail by raising from a comparison.
-fn check_fragment(
+pub(crate) fn check_fragment(
     event: &Entry,
     lot: Option<&LotView>,
     amount: &Decimal,

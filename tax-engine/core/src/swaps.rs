@@ -37,17 +37,30 @@ struct SwapPair {
 
 /// Parses every asset in request order; the first constructor failure
 /// wins, as it does while the adapter builds its transaction sets.
-fn parse_assets(inputs: &[AssetInput]) -> EngineResult<Vec<ParsedAsset>> {
-    let mut names = HashSet::new();
-    for input in inputs {
-        if !names.insert(input.asset.as_str()) {
+fn parse_assets(inputs: &[AssetInput]) -> EngineResult<Vec<ParsedAsset<'static>>> {
+    unique_names(inputs.iter().map(|input| input.asset.as_str()))?;
+    inputs.iter().map(ParsedAsset::new).collect()
+}
+
+/// Refuses a run that names an asset twice.
+fn unique_names<'a>(names: impl IntoIterator<Item = &'a str>) -> EngineResult<()> {
+    let mut seen = HashSet::new();
+    for name in names {
+        if !seen.insert(name) {
             return Err(EngineError::request(format!(
-                "asset {:?} appears more than once",
-                input.asset
+                "asset {name:?} appears more than once"
             )));
         }
     }
-    inputs.iter().map(ParsedAsset::new).collect()
+    Ok(())
+}
+
+/// [`parse_assets`]' checks on assets whose entries are already
+/// constructed, which then cannot fail a constructor: the names, then each
+/// asset's set checks, in order.
+pub(crate) fn check_assets(assets: &[ParsedAsset]) -> EngineResult<()> {
+    unique_names(assets.iter().map(|asset| asset.asset.as_str()))?;
+    assets.iter().try_for_each(ParsedAsset::check)
 }
 
 /// `(asset, internal_id)` tuples as Python prints them.
@@ -123,9 +136,18 @@ fn collect_pairs(assets: &[ParsedAsset]) -> EngineResult<Vec<SwapPair>> {
 /// `validate_input_data`: Austria checks the swap pairs; other countries
 /// have nothing to check.
 pub(crate) fn validate(inputs: &[AssetInput], country: Country) -> EngineResult<()> {
-    let assets = parse_assets(inputs)?;
+    validate_checked(&parse_assets(inputs)?, country)
+}
+
+/// [`validate`] on constructed entries.
+pub(crate) fn validate_parsed(assets: &[ParsedAsset], country: Country) -> EngineResult<()> {
+    check_assets(assets)?;
+    validate_checked(assets, country)
+}
+
+fn validate_checked(assets: &[ParsedAsset], country: Country) -> EngineResult<()> {
     if country == Country::Austria {
-        collect_pairs(&assets)?;
+        collect_pairs(assets)?;
     }
     Ok(())
 }
@@ -138,15 +160,39 @@ pub(crate) fn compute_multi(
     country: Country,
     method: MethodName,
 ) -> EngineResult<Option<Vec<AssetOutput>>> {
-    let assets = parse_assets(inputs)?;
+    Ok(compute_multi_checked(parse_assets(inputs)?, country, method)?.ok())
+}
+
+/// [`compute_multi`] on constructed entries; the assets come back, checked,
+/// when the runner does not take them.
+pub(crate) fn compute_multi_parsed<'e>(
+    assets: Vec<ParsedAsset<'e>>,
+    country: Country,
+    method: MethodName,
+) -> EngineResult<Result<Vec<AssetOutput>, Vec<ParsedAsset<'e>>>> {
+    check_assets(&assets)?;
+    compute_multi_checked(assets, country, method)
+}
+
+fn compute_multi_checked<'e>(
+    assets: Vec<ParsedAsset<'e>>,
+    country: Country,
+    method: MethodName,
+) -> EngineResult<Result<Vec<AssetOutput>, Vec<ParsedAsset<'e>>>> {
     if country != Country::Austria {
-        return Ok(None);
+        return Ok(Err(assets));
     }
     let pairs = collect_pairs(&assets)?;
     if pairs.is_empty() {
-        return Ok(None);
+        return Ok(Err(assets));
     }
-    run(assets, pairs, method).map(Some)
+    if crate::matching::method(method).is_some() {
+        return Err(EngineError::value(format!(
+            "Accounting method '{}' has no Austrian swap-runner form",
+            method.as_str()
+        )));
+    }
+    run(assets, pairs, method).map(Ok)
 }
 
 /// `_incoming_can_affect_event`: whether an unresolved incoming lot could
@@ -258,15 +304,15 @@ fn reject_cycles(
 }
 
 /// The runner's view of the pairs and assets while cursors advance.
-struct Runner<'a> {
-    prepared: &'a [PreparedAsset],
+struct Runner<'a, 'e> {
+    prepared: &'a [PreparedAsset<'e>],
     pairs: &'a [SwapPair],
     /// Per destination asset, its pairs ordered by incoming leg then id.
     incoming: &'a [Vec<usize>],
     resolved: Vec<bool>,
 }
 
-impl Runner<'_> {
+impl Runner<'_, '_> {
     fn entry(&self, asset: usize, index: usize) -> &Entry {
         &self.prepared[asset].entries[index]
     }
@@ -303,7 +349,7 @@ impl Runner<'_> {
 
 /// `compute_native_at_tax`.
 fn run(
-    assets: Vec<ParsedAsset>,
+    assets: Vec<ParsedAsset<'_>>,
     pairs: Vec<SwapPair>,
     method: MethodName,
 ) -> EngineResult<Vec<AssetOutput>> {
@@ -460,7 +506,7 @@ fn run(
 /// carried unit basis` onto the destination lot, then marks the pair
 /// resolved (also when nothing is carried).
 fn resolve(
-    runner: &mut Runner<'_>,
+    runner: &mut Runner<'_, '_>,
     cursors: &mut [Cursor<'_>],
     destination: &[Option<usize>],
     pair: usize,

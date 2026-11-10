@@ -631,8 +631,8 @@
   {
     "id": "walk-entries-in-insertion-order",
     "file": "tax-engine/core/src/ledger/walk.rs",
-    "find": "            entries.append(&mut self.outs);\n            entries.append(&mut self.moves);",
-    "replace": "            entries.append(&mut self.moves);\n            entries.append(&mut self.outs);",
+    "find": "self.ins.into_iter().chain(self.outs).chain(self.moves)",
+    "replace": "self.ins.into_iter().chain(self.moves).chain(self.outs)",
     "expect_failing": [
       "ledger::walk::tests::entries_are_the_adapters_constructor_calls_in_walk_order"
     ],
@@ -651,8 +651,8 @@
   {
     "id": "walk-infinite-values-checked-first",
     "file": "tax-engine/core/src/ledger/walk.rs",
-    "find": "        let entry = Entry::from_input(&input, Some(self.config))?;\n        if infinite {",
-    "replace": "        if infinite {\n            return Err(DecimalError::InvalidOperation.into());\n        }\n        let entry = Entry::from_input(&input, Some(self.config))?;\n        if infinite {",
+    "find": "    let mut entry = Entry::from_input(&call.input, Some(config))?;\n    if call.infinite {",
+    "replace": "    if call.infinite {\n        return Err(DecimalError::InvalidOperation.into());\n    }\n    let mut entry = Entry::from_input(&call.input, Some(config))?;\n    if call.infinite {",
     "expect_failing": [
       "ledger::walk::tests::infinite_values_fail_where_rps_constructor_compares_them"
     ],
@@ -671,7 +671,7 @@
   {
     "id": "walk-fee-only-spend-sells",
     "file": "tax-engine/core/src/ledger/walk.rs",
-    "find": "        input.transaction_type = Some(String::from(if sell { \"SELL\" } else { \"FEE\" }));",
+    "find": "        input.transaction_type = Some(String::from(if sell { disposal } else { \"FEE\" }));",
     "replace": "        input.transaction_type = Some(String::from(\"SELL\"));",
     "expect_failing": [
       "ledger::walk::tests::entries_are_the_adapters_constructor_calls_in_walk_order"
@@ -842,8 +842,8 @@
   {
     "id": "normalize-values-acquisitions-at-the-price",
     "file": "tax-engine/core/src/ledger/normalize.rs",
-    "find": "        let fiat_value = fiat_value(row, &amount, &spot)?;\n",
-    "replace": "        let fiat_value = spot.clone();\n",
+    "find": "            None => fiat_value(row, &amount, &spot)?,\n",
+    "replace": "            None => spot.clone(),\n",
     "expect_failing": [
       "ledger::compose::tests::acquisitions_come_in_lot_order_at_their_basis_with_their_unit_cost",
       "the_ledger_operation_reproduces_every_stored_response"
@@ -906,8 +906,8 @@
   {
     "id": "compose-unit-cost-multiplies",
     "file": "tax-engine/core/src/ledger/compose.rs",
-    "find": "            let unit_cost = num::div(&basis.0, quantity)?;",
-    "replace": "            let unit_cost = num::mul(&basis.0, quantity)?;",
+    "find": "        let unit_cost = num::div(&basis.0, quantity)?;",
+    "replace": "        let unit_cost = num::mul(&basis.0, quantity)?;",
     "expect_failing": [
       "ledger::compose::tests::acquisitions_come_in_lot_order_at_their_basis_with_their_unit_cost",
       "the_ledger_operation_reproduces_every_stored_response"
@@ -927,7 +927,7 @@
   {
     "id": "compose-fees-realize-gains",
     "file": "tax-engine/core/src/ledger/compose.rs",
-    "find": "                let fee = matches!(group.entry_type, EntryType::Fee | EntryType::TransferFee);",
+    "find": "                let fee = matches!(group.entry_type, EntryType::Fee | EntryType::TransferFee)\n                    && !self.book.country.fee_units().realize();",
     "replace": "                let fee = false;",
     "expect_failing": [
       "ledger::compose::tests::realized_entries_sum_their_fragments_by_event_and_holding_period",
@@ -1010,7 +1010,7 @@
   {
     "id": "compose-summary-keeps-fees-and-moves",
     "file": "tax-engine/core/src/ledger/compose.rs",
-    "find": "            .filter(|yearly| !matches!(yearly.transaction_type, \"fee\" | \"move\"))\n",
+    "find": "            .filter(|yearly| fees || !matches!(yearly.transaction_type, \"fee\" | \"move\"))\n",
     "replace": "",
     "expect_failing": [
       "ledger::compose::tests::the_tax_summary_drops_fees_and_moves_and_sorts_by_year_type_and_holding_period"
@@ -1030,7 +1030,7 @@
   {
     "id": "run-method-gate-without-computation",
     "file": "tax-engine/core/src/ledger/run.rs",
-    "find": "    if inputs.is_empty() {\n        return Ok(Vec::new());\n    }\n    let method",
+    "find": "    if assets.is_empty() {\n        return Ok(Vec::new());\n    }\n    let method",
     "replace": "    let method",
     "expect_failing": [
       "ledger::compose::tests::the_method_gate_fails_the_multi_asset_stage_once_an_asset_is_computed",
@@ -1041,8 +1041,8 @@
   {
     "id": "run-compute-failure-names-no-asset",
     "file": "tax-engine/core/src/ledger/run.rs",
-    "find": "                asset: Some(input.asset.clone()),",
-    "replace": "                asset: None,",
+    "find": "            asset: Some(parsed.asset.clone()),",
+    "replace": "            asset: None,",
     "expect_failing": [
       "ledger::compose::tests::a_failing_computation_names_its_asset"
     ],
@@ -1109,7 +1109,7 @@
     "expect_failing": [
       "ledger::regimes::tests::the_cutoff_is_strict_and_an_unread_time_fails_with_pythons_value_error"
     ],
-    "rule": "A time's regime is Alt strictly before the Neuverm\u00f6gen cutoff and Neu from it on."
+    "rule": "A time's regime is Alt strictly before the Neuvermögen cutoff and Neu from it on."
   },
   {
     "id": "regimes-unread-time-is-neu",
@@ -1332,6 +1332,16 @@
       "the_ledger_operation_reproduces_every_stored_response"
     ],
     "rule": "An Austrian move's fee notes and leg descriptions carry its regime."
+  },
+  {
+    "id": "walk-last-constructor-failure-wins",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "        for outcome in constructed {",
+    "replace": "        for outcome in constructed.into_iter().rev() {",
+    "expect_failing": [
+      "ledger::compose::tests::the_first_failing_constructor_in_walk_order_fails_the_pass"
+    ],
+    "rule": "Of the constructor calls the walk made, the first in walk order that fails fails the pass."
   },
   {
     "id": "compose-categories-ignore-overrides",
@@ -1694,8 +1704,8 @@
   {
     "id": "carry-stops-after-a-pass",
     "file": "tax-engine/core/src/ledger/carry.rs",
-    "find": "        if !rows_changed && !blocks_changed {\n            break;\n        }",
-    "replace": "        if true {\n            break;\n        }",
+    "find": "        if rows_changed || blocks_changed {\n            continue;\n        }",
+    "replace": "        if rows_changed || blocks_changed {\n            break;\n        }",
     "expect_failing": [
       "ledger::carry::tests::each_hop_carries_the_basis_the_last_hop_carried"
     ],
@@ -1856,7 +1866,7 @@
     "id": "run-carry-pricing-unread",
     "file": "tax-engine/core/src/ledger/run.rs",
     "find": "    let carried = carry.request(request)?;",
-    "replace": "    let carried = std::borrow::Cow::Borrowed(request);",
+    "replace": "    let carried = std::borrow::Cow::Borrowed(request);\n    carry.settled = None;",
     "expect_failing": [
       "ledger::carry::tests::a_rail_pair_books_its_source_basis_on_both_legs",
       "the_ledger_operation_reproduces_every_stored_response"
@@ -1866,8 +1876,8 @@
   {
     "id": "run-carry-blocks-unread",
     "file": "tax-engine/core/src/ledger/run.rs",
-    "find": "    } = final_pass(&book, &config, &book.rows_of(&carry.blocked));\n    if let Some(error) = error {",
-    "replace": "    } = final_pass(&book, &config, &HashSet::new());\n    if let Some(error) = error {",
+    "find": "    } = final_pass(book, &config, &book.rows_of(&carry.blocked), settled);\n    if let Some(error) = error {",
+    "replace": "    } = final_pass(book, &config, &HashSet::new(), settled);\n    if let Some(error) = error {",
     "expect_failing": [
       "ledger::carry::tests::a_source_short_of_lots_blocks_its_pair_for_good",
       "the_ledger_operation_reproduces_every_stored_response"
@@ -1877,7 +1887,7 @@
   {
     "id": "run-carried-rows-unreported",
     "file": "tax-engine/core/src/ledger/run.rs",
-    "find": "        carried_rows: carried_rows_out(&book, &carry.carried),",
+    "find": "        carried_rows: carried_rows_out(book, &carry.carried),",
     "replace": "        carried_rows: Vec::new(),",
     "expect_failing": [
       "ledger::carry::tests::a_rail_pair_books_its_source_basis_on_both_legs",
@@ -1909,9 +1919,9 @@
   },
   {
     "id": "holding-period-boundary-exclusive",
-    "file": "tax-engine/core/src/outputs.rs",
-    "find": "            (basis, days >= i128::from(long_term_days))",
-    "replace": "            (basis, days > i128::from(long_term_days))",
+    "file": "tax-engine/core/src/engine.rs",
+    "find": "            None => Ok(elapsed_days(disposed, acquired) >= i128::from(self.long_term_days())),",
+    "replace": "            None => Ok(elapsed_days(disposed, acquired) > i128::from(self.long_term_days())),",
     "expect_failing": [
       "generic_entries_are_long_term_from_their_holding_period",
       "the_ledger_operation_reproduces_every_stored_response"
@@ -1977,5 +1987,808 @@
       "consumed_regimes_split_before_disposal_overrides_and_fee_clearing"
     ],
     "rule": "Consumed-lot authority replaces every input-intent regime marker."
+  },
+  {
+    "id": "LTE-typed-schema",
+    "file": "tax-engine/core/src/api.rs",
+    "find": "if request.schema_version != v2::SCHEMA_VERSION {",
+    "replace": "if false {",
+    "expect_failing": [
+      "typed_ledger_checks_its_header"
+    ],
+    "rule": "The typed ledger entry point must reject unsupported schema versions before computation."
+  },
+  {
+    "id": "LTE-typed-operation",
+    "file": "tax-engine/core/src/api.rs",
+    "find": "if request.operation != v2::Operation::Ledger {",
+    "replace": "if false {",
+    "expect_failing": [
+      "typed_ledger_checks_its_header"
+    ],
+    "rule": "The typed ledger entry point must reject operations that do not return a ledger response."
+  },
+  {
+    "id": "PAR-sequential-enter",
+    "file": "tax-engine/core/src/par.rs",
+    "find": "flag.replace(true)",
+    "replace": "flag.replace(false)",
+    "expect_failing": [
+      "sequential_maps_stay_on_the_calling_thread_and_keep_results"
+    ],
+    "rule": "A sequential scope keeps every map on its thread."
+  },
+  {
+    "id": "PAR-sequential-restore",
+    "file": "tax-engine/core/src/par.rs",
+    "find": "SEQUENTIAL.with(|flag| flag.set(self.0));",
+    "replace": "SEQUENTIAL.with(|flag| flag.set(true));",
+    "expect_failing": [
+      "sequential_maps_stay_on_the_calling_thread_and_keep_results"
+    ],
+    "rule": "Leaving a sequential scope restores parallel maps."
+  },
+  {
+    "id": "PAR-sequential-workers",
+    "file": "tax-engine/core/src/par.rs",
+    "find": "    if SEQUENTIAL.with(std::cell::Cell::get) {\n        return 1;",
+    "replace": "    if SEQUENTIAL.with(std::cell::Cell::get) {\n        return 2;",
+    "expect_failing": [
+      "sequential_maps_stay_on_the_calling_thread_and_keep_results"
+    ],
+    "rule": "Inside a sequential scope a map has one worker."
+  },
+  {
+    "id": "us-anniversary-is-not-more-than-a-year",
+    "file": "crates/tax-countries/src/calendar.rs",
+    "find": "disposed > acquired.anniversary(1)",
+    "replace": "disposed >= acquired.anniversary(1)",
+    "expect_failing": [
+      "the_holding_period_counts_utc_calendar_dates",
+      "engine_matches_rp2s_us_plugin",
+      "holding_periods_count_local_dates_in_the_rules_zone"
+    ],
+    "rule": "A US disposal on the acquisition's anniversary is short-term: held more than one year means after the anniversary."
+  },
+  {
+    "id": "us-holding-period-in-utc-dates",
+    "file": "tax-engine/core/src/engine.rs",
+    "find": "            Country::UnitedStates => Some(Rules {\n                zone: calendar::UTC,",
+    "replace": "            Country::UnitedStates => Some(Rules {\n                zone: calendar::zone(\"Asia/Tokyo\").unwrap(),",
+    "expect_failing": [
+      "the_holding_period_counts_utc_calendar_dates"
+    ],
+    "rule": "US holding periods compare UTC calendar dates, not the dates of the timestamps' own offsets."
+  },
+  {
+    "id": "us-global-scope-from-2025",
+    "file": "tax-engine/core/src/engine.rs",
+    "find": ".to_days() >= US_WALLET_SCOPE_FROM",
+    "replace": ".to_days() > US_WALLET_SCOPE_FROM",
+    "expect_failing": [
+      "the_global_scope_ends_with_2024"
+    ],
+    "rule": "A US book on the global scope refuses a disposal on 2025-01-01 UTC itself."
+  },
+  {
+    "id": "us-global-scope-ignores-income",
+    "file": "tax-engine/core/src/engine.rs",
+    "find": "        if !event.is_earning()\n",
+    "replace": "        if true\n",
+    "expect_failing": [
+      "the_global_scope_ends_with_2024"
+    ],
+    "rule": "Income received from 2025 is no disposal, so it does not trip the US global-scope refusal."
+  },
+  {
+    "id": "wallet-scope-ignored",
+    "file": "tax-engine/core/src/engine.rs",
+    "find": "    if scope == PoolScope::Wallet {\n        // Lot methods only",
+    "replace": "    if false {\n        // Lot methods only",
+    "expect_failing": [
+      "the_wallet_scope_disposes_only_of_the_disposing_wallets_lots",
+      "engine_matches_rp2s_us_plugin"
+    ],
+    "rule": "The wallet pool scope takes a disposal's lots from the disposing wallet only."
+  },
+  {
+    "id": "wallet-lifo-latest-first",
+    "file": "tax-engine/core/src/wallets.rs",
+    "find": "Order::Lifo => by_time == Ordering::Greater,",
+    "replace": "Order::Lifo => by_time == Ordering::Less,",
+    "expect_failing": [
+      "lifo_hifo_and_lofo_order_a_wallets_portions_by_their_lots",
+      "engine_matches_rp2s_us_plugin"
+    ],
+    "rule": "Wallet-scoped LIFO takes the latest-acquired portion first."
+  },
+  {
+    "id": "wallet-hifo-highest-first",
+    "file": "tax-engine/core/src/wallets.rs",
+    "find": "cost.reverse()",
+    "replace": "cost",
+    "expect_failing": [
+      "lifo_hifo_and_lofo_order_a_wallets_portions_by_their_lots",
+      "engine_matches_rp2s_us_plugin"
+    ],
+    "rule": "Wallet-scoped HIFO takes the highest unit cost first."
+  },
+  {
+    "id": "wallet-moves-before-disposals",
+    "file": "tax-engine/core/src/wallets.rs",
+    "find": "EntryKind::Intra => 1,",
+    "replace": "EntryKind::Intra => 3,",
+    "expect_failing": [
+      "a_same_instant_move_funds_a_sale_at_its_destination"
+    ],
+    "rule": "At one instant a move comes before disposals, so it funds a same-instant sale at its destination."
+  },
+  {
+    "id": "wallet-move-carries-lots",
+    "file": "tax-engine/core/src/wallets.rs",
+    "find": "holdings.put(to, *lot, amount.clone())?;",
+    "replace": "let _ = (to, lot, amount);",
+    "expect_failing": [
+      "the_wallet_scope_disposes_only_of_the_disposing_wallets_lots",
+      "a_moves_fee_leaves_first_then_its_principal",
+      "engine_matches_rp2s_us_plugin"
+    ],
+    "rule": "A move carries the portions it takes to its destination wallet."
+  },
+  {
+    "id": "wallet-portions-merge",
+    "file": "tax-engine/core/src/wallets.rs",
+    "find": "match portions.iter_mut().find(|portion| portion.lot == lot) {",
+    "replace": "match None::<&mut Portion> {",
+    "expect_failing": [
+      "a_lot_moved_away_and_back_is_one_portion"
+    ],
+    "rule": "A lot's portions in one wallet are one portion."
+  },
+  {
+    "id": "wallet-unpriced-move-fee",
+    "file": "tax-engine/core/src/wallets.rs",
+    "find": "if !entry.is_taxable()? {",
+    "replace": "if false {",
+    "expect_failing": [
+      "the_wallet_scope_fails_closed"
+    ],
+    "rule": "Under the wallet scope a move fee without a price fails instead of dropping its basis."
+  },
+  {
+    "id": "wallet-fee-before-principal",
+    "file": "tax-engine/core/src/wallets.rs",
+    "find": "if gt13(crypto_fee, &zero())? {",
+    "replace": "if false && gt13(crypto_fee, &zero())? {",
+    "expect_failing": [
+      "a_moves_fee_leaves_first_then_its_principal"
+    ],
+    "rule": "A move's fee units leave the source wallet as a disposal before its principal."
+  },
+  {
+    "id": "wallet-holdings-reported",
+    "file": "tax-engine/core/src/wallets.rs",
+    "find": "if gt13(&quantity, &zero())? {",
+    "replace": "if false {",
+    "expect_failing": [
+      "a_moves_fee_leaves_first_then_its_principal",
+      "wallet_scope_holdings_carry_each_wallets_own_lots"
+    ],
+    "rule": "The wallet scope reports each wallet's remaining units with their own basis."
+  },
+  {
+    "id": "wallet-holdings-booked",
+    "file": "tax-engine/core/src/ledger/compose.rs",
+    "find": "if let Some(wallets) = &output.wallet_holdings {",
+    "replace": "if let Some(wallets) = None::<&Vec<crate::model::WalletHoldingOut>> {",
+    "expect_failing": [
+      "wallet_scope_holdings_carry_each_wallets_own_lots"
+    ],
+    "rule": "A wallet-scoped book's holdings are each wallet's own basis, not an allocation at the average."
+  },
+  {
+    "id": "rules-holding-local-dates",
+    "file": "tax-engine/core/src/engine.rs",
+    "find": "                rules.local_date(acquired)?,\n                rules.local_date(disposed)?,",
+    "replace": "                calendar::UTC.local_date(acquired.us).unwrap(),\n                calendar::UTC.local_date(disposed.us).unwrap(),",
+    "expect_failing": [
+      "holding_periods_count_local_dates_in_the_rules_zone",
+      "rules_fail_closed_on_an_unknown_zone_and_before_its_calendar"
+    ],
+    "rule": "A rules country counts holding periods in its own zone's local dates, and has no calendar before it starts."
+  },
+  {
+    "id": "rules-holding-never",
+    "file": "tax-engine/core/src/engine.rs",
+    "find": "            }) => Ok(false),",
+    "replace": "            }) => Ok(true),",
+    "expect_failing": [
+      "without_a_holding_period_every_gain_is_short_term"
+    ],
+    "rule": "A country without a holding period has only short-term gains."
+  },
+  {
+    "id": "rules-unknown-zone-refused",
+    "file": "tax-engine/core/src/engine.rs",
+    "find": "let zone = calendar::zone(&spec.timezone).ok_or_else(",
+    "replace": "let zone = calendar::zone(&spec.timezone).or(Some(calendar::UTC)).ok_or_else(",
+    "expect_failing": [
+      "rules_fail_closed_on_an_unknown_zone_and_before_its_calendar"
+    ],
+    "rule": "Rules naming a zone without a calendar are a request error, not UTC."
+  },
+  {
+    "id": "us-holding-is-the-calendar-rule",
+    "file": "tax-engine/core/src/engine.rs",
+    "find": "                holding: Holding::MoreThanOneYear,\n                tax_year_start: (1, 1),",
+    "replace": "                holding: Holding::Never,\n                tax_year_start: (1, 1),",
+    "expect_failing": [
+      "the_holding_period_counts_utc_calendar_dates",
+      "engine_matches_rp2s_us_plugin"
+    ],
+    "rule": "The United States is the UTC calendar's more-than-one-year rule."
+  },
+  {
+    "id": "fee-split-before-sale",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "            && self.fee_units == FeeUnits::DisposalBeforeSale;",
+    "replace": "            && self.fee_units == FeeUnits::Disposal;",
+    "expect_failing": [
+      "fee_units_of_a_sale_are_a_disposal_before_the_sale"
+    ],
+    "rule": "A country whose fee units are a disposal of their own books a sale's fee units as a fee before the sale."
+  },
+  {
+    "id": "fee-split-sale-keeps-no-fee-units",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "        input.crypto_fee = Some(Dec(if split {",
+    "replace": "        input.crypto_fee = Some(Dec(if false {",
+    "expect_failing": [
+      "fee_units_of_a_sale_are_a_disposal_before_the_sale"
+    ],
+    "rule": "A sale whose fee units were split off disposes of its own units only."
+  },
+  {
+    "id": "fee-expenses-deducted",
+    "file": "tax-engine/core/src/outputs.rs",
+    "find": "        Some(expenses) => sub(&fiat_gain, expenses)?,",
+    "replace": "        Some(_) => fiat_gain,",
+    "expect_failing": [
+      "fee_units_of_a_sale_are_a_disposal_before_the_sale"
+    ],
+    "rule": "The split-off fee's value is an expense of the sale, deducted from each fragment's gain by quantity."
+  },
+  {
+    "id": "fee-entries-realize",
+    "file": "tax-engine/core/src/ledger/compose.rs",
+    "find": "                    && !self.book.country.fee_units().realize();",
+    "replace": "                    && true;",
+    "expect_failing": [
+      "fee_units_of_a_sale_are_a_disposal_before_the_sale",
+      "a_moves_fee_units_are_a_disposal_at_their_value"
+    ],
+    "rule": "Under a country's fee-disposal rule, fee and transfer-fee entries realize their gain."
+  },
+  {
+    "id": "fee-rows-in-summary",
+    "file": "tax-engine/core/src/ledger/compose.rs",
+    "find": "            .filter(|yearly| fees || !matches!(yearly.transaction_type, \"fee\" | \"move\"))",
+    "replace": "            .filter(|yearly| !matches!(yearly.transaction_type, \"fee\" | \"move\"))",
+    "expect_failing": [
+      "fee_units_of_a_sale_are_a_disposal_before_the_sale",
+      "a_moves_fee_units_are_a_disposal_at_their_value"
+    ],
+    "rule": "Under a country's fee-disposal rule, fee and move rows count in the tax summary."
+  },
+  {
+    "id": "fee-disposal-realizes",
+    "file": "tax-engine/core/src/model.rs",
+    "find": "        self != FeeUnits::Basis",
+    "replace": "        self == FeeUnits::DisposalBeforeSale",
+    "expect_failing": [
+      "a_moves_fee_units_are_a_disposal_at_their_value"
+    ],
+    "rule": "Fee units that are disposals realize a gain whether or not a sale's are split off."
+  },
+  {
+    "id": "swap-partners-indexed",
+    "file": "tax-engine/core/src/ledger/run.rs",
+    "find": "        if !country.swap_values().is_own() {",
+    "replace": "        if false {",
+    "expect_failing": [
+      "swap_values_choose_the_received_or_given_or_higher_value",
+      "a_swap_leg_without_a_value_takes_the_other_legs"
+    ],
+    "rule": "A country with swap values pairs the legs of each taxable cross-asset exchange."
+  },
+  {
+    "id": "swap-carrying-value-pairs-skipped",
+    "file": "tax-engine/core/src/ledger/run.rs",
+    "find": "                if pair.policy.as_deref() == Some(super::swaplinks::CARRYING_VALUE) {",
+    "replace": "                if false {",
+    "expect_failing": [
+      "a_swap_leg_without_a_value_takes_the_other_legs"
+    ],
+    "rule": "A carrying-value pair is not an exchange; its legs keep their own values."
+  },
+  {
+    "id": "swap-received-given-proceeds",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "            SwapValues::ReceivedGiven if given => received.or(given_value),",
+    "replace": "            SwapValues::ReceivedGiven if given => given_value.or(received),",
+    "expect_failing": [
+      "swap_values_choose_the_received_or_given_or_higher_value"
+    ],
+    "rule": "Under received_given the given asset's proceeds are the received asset's value."
+  },
+  {
+    "id": "swap-received-given-cost",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "            SwapValues::ReceivedGiven => given_value.or(received),",
+    "replace": "            SwapValues::ReceivedGiven => received.or(given_value),",
+    "expect_failing": [
+      "swap_values_choose_the_received_or_given_or_higher_value"
+    ],
+    "rule": "Under received_given the received asset's cost is the given asset's value."
+  },
+  {
+    "id": "swap-received-both",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "            SwapValues::Received => received.or(given_value),",
+    "replace": "            SwapValues::Received => given_value.or(received),",
+    "expect_failing": [
+      "swap_values_choose_the_received_or_given_or_higher_value"
+    ],
+    "rule": "Under received both legs book the received asset's value."
+  },
+  {
+    "id": "swap-higher-value",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "                (Some(a), Some(b)) => Some(if a >= b { a } else { b }),",
+    "replace": "                (Some(a), Some(b)) => Some(if a >= b { b } else { a }),",
+    "expect_failing": [
+      "swap_values_choose_the_received_or_given_or_higher_value"
+    ],
+    "rule": "Under higher both legs book the higher of the two values."
+  },
+  {
+    "id": "swap-legs-sides",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "        let (received, given_value) = if given { (other, own) } else { (own, other) };",
+    "replace": "        let (received, given_value) = (other, own);",
+    "expect_failing": [
+      "swap_values_choose_the_received_or_given_or_higher_value"
+    ],
+    "rule": "Which leg's value is received and which given depends on the leg's side."
+  },
+  {
+    "id": "swap-unpriced-leg-priced",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "            spot = Some(Fiat::Finite(num::div(value, &amount)?));",
+    "replace": "",
+    "expect_failing": [
+      "a_swap_leg_without_a_value_takes_the_other_legs"
+    ],
+    "rule": "An unpriced swap leg takes the other leg's value instead of being quarantined."
+  },
+  {
+    "id": "swap-value-booked",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "            Some(value) => Fiat::Finite(value),",
+    "replace": "            Some(_) => fiat_value(row, &amount, &spot)?,",
+    "expect_failing": [
+      "swap_values_choose_the_received_or_given_or_higher_value"
+    ],
+    "rule": "A swap leg books at the value its country's swap rule gives."
+  },
+  {
+    "id": "gift-given-at-value",
+    "file": "tax-engine/core/src/engine.rs",
+    "find": "            self.given == Given::MarketValue",
+    "replace": "            false",
+    "expect_failing": [
+      "a_country_may_book_a_gift_as_a_disposal_at_its_value"
+    ],
+    "rule": "A country booking gifts disposes of a given asset at its value instead of quarantining it."
+  },
+  {
+    "id": "donation-at-value",
+    "file": "tax-engine/core/src/engine.rs",
+    "find": "            self.donated == Given::MarketValue",
+    "replace": "            false",
+    "expect_failing": [
+      "gifts_donations_and_losses_stay_quarantined_unless_the_country_books_them"
+    ],
+    "rule": "A country booking donations disposes of a donated asset at its value."
+  },
+  {
+    "id": "gift-received-refused",
+    "file": "tax-engine/core/src/engine.rs",
+    "find": "        self.received == Received::Quarantine && kind_has_token(kind, &[\"gift\"])",
+    "replace": "        false && kind_has_token(kind, &[\"gift\"])",
+    "expect_failing": [
+      "a_received_gift_without_the_donors_data_is_refused_and_taints_later_disposals"
+    ],
+    "rule": "A country requiring the donor's data refuses a received gift."
+  },
+  {
+    "id": "gift-refused-taints",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "                    || gifts.refuses_inbound(kind)",
+    "replace": "                    || false",
+    "expect_failing": [
+      "a_received_gift_without_the_donors_data_is_refused_and_taints_later_disposals"
+    ],
+    "rule": "A refused received gift leaves later disposals' lots uncertain."
+  },
+  {
+    "id": "booked-gift-does-not-taint",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "                kind_has_token(kind, &NON_SALE_DISPOSAL_KIND_TOKENS) && !gifts.books_outbound(kind)",
+    "replace": "                kind_has_token(kind, &NON_SALE_DISPOSAL_KIND_TOKENS)",
+    "expect_failing": [
+      "a_country_may_book_a_gift_as_a_disposal_at_its_value"
+    ],
+    "rule": "A gift booked at its value does not leave later disposals' lots uncertain."
+  },
+  {
+    "id": "gift-disposal-type",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "            \"GIFT\"",
+    "replace": "            \"SELL\"",
+    "expect_failing": [
+      "a_country_may_book_a_gift_as_a_disposal_at_its_value"
+    ],
+    "rule": "A booked gift is a GIFT disposal, so its summary row says gift."
+  },
+  {
+    "id": "gift-loss-marked",
+    "file": "tax-engine/core/src/ledger/compose.rs",
+    "find": "                    && self.book.country.gifts().losses == GiftLosses::NotDeductible",
+    "replace": "                    && self.book.country.gifts().losses == GiftLosses::Deductible",
+    "expect_failing": [
+      "a_country_may_book_a_gift_as_a_disposal_at_its_value"
+    ],
+    "rule": "Under not-deductible gift losses a gift's loss is marked and a gain is not."
+  },
+  {
+    "id": "rules-summary-tax-year",
+    "file": "tax-engine/core/src/outputs.rs",
+    "find": "        let year = country.tax_year(&event.ts)?;",
+    "replace": "        let year = event.ts.year();",
+    "expect_failing": [
+      "the_summary_counts_the_countrys_tax_year_in_its_zone"
+    ],
+    "rule": "A rules country's yearly totals are by its tax year in its zone."
+  },
+  {
+    "id": "rules-tax-year-start",
+    "file": "tax-engine/core/src/engine.rs",
+    "find": "                rules.tax_year_start,",
+    "replace": "                (1, 1),",
+    "expect_failing": [
+      "the_summary_counts_the_countrys_tax_year_in_its_zone"
+    ],
+    "rule": "A rules country's tax year starts on its own day."
+  },
+  {
+    "id": "rules-required-pool-scope",
+    "file": "tax-engine/core/src/engine.rs",
+    "find": "    check_rules_scope(country, scope)?;\n",
+    "replace": "",
+    "expect_failing": [
+      "a_country_that_identifies_units_per_wallet_refuses_the_global_pool"
+    ],
+    "rule": "A rules country that allows one pool scope refuses the other."
+  },
+  {
+    "id": "rules-pool-scope-compared",
+    "file": "tax-engine/core/src/engine.rs",
+    "find": "        }) if required != scope => Err(EngineError::value(format!(",
+    "replace": "        }) if required == scope => Err(EngineError::value(format!(",
+    "expect_failing": [
+      "a_country_that_identifies_units_per_wallet_refuses_the_global_pool"
+    ],
+    "rule": "A rules country computes on the pool scope it requires."
+  },
+  {
+    "id": "matching-method-dispatched",
+    "file": "tax-engine/core/src/engine.rs",
+    "find": "    if let Some(matching) = crate::matching::method(method) {",
+    "replace": "    if let Some(matching) = None::<&dyn crate::matching::Matching> {",
+    "expect_failing": [
+      "the_fifo_period_at_the_wallets_moving_average"
+    ],
+    "rule": "A matching method computes the asset before any lot method is asked for."
+  },
+  {
+    "id": "matching-holdings-reported",
+    "file": "tax-engine/core/src/engine.rs",
+    "find": "        output.wallet_holdings = matched.wallet_holdings;",
+    "replace": "",
+    "expect_failing": [
+      "the_fifo_period_at_the_wallets_moving_average"
+    ],
+    "rule": "A matching method's wallet holdings are the book's holdings."
+  },
+  {
+    "id": "fifo-period-wallet-scope",
+    "file": "tax-engine/core/src/matching.rs",
+    "find": "        if scope != PoolScope::Wallet {",
+    "replace": "        if false {",
+    "expect_failing": [
+      "the_fifo_period_average_needs_the_wallet_scope"
+    ],
+    "rule": "moving_average_fifo_period averages per wallet and refuses the global scope."
+  },
+  {
+    "id": "fifo-period-average-basis",
+    "file": "tax-engine/core/src/matching.rs",
+    "find": "            Basis::WalletAverage,",
+    "replace": "            Basis::Lot,",
+    "expect_failing": [
+      "the_fifo_period_at_the_wallets_moving_average"
+    ],
+    "rule": "moving_average_fifo_period values every unit at the wallet's moving average."
+  },
+  {
+    "id": "fifo-period-fifo-dates",
+    "file": "tax-engine/core/src/matching.rs",
+    "find": "            Order::Fifo,",
+    "replace": "            Order::Lifo,",
+    "expect_failing": [
+      "the_fifo_period_at_the_wallets_moving_average"
+    ],
+    "rule": "moving_average_fifo_period dates the holding period by FIFO."
+  },
+  {
+    "id": "wallet-average-acquisition-cost",
+    "file": "tax-engine/core/src/wallets.rs",
+    "find": "                    *cost = add(cost, &lots[lot].fiat_in_with_fee)?;",
+    "replace": "",
+    "expect_failing": [
+      "the_fifo_period_at_the_wallets_moving_average"
+    ],
+    "rule": "An acquisition adds its cost to the wallet's average."
+  },
+  {
+    "id": "wallet-average-move-carried",
+    "file": "tax-engine/core/src/wallets.rs",
+    "find": "                    holdings.move_cost(from, Some(to), &unit, &taken)?;",
+    "replace": "",
+    "expect_failing": [
+      "a_move_carries_its_sources_average_to_its_destination"
+    ],
+    "rule": "A move carries its source's average cost to its destination."
+  },
+  {
+    "id": "wallet-average-override",
+    "file": "tax-engine/core/src/wallets.rs",
+    "find": "            unit_cost_basis_override: unit.clone(),",
+    "replace": "            unit_cost_basis_override: None,",
+    "expect_failing": [
+      "the_fifo_period_at_the_wallets_moving_average"
+    ],
+    "rule": "A taken portion costs the wallet's average per unit."
+  },
+  {
+    "id": "wallet-average-holdings",
+    "file": "tax-engine/core/src/wallets.rs",
+    "find": "            cost_basis = average_cost",
+    "replace": "            cost_basis = cost_basis.clone();\n            let _ = average_cost",
+    "expect_failing": [
+      "the_fifo_period_at_the_wallets_moving_average"
+    ],
+    "rule": "A wallet's holding under the average is its remaining average cost."
+  },
+  {
+    "id": "swap-runner-refuses-matching",
+    "file": "tax-engine/core/src/swaps.rs",
+    "find": "    if crate::matching::method(method).is_some() {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "the_austrian_swap_runner_refuses_a_matching_method"
+    ],
+    "rule": "The Austrian swap runner refuses a matching method instead of reaching a lot method it has not."
+  },
+  {
+    "id": "rules-refused-receipt-held",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "if let Some(refused) = self.book.refused_receipt(row.direction, &row.kind) {",
+    "replace": "if let Some(refused) = self.book.refused_receipt(row.direction, &row.kind).filter(|_| false) {",
+    "expect_failing": [
+      "a_refused_receipt_is_held_with_the_countrys_code_before_its_price"
+    ],
+    "rule": "A receipt of a kind the rules country refuses is held with its code before it is priced."
+  },
+  {
+    "id": "rules-refused-receipt-any-kind",
+    "file": "tax-engine/core/src/model.rs",
+    "find": "Direction::Inbound => refused.kinds.iter().any(|k| k == kind),",
+    "replace": "Direction::Inbound => refused.kinds.iter().all(|k| k == kind),",
+    "expect_failing": [
+      "a_refused_receipt_is_held_with_the_countrys_code_before_its_price"
+    ],
+    "rule": "A refusal covers each of its kinds."
+  },
+  {
+    "id": "uk-share-same-day",
+    "file": "tax-engine/core/src/share_matching.rs",
+    "find": "            if let Some(acquisition) = acquired.get_mut(day) {",
+    "replace": "            if let Some(acquisition) = None::<&mut Acquired> {",
+    "expect_failing": [
+      "share_matching_takes_the_same_day_before_the_pool"
+    ],
+    "rule": "GB-SAME-DAY: a day's disposals are matched with the same day's acquisitions first."
+  },
+  {
+    "id": "uk-share-thirty-day-window",
+    "file": "tax-engine/core/src/share_matching.rs",
+    "find": "            let last = CivilDate::from_days(day.to_days() + WINDOW_DAYS);",
+    "replace": "            let last = CivilDate::from_days(day.to_days() + WINDOW_DAYS - 1);",
+    "expect_failing": [
+      "share_matching_windows_30_days_and_refuses_what_the_pool_lacks"
+    ],
+    "rule": "GB-30-DAY-WINDOW: day 30 after the disposal is inside the window."
+  },
+  {
+    "id": "uk-share-pool-average",
+    "file": "tax-engine/core/src/share_matching.rs",
+    "find": "            let cost = div(&mul(&pool_cost, &needed)?, &pool_quantity)?;",
+    "replace": "            let cost = div(&mul(&pool_cost, &needed)?, &add(&pool_quantity, &needed)?)?;",
+    "expect_failing": [
+      "share_matching_looks_30_days_ahead_then_takes_the_pool_average"
+    ],
+    "rule": "GB-POOL-S104: a pool match costs the pool's average: pool cost x disposed / pool quantity."
+  },
+  {
+    "id": "uk-share-open-basis-pool",
+    "file": "tax-engine/core/src/share_matching.rs",
+    "find": "        let open_basis = if pool_quantity.is_positive() {",
+    "replace": "        let open_basis = if false {",
+    "expect_failing": [
+      "share_matching_looks_30_days_ahead_then_takes_the_pool_average"
+    ],
+    "rule": "Holdings read the pool's average cost, not the remaining lots' own."
+  },
+  {
+    "id": "uk-share-pool-lacks",
+    "file": "tax-engine/core/src/share_matching.rs",
+    "find": "            if gt13(&needed, &pool_quantity)? {",
+    "replace": "            if false {",
+    "expect_failing": [
+      "share_matching_refuses_a_disposal_the_pool_cannot_cover"
+    ],
+    "rule": "A day the pool cannot cover fails with the lots-exhausted message."
+  },
+  {
+    "id": "uk-share-global-scope",
+    "file": "tax-engine/core/src/share_matching.rs",
+    "find": "        if scope != PoolScope::Global {",
+    "replace": "        if false {",
+    "expect_failing": [
+      "share_matching_windows_30_days_and_refuses_what_the_pool_lacks"
+    ],
+    "rule": "GB-POOL-GLOBAL: share matching refuses the wallet pool scope."
+  },
+  {
+    "id": "country-review-kinds-quarantine",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "        if let Some(refused) = self.book.refused_receipt(row.direction, &row.kind) {",
+    "replace": "        if let Some(refused) = self.book.refused_receipt(row.direction, &row.kind).filter(|_| row.direction == Direction::Inbound) {",
+    "expect_failing": [
+      "an_outbound_refusal_is_held_with_the_countrys_code_before_its_price"
+    ],
+    "rule": "An outbound kind the country refuses is held with its own code before pricing (es-16, jp lost coins)."
+  },
+  {
+    "id": "country-review-outbound-token",
+    "file": "tax-engine/core/src/model.rs",
+    "find": "!kind.is_empty() && refused.kinds.iter().any(|k| kind.contains(k.as_str()))",
+    "replace": "refused.kinds.iter().any(|k| k == kind)",
+    "expect_failing": [
+      "an_outbound_refusal_is_held_with_the_countrys_code_before_its_price"
+    ],
+    "rule": "An outbound refusal matches a token of the kind (lost matches lost_keys)."
+  },
+  {
+    "id": "country-zero-cost-kind",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "        input.country.zero_cost = zero_cost;",
+    "replace": "        input.country.zero_cost = false;",
+    "expect_failing": [
+      "a_zero_cost_kind_is_an_acquisition_at_zero_without_income"
+    ],
+    "rule": "A zero-cost kind books an acquisition at zero, which the constructor accepts only for it (jp-10)."
+  },
+  {
+    "id": "country-below-market-value",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "BelowMarket::MarketValue => (market > value).then(",
+    "replace": "BelowMarket::MarketValue => (market < value).then(",
+    "expect_failing": [
+      "a_sale_below_market_value_books_at_the_countrys_floor"
+    ],
+    "rule": "Spain values a sale below market value at market value (art. 35.2 LIRPF, es-12)."
+  },
+  {
+    "id": "country-seventy-percent-boundary",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "(*value < floor).then_some((floor, \"seventy_percent\"))",
+    "replace": "(*value <= floor).then_some((floor, \"seventy_percent\"))",
+    "expect_failing": [
+      "a_sale_below_market_value_books_at_the_countrys_floor"
+    ],
+    "rule": "Only a price below 70 % of market value is replaced; exactly 70 % is not (jp-13)."
+  },
+  {
+    "id": "country-refusal-outbound-kinds",
+    "file": "tax-engine/core/src/ledger/run.rs",
+    "find": "                    .find(|kind| !NON_SALE_DISPOSAL_KIND_TOKENS.contains(&kind.as_str()))",
+    "replace": "                    .find(|_| false)",
+    "expect_failing": [
+      "an_outbound_refusal_is_held_with_the_countrys_code_before_its_price"
+    ],
+    "rule": "An outbound refusal may name only a non-sale disposal kind, so its quarantine reason stays true."
+  },
+  {
+    "id": "jp-total-average-opening",
+    "file": "tax-engine/core/src/matching.rs",
+    "find": "let total_value = add(&value, &acquired_value)?;",
+    "replace": "let total_value = acquired_value.clone();",
+    "expect_failing": [
+      "the_total_average_carries_the_year_end_value_unrounded"
+    ],
+    "rule": "The total average adds the year opening value to its acquisitions (jp-06)."
+  },
+  {
+    "id": "jp-moving-average-round-up",
+    "file": "tax-engine/core/src/matching.rs",
+    "find": "Ok(value.quantize(0, &Context::new(32, Rounding::Ceiling))?)",
+    "replace": "Ok(value.quantize(0, &Context::new(32, Rounding::Floor))?)",
+    "expect_failing": [
+      "the_moving_average_rounds_the_book_left_up_to_the_yen"
+    ],
+    "rule": "The moving average rounds the book value left after a disposal up to the yen (jp-08)."
+  },
+  {
+    "id": "jp-averages-global-scope",
+    "file": "tax-engine/core/src/matching.rs",
+    "find": "        if scope != PoolScope::Global {\n            return Err(EngineError::value(format!(\n                \"Accounting method '{name}' averages over every wallet",
+    "replace": "        if false {\n            return Err(EngineError::value(format!(\n                \"Accounting method '{name}' averages over every wallet",
+    "expect_failing": [
+      "japans_averages_pool_every_wallet"
+    ],
+    "rule": "Japan averages over every wallet; the wallet scope is refused."
+  },
+  {
+    "id": "jp-total-average-year-unit",
+    "file": "tax-engine/core/src/matching.rs",
+    "find": "let cost = div(&mul(&total_value, amount)?, &total_quantity)?;",
+    "replace": "let cost = div(&mul(&acquired_value, amount)?, &total_quantity)?;",
+    "expect_failing": [
+      "the_total_average_carries_the_year_end_value_unrounded"
+    ],
+    "rule": "A disposal costs the year total value times its quantity over the year total quantity."
+  },
+  {
+    "id": "price-currency-hold-reason",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "                    QuarantineReason::PriceCurrencyMismatch,\n                    DetailKind::PriceCurrency,",
+    "replace": "                    QuarantineReason::MissingSpotPrice,\n                    DetailKind::PriceCurrency,",
+    "expect_failing": [
+      "a_price_in_another_currency_is_held_and_taints_the_lot_state"
+    ],
+    "rule": "A row held for a price in another currency is quarantined as price_currency_mismatch."
+  },
+  {
+    "id": "price-currency-hold-required-for",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "                    Value::from(\"book_currency_price\"),",
+    "replace": "                    Value::from(\"confirmed_chain_history\"),",
+    "expect_failing": [
+      "a_price_in_another_currency_is_held_and_taints_the_lot_state"
+    ],
+    "rule": "A price-currency hold asks for a price in the book's currency."
   }
 ]

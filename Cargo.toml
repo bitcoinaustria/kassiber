@@ -8,6 +8,7 @@ resolver = "2"
 members = [
   "crates/backup",
   "crates/credentials",
+  "crates/custody",
   "crates/envelope",
   "crates/paths",
   "crates/ownership",
@@ -17,6 +18,7 @@ members = [
   "crates/pydecimal",
   "crates/pyjson",
   "crates/pytext",
+  "crates/tax-countries",
   "tax-engine/core",
   "tax-engine/python",
 ]
