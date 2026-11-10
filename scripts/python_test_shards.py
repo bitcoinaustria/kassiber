@@ -527,9 +527,6 @@ def _run_shadow(lane: str | None, *, ci: bool, pytest_args: Sequence[str]) -> in
     return _run_pytest(paths, distribution=distribution, pytest_args=pytest_args, tax_mode=SHADOW_MODE)
 
 
-PART_ENV = "KASSIBER_TEST_PART"
-
-
 def _part(value: str) -> str:
     """`K/N` with 1 <= K <= N; tests/conftest.py keeps that part's tests."""
     index, slash, count = value.partition("/")
@@ -594,8 +591,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     pytest_args = [*pytest_args, *passthrough]
     manifest = validate_manifest()
     if getattr(args, "part", None):
-        os.environ[PART_ENV] = args.part
-        print(f"{PART_ENV}={args.part}", flush=True)
+        # tests/conftest.py's option; xdist workers receive it, a pytest that
+        # a test starts does not.
+        pytest_args = ["--kassiber-part", args.part, *pytest_args]
     if args.command == "validate":
         if pytest_args:
             parser.error(f"unrecognized arguments: {' '.join(pytest_args)}")

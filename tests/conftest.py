@@ -250,20 +250,31 @@ def pytest_configure(config: pytest.Config) -> None:
     _EGRESS_STACK.enter_context(no_egress_guard(enabled=True))
 
 
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        "--kassiber-part",
+        default=None,
+        metavar="K/N",
+        help="Keep part K of N of the collected tests (scripts/python_test_shards.py --part).",
+    )
+
+
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
-    """Keep one part of a lane split across CI jobs (`KASSIBER_TEST_PART=K/N`).
+    """Keep one part of a lane split across CI jobs (`--kassiber-part K/N`).
 
     A test belongs to the part its node id's CRC-32 picks, so every xdist
     worker and every job agrees without coordination, and each test runs in
-    exactly one part (scripts/python_test_shards.py `--part`).
+    exactly one part (scripts/python_test_shards.py `--part`). An option,
+    not an environment variable, so a pytest a test starts keeps all of its
+    own tests.
     """
-    part = os.environ.get("KASSIBER_TEST_PART", "").strip()
+    part = (config.getoption("kassiber_part") or "").strip()
     if not part:
         return
-    index, _, count = part.partition("/")
+    index, slash, count = part.partition("/")
+    if not (slash and index.isdigit() and count.isdigit() and 1 <= int(index) <= int(count)):
+        raise pytest.UsageError(f"--kassiber-part must be K/N with 1 <= K <= N, not {part!r}")
     index, count = int(index), int(count)
-    if not 1 <= index <= count:
-        raise pytest.UsageError(f"KASSIBER_TEST_PART must be K/N with 1 <= K <= N, not {part!r}")
     keep, drop = [], []
     for item in items:
         (keep if zlib.crc32(item.nodeid.encode("utf-8")) % count == index - 1 else drop).append(item)

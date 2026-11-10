@@ -450,14 +450,10 @@ def test_parts_split_a_lane_into_disjoint_complete_runs():
     import sys
 
     def collected(part=None):
-        env = dict(os.environ)
-        env.pop("KASSIBER_TEST_PART", None)
-        if part:
-            env["KASSIBER_TEST_PART"] = part
         result = subprocess.run(
             [sys.executable, "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider",
-             "tests/test_ci_shards.py"],
-            cwd=ROOT, env=env, capture_output=True, text=True, timeout=120,
+             *(("--kassiber-part", part) if part else ()), "tests/test_ci_shards.py"],
+            cwd=ROOT, env=dict(os.environ), capture_output=True, text=True, timeout=120,
         )
         assert result.returncode == 0, result.stdout + result.stderr
         return [line for line in result.stdout.splitlines() if "::" in line]
@@ -469,7 +465,13 @@ def test_parts_split_a_lane_into_disjoint_complete_runs():
     with pytest.raises(SystemExit):
         python_test_shards.main(["run", "serial-daemon", "--part", "4/3"])
     calls = []
-    with mock.patch.object(python_test_shards, "_run_pytest", lambda paths, **options: calls.append(os.environ.get("KASSIBER_TEST_PART")) or 0):
-        with mock.patch.dict(os.environ):
-            python_test_shards.main(["run-shadow", "serial-daemon", "--ci", "--part", "2/8"])
-    assert calls == ["2/8"]
+    with mock.patch.object(python_test_shards, "_run_pytest", lambda paths, **options: calls.append(options["pytest_args"]) or 0):
+        python_test_shards.main(["run-shadow", "serial-daemon", "--ci", "--part", "2/8", "--", "-q"])
+        python_test_shards.main(["run-custody-shadow", "core-accounting", "--ci", "--part", "1/3"])
+        python_test_shards.main(["run", "serial-daemon", "--ci", "--part", "8/8"])
+    assert calls[0] == ["--kassiber-part", "2/8", "-q"]
+    assert calls[1] == ["--deselect", "tests/test_custody_native_reconciliation.py::test_disjoint_reviewed_routes_limit_observation_reads",
+                        "--kassiber-part", "1/3"]
+    assert calls[2] == ["--kassiber-part", "8/8"]
+    # A pytest a test starts never inherits the part.
+    assert "KASSIBER_TEST_PART" not in os.environ
