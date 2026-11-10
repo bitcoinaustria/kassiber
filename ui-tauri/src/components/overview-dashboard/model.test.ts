@@ -28,6 +28,7 @@ import {
   linearAxisTicks,
   logAxisTicks,
   logSafeTreasuryPoints,
+  displayBalanceBtc,
   latestPortfolioBalanceBtc,
   marketRateCompactLabel,
   marketRateDetailLabel,
@@ -209,6 +210,33 @@ describe("overview market rate display", () => {
     };
 
     expect(latestPortfolioBalanceBtc(snapshot)).toBe(0.25);
+  });
+
+  it("shows the chain-observed display total, not the end of the history", () => {
+    const history = {
+      ...MOCK_OVERVIEW,
+      portfolioSeries: [
+        { date: "2026-03-01", label: "2026-03-01", balanceBtc: 0.00761, valueEur: 0, costBasisEur: 0 },
+      ],
+    } as OverviewSnapshot;
+    expect(latestPortfolioBalanceBtc(history)).toBe(0.00761);
+    expect(displayBalanceBtc(history)).toBe(0.00761);
+
+    const withSummary: OverviewSnapshot = {
+      ...history,
+      balanceSummary: {
+        totalBtc: 0.0075,
+        status: "current",
+        source: "chain",
+        needsJournals: false,
+        quarantines: 0,
+        chainWalletCount: 1,
+        bookWalletCount: 0,
+        transactionWalletCount: 0,
+        duplicateOutpointAdjustmentBtc: 0,
+      },
+    };
+    expect(displayBalanceBtc(withSummary)).toBe(0.0075);
   });
 
   it("uses friendly labels for known rate sources", () => {

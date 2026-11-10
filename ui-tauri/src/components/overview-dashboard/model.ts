@@ -638,6 +638,19 @@ export function latestPortfolioBalanceBtc(snapshot: OverviewSnapshot) {
   return fiatBalance;
 }
 
+/**
+ * The bitcoin the balance tile shows: the daemon's display total, the same
+ * chain-observed wallet balances the tile's fiat value and Holdings by Source
+ * use. The portfolio series ends at the sum of the history, which differs
+ * from it when history and chain disagree.
+ */
+export function displayBalanceBtc(snapshot: OverviewSnapshot) {
+  const total = snapshot.balanceSummary?.totalBtc;
+  return typeof total === "number" && Number.isFinite(total)
+    ? total
+    : latestPortfolioBalanceBtc(snapshot);
+}
+
 /** The portfolio value tile: what the bitcoin is worth against its basis. */
 export function buildPortfolioStat(snapshot: OverviewSnapshot): StatItem {
   // A basis that misses quarantined/unresolved rows would turn the change
