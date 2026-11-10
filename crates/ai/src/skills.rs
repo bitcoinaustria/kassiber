@@ -33,18 +33,12 @@ const REFERENCES: [(&str, &str); 10] = [
         "journal-processing",
         include_str!("../skill_references/journal-processing.md"),
     ),
-    (
-        "metadata",
-        include_str!("../skill_references/metadata.md"),
-    ),
+    ("metadata", include_str!("../skill_references/metadata.md")),
     (
         "onboarding",
         include_str!("../skill_references/onboarding.md"),
     ),
-    (
-        "reports",
-        include_str!("../skill_references/reports.md"),
-    ),
+    ("reports", include_str!("../skill_references/reports.md")),
     (
         "secrets-and-backup",
         include_str!("../skill_references/secrets-and-backup.md"),

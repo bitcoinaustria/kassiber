@@ -449,11 +449,11 @@ fn ingest(
     Ok(Value::List(result))
 }
 pub fn bundled_path(hourly: bool) -> PathBuf {
-    Path::new(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/data/kraken"
-    ))
-    .join(if hourly { "btc_hourly" } else { "btc_daily" })
+    Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/data/kraken")).join(if hourly {
+        "btc_hourly"
+    } else {
+        "btc_daily"
+    })
 }
 
 pub fn sync_bundled(conn: &Connection, pair: Option<&str>, hourly: bool) -> Result<Value> {
