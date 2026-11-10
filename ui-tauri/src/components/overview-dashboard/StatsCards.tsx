@@ -13,7 +13,7 @@ import {
   buildPortfolioStat,
   formatCompactDisplayMoney,
   formatMarketRateValue,
-  latestPortfolioBalanceBtc,
+  displayBalanceBtc,
   marketRateCompactLabel,
   marketRateDetailLabel,
   portfolioCompletenessDetail,
@@ -130,7 +130,7 @@ export const StatsCards = ({
                 blurClass(hideSensitive),
               )}
             >
-              {formatBtc(latestPortfolioBalanceBtc(snapshot), { precision: 3 })}
+              {formatBtc(displayBalanceBtc(snapshot), { precision: 3 })}
             </p>
             <p className="truncate text-2xs text-muted-foreground sm:text-xs">
               {t("stats.heldIn", { count: sourcesHoldingBitcoin(snapshot) })}
