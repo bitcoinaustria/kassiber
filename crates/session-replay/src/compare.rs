@@ -11,7 +11,8 @@
 //! never replaced. A uuid5 derived from a generated value differs between
 //! runs too, so a uuid5 is numbered like a uuid4 unless an input names it or
 //! both runs printed it (`pin_shared_uuid5`). Random request ids
-//! (`chat-<32 hex>`) and url-safe `*_token` values are generated as well. Everything else (hashes, fixture
+//! (`chat-<32 hex>`), url-safe tokens and upload ids, and the random part of
+//! temporary names inside the session's roots are generated as well. Everything else (hashes, fixture
 //! dates) compares exactly.
 
 use std::collections::{HashMap, HashSet};
@@ -62,6 +63,23 @@ fn url_token() -> &'static Regex {
             r#"(?:\b|_)token\\?"\s*:\s*\\?"([A-Za-z0-9_-]{43})\\?"|\bupload_id\\?"\s*:\s*\\?"([A-Za-z0-9_-]{22})\\?""#,
         )
         .unwrap()
+    })
+}
+
+/// A path inside the session's state roots (`/mnt/...` in a namespaced
+/// recording) and, in it, a temporary directory or file name: a prefix and
+/// six to eight random characters (`kassiber-chat-uploads-XjMTS7Hk`,
+/// `tmpzxLZfBnQ`, `.tmpA1b2C3`).
+fn root_path() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r#"/mnt/(?:tmp|bt)/[^"'\s\\]+"#).unwrap())
+}
+
+fn temporary_name() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(r"^(?:[A-Za-z][A-Za-z0-9.]*(?:-[A-Za-z0-9.]+)*[-_]|\.?tmp)([A-Za-z0-9_]{6,8})$")
+            .unwrap()
     })
 }
 
@@ -254,6 +272,25 @@ pub fn generated_spans(
     {
         let token = caps.get(1).or_else(|| caps.get(2)).unwrap();
         take_identity(token.start(), token.end(), &mut spans);
+    }
+    for path in root_path().find_iter(text) {
+        let mut at = path.start();
+        for component in path.as_str().split('/') {
+            if let Some(caps) = temporary_name().captures(component) {
+                let suffix = caps.get(1).unwrap();
+                // Random: it mixes letters and digits or cases.
+                let tail = suffix.as_str();
+                let kinds = [
+                    tail.bytes().any(|b| b.is_ascii_digit()),
+                    tail.bytes().any(|b| b.is_ascii_uppercase()),
+                    tail.bytes().any(|b| b.is_ascii_lowercase()),
+                ];
+                if kinds.iter().filter(|k| **k).count() >= 2 {
+                    take_identity(at + suffix.start(), at + suffix.end(), &mut spans);
+                }
+            }
+            at += component.len() + 1;
+        }
     }
     for m in uuid4_hex().find_iter(text) {
         // Only a whole value: quoted, or delimited by non-word characters.
@@ -840,6 +877,27 @@ mod tests {
             true,
         );
         assert_eq!(left, right);
+    }
+
+    #[test]
+    fn temporary_names_in_root_paths_number() {
+        let mut pinned = HashSet::new();
+        pin_inputs("/mnt/tmp/kassiber-r5-desktop-od6dr16w/data", &mut pinned);
+        let mut a = Canon::new(window(), &pinned);
+        let mut b = Canon::new(window(), &pinned);
+        let left = a.rewrite(
+            r#"{"path":"/mnt/tmp/kassiber-chat-uploads-XjMTS7Hk/tmpzxLZfBnQ/paste.csv","root":"/mnt/tmp/kassiber-r5-desktop-od6dr16w/data"}"#,
+            true,
+        );
+        let right = b.rewrite(
+            r#"{"path":"/mnt/tmp/kassiber-chat-uploads-Jf78MYwY/tmp0HCb0AO9/paste.csv","root":"/mnt/tmp/kassiber-r5-desktop-od6dr16w/data"}"#,
+            true,
+        );
+        assert_eq!(left, right);
+        assert!(left.contains("kassiber-r5-desktop-od6dr16w"), "{left}");
+        // Outside the roots, and names that are words, stay.
+        let kept = a.rewrite("/home/x/tmpzxLZfBnQ /mnt/tmp/kassiber-data/statement", true);
+        assert_eq!(kept, "/home/x/tmpzxLZfBnQ /mnt/tmp/kassiber-data/statement");
     }
 
     #[test]
