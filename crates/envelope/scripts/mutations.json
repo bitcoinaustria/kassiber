@@ -1,0 +1,272 @@
+[
+  {
+    "id": "embedded-ordinary",
+    "file": "crates/envelope/src/redaction/scanner.rs",
+    "find": "if !contained {",
+    "replace": "if contained || !contained {",
+    "expect_failing": [
+      "names_segment_into_words"
+    ],
+    "rule": "A secret word inside a listed ordinary word (dnsseed, bypass) is vocabulary."
+  },
+  {
+    "id": "last-name-final",
+    "file": "crates/envelope/src/redaction/scanner.rs",
+    "find": "if v.last.contains(base) && !last_only[index] {",
+    "replace": "if false {",
+    "expect_failing": [
+      "names_segment_into_words"
+    ],
+    "rule": "The shortest names count only as the final word (pw_hash is not a password)."
+  },
+  {
+    "id": "part-name-whole",
+    "file": "crates/envelope/src/redaction/scanner.rs",
+    "find": "if v.part.contains(base) && !whole {",
+    "replace": "if false {",
+    "expect_failing": [
+      "names_segment_into_words"
+    ],
+    "rule": "Short names count only as a whole identifier part (sighash is not a signature)."
+  },
+  {
+    "id": "compound-pair",
+    "file": "crates/envelope/src/redaction/scanner.rs",
+    "find": "names.push(pair.clone());",
+    "replace": "let _ = pair;",
+    "expect_failing": [
+      "names_segment_into_words"
+    ],
+    "rule": "Adjacent words name a compound secret (api key)."
+  },
+  {
+    "id": "count-word",
+    "file": "crates/envelope/src/redaction/scanner.rs",
+    "find": "if v.count.contains(word.as_str())",
+    "replace": "if false",
+    "expect_failing": [
+      "count_shaped_names_keep_metadata"
+    ],
+    "rule": "Count-shaped names keep bare counts readable (max_tokens: 16)."
+  },
+  {
+    "id": "count-value",
+    "file": "crates/envelope/src/redaction/scanner.rs",
+    "find": "if !(1..=9).contains(&i) {",
+    "replace": "if true {",
+    "expect_failing": [
+      "count_shaped_names_keep_metadata"
+    ],
+    "rule": "A count is one to nine digits with an optional fraction."
+  },
+  {
+    "id": "literal-record-boundary",
+    "file": "crates/envelope/src/redaction/scanner.rs",
+    "find": "return value_boundary(text, pos);",
+    "replace": "return false;",
+    "expect_failing": [
+      "literals_end_at_value_boundaries"
+    ],
+    "rule": "A JSON literal ends at a record boundary; later fields stay readable."
+  },
+  {
+    "id": "core-flags",
+    "file": "crates/envelope/src/redaction/scanner.rs",
+    "find": ".any(|flag| starts(text, head, flag) && arg_end(text, head + flag.len()))",
+    "replace": ".any(|_| false)",
+    "expect_failing": [
+      "flag_values_end_at_known_flags"
+    ],
+    "rule": "A known Bitcoin Core flag ends an argv value."
+  },
+  {
+    "id": "escaped-flag-gap",
+    "file": "crates/envelope/src/redaction/scanner.rs",
+    "find": "|| text[end - 1] == '\\\\'",
+    "replace": "|| false",
+    "expect_failing": [
+      "flag_values_end_at_known_flags"
+    ],
+    "rule": "An escaped space does not end an argv value."
+  },
+  {
+    "id": "continuation-table",
+    "file": "crates/envelope/src/redaction/scanner.rs",
+    "find": "while following < self.depth.len() && self.depth[following] > column as isize {",
+    "replace": "while false {",
+    "expect_failing": [
+      "continuations_own_deeper_lines"
+    ],
+    "rule": "A plain value owns its deeper-indented continuation lines."
+  },
+  {
+    "id": "yaml-block-table",
+    "file": "crates/envelope/src/redaction/scanner.rs",
+    "find": "if !(start < self.ends[index + 1] && !matches!(self.text[start], ' ' | '\\t')) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "continuations_own_deeper_lines"
+    ],
+    "rule": "A YAML block value runs through its indented and blank lines."
+  },
+  {
+    "id": "public-handle-pair",
+    "file": "crates/envelope/src/redaction/scanner.rs",
+    "find": "if handle.contains(&':') && !plain_handle(handle) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "url_userinfo_is_masked"
+    ],
+    "rule": "A public @handle path cannot license a handle:password pair."
+  },
+  {
+    "id": "fragment-userinfo",
+    "file": "crates/envelope/src/redaction/scanner.rs",
+    "find": "prefix[boundary] == '#' && !prefix[..boundary].iter().any(|&c| in_set(c, \".:[\"))",
+    "replace": "false",
+    "expect_failing": [
+      "url_userinfo_is_masked"
+    ],
+    "rule": "A # after a bare token is userinfo data before the later @."
+  },
+  {
+    "id": "bot-token",
+    "file": "crates/envelope/src/redaction/scanner.rs",
+    "find": "if count >= 3 && text.get(end) == Some(&':') {",
+    "replace": "if false {",
+    "expect_failing": [
+      "path_tokens_run_to_whitespace"
+    ],
+    "rule": "A /bot<digits>: path token is masked to the next whitespace."
+  },
+  {
+    "id": "triple-quote",
+    "file": "crates/envelope/src/redaction/scanner.rs",
+    "find": "if starts_chars(text, pos, &tripled) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "keyed_values_are_masked"
+    ],
+    "rule": "A triple-quoted value ends at its closing triple quote."
+  },
+  {
+    "id": "weak-alias-prose",
+    "file": "crates/envelope/src/redaction/scanner.rs",
+    "find": "|| (v.weak.contains(name.as_str()) && alias_prose(&name, whole))",
+    "replace": "",
+    "expect_failing": [
+      "keyed_values_are_masked"
+    ],
+    "rule": "Known prose after a weak alias (user: alice) stays readable."
+  },
+  {
+    "id": "plist-key",
+    "file": "crates/envelope/src/redaction/scanner.rs",
+    "find": "if name.is_empty() && plist_secret {",
+    "replace": "if false {",
+    "expect_failing": [
+      "xml_values_are_masked"
+    ],
+    "rule": "A plist <key> naming a secret masks the following value element."
+  },
+  {
+    "id": "named-pair-value",
+    "file": "crates/envelope/src/redaction/scanner.rs",
+    "find": "if !lit(i, \"value\") {",
+    "replace": "if !lit(i, \"valuex\") {",
+    "expect_failing": [
+      "named_pairs_are_masked"
+    ],
+    "rule": "A name/key pair naming a secret masks its value field."
+  },
+  {
+    "id": "cli-commands",
+    "file": "crates/envelope/src/redaction/scanner.rs",
+    "find": "for (command, flag) in [(\"curl\", \"-u\"), (\"sshpass\", \"-p\")] {",
+    "replace": "for (command, flag) in [(\"curlx\", \"-u\"), (\"sshpassx\", \"-p\")] {",
+    "expect_failing": [
+      "cli_credentials_are_masked"
+    ],
+    "rule": "curl -u and sshpass -p values are credentials."
+  },
+  {
+    "id": "bare-userinfo",
+    "file": "crates/envelope/src/redaction/scanner.rs",
+    "find": "if !named && !mail {",
+    "replace": "if false {",
+    "expect_failing": [
+      "bare_userinfo_is_masked"
+    ],
+    "rule": "A bare token:token@host is userinfo."
+  },
+  {
+    "id": "decoded-layers",
+    "file": "crates/envelope/src/redaction/scanner.rs",
+    "find": "for _ in 0..3 {",
+    "replace": "for _ in 0..1 {",
+    "expect_failing": [
+      "decoded_views_are_scanned"
+    ],
+    "rule": "The decoded view peels three percent/entity/escape layers."
+  },
+  {
+    "id": "merge-union",
+    "file": "crates/envelope/src/redaction/scanner.rs",
+    "find": "*current = (current.0, end, \"[redacted]\".to_owned());",
+    "replace": "",
+    "expect_failing": [
+      "overlapping_spans_merge"
+    ],
+    "rule": "Overlapping spans mask their whole union."
+  },
+  {
+    "id": "oversized",
+    "file": "crates/envelope/src/redaction/scanner.rs",
+    "find": "if text.len() > REDACTION_LIMIT {",
+    "replace": "if text.len() > 2 * REDACTION_LIMIT {",
+    "expect_failing": [
+      "oversized_records_are_masked_whole"
+    ],
+    "rule": "Records over the limit are masked whole."
+  },
+  {
+    "id": "floor-sk",
+    "file": "crates/envelope/src/redaction/floor.rs",
+    "find": "(sk_secret, \"[redacted-secret]\"),",
+    "replace": "(|_, _, _| None, \"[redacted-secret]\"),",
+    "expect_failing": [
+      "floor_patterns_follow_the_scanner"
+    ],
+    "rule": "sk- secrets are masked after the scanner."
+  },
+  {
+    "id": "floor-descriptor",
+    "file": "crates/envelope/src/redaction/floor.rs",
+    "find": "(descriptor, \"[redacted-descriptor]\"),",
+    "replace": "(|_, _, _| None, \"[redacted-descriptor]\"),",
+    "expect_failing": [
+      "floor_patterns_follow_the_scanner"
+    ],
+    "rule": "Output descriptors are masked after the scanner."
+  },
+  {
+    "id": "floor-wif",
+    "file": "crates/envelope/src/redaction/floor.rs",
+    "find": "Some('5') => (49, 50),",
+    "replace": "Some('5') => (48, 48),",
+    "expect_failing": [
+      "floor_patterns_follow_the_scanner"
+    ],
+    "rule": "Uncompressed WIF keys have 49 or 50 base58 characters after the 5."
+  },
+  {
+    "id": "sensitive-key-macaroon",
+    "file": "crates/envelope/src/redaction/floor.rs",
+    "find": "\"macaroon\",",
+    "replace": "",
+    "expect_failing": [
+      "sensitive_keys_match_python"
+    ],
+    "rule": "macaroon keys are sensitive."
+  }
+]

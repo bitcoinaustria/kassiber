@@ -1,0 +1,151 @@
+{
+ "prefix": "kassiber native auth: ",
+ "messages": [
+  "LocalAuthentication is unavailable on this Mac",
+  "No saved desktop biometric passphrase was found.",
+  "The credential remained in the native store after deletion.",
+  "This build cannot access the protected Keychain item; reopen a production-entitled build to manage it.",
+  "Touch ID is not available or not enrolled for this Mac user.",
+  "Touch ID is unavailable on this platform",
+  "Touch ID operator account is invalid.",
+  "Touch ID operator unlock is only available in the macOS desktop app.",
+  "could not inspect native-auth parent process",
+  "database passphrase must not be empty",
+  "invalid --go-fd",
+  "invalid --output-fd",
+  "invalid --ready-fd",
+  "invalid --secret-fd",
+  "missing --go-fd",
+  "missing --output-fd",
+  "missing --ready-fd",
+  "missing --secret-fd",
+  "missing native auth account",
+  "missing native auth action",
+  "native auth launch gate received an invalid release",
+  "native auth launch gate requires inherited pipes",
+  "native auth output must be an inherited pipe",
+  "native auth secret exceeds 16 KiB",
+  "native-auth code signature has no Identifier",
+  "native-auth code signature inspection failed",
+  "native-auth code signature verification failed",
+  "native-auth helper and broker signatures do not match",
+  "native-auth helper does not support this macOS architecture",
+  "native-auth helper has an invalid TeamIdentifier",
+  "native-auth helper is not inside a signed app bundle",
+  "native-auth helper parent has an unexpected signing identifier",
+  "native-auth helper parent is not the bundled Kassiber sidecar",
+  "native-auth helper requires a production TeamIdentifier",
+  "native-auth sidecar signing identifier is invalid",
+  "secret_ref_missing",
+  "secret_store_locked_or_denied",
+  "unsupported native auth action"
+ ],
+ "status_templates": [
+  [
+   "macOS protected Keychain rejected the operation (",
+   ")."
+  ],
+  [
+   "could not resolve the running native-auth parent code (",
+   ")"
+  ],
+  [
+   "could not compile the native-auth sidecar requirement (",
+   ")"
+  ],
+  [
+   "running native-auth parent did not match the bundled sidecar requirement (",
+   ")"
+  ]
+ ],
+ "allowed": [
+  "kassiber native auth: LocalAuthentication is unavailable on this Mac",
+  "kassiber native auth: No saved desktop biometric passphrase was found.",
+  "kassiber native auth: The credential remained in the native store after deletion.",
+  "kassiber native auth: This build cannot access the protected Keychain item; reopen a production-entitled build to manage it.",
+  "kassiber native auth: Touch ID is not available or not enrolled for this Mac user.",
+  "kassiber native auth: Touch ID is unavailable on this platform",
+  "kassiber native auth: Touch ID operator account is invalid.",
+  "kassiber native auth: Touch ID operator unlock is only available in the macOS desktop app.",
+  "kassiber native auth: could not inspect native-auth parent process",
+  "kassiber native auth: database passphrase must not be empty",
+  "kassiber native auth: invalid --go-fd",
+  "kassiber native auth: invalid --output-fd",
+  "kassiber native auth: invalid --ready-fd",
+  "kassiber native auth: invalid --secret-fd",
+  "kassiber native auth: missing --go-fd",
+  "kassiber native auth: missing --output-fd",
+  "kassiber native auth: missing --ready-fd",
+  "kassiber native auth: missing --secret-fd",
+  "kassiber native auth: missing native auth account",
+  "kassiber native auth: missing native auth action",
+  "kassiber native auth: native auth launch gate received an invalid release",
+  "kassiber native auth: native auth launch gate requires inherited pipes",
+  "kassiber native auth: native auth output must be an inherited pipe",
+  "kassiber native auth: native auth secret exceeds 16 KiB",
+  "kassiber native auth: native-auth code signature has no Identifier",
+  "kassiber native auth: native-auth code signature inspection failed",
+  "kassiber native auth: native-auth code signature verification failed",
+  "kassiber native auth: native-auth helper and broker signatures do not match",
+  "kassiber native auth: native-auth helper does not support this macOS architecture",
+  "kassiber native auth: native-auth helper has an invalid TeamIdentifier",
+  "kassiber native auth: native-auth helper is not inside a signed app bundle",
+  "kassiber native auth: native-auth helper parent has an unexpected signing identifier",
+  "kassiber native auth: native-auth helper parent is not the bundled Kassiber sidecar",
+  "kassiber native auth: native-auth helper requires a production TeamIdentifier",
+  "kassiber native auth: native-auth sidecar signing identifier is invalid",
+  "kassiber native auth: secret_ref_missing",
+  "kassiber native auth: secret_store_locked_or_denied",
+  "kassiber native auth: unsupported native auth action",
+  "kassiber native auth: macOS protected Keychain rejected the operation (-34018).",
+  "kassiber native auth: could not resolve the running native-auth parent code (0)",
+  "kassiber native auth: could not compile the native-auth sidecar requirement (-67050)",
+  "kassiber native auth: running native-auth parent did not match the bundled sidecar requirement (2147483647)"
+ ],
+ "redacted": [
+  {
+   "input": "kassiber native auth: hunter2",
+   "expected": "kassiber native auth: [redacted]"
+  },
+  {
+   "input": "kassiber native auth: Touch ID operator account is invalid. hunter2",
+   "expected": "kassiber native auth: [redacted]"
+  },
+  {
+   "input": "kassiber native auth: macOS protected Keychain rejected the operation (hunter2).",
+   "expected": "kassiber native auth: [redacted]"
+  },
+  {
+   "input": "kassiber native auth: macOS protected Keychain rejected the operation ().",
+   "expected": "kassiber native auth: [redacted]"
+  },
+  {
+   "input": "kassiber native auth: macOS protected Keychain rejected the operation (12345678901).",
+   "expected": "kassiber native auth: [redacted]"
+  },
+  {
+   "input": "kassiber native auth: macOS protected Keychain rejected the operation (-).",
+   "expected": "kassiber native auth: [redacted]"
+  },
+  {
+   "input": "kassiber native auth: could not read native auth secret: synthetic-passphrase-value",
+   "expected": "kassiber native auth: [redacted]"
+  },
+  {
+   "input": "kassiber native auth: No saved desktop biometric passphrase was found. ",
+   "expected": "kassiber native auth: [redacted] "
+  },
+  {
+   "input": " kassiber native auth: secret_ref_missing",
+   "expected": " kassiber native auth: [redacted]"
+  },
+  {
+   "input": "kassiber native auth:secret_ref_missing",
+   "expected": "kassiber native auth:[redacted]"
+  },
+  {
+   "input": "other auth: secret_ref_missing",
+   "expected": "other auth: [redacted]"
+  }
+ ]
+}

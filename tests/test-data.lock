@@ -3,6 +3,22 @@
 # docs/reference/testing.md#generated-test-data). <git blob id> <path>
 branch t3code/test-data
 commit fcb97231d0828d16c168618601c75449a7b53a67
+a8c6fbd93a1c6f9a039ce7b6ef3d74d6cef2f88f crates/credentials/tests/data/vectors.json
+e18da5bce91113673310803f33fc20a305d743f4 crates/envelope/tests/data/golden.txt
+75c939e99c8ead87d5e03e5be2bf20c1097cdfd1 crates/envelope/tests/data/scanner_families.json
+9829dc982fdc4e30492d34559c079447a50234f3 crates/envelope/tests/data/secret_floor.txt
+67419b7a3c51a8ce02ac497b6959e42edfc64b0d crates/ipc/tests/data/list2cmdline.json
+fd81642d3a974032eedbb4d6c283ac43d5b03d03 crates/pyjson/tests/data/json_vectors.txt
+d78c59b28c2713a0c6cd4f4a6ccde03db46a7216 crates/pytext/tests/data/casefold.txt
+4cde391b4867995dd68a6870dca9ca976badc256 crates/pytext/tests/data/lower.txt
+fabc789d2fd4e1979860958108dcd73b87e9e2bc crates/pytext/tests/data/upper.txt
+781dcc9d2aadfcc0f4ecd575aafb8807dfc93ff1 crates/pytext/tests/data/vectors.txt
+0bf6821baab5f242020a0b5cda34385cd74e5f55 crates/store/fixtures/compat.json
+62f1eaf023a082383f018ec74df1f9a8b734990a crates/store/fixtures/creation.json
+749a6f44b27e00f0e2d9b7630567c8662621a551 crates/store/fixtures/current-schema.json
+b863564fc7005d91d0461e9b4e04b7cb697ad88b crates/store/fixtures/legacy-ledger-triggers.json
+5a8b9a97e0efc14bdfd5c76ae7dc363b6847ac2f crates/store/fixtures/retired.json
+a294f0797f041762cc2e190ea61f913b6900abc7 crates/store/fixtures/semantics.json
 c11fcc0f65d3774dba1b50d9073e021445108cfa tests/fixtures/btcpay_bark/0.13.0/invoice.4kA2cCQDoB29RhTSKEMMK1.payment-methods.accounted.json
 42cc6ab29f70c797cd2a005d7f4012e8e9ed6fc6 tests/fixtures/btcpay_bark/0.13.0/invoice.6zTrmwy5tNVt5gzCBmCXvy.payment-methods.accounted.json
 58e6a62b68c6ed0b56157f6775cbba73850e29ed tests/fixtures/btcpay_bark/0.13.0/invoice.E5mxtedvENirbwt55k2V1m.payment-methods.accounted.json

@@ -5,7 +5,21 @@
 # Cargo would otherwise claim ui-tauri/src-tauri as an undeclared member.
 exclude = ["ui-tauri"]
 resolver = "2"
-members = ["tax-engine/core", "tax-engine/python"]
+members = [
+  "crates/backup",
+  "crates/credentials",
+  "crates/envelope",
+  "crates/paths",
+  "crates/ownership",
+  "crates/ipc",
+  "crates/store",
+  "crates/secrets",
+  "crates/pydecimal",
+  "crates/pyjson",
+  "crates/pytext",
+  "tax-engine/core",
+  "tax-engine/python",
+]
 
 [workspace.package]
 edition = "2021"
@@ -19,3 +33,11 @@ publish = false
 [profile.release]
 # A panic is a bug; keep unwinding so the binding can turn it into an error.
 panic = "unwind"
+
+# age calibrates scrypt from elapsed CPU time. Unoptimized crypto can otherwise
+# reject ordinary pyrage/release-built bundles as excessive work in the native
+# debug/parity binary. Keep calibration on the same optimized primitives.
+[profile.dev.package.scrypt]
+opt-level = 3
+[profile.dev.package.salsa20]
+opt-level = 3

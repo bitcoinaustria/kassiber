@@ -1,0 +1,183 @@
+[
+  {
+    "id": "S-resolve-root",
+    "file": "crates/store/src/durable.rs",
+    "find": "    let resolved = kassiber_paths::canonicalize_allow_missing(root)?;",
+    "replace": "    let resolved = root.to_path_buf();",
+    "expect_failing": [
+      "durable::tests::roots_resolve_while_links_below_them_still_refuse",
+      "creation::tests::data_roots_resolve_but_a_linked_database_is_refused",
+      "layout::tests::layout_resolves_its_roots_and_refuses_links_below_them",
+      "state_root::tests::linked_home_parents_migrate_but_linked_legacy_layouts_stay",
+      "encryption::tests::data_roots_resolve_but_linked_databases_and_candidates_refuse",
+      "projects::tests::legacy_books_under_linked_parents_migrate_and_markers_refuse_links_below"
+    ],
+    "rule": "A root under a linked parent (macOS /var) resolves like Python's Path.resolve before the no-link walk."
+  },
+  {
+    "id": "S-keep-tail-lexical",
+    "file": "crates/store/src/durable.rs",
+    "find": "        resolved.join(tail)\n",
+    "replace": "        kassiber_paths::canonicalize_allow_missing(&resolved.join(tail))?\n",
+    "expect_failing": [
+      "durable::tests::roots_resolve_while_links_below_them_still_refuse",
+      "layout::tests::layout_resolves_its_roots_and_refuses_links_below_them",
+      "projects::tests::legacy_books_under_linked_parents_migrate_and_markers_refuse_links_below"
+    ],
+    "rule": "Only the root resolves; a link Kassiber manages below it is still refused."
+  },
+  {
+    "id": "S-refuse-links",
+    "file": "crates/store/src/durable.rs",
+    "find": "Ok(meta) if meta.file_type().is_symlink() =>",
+    "replace": "Ok(meta) if false && meta.file_type().is_symlink() =>",
+    "expect_failing": [
+      "durable::tests::roots_resolve_while_links_below_them_still_refuse",
+      "creation::tests::data_roots_resolve_but_a_linked_database_is_refused",
+      "layout::tests::layout_resolves_its_roots_and_refuses_links_below_them",
+      "encryption::tests::data_roots_resolve_but_linked_databases_and_candidates_refuse",
+      "projects::tests::legacy_books_under_linked_parents_migrate_and_markers_refuse_links_below"
+    ],
+    "rule": "Links from the resolved root down are refused."
+  },
+  {
+    "id": "S-root-containment",
+    "file": "crates/store/src/durable.rs",
+    "find": "    let tail = path.strip_prefix(root).map_err(|_| {",
+    "replace": "    let tail = path.strip_prefix(root).or_else(|_| path.strip_prefix(\"/\")).map_err(|_| {",
+    "expect_failing": [
+      "durable::tests::roots_resolve_while_links_below_them_still_refuse"
+    ],
+    "rule": "A path outside its stated root is refused rather than rebased."
+  },
+  {
+    "id": "S-creation-database-link",
+    "file": "crates/store/src/creation.rs",
+    "find": "    durable::refuse_symlinks(&database)?;",
+    "replace": "",
+    "expect_failing": [
+      "creation::tests::data_roots_resolve_but_a_linked_database_is_refused"
+    ],
+    "rule": "Book creation refuses a link at the database path, even to an empty file (stricter than Python)."
+  },
+  {
+    "id": "S-creation-resolve",
+    "file": "crates/store/src/creation.rs",
+    "find": "    let root = &durable::under(root, root)?;",
+    "replace": "",
+    "expect_failing": [
+      "creation::tests::data_roots_resolve_but_a_linked_database_is_refused"
+    ],
+    "rule": "Book creation resolves its data root."
+  },
+  {
+    "id": "S-layout-data-root",
+    "file": "crates/store/src/layout.rs",
+    "find": "    durable::directory(&durable::under(&paths.data_root, &paths.data_root)?)?;",
+    "replace": "    durable::directory(&paths.data_root)?;",
+    "expect_failing": [
+      "layout::tests::layout_resolves_its_roots_and_refuses_links_below_them"
+    ],
+    "rule": "The layout writer resolves the data root, including a linked data directory."
+  },
+  {
+    "id": "S-layout-managed-dirs",
+    "file": "crates/store/src/layout.rs",
+    "find": "        durable::directory(&durable::under(state, directory)?)?;",
+    "replace": "        durable::directory(&durable::under(directory, directory)?)?;",
+    "expect_failing": [
+      "layout::tests::layout_resolves_its_roots_and_refuses_links_below_them"
+    ],
+    "rule": "config, exports and attachments below the state root refuse links."
+  },
+  {
+    "id": "S-config-file-root",
+    "file": "crates/store/src/layout.rs",
+    "find": "            .and_then(Path::parent)\n",
+    "replace": "",
+    "expect_failing": [
+      "layout::tests::layout_resolves_its_roots_and_refuses_links_below_them"
+    ],
+    "rule": "Catalog, settings and auth metadata resolve the state root, not their config directory."
+  },
+  {
+    "id": "S-migration-parent",
+    "file": "crates/store/src/state_root.rs",
+    "find": "        durable::directory(&durable::under(parent, parent)?)?;",
+    "replace": "        durable::directory(parent)?;",
+    "expect_failing": [
+      "state_root::tests::linked_home_parents_migrate_but_linked_legacy_layouts_stay"
+    ],
+    "rule": "The hidden-home cutover resolves the app-data parent."
+  },
+  {
+    "id": "S-owner-lock-root",
+    "file": "crates/store/src/state_root.rs",
+    "find": "    let path = &durable::under(root, path)?;\n",
+    "replace": "",
+    "expect_failing": [
+      "state_root::tests::linked_home_parents_migrate_but_linked_legacy_layouts_stay"
+    ],
+    "rule": "Migration and legacy owner locks resolve their root and refuse links below it."
+  },
+  {
+    "id": "S-legacy-links",
+    "file": "crates/store/src/state_root.rs",
+    "find": "            if reject_symlinks(&legacy, true).is_err() {",
+    "replace": "            if false && reject_symlinks(&legacy, true).is_err() {",
+    "expect_failing": [
+      "state_root::tests::linked_home_parents_migrate_but_linked_legacy_layouts_stay"
+    ],
+    "rule": "A linked legacy root or a link inside it keeps the legacy layout, as Python's _reject_unsafe_migration_symlinks."
+  },
+  {
+    "id": "S-encryption-validate",
+    "file": "crates/store/src/encryption.rs",
+    "find": "    durable::refuse_symlinks(&durable::beside(path)?)?;\n    kassiber_ownership",
+    "replace": "    durable::refuse_symlinks(path)?;\n    kassiber_ownership",
+    "expect_failing": [
+      "encryption::tests::data_roots_resolve_but_linked_databases_and_candidates_refuse"
+    ],
+    "rule": "SQLCipher maintenance resolves the database's data root."
+  },
+  {
+    "id": "S-encryption-database-link",
+    "file": "crates/store/src/encryption.rs",
+    "find": "    durable::refuse_symlinks(&durable::beside(database)?)?;",
+    "replace": "",
+    "expect_failing": [
+      "encryption::tests::data_roots_resolve_but_linked_databases_and_candidates_refuse"
+    ],
+    "rule": "An empty SQLCipher container is never published over a link at the database path."
+  },
+  {
+    "id": "S-encryption-artifacts",
+    "file": "crates/store/src/encryption.rs",
+    "find": "        durable::refuse_symlinks(&durable::beside(artifact)?)?;",
+    "replace": "        let _ = artifact;",
+    "expect_failing": [
+      "encryption::tests::data_roots_resolve_but_linked_databases_and_candidates_refuse"
+    ],
+    "rule": "Encryption refuses a link at its candidate or rollback backup before writing."
+  },
+  {
+    "id": "S-project-marker-root",
+    "file": "crates/store/src/projects.rs",
+    "find": "        &durable::under(root, path)?,",
+    "replace": "        path,",
+    "expect_failing": [
+      "projects::tests::legacy_books_under_linked_parents_migrate_and_markers_refuse_links_below"
+    ],
+    "rule": "Legacy project markers resolve the state root that holds them."
+  },
+  {
+    "id": "S-restore-null-details",
+    "file": "crates/store/src/restore.rs",
+    "find": "            .details(Value::Null)\n",
+    "replace": "",
+    "expect_failing": [
+      "restore::tests::invalid_intents_and_target_links_fail_closed"
+    ],
+    "rule": "The restore link refusal carries Python's null details."
+  }
+]

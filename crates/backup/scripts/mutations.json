@@ -1,0 +1,1072 @@
+[
+  {
+    "id": "B-path-absolute",
+    "file": "crates/backup/src/archive.rs",
+    "find": "name.starts_with(b\"/\")",
+    "replace": "false",
+    "expect_failing": [
+      "path_types_sizes_and_normalized_duplicates_match_python"
+    ],
+    "rule": "Absolute member paths are refused before extraction."
+  },
+  {
+    "id": "B-path-backslash",
+    "file": "crates/backup/src/archive.rs",
+    "find": "name.contains(&b'\\\\')",
+    "replace": "false",
+    "expect_failing": [
+      "path_types_sizes_and_normalized_duplicates_match_python"
+    ],
+    "rule": "Windows separators are refused on every platform."
+  },
+  {
+    "id": "B-path-nul",
+    "file": "crates/backup/src/archive.rs",
+    "find": "name.contains(&0)",
+    "replace": "false",
+    "expect_failing": [
+      "path_types_sizes_and_normalized_duplicates_match_python"
+    ],
+    "rule": "Embedded NUL is refused."
+  },
+  {
+    "id": "B-path-traversal",
+    "file": "crates/backup/src/archive.rs",
+    "find": "b\"..\" => return Err",
+    "replace": "b\"...\" => return Err",
+    "expect_failing": [
+      "path_types_sizes_and_normalized_duplicates_match_python"
+    ],
+    "rule": "Every parent component is refused even when it stays inside staging."
+  },
+  {
+    "id": "B-path-top",
+    "file": "crates/backup/src/archive.rs",
+    "find": "if ![\n        b\"manifest.json\".as_slice(),\n        b\"kassiber.sqlite3\",\n        b\"attachments\",\n        b\"config\",\n    ]\n    .contains(&top)\n    {",
+    "replace": "if false && ![\n        b\"manifest.json\".as_slice(),\n        b\"kassiber.sqlite3\",\n        b\"attachments\",\n        b\"config\",\n    ]\n    .contains(&top)\n    {",
+    "expect_failing": [
+      "path_types_sizes_and_normalized_duplicates_match_python"
+    ],
+    "rule": "Only the Python top-level allowlist may be extracted."
+  },
+  {
+    "id": "B-type-symlink",
+    "file": "crates/backup/src/archive.rs",
+    "find": "b'2' => Some(\"symlink\")",
+    "replace": "b'8' => Some(\"symlink\")",
+    "expect_failing": [
+      "path_types_sizes_and_normalized_duplicates_match_python"
+    ],
+    "rule": "Symbolic links are refused."
+  },
+  {
+    "id": "B-type-hardlink",
+    "file": "crates/backup/src/archive.rs",
+    "find": "b'1' => Some(\"hardlink\")",
+    "replace": "b'9' => Some(\"hardlink\")",
+    "expect_failing": [
+      "path_types_sizes_and_normalized_duplicates_match_python"
+    ],
+    "rule": "Hardlinks are refused."
+  },
+  {
+    "id": "B-type-device",
+    "file": "crates/backup/src/archive.rs",
+    "find": "b'3' | b'4' => Some(\"device node\")",
+    "replace": "b'3' => Some(\"device node\")",
+    "expect_failing": [
+      "path_types_sizes_and_normalized_duplicates_match_python"
+    ],
+    "rule": "Both block and character devices are refused."
+  },
+  {
+    "id": "B-type-fifo",
+    "file": "crates/backup/src/archive.rs",
+    "find": "b'6' => Some(\"FIFO\")",
+    "replace": "b'8' => Some(\"FIFO\")",
+    "expect_failing": [
+      "path_types_sizes_and_normalized_duplicates_match_python"
+    ],
+    "rule": "FIFO members are refused."
+  },
+  {
+    "id": "B-size-bound",
+    "file": "crates/backup/src/archive.rs",
+    "find": "size > MAX_MEMBER",
+    "replace": "size > MAX_MEMBER + 1",
+    "expect_failing": [
+      "path_types_sizes_and_normalized_duplicates_match_python"
+    ],
+    "rule": "The four GiB limit includes the first excess byte."
+  },
+  {
+    "id": "B-path-duplicate",
+    "file": "crates/backup/src/archive.rs",
+    "find": "if !seen.insert(normalized.clone()) {",
+    "replace": "if false && !seen.insert(normalized.clone()) {",
+    "expect_failing": [
+      "path_types_sizes_and_normalized_duplicates_match_python"
+    ],
+    "rule": "Duplicate normalized paths are refused."
+  },
+  {
+    "id": "B-manifest-schema",
+    "file": "crates/backup/src/lib.rs",
+    "find": "schema != &Value::from(1)",
+    "replace": "schema != &Value::from(2)",
+    "expect_failing": [
+      "manifest_paths_schema_counts_and_declared_sidecars_match_python"
+    ],
+    "rule": "The manifest retains schema version one."
+  },
+  {
+    "id": "B-manifest-db-path",
+    "file": "crates/backup/src/lib.rs",
+    "find": "if database != &s(DATABASE) {",
+    "replace": "if false && database != &s(DATABASE) {",
+    "expect_failing": [
+      "manifest_paths_schema_counts_and_declared_sidecars_match_python"
+    ],
+    "rule": "The database member must have its fixed root name."
+  },
+  {
+    "id": "B-manifest-count-type",
+    "file": "crates/backup/src/lib.rs",
+    "find": "if !matches!(count, Value::Int(n) if n >= &0.into()) {",
+    "replace": "if matches!(count, Value::Null) {",
+    "expect_failing": [
+      "manifest_paths_schema_counts_and_declared_sidecars_match_python"
+    ],
+    "rule": "Counts must be nonnegative Python integers, never bools or floats."
+  },
+  {
+    "id": "B-manifest-count",
+    "file": "crates/backup/src/lib.rs",
+    "find": "if count != &Value::from(actual) {",
+    "replace": "if false && count != &Value::from(actual) {",
+    "expect_failing": [
+      "manifest_paths_schema_counts_and_declared_sidecars_match_python"
+    ],
+    "rule": "The attachment count must match extracted regular files."
+  },
+  {
+    "id": "B-manifest-sidecars",
+    "file": "crates/backup/src/lib.rs",
+    "find": "get(entries, key).is_some_and(truthy) && !staging.join(name).exists()",
+    "replace": "false && get(entries, key).is_some_and(truthy) && !staging.join(name).exists()",
+    "expect_failing": [
+      "manifest_paths_schema_counts_and_declared_sidecars_match_python"
+    ],
+    "rule": "Declared configuration files must actually exist."
+  },
+  {
+    "id": "B-plaintext-refusal",
+    "file": "crates/backup/src/lib.rs",
+    "find": "if kassiber_paths::looks_like_plaintext(&paths.database)",
+    "replace": "if false && kassiber_paths::looks_like_plaintext(&paths.database)",
+    "expect_failing": [
+      "export_plaintext_refusal_keeps_the_python_message_hint_and_destination"
+    ],
+    "rule": "Plaintext export has the same typed refusal as Python."
+  },
+  {
+    "id": "B-secret-conflict",
+    "file": "crates/backup/src/lib.rs",
+    "find": "if inline {",
+    "replace": "if false && inline {",
+    "expect_failing": [
+      "provider_refs_never_materialize_external_secrets_or_hide_inline_conflicts"
+    ],
+    "rule": "An OS-backed reference with a lingering inline secret blocks export."
+  },
+  {
+    "id": "B-install-owner-order",
+    "file": "crates/backup/src/service.rs",
+    "find": "let _maintenance = if install {",
+    "replace": "let _maintenance = if false && install {",
+    "expect_failing": [
+      "installation_requires_both_owner_roles_before_decryption_and_preserves_live_files"
+    ],
+    "rule": "Both owner roles precede decryption, even for an absent database."
+  },
+  {
+    "id": "R-broker-role",
+    "file": "crates/store/src/restore.rs",
+    "find": "if Some(role) == active {",
+    "replace": "if role == OwnerKind::Broker || Some(role) == active {",
+    "expect_failing": [
+      "installation_requires_both_owner_roles_before_decryption_and_preserves_live_files"
+    ],
+    "rule": "Maintenance excludes the broker role as well as the desktop."
+  },
+  {
+    "id": "R-desktop-role",
+    "file": "crates/store/src/restore.rs",
+    "find": "if Some(role) == active {",
+    "replace": "if role == OwnerKind::Desktop || Some(role) == active {",
+    "expect_failing": [
+      "installation_requires_both_owner_roles_before_decryption_and_preserves_live_files"
+    ],
+    "rule": "Maintenance excludes the desktop role as well as the broker."
+  },
+  {
+    "id": "R-intent-before-moves",
+    "file": "crates/store/src/restore.rs",
+    "find": "publish(&state, &journal, observer)?;\n        published = true;",
+    "replace": "published = true;",
+    "expect_failing": [
+      "durable_install_boundaries_recover_original_or_complete_and_retain_copy"
+    ],
+    "rule": "Publish the pending intent durably before any live rename."
+  },
+  {
+    "id": "R-initial-phase",
+    "file": "crates/store/src/restore.rs",
+    "find": "\"phase\":\"pending\"",
+    "replace": "\"phase\":\"committed\"",
+    "expect_failing": [
+      "durable_install_boundaries_recover_original_or_complete_and_retain_copy"
+    ],
+    "rule": "A prepared or partly installed tree never establishes commit."
+  },
+  {
+    "id": "R-commit-phase",
+    "file": "crates/store/src/restore.rs",
+    "find": "journal[\"phase\"] = json!(\"committed\");",
+    "replace": "journal[\"phase\"] = json!(\"pending\");",
+    "expect_failing": [
+      "durable_install_boundaries_recover_original_or_complete_and_retain_copy"
+    ],
+    "rule": "Only publication of a committed marker retains the incoming tree."
+  },
+  {
+    "id": "R-save-original",
+    "file": "crates/store/src/restore.rs",
+    "find": "if original.contains(name) {",
+    "replace": "if false && original.contains(name) {",
+    "expect_failing": [
+      "durable_install_boundaries_recover_original_or_complete_and_retain_copy"
+    ],
+    "rule": "Save every old entry before publishing replacements."
+  },
+  {
+    "id": "R-publish-incoming",
+    "file": "crates/store/src/restore.rs",
+    "find": "if incoming.contains(name) {",
+    "replace": "if false && incoming.contains(name) {",
+    "expect_failing": [
+      "durable_install_boundaries_recover_original_or_complete_and_retain_copy"
+    ],
+    "rule": "Install all prepared entries before commit."
+  },
+  {
+    "id": "R-no-old-journals",
+    "file": "crates/store/src/restore.rs",
+    "find": "[NAMES[0], NAMES[4], NAMES[5], NAMES[6]]",
+    "replace": "[NAMES[0], NAMES[4], NAMES[5], NAMES[3]]",
+    "expect_failing": [
+      "durable_install_boundaries_recover_original_or_complete_and_retain_copy"
+    ],
+    "rule": "Do not carry old DB journals or exports beside the restored DB."
+  },
+  {
+    "id": "R-pending-rollback",
+    "file": "crates/store/src/restore.rs",
+    "find": "if pending {",
+    "replace": "if false && pending {",
+    "expect_failing": [
+      "durable_install_boundaries_recover_original_or_complete_and_retain_copy"
+    ],
+    "rule": "Restart rolls back every uncommitted live move."
+  },
+  {
+    "id": "R-rollback-move",
+    "file": "crates/store/src/restore.rs",
+    "find": "move_entry(&saved, target, &format!(\"rollback.{name}\"), observer)?;",
+    "replace": "let _ = saved;",
+    "expect_failing": [
+      "rollback_is_repeatable_at_every_recovery_boundary"
+    ],
+    "rule": "Recovery restores the old entry after removing an incoming entry."
+  },
+  {
+    "id": "R-recovery-copy-retention",
+    "file": "crates/store/src/restore.rs",
+    "find": "recovery.filter(|_| pending)",
+    "replace": "recovery.filter(|_| true)",
+    "expect_failing": [
+      "durable_install_boundaries_recover_original_or_complete_and_retain_copy"
+    ],
+    "rule": "Committed rollback copies remain available for explicit user recovery."
+  },
+  {
+    "id": "R-path-binding",
+    "file": "crates/store/src/restore.rs",
+    "find": "journal[\"data_root\"] != json!(kassiber_paths::canonicalize_allow_missing(data)?)",
+    "replace": "false",
+    "expect_failing": [
+      "invalid_intents_and_target_links_fail_closed"
+    ],
+    "rule": "Reject intents for any other data root."
+  },
+  {
+    "id": "R-prepared-path",
+    "file": "crates/store/src/restore.rs",
+    "find": ".strip_prefix(\".restore-install-\")\n        .ok_or_else(invalid)?",
+    "replace": ".rsplit(\".restore-install-\").next()\n        .ok_or_else(invalid)?",
+    "expect_failing": [
+      "invalid_intents_and_target_links_fail_closed"
+    ],
+    "rule": "Confine prepared trees to the fixed sibling namespace."
+  },
+  {
+    "id": "R-name-allowlist",
+    "file": "crates/store/src/restore.rs",
+    "find": "if names\n        != allowed",
+    "replace": "if false && names\n        != allowed",
+    "expect_failing": [
+      "invalid_intents_and_target_links_fail_closed"
+    ],
+    "rule": "Only the fixed ordered entry names may be replayed."
+  },
+  {
+    "id": "R-intent-size",
+    "file": "crates/store/src/restore.rs",
+    "find": "info.len() > 65536",
+    "replace": "info.len() > 0xffff_ffff",
+    "expect_failing": [
+      "invalid_intents_and_target_links_fail_closed"
+    ],
+    "rule": "Recovery metadata is bounded before reading it."
+  },
+  {
+    "id": "R-target-symlink",
+    "file": "crates/store/src/restore.rs",
+    "find": "safe(target)?;\n    }\n    if !pending(data)?",
+    "replace": "let _ = target;\n    }\n    if !pending(data)?",
+    "expect_failing": [
+      "invalid_intents_and_target_links_fail_closed"
+    ],
+    "rule": "Never follow destination sidecars out of the container."
+  },
+  {
+    "id": "R-absent-target",
+    "file": "crates/store/src/restore.rs",
+    "find": "} else if !original.iter().any(|n| n == name)",
+    "replace": "} else if false && !original.iter().any(|n| n == name)",
+    "expect_failing": [
+      "rollback_is_repeatable_at_every_recovery_boundary"
+    ],
+    "rule": "Rollback removes installed entries that had no original counterpart."
+  },
+  {
+    "id": "R-sync-journal-file",
+    "file": "crates/store/src/restore.rs",
+    "find": "temp.as_file().sync_all().map_err(Error::io)?;\n    observer(&format!(\"restore.{phase}.journal_sync\"))?;",
+    "replace": "",
+    "expect_failing": [
+      "durable_install_boundaries_recover_original_or_complete_and_retain_copy"
+    ],
+    "rule": "Preserve the explicit journal-file durability boundary before publication."
+  },
+  {
+    "id": "R-sync-journal-directory",
+    "file": "crates/store/src/restore.rs",
+    "find": "durable::sync_directory(state)?;\n    observer(&format!(\"restore.{phase}.journal_dir_sync\"))",
+    "replace": "Ok(())",
+    "expect_failing": [
+      "durable_install_boundaries_recover_original_or_complete_and_retain_copy"
+    ],
+    "rule": "Preserve the explicit journal-directory durability boundary before publication."
+  },
+  {
+    "id": "R-sync-copy-file",
+    "file": "crates/store/src/restore.rs",
+    "find": "File::open(item)\n            .and_then(|f| f.sync_all())\n            .map_err(Error::io)?;\n        observer(&format!(\"restore.copy_sync.{}\", relative(item, path)))?;",
+    "replace": "let _ = item;",
+    "expect_failing": [
+      "durable_install_boundaries_recover_original_or_complete_and_retain_copy"
+    ],
+    "rule": "Preserve the explicit copy-file durability boundary before publication."
+  },
+  {
+    "id": "R-open-admission",
+    "file": "crates/store/src/lib.rs",
+    "find": "if restore::pending(&effective)? {",
+    "replace": "if false && restore::pending(&effective)? {",
+    "expect_failing": [
+      "invalid_intents_and_target_links_fail_closed"
+    ],
+    "rule": "A low-level book open cannot initialize or migrate a book with pending restore recovery."
+  },
+  {
+    "id": "R-recover-before-settings",
+    "file": "crates/store/src/restore.rs",
+    "find": "recover_pending(namespace, &located.data_root)?;",
+    "replace": "let _ = located;",
+    "expect_failing": [
+      "startup_recovers_before_reading_partial_sidecar_configuration"
+    ],
+    "rule": "Recover the selected container before admitting any partially installed configuration."
+  },
+  {
+    "id": "R-sync-move-source-directory",
+    "file": "crates/store/src/restore.rs",
+    "find": "durable::sync_directory(source.parent().ok_or_else(invalid)?)?;\n    observer(&format!(\"restore.source_sync.{label}\"))?;",
+    "replace": "",
+    "expect_failing": [
+      "durable_install_boundaries_recover_original_or_complete_and_retain_copy"
+    ],
+    "rule": "Synchronize both parents at each installation and recovery rename."
+  },
+  {
+    "id": "R-sync-move-target-directory",
+    "file": "crates/store/src/restore.rs",
+    "find": "durable::sync_directory(target.parent().ok_or_else(invalid)?)?;\n    observer(&format!(\"restore.target_sync.{label}\"))",
+    "replace": "Ok(())",
+    "expect_failing": [
+      "durable_install_boundaries_recover_original_or_complete_and_retain_copy"
+    ],
+    "rule": "Synchronize both parents at each installation and recovery rename."
+  },
+  {
+    "id": "R-layout-admission",
+    "file": "crates/store/src/layout.rs",
+    "find": "if crate::restore::pending(&paths.data_root)? {",
+    "replace": "if false && crate::restore::pending(&paths.data_root)? {",
+    "expect_failing": [
+      "startup_recovers_before_reading_partial_sidecar_configuration"
+    ],
+    "rule": "No layout write may recreate or normalize sidecars before pending recovery."
+  },
+  {
+    "id": "B-stage-owner",
+    "file": "crates/backup/src/service.rs",
+    "find": "let _maintenance = if install {",
+    "replace": "let _maintenance = if true {",
+    "expect_failing": [
+      "staging_only_import_never_requires_exclusive_ownership"
+    ],
+    "rule": "Staging-only import does not exclude the owner of an untouched target."
+  },
+  {
+    "id": "R-rollback-failure-code",
+    "file": "crates/store/src/restore.rs",
+    "find": "ErrorKind::RestoreRollbackFailed,",
+    "replace": "ErrorKind::RestoreInstallFailed,",
+    "expect_failing": [
+      "failed_rollback_preserves_intent_and_reports_recovery_location"
+    ],
+    "rule": "An unfinished automatic rollback reports the recovery failure without claiming that the original tree was restored."
+  },
+  {
+    "id": "R-rollback-location-none",
+    "file": "crates/store/src/restore.rs",
+    "find": ".unwrap_or_else(|| \"None\".into())",
+    "replace": ".unwrap_or_else(|| \"\".into())",
+    "expect_failing": [
+      "failed_rollback_preserves_intent_and_reports_recovery_location"
+    ],
+    "rule": "The absent original recovery path retains Python's string projection rather than a JSON null or empty path."
+  },
+  {
+    "id": "D-cancel-token",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "get(args, \"token\") == Some(&s(p.token.as_str()))",
+    "replace": "true",
+    "expect_failing": [
+      "cancel_capabilities_expiry_and_cleanup_match_reference"
+    ],
+    "rule": "Only the matching preview capability cancels staging."
+  },
+  {
+    "id": "D-cancel-locked",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "if kind == \"ui.backup.cancel\" {",
+    "replace": "if kind == \"ui.backup.cancel\" && host.unlocked() {",
+    "expect_failing": [
+      "cancel_capabilities_expiry_and_cleanup_match_reference"
+    ],
+    "rule": "Cancellation works while the target is locked."
+  },
+  {
+    "id": "D-cancel-cleanup",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "self.preview = None;",
+    "replace": "if let Some(p) = self.preview.take() { std::mem::forget(p); }",
+    "expect_failing": [
+      "cancel_capabilities_expiry_and_cleanup_match_reference"
+    ],
+    "rule": "Clearing a preview removes its private decrypted workspace."
+  },
+  {
+    "id": "D-expiry",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "p.expires <= Instant::now()",
+    "replace": "p.expires >= Instant::now()",
+    "expect_failing": [
+      "cancel_capabilities_expiry_and_cleanup_match_reference"
+    ],
+    "rule": "Expired previews are removed and live capabilities remain valid."
+  },
+  {
+    "id": "D-target-locked",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "if !host.unlocked() {\n            return Err",
+    "replace": "if false {\n            return Err",
+    "expect_failing": [
+      "export_paths_plaintext_and_secret_refusals_match_reference"
+    ],
+    "rule": "Backup management requires an unlocked target except cancellation."
+  },
+  {
+    "id": "D-export-suffix",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "p.extension().is_some_and(|e| e == \"kassiber\")",
+    "replace": "true",
+    "expect_failing": [
+      "export_paths_plaintext_and_secret_refusals_match_reference"
+    ],
+    "rule": "Desktop destinations require the exact .kassiber suffix."
+  },
+  {
+    "id": "D-export-contained",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "if target.starts_with(state) {",
+    "replace": "if false && target.starts_with(state) {",
+    "expect_failing": [
+      "export_paths_plaintext_and_secret_refusals_match_reference"
+    ],
+    "rule": "Exports cannot replace files within the active container."
+  },
+  {
+    "id": "D-export-plaintext",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "db_passphrase.filter(|p| !p.is_empty())",
+    "replace": "db_passphrase.filter(|p| p.is_empty())",
+    "expect_failing": [
+      "export_paths_plaintext_and_secret_refusals_match_reference"
+    ],
+    "rule": "Plaintext is refused before requesting an outer passphrase."
+  },
+  {
+    "id": "D-preview-replace",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "\"ui.backup.preview\" => {\n                self.clear();",
+    "replace": "\"ui.backup.preview\" => {",
+    "expect_failing": [
+      "preview_validates_encryption_integrity_summaries_counts_and_redaction"
+    ],
+    "rule": "Choosing another preview clears the previous staging even on refusal."
+  },
+  {
+    "id": "D-preview-path",
+    "file": "crates/backup/src/desktop.rs",
+    "find": ".filter(|p| p.is_absolute())",
+    "replace": ".filter(|p| !p.is_absolute())",
+    "expect_failing": [
+      "preview_validates_encryption_integrity_summaries_counts_and_redaction"
+    ],
+    "rule": "Preview paths must be absolute strings."
+  },
+  {
+    "id": "D-preview-outer",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "Some(secret(args, \"backup_passphrase_secret\")?)",
+    "replace": "Some(string(args, \"backup_passphrase_secret\").unwrap_or(\"\"))",
+    "expect_failing": [
+      "preview_secret_path_and_validation_error_contracts_match_reference"
+    ],
+    "rule": "Missing or empty outer passphrases retain their required-input refusal."
+  },
+  {
+    "id": "D-preview-inner",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "secret(args, \"database_passphrase_secret\")?,",
+    "replace": "string(args, \"database_passphrase_secret\").unwrap_or(\"\"),",
+    "expect_failing": [
+      "preview_secret_path_and_validation_error_contracts_match_reference"
+    ],
+    "rule": "Missing inner passphrases retain their required-input refusal."
+  },
+  {
+    "id": "D-preview-encrypted",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "if kassiber_paths::looks_like_plaintext(&db)",
+    "replace": "if !kassiber_paths::looks_like_plaintext(&db)",
+    "expect_failing": [
+      "preview_validates_encryption_integrity_summaries_counts_and_redaction"
+    ],
+    "rule": "A desktop preview requires an encrypted inner database."
+  },
+  {
+    "id": "D-preview-integrity",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "if check != \"ok\" {",
+    "replace": "if false && check != \"ok\" {",
+    "expect_failing": [
+      "preview_validates_encryption_integrity_summaries_counts_and_redaction"
+    ],
+    "rule": "An authenticated but corrupt incoming database is refused."
+  },
+  {
+    "id": "D-preview-workspaces",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "SELECT label FROM workspaces ORDER BY label LIMIT 100",
+    "replace": "SELECT label FROM workspaces ORDER BY label DESC LIMIT 100",
+    "expect_failing": [
+      "preview_validates_encryption_integrity_summaries_counts_and_redaction"
+    ],
+    "rule": "Workspace labels are sorted and limited to one hundred."
+  },
+  {
+    "id": "D-preview-books",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "SELECT label FROM profiles ORDER BY label LIMIT 100",
+    "replace": "SELECT label FROM profiles ORDER BY label LIMIT 99",
+    "expect_failing": [
+      "preview_validates_encryption_integrity_summaries_counts_and_redaction"
+    ],
+    "rule": "Book labels are sorted and limited to one hundred."
+  },
+  {
+    "id": "D-preview-book-count",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "SELECT count(*) FROM profiles",
+    "replace": "SELECT count(*)+1 FROM profiles",
+    "expect_failing": [
+      "preview_validates_encryption_integrity_summaries_counts_and_redaction"
+    ],
+    "rule": "The count includes all incoming books beyond the label limit."
+  },
+  {
+    "id": "D-preview-redacted-target",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "(\"target\", host.summary().map_err(|_| invalid_backup())?),",
+    "replace": "(\"target\", preview.incoming.clone()),",
+    "expect_failing": [
+      "preview_validates_encryption_integrity_summaries_counts_and_redaction"
+    ],
+    "rule": "Preview reports the current target and incoming label-only summaries separately."
+  },
+  {
+    "id": "D-preview-unavailable",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "let unavailable = !imported.unavailable.is_empty();",
+    "replace": "let unavailable = imported.unavailable.is_empty();",
+    "expect_failing": [
+      "preview_validates_encryption_integrity_summaries_counts_and_redaction"
+    ],
+    "rule": "External secret references remain an availability warning without secret material."
+  },
+  {
+    "id": "D-preview-lifetime",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "Instant::now() + Duration::from_secs(600)",
+    "replace": "Instant::now() + Duration::ZERO",
+    "expect_failing": [
+      "preview_validates_encryption_integrity_summaries_counts_and_redaction"
+    ],
+    "rule": "A newly validated capability lasts six hundred seconds."
+  },
+  {
+    "id": "D-preview-error-mask",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "                        invalid_backup()\n",
+    "replace": "                        e\n",
+    "expect_failing": [
+      "preview_secret_path_and_validation_error_contracts_match_reference"
+    ],
+    "rule": "Archive, decryption and validation failures use the redacted invalid_backup error."
+  },
+  {
+    "id": "D-preview-token-random",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "getrandom::fill(&mut bytes).map_err(io_error)?;",
+    "replace": "bytes.fill(0);",
+    "expect_failing": [
+      "preview_validates_encryption_integrity_summaries_counts_and_redaction"
+    ],
+    "rule": "Preview capabilities use fresh operating-system randomness."
+  },
+  {
+    "id": "D-fingerprint-project",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "project: project.map(str::to_owned),",
+    "replace": "project: None,",
+    "expect_failing": [
+      "fingerprint_pins_connection_project_database_sidecars_and_sqlite_generations"
+    ],
+    "rule": "A preview is bound to the active project."
+  },
+  {
+    "id": "D-fingerprint-connection",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "connection: conn as *const Connection as usize,",
+    "replace": "connection: 0,",
+    "expect_failing": [
+      "fingerprint_pins_connection_project_database_sidecars_and_sqlite_generations"
+    ],
+    "rule": "A reopened connection cannot reuse a preview."
+  },
+  {
+    "id": "D-fingerprint-database",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "files.push((targets[0].1.clone(), stamp(&targets[0].1, true)?));",
+    "replace": "// omitted main database stat",
+    "expect_failing": [
+      "fingerprint_pins_connection_project_database_sidecars_and_sqlite_generations"
+    ],
+    "rule": "The main database identity and metadata participate in the fingerprint."
+  },
+  {
+    "id": "D-fingerprint-sidecars",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "for (_, target) in targets.iter().skip(1) {",
+    "replace": "for (_, target) in targets.iter().skip(8) {",
+    "expect_failing": [
+      "fingerprint_pins_connection_project_database_sidecars_and_sqlite_generations"
+    ],
+    "rule": "SQLite journals and all restore sidecars participate in the fingerprint."
+  },
+  {
+    "id": "D-fingerprint-changes",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "changes: conn.total_changes(),",
+    "replace": "changes: 0,",
+    "expect_failing": [
+      "fingerprint_pins_connection_project_database_sidecars_and_sqlite_generations"
+    ],
+    "rule": "Same-connection changes, including rolled-back writes, invalidate a preview."
+  },
+  {
+    "id": "D-fingerprint-version",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "version: conn\n            .query_row(\"PRAGMA data_version\", [], |r| r.get(0))\n            .map_err(sql_error)?,",
+    "replace": "version: 0,",
+    "expect_failing": [
+      "fingerprint_pins_connection_project_database_sidecars_and_sqlite_generations"
+    ],
+    "rule": "External committed writes invalidate the SQLite data generation."
+  },
+  {
+    "id": "D-fingerprint-stat",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "meta.mtime_nsec() as u128",
+    "replace": "0",
+    "expect_failing": [
+      "fingerprint_pins_connection_project_database_sidecars_and_sqlite_generations"
+    ],
+    "rule": "Nanosecond file metadata is retained exactly."
+  },
+  {
+    "id": "D-digest-links",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "if path.is_symlink() {",
+    "replace": "if false && path.is_symlink() {",
+    "expect_failing": [
+      "apply_confirmation_tokens_target_and_stage_guards_match_reference"
+    ],
+    "rule": "Changed staging links fail with the reference stale-preview refusal."
+  },
+  {
+    "id": "D-digest-paths",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "            digest.update(\n                path.strip_prefix(staging)\n                    .expect(\"descendant\")\n                    .to_str()\n                    .ok_or_else(|| AppError::new(\"internal_error\", \"Restore path is not UTF-8\"))?\n                    .as_bytes(),\n            );",
+    "replace": "",
+    "expect_failing": [
+      "apply_confirmation_tokens_target_and_stage_guards_match_reference"
+    ],
+    "rule": "The staging commitment includes each relative filename."
+  },
+  {
+    "id": "D-digest-content",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "digest.update(&buffer[..size]);",
+    "replace": "digest.update([]);",
+    "expect_failing": [
+      "apply_confirmation_tokens_target_and_stage_guards_match_reference"
+    ],
+    "rule": "The staging commitment includes every file byte."
+  },
+  {
+    "id": "D-apply-confirm",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "if get(args, \"confirm\") != Some(&s(\"RESTORE\")) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "apply_confirmation_tokens_target_and_stage_guards_match_reference"
+    ],
+    "rule": "Apply requires the exact RESTORE confirmation without consuming the preview on refusal."
+  },
+  {
+    "id": "D-apply-token",
+    "file": "crates/backup/src/desktop.rs",
+    "find": ".is_none_or(|p| get(args, \"token\") != Some(&s(p.token.as_str())))",
+    "replace": ".is_none_or(|_| false)",
+    "expect_failing": [
+      "apply_confirmation_tokens_target_and_stage_guards_match_reference"
+    ],
+    "rule": "Apply requires the matching live preview capability."
+  },
+  {
+    "id": "D-apply-target",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "if self.preview.as_ref().is_some_and(|p| p.target != target) {",
+    "replace": "if self.preview.as_ref().is_some_and(|_| false) {",
+    "expect_failing": [
+      "apply_confirmation_tokens_target_and_stage_guards_match_reference"
+    ],
+    "rule": "Apply rechecks every target fingerprint before acquiring maintenance."
+  },
+  {
+    "id": "D-apply-staging",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "if preview.digest != digest_tree(&preview.imported.staging())? {",
+    "replace": "if false && preview.digest != digest_tree(&preview.imported.staging())? {",
+    "expect_failing": [
+      "apply_confirmation_tokens_target_and_stage_guards_match_reference"
+    ],
+    "rule": "Apply rejects altered validated staging before closing the book."
+  },
+  {
+    "id": "D-apply-owner",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "host.ensure_owner()?;",
+    "replace": "// omitted desktop lease",
+    "expect_failing": [
+      "apply_ownership_close_recheck_failures_and_locked_outcomes_match_reference"
+    ],
+    "rule": "The desktop lease remains held through connection retirement and install."
+  },
+  {
+    "id": "D-apply-maintenance",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "let _maintenance = host.maintenance()?;",
+    "replace": "let _maintenance = ();",
+    "expect_failing": [
+      "apply_ownership_close_recheck_failures_and_locked_outcomes_match_reference"
+    ],
+    "rule": "Maintenance excludes the other owner role before close."
+  },
+  {
+    "id": "D-apply-consumption",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "                let _maintenance = host.maintenance()?;\n                let preview = self.preview.take().expect(\"checked preview\");",
+    "replace": "                let preview = self.preview.take().expect(\"checked preview\");\n                let _maintenance = host.maintenance()?;",
+    "expect_failing": [
+      "apply_ownership_close_recheck_failures_and_locked_outcomes_match_reference"
+    ],
+    "rule": "Owner refusals preserve the preview for a later safe apply."
+  },
+  {
+    "id": "D-apply-close",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "host.close_database(&preview.target)?;",
+    "replace": "// omitted close",
+    "expect_failing": [
+      "apply_ownership_close_recheck_failures_and_locked_outcomes_match_reference"
+    ],
+    "rule": "The database closes before restore publication."
+  },
+  {
+    "id": "D-apply-install",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "                    let recovery = kassiber_store::restore::install(\n                        &preview.imported.staging(),\n                        host.data_root(),\n                    )\n                    .map_err(service::restore_error)?;",
+    "replace": "let recovery: Option<PathBuf> = None;",
+    "expect_failing": [
+      "apply_ownership_close_recheck_failures_and_locked_outcomes_match_reference"
+    ],
+    "rule": "Apply installs the retained validated snapshot and returns its rollback location."
+  },
+  {
+    "id": "D-apply-credentials",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "                    let warning = host\n                        .invalidate_credentials()\n                        .err()\n                        .map(|_| s(\"restore_unlock_settings_failed\"))\n                        .unwrap_or(Value::Null);",
+    "replace": "let warning = Value::Null;",
+    "expect_failing": [
+      "apply_ownership_close_recheck_failures_and_locked_outcomes_match_reference"
+    ],
+    "rule": "Restored credentials are invalidated before reporting completion."
+  },
+  {
+    "id": "D-apply-warning",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "s(\"restore_unlock_settings_failed\")",
+    "replace": "s(\"incorrect_warning\")",
+    "expect_failing": [
+      "apply_ownership_close_recheck_failures_and_locked_outcomes_match_reference"
+    ],
+    "rule": "A post-install credential failure is a warning on the completed locked restore."
+  },
+  {
+    "id": "D-apply-locked-error",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "fields.push((\"locked\".into(), Value::Bool(true)));",
+    "replace": "fields.push((\"locked\".into(), Value::Bool(false)));",
+    "expect_failing": [
+      "apply_ownership_close_recheck_failures_and_locked_outcomes_match_reference"
+    ],
+    "rule": "Failures after close disclose that the target is locked."
+  },
+  {
+    "id": "D-apply-release",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "host.release_owner()?;",
+    "replace": "// omitted release",
+    "expect_failing": [
+      "apply_ownership_close_recheck_failures_and_locked_outcomes_match_reference"
+    ],
+    "rule": "A closed target releases desktop ownership after staging cleanup."
+  },
+  {
+    "id": "D-apply-cleanup",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "drop(preview);",
+    "replace": "std::mem::forget(preview);",
+    "expect_failing": [
+      "apply_ownership_close_recheck_failures_and_locked_outcomes_match_reference"
+    ],
+    "rule": "Consumed previews clean up on success and pre/post-close failures."
+  },
+  {
+    "id": "D-close-recheck",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "if &fingerprint(conn, data, project)? != expected {",
+    "replace": "if false && &fingerprint(conn, data, project)? != expected {",
+    "expect_failing": [
+      "apply_ownership_close_recheck_failures_and_locked_outcomes_match_reference"
+    ],
+    "rule": "The target is rechecked after workers quiesce and immediately before checkpoint/close."
+  },
+  {
+    "id": "D-close-readers",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "if busy != 0 {",
+    "replace": "if false && busy != 0 {",
+    "expect_failing": [
+      "close_refuses_busy_wal_readers_before_retiring_connection"
+    ],
+    "rule": "Busy WAL readers block restore before the connection is retired."
+  },
+  {
+    "id": "D-credentials-generations",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "kassiber_secrets::policy::invalidate(namespace, root).map_err(service::restore_error)?;",
+    "replace": "// omitted guards",
+    "expect_failing": [
+      "restore_credentials_revoke_remembered_unlock_without_native_access"
+    ],
+    "rule": "Restore invalidates desktop/operator credential generations without probing native stores."
+  },
+  {
+    "id": "D-credentials-disable",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "kassiber_secrets::policy::Policy::load(namespace, root)?.disable(true)",
+    "replace": "kassiber_secrets::policy::Policy::load(namespace, root)?.disable(false)",
+    "expect_failing": [
+      "restore_credentials_revoke_remembered_unlock_without_native_access"
+    ],
+    "rule": "Restore disables remembered unlock and quarantines legacy enrollment."
+  },
+  {
+    "id": "D-incoming-quiet",
+    "file": "crates/store/src/encryption.rs",
+    "find": "conn.execute_batch(\"PRAGMA cipher_log_level=NONE\")",
+    "replace": "conn.execute_batch(\"PRAGMA cipher_log_level=ERROR\")",
+    "expect_failing": [
+      "incoming_authentication_is_quiet_and_ignores_active_operator_binding"
+    ],
+    "rule": "Failed incoming authentication emits no SQLCipher stderr diagnostics."
+  },
+  {
+    "id": "D-incoming-binding",
+    "file": "crates/store/src/encryption.rs",
+    "find": "if !backup && std::env::var_os(\"KASSIBER_OPERATOR_CHILD\")",
+    "replace": "if std::env::var_os(\"KASSIBER_OPERATOR_CHILD\")",
+    "expect_failing": [
+      "incoming_authentication_is_quiet_and_ignores_active_operator_binding"
+    ],
+    "rule": "Incoming validation does not adopt the active operator database identity."
+  },
+  {
+    "id": "D-preview-preserved-errors",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "[\"backup_passphrase_required\", \"missing_backup\"].contains",
+    "replace": "[\"backup_passphrase_required\", \"different\"].contains",
+    "expect_failing": [
+      "preview_secret_path_and_validation_error_contracts_match_reference"
+    ],
+    "rule": "Missing archives preserve the actionable missing_backup refusal instead of becoming invalid_backup."
+  },
+  {
+    "id": "D-preview-replaces",
+    "file": "crates/backup/src/desktop.rs",
+    "find": ".filter(|(_, p)| p.exists())",
+    "replace": ".filter(|_| false)",
+    "expect_failing": [
+      "preview_validates_encryption_integrity_summaries_counts_and_redaction"
+    ],
+    "rule": "Preview lists only existing replaced entries in restore target order."
+  },
+  {
+    "id": "D-preview-count-only",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "                            \"attachments_files\",\n                        )\n                        .cloned()",
+    "replace": "                            \"incorrect_count\",\n                        )\n                        .cloned()",
+    "expect_failing": [
+      "preview_validates_encryption_integrity_summaries_counts_and_redaction"
+    ],
+    "rule": "The summary carries the declared attachment count without inventing hashes."
+  },
+  {
+    "id": "D-preview-expiry-field",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "(\"expires_in_seconds\", Value::from(600))",
+    "replace": "(\"expires_in_seconds\", Value::from(599))",
+    "expect_failing": [
+      "preview_validates_encryption_integrity_summaries_counts_and_redaction"
+    ],
+    "rule": "The wire preview reports the six hundred second expiration contract."
+  },
+  {
+    "id": "D-apply-restored",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "(\"restored\", Value::Bool(true))",
+    "replace": "(\"restored\", Value::Bool(false))",
+    "expect_failing": [
+      "apply_ownership_close_recheck_failures_and_locked_outcomes_match_reference"
+    ],
+    "rule": "A completed installation reports restored true."
+  },
+  {
+    "id": "D-apply-locked",
+    "file": "crates/backup/src/desktop.rs",
+    "find": "(\"locked\", Value::Bool(true))",
+    "replace": "(\"locked\", Value::Bool(false))",
+    "expect_failing": [
+      "apply_ownership_close_recheck_failures_and_locked_outcomes_match_reference"
+    ],
+    "rule": "A completed restore reports locked true."
+  },
+  {
+    "id": "E-record-padding",
+    "file": "crates/backup/src/archive.rs",
+    "find": "size.div_ceil(10240) * 10240",
+    "replace": "size",
+    "expect_failing": [
+      "disk_members_preserve_pax_names_mtimes_and_python_record_padding"
+    ],
+    "rule": "Encrypted export sizes retain Python tarfile record padding."
+  },
+  {
+    "id": "E-pax-mtime",
+    "file": "crates/backup/src/archive.rs",
+    "find": "pax.push((\"mtime\", mtime.as_bytes()));",
+    "replace": "// omitted mtime record",
+    "expect_failing": [
+      "disk_members_preserve_pax_names_mtimes_and_python_record_padding"
+    ],
+    "rule": "Disk members retain the PAX metadata included in Python export sizes."
+  }
+]
