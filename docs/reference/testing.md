@@ -384,6 +384,22 @@ the same isolated ownership namespace as the native test build. This injection
 lives only in test tooling; production ownership still uses the stable UID
 account-home namespace, independently of `HOME` and XDG settings.
 
+### Black-box goldens
+
+`crates/kassiber/tests/black_box.rs` (feature `test-harness`) drives the
+harness binary on Rust-seeded disposable books and compares each test's
+transcript (argv, exit, stdout/stderr, daemon replies, changed book rows,
+exported files) with its golden under `tests/black_box/golden/`. These tests
+hold the mutation kills the Python parity modules used to hold, and keep
+those modules' test names. Generated uuid4s, wall-clock readings and
+per-process handles are masked. Large outputs keep their head and a digest
+of every byte, and the whole transcript is written beside the test binary
+when a comparison fails. `KASSIBER_BLESS=1` rewrites the goldens; review the
+diff. Children get their XDG roots, offline/agent/update files, owner
+namespace and state root inside the sandbox, never `HOME`. Test builds accept
+`KASSIBER_RUST_TEST_ENTROPY_CLOCK=frozen`, which stops the Privacy Mirror's
+entropy time budget from depending on machine load.
+
 ### Recording
 
 `KASSIBER_TEST_RECORD_SESSIONS=<dir>` records every invocation the runner

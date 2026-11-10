@@ -70,7 +70,9 @@ fn book(sql: &str, offline: bool) -> Sandbox {
     let mut sandbox = Sandbox::book(&format!("{BOOK}{sql}"));
     sandbox
         .set("KASSIBER_RUST_TEST_ANALYSIS_IDS", "sequential")
-        .set("KASSIBER_RUST_TEST_ANALYSIS_TIME", "2026-01-01T00:00:00Z");
+        .set("KASSIBER_RUST_TEST_ANALYSIS_TIME", "2026-01-01T00:00:00Z")
+        // The entropy time budget must not depend on the machine's load.
+        .set("KASSIBER_RUST_TEST_ENTROPY_CLOCK", "frozen");
     if offline {
         sandbox.set("KASSIBER_NO_EGRESS", "1");
     }
