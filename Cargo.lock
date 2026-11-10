@@ -2614,6 +2614,7 @@ name = "kassiber-custody"
 version = "0.1.0"
 dependencies = [
  "bitcoin_hashes",
+ "flate2",
  "kassiber-pydecimal",
  "kassiber-pyjson",
  "kassiber-tax-core",

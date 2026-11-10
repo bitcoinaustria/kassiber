@@ -2,7 +2,7 @@
 # scripts/fetch-test-data.sh; never edit by hand (see
 # docs/reference/testing.md#generated-test-data). <git blob id> <path>
 branch t3code/test-data
-commit 2f2a8114d009821bda4b23e5cb758c5c18fd44b8
+commit 33aa16247374df73685d689530bbed0cf23a845a
 ab2bfbb90cc8996dcee6933efaf1a0fd9ea88f89 crates/ai/tests/data/vectors.json
 b02df587ab3b14801a923c1049f1ce4062b1188e crates/chain/fixtures/python_btcpay.json
 76906734c1ea7bd4f09690ad90894cfcadf9f333 crates/chain/fixtures/python_cln.json
@@ -338,6 +338,7 @@ bd4724efafca6c538332bbae9e68b4485fe6972f tests/fixtures/btcpay_bark/0.9.6/wallet
 f43aec65634374f3f023745bac6cee47c4491b21 tests/fixtures/btcpay_bark/0.9.6/wallet.transactions.unconfirmed.json
 9bddf6100206fb7b921d1896b73ce4a0dca49a20 tests/fixtures/custody_channel_helpers.json
 b13123ee67b9bd3b58542b528efa68a0cdfe808b tests/fixtures/custody_component_cases.json
+3d14c3dcc3242db4a66f572e3ae08ee1d904ab6f tests/fixtures/custody_component_generated.json.gz
 20d981de45cce928c38c79333835528dad37aed2 tests/fixtures/custody_component_review.json
 3a71c0409a96339579d34846308366fb70e9ce2f tests/fixtures/custody_component_semantics.json
 456d241ed624d4e3122aebe86ac96cd5a42dffbc tests/fixtures/custody_consolidation_cases.json

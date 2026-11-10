@@ -367,6 +367,7 @@ ui-tauri/src-tauri/bin/provider_broker/
 /tests/fixtures/btcpay_bark/0.9.6/wallet.transactions.unconfirmed.json
 /tests/fixtures/custody_channel_helpers.json
 /tests/fixtures/custody_component_cases.json
+/tests/fixtures/custody_component_generated.json.gz
 /tests/fixtures/custody_component_review.json
 /tests/fixtures/custody_component_semantics.json
 /tests/fixtures/custody_consolidation_cases.json
