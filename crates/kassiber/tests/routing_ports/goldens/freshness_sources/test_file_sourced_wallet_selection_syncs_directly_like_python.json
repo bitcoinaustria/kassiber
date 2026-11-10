@@ -1,0 +1,714 @@
+{
+ "pytest": "tests/test_rust_freshness_sources.py::test_file_sourced_wallet_selection_syncs_directly_like_python",
+ "sessions": [
+  {
+   "args": [
+    "--data-root",
+    "{tmp}/data",
+    "daemon"
+   ],
+   "cwd": "{repo}",
+   "env": {
+    "COLUMNS": "80",
+    "KASSIBER_AGENT_ACCESS_FILE": "{tmp}/agents.json",
+    "KASSIBER_DISABLE_UPDATE_CHECK": "1",
+    "KASSIBER_OFFLINE_PREFERENCE_FILE": "{tmp}/offline.json",
+    "KASSIBER_RUST_TEST_OWNER_ROOT": "{tmp}/owners",
+    "KASSIBER_TEST_NO_EGRESS": "1",
+    "KASSIBER_UPDATE_CACHE_FILE": "{tmp}/update-cache.json",
+    "KASSIBER_UPDATE_PREFERENCE_FILE": "{tmp}/updates.json",
+    "LANG": "en_US.UTF-8",
+    "LINES": "24",
+    "LOCALAPPDATA": "{tmp}",
+    "TMPDIR": "{tmp}",
+    "USERPROFILE": "{tmp}",
+    "XDG_CONFIG_HOME": "{tmp}/xdg-config",
+    "XDG_DATA_HOME": "{tmp}/xdg-data",
+    "XDG_STATE_HOME": "{tmp}/xdg-state"
+   },
+   "roots": [
+    "{tmp}"
+   ],
+   "recorded_us": [
+    1794333620254586,
+    1794333620254586,
+    1794333621183478
+   ],
+   "setup": [
+    {
+     "mkdir": "{tmp}/attachments",
+     "mode": 493
+    },
+    {
+     "mkdir": "{tmp}/config",
+     "mode": 493
+    },
+    {
+     "write": "{tmp}/config/settings.json",
+     "mode": 384,
+     "text": "{\n  \"app\": \"kassiber\",\n  \"paths\": {\n    \"attachments_root\": \"{tmp}/attachments\",\n    \"config_root\": \"{tmp}/config\",\n    \"data_root\": \"{tmp}/data\",\n    \"database\": \"{tmp}/data/kassiber.sqlite3\",\n    \"env_file\": \"{tmp}/config/backends.env\",\n    \"exports_root\": \"{tmp}/exports\",\n    \"settings_file\": \"{tmp}/config/settings.json\",\n    \"state_root\": \"{tmp}\"\n  },\n  \"schema_version\": 1\n}\n"
+    },
+    {
+     "mkdir": "{tmp}/data",
+     "mode": 493
+    },
+    {
+     "book": "{tmp}/data/kassiber.sqlite3",
+     "create": {
+      "schema": "current",
+      "pragmas": {
+       "user_version": 0,
+       "application_id": 0
+      },
+      "tables": {
+       "accounts": {
+        "upsert": [
+         [
+          1,
+          "acct",
+          "w",
+          "p",
+          "treasury",
+          "Treasury",
+          "asset",
+          "BTC",
+          "2026-01-01T00:00:00Z"
+         ]
+        ]
+       },
+       "backends": {
+        "upsert": [
+         [
+          1,
+          "merchant",
+          "btcpay",
+          null,
+          null,
+          "http://127.0.0.1:39855",
+          null,
+          "synthetic-btcpay-secret",
+          null,
+          null,
+          null,
+          "{}",
+          null,
+          "fixed",
+          "fixed"
+         ],
+         [
+          2,
+          "chain",
+          "esplora",
+          null,
+          null,
+          "http://127.0.0.1:1",
+          null,
+          null,
+          null,
+          null,
+          null,
+          "{}",
+          null,
+          "fixed",
+          "fixed"
+         ]
+        ]
+       },
+       "chain_analysis_dataset_claims": {
+        "replace": []
+       },
+       "chain_index_clock": {
+        "upsert": [
+         [
+          1,
+          1,
+          19
+         ]
+        ]
+       },
+       "chain_index_dirty": {
+        "upsert": [
+         [
+          1,
+          "transactions",
+          -1,
+          1
+         ],
+         [
+          2,
+          "transaction_graph_cache",
+          -1,
+          2
+         ],
+         [
+          3,
+          "wallet_utxos",
+          -1,
+          3
+         ],
+         [
+          4,
+          "chain_analysis_observations",
+          -1,
+          4
+         ],
+         [
+          5,
+          "chain_analysis_reference_assertions",
+          -1,
+          5
+         ],
+         [
+          6,
+          "wallets",
+          -1,
+          19
+         ],
+         [
+          7,
+          "profiles",
+          -1,
+          15
+         ],
+         [
+          8,
+          "journal_custody_decisions",
+          -1,
+          8
+         ],
+         [
+          9,
+          "journal_custody_economic_relations",
+          -1,
+          9
+         ],
+         [
+          10,
+          "chain_analysis_labels",
+          -1,
+          10
+         ],
+         [
+          11,
+          "chain_analysis_datasets",
+          -1,
+          11
+         ],
+         [
+          12,
+          "chain_analysis_dataset_claims",
+          -1,
+          12
+         ],
+         [
+          13,
+          "book_network_bindings",
+          -1,
+          13
+         ],
+         [
+          14,
+          "chain_analysis_acquisition_grants",
+          -1,
+          14
+         ],
+         [
+          15,
+          "transactions",
+          1,
+          17
+         ],
+         [
+          16,
+          "transactions",
+          2,
+          18
+         ]
+        ]
+       },
+       "profiles": {
+        "upsert": [
+         [
+          1,
+          "p",
+          "w",
+          "Book",
+          "USD",
+          "generic",
+          365,
+          "FIFO",
+          0,
+          1,
+          "global",
+          0,
+          0,
+          0,
+          0,
+          null,
+          0,
+          null,
+          "2026-01-01T00:00:00Z",
+          null
+         ]
+        ]
+       },
+       "schema_migration_audits": {
+        "upsert": [
+         [
+          1,
+          "journal-calculation-semantics-adoption-v1",
+          "journal-calculation-semantics-adoption-v1",
+          1,
+          "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
+          "2026-11-10T18:00:17.707Z"
+         ],
+         [
+          2,
+          "wages-acquisition-semantics-v1",
+          "wages-acquisition-semantics-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"affected_transaction_count\":0,\"after\":{\"journal_treatment\":\"basis_bearing_acquisition\"},\"before\":{\"journal_treatment\":\"employment_income\"},\"explanation\":\"Marks wage-bearing journal projections stale so they are rebuilt without employment-income or Kennzahl 172 rows.\",\"name\":\"wages_acquisition_semantics\"}],\"migration\":\"wages-acquisition-semantics-v1\",\"schema_version\":1}",
+          "2026-11-10T18:00:17.716Z"
+         ],
+         [
+          3,
+          "rp2-pool-basis-semantics-v1",
+          "rp2-pool-basis-semantics-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"explanation\":\"Marks previously processed pool journals stale to rebuild holdings with report-cutoff basis; retained journals are unchanged.\",\"name\":\"report_cutoff_pool_basis\"}],\"migration\":\"rp2-pool-basis-semantics-v1\",\"schema_version\":1}",
+          "2026-11-10T18:00:17.716Z"
+         ],
+         [
+          4,
+          "custody-fail-closed-holds-v1",
+          "custody-fail-closed-holds-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"explanation\":\"Marks processed journals stale so unscoped, fan-out, pending and replaced spends are held on the next rebuild; retained journals are unchanged until then.\",\"name\":\"pre_arbitration_custody_holds\"}],\"migration\":\"custody-fail-closed-holds-v1\",\"schema_version\":1}",
+          "2026-11-10T18:00:17.716Z"
+         ],
+         [
+          5,
+          "kassiber-tax-engine-v1",
+          "kassiber-tax-engine-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"explanation\":\"Marks processed journals stale so the next rebuild uses Kassiber's own tax engine at one fixed decimal precision; retained journals are unchanged until then.\",\"name\":\"kassiber_tax_engine\"}],\"migration\":\"kassiber-tax-engine-v1\",\"schema_version\":1}",
+          "2026-11-10T18:00:17.716Z"
+         ],
+         [
+          6,
+          "at-outflow-consumed-regime-v2",
+          "at-outflow-consumed-regime-v2",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+          "2026-11-10T18:00:17.716Z"
+         ],
+         [
+          7,
+          "same-time-source-order-v1",
+          "same-time-source-order-v1",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"same-time-source-order-v1\", \"required_journal_semantics_version\": 8, \"schema_version\": 1}",
+          "2026-11-10T18:00:17.717Z"
+         ],
+         [
+          8,
+          "at-acquisition-valuation-support-v1",
+          "at-acquisition-valuation-support-v1",
+          1,
+          "{\"schema_version\": 1, \"affected_profile_count\": 0, \"explanation\": \"Rebuild Austrian airdrop/hardfork journals with the explicit unsupported-valuation barrier.\"}",
+          "2026-11-10T18:00:17.735Z"
+         ],
+         [
+          9,
+          "custody-partial-payout-pricing-v1",
+          "custody-partial-payout-pricing-v1",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+          "2026-11-10T18:00:17.742Z"
+         ],
+         [
+          10,
+          "custody-legacy-pair-fee-review-v1",
+          "custody-legacy-pair-fee-review-v1",
+          1,
+          "{\"affected_component_count\": 0, \"affected_profile_count\": 0, \"explanation\": \"Legacy pair fee allocations require review; authored economics and retained journals are unchanged.\", \"migration\": \"custody-legacy-pair-fee-review-v1\", \"required_journal_semantics_version\": 7, \"schema_version\": 1}",
+          "2026-11-10T18:00:17Z"
+         ],
+         [
+          11,
+          "price-currency-mismatch-hold-v1",
+          "price-currency-mismatch-hold-v1",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"price-currency-mismatch-hold-v1\", \"required_journal_semantics_version\": 10, \"schema_version\": 1}",
+          "2026-11-10T18:00:17.742Z"
+         ],
+         [
+          12,
+          "stored-error-credentials-v1",
+          "stored-error-credentials-v1",
+          1,
+          "{\"migration\": \"stored-error-credentials-v1\", \"schema_version\": 1, \"scrubbed_value_count\": 0}",
+          "2026-11-10T18:00:17.745Z"
+         ]
+        ]
+       },
+       "settings": {
+        "upsert": [
+         [
+          1,
+          "database_instance_id",
+          "bfcfa6af1c8b45fd82f8da1eabde6848"
+         ],
+         [
+          2,
+          "context_workspace",
+          "w"
+         ],
+         [
+          3,
+          "context_profile",
+          "p"
+         ]
+        ]
+       },
+       "transactions": {
+        "upsert": [
+         [
+          1,
+          "tx-in",
+          "w",
+          "p",
+          "a",
+          "abababababababababababababababababababababababababababababababab",
+          null,
+          "fp-in",
+          "2023-11-14T22:15:00Z",
+          null,
+          "inbound",
+          "BTC",
+          100000000,
+          0,
+          0,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          0,
+          "{}",
+          null,
+          null,
+          null,
+          null,
+          "2026-01-01T00:00:00Z"
+         ],
+         [
+          2,
+          "tx-out",
+          "w",
+          "p",
+          "a",
+          "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+          null,
+          "fp-out",
+          "2023-11-14T22:21:40Z",
+          null,
+          "outbound",
+          "BTC",
+          50000000,
+          0,
+          0,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          0,
+          "{}",
+          null,
+          null,
+          null,
+          null,
+          "2026-01-01T00:00:00Z"
+         ]
+        ]
+       },
+       "wallets": {
+        "upsert": [
+         [
+          1,
+          "a",
+          "w",
+          "p",
+          null,
+          "Cold",
+          "custom",
+          "{}",
+          "2026-01-01T00:00:00Z"
+         ],
+         [
+          2,
+          "mapped",
+          "w",
+          "p",
+          null,
+          "Mapped",
+          "custom",
+          "{\"source_file\": \"{tmp}/exports/mapped.csv\", \"source_format\": \"csv\"}",
+          "2026-01-01T00:00:00Z"
+         ]
+        ]
+       },
+       "workspaces": {
+        "upsert": [
+         [
+          1,
+          "w",
+          "Main",
+          "2026-01-01T00:00:00Z"
+         ]
+        ]
+       }
+      }
+     }
+    },
+    {
+     "mkdir": "{tmp}/exports",
+     "mode": 493
+    },
+    {
+     "write": "{tmp}/exports/mapped.csv",
+     "mode": 420,
+     "text": "txid,occurred_at,direction,asset,amount,fee,description\nabababababababababababababababababababababababababababababababab,2023-11-14T22:15:00Z,inbound,BTC,0.001,0,Mapped\n"
+    }
+   ],
+   "stdin": [
+    {
+     "after_lines": 1,
+     "text": "{\"kind\": \"ui.wallets.sync\", \"request_id\": \"0\", \"args\": {\"wallet\": \"Mapped\", \"process_journals\": false}}\n"
+    },
+    {
+     "after_lines": 4,
+     "text": "{\"kind\": \"daemon.shutdown\", \"request_id\": \"stop\"}\n"
+    },
+    {
+     "after_lines": 5,
+     "close": true
+    }
+   ],
+   "expect": {
+    "exit": 0,
+    "stdout": "{\"kind\":\"daemon.ready\",\"schema_version\":1,\"data\":{\"version\":\"0.22.78\",\"supported_kinds\":[\"ui.chain_analysis.acquire.apply\",\"ui.chain_analysis.acquire.plan\",\"ui.chain_analysis.ai_context\",\"ui.chain_analysis.cases.compare\",\"ui.chain_analysis.cases.delete\",\"ui.chain_analysis.cases.get\",\"ui.chain_analysis.cases.list\",\"ui.chain_analysis.cases.save\",\"ui.chain_analysis.datasets.discard\",\"ui.chain_analysis.datasets.discard.start\",\"ui.chain_analysis.datasets.get\",\"ui.chain_analysis.datasets.import\",\"ui.chain_analysis.datasets.import.start\",\"ui.chain_analysis.datasets.list\",\"ui.chain_analysis.datasets.preview\",\"ui.chain_analysis.datasets.preview.start\",\"ui.chain_analysis.datasets.query\",\"ui.chain_analysis.datasets.revoke\",\"ui.chain_analysis.entropy\",\"ui.chain_analysis.entropy.start\",\"ui.chain_analysis.jobs.cancel\",\"ui.chain_analysis.jobs.get\",\"ui.chain_analysis.labels.delete\",\"ui.chain_analysis.labels.import\",\"ui.chain_analysis.labels.list\",\"ui.chain_analysis.labels.upsert\",\"ui.chain_analysis.psbt.analyze\",\"ui.chain_analysis.psbt.compare\",\"ui.chain_analysis.psbt.entropy\",\"ui.chain_analysis.psbt.entropy.start\",\"ui.chain_analysis.query\",\"ui.chain_analysis.sources.authorize\",\"ui.chain_analysis.sources.list\",\"ui.chain_analysis.sources.plan\",\"ui.chain_analysis.sources.revoke\",\"ui.chain_analysis.sources.run\",\"ui.chain_analysis.watches.acknowledge\",\"ui.chain_analysis.watches.configure\",\"ui.chain_analysis.watches.create\",\"ui.chain_analysis.watches.delete\",\"ui.chain_analysis.watches.evaluate\",\"ui.chain_analysis.watches.inbox\",\"ui.chain_analysis.watches.list\",\"ui.chain_analysis.watches.preview\",\"status\",\"ui.logs.snapshot\",\"ui.agent_access.status\",\"ui.agent_access.configure\",\"ui.agent_access.unlock\",\"ui.agent_access.lock\",\"ui.agent_access.pairing\",\"ui.egress.snapshot\",\"ui.network.offline\",\"ui.network.offline.set\",\"ui.overview.snapshot\",\"ui.workspace.overview.snapshot\",\"ui.transactions.list\",\"ui.transactions.dashboard\",\"ui.transactions.extremes\",\"ui.transactions.resolve\",\"ui.transactions.graph\",\"ui.transactions.review_context\",\"ui.transactions.search\",\"ui.transactions.export_csv\",\"ui.transactions.export_xlsx\",\"ui.transactions.export_platform_csv\",\"ui.transactions.ledger_template\",\"ui.transactions.metadata.update\",\"ui.transactions.history\",\"ui.transactions.history.revert\",\"ui.activity.history\",\"ui.activity.stale\",\"ui.attachments.list\",\"ui.attachments.add\",\"ui.attachments.copy\",\"ui.attachments.rename\",\"ui.attachments.remove\",\"ui.attachments.open\",\"ui.wallets.list\",\"ui.wallets.utxos\",\"ui.privacy_hygiene.snapshot\",\"ui.wallets.identify\",\"ui.wallets.identify_onchain\",\"ui.wallets.identify_onchain.cancel\",\"ui.loans.list\",\"ui.loans.link\",\"ui.loans.mark\",\"ui.loans.unmark\",\"ui.backends.list\",\"ui.backends.options\",\"ui.backends.public_defaults\",\"ui.backends.settings.list\",\"ui.backends.create\",\"ui.backends.update\",\"ui.backends.delete\",\"ui.backends.set_default\",\"ui.backends.bitcoinrpc.test\",\"ui.backends.btcpay.test\",\"ui.backends.detect_core\",\"ui.backends.electrum.test\",\"ui.backends.http.test\",\"ui.backends.lightning.test\",\"ui.reports.capital_gains\",\"ui.reports.explain_capital_gain\",\"ui.reports.summary\",\"ui.reports.balance_sheet\",\"ui.reports.portfolio_summary\",\"ui.reports.tax_summary\",\"ui.reports.balance_history\",\"ui.reports.privacy_hygiene\",\"ui.reports.privacy_mirror\",\"ui.reports.psbt_privacy\",\"ui.reports.exit_tax_preview\",\"ui.reports.export_pdf\",\"ui.reports.export_summary_pdf\",\"ui.reports.export_csv\",\"ui.reports.export_xlsx\",\"ui.reports.export_capital_gains_csv\",\"ui.reports.export_austrian_e1kv_pdf\",\"ui.reports.export_austrian_e1kv_xlsx\",\"ui.reports.export_austrian_e1kv_csv\",\"ui.reports.export_exit_tax_pdf\",\"ui.reports.export_exit_tax_xlsx\",\"ui.reports.export_year_handoff\",\"ui.reports.export_cross_check\",\"ui.reports.export_audit_package\",\"ui.source_funds.preview\",\"ui.source_funds.review_context\",\"ui.source_funds.request_input\",\"ui.source_funds.cases.save\",\"ui.source_funds.cases.list\",\"ui.source_funds.sources.list\",\"ui.source_funds.sources.create\",\"ui.source_funds.sources.attach\",\"ui.source_funds.links.list\",\"ui.source_funds.links.create\",\"ui.source_funds.links.review\",\"ui.source_funds.links.bulk_review\",\"ui.source_funds.links.attach\",\"ui.source_funds.suggest\",\"ui.source_funds.assemble\",\"ui.source_funds.evidence.list\",\"ui.source_funds.export_pdf\",\"ui.source_funds.export_bundle\",\"ui.source_funds.coverage\",\"ui.source_funds.recipients.list\",\"ui.source_funds.recipients.create\",\"ui.source_funds.recipients.update\",\"ui.source_funds.recipients.delete\",\"ui.btcpay.provenance.sync\",\"ui.btcpay.provenance.list\",\"ui.btcpay.provenance.suggest\",\"ui.btcpay.provenance.links\",\"ui.btcpay.provenance.review\",\"ui.transactions.commercial_context\",\"ui.documents.list\",\"ui.documents.create\",\"ui.documents.attach\",\"ui.documents.import_report\",\"ui.journals.snapshot\",\"ui.journals.events.list\",\"ui.journals.quarantine\",\"ui.journals.quarantine.resolve\",\"ui.journals.transfers.list\",\"ui.journals.process\",\"ui.transfers.suggest\",\"ui.transfers.review_context\",\"ui.transfers.list\",\"ui.transfers.payouts.list\",\"ui.transfers.payouts.create\",\"ui.transfers.payouts.delete\",\"ui.transfers.pair\",\"ui.transfers.unpair\",\"ui.transfers.update\",\"ui.transfers.bulk_pair\",\"ui.transfers.dismiss\",\"ui.transfers.dismissals.list\",\"ui.transfers.dismissals.delete\",\"ui.transfers.components.list\",\"ui.transfers.components.get\",\"ui.transfers.components.plan\",\"ui.transfers.components.apply\",\"ui.custody.coverage.snapshot\",\"ui.custody.lineage.snapshot\",\"ui.custody.gaps.list\",\"ui.custody.gaps.review_context\",\"ui.custody.gaps.history\",\"ui.custody.review.plan\",\"ui.custody.review.apply\",\"ui.transfers.rules.list\",\"ui.transfers.rules.create\",\"ui.transfers.rules.delete\",\"ui.transfers.rules.set_enabled\",\"ui.transfers.rules.apply\",\"ui.saved_views.list\",\"ui.saved_views.create\",\"ui.saved_views.delete\",\"ui.networks.partition_plan\",\"ui.networks.partition_export\",\"ui.networks.binding\",\"ui.networks.inventory\",\"ui.networks.plan\",\"ui.networks.bind\",\"ui.profiles.snapshot\",\"ui.onboarding.complete\",\"ui.profiles.create\",\"ui.profiles.rename\",\"ui.profiles.update\",\"ui.profiles.switch\",\"ui.rates.summary\",\"ui.rates.coverage\",\"ui.rates.kraken_csv.import\",\"ui.rates.latest\",\"ui.rates.rebuild\",\"ui.report.blockers\",\"ui.audit.changes_since_last_answer\",\"ui.audit.evidence.summary\",\"ui.review.worklist\",\"ui.review.cases\",\"ui.review.request_input\",\"ui.review.plan\",\"ui.review.apply\",\"ui.review.receipt\",\"ui.maintenance.settings\",\"ui.maintenance.configure\",\"ui.maintenance.run\",\"ui.freshness.status\",\"ui.freshness.configure\",\"ui.freshness.run\",\"ui.freshness.cancel\",\"ui.freshness.pause\",\"ui.freshness.resume\",\"ui.workspace.health\",\"ui.workspace.freshness.run\",\"ui.workspace.create\",\"ui.workspace.rename\",\"ui.workspace.delete\",\"ui.profiles.reset_data\",\"ui.projects.list\",\"ui.projects.create\",\"ui.projects.select\",\"ui.backup.export\",\"ui.backup.preview\",\"ui.backup.apply\",\"ui.backup.cancel\",\"ui.secrets.init\",\"ui.secrets.change_passphrase\",\"ui.secrets.forget_cli_unlock\",\"ui.next_actions\",\"ui.review.badges\",\"ui.wallets.create\",\"ui.wallets.import_file\",\"internal.document_import.stage\",\"ui.chat.attachments.upload\",\"internal.chain_analysis.stage\",\"ui.wallets.document_import.preview\",\"ui.wallets.document_import.import\",\"ui.wallets.import_samourai\",\"ui.wallets.ledger_preview\",\"ui.wallets.analyze_file\",\"ui.imports.list\",\"ui.imports.rollback\",\"ui.wallets.preview_descriptor\",\"ui.wallets.detect_script_types\",\"ui.connections.sources\",\"ui.connections.btcpay.create\",\"ui.connections.bullbitcoin_wallet.create\",\"ui.connections.btcpay.discover\",\"ui.connections.btcpay.key_guide\",\"ui.connections.btcpay.test\",\"ui.connections.node.snapshot\",\"ui.reports.lightning_profitability\",\"ui.metadata.bip329.preview\",\"ui.metadata.bip329.import\",\"ui.metadata.bip329.export\",\"ui.exports.preview\",\"ui.reports.cross_check\",\"ui.wallets.update\",\"ui.wallets.delete\",\"ui.wallets.sync\",\"daemon.lock\",\"daemon.unlock\",\"ai.providers.list\",\"ai.providers.get\",\"ai.providers.create\",\"ai.providers.update\",\"ai.providers.set_api_key\",\"ai.providers.move_api_key\",\"ai.providers.delete\",\"ai.providers.set_default\",\"ai.providers.clear_default\",\"ai.providers.acknowledge\",\"ai.provider_runtime.status\",\"ai.list_models\",\"ai.test_connection\",\"ai.chat\",\"ai.chat.cancel\",\"ai.tool_call.consent\",\"ai.chat.permission_mode\",\"ui.chat.sessions.list\",\"ui.chat.sessions.get\",\"ui.chat.sessions.delete\",\"ui.chat.sessions.clear\",\"ui.chat.history.configure\",\"wallets.reveal_descriptor\",\"backends.reveal_token\",\"daemon.shutdown\",\"ui.connections.exchange.status\",\"ui.connections.exchange.test\",\"ui.connections.exchange.create\",\"ui.connections.exchange.sync\",\"test.stream\",\"test.journals.refresh\",\"test.emit_event\",\"test.late\",\"test.secret_store\",\"test.freshness.plan\",\"test.freshness.select\",\"test.freshness.invoke\",\"test.freshness.execute\",\"test.freshness.product.execute\",\"test.freshness.cancel\",\"test.freshness.pause\",\"test.freshness.resume\",\"test.freshness.request.cancel\",\"test.freshness.request.revoke\",\"test.freshness.graph.pending\",\"test.freshness.graph.start\",\"test.ai_tool\",\"test.ai_auto_read\",\"test.ai_consent_preview\",\"test.ai_custody_record\"]}}\n{\"kind\":\"ui.wallets.sync.progress\",\"schema_version\":1,\"data\":{\"phase\":\"importing\",\"wallet\":\"Mapped\",\"processed\":0,\"total\":1},\"request_id\":\"0\"}\n{\"kind\":\"ui.wallets.sync.progress\",\"schema_version\":1,\"data\":{\"phase\":\"importing\",\"wallet\":\"Mapped\",\"processed\":1,\"total\":1,\"imported\":1,\"skipped\":0},\"request_id\":\"0\"}\n{\"kind\":\"ui.wallets.sync\",\"schema_version\":1,\"data\":{\"profile\":{\"id\":\"p\",\"label\":\"Book\"},\"results\":[{\"wallet\":\"Mapped\",\"status\":\"synced\",\"source\":\"file:csv\",\"imported\":1,\"skipped\":0,\"unchanged\":0,\"journal_invalidated\":true,\"inserted_records\":[{\"transaction_id\":\"156aa470-627e-4578-a4e8-b82f7e590ed3\",\"external_id\":\"txid#4e6f0005\",\"wallet\":\"Mapped\",\"asset\":\"BTC\",\"direction\":\"inbound\",\"amount_msat\":100000000,\"changed_fields\":[\"metadata\",\"pricing\",\"transaction\"],\"pricing_external_ref\":null}],\"updated_records\":[],\"import_batch_id\":\"d8ce2bea-06ef-4e7d-9327-8bf76a3ed4dc\",\"input_format\":\"csv\",\"file\":\"{tmp}/exports/mapped.csv\"}],\"force_full\":false,\"recovered\":[],\"enqueued\":[],\"completed\":[],\"policy\":{\"background_enabled\":false,\"source_classes\":{\"btcpay_provenance\":false,\"btcpay_wallet\":false,\"journals\":true,\"market_rates\":false,\"onchain_wallet\":false},\"report_read_sync\":false},\"sources\":[],\"jobs\":[],\"summary\":{\"sources\":0,\"active_jobs\":0,\"blocking_reports\":0,\"rate_limited\":0},\"ok\":true},\"request_id\":\"0\"}\n{\"kind\":\"daemon.shutdown\",\"schema_version\":1,\"data\":{},\"request_id\":\"stop\"}\n",
+    "stderr": "",
+    "changes": {
+     "{tmp}/data/kassiber.sqlite3": {
+      "book": {
+       "tables": {
+        "chain_index_clock": {
+         "upsert": [
+          [
+           1,
+           1,
+           23
+          ]
+         ]
+        },
+        "chain_index_dirty": {
+         "upsert": [
+          [
+           6,
+           "wallets",
+           -1,
+           23
+          ],
+          [
+           7,
+           "profiles",
+           -1,
+           22
+          ],
+          [
+           17,
+           "transactions",
+           3,
+           20
+          ]
+         ]
+        },
+        "import_batch_transactions": {
+         "upsert": [
+          [
+           1,
+           "d8ce2bea-06ef-4e7d-9327-8bf76a3ed4dc",
+           "156aa470-627e-4578-a4e8-b82f7e590ed3",
+           1
+          ]
+         ]
+        },
+        "import_batches": {
+         "upsert": [
+          [
+           1,
+           "d8ce2bea-06ef-4e7d-9327-8bf76a3ed4dc",
+           "w",
+           "p",
+           "mapped",
+           "csv",
+           "mapped.csv",
+           null,
+           "<now>",
+           1,
+           1,
+           0,
+           0
+          ]
+         ]
+        },
+        "profiles": {
+         "upsert": [
+          [
+           1,
+           "p",
+           "w",
+           "Book",
+           "USD",
+           "generic",
+           365,
+           "FIFO",
+           0,
+           1,
+           "global",
+           1,
+           0,
+           1,
+           0,
+           null,
+           0,
+           null,
+           "2026-01-01T00:00:00Z",
+           null
+          ]
+         ]
+        },
+        "transactions": {
+         "upsert": [
+          [
+           3,
+           "156aa470-627e-4578-a4e8-b82f7e590ed3",
+           "w",
+           "p",
+           "mapped",
+           "abababababababababababababababababababababababababababababababab",
+           "txid",
+           "7231e216afb64aadf96eaa6835a1d669d939c7541f4bb22ed6e1e2d77d3427ff",
+           "2023-11-14T22:15:00Z",
+           null,
+           "inbound",
+           "BTC",
+           100000000,
+           0,
+           0,
+           "USD",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "missing",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "Mapped",
+           null,
+           null,
+           0,
+           "{\"amount\": \"0.001\", \"asset\": \"BTC\", \"description\": \"Mapped\", \"direction\": \"inbound\", \"fee\": \"0\", \"occurred_at\": \"2023-11-14T22:15:00Z\", \"txid\": \"abababababababababababababababababababababababababababababababab\"}",
+           null,
+           null,
+           null,
+           null,
+           "<now>"
+          ]
+         ]
+        },
+        "wallets": {
+         "upsert": [
+          [
+           2,
+           "mapped",
+           "w",
+           "p",
+           null,
+           "Mapped",
+           "custom",
+           "{\"last_synced_at\": \"<now>\", \"source_file\": \"{tmp}/exports/mapped.csv\", \"source_format\": \"csv\"}",
+           "2026-01-01T00:00:00Z"
+          ]
+         ]
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ ]
+}

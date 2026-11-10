@@ -77,3 +77,8 @@ unsafe_code = "forbid"
 [[example]]
 name = "psbt_transport_fixture"
 required-features = ["test-harness"]
+
+[[test]]
+name = "routing_ports"
+path = "tests/routing_ports/main.rs"
+required-features = ["test-harness"]

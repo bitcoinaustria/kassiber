@@ -1,0 +1,1873 @@
+{
+ "pytest": "tests/test_rust_wallet_sync_bark.py::test_the_bark_wallet_books_like_python",
+ "sessions": [
+  {
+   "args": [
+    "--data-root",
+    "{tmp}/data",
+    "--machine",
+    "wallets",
+    "sync",
+    "--wallet",
+    "Bark"
+   ],
+   "cwd": "{repo}",
+   "env": {
+    "COLUMNS": "80",
+    "KASSIBER_AGENT_ACCESS_FILE": "{tmp}/agents.json",
+    "KASSIBER_DISABLE_UPDATE_CHECK": "1",
+    "KASSIBER_OFFLINE_PREFERENCE_FILE": "{tmp}/offline.json",
+    "KASSIBER_RUST_TEST_OWNER_ROOT": "{tmp}/owners",
+    "KASSIBER_RUST_TEST_PROBE": "1",
+    "KASSIBER_TEST_NO_EGRESS": "1",
+    "KASSIBER_UPDATE_CACHE_FILE": "{tmp}/update-cache.json",
+    "KASSIBER_UPDATE_PREFERENCE_FILE": "{tmp}/updates.json",
+    "LANG": "en_US.UTF-8",
+    "LINES": "24",
+    "LOCALAPPDATA": "{tmp}",
+    "TMPDIR": "{tmp}",
+    "USERPROFILE": "{tmp}",
+    "XDG_CONFIG_HOME": "{tmp}/xdg-config",
+    "XDG_DATA_HOME": "{tmp}/xdg-data",
+    "XDG_STATE_HOME": "{tmp}/xdg-state"
+   },
+   "roots": [
+    "{tmp}"
+   ],
+   "recorded_us": [
+    1794333602160372,
+    1794333602160372,
+    1794333602177750
+   ],
+   "setup": [
+    {
+     "mkdir": "{tmp}/attachments",
+     "mode": 493
+    },
+    {
+     "mkdir": "{tmp}/config",
+     "mode": 493
+    },
+    {
+     "write": "{tmp}/config/settings.json",
+     "mode": 384,
+     "text": "{\n  \"app\": \"kassiber\",\n  \"paths\": {\n    \"attachments_root\": \"{tmp}/attachments\",\n    \"config_root\": \"{tmp}/config\",\n    \"data_root\": \"{tmp}/data\",\n    \"database\": \"{tmp}/data/kassiber.sqlite3\",\n    \"env_file\": \"{tmp}/config/backends.env\",\n    \"exports_root\": \"{tmp}/exports\",\n    \"settings_file\": \"{tmp}/config/settings.json\",\n    \"state_root\": \"{tmp}\"\n  },\n  \"schema_version\": 1\n}\n"
+    },
+    {
+     "mkdir": "{tmp}/data",
+     "mode": 493
+    },
+    {
+     "book": "{tmp}/data/kassiber.sqlite3",
+     "create": {
+      "schema": "current",
+      "pragmas": {
+       "user_version": 0,
+       "application_id": 0
+      },
+      "tables": {
+       "accounts": {
+        "upsert": [
+         [
+          1,
+          "acct",
+          "w",
+          "p",
+          "treasury",
+          "Treasury",
+          "asset",
+          "BTC",
+          "2026-01-01T00:00:00Z"
+         ]
+        ]
+       },
+       "backends": {
+        "upsert": [
+         [
+          1,
+          "merchant",
+          "btcpay",
+          null,
+          null,
+          "http://127.0.0.1:38857",
+          null,
+          "synthetic-btcpay-secret",
+          null,
+          null,
+          null,
+          "{}",
+          null,
+          "fixed",
+          "fixed"
+         ],
+         [
+          2,
+          "chain",
+          "esplora",
+          null,
+          null,
+          "http://127.0.0.1:1",
+          null,
+          null,
+          null,
+          null,
+          null,
+          "{}",
+          null,
+          "fixed",
+          "fixed"
+         ]
+        ]
+       },
+       "chain_analysis_dataset_claims": {
+        "replace": []
+       },
+       "chain_index_clock": {
+        "upsert": [
+         [
+          1,
+          1,
+          17
+         ]
+        ]
+       },
+       "chain_index_dirty": {
+        "upsert": [
+         [
+          1,
+          "transactions",
+          -1,
+          1
+         ],
+         [
+          2,
+          "transaction_graph_cache",
+          -1,
+          2
+         ],
+         [
+          3,
+          "wallet_utxos",
+          -1,
+          3
+         ],
+         [
+          4,
+          "chain_analysis_observations",
+          -1,
+          4
+         ],
+         [
+          5,
+          "chain_analysis_reference_assertions",
+          -1,
+          5
+         ],
+         [
+          6,
+          "wallets",
+          -1,
+          17
+         ],
+         [
+          7,
+          "profiles",
+          -1,
+          15
+         ],
+         [
+          8,
+          "journal_custody_decisions",
+          -1,
+          8
+         ],
+         [
+          9,
+          "journal_custody_economic_relations",
+          -1,
+          9
+         ],
+         [
+          10,
+          "chain_analysis_labels",
+          -1,
+          10
+         ],
+         [
+          11,
+          "chain_analysis_datasets",
+          -1,
+          11
+         ],
+         [
+          12,
+          "chain_analysis_dataset_claims",
+          -1,
+          12
+         ],
+         [
+          13,
+          "book_network_bindings",
+          -1,
+          13
+         ],
+         [
+          14,
+          "chain_analysis_acquisition_grants",
+          -1,
+          14
+         ]
+        ]
+       },
+       "profiles": {
+        "upsert": [
+         [
+          1,
+          "p",
+          "w",
+          "Book",
+          "USD",
+          "generic",
+          365,
+          "FIFO",
+          0,
+          1,
+          "global",
+          0,
+          0,
+          0,
+          0,
+          null,
+          0,
+          null,
+          "2026-01-01T00:00:00Z",
+          null
+         ]
+        ]
+       },
+       "schema_migration_audits": {
+        "upsert": [
+         [
+          1,
+          "journal-calculation-semantics-adoption-v1",
+          "journal-calculation-semantics-adoption-v1",
+          1,
+          "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
+          "2026-11-10T18:00:00.353Z"
+         ],
+         [
+          2,
+          "wages-acquisition-semantics-v1",
+          "wages-acquisition-semantics-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"affected_transaction_count\":0,\"after\":{\"journal_treatment\":\"basis_bearing_acquisition\"},\"before\":{\"journal_treatment\":\"employment_income\"},\"explanation\":\"Marks wage-bearing journal projections stale so they are rebuilt without employment-income or Kennzahl 172 rows.\",\"name\":\"wages_acquisition_semantics\"}],\"migration\":\"wages-acquisition-semantics-v1\",\"schema_version\":1}",
+          "2026-11-10T18:00:00.361Z"
+         ],
+         [
+          3,
+          "rp2-pool-basis-semantics-v1",
+          "rp2-pool-basis-semantics-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"explanation\":\"Marks previously processed pool journals stale to rebuild holdings with report-cutoff basis; retained journals are unchanged.\",\"name\":\"report_cutoff_pool_basis\"}],\"migration\":\"rp2-pool-basis-semantics-v1\",\"schema_version\":1}",
+          "2026-11-10T18:00:00.362Z"
+         ],
+         [
+          4,
+          "custody-fail-closed-holds-v1",
+          "custody-fail-closed-holds-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"explanation\":\"Marks processed journals stale so unscoped, fan-out, pending and replaced spends are held on the next rebuild; retained journals are unchanged until then.\",\"name\":\"pre_arbitration_custody_holds\"}],\"migration\":\"custody-fail-closed-holds-v1\",\"schema_version\":1}",
+          "2026-11-10T18:00:00.362Z"
+         ],
+         [
+          5,
+          "kassiber-tax-engine-v1",
+          "kassiber-tax-engine-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"explanation\":\"Marks processed journals stale so the next rebuild uses Kassiber's own tax engine at one fixed decimal precision; retained journals are unchanged until then.\",\"name\":\"kassiber_tax_engine\"}],\"migration\":\"kassiber-tax-engine-v1\",\"schema_version\":1}",
+          "2026-11-10T18:00:00.362Z"
+         ],
+         [
+          6,
+          "at-outflow-consumed-regime-v2",
+          "at-outflow-consumed-regime-v2",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+          "2026-11-10T18:00:00.363Z"
+         ],
+         [
+          7,
+          "same-time-source-order-v1",
+          "same-time-source-order-v1",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"same-time-source-order-v1\", \"required_journal_semantics_version\": 8, \"schema_version\": 1}",
+          "2026-11-10T18:00:00.363Z"
+         ],
+         [
+          8,
+          "at-acquisition-valuation-support-v1",
+          "at-acquisition-valuation-support-v1",
+          1,
+          "{\"schema_version\": 1, \"affected_profile_count\": 0, \"explanation\": \"Rebuild Austrian airdrop/hardfork journals with the explicit unsupported-valuation barrier.\"}",
+          "2026-11-10T18:00:00.402Z"
+         ],
+         [
+          9,
+          "custody-partial-payout-pricing-v1",
+          "custody-partial-payout-pricing-v1",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+          "2026-11-10T18:00:00.416Z"
+         ],
+         [
+          10,
+          "custody-legacy-pair-fee-review-v1",
+          "custody-legacy-pair-fee-review-v1",
+          1,
+          "{\"affected_component_count\": 0, \"affected_profile_count\": 0, \"explanation\": \"Legacy pair fee allocations require review; authored economics and retained journals are unchanged.\", \"migration\": \"custody-legacy-pair-fee-review-v1\", \"required_journal_semantics_version\": 7, \"schema_version\": 1}",
+          "2026-11-10T18:00:00Z"
+         ],
+         [
+          11,
+          "price-currency-mismatch-hold-v1",
+          "price-currency-mismatch-hold-v1",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"price-currency-mismatch-hold-v1\", \"required_journal_semantics_version\": 10, \"schema_version\": 1}",
+          "2026-11-10T18:00:00.422Z"
+         ],
+         [
+          12,
+          "stored-error-credentials-v1",
+          "stored-error-credentials-v1",
+          1,
+          "{\"migration\": \"stored-error-credentials-v1\", \"schema_version\": 1, \"scrubbed_value_count\": 0}",
+          "2026-11-10T18:00:00.427Z"
+         ]
+        ]
+       },
+       "settings": {
+        "upsert": [
+         [
+          1,
+          "database_instance_id",
+          "902312d96a13401e9c257f4f5d067a56"
+         ],
+         [
+          2,
+          "context_workspace",
+          "w"
+         ],
+         [
+          3,
+          "context_profile",
+          "p"
+         ]
+        ]
+       },
+       "wallets": {
+        "upsert": [
+         [
+          1,
+          "a",
+          "w",
+          "p",
+          null,
+          "Cold",
+          "custom",
+          "{}",
+          "2026-01-01T00:00:00Z"
+         ],
+         [
+          2,
+          "bark",
+          "w",
+          "p",
+          null,
+          "Bark",
+          "custom",
+          "{\"sync_source\": \"btcpay\", \"backend\": \"merchant\", \"store_id\": \"shop\", \"payment_method_id\": \"BTC-ARK\", \"chain\": \"bitcoin\"}",
+          "2026-01-01T00:00:00Z"
+         ]
+        ]
+       },
+       "workspaces": {
+        "upsert": [
+         [
+          1,
+          "w",
+          "Main",
+          "2026-01-01T00:00:00Z"
+         ]
+        ]
+       }
+      }
+     }
+    },
+    {
+     "mkdir": "{tmp}/exports",
+     "mode": 493
+    }
+   ],
+   "expect": {
+    "exit": 0,
+    "stdout": "wallets.sync\n",
+    "stderr": "",
+    "changes": {}
+   }
+  },
+  {
+   "args": [
+    "--data-root",
+    "{tmp}/data",
+    "--machine",
+    "wallets",
+    "sync",
+    "--wallet",
+    "Bark"
+   ],
+   "cwd": "{repo}",
+   "env": {
+    "COLUMNS": "80",
+    "KASSIBER_AGENT_ACCESS_FILE": "{tmp}/agents.json",
+    "KASSIBER_DISABLE_UPDATE_CHECK": "1",
+    "KASSIBER_OFFLINE_PREFERENCE_FILE": "{tmp}/offline.json",
+    "KASSIBER_RUST_TEST_OWNER_ROOT": "{tmp}/owners",
+    "KASSIBER_RUST_TEST_SYNC_HANDOFF": "1",
+    "KASSIBER_TEST_NO_EGRESS": "1",
+    "KASSIBER_UPDATE_CACHE_FILE": "{tmp}/update-cache.json",
+    "KASSIBER_UPDATE_PREFERENCE_FILE": "{tmp}/updates.json",
+    "LANG": "en_US.UTF-8",
+    "LINES": "24",
+    "LOCALAPPDATA": "{tmp}",
+    "TMPDIR": "{tmp}",
+    "USERPROFILE": "{tmp}",
+    "XDG_CONFIG_HOME": "{tmp}/xdg-config",
+    "XDG_DATA_HOME": "{tmp}/xdg-data",
+    "XDG_STATE_HOME": "{tmp}/xdg-state"
+   },
+   "roots": [
+    "{tmp}"
+   ],
+   "recorded_us": [
+    1794333602160372,
+    1794333602307763,
+    1794333602927686
+   ],
+   "tape": {"templates":["GET /api/v1/stores/shop/invoices?skip=0&take=100&includePaymentMethods=true HTTP/1.1\r\nHost: 127.0.0.1:38857\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token synthetic-btcpay-secret\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 2\r\n\r\n","GET /api/v1/stores/shop/payouts?includeCancelled=false HTTP/1.1\r\nHost: 127.0.0.1:38857\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token synthetic-btcpay-secret\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 2\r\n\r\n[]","GET /api/v1/stores/shop/payment-methods/BTC-ARK/wallet/transactions?statusFilter=Confirmed&skip=0&limit=100 HTTP/1.1\r\nHost: 127.0.0.1:38857\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token synthetic-btcpay-secret\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 2152\r\n\r\n[{\"id\": \"9-1:x\", \"kind\": \"ark-send\", \"amount\": \"-0.00001000\", \"fee\": \"0\", \"status\": \"Confirmed\", \"confirmations\": 1, \"timestamp\": 1767312000, \"comment\": \"\", \"labels\": {}}, {\"id\": \"8-1\", \"kind\": \"refresh\", \"amount\": \"-0.00000050\", \"fee\": \"0.00000050\", \"status\": \"Confirmed\", \"confirmations\": 1, \"timestamp\": 1767312000, \"comment\": \"\", \"labels\": {}}, {\"id\": \"7-1\", \"kind\": \"board\", \"amount\": \"-0.00000500\", \"fee\": \"0.00000500\", \"status\": \"Confirmed\", \"confirmations\": 1, \"timestamp\": 1767312000, \"comment\": \"\", \"labels\": {}, \"transactionHash\": \"\u0001\"}, {\"id\": \"6-1\", \"kind\": \"lightning-receive\", \"amount\": \"0.00009990\", \"fee\": \"0.00000010\", \"status\": \"Confirmed\", \"confirmations\": 1, \"timestamp\": 1767312000, \"comment\": \"\", \"labels\": {\"invoice\": {\"type\": \"invoice\", \"text\": \"invoice\", \"ref\": \"inv-ln\"}}, \"paymentHash\": \"\u0001\"}, {\"id\": \"5-1:\u0001:0\", \"kind\": \"ark-receive\", \"amount\": \"0.00020000\", \"fee\": null, \"status\": \"Confirmed\", \"confirmations\": 1, \"timestamp\": 1767312000, \"comment\": \"\", \"labels\": {\"invoice\": {\"type\": \"invoice\", \"text\": \"invoice\", \"ref\": \"inv-ark\"}}, \"outpoint\": \"\u0001:0\", \"transactionHash\": \"\u0001\"}, {\"id\": \"3-1:\u0001:1\", \"kind\": \"ark-receive\", \"amount\": \"0.00005000\", \"fee\": null, \"status\": \"Confirmed\", \"confirmations\": 1, \"timestamp\": 1767312000, \"comment\": \"\", \"labels\": {\"invoice\": {\"type\": \"invoice\", \"text\": \"invoice\", \"ref\": \"inv-old\"}}, \"outpoint\": \"\u0001:1\", \"movementId\": 3}, {\"id\": \"tx:\u0001\", \"kind\": \"onchain-receive\", \"amount\": \"0.00100000\", \"fee\": null, \"status\": \"Confirmed\", \"confirmations\": 1, \"timestamp\": 1767312000, \"comment\": \"\", \"labels\": {}, \"transactionHash\": \"\u0001\"}]"],"connections":[[1,false,"127.0.0.1",38857,1,null,[["w",229,[0]],["r",[1]],["r","[]"]]],[2,false,"127.0.0.1",38857,1,null,[["w",208,[2]],["r",[3]]]],[3,false,"127.0.0.1",38857,1,null,[["w",261,[4]],["r",[5,"c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1","b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1","a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1","a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1","a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1","a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2","a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2","d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1","d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1"]]]]]},
+   "expect": {
+    "exit": 0,
+    "stdout": "{\n  \"kind\": \"wallets.sync\",\n  \"schema_version\": 1,\n  \"data\": [\n    {\n      \"wallet\": \"Bark\",\n      \"status\": \"synced\",\n      \"source\": \"btcpay-bark:merchant:shop\",\n      \"imported\": 8,\n      \"skipped\": 0,\n      \"unchanged\": 0,\n      \"journal_invalidated\": true,\n      \"inserted_records\": [\n        {\n          \"transaction_id\": \"aa0ff64c-053c-4d3d-9fa4-adeac7546a4d\",\n          \"external_id\": \"btcpay-bark:shop:9-1:x\",\n          \"wallet\": \"Bark\",\n          \"asset\": \"BTC\",\n          \"direction\": \"outbound\",\n          \"amount_msat\": 1000000,\n          \"changed_fields\": [\n            \"metadata\",\n            \"pricing\",\n            \"transaction\"\n          ],\n          \"pricing_external_ref\": null\n        },\n        {\n          \"transaction_id\": \"ddbbd997-62c2-4143-9c4e-1b41fd824ba6\",\n          \"external_id\": \"btcpay-bark:shop:8-1\",\n          \"wallet\": \"Bark\",\n          \"asset\": \"BTC\",\n          \"direction\": \"outbound\",\n          \"amount_msat\": 0,\n          \"changed_fields\": [\n            \"metadata\",\n            \"pricing\",\n            \"transaction\"\n          ],\n          \"pricing_external_ref\": null\n        },\n        {\n          \"transaction_id\": \"69ff055f-bbef-4fdd-a200-28eb2ecbbddd\",\n          \"external_id\": \"btcpay-bark:shop:7-1\",\n          \"wallet\": \"Bark\",\n          \"asset\": \"BTC\",\n          \"direction\": \"outbound\",\n          \"amount_msat\": 0,\n          \"changed_fields\": [\n            \"metadata\",\n            \"pricing\",\n            \"transaction\"\n          ],\n          \"pricing_external_ref\": null\n        },\n        {\n          \"transaction_id\": \"bc9a47a3-131f-47d0-a4d1-c57d2d404f16\",\n          \"external_id\": \"btcpay-bark:shop:6-1\",\n          \"wallet\": \"Bark\",\n          \"asset\": \"BTC\",\n          \"direction\": \"inbound\",\n          \"amount_msat\": 10000000,\n          \"changed_fields\": [\n            \"metadata\",\n            \"pricing\",\n            \"transaction\"\n          ],\n          \"pricing_external_ref\": null\n        },\n        {\n          \"transaction_id\": \"5e2f29f8-9e47-452e-98d2-48086031065c\",\n          \"external_id\": \"btcpay-bark:shop:6-1:fee\",\n          \"wallet\": \"Bark\",\n          \"asset\": \"BTC\",\n          \"direction\": \"outbound\",\n          \"amount_msat\": 0,\n          \"changed_fields\": [\n            \"metadata\",\n            \"pricing\",\n            \"transaction\"\n          ],\n          \"pricing_external_ref\": null\n        },\n        {\n          \"transaction_id\": \"87c82159-8b91-4679-a186-617cea14c944\",\n          \"external_id\": \"btcpay-bark:shop:5-1:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1:0\",\n          \"wallet\": \"Bark\",\n          \"asset\": \"BTC\",\n          \"direction\": \"inbound\",\n          \"amount_msat\": 20000000,\n          \"changed_fields\": [\n            \"metadata\",\n            \"pricing\",\n            \"transaction\"\n          ],\n          \"pricing_external_ref\": null\n        },\n        {\n          \"transaction_id\": \"2ed87ba7-6454-479e-a929-85e29b4961a5\",\n          \"external_id\": \"btcpay-bark:shop:3-1:a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2:1\",\n          \"wallet\": \"Bark\",\n          \"asset\": \"BTC\",\n          \"direction\": \"inbound\",\n          \"amount_msat\": 5000000,\n          \"changed_fields\": [\n            \"metadata\",\n            \"pricing\",\n            \"transaction\"\n          ],\n          \"pricing_external_ref\": null\n        },\n        {\n          \"transaction_id\": \"18526046-01ac-455d-ad7c-59f46c077dc0\",\n          \"external_id\": \"btcpay-bark:shop:tx:d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1\",\n          \"wallet\": \"Bark\",\n          \"asset\": \"BTC\",\n          \"direction\": \"inbound\",\n          \"amount_msat\": 100000000,\n          \"changed_fields\": [\n            \"metadata\",\n            \"pricing\",\n            \"transaction\"\n          ],\n          \"pricing_external_ref\": null\n        }\n      ],\n      \"updated_records\": [],\n      \"btcpay_notes_set\": 0,\n      \"btcpay_tags_added\": 3,\n      \"btcpay_tags_created\": 1,\n      \"backend\": \"merchant\",\n      \"backend_kind\": \"btcpay\",\n      \"backend_url\": \"http://127.0.0.1:38857\",\n      \"store_id\": \"shop\",\n      \"payment_method_id\": \"BTC-ARK\",\n      \"page_size\": 100,\n      \"fetched\": 8,\n      \"bark\": {\n        \"linked_to_payments\": 0,\n        \"ambiguous_payments\": 0,\n        \"identities_rekeyed\": 0,\n        \"lightning_ledger_rows_moved\": 0,\n        \"migrated_from_payment_ledger\": false,\n        \"ledger_rows_kept\": 0\n      },\n      \"pages_fetched\": 1,\n      \"stopped_by_known_page\": false,\n      \"stop_reason\": \"end_of_results\",\n      \"deep_audit\": null,\n      \"invoice_provenance\": {\n        \"invoices_seen\": 0,\n        \"records_inserted\": 0,\n        \"records_updated\": 0,\n        \"payouts_seen\": 0,\n        \"payout_records_inserted\": 0,\n        \"payout_records_updated\": 0,\n        \"backend\": \"merchant\",\n        \"backend_kind\": \"btcpay\",\n        \"backend_url\": \"http://127.0.0.1:38857\",\n        \"store_id\": \"shop\",\n        \"page_size\": 100,\n        \"pages_fetched\": 1,\n        \"invoices_hydrated\": 0,\n        \"stopped_by_known_page\": false,\n        \"stop_reason\": \"end_of_results\",\n        \"deep_audit\": null,\n        \"payouts_available\": true,\n        \"payouts_permission_missing\": false,\n        \"suggestions\": {\n          \"created\": 0,\n          \"total\": 0\n        },\n        \"status\": \"synced\"\n      },\n      \"freshness_checkpoint\": {\n        \"backend\": {\n          \"name\": \"merchant\",\n          \"kind\": \"btcpay\"\n        },\n        \"btcpay_pages\": {\n          \"0\": {\n            \"fingerprint\": \"0c6473492b92de51e9100fd80a5be89045bc570f951251010d39732ed30d1cd5\",\n            \"stable_ids\": [\n              \"3-1:a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2:1\",\n              \"5-1:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1:0\",\n              \"6-1\",\n              \"7-1\",\n              \"8-1\",\n              \"9-1:x\",\n              \"tx:d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1\"\n            ],\n            \"rows\": 7,\n            \"page_size\": 100\n          }\n        },\n        \"btcpay_pagination\": {\n          \"unchanged_page_window\": 5,\n          \"deep_audit_pages\": 1,\n          \"last_stop_reason\": \"end_of_results\",\n          \"next_deep_audit_skip\": null\n        },\n        \"store_id\": \"shop\",\n        \"payment_method_id\": \"BTC-ARK\",\n        \"invoice_provenance\": {\n          \"backend\": {\n            \"name\": \"merchant\",\n            \"kind\": \"btcpay\"\n          },\n          \"btcpay_invoice_pages\": {\n            \"0\": {\n              \"fingerprint\": \"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945\",\n              \"stable_ids\": [],\n              \"rows\": 0,\n              \"page_size\": 100\n            }\n          },\n          \"btcpay_invoice_pagination\": {\n            \"unchanged_page_window\": 5,\n            \"deep_audit_pages\": 1,\n            \"last_stop_reason\": \"end_of_results\",\n            \"next_deep_audit_skip\": null\n          },\n          \"store_id\": \"shop\"\n        }\n      }\n    }\n  ]\n}\n",
+    "stderr": "",
+    "changes": {
+     "{tmp}/data/kassiber.sqlite3": {
+      "book": {
+       "tables": {
+        "btcpay_store_sync_states": {
+         "upsert": [
+          [
+           1,
+           "p",
+           "merchant",
+           "shop",
+           "<now>",
+           "<now>",
+           null,
+           null,
+           0,
+           0,
+           "<now>"
+          ]
+         ]
+        },
+        "chain_index_clock": {
+         "upsert": [
+          [
+           1,
+           1,
+           28
+          ]
+         ]
+        },
+        "chain_index_dirty": {
+         "upsert": [
+          [
+           6,
+           "wallets",
+           -1,
+           28
+          ],
+          [
+           7,
+           "profiles",
+           -1,
+           27
+          ],
+          [
+           15,
+           "transactions",
+           1,
+           18
+          ],
+          [
+           16,
+           "transactions",
+           2,
+           19
+          ],
+          [
+           17,
+           "transactions",
+           3,
+           20
+          ],
+          [
+           18,
+           "transactions",
+           4,
+           21
+          ],
+          [
+           19,
+           "transactions",
+           5,
+           22
+          ],
+          [
+           20,
+           "transactions",
+           6,
+           23
+          ],
+          [
+           21,
+           "transactions",
+           7,
+           24
+          ],
+          [
+           22,
+           "transactions",
+           8,
+           25
+          ]
+         ]
+        },
+        "freshness_source_states": {
+         "upsert": [
+          [
+           1,
+           "p",
+           "onchain_wallet:bark",
+           "onchain_wallet",
+           "Bark",
+           "fresh",
+           "fresh",
+           null,
+           0,
+           0,
+           null,
+           null,
+           0,
+           "<now>",
+           null,
+           null,
+           null,
+           "done",
+           "{\"phase\":\"done\"}",
+           "{\"backend\":{\"kind\":\"btcpay\",\"name\":\"merchant\"},\"btcpay_pages\":{\"0\":{\"fingerprint\":\"0c6473492b92de51e9100fd80a5be89045bc570f951251010d39732ed30d1cd5\",\"page_size\":100,\"rows\":7,\"stable_ids\":[\"3-1:a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2:1\",\"5-1:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1:0\",\"6-1\",\"7-1\",\"8-1\",\"9-1:x\",\"tx:d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1\"]}},\"btcpay_pagination\":{\"deep_audit_pages\":1,\"last_stop_reason\":\"end_of_results\",\"next_deep_audit_skip\":null,\"unchanged_page_window\":5},\"invoice_provenance\":{\"backend\":{\"kind\":\"btcpay\",\"name\":\"merchant\"},\"btcpay_invoice_pages\":{\"0\":{\"fingerprint\":\"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945\",\"page_size\":100,\"rows\":0,\"stable_ids\":[]}},\"btcpay_invoice_pagination\":{\"deep_audit_pages\":1,\"last_stop_reason\":\"end_of_results\",\"next_deep_audit_skip\":null,\"unchanged_page_window\":5},\"store_id\":\"shop\"},\"payment_method_id\":\"BTC-ARK\",\"store_id\":\"shop\"}",
+           "<now>"
+          ]
+         ]
+        },
+        "profiles": {
+         "upsert": [
+          [
+           1,
+           "p",
+           "w",
+           "Book",
+           "USD",
+           "generic",
+           365,
+           "FIFO",
+           0,
+           1,
+           "global",
+           1,
+           0,
+           1,
+           0,
+           null,
+           0,
+           null,
+           "2026-01-01T00:00:00Z",
+           null
+          ]
+         ]
+        },
+        "tags": {
+         "upsert": [
+          [
+           1,
+           "2d25a9ca-e779-4804-b968-617091a4c2e1",
+           "w",
+           "p",
+           "invoice",
+           "invoice",
+           "<now>"
+          ]
+         ]
+        },
+        "transaction_tags": {
+         "upsert": [
+          [
+           1,
+           "bc9a47a3-131f-47d0-a4d1-c57d2d404f16",
+           "2d25a9ca-e779-4804-b968-617091a4c2e1"
+          ],
+          [
+           2,
+           "87c82159-8b91-4679-a186-617cea14c944",
+           "2d25a9ca-e779-4804-b968-617091a4c2e1"
+          ],
+          [
+           3,
+           "2ed87ba7-6454-479e-a929-85e29b4961a5",
+           "2d25a9ca-e779-4804-b968-617091a4c2e1"
+          ]
+         ]
+        },
+        "transactions": {
+         "upsert": [
+          [
+           1,
+           "aa0ff64c-053c-4d3d-9fa4-adeac7546a4d",
+           "w",
+           "p",
+           "bark",
+           "btcpay-bark:shop:9-1:x",
+           null,
+           "8c411e42acfedf345a49d788aade6bca4f51633b6d58d0444e637ec590202396",
+           "2026-01-02T00:00:00Z",
+           "2026-01-02T00:00:00Z",
+           "outbound",
+           "BTC",
+           1000000,
+           0,
+           0,
+           "USD",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "missing",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "withdrawal",
+           "Bark ark-send",
+           null,
+           null,
+           0,
+           "{\"amount_msat\": -1000000, \"bark_payment_hash\": null, \"bark_row_id\": \"9-1:x\", \"fee_msat\": 0, \"invoice_id\": null, \"kind\": \"ark-send\", \"movement_id\": null, \"outpoint\": null, \"part\": \"principal\", \"source\": \"btcpay_bark_wallet\", \"store_id\": \"shop\", \"transaction_hash\": null}",
+           null,
+           null,
+           null,
+           null,
+           "<now>"
+          ],
+          [
+           2,
+           "ddbbd997-62c2-4143-9c4e-1b41fd824ba6",
+           "w",
+           "p",
+           "bark",
+           "btcpay-bark:shop:8-1",
+           null,
+           "6a22695185908fcec5e0af3b9dbfa5557a258caddbc1b824abea2725477aa810",
+           "2026-01-02T00:00:00Z",
+           "2026-01-02T00:00:00Z",
+           "outbound",
+           "BTC",
+           0,
+           50000,
+           0,
+           "USD",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "missing",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "fee",
+           "Bark refresh",
+           null,
+           null,
+           0,
+           "{\"amount_msat\": -50000, \"bark_payment_hash\": null, \"bark_row_id\": \"8-1\", \"fee_msat\": 50000, \"invoice_id\": null, \"kind\": \"refresh\", \"movement_id\": null, \"outpoint\": null, \"part\": \"principal\", \"source\": \"btcpay_bark_wallet\", \"store_id\": \"shop\", \"transaction_hash\": null}",
+           null,
+           null,
+           null,
+           null,
+           "<now>"
+          ],
+          [
+           3,
+           "69ff055f-bbef-4fdd-a200-28eb2ecbbddd",
+           "w",
+           "p",
+           "bark",
+           "btcpay-bark:shop:7-1",
+           null,
+           "353e409a8f6851ff1bbc2110fafa92589d3f20f10da1c858b6510812bf46db5e",
+           "2026-01-02T00:00:00Z",
+           "2026-01-02T00:00:00Z",
+           "outbound",
+           "BTC",
+           0,
+           500000,
+           0,
+           "USD",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "missing",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "fee",
+           "Bark board",
+           null,
+           null,
+           0,
+           "{\"amount_msat\": -500000, \"bark_payment_hash\": null, \"bark_row_id\": \"7-1\", \"fee_msat\": 500000, \"invoice_id\": null, \"kind\": \"board\", \"movement_id\": null, \"outpoint\": null, \"part\": \"principal\", \"source\": \"btcpay_bark_wallet\", \"store_id\": \"shop\", \"transaction_hash\": \"c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1\"}",
+           null,
+           null,
+           null,
+           null,
+           "<now>"
+          ],
+          [
+           4,
+           "bc9a47a3-131f-47d0-a4d1-c57d2d404f16",
+           "w",
+           "p",
+           "bark",
+           "btcpay-bark:shop:6-1",
+           null,
+           "0a343932a015c7af23bf9943acd30a4d3085d78da58028a5952d0d60b0fcedaa",
+           "2026-01-02T00:00:00Z",
+           "2026-01-02T00:00:00Z",
+           "inbound",
+           "BTC",
+           10000000,
+           0,
+           0,
+           "USD",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "missing",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "deposit",
+           "Bark lightning-receive",
+           null,
+           null,
+           0,
+           "{\"amount_msat\": 9990000, \"bark_payment_hash\": \"b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1\", \"bark_row_id\": \"6-1\", \"fee_msat\": 10000, \"invoice_id\": \"inv-ln\", \"kind\": \"lightning-receive\", \"movement_id\": null, \"outpoint\": null, \"part\": \"principal\", \"source\": \"btcpay_bark_wallet\", \"store_id\": \"shop\", \"transaction_hash\": null}",
+           "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+           "btcpay_bark",
+           null,
+           null,
+           "<now>"
+          ],
+          [
+           5,
+           "5e2f29f8-9e47-452e-98d2-48086031065c",
+           "w",
+           "p",
+           "bark",
+           "btcpay-bark:shop:6-1:fee",
+           null,
+           "09e040ff61eede112dba37a194cbd315858945a4d0a0994e115e7d0c33edae14",
+           "2026-01-02T00:00:00Z",
+           "2026-01-02T00:00:00Z",
+           "outbound",
+           "BTC",
+           0,
+           10000,
+           0,
+           "USD",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "missing",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "fee",
+           "Bark lightning-receive fee",
+           null,
+           null,
+           0,
+           "{\"amount_msat\": 9990000, \"bark_payment_hash\": \"b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1\", \"bark_row_id\": \"6-1\", \"fee_msat\": 10000, \"invoice_id\": \"inv-ln\", \"kind\": \"lightning-receive\", \"movement_id\": null, \"outpoint\": null, \"part\": \"fee\", \"source\": \"btcpay_bark_wallet\", \"store_id\": \"shop\", \"transaction_hash\": null}",
+           null,
+           null,
+           null,
+           null,
+           "<now>"
+          ],
+          [
+           6,
+           "87c82159-8b91-4679-a186-617cea14c944",
+           "w",
+           "p",
+           "bark",
+           "btcpay-bark:shop:5-1:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1:0",
+           null,
+           "6e79b2713f81a7947190d1bf440050007dd7c6b5cb82439d1983c9c497a92fa0",
+           "2026-01-02T00:00:00Z",
+           "2026-01-02T00:00:00Z",
+           "inbound",
+           "BTC",
+           20000000,
+           0,
+           0,
+           "USD",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "missing",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "deposit",
+           "Bark ark-receive",
+           null,
+           null,
+           0,
+           "{\"amount_msat\": 20000000, \"bark_payment_hash\": null, \"bark_row_id\": \"5-1:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1:0\", \"fee_msat\": 0, \"invoice_id\": \"inv-ark\", \"kind\": \"ark-receive\", \"movement_id\": null, \"outpoint\": \"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1:0\", \"part\": \"principal\", \"source\": \"btcpay_bark_wallet\", \"store_id\": \"shop\", \"transaction_hash\": \"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\"}",
+           null,
+           null,
+           null,
+           null,
+           "<now>"
+          ],
+          [
+           7,
+           "2ed87ba7-6454-479e-a929-85e29b4961a5",
+           "w",
+           "p",
+           "bark",
+           "btcpay-bark:shop:3-1:a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2:1",
+           null,
+           "dfe06af096a1d33884a9800f8801b1074b92a36b44ed31eef22df6ce9db61f61",
+           "2026-01-02T00:00:00Z",
+           "2026-01-02T00:00:00Z",
+           "inbound",
+           "BTC",
+           5000000,
+           0,
+           0,
+           "USD",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "missing",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "deposit",
+           "Bark ark-receive",
+           null,
+           null,
+           0,
+           "{\"amount_msat\": 5000000, \"bark_payment_hash\": null, \"bark_row_id\": \"3-1:a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2:1\", \"fee_msat\": 0, \"invoice_id\": \"inv-old\", \"kind\": \"ark-receive\", \"movement_id\": 3, \"outpoint\": \"a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2:1\", \"part\": \"principal\", \"source\": \"btcpay_bark_wallet\", \"store_id\": \"shop\", \"transaction_hash\": null}",
+           null,
+           null,
+           null,
+           null,
+           "<now>"
+          ],
+          [
+           8,
+           "18526046-01ac-455d-ad7c-59f46c077dc0",
+           "w",
+           "p",
+           "bark",
+           "btcpay-bark:shop:tx:d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+           null,
+           "9496a401965fe0054d57593225a16dea1012f047fed9ad304929e52f222436c6",
+           "2026-01-02T00:00:00Z",
+           "2026-01-02T00:00:00Z",
+           "inbound",
+           "BTC",
+           100000000,
+           0,
+           0,
+           "USD",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "missing",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "deposit",
+           "Bark onchain-receive",
+           null,
+           null,
+           0,
+           "{\"amount_msat\": 100000000, \"bark_payment_hash\": null, \"bark_row_id\": \"tx:d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1\", \"fee_msat\": 0, \"invoice_id\": null, \"kind\": \"onchain-receive\", \"movement_id\": null, \"outpoint\": null, \"part\": \"principal\", \"source\": \"btcpay_bark_wallet\", \"store_id\": \"shop\", \"transaction_hash\": \"d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1\"}",
+           null,
+           null,
+           null,
+           null,
+           "<now>"
+          ]
+         ]
+        },
+        "wallets": {
+         "upsert": [
+          [
+           2,
+           "bark",
+           "w",
+           "p",
+           null,
+           "Bark",
+           "custom",
+           "{\"backend\": \"merchant\", \"chain\": \"bitcoin\", \"last_synced_at\": \"<now>\", \"payment_method_id\": \"BTC-ARK\", \"store_id\": \"shop\", \"sync_source\": \"btcpay\"}",
+           "2026-01-01T00:00:00Z"
+          ]
+         ]
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  {
+   "args": [
+    "--data-root",
+    "{tmp}/data",
+    "--machine",
+    "wallets",
+    "sync",
+    "--wallet",
+    "Bark"
+   ],
+   "cwd": "{repo}",
+   "env": {
+    "COLUMNS": "80",
+    "KASSIBER_AGENT_ACCESS_FILE": "{tmp}/agents.json",
+    "KASSIBER_DISABLE_UPDATE_CHECK": "1",
+    "KASSIBER_OFFLINE_PREFERENCE_FILE": "{tmp}/offline.json",
+    "KASSIBER_RUST_TEST_OWNER_ROOT": "{tmp}/owners",
+    "KASSIBER_RUST_TEST_PROBE": "1",
+    "KASSIBER_TEST_NO_EGRESS": "1",
+    "KASSIBER_UPDATE_CACHE_FILE": "{tmp}/update-cache.json",
+    "KASSIBER_UPDATE_PREFERENCE_FILE": "{tmp}/updates.json",
+    "LANG": "en_US.UTF-8",
+    "LINES": "24",
+    "LOCALAPPDATA": "{tmp}",
+    "TMPDIR": "{tmp}",
+    "USERPROFILE": "{tmp}",
+    "XDG_CONFIG_HOME": "{tmp}/xdg-config",
+    "XDG_DATA_HOME": "{tmp}/xdg-data",
+    "XDG_STATE_HOME": "{tmp}/xdg-state"
+   },
+   "roots": [
+    "{tmp}"
+   ],
+   "recorded_us": [
+    1794333602160372,
+    1794333604926816,
+    1794333604955481
+   ],
+   "setup": [
+    {
+     "book": "{tmp}/data/kassiber.sqlite3",
+     "patch": {
+      "tables": {
+       "backends": {
+        "upsert": [
+         [
+          1,
+          "merchant",
+          "btcpay",
+          null,
+          null,
+          "http://127.0.0.1:39405",
+          null,
+          "synthetic-btcpay-secret",
+          null,
+          null,
+          null,
+          "{}",
+          null,
+          "fixed",
+          "fixed"
+         ]
+        ]
+       }
+      }
+     }
+    }
+   ],
+   "expect": {
+    "exit": 0,
+    "stdout": "wallets.sync\n",
+    "stderr": "",
+    "changes": {}
+   }
+  },
+  {
+   "args": [
+    "--data-root",
+    "{tmp}/data",
+    "--machine",
+    "wallets",
+    "sync",
+    "--wallet",
+    "Bark"
+   ],
+   "cwd": "{repo}",
+   "env": {
+    "COLUMNS": "80",
+    "KASSIBER_AGENT_ACCESS_FILE": "{tmp}/agents.json",
+    "KASSIBER_DISABLE_UPDATE_CHECK": "1",
+    "KASSIBER_OFFLINE_PREFERENCE_FILE": "{tmp}/offline.json",
+    "KASSIBER_RUST_TEST_OWNER_ROOT": "{tmp}/owners",
+    "KASSIBER_RUST_TEST_SYNC_HANDOFF": "1",
+    "KASSIBER_TEST_NO_EGRESS": "1",
+    "KASSIBER_UPDATE_CACHE_FILE": "{tmp}/update-cache.json",
+    "KASSIBER_UPDATE_PREFERENCE_FILE": "{tmp}/updates.json",
+    "LANG": "en_US.UTF-8",
+    "LINES": "24",
+    "LOCALAPPDATA": "{tmp}",
+    "TMPDIR": "{tmp}",
+    "USERPROFILE": "{tmp}",
+    "XDG_CONFIG_HOME": "{tmp}/xdg-config",
+    "XDG_DATA_HOME": "{tmp}/xdg-data",
+    "XDG_STATE_HOME": "{tmp}/xdg-state"
+   },
+   "roots": [
+    "{tmp}"
+   ],
+   "recorded_us": [
+    1794333602160372,
+    1794333605084871,
+    1794333606137379
+   ],
+   "tape": {"templates":["GET /api/v1/stores/shop/invoices?skip=0&take=100&includePaymentMethods=true HTTP/1.1\r\nHost: 127.0.0.1:39405\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token synthetic-btcpay-secret\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 953\r\n\r\n[{\"id\": \"inv-ark\", \"status\": \"Settled\", \"currency\": \"EUR\", \"amount\": \"10.00\", \"createdTime\": 1767312000, \"paymentMethods\": [{\"paymentMethodId\": \"BTC-ARK\", \"rate\": \"50000\", \"payments\": [{\"id\": \"\u0001-0\", \"value\": \"0.0002\", \"status\": \"Settled\", \"receivedDate\": 1767312000}]}]}, {\"id\": \"inv-ln\", \"status\": \"Settled\", \"currency\": \"EUR\", \"amount\": \"10.00\", \"createdTime\": 1767312000, \"paymentMethods\": [{\"paymentMethodId\": \"BTC-ARK\", \"rate\": \"50000\", \"payments\": [{\"id\": \"\u0001\", \"value\": \"0.0001\", \"status\": \"Settled\", \"receivedDate\": 1767312000}]}]}, {\"id\": \"inv-old\", \"status\": \"Settled\", \"currency\": \"EUR\", \"amount\": \"10.00\", \"createdTime\": 1767312000, \"paymentMethods\": [{\"paymentMethodId\": \"BARK\", \"rate\": \"50000\", \"payments\": [{\"id\": \"inv-old#ark-movement-3\", \"value\": \"0.00005\", \"status\": \"Settled\", \"receivedDate\": 1767312000}]}]}]","GET /api/v1/stores/shop/payouts?includeCancelled=false HTTP/1.1\r\nHost: 127.0.0.1:39405\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token synthetic-btcpay-secret\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 2\r\n\r\n[]","GET /api/v1/stores/shop/payment-methods/BTC-ARK/wallet/transactions?statusFilter=Confirmed&skip=0&limit=100 HTTP/1.1\r\nHost: 127.0.0.1:39405\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token synthetic-btcpay-secret\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 2152\r\n\r\n","[{\"id\": \"9-1:x\", \"kind\": \"ark-send\", \"amount\": \"-0.00001000\", \"fee\": \"0\", \"status\": \"Confirmed\", \"confirmations\": 1, \"timestamp\": 1767312000, \"comment\": \"\", \"labels\": {}}, {\"id\": \"8-1\", \"kind\": \"refresh\", \"amount\": \"-0.00000050\", \"fee\": \"0.00000050\", \"status\": \"Confirmed\", \"confirmations\": 1, \"timestamp\": 1767312000, \"comment\": \"\", \"labels\": {}}, {\"id\": \"7-1\", \"kind\": \"board\", \"amount\": \"-0.00000500\", \"fee\": \"0.00000500\", \"status\": \"Confirmed\", \"confirmations\": 1, \"timestamp\": 1767312000, \"comment\": \"\", \"labels\": {}, \"transactionHash\": \"\u0001\"}, {\"id\": \"6-1\", \"kind\": \"lightning-receive\", \"amount\": \"0.00009990\", \"fee\": \"0.00000010\", \"status\": \"Confirmed\", \"confirmations\": 1, \"timestamp\": 1767312000, \"comment\": \"\", \"labels\": {\"invoice\": {\"type\": \"invoice\", \"text\": \"invoice\", \"ref\": \"inv-ln\"}}, \"paymentHash\": \"\u0001\"}, {\"id\": \"5-1:\u0001:0\", \"kind\": \"ark-receive\", \"amount\": \"0.00020000\", \"fee\": null, \"status\": \"Confirmed\", \"confirmations\": 1, \"timestamp\": 1767312000, \"comment\": \"\", \"labels\": {\"invoice\": {\"type\": \"invoice\", \"text\": \"invoice\", \"ref\": \"inv-ark\"}}, \"outpoint\": \"\u0001:0\", \"transactionHash\": \"\u0001\"}, {\"id\": \"3-1:\u0001:1\", \"kind\": \"ark-receive\", \"amount\": \"0.00005000\", \"fee\": null, \"status\": \"Confirmed\", \"confirmations\": 1, \"timestamp\": 1767312000, \"comment\": \"\", \"labels\": {\"invoice\": {\"type\": \"invoice\", \"text\": \"invoice\", \"ref\": \"inv-old\"}}, \"outpoint\": \"\u0001:1\", \"movementId\": 3}, {\"id\": \"tx:\u0001\", \"kind\": \"onchain-receive\", \"amount\": \"0.00100000\", \"fee\": null, \"status\": \"Confirmed\", \"confirmations\": 1, \"timestamp\": 1767312000, \"comment\": \"\", \"labels\": {}, \"transactionHash\": \"\u0001\"}]"],"connections":[[1,false,"127.0.0.1",39405,1,null,[["w",229,[0]],["r",[1,"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1","b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1"]]]],[2,false,"127.0.0.1",39405,1,null,[["w",208,[2]],["r",[3]]]],[3,false,"127.0.0.1",39405,1,null,[["w",261,[4]],["r",[5]],["r",[6,"c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1","b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1","a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1","a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1","a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1","a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2","a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2","d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1","d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1"]]]]]},
+   "expect": {
+    "exit": 0,
+    "stdout": "{\n  \"kind\": \"wallets.sync\",\n  \"schema_version\": 1,\n  \"data\": [\n    {\n      \"wallet\": \"Bark\",\n      \"status\": \"synced\",\n      \"source\": \"btcpay-bark:merchant:shop\",\n      \"imported\": 0,\n      \"skipped\": 8,\n      \"unchanged\": 8,\n      \"journal_invalidated\": true,\n      \"inserted_records\": [],\n      \"updated_records\": [],\n      \"btcpay_notes_set\": 0,\n      \"btcpay_tags_added\": 0,\n      \"btcpay_tags_created\": 0,\n      \"backend\": \"merchant\",\n      \"backend_kind\": \"btcpay\",\n      \"backend_url\": \"http://127.0.0.1:39405\",\n      \"store_id\": \"shop\",\n      \"payment_method_id\": \"BTC-ARK\",\n      \"page_size\": 100,\n      \"fetched\": 8,\n      \"bark\": {\n        \"linked_to_payments\": 3,\n        \"ambiguous_payments\": 0,\n        \"identities_rekeyed\": 3,\n        \"lightning_ledger_rows_moved\": 0,\n        \"migrated_from_payment_ledger\": false,\n        \"ledger_rows_kept\": 0\n      },\n      \"pages_fetched\": 1,\n      \"stopped_by_known_page\": false,\n      \"stop_reason\": \"end_of_results\",\n      \"deep_audit\": null,\n      \"invoice_provenance\": {\n        \"invoices_seen\": 3,\n        \"records_inserted\": 6,\n        \"records_updated\": 0,\n        \"payouts_seen\": 0,\n        \"payout_records_inserted\": 0,\n        \"payout_records_updated\": 0,\n        \"backend\": \"merchant\",\n        \"backend_kind\": \"btcpay\",\n        \"backend_url\": \"http://127.0.0.1:39405\",\n        \"store_id\": \"shop\",\n        \"page_size\": 100,\n        \"pages_fetched\": 1,\n        \"invoices_hydrated\": 0,\n        \"stopped_by_known_page\": false,\n        \"stop_reason\": \"end_of_results\",\n        \"deep_audit\": null,\n        \"payouts_available\": true,\n        \"payouts_permission_missing\": false,\n        \"suggestions\": {\n          \"created\": 3,\n          \"total\": 3\n        },\n        \"status\": \"synced\"\n      },\n      \"freshness_checkpoint\": {\n        \"backend\": {\n          \"name\": \"merchant\",\n          \"kind\": \"btcpay\"\n        },\n        \"btcpay_pages\": {\n          \"0\": {\n            \"fingerprint\": \"0c6473492b92de51e9100fd80a5be89045bc570f951251010d39732ed30d1cd5\",\n            \"stable_ids\": [\n              \"3-1:a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2:1\",\n              \"5-1:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1:0\",\n              \"6-1\",\n              \"7-1\",\n              \"8-1\",\n              \"9-1:x\",\n              \"tx:d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1\"\n            ],\n            \"rows\": 7,\n            \"page_size\": 100\n          }\n        },\n        \"btcpay_pagination\": {\n          \"unchanged_page_window\": 5,\n          \"deep_audit_pages\": 1,\n          \"last_stop_reason\": \"end_of_results\",\n          \"next_deep_audit_skip\": null\n        },\n        \"store_id\": \"shop\",\n        \"payment_method_id\": \"BTC-ARK\",\n        \"invoice_provenance\": {\n          \"backend\": {\n            \"name\": \"merchant\",\n            \"kind\": \"btcpay\"\n          },\n          \"btcpay_invoice_pages\": {\n            \"0\": {\n              \"fingerprint\": \"161ef92f754456cba1cb4dc0a866e7de0d6821ce716fd3bd0b5ee32ae8c3c59f\",\n              \"stable_ids\": [\n                \"inv-ark\",\n                \"inv-ln\",\n                \"inv-old\"\n              ],\n              \"rows\": 3,\n              \"page_size\": 100\n            }\n          },\n          \"btcpay_invoice_pagination\": {\n            \"unchanged_page_window\": 5,\n            \"deep_audit_pages\": 1,\n            \"last_stop_reason\": \"end_of_results\",\n            \"next_deep_audit_skip\": null\n          },\n          \"store_id\": \"shop\"\n        }\n      }\n    }\n  ]\n}\n",
+    "stderr": "",
+    "changes": {
+     "{tmp}/data/kassiber.sqlite3": {
+      "book": {
+       "tables": {
+        "btcpay_provenance_records": {
+         "upsert": [
+          [
+           1,
+           "313f88e5-1f62-4ccc-9e14-02a30a7c0c09",
+           "w",
+           "p",
+           "merchant",
+           "shop",
+           null,
+           "invoice",
+           "btcpay:shop:invoice:inv-ark",
+           "inv-ark",
+           null,
+           null,
+           "Settled",
+           "2026-01-02T00:00:00Z",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "unknown",
+           null,
+           null,
+           null,
+           null,
+           "EUR",
+           "10.00",
+           null,
+           "2026-01-02T00:00:00Z",
+           "{\"amount\": \"10.00\", \"createdTime\": 1767312000, \"currency\": \"EUR\", \"id\": \"inv-ark\", \"paymentMethods\": [{\"paymentMethodId\": \"BTC-ARK\", \"payments\": [{\"id\": \"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1-0\", \"receivedDate\": 1767312000, \"status\": \"Settled\", \"value\": \"0.0002\"}], \"rate\": \"50000\"}], \"payments\": [{\"id\": \"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1-0\", \"paymentMethodId\": \"BTC-ARK\", \"rate\": \"50000\", \"receivedDate\": 1767312000, \"status\": \"Settled\", \"transactionId\": \"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\", \"value\": \"0.0002\"}], \"status\": \"Settled\"}",
+           "<now>",
+           "<now>"
+          ],
+          [
+           2,
+           "a78963f3-da0a-49ac-939c-2e60f9390791",
+           "w",
+           "p",
+           "merchant",
+           "shop",
+           "BTC-ARK",
+           "payment",
+           "btcpay:shop:invoice:inv-ark:payment:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1-0",
+           "inv-ark",
+           "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1-0",
+           null,
+           "Settled",
+           "2026-01-02T00:00:00Z",
+           "BTC",
+           20000000,
+           "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+           null,
+           null,
+           null,
+           "unknown",
+           null,
+           null,
+           null,
+           null,
+           "EUR",
+           "10.00",
+           "50000",
+           "2026-01-02T00:00:00Z",
+           "{\"id\": \"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1-0\", \"paymentMethodId\": \"BTC-ARK\", \"rate\": \"50000\", \"receivedDate\": 1767312000, \"status\": \"Settled\", \"transactionId\": \"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\", \"value\": \"0.0002\"}",
+           "<now>",
+           "<now>"
+          ],
+          [
+           3,
+           "c5df8ce0-6c0f-4dbb-8ca7-9b38fa2dc815",
+           "w",
+           "p",
+           "merchant",
+           "shop",
+           null,
+           "invoice",
+           "btcpay:shop:invoice:inv-ln",
+           "inv-ln",
+           null,
+           null,
+           "Settled",
+           "2026-01-02T00:00:00Z",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "unknown",
+           null,
+           null,
+           null,
+           null,
+           "EUR",
+           "10.00",
+           null,
+           "2026-01-02T00:00:00Z",
+           "{\"amount\": \"10.00\", \"createdTime\": 1767312000, \"currency\": \"EUR\", \"id\": \"inv-ln\", \"paymentMethods\": [{\"paymentMethodId\": \"BTC-ARK\", \"payments\": [{\"id\": \"b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1\", \"receivedDate\": 1767312000, \"status\": \"Settled\", \"value\": \"0.0001\"}], \"rate\": \"50000\"}], \"payments\": [{\"id\": \"b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1\", \"paymentMethodId\": \"BTC-ARK\", \"rate\": \"50000\", \"receivedDate\": 1767312000, \"status\": \"Settled\", \"value\": \"0.0001\"}], \"status\": \"Settled\"}",
+           "<now>",
+           "<now>"
+          ],
+          [
+           4,
+           "8dbc63b7-37b8-418b-b9b3-b1d85fec5f74",
+           "w",
+           "p",
+           "merchant",
+           "shop",
+           "BTC-ARK",
+           "payment",
+           "btcpay:shop:invoice:inv-ln:payment:b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+           "inv-ln",
+           "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+           null,
+           "Settled",
+           "2026-01-02T00:00:00Z",
+           "BTC",
+           10000000,
+           null,
+           null,
+           null,
+           null,
+           "unknown",
+           null,
+           null,
+           null,
+           null,
+           "EUR",
+           "10.00",
+           "50000",
+           "2026-01-02T00:00:00Z",
+           "{\"id\": \"b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1\", \"paymentMethodId\": \"BTC-ARK\", \"rate\": \"50000\", \"receivedDate\": 1767312000, \"status\": \"Settled\", \"value\": \"0.0001\"}",
+           "<now>",
+           "<now>"
+          ],
+          [
+           5,
+           "17f01f20-d14b-4bf4-be56-97be5f028319",
+           "w",
+           "p",
+           "merchant",
+           "shop",
+           null,
+           "invoice",
+           "btcpay:shop:invoice:inv-old",
+           "inv-old",
+           null,
+           null,
+           "Settled",
+           "2026-01-02T00:00:00Z",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "unknown",
+           null,
+           null,
+           null,
+           null,
+           "EUR",
+           "10.00",
+           null,
+           "2026-01-02T00:00:00Z",
+           "{\"amount\": \"10.00\", \"createdTime\": 1767312000, \"currency\": \"EUR\", \"id\": \"inv-old\", \"paymentMethods\": [{\"paymentMethodId\": \"BARK\", \"payments\": [{\"id\": \"inv-old#ark-movement-3\", \"receivedDate\": 1767312000, \"status\": \"Settled\", \"value\": \"0.00005\"}], \"rate\": \"50000\"}], \"payments\": [{\"id\": \"inv-old#ark-movement-3\", \"paymentMethodId\": \"BTC-ARK\", \"rate\": \"50000\", \"receivedDate\": 1767312000, \"status\": \"Settled\", \"value\": \"0.00005\"}], \"status\": \"Settled\"}",
+           "<now>",
+           "<now>"
+          ],
+          [
+           6,
+           "416f6450-9ae5-47fd-bcc5-2b84bc607bcc",
+           "w",
+           "p",
+           "merchant",
+           "shop",
+           "BTC-ARK",
+           "payment",
+           "btcpay:shop:invoice:inv-old:payment:inv-old#ark-movement-3",
+           "inv-old",
+           "inv-old#ark-movement-3",
+           null,
+           "Settled",
+           "2026-01-02T00:00:00Z",
+           "BTC",
+           5000000,
+           null,
+           null,
+           null,
+           null,
+           "unknown",
+           null,
+           null,
+           null,
+           null,
+           "EUR",
+           "10.00",
+           "50000",
+           "2026-01-02T00:00:00Z",
+           "{\"id\": \"inv-old#ark-movement-3\", \"paymentMethodId\": \"BTC-ARK\", \"rate\": \"50000\", \"receivedDate\": 1767312000, \"status\": \"Settled\", \"value\": \"0.00005\"}",
+           "<now>",
+           "<now>"
+          ]
+         ]
+        },
+        "btcpay_store_sync_states": {
+         "upsert": [
+          [
+           1,
+           "p",
+           "merchant",
+           "shop",
+           "<now>",
+           "<now>",
+           null,
+           null,
+           3,
+           0,
+           "<now>"
+          ]
+         ]
+        },
+        "chain_index_clock": {
+         "upsert": [
+          [
+           1,
+           1,
+           34
+          ]
+         ]
+        },
+        "chain_index_dirty": {
+         "upsert": [
+          [
+           6,
+           "wallets",
+           -1,
+           34
+          ],
+          [
+           7,
+           "profiles",
+           -1,
+           33
+          ],
+          [
+           18,
+           "transactions",
+           4,
+           29
+          ],
+          [
+           20,
+           "transactions",
+           6,
+           30
+          ],
+          [
+           21,
+           "transactions",
+           7,
+           31
+          ]
+         ]
+        },
+        "commercial_links": {
+         "upsert": [
+          [
+           1,
+           "2c803b0a-b996-436e-aed6-0a7cc120b624",
+           "w",
+           "p",
+           "a78963f3-da0a-49ac-939c-2e60f9390791",
+           null,
+           "87c82159-8b91-4679-a186-617cea14c944",
+           "btcpay_payment_transaction",
+           "suggested",
+           "exact",
+           "txid_or_payment_hash",
+           20000000,
+           "10.00",
+           "unreviewed",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "<now>",
+           "<now>"
+          ],
+          [
+           2,
+           "c8a9fc99-c1be-489d-a4a9-ed0a6a409dc3",
+           "w",
+           "p",
+           "8dbc63b7-37b8-418b-b9b3-b1d85fec5f74",
+           null,
+           "bc9a47a3-131f-47d0-a4d1-c57d2d404f16",
+           "btcpay_payment_transaction",
+           "suggested",
+           "exact",
+           "txid_or_payment_hash",
+           10000000,
+           "10.00",
+           "unreviewed",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "<now>",
+           "<now>"
+          ],
+          [
+           3,
+           "50bc7d9e-f843-4b1d-85e1-893293343a4c",
+           "w",
+           "p",
+           "416f6450-9ae5-47fd-bcc5-2b84bc607bcc",
+           null,
+           "2ed87ba7-6454-479e-a929-85e29b4961a5",
+           "btcpay_payment_transaction",
+           "suggested",
+           "exact",
+           "txid_or_payment_hash",
+           5000000,
+           "10.00",
+           "unreviewed",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "<now>",
+           "<now>"
+          ]
+         ]
+        },
+        "freshness_source_states": {
+         "upsert": [
+          [
+           1,
+           "p",
+           "onchain_wallet:bark",
+           "onchain_wallet",
+           "Bark",
+           "fresh",
+           "fresh",
+           null,
+           0,
+           0,
+           null,
+           null,
+           0,
+           "<now>",
+           null,
+           null,
+           null,
+           "done",
+           "{\"phase\":\"done\"}",
+           "{\"backend\":{\"kind\":\"btcpay\",\"name\":\"merchant\"},\"btcpay_pages\":{\"0\":{\"fingerprint\":\"0c6473492b92de51e9100fd80a5be89045bc570f951251010d39732ed30d1cd5\",\"page_size\":100,\"rows\":7,\"stable_ids\":[\"3-1:a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2:1\",\"5-1:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1:0\",\"6-1\",\"7-1\",\"8-1\",\"9-1:x\",\"tx:d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1\"]}},\"btcpay_pagination\":{\"deep_audit_pages\":1,\"last_stop_reason\":\"end_of_results\",\"next_deep_audit_skip\":null,\"unchanged_page_window\":5},\"invoice_provenance\":{\"backend\":{\"kind\":\"btcpay\",\"name\":\"merchant\"},\"btcpay_invoice_pages\":{\"0\":{\"fingerprint\":\"161ef92f754456cba1cb4dc0a866e7de0d6821ce716fd3bd0b5ee32ae8c3c59f\",\"page_size\":100,\"rows\":3,\"stable_ids\":[\"inv-ark\",\"inv-ln\",\"inv-old\"]}},\"btcpay_invoice_pagination\":{\"deep_audit_pages\":1,\"last_stop_reason\":\"end_of_results\",\"next_deep_audit_skip\":null,\"unchanged_page_window\":5},\"store_id\":\"shop\"},\"payment_method_id\":\"BTC-ARK\",\"store_id\":\"shop\"}",
+           "<now>"
+          ]
+         ]
+        },
+        "profiles": {
+         "upsert": [
+          [
+           1,
+           "p",
+           "w",
+           "Book",
+           "USD",
+           "generic",
+           365,
+           "FIFO",
+           0,
+           1,
+           "global",
+           2,
+           0,
+           1,
+           0,
+           null,
+           0,
+           null,
+           "2026-01-01T00:00:00Z",
+           null
+          ]
+         ]
+        },
+        "transactions": {
+         "upsert": [
+          [
+           4,
+           "bc9a47a3-131f-47d0-a4d1-c57d2d404f16",
+           "w",
+           "p",
+           "bark",
+           "btcpay:shop:invoice:inv-ln:payment:b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+           null,
+           "fe465b046aaf13a8ce822be726bf154c9d9a77adf6805b3b1bedb1161d0d57b0",
+           "2026-01-02T00:00:00Z",
+           "2026-01-02T00:00:00Z",
+           "inbound",
+           "BTC",
+           10000000,
+           0,
+           0,
+           "USD",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "missing",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "deposit",
+           "Bark lightning-receive",
+           null,
+           null,
+           0,
+           "{\"amount_msat\": 9990000, \"bark_payment_hash\": \"b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1\", \"bark_row_id\": \"6-1\", \"fee_msat\": 10000, \"invoice_id\": \"inv-ln\", \"kind\": \"lightning-receive\", \"movement_id\": null, \"outpoint\": null, \"part\": \"principal\", \"source\": \"btcpay_bark_wallet\", \"store_id\": \"shop\", \"transaction_hash\": null}",
+           "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+           "btcpay_bark",
+           null,
+           null,
+           "<now>"
+          ],
+          [
+           6,
+           "87c82159-8b91-4679-a186-617cea14c944",
+           "w",
+           "p",
+           "bark",
+           "btcpay:shop:invoice:inv-ark:payment:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1-0",
+           null,
+           "82421032781e0847014a301184a3e52acf019bbf067e6ff0ce4ebc382e576cc8",
+           "2026-01-02T00:00:00Z",
+           "2026-01-02T00:00:00Z",
+           "inbound",
+           "BTC",
+           20000000,
+           0,
+           0,
+           "USD",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "missing",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "deposit",
+           "Bark ark-receive",
+           null,
+           null,
+           0,
+           "{\"amount_msat\": 20000000, \"bark_payment_hash\": null, \"bark_row_id\": \"5-1:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1:0\", \"fee_msat\": 0, \"invoice_id\": \"inv-ark\", \"kind\": \"ark-receive\", \"movement_id\": null, \"outpoint\": \"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1:0\", \"part\": \"principal\", \"source\": \"btcpay_bark_wallet\", \"store_id\": \"shop\", \"transaction_hash\": \"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\"}",
+           null,
+           null,
+           null,
+           null,
+           "<now>"
+          ],
+          [
+           7,
+           "2ed87ba7-6454-479e-a929-85e29b4961a5",
+           "w",
+           "p",
+           "bark",
+           "btcpay:shop:invoice:inv-old:payment:inv-old#ark-movement-3",
+           null,
+           "8ec020f11af889ac130bbd23ceeaa63f286ed8c32eeb820cff02344d9bb9d91c",
+           "2026-01-02T00:00:00Z",
+           "2026-01-02T00:00:00Z",
+           "inbound",
+           "BTC",
+           5000000,
+           0,
+           0,
+           "USD",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "missing",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "deposit",
+           "Bark ark-receive",
+           null,
+           null,
+           0,
+           "{\"amount_msat\": 5000000, \"bark_payment_hash\": null, \"bark_row_id\": \"3-1:a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2:1\", \"fee_msat\": 0, \"invoice_id\": \"inv-old\", \"kind\": \"ark-receive\", \"movement_id\": 3, \"outpoint\": \"a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2:1\", \"part\": \"principal\", \"source\": \"btcpay_bark_wallet\", \"store_id\": \"shop\", \"transaction_hash\": null}",
+           null,
+           null,
+           null,
+           null,
+           "<now>"
+          ]
+         ]
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  {
+   "args": [
+    "--data-root",
+    "{tmp}/data",
+    "--machine",
+    "wallets",
+    "sync",
+    "--wallet",
+    "Bark"
+   ],
+   "cwd": "{repo}",
+   "env": {
+    "COLUMNS": "80",
+    "KASSIBER_AGENT_ACCESS_FILE": "{tmp}/agents.json",
+    "KASSIBER_DISABLE_UPDATE_CHECK": "1",
+    "KASSIBER_OFFLINE_PREFERENCE_FILE": "{tmp}/offline.json",
+    "KASSIBER_RUST_TEST_OWNER_ROOT": "{tmp}/owners",
+    "KASSIBER_RUST_TEST_PROBE": "1",
+    "KASSIBER_TEST_NO_EGRESS": "1",
+    "KASSIBER_UPDATE_CACHE_FILE": "{tmp}/update-cache.json",
+    "KASSIBER_UPDATE_PREFERENCE_FILE": "{tmp}/updates.json",
+    "LANG": "en_US.UTF-8",
+    "LINES": "24",
+    "LOCALAPPDATA": "{tmp}",
+    "TMPDIR": "{tmp}",
+    "USERPROFILE": "{tmp}",
+    "XDG_CONFIG_HOME": "{tmp}/xdg-config",
+    "XDG_DATA_HOME": "{tmp}/xdg-data",
+    "XDG_STATE_HOME": "{tmp}/xdg-state"
+   },
+   "roots": [
+    "{tmp}"
+   ],
+   "recorded_us": [
+    1794333602160372,
+    1794333607942631,
+    1794333607976045
+   ],
+   "expect": {
+    "exit": 0,
+    "stdout": "wallets.sync\n",
+    "stderr": "",
+    "changes": {}
+   }
+  },
+  {
+   "args": [
+    "--data-root",
+    "{tmp}/data",
+    "--machine",
+    "wallets",
+    "sync",
+    "--wallet",
+    "Bark"
+   ],
+   "cwd": "{repo}",
+   "env": {
+    "COLUMNS": "80",
+    "KASSIBER_AGENT_ACCESS_FILE": "{tmp}/agents.json",
+    "KASSIBER_DISABLE_UPDATE_CHECK": "1",
+    "KASSIBER_OFFLINE_PREFERENCE_FILE": "{tmp}/offline.json",
+    "KASSIBER_RUST_TEST_OWNER_ROOT": "{tmp}/owners",
+    "KASSIBER_RUST_TEST_SYNC_HANDOFF": "1",
+    "KASSIBER_TEST_NO_EGRESS": "1",
+    "KASSIBER_UPDATE_CACHE_FILE": "{tmp}/update-cache.json",
+    "KASSIBER_UPDATE_PREFERENCE_FILE": "{tmp}/updates.json",
+    "LANG": "en_US.UTF-8",
+    "LINES": "24",
+    "LOCALAPPDATA": "{tmp}",
+    "TMPDIR": "{tmp}",
+    "USERPROFILE": "{tmp}",
+    "XDG_CONFIG_HOME": "{tmp}/xdg-config",
+    "XDG_DATA_HOME": "{tmp}/xdg-data",
+    "XDG_STATE_HOME": "{tmp}/xdg-state"
+   },
+   "roots": [
+    "{tmp}"
+   ],
+   "recorded_us": [
+    1794333602160372,
+    1794333608092647,
+    1794333608444110
+   ],
+   "tape": {"templates":["GET /api/v1/stores/shop/invoices?skip=0&take=100&includePaymentMethods=true HTTP/1.1\r\nHost: 127.0.0.1:39405\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token synthetic-btcpay-secret\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 953\r\n\r\n[{\"id\": \"inv-ark\", \"status\": \"Settled\", \"currency\": \"EUR\", \"amount\": \"10.00\", \"createdTime\": 1767312000, \"paymentMethods\": [{\"paymentMethodId\": \"BTC-ARK\", \"rate\": \"50000\", \"payments\": [{\"id\": \"\u0001-0\", \"value\": \"0.0002\", \"status\": \"Settled\", \"receivedDate\": 1767312000}]}]}, {\"id\": \"inv-ln\", \"status\": \"Settled\", \"currency\": \"EUR\", \"amount\": \"10.00\", \"createdTime\": 1767312000, \"paymentMethods\": [{\"paymentMethodId\": \"BTC-ARK\", \"rate\": \"50000\", \"payments\": [{\"id\": \"\u0001\", \"value\": \"0.0001\", \"status\": \"Settled\", \"receivedDate\": 1767312000}]}]}, {\"id\": \"inv-old\", \"status\": \"Settled\", \"currency\": \"EUR\", \"amount\": \"10.00\", \"createdTime\": 1767312000, \"paymentMethods\": [{\"paymentMethodId\": \"BARK\", \"rate\": \"50000\", \"payments\": [{\"id\": \"inv-old#ark-movement-3\", \"value\": \"0.00005\", \"status\": \"Settled\", \"receivedDate\": 1767312000}]}]}]","GET /api/v1/stores/shop/payouts?includeCancelled=false HTTP/1.1\r\nHost: 127.0.0.1:39405\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token synthetic-btcpay-secret\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 2\r\n\r\n","GET /api/v1/stores/shop/payment-methods/BTC-ARK/wallet/transactions?statusFilter=Confirmed&skip=0&limit=100 HTTP/1.1\r\nHost: 127.0.0.1:39405\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nAuthorization: token synthetic-btcpay-secret\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 2152\r\n\r\n","[{\"id\": \"9-1:x\", \"kind\": \"ark-send\", \"amount\": \"-0.00001000\", \"fee\": \"0\", \"status\": \"Confirmed\", \"confirmations\": 1, \"timestamp\": 1767312000, \"comment\": \"\", \"labels\": {}}, {\"id\": \"8-1\", \"kind\": \"refresh\", \"amount\": \"-0.00000050\", \"fee\": \"0.00000050\", \"status\": \"Confirmed\", \"confirmations\": 1, \"timestamp\": 1767312000, \"comment\": \"\", \"labels\": {}}, {\"id\": \"7-1\", \"kind\": \"board\", \"amount\": \"-0.00000500\", \"fee\": \"0.00000500\", \"status\": \"Confirmed\", \"confirmations\": 1, \"timestamp\": 1767312000, \"comment\": \"\", \"labels\": {}, \"transactionHash\": \"\u0001\"}, {\"id\": \"6-1\", \"kind\": \"lightning-receive\", \"amount\": \"0.00009990\", \"fee\": \"0.00000010\", \"status\": \"Confirmed\", \"confirmations\": 1, \"timestamp\": 1767312000, \"comment\": \"\", \"labels\": {\"invoice\": {\"type\": \"invoice\", \"text\": \"invoice\", \"ref\": \"inv-ln\"}}, \"paymentHash\": \"\u0001\"}, {\"id\": \"5-1:\u0001:0\", \"kind\": \"ark-receive\", \"amount\": \"0.00020000\", \"fee\": null, \"status\": \"Confirmed\", \"confirmations\": 1, \"timestamp\": 1767312000, \"comment\": \"\", \"labels\": {\"invoice\": {\"type\": \"invoice\", \"text\": \"invoice\", \"ref\": \"inv-ark\"}}, \"outpoint\": \"\u0001:0\", \"transactionHash\": \"\u0001\"}, {\"id\": \"3-1:\u0001:1\", \"kind\": \"ark-receive\", \"amount\": \"0.00005000\", \"fee\": null, \"status\": \"Confirmed\", \"confirmations\": 1, \"timestamp\": 1767312000, \"comment\": \"\", \"labels\": {\"invoice\": {\"type\": \"invoice\", \"text\": \"invoice\", \"ref\": \"inv-old\"}}, \"outpoint\": \"\u0001:1\", \"movementId\": 3}, {\"id\": \"tx:\u0001\", \"kind\": \"onchain-receive\", \"amount\": \"0.00100000\", \"fee\": null, \"status\": \"Confirmed\", \"confirmations\": 1, \"timestamp\": 1767312000, \"comment\": \"\", \"labels\": {}, \"transactionHash\": \"\u0001\"}]"],"connections":[[1,false,"127.0.0.1",39405,1,null,[["w",229,[0]],["r",[1,"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1","b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1"]]]],[2,false,"127.0.0.1",39405,1,null,[["w",208,[2]],["r",[3]],["r","[]"]]],[3,false,"127.0.0.1",39405,1,null,[["w",261,[4]],["r",[5]],["r",[6,"c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1","b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1","a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1","a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1","a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1","a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2","a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2","d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1","d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1"]]]]]},
+   "expect": {
+    "exit": 0,
+    "stdout": "{\n  \"kind\": \"wallets.sync\",\n  \"schema_version\": 1,\n  \"data\": [\n    {\n      \"wallet\": \"Bark\",\n      \"status\": \"synced\",\n      \"source\": \"btcpay-bark:merchant:shop\",\n      \"imported\": 0,\n      \"skipped\": 8,\n      \"unchanged\": 8,\n      \"journal_invalidated\": false,\n      \"inserted_records\": [],\n      \"updated_records\": [],\n      \"btcpay_notes_set\": 0,\n      \"btcpay_tags_added\": 0,\n      \"btcpay_tags_created\": 0,\n      \"backend\": \"merchant\",\n      \"backend_kind\": \"btcpay\",\n      \"backend_url\": \"http://127.0.0.1:39405\",\n      \"store_id\": \"shop\",\n      \"payment_method_id\": \"BTC-ARK\",\n      \"page_size\": 100,\n      \"fetched\": 8,\n      \"bark\": {\n        \"linked_to_payments\": 3,\n        \"ambiguous_payments\": 0,\n        \"identities_rekeyed\": 0,\n        \"lightning_ledger_rows_moved\": 0,\n        \"migrated_from_payment_ledger\": false,\n        \"ledger_rows_kept\": 0\n      },\n      \"pages_fetched\": 1,\n      \"stopped_by_known_page\": false,\n      \"stop_reason\": \"end_of_results\",\n      \"deep_audit\": null,\n      \"invoice_provenance\": {\n        \"invoices_seen\": 3,\n        \"records_inserted\": 0,\n        \"records_updated\": 6,\n        \"payouts_seen\": 0,\n        \"payout_records_inserted\": 0,\n        \"payout_records_updated\": 0,\n        \"backend\": \"merchant\",\n        \"backend_kind\": \"btcpay\",\n        \"backend_url\": \"http://127.0.0.1:39405\",\n        \"store_id\": \"shop\",\n        \"page_size\": 100,\n        \"pages_fetched\": 1,\n        \"invoices_hydrated\": 0,\n        \"stopped_by_known_page\": false,\n        \"stop_reason\": \"end_of_results\",\n        \"deep_audit\": null,\n        \"payouts_available\": true,\n        \"payouts_permission_missing\": false,\n        \"suggestions\": {\n          \"created\": 0,\n          \"total\": 3\n        },\n        \"status\": \"synced\"\n      },\n      \"freshness_checkpoint\": {\n        \"backend\": {\n          \"name\": \"merchant\",\n          \"kind\": \"btcpay\"\n        },\n        \"btcpay_pages\": {\n          \"0\": {\n            \"fingerprint\": \"0c6473492b92de51e9100fd80a5be89045bc570f951251010d39732ed30d1cd5\",\n            \"stable_ids\": [\n              \"3-1:a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2:1\",\n              \"5-1:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1:0\",\n              \"6-1\",\n              \"7-1\",\n              \"8-1\",\n              \"9-1:x\",\n              \"tx:d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1\"\n            ],\n            \"rows\": 7,\n            \"page_size\": 100\n          }\n        },\n        \"btcpay_pagination\": {\n          \"unchanged_page_window\": 5,\n          \"deep_audit_pages\": 1,\n          \"last_stop_reason\": \"end_of_results\",\n          \"next_deep_audit_skip\": null\n        },\n        \"store_id\": \"shop\",\n        \"payment_method_id\": \"BTC-ARK\",\n        \"invoice_provenance\": {\n          \"backend\": {\n            \"name\": \"merchant\",\n            \"kind\": \"btcpay\"\n          },\n          \"btcpay_invoice_pages\": {\n            \"0\": {\n              \"fingerprint\": \"161ef92f754456cba1cb4dc0a866e7de0d6821ce716fd3bd0b5ee32ae8c3c59f\",\n              \"stable_ids\": [\n                \"inv-ark\",\n                \"inv-ln\",\n                \"inv-old\"\n              ],\n              \"rows\": 3,\n              \"page_size\": 100\n            }\n          },\n          \"btcpay_invoice_pagination\": {\n            \"unchanged_page_window\": 5,\n            \"deep_audit_pages\": 1,\n            \"last_stop_reason\": \"end_of_results\",\n            \"next_deep_audit_skip\": null\n          },\n          \"store_id\": \"shop\"\n        }\n      }\n    }\n  ]\n}\n",
+    "stderr": "",
+    "changes": {
+     "{tmp}/data/kassiber.sqlite3": {
+      "book": {
+       "tables": {
+        "chain_index_clock": {
+         "upsert": [
+          [
+           1,
+           1,
+           35
+          ]
+         ]
+        },
+        "chain_index_dirty": {
+         "upsert": [
+          [
+           6,
+           "wallets",
+           -1,
+           35
+          ]
+         ]
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ ]
+}

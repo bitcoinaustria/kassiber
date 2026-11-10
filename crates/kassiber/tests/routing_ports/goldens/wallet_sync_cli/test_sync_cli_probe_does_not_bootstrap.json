@@ -1,0 +1,57 @@
+{
+ "pytest": "tests/test_rust_wallet_sync_cli.py::test_sync_cli_probe_does_not_bootstrap",
+ "sessions": [
+  {
+   "args": [
+    "--machine",
+    "--data-root",
+    "{tmp}/missing",
+    "wallets",
+    "sync",
+    "--wallet",
+    "a"
+   ],
+   "cwd": "{repo}",
+   "env": {
+    "COLUMNS": "80",
+    "KASSIBER_AGENT_ACCESS_FILE": "{tmp}/agents.json",
+    "KASSIBER_BACKEND_FIXTURE_BATCH_SIZE": "2",
+    "KASSIBER_BACKEND_FIXTURE_KIND": "esplora",
+    "KASSIBER_BACKEND_FIXTURE_URL": "http://127.0.0.1:1",
+    "KASSIBER_DEFAULT_BACKEND": "fixture",
+    "KASSIBER_DISABLE_UPDATE_CHECK": "1",
+    "KASSIBER_OFFLINE_PREFERENCE_FILE": "{tmp}/offline.json",
+    "KASSIBER_RUST_TEST_OWNER_ROOT": "{tmp}/owners",
+    "KASSIBER_RUST_TEST_PROBE": "1",
+    "KASSIBER_RUST_TEST_SYNC_NOW": "0",
+    "KASSIBER_RUST_TEST_SYNC_PREFIX": "r0",
+    "KASSIBER_RUST_TEST_SYNC_START": "1700000000",
+    "KASSIBER_TEST_NO_EGRESS": "1",
+    "KASSIBER_UPDATE_CACHE_FILE": "{tmp}/update-cache.json",
+    "KASSIBER_UPDATE_PREFERENCE_FILE": "{tmp}/updates.json",
+    "LANG": "en_US.UTF-8",
+    "LINES": "24",
+    "LOCALAPPDATA": "{tmp}",
+    "TMPDIR": "{tmp}",
+    "USERPROFILE": "{tmp}",
+    "XDG_CONFIG_HOME": "{tmp}/xdg-config",
+    "XDG_DATA_HOME": "{tmp}/xdg-data",
+    "XDG_STATE_HOME": "{tmp}/xdg-state"
+   },
+   "roots": [
+    "{tmp}"
+   ],
+   "recorded_us": [
+    1794333595024674,
+    1794333595024674,
+    1794333595039568
+   ],
+   "expect": {
+    "exit": 0,
+    "stdout": "wallets.sync\n",
+    "stderr": "",
+    "changes": {}
+   }
+  }
+ ]
+}
