@@ -161,9 +161,7 @@ fn copy(source: &Path, target: &Path) -> Result<bool> {
             fs::create_dir_all(parent).map_err(Error::io)?;
         }
         fs::copy(source, target).map_err(Error::io)?;
-        fs::File::open(target)
-            .and_then(|f| f.sync_all())
-            .map_err(Error::io)?;
+        durable::sync_file(target)?;
     } else {
         return Err(Error::new(
             ErrorKind::UnsupportedSchemaLayout,

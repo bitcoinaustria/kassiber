@@ -84,6 +84,22 @@ pub(crate) fn create_new(path: &Path) -> Result<File> {
     options.open(path).map_err(Error::io)
 }
 
+/// Flush an already written file by path. Windows' `FlushFileBuffers` needs a
+/// handle with write access (Python's `durable_sync.sync_file` likewise
+/// opens read-write there); elsewhere a read-only handle is enough.
+pub(crate) fn sync_file(path: &Path) -> Result<()> {
+    sync_options()
+        .open(path)
+        .and_then(|f| f.sync_all())
+        .map_err(Error::io)
+}
+
+fn sync_options() -> OpenOptions {
+    let mut options = OpenOptions::new();
+    options.read(true).write(cfg!(windows));
+    options
+}
+
 pub(crate) fn sync_directory(path: &Path) -> Result<()> {
     #[cfg(not(windows))]
     File::open(path)
@@ -157,6 +173,19 @@ pub(crate) mod tests {
         fs::create_dir(&real).unwrap();
         symlink("private-var", root.join("var")).unwrap();
         (root.join("var"), fs::canonicalize(real).unwrap())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn file_syncs_need_no_write_access_off_windows() {
+        use std::os::unix::fs::PermissionsExt;
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("read-only");
+        fs::write(&path, b"x").unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o444)).unwrap();
+        // A write-access open would be refused here (unless run as root).
+        sync_file(&path).unwrap();
+        assert_eq!(fs::read(&path).unwrap(), b"x");
     }
 
     #[test]

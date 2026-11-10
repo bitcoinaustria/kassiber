@@ -382,7 +382,7 @@
   {
     "id": "R-sync-copy-file",
     "file": "crates/store/src/restore.rs",
-    "find": "File::open(item)\n            .and_then(|f| f.sync_all())\n            .map_err(Error::io)?;\n        observer(&format!(\"restore.copy_sync.{}\", relative(item, path)))?;",
+    "find": "durable::sync_file(item)?;\n        observer(&format!(\"restore.copy_sync.{}\", relative(item, path)))?;",
     "replace": "let _ = item;",
     "expect_failing": [
       "durable_install_boundaries_recover_original_or_complete_and_retain_copy"

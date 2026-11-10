@@ -380,9 +380,7 @@ fn pragma(conn: &Connection, name: &str) -> Result<i64> {
         .map_err(map_sqlite_error)
 }
 fn sync(path: &Path) -> Result<()> {
-    File::open(path)
-        .and_then(|f| f.sync_all())
-        .map_err(Error::io)
+    crate::durable::sync_file(path)
 }
 fn no_sidecars(path: &Path) -> Result<()> {
     if ["-wal", "-shm"]

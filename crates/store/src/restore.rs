@@ -189,9 +189,7 @@ fn sync_tree(path: &Path, observer: &mut impl FnMut(&str) -> Result<()>) -> Resu
     let mut items = Vec::new();
     walk(path, &mut items)?;
     for item in items.iter().filter(|p| p.is_file()) {
-        File::open(item)
-            .and_then(|f| f.sync_all())
-            .map_err(Error::io)?;
+        durable::sync_file(item)?;
         observer(&format!("restore.copy_sync.{}", relative(item, path)))?;
     }
     for item in items.iter().rev().filter(|p| p.is_dir()) {
