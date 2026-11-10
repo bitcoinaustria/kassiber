@@ -1,0 +1,47 @@
+## session 1
+> {"request_id": "0", "kind": "ui.wallets.detect_script_types"}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Wallet export is required.","hint":"Enter wallet export.","details":null,"retryable":false,"debug":null},"request_id":"0"}
+> {"request_id": "1", "kind": "ui.wallets.detect_script_types", "args": null}
+< same as line 3
+> {"request_id": "2", "kind": "ui.wallets.detect_script_types", "args": []}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"daemon args must be an object","hint":null,"details":{"type":"list"},"retryable":false,"debug":null},"request_id":"2"}
+> {"request_id": "3", "kind": "ui.wallets.detect_script_types", "args": {}}
+< same as line 3
+> {"request_id": "4", "kind": "ui.wallets.detect_script_types", "args": {"wallet_material": " "}}
+< same as line 3
+> {"request_id": "5", "kind": "ui.wallets.detect_script_types", "args": {"wallet_material": 3}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"wallet_material must be a string","hint":null,"details":{"type":"int"},"retryable":false,"debug":null},"request_id":"5"}
+> {"request_id": "6", "kind": "ui.wallets.detect_script_types", "args": {"wallet_material": "xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi"}}
+< {"kind":"error","schema_version":1,"error":{"code":"wallet_spending_private_material","message":"Spending-private wallet material is not accepted","hint":"Export a watch-only descriptor or extended public key. Liquid blinding/view keys may remain private because they cannot spend.","details":null,"retryable":false,"debug":null},"request_id":"6"}
+> {"request_id": "7", "kind": "ui.wallets.detect_script_types", "args": {"wallet_material": "wpkh(xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/0/*)"}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Script-type detection only applies to a bare xpub/tpub","hint":"A descriptor or ypub/zpub key already carries its script type.","details":null,"retryable":false,"debug":null},"request_id":"7"}
+> {"request_id": "8", "kind": "ui.wallets.detect_script_types", "args": {"wallet_material": "xpubbogus"}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Invalid extended public key checksum","hint":null,"details":null,"retryable":false,"debug":null},"request_id":"8"}
+> {"request_id": "9", "kind": "ui.wallets.detect_script_types", "args": {"wallet_material": "xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz"}}
+< {"kind":"ui.wallets.detect_script_types","schema_version":1,"data":{"probed":false,"detected":[],"active":["p2wpkh"],"fallback_used":true,"reason":"Outbound requests are disabled by KASSIBER_NO_EGRESS"},"request_id":"9"}
+> {"request_id": "10", "kind": "ui.wallets.detect_script_types", "args": {"wallet_material": "xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz", "chain": 3}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"chain must be a string","hint":null,"details":{"type":"int"},"retryable":false,"debug":null},"request_id":"10"}
+> {"request_id": "11", "kind": "ui.wallets.detect_script_types", "args": {"wallet_material": "xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz", "network": []}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"network must be a string","hint":null,"details":{"type":"list"},"retryable":false,"debug":null},"request_id":"11"}
+> {"request_id": "12", "kind": "ui.wallets.detect_script_types", "args": {"wallet_material": "xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz", "backend": "nope"}}
+< {"kind":"ui.wallets.detect_script_types","schema_version":1,"data":{"probed":false,"detected":[],"active":["p2wpkh"],"fallback_used":true,"reason":"Backend 'nope' is not configured in $BASE/config/backends.env"},"request_id":"12"}
+> {"request_id": "13", "kind": "ui.wallets.detect_script_types", "args": {"wallet_material": "xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz", "backend": " FULCRUM "}}
+< same as line 21
+> {"request_id": "14", "kind": "ui.wallets.detect_script_types", "args": {"wallet_material": "xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz", "backend": "liquid"}}
+< {"kind":"ui.wallets.detect_script_types","schema_version":1,"data":{"probed":false,"detected":[],"active":["p2wpkh"],"fallback_used":true,"reason":"Backend 'liquid' is configured for liquid, but source refresh requires bitcoin"},"request_id":"14"}
+> {"request_id": "15", "kind": "ui.wallets.detect_script_types", "args": {"wallet_material": "xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz", "backend": "mempool"}}
+< same as line 21
+> {"request_id": "16", "kind": "ui.wallets.detect_script_types", "args": {"wallet_material": "tpubD6NzVbkrYhZ4XgiXtGrdW5XDAPFCL9h7we1vwNCpn8tGbBcgfVYjXyhWo4E1xkh56hjod1RhGjxbaTLV3X4FyWuejifB9jusQ46QzG87VKp"}}
+< {"kind":"ui.wallets.detect_script_types","schema_version":1,"data":{"probed":false,"detected":[],"active":["p2wpkh"],"fallback_used":true,"reason":"Backend 'fulcrum' is configured for main, but source refresh requires test"},"request_id":"16"}
+> {"request_id": "17", "kind": "ui.wallets.detect_script_types", "args": {"wallet_material": "tpubD6NzVbkrYhZ4XgiXtGrdW5XDAPFCL9h7we1vwNCpn8tGbBcgfVYjXyhWo4E1xkh56hjod1RhGjxbaTLV3X4FyWuejifB9jusQ46QzG87VKp", "network": "signet", "backend": "nope"}}
+< same as line 27
+> {"request_id": "18", "kind": "ui.wallets.detect_script_types", "args": {"wallet_material": "xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz", "chain": "doge"}}
+< {"kind":"ui.wallets.detect_script_types","schema_version":1,"data":{"probed":false,"detected":[],"active":["p2wpkh"],"fallback_used":true,"reason":"Unsupported wallet chain 'doge'"},"request_id":"18"}
+> {"request_id": "19", "kind": "ui.wallets.detect_script_types", "args": {"wallet_material": "xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz", "chain": "liquid"}}
+< {"kind":"ui.wallets.detect_script_types","schema_version":1,"data":{"probed":false,"detected":[],"active":["p2wpkh"],"fallback_used":true,"reason":"Backend 'fulcrum' is configured for bitcoin, but source refresh requires liquid"},"request_id":"19"}
+> {"request_id": "20", "kind": "ui.wallets.detect_script_types", "args": {"wallet_material": "xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz", "network": "bogus"}}
+< {"kind":"ui.wallets.detect_script_types","schema_version":1,"data":{"probed":false,"detected":[],"active":["p2wpkh"],"fallback_used":true,"reason":"Unsupported bitcoin network 'bogus'"},"request_id":"20"}
+> {"request_id": "21", "kind": "ui.wallets.detect_script_types", "args": {"wallet_material": "xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz", "network": "testnet"}}
+< {"kind":"ui.wallets.detect_script_types","schema_version":1,"data":{"probed":false,"detected":[],"active":["p2wpkh"],"fallback_used":true,"reason":"Extended public key network does not match the configured Bitcoin network"},"request_id":"21"}
+> {"request_id": "stop", "kind": "daemon.shutdown"}
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}

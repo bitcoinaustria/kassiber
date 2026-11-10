@@ -1,0 +1,41 @@
+## session 1
+> {"request_id": "0", "kind": "ui.wallets.import_file"}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Source format is required.","hint":"Enter source format.","details":null,"retryable":false,"debug":null},"request_id":"0"}
+> {"request_id": "1", "kind": "ui.wallets.import_file", "args": null}
+< same as line 3
+> {"request_id": "2", "kind": "ui.wallets.import_file", "args": []}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"daemon args must be an object","hint":null,"details":{"type":"list"},"retryable":false,"debug":null},"request_id":"2"}
+> {"request_id": "3", "kind": "ui.wallets.import_file", "args": {}}
+< same as line 3
+> {"request_id": "4", "kind": "ui.wallets.import_file", "args": {"source_format": 3}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"source_format must be a string","hint":null,"details":{"type":"int"},"retryable":false,"debug":null},"request_id":"4"}
+> {"request_id": "5", "kind": "ui.wallets.import_file", "args": {"source_format": " "}}
+< same as line 3
+> {"request_id": "6", "kind": "ui.wallets.import_file", "args": {"source_format": "csv"}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"source_file is required","hint":"Choose the local export file to import.","details":null,"retryable":false,"debug":null},"request_id":"6"}
+> {"request_id": "7", "kind": "ui.wallets.import_file", "args": {"source_format": "csv", "source_file": 4}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"source_file must be a string","hint":null,"details":{"type":"int"},"retryable":false,"debug":null},"request_id":"7"}
+> {"request_id": "8", "kind": "ui.wallets.import_file", "args": {"source_format": "csv", "source_file": "/no/such/export.csv"}}
+< {"kind":"error","schema_version":1,"error":{"code":"not_found","message":"Source file not found: /no/such/export.csv","hint":"Choose an existing local export file.","details":null,"retryable":false,"debug":null},"request_id":"8"}
+> {"request_id": "9", "kind": "ui.wallets.import_file", "args": {"source_format": "pdf", "source_file": "$BASE/files/rows.csv", "wallet": "imports"}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Unsupported source format 'pdf'","hint":"Choose a supported file format.","details":null,"retryable":false,"debug":null},"request_id":"9"}
+> {"request_id": "10", "kind": "ui.wallets.import_file", "args": {"source_format": "csv", "source_bundle": {}}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Inline source_bundle is only supported for Wasabi imports","hint":null,"details":null,"retryable":false,"debug":null},"request_id":"10"}
+> {"request_id": "11", "kind": "ui.wallets.import_file", "args": {"source_format": "wasabi_bundle", "source_bundle": {}}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Wallet is required.","hint":"Enter wallet.","details":null,"retryable":false,"debug":null},"request_id":"11"}
+> {"request_id": "12", "kind": "ui.wallets.import_file", "args": {"source_format": "wasabi_bundle", "source_bundle": {}, "wallet": "absent"}}
+< {"kind":"error","schema_version":1,"error":{"code":"not_found","message":"Wallet 'absent' not found","hint":null,"details":null,"retryable":false,"debug":null},"request_id":"12"}
+> {"request_id": "13", "kind": "ui.wallets.import_file", "args": {"source_format": "csv", "source_file": "$BASE/files/rows.csv"}}
+< same as line 25
+> {"request_id": "14", "kind": "ui.wallets.import_file", "args": {"source_format": "csv", "source_file": "$BASE/files/rows.csv", "wallet": "absent"}}
+< same as line 27
+> {"request_id": "15", "kind": "ui.wallets.import_file", "args": {"source_format": "generic_ledger", "source_file": "$BASE/files/ledger.csv", "wallet": "imports", "column_map": []}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"column_map must be an object","hint":"Map ledger fields to this file's column names.","details":null,"retryable":false,"debug":null},"request_id":"15"}
+> {"request_id": "16", "kind": "ui.wallets.import_file", "args": {"source_format": "generic_ledger", "source_file": "$BASE/files/ledger.csv", "wallet": "imports", "column_map": {"date": "Nope", "amount": "Menge"}}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"column_map.date names a column that is not in this file","hint":"Use one of the file's own header values.","details":{"field":"date","column":"Nope","headers":["Wann","Menge","Typ"]},"retryable":false,"debug":null},"request_id":"16"}
+> {"request_id": "17", "kind": "ui.wallets.import_file", "args": {"source_format": "bullbitcoin_csv", "source_file": "$BASE/files/rows.csv", "mode": "bogus"}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Unsupported exchange-evidence import mode 'bogus'","hint":"Choose 'relevant' to enrich matching book transactions, or 'full' to import all provider rows with reconciliation flags.","details":null,"retryable":false,"debug":null},"request_id":"17"}
+> {"request_id": "18", "kind": "ui.wallets.import_file", "args": {"source_format": "strike_csv", "source_file": "$BASE/files/rows.csv", "wallet": "imports"}}
+< {"kind":"error","schema_version":1,"error":{"code":"app_error","message":"Strike CSV is missing required columns: Reference, Date & Time (UTC), Transaction Type, Amount BTC","hint":null,"details":null,"retryable":false,"debug":null},"request_id":"18"}
+> {"request_id": "stop", "kind": "daemon.shutdown"}
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}

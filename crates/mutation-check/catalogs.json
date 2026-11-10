@@ -1171,7 +1171,12 @@
     "kassiber-wallets",
     "-p",
     "kassiber-daemon"
-   ]
+   ],
+   "package_features": {
+    "kassiber": [
+     "test-harness"
+    ]
+   }
   },
   {
    "name": "wallets-persistence",

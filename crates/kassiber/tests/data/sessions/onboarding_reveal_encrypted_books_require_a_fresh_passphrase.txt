@@ -1,0 +1,15 @@
+## session 1
+> {"request_id": "unlock", "kind": "daemon.unlock", "args": {"auth_response": {"passphrase_secret": "synthetic reveal key"}}}
+< {"kind":"daemon.unlock","schema_version":1,"data":{"unlocked":true,"status":{"version":"$VERSION","schema_version":1,"auth":{"mode":"local","authenticated":true},"database_encrypted":true,"state_root":"$BASE/encrypted","data_root":"$BASE/encrypted/data","database":"$BASE/encrypted/data/kassiber.sqlite3","project_id":null,"project_name":null,"project_root":null,"config_root":"$BASE/encrypted/config","settings_file":"$BASE/encrypted/config/settings.json","exports_root":"$BASE/encrypted/exports","attachments_root":"$BASE/encrypted/attachments","current_workspace":"Main","current_profile":"Book","workspaces":1,"profiles":2,"accounts":0,"wallets":10,"transactions":8,"journal_entries":0,"quarantines":1,"default_backend":"fulcrum","env_file":"$BASE/encrypted/config/backends.env"}},"request_id":"unlock"}
+> {"request_id": "0", "kind": "wallets.reveal_descriptor", "args": {"name": "hot"}}
+< {"kind":"auth_required","schema_version":1,"data":{"scope":"reveal_descriptor","label":"Re-enter database passphrase to reveal wallet 'hot'"},"request_id":"0"}
+> {"request_id": "1", "kind": "wallets.reveal_descriptor", "args": {"name": "hot", "auth_response": {"plaintext_reveal_ack": "COPY LOCAL SECRET"}}}
+< same as line 5
+> {"request_id": "2", "kind": "wallets.reveal_descriptor", "args": {"name": "hot", "auth_response": {"passphrase_secret": ""}}}
+< same as line 5
+> {"request_id": "3", "kind": "wallets.reveal_descriptor", "args": {"name": "hot", "auth_response": {"passphrase_secret": "wrong"}}}
+< {"kind":"error","schema_version":1,"error":{"code":"local_auth_denied","message":"passphrase verification failed","hint":null,"details":null,"retryable":true,"debug":null},"request_id":"3"}
+> {"request_id": "4", "kind": "wallets.reveal_descriptor", "args": {"name": "hot", "auth_response": {"passphrase_secret": "synthetic reveal key"}}}
+< {"kind":"wallets.reveal_descriptor","schema_version":1,"data":{"id":"hot","label":"Hot","kind":"descriptor","wallet_material":"wpkh(xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/0/*)\nwpkh(xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/1/*)"},"request_id":"4"}
+> {"request_id": "stop", "kind": "daemon.shutdown"}
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}

@@ -1,0 +1,33 @@
+## session 1
+> {"request_id": "0", "kind": "ui.wallets.import_samourai"}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Connection label is required.","hint":"Enter connection label.","details":null,"retryable":false,"debug":null},"request_id":"0"}
+> {"request_id": "1", "kind": "ui.wallets.import_samourai", "args": null}
+< same as line 3
+> {"request_id": "2", "kind": "ui.wallets.import_samourai", "args": {}}
+< same as line 3
+> {"request_id": "3", "kind": "ui.wallets.import_samourai", "args": {"label": 3}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"label must be a string","hint":null,"details":{"type":"int"},"retryable":false,"debug":null},"request_id":"3"}
+> {"request_id": "4", "kind": "ui.wallets.import_samourai", "args": {"label": "S", "mnemonic": "abandon"}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Samourai imports accept only watch-only descriptor/xpub source sets","hint":"Paste public Deposit, Badbank, Premix, and Postmix descriptors or xpubs instead of backup or recovery material.","details":{"unsupported_fields":["mnemonic"]},"retryable":false,"debug":null},"request_id":"4"}
+> {"request_id": "5", "kind": "ui.wallets.import_samourai", "args": {"label": "S", "backup_file": "", "source_file": "/x"}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Samourai imports accept only watch-only descriptor/xpub source sets","hint":"Paste public Deposit, Badbank, Premix, and Postmix descriptors or xpubs instead of backup or recovery material.","details":{"unsupported_fields":["source_file"]},"retryable":false,"debug":null},"request_id":"5"}
+> {"request_id": "6", "kind": "ui.wallets.import_samourai", "args": {"label": "S", "source_set": []}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"source_set must be a JSON object","hint":null,"details":null,"retryable":false,"debug":null},"request_id":"6"}
+> {"request_id": "7", "kind": "ui.wallets.import_samourai", "args": {"label": "S", "gap_limit": "20"}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"gap_limit must be an integer","hint":null,"details":{"type":"str"},"retryable":false,"debug":null},"request_id":"7"}
+> {"request_id": "8", "kind": "ui.wallets.import_samourai", "args": {"label": "S", "gap_limit": 2.5}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"gap_limit must be an integer","hint":null,"details":{"type":"float"},"retryable":false,"debug":null},"request_id":"8"}
+> {"request_id": "9", "kind": "ui.wallets.import_samourai", "args": {"label": "S", "account": 3}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"account must be a string","hint":null,"details":{"type":"int"},"retryable":false,"debug":null},"request_id":"9"}
+> {"request_id": "10", "kind": "ui.wallets.import_samourai", "args": {"label": "S"}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Choose exactly one Samourai import source","hint":"Use a descriptor/xpub source-set file or inline source_set payload.","details":null,"retryable":false,"debug":null},"request_id":"10"}
+> {"request_id": "11", "kind": "ui.wallets.import_samourai", "args": {"label": "S", "source_set": {"deposit": {"bip84": "xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi"}}}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Samourai source set does not contain any descriptor or xpub sources","hint":null,"details":null,"retryable":false,"debug":null},"request_id":"11"}
+> {"request_id": "12", "kind": "ui.wallets.import_samourai", "args": {"label": "S", "source_set_file": "/no/such/set.json"}}
+< {"kind":"error","schema_version":1,"error":{"code":"not_found","message":"Could not read Samourai descriptor/xpub set","hint":"Choose a readable local JSON file.","details":{"path":"/no/such/set.json"},"retryable":false,"debug":null},"request_id":"12"}
+> {"request_id": "13", "kind": "ui.wallets.import_samourai", "args": {"label": "S", "source_set": {"deposit": {"bip84": "xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz"}}}}
+< same as line 25
+> {"request_id": "14", "kind": "ui.wallets.import_samourai", "args": {"label": "S", "source_set": {"xpubs": [{"xpub": "xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz"}]}}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Samourai xpub source is missing root_path","hint":"Include the BIP32 account path so provenance is explicit.","details":null,"retryable":false,"debug":null},"request_id":"14"}
+> {"request_id": "stop", "kind": "daemon.shutdown"}
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
