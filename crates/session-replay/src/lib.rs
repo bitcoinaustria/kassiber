@@ -98,6 +98,76 @@ pub struct Session {
     pub roots: Vec<Root>,
     /// The repository root of the recording checkout, mapped to the replay's.
     pub repo: String,
+    /// The process's network tape (`kassiber-net`'s test-observer tape): the
+    /// bytes every connection read, served again on replay.
+    #[serde(default)]
+    pub net_tape: Option<String>,
+    /// Inherited input descriptors the argv names (`--db-passphrase-fd 3`):
+    /// descriptor number to base64 content. Test passphrases only.
+    #[serde(default)]
+    pub fds: BTreeMap<i32, String>,
+}
+
+/// The descriptor numbers argv hands over with a `--...-fd N` (or
+/// `--...-fd=N`) option.
+pub fn descriptor_args(argv: &[String]) -> Vec<i32> {
+    let mut fds = Vec::new();
+    for (index, arg) in argv.iter().enumerate() {
+        let value = match arg.split_once('=') {
+            Some((flag, value)) if flag.starts_with("--") && flag.ends_with("-fd") => {
+                Some(value.to_owned())
+            }
+            _ if arg.starts_with("--") && arg.ends_with("-fd") => argv.get(index + 1).cloned(),
+            _ => None,
+        };
+        if let Some(fd) = value
+            .and_then(|v| v.parse::<i32>().ok())
+            .filter(|fd| *fd > 2)
+        {
+            fds.push(fd);
+        }
+    }
+    fds
+}
+
+/// A pipe already holding `bytes` (closed for writing); returns its read
+/// end, for a child to receive at a given descriptor number.
+#[cfg(unix)]
+#[allow(unsafe_code)] // pipe(2) and the write end's ownership
+pub fn filled_pipe(bytes: &[u8]) -> io::Result<i32> {
+    use std::io::Write;
+    use std::os::fd::FromRawFd;
+    let mut ends = [0i32; 2];
+    // SAFETY: `ends` has room for the two descriptors pipe(2) writes.
+    if unsafe { libc::pipe(ends.as_mut_ptr()) } != 0 {
+        return Err(io::Error::last_os_error());
+    }
+    // SAFETY: the write end was just created and is owned only here.
+    let mut writer = unsafe { fs::File::from_raw_fd(ends[1]) };
+    writer.write_all(bytes)?;
+    drop(writer);
+    Ok(ends[0])
+}
+
+/// Give a child each `(target, source)` descriptor before it executes.
+#[cfg(unix)]
+#[allow(unsafe_code)] // dup2(2) in the forked child
+pub fn hand_over(command: &mut std::process::Command, descriptors: Vec<(i32, i32)>) {
+    use std::os::unix::process::CommandExt;
+    if descriptors.is_empty() {
+        return;
+    }
+    // SAFETY: only async-signal-safe dup2 runs between fork and exec.
+    unsafe {
+        command.pre_exec(move || {
+            for (target, source) in &descriptors {
+                if libc::dup2(*source, *target) < 0 {
+                    return Err(io::Error::last_os_error());
+                }
+            }
+            Ok(())
+        });
+    }
 }
 
 /// Content-addressed file storage under `<dir>/blobs/ab/<sha256>`.
@@ -117,20 +187,43 @@ impl Blobs {
         self.dir.join(&hash[..2]).join(hash)
     }
 
+    /// Store `bytes` gzip-compressed under their sha256 (books, which most
+    /// blobs are, shrink about 25 times).
     pub fn put(&self, bytes: &[u8]) -> io::Result<String> {
+        use flate2::write::GzEncoder;
         let hash = hex(&Sha256::digest(bytes));
-        let path = self.path(&hash);
-        if !path.exists() {
+        let path = self.path(&hash).with_extension("gz");
+        if !path.exists() && !self.path(&hash).exists() {
             fs::create_dir_all(path.parent().unwrap())?;
             let tmp = path.with_extension(format!("tmp{}", std::process::id()));
-            fs::write(&tmp, bytes)?;
+            let mut encoder = GzEncoder::new(Vec::new(), flate2::Compression::new(6));
+            io::Write::write_all(&mut encoder, bytes)?;
+            fs::write(&tmp, encoder.finish()?)?;
             fs::rename(&tmp, &path)?;
         }
         Ok(hash)
     }
 
     pub fn get(&self, hash: &str) -> io::Result<Vec<u8>> {
+        let compressed = self.path(hash).with_extension("gz");
+        if compressed.exists() {
+            let mut out = Vec::new();
+            io::Read::read_to_end(
+                &mut flate2::read::GzDecoder::new(fs::File::open(compressed)?),
+                &mut out,
+            )?;
+            return Ok(out);
+        }
         fs::read(self.path(hash))
+    }
+
+    /// The stored (compressed) size of a blob.
+    pub fn stored_size(&self, hash: &str) -> u64 {
+        let compressed = self.path(hash).with_extension("gz");
+        fs::metadata(&compressed)
+            .or_else(|_| fs::metadata(self.path(hash)))
+            .map(|m| m.len())
+            .unwrap_or(0)
     }
 }
 

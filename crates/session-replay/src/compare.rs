@@ -277,7 +277,16 @@ impl<'a> Canon<'a> {
 
     /// `text` with every generated value replaced; `numbered` gives each
     /// distinct value its first-appearance index, otherwise all collapse.
+    /// Durations compare within tolerance (any value), and JSON lists whose
+    /// elements a generated id orders are compared in a shape order.
     pub fn rewrite(&mut self, text: &str, numbered: bool) -> String {
+        let text = mask_durations(text);
+        let text = if numbered {
+            self.sort_generated_id_lists(&text)
+        } else {
+            text
+        };
+        let text = text.as_str();
         let spans = generated_spans(text, &self.window, self.pinned);
         let mut out = String::with_capacity(text.len());
         let mut at = 0;
@@ -314,6 +323,234 @@ impl<'a> Canon<'a> {
             .map(|(_, i)| self.rewrite(&rows[i], true))
             .collect()
     }
+}
+
+impl Canon<'_> {
+    /// JSON arrays of objects whose `id` is a generated identity: their
+    /// order follows random ids, so they compare sorted by shape.
+    fn sort_generated_id_lists(&mut self, text: &str) -> String {
+        let bytes = text.as_bytes();
+        let mut out = String::with_capacity(text.len());
+        let mut at = 0;
+        let mut i = 0;
+        let mut in_string = false;
+        while i < bytes.len() {
+            let c = bytes[i];
+            if in_string {
+                if c == b'\\' {
+                    i += 2;
+                    continue;
+                }
+                in_string = c != b'"';
+            } else if c == b'"' {
+                in_string = true;
+            } else if c == b'[' {
+                if let Some(end) = matching(bytes, i) {
+                    out.push_str(&text[at..i + 1]);
+                    let inner = self.sort_generated_id_lists(&text[i + 1..end]);
+                    out.push_str(&self.sorted_elements(&inner));
+                    out.push(']');
+                    at = end + 1;
+                    i = end + 1;
+                    continue;
+                }
+            }
+            i += 1;
+        }
+        out.push_str(&text[at..]);
+        out
+    }
+
+    fn sorted_elements(&mut self, inner: &str) -> String {
+        let pieces = split_top_level(inner);
+        let generated_id = |element: &str| {
+            let element = element.trim();
+            element.starts_with('{')
+                && json_id(element).is_some_and(|id| {
+                    !self.pinned.contains(id) && (uuid4().is_match(id) || uuid4_hex().is_match(id))
+                })
+        };
+        if pieces.len() < 2 || !pieces.iter().all(|p| generated_id(p)) {
+            return inner.to_owned();
+        }
+        let mut elements: Vec<(String, String)> = pieces
+            .iter()
+            .map(|p| {
+                let trimmed = p.trim().to_owned();
+                let shape = collapse(&trimmed, &self.window, self.pinned);
+                (shape, trimmed)
+            })
+            .collect();
+        elements.sort();
+        let mut out = String::new();
+        for (index, piece) in pieces.iter().enumerate() {
+            let lead = &piece[..piece.len() - piece.trim_start().len()];
+            let trail = &piece[piece.trim_end().len()..];
+            if index > 0 {
+                out.push(',');
+            }
+            out.push_str(lead);
+            out.push_str(&elements[index].1);
+            out.push_str(trail);
+        }
+        out
+    }
+}
+
+/// `text` with every generated value collapsed, for ordering.
+fn collapse(text: &str, window: &Window, pinned: &HashSet<String>) -> String {
+    let mut out = String::new();
+    let mut at = 0;
+    for (start, end, _) in generated_spans(text, window, pinned) {
+        out.push_str(&text[at..start]);
+        out.push_str("<gen>");
+        at = end;
+    }
+    out.push_str(&text[at..]);
+    out
+}
+
+/// The index of the `]` or `}` closing the bracket at `open`, string aware.
+fn matching(bytes: &[u8], open: usize) -> Option<usize> {
+    let mut depth = 0usize;
+    let mut in_string = false;
+    let mut i = open;
+    while i < bytes.len() {
+        let c = bytes[i];
+        if in_string {
+            if c == b'\\' {
+                i += 2;
+                continue;
+            }
+            in_string = c != b'"';
+        } else {
+            match c {
+                b'"' => in_string = true,
+                b'[' | b'{' => depth += 1,
+                b']' | b'}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Some(i);
+                    }
+                }
+                _ => {}
+            }
+        }
+        i += 1;
+    }
+    None
+}
+
+/// Split an array's inside at its top-level commas, string aware.
+fn split_top_level(inner: &str) -> Vec<&str> {
+    let bytes = inner.as_bytes();
+    let (mut depth, mut in_string, mut start, mut i) = (0i32, false, 0, 0);
+    let mut pieces = Vec::new();
+    while i < bytes.len() {
+        let c = bytes[i];
+        if in_string {
+            if c == b'\\' {
+                i += 2;
+                continue;
+            }
+            in_string = c != b'"';
+        } else {
+            match c {
+                b'"' => in_string = true,
+                b'[' | b'{' => depth += 1,
+                b']' | b'}' => depth -= 1,
+                b',' if depth == 0 => {
+                    pieces.push(&inner[start..i]);
+                    start = i + 1;
+                }
+                _ => {}
+            }
+        }
+        i += 1;
+    }
+    if !inner[start..].trim().is_empty() {
+        pieces.push(&inner[start..]);
+    }
+    pieces
+}
+
+/// The object's own `"id"` string value (the first `"id"` key at depth one).
+fn json_id(object: &str) -> Option<&str> {
+    let bytes = object.as_bytes();
+    let (mut depth, mut in_string, mut i) = (0i32, false, 0);
+    while i < bytes.len() {
+        let c = bytes[i];
+        if in_string {
+            if c == b'\\' {
+                i += 2;
+                continue;
+            }
+            in_string = c != b'"';
+        } else {
+            match c {
+                b'{' | b'[' => depth += 1,
+                b'}' | b']' => depth -= 1,
+                b'"' if depth == 1 && object[i..].starts_with("\"id\"") => {
+                    let rest = object[i + 4..].trim_start().strip_prefix(':')?.trim_start();
+                    let value = rest.strip_prefix('"')?;
+                    return value.split('"').next();
+                }
+                b'"' => in_string = true,
+                _ => {}
+            }
+        }
+        i += 1;
+    }
+    None
+}
+
+/// Durations (`*elapsed*` / `*duration*` keys or columns) vary run to run;
+/// they compare as present, never by value.
+pub fn mask_durations(text: &str) -> String {
+    static JSON: OnceLock<Regex> = OnceLock::new();
+    static ROW: OnceLock<Regex> = OnceLock::new();
+    let json = JSON.get_or_init(|| {
+        Regex::new(r#"(\\?"[A-Za-z_]*(?:elapsed|duration)[A-Za-z_]*\\?"\s*:\s*)-?\d+(?:\.\d+)?"#)
+            .unwrap()
+    });
+    let row = ROW.get_or_init(|| {
+        Regex::new(r"(\b[A-Za-z_]*(?:elapsed|duration)[A-Za-z_]*=(?:int|real) )-?[\d.]+").unwrap()
+    });
+    static TYPED: OnceLock<Regex> = OnceLock::new();
+    // Log records carry a duration as `{"type":"duration_ms","value":39}`.
+    let typed = TYPED.get_or_init(|| {
+        Regex::new(
+            r#"(\\?"type\\?"\s*:\s*\\?"duration_ms\\?"\s*,\s*\\?"value\\?"\s*:\s*)-?\d+(?:\.\d+)?"#,
+        )
+        .unwrap()
+    });
+    let text = typed.replace_all(text, "${1}<duration>");
+    let text = json.replace_all(&text, "${1}<duration>");
+    row.replace_all(&text, "${1}<duration>").into_owned()
+}
+
+/// Daemon output in an order concurrency cannot change: each request's
+/// records keep their order, requests sort by id, unsolicited records first.
+pub fn group_by_request(text: &str) -> String {
+    static ID: OnceLock<Regex> = OnceLock::new();
+    let id = ID.get_or_init(|| Regex::new(r#""request_id"\s*:\s*"([^"]*)"\s*\}\s*$"#).unwrap());
+    let mut groups: std::collections::BTreeMap<String, Vec<&str>> =
+        std::collections::BTreeMap::new();
+    for line in text.lines() {
+        let key = id
+            .captures(line)
+            .map(|c| format!("1{}", &c[1]))
+            .unwrap_or_else(|| "0".to_owned());
+        groups.entry(key).or_default().push(line);
+    }
+    let mut out = String::new();
+    for lines in groups.values() {
+        for line in lines {
+            out.push_str(line);
+            out.push('\n');
+        }
+    }
+    out
 }
 
 /// Every token in `text` that could be mistaken for a generated value.
@@ -418,6 +655,49 @@ mod tests {
             canon.rewrite("2026-11-20T12:00:01Z", true),
             "2026-11-20T12:00:01Z"
         );
+    }
+
+    #[test]
+    fn durations_and_random_id_lists_normalise() {
+        let pinned = HashSet::new();
+        let mut a = Canon::new(window(), &pinned);
+        let mut b = Canon::new(window(), &pinned);
+        let left = a.rewrite(
+            r#"{"elapsed_ms":1931,"items":[{"id":"0b9e4c58-7f43-4d0e-9a3a-5c2d1e8f0a11","name":"b"},{"id":"1b9e4c58-7f43-4d0e-9a3a-5c2d1e8f0a11","name":"a"}]}"#,
+            true,
+        );
+        let right = b.rewrite(
+            r#"{"elapsed_ms":7,"items":[{"id":"21111111-2222-4333-8444-555555555555","name":"a"},{"id":"31111111-2222-4333-8444-555555555555","name":"b"}]}"#,
+            true,
+        );
+        assert_eq!(left, right);
+        // A list ordered by meaningful values keeps its order.
+        let mut c = Canon::new(window(), &pinned);
+        let kept = c.rewrite(r#"[{"id":"fixed-1","n":2},{"id":"fixed-0","n":1}]"#, true);
+        assert_eq!(kept, r#"[{"id":"fixed-1","n":2},{"id":"fixed-0","n":1}]"#);
+        assert_eq!(
+            mask_durations("duration_ms=int 99 | x=int 3"),
+            "duration_ms=int <duration> | x=int 3"
+        );
+        assert_eq!(
+            mask_durations(r#"{"duration_ms":{"type":"duration_ms","value":39}}"#),
+            r#"{"duration_ms":{"type":"duration_ms","value":<duration>}}"#
+        );
+        // Inside JSON stored as text, with escaped quotes.
+        assert_eq!(
+            mask_durations(r#"{\"elapsed_ms\":1257,\"n\":1}"#),
+            r#"{\"elapsed_ms\":<duration>,\"n\":1}"#
+        );
+    }
+
+    #[test]
+    fn daemon_output_groups_by_request() {
+        let left = "{\"kind\":\"a\",\"request_id\":\"r2\"}\n{\"kind\":\"b\",\"request_id\":\"r1\"}\n{\"kind\":\"c\",\"request_id\":\"r2\"}\n";
+        let right = "{\"kind\":\"b\",\"request_id\":\"r1\"}\n{\"kind\":\"a\",\"request_id\":\"r2\"}\n{\"kind\":\"c\",\"request_id\":\"r2\"}\n";
+        assert_eq!(group_by_request(left), group_by_request(right));
+        let swapped =
+            "{\"kind\":\"c\",\"request_id\":\"r2\"}\n{\"kind\":\"a\",\"request_id\":\"r2\"}\n";
+        assert_ne!(group_by_request(swapped), group_by_request(left));
     }
 
     #[test]

@@ -14,13 +14,13 @@ pub fn is_sqlite(bytes: &[u8]) -> bool {
 /// One line per pragma, schema object, and row; rows of each table in
 /// rowid order (or primary-key order for a `WITHOUT ROWID` table). Returns
 /// the per-table blocks so a caller can reorder rows it knows are unordered.
+///
+/// `path` must be a disposable copy: a `-wal` file beside it is read in (and
+/// checkpointed), so a book's latest writes are part of the dump.
 pub fn dump(path: &Path) -> Result<Vec<(String, Vec<String>)>, String> {
-    let uri = format!("file:{}?immutable=1", path.display());
     let conn = Connection::open_with_flags(
-        &uri,
-        OpenFlags::SQLITE_OPEN_READ_ONLY
-            | OpenFlags::SQLITE_OPEN_URI
-            | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        path,
+        OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
     )
     .map_err(|e| e.to_string())?;
     let mut blocks = Vec::new();

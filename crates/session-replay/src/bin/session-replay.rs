@@ -1,6 +1,7 @@
 //! Replay recorded process sessions against the current binaries.
 //!
-//!     session-replay replay DIR --bin NAME=PATH ... [--only TEXT] [--jobs N] [--keep]
+//!     session-replay replay DIR --bin NAME=PATH ... [--examples DIR] [--only TEXT] [--jobs N]
+//!                           [--keep] [--report FILE] [--coverage DIR]
 //!     session-replay list DIR
 //!
 //! DIR holds `sessions/*.json` and `blobs/` as `session-shim` wrote them. A
@@ -35,6 +36,25 @@ fn sessions(dir: &Path) -> Vec<PathBuf> {
     found
 }
 
+/// Merge a session's raw counters into one sparse profile.
+fn merge_profile(raw: &Path, out: &Path) {
+    let files: Vec<PathBuf> = fs::read_dir(raw)
+        .map(|read| read.filter_map(|e| e.ok().map(|e| e.path())).collect())
+        .unwrap_or_default();
+    if files.is_empty() {
+        return;
+    }
+    if let Some(parent) = out.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    let tool = std::env::var("LLVM_PROFDATA").unwrap_or_else(|_| "llvm-profdata".into());
+    let _ = std::process::Command::new(tool)
+        .args(["merge", "-sparse", "-o"])
+        .arg(out)
+        .args(&files)
+        .status();
+}
+
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let Some(command) = args.first() else {
@@ -49,6 +69,8 @@ fn main() -> ExitCode {
     let mut only = Vec::new();
     let mut jobs = 4usize;
     let mut keep = false;
+    let mut report: Option<PathBuf> = None;
+    let mut coverage: Option<PathBuf> = None;
     let mut rest = args[2..].iter();
     while let Some(arg) = rest.next() {
         match arg.as_str() {
@@ -62,6 +84,22 @@ fn main() -> ExitCode {
             "--only" => only.extend(rest.next().cloned()),
             "--jobs" => jobs = rest.next().and_then(|v| v.parse().ok()).unwrap_or(4),
             "--keep" => keep = true,
+            "--report" => report = rest.next().map(PathBuf::from),
+            "--coverage" => coverage = rest.next().map(PathBuf::from),
+            // Every executable in DIR, by file name (cargo examples).
+            "--examples" => {
+                let Some(dir) = rest.next() else {
+                    eprintln!("--examples DIR");
+                    return ExitCode::from(2);
+                };
+                for entry in fs::read_dir(dir).into_iter().flatten().flatten() {
+                    let path = entry.path();
+                    let name = entry.file_name().to_string_lossy().into_owned();
+                    if path.is_file() && !name.contains('.') {
+                        binaries.entry(name).or_insert(path);
+                    }
+                }
+            }
             other => {
                 eprintln!("unknown argument {other}");
                 return ExitCode::from(2);
@@ -110,10 +148,19 @@ fn main() -> ExitCode {
     let blobs = Blobs::new(&dir);
     let next = Arc::new(AtomicUsize::new(0));
     let failures = Arc::new(Mutex::new(Vec::<(String, Vec<String>)>::new()));
+    let outcomes = Arc::new(Mutex::new(Vec::<String>::new()));
+    // Each outcome is appended as it completes, so an interrupted run keeps
+    // what it finished.
+    let report_file = Arc::new(Mutex::new(
+        report.as_ref().and_then(|path| fs::File::create(path).ok()),
+    ));
     let files = Arc::new(files);
     let binaries = Arc::new(binaries);
     let workers: Vec<_> = (0..jobs.max(1))
         .map(|worker| {
+            let outcomes = Arc::clone(&outcomes);
+            let report_file = Arc::clone(&report_file);
+            let coverage = coverage.clone();
             let (next, failures, files, binaries, blobs, repo, scratch_root) = (
                 Arc::clone(&next),
                 Arc::clone(&failures),
@@ -133,7 +180,26 @@ fn main() -> ExitCode {
                 let result = fs::read_to_string(file)
                     .map_err(|e| e.to_string())
                     .and_then(|t| serde_json::from_str::<Session>(&t).map_err(|e| e.to_string()))
-                    .and_then(|session| replay(&session, &blobs, &binaries, &repo, &scratch));
+                    .and_then(|session| {
+                        let profile = coverage.as_ref().map(|_| scratch.join("profile"));
+                        if let Some(profile) = &profile {
+                            let _ = fs::create_dir_all(profile);
+                        }
+                        replay(
+                            &session,
+                            &blobs,
+                            &binaries,
+                            &repo,
+                            &scratch,
+                            profile.as_deref(),
+                        )
+                    });
+                if let Some(out) = &coverage {
+                    merge_profile(
+                        &scratch.join("profile"),
+                        &out.join(name.replace(".json", ".profdata")),
+                    );
+                }
                 let problems = match result {
                     Ok(outcome) => outcome.differences,
                     Err(error) => vec![format!("could not replay: {error}")],
@@ -141,6 +207,21 @@ fn main() -> ExitCode {
                 if !keep && scratch.starts_with(&scratch_root) {
                     let _ = fs::remove_dir_all(&scratch);
                 }
+                let first = problems
+                    .first()
+                    .map(|p| p.lines().next().unwrap_or("").to_owned())
+                    .unwrap_or_default();
+                let line = format!(
+                    "{name}\t{}\t{}",
+                    if problems.is_empty() { "ok" } else { "differs" },
+                    first.replace('\t', " ")
+                );
+                if let Some(file) = report_file.lock().unwrap().as_mut() {
+                    use std::io::Write;
+                    let _ = writeln!(file, "{line}");
+                    let _ = file.flush();
+                }
+                outcomes.lock().unwrap().push(line);
                 if !problems.is_empty() {
                     failures.lock().unwrap().push((name, problems));
                 }
@@ -150,6 +231,7 @@ fn main() -> ExitCode {
     for worker in workers {
         let _ = worker.join();
     }
+
     let mut failures = failures.lock().unwrap().clone();
     failures.sort();
     for (name, problems) in &failures {

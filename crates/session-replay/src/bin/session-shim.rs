@@ -64,6 +64,59 @@ fn install_forwarding() {
     }
 }
 
+/// Everything a test wrote into an inherited descriptor, or `None` when it
+/// is not open or does not reach its end within five seconds.
+fn read_descriptor(fd: i32) -> Option<Vec<u8>> {
+    use std::os::fd::FromRawFd;
+    if fs::metadata(format!("/proc/self/fd/{fd}")).is_err() {
+        return None;
+    }
+    let (sender, receiver) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        // SAFETY: the descriptor is open (checked above) and the test handed
+        // it to this process to read; the shim reads it once.
+        let mut file = unsafe { fs::File::from_raw_fd(fd) };
+        let mut bytes = Vec::new();
+        let _ = file.read_to_end(&mut bytes);
+        let _ = sender.send(bytes);
+    });
+    receiver
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .ok()
+}
+
+/// `shim-config.json` beside the shims (written by record-sessions.sh).
+#[derive(Default, serde::Deserialize)]
+struct Config {
+    record_dir: Option<String>,
+    #[serde(default)]
+    root_prefixes: Vec<String>,
+    repo: Option<String>,
+    examples_dir: Option<String>,
+    /// Where the recording's pytest plugin writes `<pid>`: the node id each
+    /// worker is running.
+    current_dir: Option<String>,
+}
+
+/// The test a pytest ancestor of this process is running.
+fn current_test(dir: Option<&str>) -> Option<String> {
+    let dir = Path::new(dir?);
+    let mut pid = std::process::id();
+    for _ in 0..12 {
+        if let Ok(test) = fs::read_to_string(dir.join(pid.to_string())) {
+            return Some(test.trim().to_owned());
+        }
+        let stat = fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+        // `pid (comm) state ppid ...`; comm may contain spaces.
+        let after = stat.rsplit_once(')')?.1;
+        pid = after.split_whitespace().nth(1)?.parse().ok()?;
+        if pid <= 1 {
+            return None;
+        }
+    }
+    None
+}
+
 fn now_us() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -76,33 +129,54 @@ fn fail(message: &str) -> ! {
     std::process::exit(127)
 }
 
-/// The roots this run names: for every absolute path in argv or the kept
-/// environment below a prefix, the prefix's child on that path.
+/// The roots this run names. A path below one of the prefixes is captured
+/// as itself when it is (or will be) a directory, with its siblings when it
+/// is a data root named `data` (the product keeps `config`, `exports` and
+/// `attachments` beside it), and as its directory when it is a file, so a
+/// book's `-wal` and `-shm` come along. Only what the process names is
+/// captured, never the whole test directory other books share.
 fn roots(argv: &[String], env: &BTreeMap<String, String>, prefixes: &[PathBuf]) -> Vec<PathBuf> {
     let mut found = Vec::new();
     let mut consider = |text: &str| {
-        for piece in text.split(['=', ':', ',', ' ', '"', '\'']) {
-            let path = Path::new(piece);
-            if !path.is_absolute() {
+        for piece in text.split([
+            '=', ':', ',', ' ', '"', '\'', '\n', '\t', '{', '}', '[', ']',
+        ]) {
+            let path = Path::new(piece.trim_end_matches(['/', '\\']));
+            if !path.is_absolute()
+                || path
+                    .components()
+                    .any(|c| matches!(c, std::path::Component::ParentDir))
+            {
                 continue;
             }
-            for prefix in prefixes {
-                if let Ok(rest) = path.strip_prefix(prefix) {
-                    // pytest-xdist puts each worker's tests under `popen-gwN`.
-                    let mut parts = rest.components();
-                    let mut root = prefix.clone();
-                    let mut next = parts.next();
-                    while let Some(part) = next {
-                        root.push(part);
-                        if !part.as_os_str().to_string_lossy().starts_with("popen-gw") {
-                            break;
-                        }
-                        next = parts.next();
-                    }
-                    if root != *prefix && next.is_some() && !found.contains(&root) {
-                        found.push(root);
-                    }
-                }
+            let Some(prefix) = prefixes
+                .iter()
+                .find(|p| path.starts_with(p) && path != p.as_path())
+            else {
+                continue;
+            };
+            // pytest-xdist's `popen-gwN` directory alone is never a root.
+            if path.parent() == Some(prefix.as_path())
+                && path
+                    .file_name()
+                    .is_some_and(|n| n.to_string_lossy().starts_with("popen-gw"))
+            {
+                continue;
+            }
+            let is_file = path.is_file() || (!path.exists() && path.extension().is_some());
+            let data_root = path.file_name().is_some_and(|n| n == "data");
+            let root = if is_file || data_root {
+                path.parent().unwrap_or(path).to_path_buf()
+            } else {
+                path.to_path_buf()
+            };
+            let below_prefix = root.starts_with(prefix) && root != *prefix;
+            let worker_dir = root.parent() == Some(prefix.as_path())
+                && root
+                    .file_name()
+                    .is_some_and(|n| n.to_string_lossy().starts_with("popen-gw"));
+            if below_prefix && !worker_dir && !found.contains(&root) {
+                found.push(root);
             }
         }
     };
@@ -153,37 +227,72 @@ fn main() {
         .ok()
         .and_then(|text| serde_json::from_str(&text).ok())
         .unwrap_or_else(|| fail(&format!("no shim map at {}", map_path.display())));
-    let Some(real) = map.get(&name) else {
+    // Tests often start children with a minimal environment, so the
+    // recording settings live in a file beside the shims, not in variables.
+    let config: Config = fs::read_to_string(map_path.with_file_name("shim-config.json"))
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or_default();
+    // An example a test built during the run is not in the map yet.
+    let built = config
+        .examples_dir
+        .clone()
+        .map(|dir| PathBuf::from(dir).join(&name));
+    let fallback = built
+        .filter(|p| p.is_file())
+        .map(|p| p.to_string_lossy().into_owned());
+    let Some(real) = map.get(&name).or(fallback.as_ref()) else {
         fail(&format!("{name} is not in {}", map_path.display()))
     };
 
-    let record = std::env::var_os("KASSIBER_SESSION_RECORD_DIR").map(PathBuf::from);
+    let record = config.record_dir.clone().map(PathBuf::from);
     let mut command = Command::new(real);
     command
         .args(&rest)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    // The child must not record its own children through another shim.
-    command.env_remove("KASSIBER_SESSION_RECORD_DIR");
+    // A test-harness binary records its connections' bytes here.
+    let tape = record.as_ref().map(|dir| {
+        let tapes = dir.join("tapes");
+        let _ = fs::create_dir_all(&tapes);
+        tapes.join(format!("{}-{}.tape", now_us(), std::process::id()))
+    });
+    if let Some(tape) = &tape {
+        command.env(
+            "KASSIBER_TEST_NET_TAPE",
+            format!("record:{}", tape.display()),
+        );
+    }
 
     let argv: Vec<String> = rest
         .iter()
         .map(|a| a.to_string_lossy().into_owned())
         .collect();
     let env: BTreeMap<String, String> = std::env::vars().filter(|(k, _)| keeps_env(k)).collect();
-    let prefixes: Vec<PathBuf> = std::env::var("KASSIBER_SESSION_ROOT_PREFIXES")
-        .unwrap_or_default()
-        .split(':')
-        .filter(|p| !p.is_empty())
-        .map(PathBuf::from)
-        .collect();
+    let prefixes: Vec<PathBuf> = config.root_prefixes.iter().map(PathBuf::from).collect();
     let blobs = record.as_ref().map(|dir| Blobs::new(dir));
+    // Inherited input descriptors (a test's passphrase pipe): read them,
+    // keep their bytes, and give the child an identical pipe.
+    let mut fds = BTreeMap::new();
+    let mut handed = Vec::new();
+    for fd in kassiber_session_replay::descriptor_args(&argv) {
+        if let Some(bytes) = read_descriptor(fd) {
+            if let Ok(pipe) = kassiber_session_replay::filled_pipe(&bytes) {
+                handed.push((fd, pipe));
+            }
+            fds.insert(fd, base64::engine::general_purpose::STANDARD.encode(&bytes));
+        }
+    }
+    kassiber_session_replay::hand_over(&mut command, handed);
     let state_roots = roots(&argv, &env, &prefixes);
     let before = blobs
         .as_ref()
         .map(|b| capture(&state_roots, b))
         .unwrap_or_default();
+    // Services learn their book over stdin: a root first named there is
+    // captured before the chunk naming it reaches the child.
+    let known = Arc::new(Mutex::new((state_roots, before)));
 
     install_forwarding();
     let started = now_us();
@@ -196,6 +305,8 @@ fn main() {
     let mut child_stdin = child.stdin.take().unwrap();
     let log = Arc::clone(&stdin_log);
     let recording = record.is_some();
+    let (stdin_roots, stdin_blobs, stdin_prefixes) =
+        (Arc::clone(&known), blobs.clone(), prefixes.clone());
     // Not joined: a parent that never closes our stdin must not hold us up.
     std::thread::spawn(move || {
         let mut input = std::io::stdin().lock();
@@ -212,6 +323,21 @@ fn main() {
                     break;
                 }
                 Ok(n) => {
+                    if let Some(blobs) = &stdin_blobs {
+                        let text = String::from_utf8_lossy(&buffer[..n]);
+                        let named = roots(&[text.into_owned()], &BTreeMap::new(), &stdin_prefixes);
+                        let mut known = stdin_roots.lock().unwrap();
+                        for root in named {
+                            let covered = known
+                                .0
+                                .iter()
+                                .any(|k| root.starts_with(k) || k.starts_with(&root));
+                            if !covered {
+                                known.1.extend(capture(std::slice::from_ref(&root), blobs));
+                                known.0.push(root);
+                            }
+                        }
+                    }
                     if recording {
                         let data = base64::engine::general_purpose::STANDARD.encode(&buffer[..n]);
                         log.lock().unwrap().push(StdinChunk {
@@ -270,6 +396,7 @@ fn main() {
     let signal: Option<i32> = None;
 
     if let (Some(dir), Some(blobs)) = (record, blobs) {
+        let (state_roots, before) = std::mem::take(&mut *known.lock().unwrap());
         let after = capture(&state_roots, &blobs);
         let roots = before
             .into_iter()
@@ -288,13 +415,15 @@ fn main() {
                 after_lines: SIGNAL_LINES[i].load(Ordering::SeqCst),
             })
             .collect();
-        let test = std::env::var("PYTEST_CURRENT_TEST").ok().map(|t| {
-            t.strip_suffix(" (call)")
-                .or_else(|| t.strip_suffix(" (setup)"))
-                .or_else(|| t.strip_suffix(" (teardown)"))
-                .unwrap_or(&t)
-                .to_owned()
-        });
+        let test = current_test(config.current_dir.as_deref())
+            .or_else(|| std::env::var("PYTEST_CURRENT_TEST").ok())
+            .map(|t| {
+                t.strip_suffix(" (call)")
+                    .or_else(|| t.strip_suffix(" (setup)"))
+                    .or_else(|| t.strip_suffix(" (teardown)"))
+                    .unwrap_or(&t)
+                    .to_owned()
+            });
         let session = Session {
             format: SESSION_FORMAT.into(),
             binary: name.clone(),
@@ -315,7 +444,15 @@ fn main() {
                 signal,
             },
             roots,
-            repo: std::env::var("KASSIBER_SESSION_REPO").unwrap_or_default(),
+            repo: config.repo.clone().unwrap_or_default(),
+            fds,
+            net_tape: tape.as_ref().and_then(|path| {
+                let bytes = fs::read(path).ok()?;
+                let _ = fs::remove_file(path);
+                (!bytes.is_empty())
+                    .then(|| blobs.put(&bytes).ok())
+                    .flatten()
+            }),
         };
         let sessions = dir.join("sessions");
         let _ = fs::create_dir_all(&sessions);

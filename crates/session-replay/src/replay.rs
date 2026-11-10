@@ -108,10 +108,22 @@ fn artifacts(
             Entry::File { blob, mode, .. } => {
                 let bytes = blobs.get(blob).unwrap_or_default();
                 let body = if dbdump::is_sqlite(&bytes) {
+                    // A disposable copy with its write-ahead log beside it.
                     let file = root.join(".dump.sqlite");
+                    let wal = root.join(".dump.sqlite-wal");
                     let _ = fs::write(&file, &bytes);
+                    let _ = fs::remove_file(&wal);
+                    let _ = fs::remove_file(root.join(".dump.sqlite-shm"));
+                    let wal_name = format!("{}-wal", entry_path(entry));
+                    if let Some(Entry::File { blob, .. }) =
+                        entries.iter().find(|e| entry_path(e) == wal_name)
+                    {
+                        let _ = fs::write(&wal, blobs.get(blob).unwrap_or_default());
+                    }
                     let dumped = dbdump::dump(&file);
-                    let _ = fs::remove_file(&file);
+                    for leftover in [&file, &wal, &root.join(".dump.sqlite-shm")] {
+                        let _ = fs::remove_file(leftover);
+                    }
                     match dumped {
                         Ok(blocks) => blocks
                             .into_iter()
@@ -157,9 +169,10 @@ fn ignored(name: &str) -> bool {
         || name.ends_with("-shm")
         || name.ends_with("-journal")
         || name.ends_with(".lock")
-        // Ownership locks name the live process (pid, generation); they are
-        // runtime state, never a result.
+        // Ownership locks name the live process (pid, generation) and the
+        // locked path; they are runtime state, never a result.
         || base.starts_with(".operator-owner.lock")
+        || base.contains(".lock.")
 }
 
 fn pinned_inputs(session: &Session, blobs: &Blobs) -> HashSet<String> {
@@ -222,6 +235,7 @@ pub fn replay(
     binaries: &BTreeMap<String, PathBuf>,
     repo: &Path,
     scratch: &Path,
+    profile: Option<&Path>,
 ) -> Result<Outcome, String> {
     let binary = binaries
         .get(&session.binary)
@@ -313,11 +327,36 @@ pub fn replay(
     if !session.env.contains_key("TMPDIR") {
         command.env("TMPDIR", &tmp);
     }
+    // A coverage-instrumented binary writes its counters here.
+    if let Some(profile) = profile {
+        command.env("LLVM_PROFILE_FILE", profile.join("%p-%m.profraw"));
+    }
+    // Connections replay from the recorded tape; with none recorded, an
+    // empty tape refuses every connection instead of reaching the network.
+    let tape = scratch.join("net.tape");
+    let recorded_tape = match &session.net_tape {
+        Some(blob) => blobs.get(blob).map_err(|e| e.to_string())?,
+        None => Vec::new(),
+    };
+    fs::write(&tape, recorded_tape).map_err(|e| e.to_string())?;
+    command.env(
+        "KASSIBER_TEST_NET_TAPE",
+        format!("replay:{}", tape.display()),
+    );
     // Ownership locks rendezvous outside the state roots; a test-harness
     // binary keeps them in this replay's own directory instead.
     if !session.env.contains_key("KASSIBER_RUST_TEST_OWNER_ROOT") {
         command.env("KASSIBER_RUST_TEST_OWNER_ROOT", scratch.join("owners"));
     }
+    // The recorded passphrase pipes, at the same descriptor numbers.
+    let mut handed = Vec::new();
+    for (fd, data) in &session.fds {
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(data)
+            .unwrap_or_default();
+        handed.push((*fd, crate::filled_pipe(&bytes).map_err(|e| e.to_string())?));
+    }
+    crate::hand_over(&mut command, handed);
     command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -476,8 +515,18 @@ pub fn replay(
         String::from_utf8_lossy(&blobs.get(&session.stdout).unwrap_or_default()).into_owned();
     let recorded_err =
         String::from_utf8_lossy(&blobs.get(&session.stderr).unwrap_or_default()).into_owned();
-    let replay_out = paths.back(&String::from_utf8_lossy(&stdout));
+    let mut replay_out = paths.back(&String::from_utf8_lossy(&stdout));
     let replay_err = paths.back(&String::from_utf8_lossy(&stderr));
+    // Concurrent daemon requests interleave their records freely.
+    let daemon = session.argv.iter().any(|a| a == "daemon");
+    let recorded_out = if daemon {
+        crate::compare::group_by_request(&recorded_out)
+    } else {
+        recorded_out
+    };
+    if daemon {
+        replay_out = crate::compare::group_by_request(&replay_out);
+    }
     let (a, b) = (
         left.rewrite(&recorded_out, true),
         right.rewrite(&replay_out, true),
