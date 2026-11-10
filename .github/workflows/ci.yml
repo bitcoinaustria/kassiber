@@ -334,7 +334,16 @@ jobs:
   tax-engine:
     name: Rust crates
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # With every backend crate the workspace's test binaries alone run about
+    # 18 minutes on the build machine (4 test threads), before this job's
+    # builds and clippy.
+    timeout-minutes: 60
+    env:
+      # With debug info the workspace's test build outgrows the runner's disk
+      # ("No space left on device" while linking): 11 GB without it, 32 GB
+      # or more with line tables only. Panic messages keep their file and line.
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
