@@ -8,7 +8,8 @@
 Local-first Bitcoin accounting for individuals, businesses, and associations.
 Kassiber imports or syncs wallet transactions, supports review of transfers and
 missing evidence, and produces portfolio, tax, and source-of-funds reports.
-It has a desktop app and a CLI backed by the same Python core.
+It has a desktop app and a CLI backed by the same Rust core: one `kassiber`
+binary serves the command line, the desktop daemon and the MCP server.
 
 **Pre-alpha:** expect breaking changes and incorrect accounting or tax output.
 Do not use Kassiber as the sole basis for filings or financial decisions.
@@ -17,15 +18,15 @@ Do not use Kassiber as the sole basis for filings or financial decisions.
 
 - Watch-only Bitcoin, Lightning, and Liquid sources, plus exchange and wallet
   file imports. BTCPay Server stores sync with a read-only key, including
-  BTCPay 2.4 wallets and Bark (Ark) wallets run through BTCPay. With the Rust
-  backend, Bitpanda connects through a read-only API key and exchange API
-  connections can be set up and synced from the desktop.
+  BTCPay 2.4 wallets and Bark (Ark) wallets run through BTCPay. Bitpanda
+  connects through a read-only API key, and exchange API connections can be
+  set up and synced from the desktop.
 - Transaction notes, attachments, transfer review, quarantine, and audit history.
 - Encrypted backup and restore of a book container, from the desktop or the CLI.
 - Local tax calculations in Kassiber's own tax engine, including Austrian
-  Alt/Neu rules and E 1kv exports. The Rust backend adds preview rules for
-  the United States, Germany, Switzerland, Spain, Ireland, the United
-  Kingdom and Japan, labelled preview until a tax professional reviews each.
+  Alt/Neu rules and E 1kv exports, plus preview rules for the United States,
+  Germany, Switzerland, Spain, Ireland, the United Kingdom and Japan, labelled
+  preview until a tax professional reviews each.
 - An optional AI assistant using local or explicitly authorized remote providers.
 
 ## Install
@@ -33,8 +34,10 @@ Do not use Kassiber as the sole basis for filings or financial decisions.
 Download desktop or CLI packages from
 [GitHub Releases](https://github.com/bitcoinaustria/kassiber/releases).
 Packaged targets are Apple Silicon macOS, Linux x86_64, and Windows x86_64.
-The desktop includes the CLI runtime; a separate Python installation is not
-needed. See [installation and first launch](docs/reference/prerelease-binaries.md)
+The desktop includes the CLI runtime; neither needs Python. Releases ship the
+Rust `kassiber` binary in place of the earlier PyInstaller bundle and open the
+same books; the Python implementation stays in the source tree as the parity
+reference until it is retired. See [installation and first launch](docs/reference/prerelease-binaries.md)
 and [release verification](docs/reference/release-signing.md).
 
 With Homebrew, choose the desktop cask or the CLI formula. Both provide the

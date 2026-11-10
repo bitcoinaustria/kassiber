@@ -9,8 +9,8 @@ release-manifest signing; older unsigned downloads are not retroactively signed.
 ## What Runs Automatically
 
 - Pull requests run `.github/workflows/ci.yml`. Pull requests that touch the
-  release workflow, packaging scripts/metadata, frozen CLI inputs, the Rust
-  tax engine, the pinned Rust toolchain, or Tauri bundle inputs also run
+  release workflow, packaging scripts/metadata, the Rust backend crates and
+  the data they embed, the Rust tax engine, the pinned Rust toolchain, or Tauri bundle inputs also run
   `.github/workflows/prerelease-binaries.yml` without publishing.
 - Pushes to `main` run `.github/workflows/ci.yml` only.
 - Pushes of tags matching `v*` run `.github/workflows/prerelease-binaries.yml`
@@ -92,23 +92,24 @@ asks for one.
 
 The workflow currently builds:
 
-- Unsigned CLI build inputs: macOS arm64 and Linux x86_64 one-file PyInstaller
-  binaries as `.tar.gz` archives, Windows x86_64 as a `.zip`, and Linux
+- Unsigned CLI build inputs: the Rust `kassiber` binary for macOS arm64 and
+  Linux x86_64 as `.tar.gz` archives, Windows x86_64 as a `.zip`, and Linux
   x86_64 additionally as GUI-free `kassiber-cli` `.deb` and binary `.rpm`
   packages. The extracted
-  executable is named `kassiber` (`kassiber.exe` on Windows). These artifacts
-  do not require the desktop app. Linux is built on Ubuntu 22.04 to keep the
-  glibc floor aligned with the AppImage build.
+  executable is named `kassiber` (`kassiber.exe` on Windows), with
+  `BUILD_INFO.json` and the AI provider broker (`provider_broker/index.mjs`)
+  beside it. These artifacts do not require the desktop app. Linux is built on
+  Ubuntu 22.04 to keep the glibc floor aligned with the AppImage build, and
+  the build refuses a binary above that floor.
 - Desktop previews: a macOS arm64 `.app` zip plus `.dmg`, Linux `.AppImage`,
   `.deb`, and binary `.rpm`, and Windows `.msi` plus
-  NSIS setup `.exe`, published with short user-facing filenames. Linux and
-  Windows previews include the exact one-file Kassiber CLI executable produced
-  by the matching CLI-only matrix leg. macOS previews instead carry a one-dir
-  build of the same entry point, under `binaries/kassiber-cli/`, because
-  re-unpacking a one-file sidecar on every launch costs ~6s of macOS code
-  signature re-validation (see [desktop.md](desktop.md)).
+  NSIS setup `.exe`, published with short user-facing filenames. Every preview
+  carries the exact binary the matching CLI-only matrix leg built and smoked,
+  under its target-triple sidecar name; macOS keeps it under
+  `binaries/kassiber-cli/`, the location and signing identifier the Python
+  one-dir sidecar used. See [Rust packaging](rust-packaging.md).
 
-The final verified macOS CLI archive replaces the unsigned one-file input with
+The final verified macOS CLI archive replaces the unsigned input with
 the complete notarized `Kassiber.app` runtime and its terminal launcher. The
 formula installs it under `libexec`, not Applications; CLI calls do not launch
 the GUI. Final DMG, app ZIP, and CLI archive share the same signed app payload;
@@ -177,10 +178,9 @@ assets.
 The macOS desktop leg uses GitHub's `macos-latest` runner with Tauri's
 `--target aarch64-apple-darwin` and bundles the single arm64 CLI sidecar.
 
-The shared CLI build always collects pinned `bdkpython` and pinned `lwk`;
-every packaged platform (macOS arm64, Linux x86_64, Windows x86_64) ships
-both, so packaged builds never fall back to the compatibility observer for
-missing wheels.
+The Rust binary links BDK and LWK natively on every packaged platform (macOS
+arm64, Linux x86_64, Windows x86_64), so packaged builds never fall back to a
+compatibility observer.
 
 ### Local Apple Silicon build
 
@@ -255,7 +255,7 @@ Use the full build script when you specifically need a real installable
 to hand a build to someone else on Apple Silicon.
 
 Desktop artifacts are unsigned previews, but normal daemon calls use the
-bundled PyInstaller CLI sidecar and do not require a separate Python checkout.
+bundled Rust sidecar and do not require a separate Python checkout.
 Settings -> Desktop -> Terminal command can install a user-local `kassiber`
 launcher without administrator privileges for direct-DMG and portable builds.
 It also maintains one marked shell-profile PATH block when needed. The launcher
@@ -294,13 +294,68 @@ update checker treats these packages as manual installs and shows the GitHub
 release link; see [Linux packaging](linux-packaging.md) for why no `apt`/`dnf`
 command is offered.
 
+### Local Apple Silicon build with the Rust backend
+
+While [plan 21](../plan/21-rust-backend.md) moves the backend to Rust, a local
+app with the Rust binary as its sidecar can be tested beside the Python one:
+
+```bash
+./scripts/build-macos-arm64-rust-app.sh
+# also build the Python-backed app from the same commit:
+./scripts/build-macos-arm64-rust-app.sh --with-python-app
+```
+
+The helper builds the production `kassiber` binary (no `test-harness`
+feature) for `aarch64-apple-darwin` through `scripts/build-rust-cli.sh`, which
+strips it with Xcode's `strip`, ad-hoc signs it under the identifier
+`kassiber-cli-aarch64-apple-darwin`, and refuses it unless it is an arm64
+Mach-O that links only macOS system libraries and reports
+`Kassiber <version> (dev, commit <12 hex>)`. It then runs the packaged-binary
+smoke CI runs. It places the binary where the Python sidecar goes,
+`binaries/kassiber-cli/kassiber-cli-aarch64-apple-darwin`, with the provider
+broker beside it, so the supervisor, the bundled CLI launcher and the Touch ID
+helper's identity check find it unchanged, and re-signs it under that
+identifier if Tauri's bundle signing changed it. It probes the freshly built
+bundles and only reads installed apps' build records, never executes them. The app is named **Kassiber Rust Dev**
+(`at.bitcoinaustria.kassiber.rust-dev`) and shows the build label `dev-rust`.
+Finished apps and DMGs are copied to `dist/macos-arm64/`.
+
+Both apps use the same books. The data location does not depend on the bundle
+identifier, and ownership locks let only one desktop app hold a book at a
+time; the other reports that another desktop app owns the project. A newer
+build may upgrade a book, which an older build then refuses, so switch back
+and forth only between apps built from the same commit (`--with-python-app`).
+The helper warns when an installed Kassiber Dev or Kassiber app reports
+another commit. Requests the Rust backend does not serve yet return
+`not_implemented`.
+
+Before finishing, the helper snapshots every local book with
+`scripts/macos-kassiber-data.sh snapshot --if-changed`, unless `--no-backup` is
+given. A snapshot copies both state roots
+(`~/Library/Application Support/at.bitcoinaustria.kassiber` and a legacy
+`~/.kassiber`) and every project directory their catalogs point to, into
+`~/Library/Application Support/at.bitcoinaustria.kassiber-snapshots/`. The
+copy is private to the account and skips live lock and socket files. Snapshots
+need every Kassiber app and CLI closed, so the files are consistent; encrypted
+books stay encrypted. Keychain items are not included. To roll back:
+
+```bash
+./scripts/macos-kassiber-data.sh list
+./scripts/macos-kassiber-data.sh restore "<snapshot directory>"
+```
+
+Restore renames the current data to `<path>.before-restore-<timestamp>` and
+never deletes it.
+
 ## Commit Identity
 
-Every packaged CLI embeds `BUILD_INFO.json`, and every CLI-only archive includes
-a readable copy beside the executable. `kassiber --version` prints the package
-version plus the channel and abbreviated commit without opening the database.
-The desktop uses that exact executable as its sidecar, while its footer keeps
-the existing version/commit display. The build record contains:
+The Rust binary compiles the channel and commit in (`KASSIBER_BUILD_CHANNEL`,
+`KASSIBER_BUILD_COMMIT`), and every CLI-only archive and desktop sidecar
+directory carries `BUILD_INFO.json` beside the executable; the macOS signer
+refuses an app without it. `kassiber --version` prints the package version plus
+the channel and abbreviated commit without opening the database. The desktop
+uses that exact executable as its sidecar, while its footer keeps the existing
+version/commit display. The build record contains:
 
 ```json
 {
@@ -316,6 +371,9 @@ the existing version/commit display. The build record contains:
 `scripts/write_build_info.py` honors `SOURCE_DATE_EPOCH`; CI and the local macOS
 builder derive it from the source commit timestamp. This removes wall-clock
 drift from `built_at` while retaining the run id as explicit provenance.
+`scripts/build-rust-cli.sh` passes the same epoch to the compiler so vendored
+OpenSSL's build stamp is fixed too; see
+[Rust packaging](rust-packaging.md#reproducibility).
 
 ## Verification When Editing This Workflow
 

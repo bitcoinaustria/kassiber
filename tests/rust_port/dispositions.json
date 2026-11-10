@@ -1957,7 +1957,9 @@
       "test_real_codesign_accepts_attached_extraction_prefix": {"disposition": "rust-test", "flags": ["subprocess"], "group": "packaging-ci", "reason": "runs helper processes without the product entry", "reviewed": false, "tests": 1},
       "test_cli_distribution_is_exact_sealed_app": {"disposition": "rust-test", "flags": [], "group": "packaging-ci", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 1},
       "test_developer_id_profile_contract": {"disposition": "rust-test", "flags": [], "group": "packaging-ci", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 1},
-      "test_entitlements_are_explicit_not_inherited": {"disposition": "rust-test", "flags": ["mock"], "group": "packaging-ci", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 1}
+      "test_entitlements_are_explicit_not_inherited": {"disposition": "rust-test", "flags": ["mock"], "group": "packaging-ci", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 1},
+      "test_backend_sidecar_keeps_the_python_sidecar_identifier": {"disposition": "rust-test", "flags": ["mock"], "group": "packaging-ci", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 1},
+      "test_backend_sidecar_must_sit_at_the_python_sidecar_location": {"disposition": "rust-test", "flags": [], "group": "packaging-ci", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 1}
     },
     "tests/test_managed_settings.py": {
       "ManagedSettingsTests": {"disposition": "rust-test", "flags": ["sql"], "group": "store", "reason": "calls kassiber.db directly", "reviewed": false, "tests": 2}
@@ -2107,6 +2109,9 @@
       "ConflictingSpendTests": {"disposition": "rust-test", "flags": [], "group": "transactions", "reason": "calls kassiber.core.ownership_transfers directly", "reviewed": false, "tests": 10},
       "PendingOnchainTests": {"disposition": "rust-test", "flags": [], "group": "transactions", "reason": "calls kassiber.core.ownership_transfers directly", "reviewed": false, "tests": 5},
       "LiquidOwnershipDeriverTests": {"disposition": "rust-test", "flags": [], "group": "transactions", "reason": "calls kassiber.core.ownership, kassiber.core.ownership_transfers directly", "reviewed": false, "tests": 5}
+    },
+    "tests/test_packaged_cli_no_egress.py": {
+      "PackagedCliNoEgressTest": {"disposition": "boundary-fixture", "flags": ["subprocess"], "group": "network-egress", "reason": "runs the packaged production binary named by KASSIBER_PACKAGED_CLI under a seccomp socket filter and a resolver shim; launch, status and daemon idle must open no socket", "reviewed": true, "tests": 6}
     },
     "tests/test_pair_residual_fee.py": {
       "test_pair_allocates_separate_observed_fee_once": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "journals", "reason": "calls kassiber.core.custody_evidence, kassiber.cli.handlers directly", "reviewed": false, "tests": 1},

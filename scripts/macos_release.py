@@ -29,6 +29,12 @@ APP_ZIP = "kassiber-macos-arm64.app.zip"
 DMG = "kassiber-macos-arm64.dmg"
 CLI_TAR = "kassiber-cli-macos-arm64.tar.gz"
 INPUT_DMG = "kassiber-macos-signing-input.dmg"
+# The backend sidecar keeps the Python sidecar's file name, bundle location and
+# signing identifier (the file name, which `sign` passes as --identifier). The
+# Touch ID helper's code requirement pins that identifier and the team, and
+# Keychain items the signed Python sidecar wrote stay readable without a
+# prompt only for the same identifier and team.
+SIDECAR = "Contents/Resources/binaries/kassiber-cli/kassiber-cli-aarch64-apple-darwin"
 NOTARY_POLL_SECONDS = 30
 NOTARY_TIMEOUT_SECONDS = 50 * 60
 APP_ENTITLEMENTS = {
@@ -355,8 +361,20 @@ def verify_code(path: Path, *, runtime: bool = True) -> None:
         raise ValueError("Missing secure timestamp or hardened runtime")
 
 
+def verify_sidecar_identity(app: Path) -> None:
+    sidecar = app / SIDECAR
+    if not sidecar.is_file() or sidecar.is_symlink():
+        raise ValueError("Backend sidecar is missing from its bundle location")
+    result = subprocess.run(["/usr/bin/codesign", "-d", "--verbose=2", str(sidecar)],
+                            check=True, capture_output=True, text=True)
+    identifiers = re.findall(r"(?m)^Identifier=(.*)$", result.stderr)
+    if identifiers != [sidecar.name]:
+        raise ValueError("Backend sidecar is not signed under its stable identifier")
+
+
 def verify_app(app: Path, commit: str, version: str, *, ticket: bool, candidate_id: str | None = None) -> None:
     validate_app(app, commit, version)
+    verify_sidecar_identity(app)
     verify_linkage(app)
     profile = load_profile(app / "Contents/embedded.provisionprofile")
     verify_profile_certificate(app, profile)
@@ -491,8 +509,8 @@ def notarize(args: argparse.Namespace) -> None:
         run("/usr/sbin/spctl", "--assess", "--type", "open", "--context",
             "context:primary-signature", "--verbose=4", image)
         run("/usr/bin/ditto", "-c", "-k", "--keepParent", app, args.output / APP_ZIP)
-        # A single notarized app supplies the CLI too: PyInstaller onefile
-        # embedded libraries cannot be Developer-ID-signed after the CI build.
+        # A single notarized app supplies the CLI too, so the CLI and the
+        # desktop share one sealed sidecar and its signing identity.
         cli_root = Path(tmp) / "kassiber-cli-macos-arm64"
         cli_root.mkdir()
         shutil.copytree(app, cli_root / "Kassiber.app")

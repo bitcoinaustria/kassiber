@@ -66,12 +66,12 @@ source-only pull request.
 
 ## Still blocked or intentionally deferred
 
-- [ ] Linux ARM64: obtain or reproducibly build pinned Linux aarch64
-  `bdkpython` and `lwk` wheels, then add native ARM CI and every release/channel
-  artifact together.
-- [ ] RHEL 9 and older enterprise Linux: lower and prove the frozen CLI glibc
-  floor below the current 2.35 requirement; validate desktop WebKitGTK
-  availability separately.
+- [ ] Linux ARM64: build the Rust binary on a native ARM runner, then add
+  native ARM CI and every release/channel artifact together.
+- [ ] RHEL 9 and older enterprise Linux: lower and prove the Rust CLI glibc
+  floor below the current 2.35 requirement (build on an older base and pass
+  `scripts/check-linux-glibc-floor.sh` with the lower floor); validate desktop
+  WebKitGTK availability separately.
 - [ ] Alpine APK: prove the full dependency and desktop stack under musl; do
   not wrap the current glibc build.
 - [ ] Snap: choose and validate confinement, local backend access, Secret

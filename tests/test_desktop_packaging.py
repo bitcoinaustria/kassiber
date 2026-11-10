@@ -53,33 +53,47 @@ class DesktopPackagingTest(unittest.TestCase):
         self.assertEqual(environment.attrib["Value"], "[INSTALLDIR]bin")
         self.assertEqual(environment.attrib["Permanent"], "no")
 
-    def test_cli_release_and_desktop_sidecar_share_one_argument_set(self):
-        """The downloadable CLI and the desktop sidecar must stay the same
-        program.
+    def test_cli_release_and_desktop_sidecar_are_one_rust_binary(self):
+        """The downloadable CLI and the desktop sidecar are the same file.
 
-        They are no longer the same *file*: macOS ships a one-dir sidecar so
-        the kernel can cache dylib signature validation across launches (see
-        docs/reference/desktop.md), and one-dir and one-file cannot be one
-        artifact. What still has to hold is that neither build can drift from
-        the other — same job, same synced dependencies, and one shared
-        argument array differing only in packaging mode.
+        Plan 21 stage 7: every leg builds the Rust `kassiber` binary once with
+        scripts/build-rust-cli.sh, smokes it, packages it as the CLI, and
+        stages that exact file as the sidecar, with the provider broker and
+        the build record beside it. No PyInstaller build may come back.
         """
         workflow = (
             ROOT / ".github/workflows/prerelease-binaries.yml"
         ).read_text(encoding="utf-8")
+        smoke = (ROOT / "scripts/smoke-packaged-cli.sh").read_text(encoding="utf-8")
+        build = (ROOT / "scripts/build-rust-cli.sh").read_text(encoding="utf-8")
 
-        # One-file CLI plus the macOS one-dir sidecar, and nothing else.
-        self.assertEqual(workflow.count("pyinstaller \\"), 2)
-        self.assertEqual(workflow.count("--onefile"), 1)
-        self.assertEqual(workflow.count("--onedir"), 1)
-        # Both invocations expand the same array, so an argument added for one
-        # cannot silently miss the other.
-        self.assertEqual(workflow.count('"${pyinstaller_args[@]}"'), 2)
-        self.assertEqual(workflow.count("pyinstaller_args=("), 1)
+        self.assertNotIn("pyinstaller", workflow.lower())
+        self.assertNotIn("--onedir", workflow)
+        self.assertEqual(workflow.count("scripts/build-rust-cli.sh \\"), 1)
+        self.assertIn('--target "${{ matrix.triple }}"', workflow)
+        self.assertIn("scripts/smoke-packaged-cli.sh", workflow)
+        self.assertIn("tests.test_packaged_cli_no_egress", workflow)
+        self.assertIn("scripts/package-cli-archive.sh", workflow)
+        # The sidecar is the smoked CLI binary, copied, never rebuilt.
+        self.assertIn(
+            'cp "dist/kassiber${{ matrix.exe_ext }}" \\\n'
+            '            "$sidecar_dir/kassiber-cli-${{ matrix.triple }}${{ matrix.exe_ext }}"',
+            workflow,
+        )
+        self.assertIn('"$sidecar_dir/provider_broker/index.mjs"', workflow)
+        self.assertIn('"$sidecar_dir/BUILD_INFO.json"', workflow)
+        self.assertIn('test ! -e "$root/_internal"', workflow)
+        # The production binary: never the test harness.
+        self.assertNotIn("--features", build)
+        self.assertNotIn("--all-features", build)
+        self.assertIn("-p kassiber --bin kassiber", build)
+        self.assertIn("check-linux-glibc-floor.sh", build)
+
         self.assertNotIn("build-desktop-sidecar:", workflow)
         self.assertIn("kassiber-cli-release-${{ matrix.target }}", workflow)
         self.assertIn("target: windows-x64", workflow)
         self.assertIn('archive: zip', workflow)
+        self.assertIn("os: ubuntu-22.04", workflow)
         self.assertIn("bundles: deb,appimage", workflow)
         self.assertIn("scripts/package-cli-deb.sh", workflow)
         self.assertIn('"ui-tauri/src-tauri/icons/**"', workflow)
@@ -90,13 +104,17 @@ class DesktopPackagingTest(unittest.TestCase):
         self.assertIn("pull_request:", workflow)
         self.assertIn("BUILD_CHANNEL:", workflow)
         self.assertIn('--channel "$BUILD_CHANNEL"', workflow)
-        self.assertIn('"$cli" --version', workflow)
-        self.assertIn("error.code not_initialized", workflow)
-        self.assertIn('"$cli" --data-root "$status_root" --machine init', workflow)
-        self.assertIn("Hosted Linux runners have no live logind user session", workflow)
-        self.assertIn("--db-passphrase-fd 0 status", workflow)
-        self.assertIn("--machine operator unlock", workflow)
         self.assertIn("Smoke desktop terminal forwarding", workflow)
+        self.assertIn("--operator-unlock", workflow)
+
+        self.assertIn('kassiber --version', smoke)
+        self.assertIn("error.code not_initialized", smoke)
+        self.assertIn('kassiber --data-root "$status_root" --machine init', smoke)
+        self.assertIn("Hosted Linux runners have no live logind user session", smoke)
+        self.assertIn("--db-passphrase-fd 0 status", smoke)
+        self.assertIn("--machine operator unlock", smoke)
+        self.assertIn("SQLite format 3", smoke)
+        self.assertIn("KASSIBER_OFFLINE_PREFERENCE_FILE", smoke)
 
     def test_appimage_uses_the_host_wayland_client(self):
         workflow = (

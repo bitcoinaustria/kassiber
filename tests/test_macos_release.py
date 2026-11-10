@@ -614,3 +614,33 @@ def test_entitlements_are_explicit_not_inherited():
         with patch.object(release, "run", return_value=plistlib.dumps(unexpected).decode()):
             with pytest.raises(ValueError):
                 release.verify_entitlements(Path("app"), release.APP_ENTITLEMENTS)
+
+
+@pytest.mark.parametrize("identifier,accepted", [
+    ("kassiber-cli-aarch64-apple-darwin", True),
+    ("kassiber-55d1c6a7f2b0e8a9", False),
+    ("at.bitcoinaustria.kassiber", False),
+])
+def test_backend_sidecar_keeps_the_python_sidecar_identifier(tmp_path, identifier, accepted):
+    """The Touch ID requirement and existing Keychain items pin this identifier."""
+    app = tmp_path / "Kassiber.app"
+    sidecar = app / release.SIDECAR
+    sidecar.parent.mkdir(parents=True)
+    sidecar.write_bytes(b"\xcf\xfa\xed\xfe")
+    signed = subprocess.CompletedProcess([], 0, "", f"Executable={sidecar}\nIdentifier={identifier}\n")
+    with patch.object(release.subprocess, "run", return_value=signed) as codesign:
+        if accepted:
+            release.verify_sidecar_identity(app)
+        else:
+            with pytest.raises(ValueError, match="stable identifier"):
+                release.verify_sidecar_identity(app)
+    assert codesign.call_args.args[0][-1] == str(sidecar)
+
+
+def test_backend_sidecar_must_sit_at_the_python_sidecar_location(tmp_path):
+    app = tmp_path / "Kassiber.app"
+    flat = app / "Contents/Resources/binaries/kassiber-cli-aarch64-apple-darwin"
+    flat.parent.mkdir(parents=True)
+    flat.write_bytes(b"\xcf\xfa\xed\xfe")
+    with pytest.raises(ValueError, match="bundle location"):
+        release.verify_sidecar_identity(app)
