@@ -38,8 +38,8 @@ export class BridgeDataRoot {
   }
 
   /** Arguments that start `kassiber daemon` against the current root. */
-  daemonArgs(runnerArgs: readonly string[]): string[] {
-    const args = [...runnerArgs];
+  daemonArgs(): string[] {
+    const args: string[] = [];
     if (this.current) {
       args.push("--data-root", this.current);
     }

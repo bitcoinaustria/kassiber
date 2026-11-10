@@ -85,10 +85,14 @@ Current development modes:
   browser preview. In bridge mode, the
   Welcome screen can open existing local books through a dev-only loopback
   folder picker; the Vite bridge validates the selected Kassiber data root and
-  restarts its Python daemon with `--data-root` before the normal unlock/profile
+  restarts its daemon with `--data-root` before the normal unlock/profile
   picker flow continues in the browser. Leaving an imported folder restarts the
   daemon on the book the preview started with: `KASSIBER_DEV_DATA_ROOT` when
-  set, otherwise the default root.
+  set, otherwise the default root. The bridge starts the Rust binary named by
+  `KASSIBER_BIN`, else the checkout's `target/release/kassiber`, else
+  `target/debug/kassiber`. It only looks for those files; it never runs a
+  probe, and with no binary the preview shows an error naming the
+  `cargo build -p kassiber --bin kassiber` step.
 - `pnpm tauri:dev` runs the Tauri shell, starts `python -m kassiber daemon`,
   and calls the Rust `daemon_invoke` boundary. The command allowlists the
   current UI data, export, and action kinds. Report exports write under the

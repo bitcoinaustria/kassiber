@@ -786,7 +786,9 @@ locally entered wallet material; that does not authorize later disclosure.
 
 The browser preview uses the real daemon through the loopback Vite bridge:
 `pnpm --dir ui-tauri run dev:bridge` exposes `/__kassiber__/daemon` and the
-NDJSON `/__kassiber__/daemon/stream` endpoint. Follow the
+NDJSON `/__kassiber__/daemon/stream` endpoint. It starts the Rust binary
+(`KASSIBER_BIN`, else `target/release/kassiber`, else `target/debug/kassiber`)
+and refuses to start without one. Follow the
 [testing guide](testing.md) to choose an isolated data root.
 
 ## Request routing
