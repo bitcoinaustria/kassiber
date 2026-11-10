@@ -54,7 +54,7 @@ the Vite bridge.
 - **CI:**
   - In `ci.yml`: `Preflight`'s Python steps, `python-tests` (9 shards),
     `tax-shadow` (9), `custody-shadow` (9) and `cli-smoke`.
-  - The `uv sync` steps in `integration.yml`, `chain-observers` and
+  - The uv steps in `integration.yml`, `chain-observers` and
     `credential-platforms.yml`.
   - The `python-binding` Cargo cache key.
   - `setup-python` in the release workflows, once their scripts are ported (D3).
@@ -185,7 +185,7 @@ Facts that drive D1:
 The regtest and demo harnesses are Python:
 - `tests/integration/`: 14,046 lines, 4,992 of them `regtest_demo.py`;
 - `dev/regtest/*.py`: 4,736 lines;
-- `scripts/integration-harness.sh`: 1,879 lines, using `uv run` and `.venv`;
+- `scripts/integration-harness.sh`: 1,879 lines, using uv and `.venv`;
 - `skills/kassiber-regtest-mode`.
 
 They start the product through `cli_runner`, which can already target the
@@ -225,7 +225,7 @@ read them as proportions.
 | Tax shadow (re-runs the overlay) | 20,275 s | 0 |
 | Custody shadow (same overlay) | 20,275 s | 0 |
 | Rust-binary tests kept (black-box, plus the Rust share of the parity tests at most 20%) | in the lanes above | ~7,400 s |
-| Setup in 29 Python jobs (setup-python, `uv sync` building the binding, release builds of probes in 18) | ~90–230 min | 0 |
+| Setup in 29 Python jobs (setup-python, `uv sync --locked` building the binding, release builds of probes in 18) | ~90–230 min | 0 |
 
 Savings, roughly 1,150–1,300 runner-minutes per full CI run:
 - about 64,000 test-seconds, or 1,070 runner-minutes;
@@ -275,7 +275,7 @@ step is green before the next.
      (uv setup, the gate), `README.md`, `SECURITY.md`, plans 00 and 01,
      `daemon.md`, `ai.md`, `desktop.md`, `privacy-and-security.md`,
      `testing.md`, `TODO.md`, both `skills/`, and the in-product
-     `troubleshooting.md`/`onboarding.md`. Those two embed `uv run` hints;
+     `troubleshooting.md`/`onboarding.md`. Those two embed uv hints;
      their text changes, their names and allowlist don't.
    - The port's working references (`rust-shell.md`, `rust-port*.md`, `r4-*`,
      `r6-*`) are marked historical rather than rewritten.
