@@ -1026,7 +1026,10 @@
     "kassiber",
     "--features",
     "test-harness"
-   ]
+   ],
+   "resolve_target": {
+    "tests_dir": "crates/kassiber/tests"
+   }
   },
   {
    "name": "wallets-discovery",
