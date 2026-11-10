@@ -115,7 +115,7 @@ jobs:
       - preflight
       - rust-binaries
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ matrix.shard == 'serial-daemon' && 90 || 45 }}
+    timeout-minutes: ${{ matrix.shard == 'serial-daemon' && 90 || 60 }}
     env:
       # Fail the lane when a test module reaches the tax engine but is
       # missing from the tax-shadow overlay (docs/reference/testing.md).
@@ -139,11 +139,19 @@ jobs:
           - serial-regressions
           - serial-integration
         # serial-daemon holds the subprocess parity suite, hours of tests run
-        # one at a time; its jobs each run one part (`--part K/N`).
+        # one at a time, and core-accounting about an hour with its parity
+        # modules; their jobs each run one part (`--part K/N`).
         part: ["1/1"]
         exclude:
+          - shard: core-accounting
           - shard: serial-daemon
         include:
+          - shard: core-accounting
+            part: "1/3"
+          - shard: core-accounting
+            part: "2/3"
+          - shard: core-accounting
+            part: "3/3"
           - shard: serial-daemon
             part: "1/8"
           - shard: serial-daemon
@@ -244,7 +252,7 @@ jobs:
       KASSIBER_TEST_CUSTODY_LOADER_BIN: ${{ github.workspace }}/target/release/examples/custody-load
       KASSIBER_TEST_JOURNAL_PROCESS_BIN: ${{ github.workspace }}/target/release/examples/journal-process
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ matrix.shard == 'serial-daemon' && 90 || 45 }}
+    timeout-minutes: ${{ matrix.shard == 'serial-daemon' && 90 || 60 }}
     strategy:
       fail-fast: false
       matrix:
@@ -261,11 +269,19 @@ jobs:
           - serial-regressions
           - serial-integration
         # serial-daemon holds the subprocess parity suite, hours of tests run
-        # one at a time; its jobs each run one part (`--part K/N`).
+        # one at a time, and core-accounting about an hour with its parity
+        # modules; their jobs each run one part (`--part K/N`).
         part: ["1/1"]
         exclude:
+          - shard: core-accounting
           - shard: serial-daemon
         include:
+          - shard: core-accounting
+            part: "1/3"
+          - shard: core-accounting
+            part: "2/3"
+          - shard: core-accounting
+            part: "3/3"
           - shard: serial-daemon
             part: "1/8"
           - shard: serial-daemon
@@ -363,7 +379,7 @@ jobs:
       - preflight
       - rust-binaries
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ matrix.shard == 'serial-daemon' && 90 || 45 }}
+    timeout-minutes: ${{ matrix.shard == 'serial-daemon' && 90 || 60 }}
     strategy:
       fail-fast: false
       matrix:
@@ -379,11 +395,19 @@ jobs:
           - serial-regressions
           - serial-integration
         # serial-daemon holds the subprocess parity suite, hours of tests run
-        # one at a time; its jobs each run one part (`--part K/N`).
+        # one at a time, and core-accounting about an hour with its parity
+        # modules; their jobs each run one part (`--part K/N`).
         part: ["1/1"]
         exclude:
+          - shard: core-accounting
           - shard: serial-daemon
         include:
+          - shard: core-accounting
+            part: "1/3"
+          - shard: core-accounting
+            part: "2/3"
+          - shard: core-accounting
+            part: "3/3"
           - shard: serial-daemon
             part: "1/8"
           - shard: serial-daemon

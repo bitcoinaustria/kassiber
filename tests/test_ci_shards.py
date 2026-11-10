@@ -291,14 +291,17 @@ class PythonShardContractTest(unittest.TestCase):
             self.assertIn('--part "${{ matrix.part }}"', run)
             self.assertLess(unpack, next(index for index, step in enumerate(steps)
                                          if "python_test_shards.py run" in str(step.get("run") or "")))
-            # serial-daemon runs as parts 1..N of N; every other lane whole.
+            # A split lane runs as parts 1..N of N; every other lane whole.
             matrix = job["strategy"]["matrix"]
             self.assertEqual(matrix["part"], ["1/1"])
-            self.assertEqual(matrix["exclude"], [{"shard": "serial-daemon"}])
-            parts = [entry["part"] for entry in matrix["include"]]
-            self.assertTrue(all(entry["shard"] == "serial-daemon" for entry in matrix["include"]))
-            count = len(parts)
-            self.assertEqual(parts, [f"{index}/{count}" for index in range(1, count + 1)])
+            split = [entry["shard"] for entry in matrix["exclude"]]
+            self.assertEqual(sorted(split), ["core-accounting", "serial-daemon"])
+            self.assertEqual({entry["shard"] for entry in matrix["include"]}, set(split))
+            for shard in split:
+                parts = [entry["part"] for entry in matrix["include"] if entry["shard"] == shard]
+                count = len(parts)
+                self.assertGreater(count, 1, shard)
+                self.assertEqual(parts, [f"{index}/{count}" for index in range(1, count + 1)], shard)
 
         # The local quality gate builds the same set itself before the single pytest pass.
         gate = (ROOT / "scripts/quality-gate.sh").read_text(encoding="utf-8")
