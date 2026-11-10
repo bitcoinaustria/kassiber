@@ -1,0 +1,52 @@
+[
+  {
+    "id": "mirror-report-scope",
+    "file": "crates/reports/src/privacy_mirror.rs",
+    "find": "(\"workspace\", s(\"active\")),",
+    "replace": "(\"workspace\", s(\"private-workspace\")),",
+    "expect_failing": [
+      "mirror_report_scope_and_table_match_python_without_accounting_readiness"
+    ],
+    "rule": "Report scope preserves the active-name privacy boundary."
+  },
+  {
+    "id": "mirror-report-table",
+    "file": "crates/reports/src/privacy_mirror.rs",
+    "find": "(\"evidence_level\", value(finding, \"authority\").clone()),",
+    "replace": "(\"evidence_level\", value(finding, \"severity\").clone()),",
+    "expect_failing": [
+      "mirror_report_scope_and_table_match_python_without_accounting_readiness"
+    ],
+    "rule": "Table finding rows retain evidence authority."
+  },
+  {
+    "id": "mirror-daemon-unknown",
+    "file": "crates/daemon/src/reports.rs",
+    "find": "if !fields.is_empty() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "privacy_mirror_daemon_accepts_only_an_empty_object"
+    ],
+    "rule": "Unknown daemon arguments cannot silently change the audience or wallet scope."
+  },
+  {
+    "id": "mirror-retain-generation",
+    "file": "crates/reports/src/privacy_mirror.rs",
+    "find": "\"RELEASE mirror_report\"",
+    "replace": "\"ROLLBACK TO mirror_report; RELEASE mirror_report\"",
+    "expect_failing": [
+      "synchronized_mirror_matches_python_cold_warm_incremental_and_caller_rollback"
+    ],
+    "rule": "Successful standalone reads retain the durable generation."
+  },
+  {
+    "id": "mirror-synchronize-before-read",
+    "file": "crates/reports/src/privacy_mirror.rs",
+    "find": "        kassiber_wallets::analysis_index::durable::synchronize_with_sources(\n            conn,\n            &text(&profile, \"id\"),\n            false,\n            index,\n        )?;",
+    "replace": "        let _ = &index;",
+    "expect_failing": [
+      "synchronized_mirror_matches_python_cold_warm_incremental_and_caller_rollback"
+    ],
+    "rule": "The report synchronizes cold and changed source state before its SQL read."
+  }
+]

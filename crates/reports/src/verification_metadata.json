@@ -1,0 +1,742 @@
+{
+  "formats": [
+    {},
+    {
+      "bold": true,
+      "font_size": 14,
+      "valign": "vcenter"
+    },
+    {
+      "bold": true,
+      "font_size": 11,
+      "valign": "top",
+      "text_wrap": true,
+      "bg_color": "#EFEFEF"
+    },
+    {
+      "bold": true,
+      "font_size": 11,
+      "valign": "top"
+    },
+    {
+      "font_size": 11,
+      "valign": "top",
+      "text_wrap": true
+    },
+    {
+      "font_size": 11,
+      "valign": "top",
+      "text_wrap": true
+    },
+    {
+      "font_size": 11,
+      "valign": "top",
+      "num_format": "0"
+    },
+    {
+      "font_size": 11,
+      "valign": "top",
+      "num_format": "0.00000000"
+    },
+    {
+      "font_size": 11,
+      "valign": "top",
+      "num_format": "#,##0.00"
+    },
+    {
+      "font_size": 11,
+      "valign": "top",
+      "num_format": "#,##0.00",
+      "bg_color": "#FFFDEB"
+    },
+    {
+      "font_size": 11,
+      "valign": "top",
+      "num_format": "0.00000000",
+      "bg_color": "#FFFDEB"
+    },
+    {
+      "font_size": 11,
+      "valign": "top",
+      "num_format": "0",
+      "bg_color": "#FFFDEB"
+    },
+    {
+      "font_size": 11,
+      "valign": "top",
+      "num_format": "#,##0.00",
+      "bg_color": "#EAF4FF"
+    },
+    {
+      "font_size": 11,
+      "valign": "top",
+      "num_format": "0.00000000",
+      "bg_color": "#EAF4FF"
+    },
+    {
+      "font_size": 11,
+      "valign": "top",
+      "num_format": "#,##0.00",
+      "italic": true
+    },
+    {
+      "font_size": 11,
+      "valign": "top",
+      "num_format": "0.00000000",
+      "italic": true
+    },
+    {
+      "font_size": 11,
+      "valign": "top",
+      "align": "center"
+    },
+    {
+      "font_size": 11,
+      "valign": "top",
+      "num_format": "#,##0.00",
+      "bg_color": "#FFFDEB",
+      "border": 1
+    },
+    {
+      "bg_color": "#C6EFCE",
+      "font_color": "#006100"
+    },
+    {
+      "bg_color": "#FFC7CE",
+      "font_color": "#9C0006",
+      "bold": true
+    },
+    {
+      "bg_color": "#C6EFCE",
+      "font_color": "#006100",
+      "bold": true,
+      "font_size": 11
+    },
+    {
+      "bg_color": "#FFEB9C",
+      "font_color": "#9C6500"
+    },
+    {
+      "font_size": 11,
+      "valign": "top",
+      "text_wrap": true,
+      "font_color": "#185FA5",
+      "underline": 1
+    }
+  ],
+  "styles": {
+    "title": 1,
+    "header": 2,
+    "subheader": 3,
+    "text": 4,
+    "note": 5,
+    "int": 6,
+    "quantity": 7,
+    "money": 8,
+    "money_input": 9,
+    "quantity_input": 10,
+    "int_input": 11,
+    "formula_money": 12,
+    "formula_quantity": 13,
+    "kassiber": 14,
+    "kassiber_qty": 15,
+    "check": 16,
+    "tolerance": 17,
+    "ok": 18,
+    "diff": 19,
+    "status_ok": 20,
+    "coarse": 21,
+    "link": 22
+  },
+  "columns": {
+    "acquisitions": [
+      {
+        "key": "occurred_at",
+        "label": "Occurred At",
+        "fmt": "text"
+      },
+      {
+        "key": "wallet",
+        "label": "Wallet",
+        "fmt": "text"
+      },
+      {
+        "key": "transaction_id",
+        "label": "Transaction ID",
+        "fmt": "text"
+      },
+      {
+        "key": "asset",
+        "label": "Asset",
+        "fmt": "text"
+      },
+      {
+        "key": "entry_type",
+        "label": "Type",
+        "fmt": "text"
+      },
+      {
+        "key": "quantity_msat",
+        "label": "Quantity msat (input)",
+        "fmt": "int_input"
+      },
+      {
+        "key": "quantity",
+        "label": "Quantity BTC (=msat/1e11)",
+        "fmt": "formula_quantity"
+      },
+      {
+        "key": "fiat_value",
+        "label": "Fiat Value (input)",
+        "fmt": "money_input"
+      },
+      {
+        "key": "unit_price",
+        "label": "Unit Price (=fiat/qty)",
+        "fmt": "formula_money"
+      },
+      {
+        "key": "gain_loss",
+        "label": "Income Gain (input)",
+        "fmt": "money_input"
+      },
+      {
+        "key": "taxable",
+        "label": "Taxable",
+        "fmt": "int"
+      },
+      {
+        "key": "pricing_source",
+        "label": "Pricing Source",
+        "fmt": "text"
+      },
+      {
+        "key": "pricing_quality",
+        "label": "Pricing Quality",
+        "fmt": "text"
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "fmt": "text"
+      },
+      {
+        "key": "tags",
+        "label": "Tags",
+        "fmt": "text"
+      }
+    ],
+    "disposals": [
+      {
+        "key": "occurred_at",
+        "label": "Occurred At",
+        "fmt": "text"
+      },
+      {
+        "key": "wallet",
+        "label": "Wallet",
+        "fmt": "text"
+      },
+      {
+        "key": "transaction_id",
+        "label": "Transaction ID",
+        "fmt": "text"
+      },
+      {
+        "key": "asset",
+        "label": "Asset",
+        "fmt": "text"
+      },
+      {
+        "key": "entry_type",
+        "label": "Type",
+        "fmt": "text"
+      },
+      {
+        "key": "quantity_msat",
+        "label": "Quantity msat (input)",
+        "fmt": "int_input"
+      },
+      {
+        "key": "quantity",
+        "label": "Quantity BTC (=msat/1e11)",
+        "fmt": "formula_quantity"
+      },
+      {
+        "key": "proceeds",
+        "label": "Proceeds (input)",
+        "fmt": "money_input"
+      },
+      {
+        "key": "cost_basis",
+        "label": "Cost Basis (input)",
+        "fmt": "money_input"
+      },
+      {
+        "key": "gain_loss",
+        "label": "Gain/Loss (=proceeds-basis)",
+        "fmt": "formula_money"
+      },
+      {
+        "key": "gain_loss_kassiber",
+        "label": "Gain/Loss (Kassiber)",
+        "fmt": "kassiber"
+      },
+      {
+        "key": "gain_check",
+        "label": "Check",
+        "fmt": "check"
+      },
+      {
+        "key": "taxable",
+        "label": "Taxable",
+        "fmt": "int"
+      },
+      {
+        "key": "pricing_source",
+        "label": "Pricing Source",
+        "fmt": "text"
+      },
+      {
+        "key": "pricing_quality",
+        "label": "Pricing Quality",
+        "fmt": "text"
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "fmt": "text"
+      },
+      {
+        "key": "tags",
+        "label": "Tags",
+        "fmt": "text"
+      }
+    ],
+    "attachments": [
+      {
+        "key": "occurred_at",
+        "label": "Occurred At",
+        "fmt": "text"
+      },
+      {
+        "key": "wallet",
+        "label": "Wallet",
+        "fmt": "text"
+      },
+      {
+        "key": "transaction_id",
+        "label": "Transaction ID",
+        "fmt": "text"
+      },
+      {
+        "key": "asset",
+        "label": "Asset",
+        "fmt": "text"
+      },
+      {
+        "key": "type",
+        "label": "Type",
+        "fmt": "text"
+      },
+      {
+        "key": "name",
+        "label": "Name (link)",
+        "fmt": "link",
+        "link_key": "url"
+      },
+      {
+        "key": "reference",
+        "label": "Reference",
+        "fmt": "text"
+      }
+    ],
+    "quarantines": [
+      {
+        "key": "occurred_at",
+        "label": "Occurred At",
+        "fmt": "text"
+      },
+      {
+        "key": "transaction_id",
+        "label": "Transaction ID",
+        "fmt": "text"
+      },
+      {
+        "key": "asset",
+        "label": "Asset",
+        "fmt": "text"
+      },
+      {
+        "key": "amount",
+        "label": "Amount BTC",
+        "fmt": "quantity"
+      },
+      {
+        "key": "reason",
+        "label": "Quarantine Reason",
+        "fmt": "text"
+      },
+      {
+        "key": "detail",
+        "label": "Detail",
+        "fmt": "text"
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "fmt": "text"
+      }
+    ],
+    "asset_rows": [
+      {
+        "key": "asset",
+        "label": "Asset",
+        "fmt": "subheader"
+      },
+      {
+        "key": "rate",
+        "label": "Market Rate (input)",
+        "fmt": "money_input"
+      },
+      {
+        "key": "rate_source",
+        "label": "Rate Source",
+        "fmt": "text"
+      },
+      {
+        "key": "rate_as_of",
+        "label": "Rate As Of",
+        "fmt": "text"
+      },
+      {
+        "key": "holdings_qty",
+        "label": "Holdings BTC (recompute)",
+        "fmt": "formula_quantity"
+      },
+      {
+        "key": "holdings_qty_kassiber",
+        "label": "Holdings BTC (Kassiber)",
+        "fmt": "kassiber_qty"
+      },
+      {
+        "key": "qty_check",
+        "label": "Balance Check",
+        "fmt": "check"
+      },
+      {
+        "key": "cost_basis",
+        "label": "Cost Basis (recompute)",
+        "fmt": "formula_money"
+      },
+      {
+        "key": "cost_basis_kassiber",
+        "label": "Cost Basis (Kassiber)",
+        "fmt": "kassiber"
+      },
+      {
+        "key": "basis_check",
+        "label": "Basis Check",
+        "fmt": "check"
+      },
+      {
+        "key": "avg_cost",
+        "label": "Avg Price (recompute)",
+        "fmt": "formula_money"
+      },
+      {
+        "key": "avg_cost_kassiber",
+        "label": "Avg Price (Kassiber)",
+        "fmt": "kassiber"
+      },
+      {
+        "key": "avg_check",
+        "label": "Avg Price Check",
+        "fmt": "check"
+      },
+      {
+        "key": "market_value",
+        "label": "Market Value (recompute)",
+        "fmt": "formula_money"
+      },
+      {
+        "key": "market_value_kassiber",
+        "label": "Market Value (Kassiber)",
+        "fmt": "kassiber"
+      },
+      {
+        "key": "mv_check",
+        "label": "Market Check",
+        "fmt": "check"
+      },
+      {
+        "key": "unrealized_pnl",
+        "label": "Unrealized (recompute)",
+        "fmt": "formula_money"
+      },
+      {
+        "key": "unrealized_kassiber",
+        "label": "Unrealized (Kassiber)",
+        "fmt": "kassiber"
+      },
+      {
+        "key": "unrealized_check",
+        "label": "Unrealized Check",
+        "fmt": "check"
+      },
+      {
+        "key": "realized_gain",
+        "label": "Realized Gain (recompute)",
+        "fmt": "formula_money"
+      },
+      {
+        "key": "realized_gain_kassiber",
+        "label": "Realized Gain (Kassiber)",
+        "fmt": "kassiber"
+      },
+      {
+        "key": "realized_check",
+        "label": "Realized Check",
+        "fmt": "check"
+      }
+    ]
+  },
+  "readme": {
+    "": [
+      [
+        "What this proves",
+        "subheader"
+      ],
+      [
+        "The Acquisitions and Disposals sheets hold the raw journal ledger. Only the highlighted input cells (msat quantities, fiat values, proceeds, cost basis) are hard numbers. Everything else \u2014 quantities in BTC, per-row gain/loss, and every figure on the Control sheet \u2014 is a live formula. The Control sheet recomputes each headline figure from those inputs and shows it next to Kassiber's own number with an OK / DIFF check.",
+        "text"
+      ],
+      [
+        "Formula legend",
+        "subheader"
+      ],
+      [
+        "Quantity BTC = Quantity msat \u00f7 100,000,000,000   (1 BTC = 100,000,000 sat = 100,000,000,000 msat; 1 sat = msat \u00f7 1000)",
+        "text"
+      ],
+      [
+        "Gain / Loss = Proceeds \u2212 Cost Basis",
+        "text"
+      ],
+      [
+        "Holdings BTC = \u03a3 Acquisitions quantity (excluding income lines) \u2212 \u03a3 Disposals quantity (per asset)",
+        "text"
+      ],
+      [
+        "Cost Basis = \u03a3 Acquisition fiat value (excluding income lines) \u2212 \u03a3 Disposal cost basis (per asset)",
+        "text"
+      ],
+      [
+        "Average Price = Cost Basis \u00f7 Holdings BTC",
+        "text"
+      ],
+      [
+        "Market Value = Holdings BTC \u00d7 Market Rate",
+        "text"
+      ],
+      [
+        "Unrealized = Market Value \u2212 Cost Basis",
+        "text"
+      ],
+      [
+        "Realized Gain = \u03a3 taxable Disposal gains + \u03a3 taxable income gains (per asset)",
+        "text"
+      ],
+      [
+        "Income/earn coins appear twice in the ledger: as an 'acquisition' lot (the coins entering holdings) and as an 'income' line (the taxable recognition). The holdings formulas above exclude the 'income' rows so the earned coins are counted once; the realized-gain formula includes them. Filter the Type column to see this.",
+        "text"
+      ],
+      [
+        "Lot-selection method",
+        "subheader"
+      ],
+      [
+        "Active lot-selection method: __METHOD__.",
+        "text"
+      ],
+      [
+        "Per-disposal cost basis under FIFO / LIFO / HIFO / LOFO is chosen by the tax engine and CANNOT be re-derived by a plain spreadsheet formula \u2014 a spreadsheet cannot re-run lot selection. What the Control sheet verifies instead are the identities that hold for ANY method: ending holdings, ending cost basis (\u03a3 acquisition fiat value \u2212 \u03a3 disposal cost basis), average price, market value, unrealized and realized gain. Each disposal row still checks gain = proceeds \u2212 cost basis directly.",
+        "text"
+      ],
+      [
+        "Scope",
+        "subheader"
+      ],
+      [
+        "Verification is computed per ASSET across the WHOLE profile. Bitcoin accounting is pooled per asset across all wallets \u2014 per-wallet cost basis in the main report is an allocation of that pooled basis, so it is not reconcilable row-by-row. Transfers between your own wallets net to zero at profile scope (only the network transfer fee reduces holdings).",
+        "text"
+      ],
+      [
+        "Note: the value sheets in this workbook are filtered to wallet '__WALLET__', but the verification sheets below cover the entire profile for the reason above.",
+        "text"
+      ],
+      [
+        "Recalculation",
+        "subheader"
+      ],
+      [
+        "This file ships with cached results, so it already shows the correct numbers. The formulas are real. To force a recompute and prove they reproduce:",
+        "text"
+      ],
+      [
+        "  \u2022 LibreOffice Calc: press Ctrl+Shift+F9 (Data \u25b8 Calculate \u25b8 Recalculate). For automatic recalc on open, enable Tools \u25b8 Options \u25b8 LibreOffice Calc \u25b8 Formula \u25b8 Recalculation on File Load \u25b8 Always recalculate.",
+        "text"
+      ],
+      [
+        "  \u2022 Excel: ensure Formulas \u25b8 Calculation Options \u25b8 Automatic. No iterative calculation is needed \u2014 no formula references its own cell: each ledger row uses only same-row cells, and the Control sheet aggregates the ledger sheets with SUMIFS.",
+        "text"
+      ],
+      [
+        "Tip: set the tolerance in B3 to 0, recalculate, and confirm every check still reads OK.",
+        "text"
+      ],
+      [
+        "Pricing provenance",
+        "subheader"
+      ],
+      [
+        "The Acquisitions and Disposals sheets carry a Pricing Source and Pricing Quality column for every priced row; rows marked 'coarse_fallback' or 'missing' used an estimated price, not an exact quote. The Control sheet shows, per asset, which market rate valued your holdings, its source, and when it was captured.",
+        "text"
+      ],
+      [
+        "Notes, tags & evidence",
+        "subheader"
+      ],
+      [
+        "Each Acquisitions/Disposals row shows its description and tags. The main report's Transactions sheet is the full per-transaction record: description, note, counterparty, tags, and an Attachments column where a linked URL is shown as a clickable link behind its name (multiple links are listed one per line). The Evidence sheet lists every attachment as its own row with a clickable link. Match a ledger row to its evidence by the Transaction ID.",
+        "text"
+      ],
+      [
+        "Missing rows",
+        "subheader"
+      ],
+      [
+        "Excluded and Austrian neu_swap rows are intentionally absent (they are not taxable disposals). The 'Taxable' column marks which ledger rows feed the realized-gain check. Transactions Kassiber could not classify are listed on the Quarantined sheet (when present) and are not in any figure above.",
+        "text"
+      ]
+    ],
+    "at": [
+      [
+        "What this proves",
+        "subheader"
+      ],
+      [
+        "The Acquisitions and Disposals sheets hold the raw journal ledger. Only the highlighted input cells (msat quantities, fiat values, proceeds, cost basis) are hard numbers. Everything else \u2014 quantities in BTC, per-row gain/loss, and every figure on the Control sheet \u2014 is a live formula. The Control sheet recomputes each headline figure from those inputs and shows it next to Kassiber's own number with an OK / DIFF check.",
+        "text"
+      ],
+      [
+        "Formula legend",
+        "subheader"
+      ],
+      [
+        "Quantity BTC = Quantity msat \u00f7 100,000,000,000   (1 BTC = 100,000,000 sat = 100,000,000,000 msat; 1 sat = msat \u00f7 1000)",
+        "text"
+      ],
+      [
+        "Gain / Loss = Proceeds \u2212 Cost Basis",
+        "text"
+      ],
+      [
+        "Holdings BTC = \u03a3 Acquisitions quantity (excluding income lines) \u2212 \u03a3 Disposals quantity (per asset)",
+        "text"
+      ],
+      [
+        "Cost Basis = \u03a3 Acquisition fiat value (excluding income lines) \u2212 \u03a3 Disposal cost basis (per asset)",
+        "text"
+      ],
+      [
+        "Average Price = Cost Basis \u00f7 Holdings BTC",
+        "text"
+      ],
+      [
+        "Market Value = Holdings BTC \u00d7 Market Rate",
+        "text"
+      ],
+      [
+        "Unrealized = Market Value \u2212 Cost Basis",
+        "text"
+      ],
+      [
+        "Realized Gain = \u03a3 taxable Disposal gains + \u03a3 taxable income gains (per asset)",
+        "text"
+      ],
+      [
+        "Income/earn coins appear twice in the ledger: as an 'acquisition' lot (the coins entering holdings) and as an 'income' line (the taxable recognition). The holdings formulas above exclude the 'income' rows so the earned coins are counted once; the realized-gain formula includes them. Filter the Type column to see this.",
+        "text"
+      ],
+      [
+        "Lot-selection method",
+        "subheader"
+      ],
+      [
+        "Active lot-selection method: __METHOD__.  Austrian profile \u2014 disposals use the moving-average cost base.",
+        "text"
+      ],
+      [
+        "Per-disposal cost basis under FIFO / LIFO / HIFO / LOFO is chosen by the tax engine and CANNOT be re-derived by a plain spreadsheet formula \u2014 a spreadsheet cannot re-run lot selection. What the Control sheet verifies instead are the identities that hold for ANY method: ending holdings, ending cost basis (\u03a3 acquisition fiat value \u2212 \u03a3 disposal cost basis), average price, market value, unrealized and realized gain. Each disposal row still checks gain = proceeds \u2212 cost basis directly.",
+        "text"
+      ],
+      [
+        "Scope",
+        "subheader"
+      ],
+      [
+        "Verification is computed per ASSET across the WHOLE profile. Bitcoin accounting is pooled per asset across all wallets \u2014 per-wallet cost basis in the main report is an allocation of that pooled basis, so it is not reconcilable row-by-row. Transfers between your own wallets net to zero at profile scope (only the network transfer fee reduces holdings).",
+        "text"
+      ],
+      [
+        "Note: the value sheets in this workbook are filtered to wallet '__WALLET__', but the verification sheets below cover the entire profile for the reason above.",
+        "text"
+      ],
+      [
+        "Recalculation",
+        "subheader"
+      ],
+      [
+        "This file ships with cached results, so it already shows the correct numbers. The formulas are real. To force a recompute and prove they reproduce:",
+        "text"
+      ],
+      [
+        "  \u2022 LibreOffice Calc: press Ctrl+Shift+F9 (Data \u25b8 Calculate \u25b8 Recalculate). For automatic recalc on open, enable Tools \u25b8 Options \u25b8 LibreOffice Calc \u25b8 Formula \u25b8 Recalculation on File Load \u25b8 Always recalculate.",
+        "text"
+      ],
+      [
+        "  \u2022 Excel: ensure Formulas \u25b8 Calculation Options \u25b8 Automatic. No iterative calculation is needed \u2014 no formula references its own cell: each ledger row uses only same-row cells, and the Control sheet aggregates the ledger sheets with SUMIFS.",
+        "text"
+      ],
+      [
+        "Tip: set the tolerance in B3 to 0, recalculate, and confirm every check still reads OK.",
+        "text"
+      ],
+      [
+        "Pricing provenance",
+        "subheader"
+      ],
+      [
+        "The Acquisitions and Disposals sheets carry a Pricing Source and Pricing Quality column for every priced row; rows marked 'coarse_fallback' or 'missing' used an estimated price, not an exact quote. The Control sheet shows, per asset, which market rate valued your holdings, its source, and when it was captured.",
+        "text"
+      ],
+      [
+        "Notes, tags & evidence",
+        "subheader"
+      ],
+      [
+        "Each Acquisitions/Disposals row shows its description and tags. The main report's Transactions sheet is the full per-transaction record: description, note, counterparty, tags, and an Attachments column where a linked URL is shown as a clickable link behind its name (multiple links are listed one per line). The Evidence sheet lists every attachment as its own row with a clickable link. Match a ledger row to its evidence by the Transaction ID.",
+        "text"
+      ],
+      [
+        "Missing rows",
+        "subheader"
+      ],
+      [
+        "Excluded and Austrian neu_swap rows are intentionally absent (they are not taxable disposals). The 'Taxable' column marks which ledger rows feed the realized-gain check. Transactions Kassiber could not classify are listed on the Quarantined sheet (when present) and are not in any figure above.",
+        "text"
+      ]
+    ]
+  }
+}

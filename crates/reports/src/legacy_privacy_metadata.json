@@ -1,0 +1,109 @@
+{
+  "address_reuse": {
+    "evidence_level": "ground_truth",
+    "remediation": "Review the reused receive-address context and keep the affected rows labelled; Kassiber does not change wallet state from this tell."
+  },
+  "change_position_fingerprint": {
+    "evidence_level": "heuristic",
+    "remediation": "Treat this as an advisory change-shape tell and confirm intent from first-party wallet records before drawing conclusions."
+  },
+  "change_type_fingerprint": {
+    "evidence_level": "heuristic",
+    "remediation": "Review the script-type mismatch as context only; no tax, balance, or transfer state is changed."
+  },
+  "coin_anonymity_evidence": {
+    "evidence_level": "imported",
+    "remediation": "Keep the imported wallet evidence attached and treat it as boundary context, not proof of a complete privacy graph."
+  },
+  "coinjoin_pattern": {
+    "evidence_level": "heuristic",
+    "remediation": "Document the CoinJoin boundary locally and do not infer unrelated participant ownership from this tell."
+  },
+  "common_input_ownership": {
+    "evidence_level": "heuristic",
+    "remediation": "Use this as an advisory common-input tell only; confirm ownership with first-party wallet evidence before relying on it."
+  },
+  "dust_utxo_exposure": {
+    "evidence_level": "ground_truth",
+    "remediation": "Label or review small-output provenance when it matters; Kassiber leaves balances and UTXO state untouched."
+  },
+  "inbound_counterparty": [
+    "change_position_fingerprint",
+    "change_type_fingerprint",
+    "common_input_ownership",
+    "consistent_low_r_encoding",
+    "ineffective_absolute_locktime",
+    "nondefault_sighash",
+    "op_return_metadata",
+    "rbf_signal",
+    "relative_lock_constraints",
+    "round_fee_rate",
+    "round_output_amount",
+    "script_type_mix",
+    "unnecessary_input_heuristic",
+    "unusual_transaction_version",
+    "wallet_fingerprint_locktime",
+    "wallet_fingerprint_version",
+    "wallet_fingerprint_witness"
+  ],
+  "large_utxo_set": {
+    "evidence_level": "ground_truth",
+    "remediation": "Use the count as review context for the wallet inventory; no spending or consolidation advice is implied."
+  },
+  "legacy_address_type": {
+    "evidence_level": "ground_truth",
+    "remediation": "Record this as an older script-type observation; it is not an accounting action or a privacy verdict."
+  },
+  "op_return_metadata": {
+    "evidence_level": "ground_truth",
+    "remediation": "Review the transaction context knowing permanent metadata exists; Kassiber does not inspect or enrich external entities."
+  },
+  "payjoin_boundary": {
+    "evidence_level": "imported",
+    "remediation": "Keep the PayJoin boundary documented locally; Kassiber does not cross it or infer the counterparty graph."
+  },
+  "rbf_signal": {
+    "evidence_level": "ground_truth",
+    "remediation": "Treat replace-by-fee signalling as transaction-shape context only."
+  },
+  "round_fee_rate": {
+    "evidence_level": "heuristic",
+    "remediation": "Treat the rounded fee rate as a weak wallet-shape tell and verify with first-party records if it matters."
+  },
+  "round_output_amount": {
+    "evidence_level": "heuristic",
+    "remediation": "Keep the round amount as payment-shape context; attach invoice or counterparty records if the distinction matters."
+  },
+  "script_type_mix": {
+    "evidence_level": "heuristic",
+    "remediation": "Review mixed script families as a local transaction-shape tell, not as proof of ownership."
+  },
+  "taproot_usage": {
+    "evidence_level": "ground_truth",
+    "remediation": "Treat Taproot usage as a local script-type observation; it is not a standing privacy guarantee."
+  },
+  "transaction_coverage_gap": {
+    "evidence_level": "unavailable",
+    "remediation": "Import or sync local vin/vout detail if you need this transaction analysed; otherwise keep the gap explicit."
+  },
+  "transaction_not_analysable": {
+    "evidence_level": "unavailable",
+    "remediation": "Leave this transaction as unknown unless local first-party transaction graph data is imported or synced."
+  },
+  "unnecessary_input_heuristic": {
+    "evidence_level": "heuristic",
+    "remediation": "Treat this as an advisory input-shape tell and review the source-wallet record before relying on it."
+  },
+  "wallet_fingerprint_locktime": {
+    "evidence_level": "heuristic",
+    "remediation": "Use the locktime pattern as weak wallet-fingerprint context only."
+  },
+  "wallet_fingerprint_version": {
+    "evidence_level": "heuristic",
+    "remediation": "Use the version pattern as weak wallet-fingerprint context only."
+  },
+  "wallet_fingerprint_witness": {
+    "evidence_level": "heuristic",
+    "remediation": "Use the witness-shape pattern as weak wallet-fingerprint context only."
+  }
+}

@@ -1,0 +1,1677 @@
+{
+  "AUSTRIAN_E1KV_REVIEW_GATE": "Review this Austrian E 1kv export with a Steuerberater before filing; Kassiber is not tax advice.",
+  "AUSTRIAN_E1KV_SELF_CUSTODY_ASSUMPTION": "Kassiber currently maps crypto rows to the auslaendisch / self-custody E 1kv Kennzahlen 172, 174, and 176. It does not populate domestic-provider or withheld-KESt fields because that metadata is not stored yet.",
+  "AUSTRIAN_E1KV_DETAIL_LIMITATION": "Lot acquisition dates and holding-period day counts are not persisted in journal rows; the export relies on the tax engine's Austrian category classification and Kassiber's journal amounts.",
+  "AUSTRIAN_E1KV_REPROCESS_HINT": "Capital-yield income (income_capital_yield) now maps to Kennzahl 172 instead of the old 175. Re-run `journals process` after upgrading so stored at_kennzahl values match this export; any mismatches are listed in the Data Quality section.",
+  "AUSTRIAN_E1KV_FORM_SECTION": "E 1kv 1.3.5 Einkuenfte aus Kryptowaehrungen",
+  "AUSTRIAN_E1KV_KENNZAHL_LABELS": {
+    "172": "Auslaendische laufende Einkuenfte aus Kryptowaehrungen",
+    "174": "Auslaendische Ueberschuesse aus realisierten Wertsteigerungen",
+    "176": "Auslaendische realisierte Wertverluste",
+    "801": "Spekulationsgeschaefte Altbestand (outside E 1kv)"
+  },
+  "AUSTRIAN_E1KV_SUPPORTED_KENNZAHL_ORDER": [
+    172,
+    174,
+    176
+  ],
+  "AUSTRIAN_OUTSIDE_E1KV_KENNZAHL_ORDER": [
+    801
+  ],
+  "AUSTRIAN_KENNZAHL_FORM_BY_CODE": {
+    "172": "E 1kv",
+    "174": "E 1kv",
+    "176": "E 1kv",
+    "801": "E 1"
+  },
+  "AUSTRIAN_KENNZAHL_FORM_SECTION_BY_CODE": {
+    "172": "E 1kv 1.3.5 Einkuenfte aus Kryptowaehrungen",
+    "174": "E 1kv 1.3.5 Einkuenfte aus Kryptowaehrungen",
+    "176": "E 1kv 1.3.5 Einkuenfte aus Kryptowaehrungen",
+    "801": "E 1 Spekulationsgeschaefte"
+  },
+  "AUSTRIAN_E1KV_CATEGORY_LABELS": {
+    "income_general": "Laufende Einkuenfte aus Kryptowaehrungen",
+    "income_capital_yield": "Laufende Einkuenfte aus Ueberlassung von Kryptowaehrungen",
+    "neu_gain": "Realisierte Wertsteigerung Neuvermoegen",
+    "neu_loss": "Realisierter Wertverlust Neuvermoegen",
+    "neu_swap": "Krypto-zu-Krypto Tausch mit Buchwertfortfuehrung",
+    "alt_spekulation": "Altbestand innerhalb Spekulationsfrist",
+    "alt_taxfree": "Altbestand ausserhalb Spekulationsfrist"
+  },
+  "AUSTRIAN_TAX_SECTION_ORDER": [
+    "1.1",
+    "1.2",
+    "1.3",
+    "2.1",
+    "2.2",
+    "3.1",
+    "3.2",
+    "3.3",
+    "4.1",
+    "4.2",
+    "4.3",
+    "4.4",
+    "4.5"
+  ],
+  "AUSTRIAN_TAX_SECTION_METADATA": {
+    "1.1": {
+      "label": "Steuerpflichtige Einkuenfte aus dem Handel mit Kryptowaehrungen",
+      "law": "27b Abs 3 EStG",
+      "supported": true,
+      "kennzahlen": [
+        174,
+        176
+      ]
+    },
+    "1.2": {
+      "label": "Steuerpflichtige Einkuenfte aus Margin, Derivaten und Futures",
+      "law": "27 Z 4 EStG",
+      "supported": false,
+      "kennzahlen": []
+    },
+    "1.3": {
+      "label": "Steuerpflichtige Einkuenfte aus Spekulationsgeschaeften mit Kryptowaehrungen",
+      "law": "31 EStG Altvermoegen innerhalb Spekulationsfrist",
+      "supported": true,
+      "kennzahlen": [
+        801
+      ]
+    },
+    "2.1": {
+      "label": "Steuerpflichtige laufende Einkuenfte aus der Ueberlassung von Kryptowaehrungen",
+      "law": "27b Abs 2 Z 1 EStG",
+      "supported": true,
+      "kennzahlen": [
+        172
+      ]
+    },
+    "2.2": {
+      "label": "Steuerpflichtige laufende Einkuenfte aus Leistungen zur Transaktionsverarbeitung",
+      "law": "27b Abs 2 Z 2 EStG",
+      "supported": true,
+      "kennzahlen": [
+        172
+      ]
+    },
+    "3.1": {
+      "label": "Nicht steuerbare Einkuenfte aus Altvermoegen ausserhalb der Spekulationsfrist",
+      "law": "31 EStG Altvermoegen",
+      "supported": true,
+      "kennzahlen": []
+    },
+    "3.2": {
+      "label": "Nicht steuerbare Einkuenfte mit Bewertung 0",
+      "law": "27b Abs 2 Z 2 Satz 2 EStG",
+      "supported": false,
+      "kennzahlen": []
+    },
+    "3.3": {
+      "label": "Nicht steuerbare Steuergebuehren und Rueckerstattungen",
+      "law": "",
+      "supported": false,
+      "kennzahlen": []
+    },
+    "4.1": {
+      "label": "Eingegangene Spenden und Schenkungen",
+      "law": "",
+      "supported": false,
+      "kennzahlen": []
+    },
+    "4.2": {
+      "label": "Ausgegangene Spenden und Schenkungen",
+      "law": "",
+      "supported": false,
+      "kennzahlen": []
+    },
+    "4.3": {
+      "label": "Verlorene und gestohlene Coins",
+      "law": "",
+      "supported": false,
+      "kennzahlen": []
+    },
+    "4.4": {
+      "label": "Mining gewerblich",
+      "law": "",
+      "supported": false,
+      "kennzahlen": []
+    },
+    "4.5": {
+      "label": "Minting",
+      "law": "",
+      "supported": false,
+      "kennzahlen": []
+    }
+  },
+  "AUSTRIAN_E1KV_XLSX_SHEETS": [
+    "Übersicht",
+    "1.1.",
+    "1.2.",
+    "1.3.",
+    "2.1.",
+    "2.2.",
+    "3.1.",
+    "3.2.",
+    "3.3.",
+    "4.1.",
+    "4.2.",
+    "4.3.",
+    "4.4.",
+    "4.5.",
+    "Erläuterungen zum Steuerreport"
+  ],
+  "AUSTRIAN_E1KV_XLSX_TITLES": {
+    "1.1": "1.1. Steuerpflichtige Einkünfte aus dem An- und Verkauf von Kryptowährungen gem. § 27b Abs 3 EStG",
+    "1.2": "1.2. Steuerpflichtige Einkünfte aus Margin, Derivaten und Futures",
+    "1.3": "1.3. Steuerpflichtige Einkünfte aus Spekulationsgeschäften mit Kryptowährungen (§ 31 EStG)",
+    "2.1": "2.1. Steuerpflichtige laufende Einkünfte aus der Überlassung von Kryptowährungen",
+    "2.2": "2.2. Steuerpflichtige laufende Einkünfte aus Leistungen zur Transaktionsverarbeitung",
+    "3.1": "3.1. Nicht steuerbare Einkünfte aus Altvermögen außerhalb der Spekulationsfrist",
+    "3.2": "3.2. Nicht steuerbare Einkünfte gem. § 27b Abs 2 Z 2 Satz 2 EStG",
+    "3.3": "3.3. Nicht steuerbare Steuergebühren und Rückerstattungen",
+    "4.1": "4.1. Eingegangene Spenden/Trinkgeld",
+    "4.2": "4.2. Ausgegangene Spenden/Schenkungen",
+    "4.3": "4.3. Gestohlene, gehackte und verlorene Coins",
+    "4.4": "4.4. Mining (kommerziell)",
+    "4.5": "4.5. Minting"
+  },
+  "AUSTRIAN_E1KV_XLSX_DISPOSAL_HEADERS": [
+    "Börse",
+    "Anlage",
+    "Anzahl",
+    "Erwerbsdatum",
+    "Verkaufsdatum",
+    "Kauf/Eingang bei",
+    "Typ",
+    "Kostenbasis in EUR",
+    "Erlös in EUR",
+    "Gewinn/Verlust in EUR"
+  ],
+  "AUSTRIAN_E1KV_XLSX_HOLDING_HEADERS": [
+    "Börse",
+    "Anlage",
+    "Anzahl",
+    "Erwerbsdatum",
+    "Verkaufsdatum",
+    "Kauf/Eingang bei",
+    "Haltedauer in Tagen",
+    "Typ",
+    "Kostenbasis in EUR",
+    "Erlös in EUR",
+    "Gewinn/Verlust in EUR"
+  ],
+  "AUSTRIAN_E1KV_XLSX_INCOME_HEADERS": [
+    "Börse",
+    "Typ",
+    "Datum des Eingangs",
+    "Anzahl",
+    "Währung",
+    "Hinweis",
+    "Wert in EUR zum Zeitpunkt des Eingangs"
+  ],
+  "AUSTRIAN_E1KV_XLSX_MARGIN_HEADERS": [
+    "Börse",
+    "Typ",
+    "Datum",
+    "Anzahl",
+    "Währung",
+    "Gesamt"
+  ],
+  "AUSTRIAN_E1KV_XLSX_FEE_HEADERS": [
+    "Börse",
+    "Datum der Gebühr",
+    "Anzahl",
+    "Währung",
+    "Erlös in EUR",
+    "Anzahl",
+    "Währung",
+    "Hinweis"
+  ],
+  "AUSTRIAN_E1KV_XLSX_OUTGOING_HEADERS": [
+    "Börse",
+    "Typ",
+    "Datum der Auszahlung",
+    "Anzahl",
+    "Währung",
+    "Hinweis",
+    "Kostenbasis in EUR",
+    "Wert bei Auszahlung in EUR"
+  ],
+  "vienna_transitions": [
+    [
+      0,
+      3921
+    ],
+    [
+      59713541679000000,
+      3600
+    ],
+    [
+      60441890400000000,
+      7200
+    ],
+    [
+      60455113200000000,
+      3600
+    ],
+    [
+      60472141200000000,
+      7200
+    ],
+    [
+      60485446800000000,
+      3600
+    ],
+    [
+      60503590800000000,
+      7200
+    ],
+    [
+      60516896400000000,
+      3600
+    ],
+    [
+      60565885200000000,
+      7200
+    ],
+    [
+      60579795600000000,
+      3600
+    ],
+    [
+      61196691600000000,
+      7200
+    ],
+    [
+      61278339600000000,
+      3600
+    ],
+    [
+      61291040400000000,
+      7200
+    ],
+    [
+      61307370000000000,
+      3600
+    ],
+    [
+      61323094800000000,
+      7200
+    ],
+    [
+      61338819600000000,
+      3600
+    ],
+    [
+      61354544400000000,
+      7200
+    ],
+    [
+      61355408400000000,
+      3600
+    ],
+    [
+      61387117200000000,
+      7200
+    ],
+    [
+      61402323600000000,
+      3600
+    ],
+    [
+      61417962000000000,
+      7200
+    ],
+    [
+      61433686800000000,
+      3600
+    ],
+    [
+      61450621200000000,
+      7200
+    ],
+    [
+      61465136400000000,
+      3600
+    ],
+    [
+      62459420400000000,
+      7200
+    ],
+    [
+      62474536800000000,
+      3600
+    ],
+    [
+      62490272400000000,
+      7200
+    ],
+    [
+      62505997200000000,
+      3600
+    ],
+    [
+      62521722000000000,
+      7200
+    ],
+    [
+      62537446800000000,
+      3600
+    ],
+    [
+      62553171600000000,
+      7200
+    ],
+    [
+      62568896400000000,
+      3600
+    ],
+    [
+      62584621200000000,
+      7200
+    ],
+    [
+      62600950800000000,
+      3600
+    ],
+    [
+      62616675600000000,
+      7200
+    ],
+    [
+      62632400400000000,
+      3600
+    ],
+    [
+      62648125200000000,
+      7200
+    ],
+    [
+      62663850000000000,
+      3600
+    ],
+    [
+      62679574800000000,
+      7200
+    ],
+    [
+      62695299600000000,
+      3600
+    ],
+    [
+      62711024400000000,
+      7200
+    ],
+    [
+      62726749200000000,
+      3600
+    ],
+    [
+      62742474000000000,
+      7200
+    ],
+    [
+      62758198800000000,
+      3600
+    ],
+    [
+      62773923600000000,
+      7200
+    ],
+    [
+      62790253200000000,
+      3600
+    ],
+    [
+      62805978000000000,
+      7200
+    ],
+    [
+      62821702800000000,
+      3600
+    ],
+    [
+      62837427600000000,
+      7200
+    ],
+    [
+      62853152400000000,
+      3600
+    ],
+    [
+      62868877200000000,
+      7200
+    ],
+    [
+      62884602000000000,
+      3600
+    ],
+    [
+      62900326800000000,
+      7200
+    ],
+    [
+      62916051600000000,
+      3600
+    ],
+    [
+      62931776400000000,
+      7200
+    ],
+    [
+      62947501200000000,
+      3600
+    ],
+    [
+      62963830800000000,
+      7200
+    ],
+    [
+      62981974800000000,
+      3600
+    ],
+    [
+      62995280400000000,
+      7200
+    ],
+    [
+      63013424400000000,
+      3600
+    ],
+    [
+      63026730000000000,
+      7200
+    ],
+    [
+      63044874000000000,
+      3600
+    ],
+    [
+      63058179600000000,
+      7200
+    ],
+    [
+      63076928400000000,
+      3600
+    ],
+    [
+      63089629200000000,
+      7200
+    ],
+    [
+      63108378000000000,
+      3600
+    ],
+    [
+      63121078800000000,
+      7200
+    ],
+    [
+      63139827600000000,
+      3600
+    ],
+    [
+      63153133200000000,
+      7200
+    ],
+    [
+      63171277200000000,
+      3600
+    ],
+    [
+      63184582800000000,
+      7200
+    ],
+    [
+      63202726800000000,
+      3600
+    ],
+    [
+      63216032400000000,
+      7200
+    ],
+    [
+      63234781200000000,
+      3600
+    ],
+    [
+      63247482000000000,
+      7200
+    ],
+    [
+      63266230800000000,
+      3600
+    ],
+    [
+      63278931600000000,
+      7200
+    ],
+    [
+      63297680400000000,
+      3600
+    ],
+    [
+      63310381200000000,
+      7200
+    ],
+    [
+      63329130000000000,
+      3600
+    ],
+    [
+      63342435600000000,
+      7200
+    ],
+    [
+      63360579600000000,
+      3600
+    ],
+    [
+      63373885200000000,
+      7200
+    ],
+    [
+      63392029200000000,
+      3600
+    ],
+    [
+      63405334800000000,
+      7200
+    ],
+    [
+      63424083600000000,
+      3600
+    ],
+    [
+      63436784400000000,
+      7200
+    ],
+    [
+      63455533200000000,
+      3600
+    ],
+    [
+      63468234000000000,
+      7200
+    ],
+    [
+      63486982800000000,
+      3600
+    ],
+    [
+      63500288400000000,
+      7200
+    ],
+    [
+      63518432400000000,
+      3600
+    ],
+    [
+      63531738000000000,
+      7200
+    ],
+    [
+      63549882000000000,
+      3600
+    ],
+    [
+      63563187600000000,
+      7200
+    ],
+    [
+      63581331600000000,
+      3600
+    ],
+    [
+      63594637200000000,
+      7200
+    ],
+    [
+      63613386000000000,
+      3600
+    ],
+    [
+      63626086800000000,
+      7200
+    ],
+    [
+      63644835600000000,
+      3600
+    ],
+    [
+      63657536400000000,
+      7200
+    ],
+    [
+      63676285200000000,
+      3600
+    ],
+    [
+      63689590800000000,
+      7200
+    ],
+    [
+      63707734800000000,
+      3600
+    ],
+    [
+      63721040400000000,
+      7200
+    ],
+    [
+      63739184400000000,
+      3600
+    ],
+    [
+      63752490000000000,
+      7200
+    ],
+    [
+      63771238800000000,
+      3600
+    ],
+    [
+      63783939600000000,
+      7200
+    ],
+    [
+      63802688400000000,
+      3600
+    ],
+    [
+      63815389200000000,
+      7200
+    ],
+    [
+      63834138000000000,
+      3600
+    ],
+    [
+      63847443600000000,
+      7200
+    ],
+    [
+      63865587600000000,
+      3600
+    ],
+    [
+      63878893200000000,
+      7200
+    ],
+    [
+      63897037200000000,
+      3600
+    ],
+    [
+      63910342800000000,
+      7200
+    ],
+    [
+      63928486800000000,
+      3600
+    ],
+    [
+      63941792400000000,
+      7200
+    ],
+    [
+      63960541200000000,
+      3600
+    ],
+    [
+      63973242000000000,
+      7200
+    ],
+    [
+      63991990800000000,
+      3600
+    ],
+    [
+      64004691600000000,
+      7200
+    ],
+    [
+      64023440400000000,
+      3600
+    ],
+    [
+      64036746000000000,
+      7200
+    ],
+    [
+      64054890000000000,
+      3600
+    ],
+    [
+      64068195600000000,
+      7200
+    ],
+    [
+      64086339600000000,
+      3600
+    ],
+    [
+      64099645200000000,
+      7200
+    ],
+    [
+      64118394000000000,
+      3600
+    ],
+    [
+      64131094800000000,
+      7200
+    ],
+    [
+      64149843600000000,
+      3600
+    ],
+    [
+      64162544400000000,
+      7200
+    ],
+    [
+      64181293200000000,
+      3600
+    ],
+    [
+      64193994000000000,
+      7200
+    ],
+    [
+      64212742800000000,
+      3600
+    ],
+    [
+      64226048400000000,
+      7200
+    ],
+    [
+      64244192400000000,
+      3600
+    ],
+    [
+      64257498000000000,
+      7200
+    ],
+    [
+      64275642000000000,
+      3600
+    ]
+  ],
+  "section_tables": [
+    {
+      "sheet_name": "1.1.",
+      "filename": "01_1.1.csv",
+      "title": "1.1. Steuerpflichtige Einkünfte aus dem An- und Verkauf von Kryptowährungen gem. § 27b Abs 3 EStG",
+      "headers": [
+        "Börse",
+        "Anlage",
+        "Anzahl",
+        "Erwerbsdatum",
+        "Verkaufsdatum",
+        "Kauf/Eingang bei",
+        "Typ",
+        "Kostenbasis in EUR",
+        "Erlös in EUR",
+        "Gewinn/Verlust in EUR"
+      ],
+      "rows": [],
+      "row_format_names": [
+        "text",
+        "text",
+        "quantity",
+        "text",
+        "text",
+        "text",
+        "text",
+        "money",
+        "money",
+        "money"
+      ],
+      "total_rows": [
+        [
+          "Summe Einkünfte realisierten Wertsteigerungen",
+          0.0
+        ],
+        [
+          "Summe realisierte Wertverluste",
+          0.0
+        ]
+      ],
+      "value_column": 9,
+      "column_widths": [
+        18,
+        12,
+        14,
+        15,
+        15,
+        18,
+        24,
+        18,
+        18,
+        20
+      ]
+    },
+    {
+      "sheet_name": "1.2.",
+      "filename": "02_1.2.csv",
+      "title": "1.2. Steuerpflichtige Einkünfte aus Margin, Derivaten und Futures",
+      "headers": [
+        "Börse",
+        "Typ",
+        "Datum",
+        "Anzahl",
+        "Währung",
+        "Gesamt"
+      ],
+      "rows": [],
+      "row_format_names": [
+        "text",
+        "text",
+        "text",
+        "quantity",
+        "text",
+        "money"
+      ],
+      "total_rows": [
+        [
+          "Summe Gewinne aus Margin, Derivaten, Futures",
+          0.0
+        ],
+        [
+          "Summe Verluste aus Margin, Derivaten, Futures",
+          0.0
+        ]
+      ],
+      "value_column": 5,
+      "column_widths": [
+        18,
+        22,
+        16,
+        14,
+        12,
+        18
+      ]
+    },
+    {
+      "sheet_name": "1.3.",
+      "filename": "03_1.3.csv",
+      "title": "1.3. Steuerpflichtige Einkünfte aus Spekulationsgeschäften mit Kryptowährungen (§ 31 EStG)",
+      "headers": [
+        "Börse",
+        "Anlage",
+        "Anzahl",
+        "Erwerbsdatum",
+        "Verkaufsdatum",
+        "Kauf/Eingang bei",
+        "Haltedauer in Tagen",
+        "Typ",
+        "Kostenbasis in EUR",
+        "Erlös in EUR",
+        "Gewinn/Verlust in EUR"
+      ],
+      "rows": [],
+      "row_format_names": [
+        "text",
+        "text",
+        "quantity",
+        "text",
+        "text",
+        "text",
+        "int",
+        "text",
+        "money",
+        "money",
+        "money"
+      ],
+      "total_rows": [
+        [
+          "Summe Spekulationseinkünfte",
+          0.0
+        ]
+      ],
+      "value_column": 10,
+      "column_widths": [
+        18,
+        12,
+        14,
+        15,
+        15,
+        18,
+        16,
+        24,
+        18,
+        18,
+        20
+      ]
+    },
+    {
+      "sheet_name": "2.1.",
+      "filename": "04_2.1.csv",
+      "title": "2.1. Steuerpflichtige laufende Einkünfte aus der Überlassung von Kryptowährungen",
+      "headers": [
+        "Börse",
+        "Typ",
+        "Datum des Eingangs",
+        "Anzahl",
+        "Währung",
+        "Hinweis",
+        "Wert in EUR zum Zeitpunkt des Eingangs"
+      ],
+      "rows": [],
+      "row_format_names": [
+        "text",
+        "text",
+        "text",
+        "quantity",
+        "text",
+        "text",
+        "money"
+      ],
+      "total_rows": [
+        [
+          "Summe laufende Einkünfte",
+          0.0
+        ]
+      ],
+      "value_column": 6,
+      "column_widths": [
+        18,
+        24,
+        18,
+        14,
+        12,
+        36,
+        24
+      ]
+    },
+    {
+      "sheet_name": "2.2.",
+      "filename": "05_2.2.csv",
+      "title": "2.2. Steuerpflichtige laufende Einkünfte aus Leistungen zur Transaktionsverarbeitung",
+      "headers": [
+        "Börse",
+        "Typ",
+        "Datum des Eingangs",
+        "Anzahl",
+        "Währung",
+        "Hinweis",
+        "Wert in EUR zum Zeitpunkt des Eingangs"
+      ],
+      "rows": [],
+      "row_format_names": [
+        "text",
+        "text",
+        "text",
+        "quantity",
+        "text",
+        "text",
+        "money"
+      ],
+      "total_rows": [
+        [
+          "Summe laufende Einkünfte",
+          0.0
+        ]
+      ],
+      "value_column": 6,
+      "column_widths": [
+        18,
+        24,
+        18,
+        14,
+        12,
+        36,
+        24
+      ]
+    },
+    {
+      "sheet_name": "3.1.",
+      "filename": "06_3.1.csv",
+      "title": "3.1. Nicht steuerbare Einkünfte aus Altvermögen außerhalb der Spekulationsfrist",
+      "headers": [
+        "Börse",
+        "Anlage",
+        "Anzahl",
+        "Erwerbsdatum",
+        "Verkaufsdatum",
+        "Kauf/Eingang bei",
+        "Haltedauer in Tagen",
+        "Typ",
+        "Kostenbasis in EUR",
+        "Erlös in EUR",
+        "Gewinn/Verlust in EUR"
+      ],
+      "rows": [],
+      "row_format_names": [
+        "text",
+        "text",
+        "quantity",
+        "text",
+        "text",
+        "text",
+        "int",
+        "text",
+        "money",
+        "money",
+        "money"
+      ],
+      "total_rows": [
+        [
+          "Summe nicht steuerbare Einkünfte",
+          0.0
+        ]
+      ],
+      "value_column": 10,
+      "column_widths": [
+        18,
+        12,
+        14,
+        15,
+        15,
+        18,
+        16,
+        24,
+        18,
+        18,
+        20
+      ]
+    },
+    {
+      "sheet_name": "3.2.",
+      "filename": "07_3.2.csv",
+      "title": "3.2. Nicht steuerbare Einkünfte gem. § 27b Abs 2 Z 2 Satz 2 EStG",
+      "headers": [
+        "Börse",
+        "Typ",
+        "Datum des Eingangs",
+        "Anzahl",
+        "Währung",
+        "Hinweis",
+        "Wert in EUR zum Zeitpunkt des Eingangs"
+      ],
+      "rows": [],
+      "row_format_names": [
+        "text",
+        "text",
+        "text",
+        "quantity",
+        "text",
+        "text",
+        "money"
+      ],
+      "total_rows": [
+        [
+          "Summe nicht steuerbare Einkünfte",
+          0.0
+        ]
+      ],
+      "value_column": 6,
+      "column_widths": [
+        18,
+        24,
+        18,
+        14,
+        12,
+        36,
+        24
+      ]
+    },
+    {
+      "sheet_name": "3.3.",
+      "filename": "08_3.3.csv",
+      "title": "3.3. Nicht steuerbare Steuergebühren und Rückerstattungen",
+      "headers": [
+        "Börse",
+        "Datum der Gebühr",
+        "Anzahl",
+        "Währung",
+        "Erlös in EUR",
+        "Anzahl",
+        "Währung",
+        "Hinweis"
+      ],
+      "rows": [],
+      "row_format_names": [
+        "text",
+        "text",
+        "quantity",
+        "text",
+        "money",
+        "quantity",
+        "text",
+        "text"
+      ],
+      "total_rows": [
+        [
+          "Summe entrichtete Steuergebühren",
+          0.0
+        ],
+        [
+          "Summe der Rückerstattungen",
+          0.0
+        ]
+      ],
+      "value_column": 4,
+      "column_widths": [
+        18,
+        18,
+        14,
+        12,
+        18,
+        14,
+        12,
+        32
+      ]
+    },
+    {
+      "sheet_name": "4.1.",
+      "filename": "09_4.1.csv",
+      "title": "4.1. Eingegangene Spenden/Trinkgeld",
+      "headers": [
+        "Börse",
+        "Typ",
+        "Datum des Eingangs",
+        "Anzahl",
+        "Währung",
+        "Hinweis",
+        "Wert in EUR zum Zeitpunkt des Eingangs"
+      ],
+      "rows": [],
+      "row_format_names": [
+        "text",
+        "text",
+        "text",
+        "quantity",
+        "text",
+        "text",
+        "money"
+      ],
+      "total_rows": [
+        [
+          "Summe Spenden/Trinkgeld",
+          0.0
+        ]
+      ],
+      "value_column": 6,
+      "column_widths": [
+        18,
+        24,
+        18,
+        14,
+        12,
+        36,
+        24
+      ]
+    },
+    {
+      "sheet_name": "4.2.",
+      "filename": "10_4.2.csv",
+      "title": "4.2. Ausgegangene Spenden/Schenkungen",
+      "headers": [
+        "Börse",
+        "Typ",
+        "Datum der Auszahlung",
+        "Anzahl",
+        "Währung",
+        "Hinweis",
+        "Kostenbasis in EUR",
+        "Wert bei Auszahlung in EUR"
+      ],
+      "rows": [],
+      "row_format_names": [
+        "text",
+        "text",
+        "text",
+        "quantity",
+        "text",
+        "text",
+        "money",
+        "money"
+      ],
+      "total_rows": [
+        [
+          "Summe Spenden",
+          0.0
+        ],
+        [
+          "Summe Schenkungen",
+          0.0
+        ]
+      ],
+      "value_column": 7,
+      "column_widths": [
+        18,
+        22,
+        18,
+        14,
+        12,
+        36,
+        18,
+        24
+      ]
+    },
+    {
+      "sheet_name": "4.3.",
+      "filename": "11_4.3.csv",
+      "title": "4.3. Gestohlene, gehackte und verlorene Coins",
+      "headers": [
+        "Börse",
+        "Typ",
+        "Datum der Auszahlung",
+        "Anzahl",
+        "Währung",
+        "Hinweis",
+        "Kostenbasis in EUR",
+        "Wert bei Auszahlung in EUR"
+      ],
+      "rows": [],
+      "row_format_names": [
+        "text",
+        "text",
+        "text",
+        "quantity",
+        "text",
+        "text",
+        "money",
+        "money"
+      ],
+      "total_rows": [
+        [
+          "Summe gestohlen/gehackt/Betrug",
+          0.0
+        ],
+        [
+          "Summe Verlust",
+          0.0
+        ]
+      ],
+      "value_column": 7,
+      "column_widths": [
+        18,
+        22,
+        18,
+        14,
+        12,
+        36,
+        18,
+        24
+      ]
+    },
+    {
+      "sheet_name": "4.4.",
+      "filename": "12_4.4.csv",
+      "title": "4.4. Mining (kommerziell)",
+      "headers": [
+        "Börse",
+        "Typ",
+        "Datum des Eingangs",
+        "Anzahl",
+        "Währung",
+        "Hinweis",
+        "Wert in EUR zum Zeitpunkt des Eingangs"
+      ],
+      "rows": [],
+      "row_format_names": [
+        "text",
+        "text",
+        "text",
+        "quantity",
+        "text",
+        "text",
+        "money"
+      ],
+      "total_rows": [
+        [
+          "Summe Mining",
+          0.0
+        ]
+      ],
+      "value_column": 6,
+      "column_widths": [
+        18,
+        24,
+        18,
+        14,
+        12,
+        36,
+        24
+      ]
+    },
+    {
+      "sheet_name": "4.5.",
+      "filename": "13_4.5.csv",
+      "title": "4.5. Minting",
+      "headers": [
+        "Börse",
+        "Typ",
+        "Datum des Eingangs",
+        "Anzahl",
+        "Währung",
+        "Hinweis",
+        "Wert in EUR zum Zeitpunkt des Eingangs"
+      ],
+      "rows": [],
+      "row_format_names": [
+        "text",
+        "text",
+        "text",
+        "quantity",
+        "text",
+        "text",
+        "money"
+      ],
+      "total_rows": [
+        [
+          "Summe Minting",
+          0.0
+        ]
+      ],
+      "value_column": 6,
+      "column_widths": [
+        18,
+        24,
+        18,
+        14,
+        12,
+        36,
+        24
+      ]
+    }
+  ],
+  "overview": [
+    [
+      "heading",
+      "1. Steuerpflichtige Einkünfte aus dem Handel mit Kryptowährungen"
+    ],
+    [
+      "section",
+      "1.1. Steuerpflichtige Einkünfte aus dem An- und Verkauf von Kryptowährungen"
+    ],
+    [
+      "amount",
+      "Veräußerungspreis",
+      0,
+      false
+    ],
+    [
+      "amount",
+      "Anschaffungskosten",
+      0,
+      false
+    ],
+    [
+      "amount",
+      "Veräußerungsgewinn",
+      0,
+      true
+    ],
+    [
+      "amount",
+      "Veräußerungspreis",
+      0,
+      false
+    ],
+    [
+      "amount",
+      "Anschaffungskosten",
+      0,
+      false
+    ],
+    [
+      "amount",
+      "Veräußerungsverlust",
+      0,
+      true
+    ],
+    [
+      "section",
+      "1.2. Steuerpflichtige Einkünfte aus Margin, Derivaten und Futures"
+    ],
+    [
+      "amount",
+      "Gewinne aus Margin, Derivaten und Futures",
+      0,
+      true
+    ],
+    [
+      "amount",
+      "Verluste aus Margin, Derivaten und Futures",
+      0,
+      true
+    ],
+    [
+      "section",
+      "1.3. Steuerpflichtige Einkünfte aus Spekulationsgeschäften (§ 31 EStG)"
+    ],
+    [
+      "amount",
+      "Summe Spekulationseinkünfte",
+      0,
+      true
+    ],
+    [
+      "heading",
+      "2. Steuerpflichtige laufende Einkünfte"
+    ],
+    [
+      "section",
+      "2.1. Einkünfte aus der Überlassung von Kryptowährungen"
+    ],
+    [
+      "amount",
+      "Summe laufende Einkünfte",
+      0,
+      true
+    ],
+    [
+      "section",
+      "2.2. Einkünfte aus Leistungen zur Transaktionsverarbeitung"
+    ],
+    [
+      "amount",
+      "Summe laufende Einkünfte",
+      0,
+      true
+    ],
+    [
+      "heading",
+      "3. Nicht steuerbare Einkünfte"
+    ],
+    [
+      "section",
+      "3.1. Nicht steuerbare Einkünfte aus Altvermögen außerhalb der Spekulationsfrist"
+    ],
+    [
+      "amount",
+      "Summe nicht steuerbare Einkünfte",
+      0,
+      true
+    ],
+    [
+      "section",
+      "3.2. Nicht steuerbare Einkünfte gem. § 27b Abs 2 Z 2 Satz 2 EStG"
+    ],
+    [
+      "amount",
+      "Summe nicht steuerbare Einkünfte",
+      0,
+      true
+    ],
+    [
+      "section",
+      "3.3. Nicht steuerbare Steuergebühren und Rückerstattungen"
+    ],
+    [
+      "amount",
+      "Summe entrichtete Steuergebühren",
+      0,
+      true
+    ],
+    [
+      "amount",
+      "Summe Rückerstattungen",
+      0,
+      true
+    ],
+    [
+      "heading",
+      "4. Sonstige Ein- und Ausgänge"
+    ],
+    [
+      "section",
+      "4.1. Eingegangene Spenden/Trinkgeld"
+    ],
+    [
+      "amount",
+      "Summe Spenden/Trinkgeld",
+      0,
+      true
+    ],
+    [
+      "section",
+      "4.2. Ausgegangene Spenden/Schenkungen"
+    ],
+    [
+      "amount",
+      "Summe Spenden",
+      0,
+      true
+    ],
+    [
+      "amount",
+      "Summe Schenkungen",
+      0,
+      true
+    ],
+    [
+      "section",
+      "4.3. Gestohlene, gehackte und verlorene Coins"
+    ],
+    [
+      "amount",
+      "Summe gestohlen/gehackt/Betrug",
+      0,
+      true
+    ],
+    [
+      "amount",
+      "Summe Verlust",
+      0,
+      true
+    ],
+    [
+      "section",
+      "4.4. Mining (kommerziell)"
+    ],
+    [
+      "amount",
+      "Summe Mining",
+      0,
+      true
+    ],
+    [
+      "section",
+      "4.5. Minting"
+    ],
+    [
+      "amount",
+      "Summe Minting",
+      0,
+      true
+    ]
+  ],
+  "calendar_vectors": [
+    [
+      "1800-01-01T23:00:00Z",
+      1800,
+      "1800-01-02"
+    ],
+    [
+      "1893-03-31T23:00:00Z",
+      1893,
+      "1893-04-01"
+    ],
+    [
+      "1916-05-01T21:59:59Z",
+      1916,
+      "1916-05-01"
+    ],
+    [
+      "1945-04-02T21:59:59Z",
+      1945,
+      "1945-04-02"
+    ],
+    [
+      "1980-04-05T22:30:00Z",
+      1980,
+      "1980-04-05"
+    ],
+    [
+      "2024-12-31T23:30:00Z",
+      2025,
+      "2025-01-01"
+    ],
+    [
+      "2024-03-31T21:59:59Z",
+      2024,
+      "2024-03-31"
+    ],
+    [
+      "2024-03-31T22:00:00Z",
+      2024,
+      "2024-04-01"
+    ],
+    [
+      "2024-10-27T22:00:00Z",
+      2024,
+      "2024-10-27"
+    ],
+    [
+      "2038-03-28T22:00:00Z",
+      2038,
+      "2038-03-29"
+    ],
+    [
+      "2038-10-31T22:00:00Z",
+      2038,
+      "2038-10-31"
+    ],
+    [
+      "2100-03-28T22:00:00Z",
+      2100,
+      "2100-03-29"
+    ],
+    [
+      "2100-10-31T22:00:00Z",
+      2100,
+      "2100-10-31"
+    ],
+    [
+      "2025-01-01T00:30:00+02:00",
+      2024,
+      "2024-12-31"
+    ],
+    [
+      "20241231T233000Z",
+      2025,
+      "2025-01-01"
+    ],
+    [
+      "2024-W01-1T23:00:00Z",
+      2024,
+      "2024-01-02"
+    ],
+    [
+      "2024-12-31T23:00:00",
+      2025,
+      "2025-01-01"
+    ],
+    [
+      "2024-12-31",
+      2024,
+      "2024-12-31"
+    ]
+  ]
+}

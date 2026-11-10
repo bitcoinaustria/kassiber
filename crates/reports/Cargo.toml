@@ -1,0 +1,47 @@
+[package]
+name = "kassiber-reports"
+description = "Stored journal reports, readiness gates and append-only report markers"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[features]
+test-harness = ["kassiber-wallets/test-harness"]
+
+[[example]]
+name = "psbt_privacy_fixture"
+required-features = ["test-harness"]
+
+[[example]]
+name = "legacy_privacy_fixture"
+required-features = ["test-harness"]
+
+[dependencies]
+kassiber-tax-countries = { path = "../tax-countries" }
+kassiber-rates = { path = "../rates" }
+kassiber-custody = { path = "../custody" }
+kassiber-envelope = { path = "../envelope" }
+kassiber-paths = { path = "../paths" }
+kassiber-pdf = { path = "../pdf" }
+kassiber-pydecimal = { path = "../pydecimal" }
+kassiber-pyjson = { path = "../pyjson" }
+kassiber-pytext = { path = "../pytext" }
+kassiber-setup = { path = "../setup" }
+kassiber-store = { path = "../store" }
+# Transaction references resolve through the one shared lookup.
+kassiber-transactions = { path = "../transactions" }
+kassiber-wallets = { path = "../wallets" }
+kassiber-xlsx = { path = "../xlsx" }
+serde_json = "1"
+# std has no SHA-256; saved exports bind the published artifact bytes.
+sha2 = "0.10"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[dev-dependencies]
+kassiber-tax-core = { path = "../../tax-engine/core" }
+tempfile = "3"
