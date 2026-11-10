@@ -148,6 +148,8 @@ See [01-stack-decision.md](01-stack-decision.md) for the stack decision and
   engine, parity requirements, country manifests, and phases
 - `21-rust-backend.md`: moving the whole backend to Rust and retiring Python:
   contracts, transition, recorded-corpus verification, and stages
+- `22-python-removal.md`: inventory and order of operations for deleting
+  Python after the Rust cutover, with the owner's open decisions
 
 ## Highest-Risk Drift Points
 
