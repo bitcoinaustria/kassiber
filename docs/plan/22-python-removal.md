@@ -213,6 +213,22 @@ Recording and storage rules:
   identically. Product builds compile the hook away;
   `scripts/check-no-test-tape.sh` checks that the marker is absent from them,
   as it does for the network tape.
+- **A shared wall clock.** Book rows hash their own `created_at` (a pair's
+  `source_row_hash`), so the recorder preloads `kassiber-clock-shim` into
+  each process. The process then reads `CLOCK_REALTIME` as the whole second
+  the session began plus one microsecond per read, and in real time only
+  after two seconds. A replay preloads the shim with the recorded base, so a
+  short process reads the same times and writes the same hashes. The shim is
+  a separate library that only the recorder and the replay load; no product
+  build links it.
+- **The recorded environment.** The product's own variables are kept,
+  including the test switches (`KASSIBER_TEST_*`, `KASSIBER_RUST_TEST_*`).
+  `PATH` is kept, so a test that hides a tool still hides it; a replay uses
+  the recorded entries this host has. Secret-named variables are kept only
+  with synthetic values.
+- **Every module with a comparison is recorded,** the porters' modules too.
+  The porters hand-port only the cases that hold kills; the replay keeps the
+  other cases covered.
 
 ### Comparison rules
 
@@ -224,7 +240,8 @@ rewrite. Each rule below covers a value that differs between two correct runs.
 | --- | --- |
 | uuid4 and `uuid4().hex` values become `<gen:N>`, numbered by first appearance | random by construction. The numbering is a bijection: equal values share a number and different values get different ones, so a row pointing at the wrong id still differs. |
 | uuid5 values become `<gen:N>` unless an input names them or both runs printed them | a uuid5 over a random uuid4 differs between runs. A uuid5 over inputs only is printed identically by both runs, so it stays literal. |
-| `chat-…-<32 hex>` request ids and 43-character url-safe `*_token` values become `<gen:N>` | random request ids and document tokens. Ids the test echoes back on stdin are translated to the replay's own. |
+| `chat-…-<32 hex>` request ids, 43-character url-safe `token`/`*_token` values and 22-character `upload_id`s become `<gen:N>` | random request ids, document tokens and upload ids. Ids the test echoes back on stdin are translated to the replay's own. |
+| The random part of a temporary name inside the session's roots (`kassiber-chat-uploads-XjMTS7Hk`, `tmpzxLZfBnQ`) becomes `<gen:N>` | `mkdtemp`-style suffixes: six to eight characters mixing letters and digits or cases. Names an input gave stay literal. |
 | Values that came in through argv, the environment, stdin or the starting state are pinned | they are inputs and must stay literal. Stdin ids the process printed first are echoes, not inputs. |
 | Clock readings inside the run's window (±5 s, the recording's window plus 10 minutes of lookback) become `<time>` | wall-clock reads. ISO, compact (`20261110T120000Z`) and epoch forms. |
 | The same at whole hours up to 72 h away, or at 7, 14, 30, 60, 90, 180 or 365 days | expiries derived from the clock, such as a 90-day dismissal. Arbitrary offsets stay literal, so a fixture dated 10 days after the run compares exactly. |
