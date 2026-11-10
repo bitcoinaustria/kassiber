@@ -435,7 +435,7 @@ fn value(value: ValueRef<'_>) -> String {
     }
 }
 
-type Mask = Box<dyn Fn(&str) -> String>;
+type Mask = Box<dyn Fn(&str) -> String + Send + Sync>;
 
 /// What a test observed, compared with (or blessed into) its golden file.
 pub struct Transcript {
@@ -460,6 +460,20 @@ impl Transcript {
             compact: false,
             future: false,
         }
+    }
+
+    /// A transcript for one part of a test run elsewhere (a thread), to be
+    /// appended to this one in order.
+    pub fn part(&self) -> Transcript {
+        let mut part = Transcript::new(&self.name);
+        part.start = self.start;
+        part.compact = self.compact;
+        part
+    }
+
+    /// Append a part's text as recorded (masks apply at `finish`).
+    pub fn append(&mut self, part: Transcript) {
+        self.text.push_str(&part.text);
     }
 
     /// The raw transcript text, for recorders outside this module.
@@ -492,7 +506,7 @@ impl Transcript {
 
     /// A further rewrite of the whole transcript before it is compared,
     /// for values a run legitimately generates differently each time.
-    pub fn mask(&mut self, mask: impl Fn(&str) -> String + 'static) -> &mut Self {
+    pub fn mask(&mut self, mask: impl Fn(&str) -> String + Send + Sync + 'static) -> &mut Self {
         self.masks.push(Box::new(mask));
         self
     }

@@ -44,12 +44,15 @@ pub fn sessions(text: &str) -> Vec<Value> {
     serde_json::from_str(text).unwrap()
 }
 
-/// The requests with `<BASE>` naming this sandbox's directory and
+/// The requests with `<BASE>` naming this sandbox's directory,
+/// `<AI_FIXTURES>` the files frozen beside them, and
 /// `request_id`s numbered as the harness numbered them.
 pub fn requests(sandbox: &Sandbox, session: &Value) -> Vec<Value> {
+    let fixtures = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/black_box/ai");
     let text = session["requests"]
         .to_string()
-        .replace("<BASE>", &sandbox.base.to_string_lossy());
+        .replace("<BASE>", &sandbox.base.to_string_lossy())
+        .replace("<AI_FIXTURES>", &fixtures.to_string_lossy());
     let list: Vec<Value> = serde_json::from_str(&text).unwrap();
     list.into_iter()
         .enumerate()
@@ -100,7 +103,7 @@ pub fn writes(
     t: &mut Transcript,
     fixture: &str,
     session: &Value,
-    setup: impl Fn(&Sandbox),
+    setup: &dyn Fn(&Sandbox),
 ) -> Vec<Value> {
     let mut sandbox = sandbox(fixture);
     sandbox.set("KASSIBER_RUST_TEST_REPORT_TIME", CLOCK);
@@ -137,17 +140,44 @@ fn place_attachment(sandbox: &Sandbox) {
 }
 
 /// Run every session of a frozen file; `compare` sessions as reads,
-/// `compare_writes` sessions as writes.
-fn run_all(t: &mut Transcript, text: &str, setup: impl Fn(&Sandbox)) -> Vec<(String, Vec<Value>)> {
+/// `compare_writes` sessions as writes. Sessions run on their own books,
+/// a few at a time; the transcript keeps their order.
+fn run_all(
+    t: &mut Transcript,
+    text: &str,
+    setup: impl Fn(&Sandbox) + Sync,
+) -> Vec<(String, Vec<Value>)> {
+    let jobs: Vec<(String, Value)> = sessions(text)
+        .into_iter()
+        .flat_map(|session| {
+            fixtures(&session)
+                .into_iter()
+                .map(move |fixture| (fixture, session.clone()))
+        })
+        .collect();
     let mut out = Vec::new();
-    for session in sessions(text) {
-        for fixture in fixtures(&session) {
-            let records = if session["method"] == "compare" {
-                reads(t, &fixture, &session, &setup)
-            } else {
-                writes(t, &fixture, &session, &setup)
-            };
-            out.push((fixture, records));
+    for batch in jobs.chunks(6) {
+        let parts: Vec<(Transcript, Vec<Value>)> = std::thread::scope(|scope| {
+            let handles: Vec<_> = batch
+                .iter()
+                .map(|(fixture, session)| {
+                    let mut part = t.part();
+                    let setup = &setup;
+                    scope.spawn(move || {
+                        let records = if session["method"] == "compare" {
+                            reads(&mut part, fixture, session, setup)
+                        } else {
+                            writes(&mut part, fixture, session, setup)
+                        };
+                        (part, records)
+                    })
+                })
+                .collect();
+            handles.into_iter().map(|h| h.join().unwrap()).collect()
+        });
+        for ((fixture, _), (part, records)) in batch.iter().zip(parts) {
+            t.append(part);
+            out.push((fixture.clone(), records));
         }
     }
     out
@@ -271,7 +301,7 @@ fn test_unreadable_wallet_config_refuses_wallet_sync_typed() {
     let mut t = transcript("ai_tools/unreadable_wallet_config");
     for stored in ["bad", "[]", "null", "\"text\""] {
         t.note(&format!("config_json={stored}"));
-        let records = writes(&mut t, "desktop", &sessions[0], |sandbox| {
+        let records = writes(&mut t, "desktop", &sessions[0], &|sandbox| {
             sandbox.sql_raw(&format!(
                 "INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) \
                  VALUES('bad','w','p','Bad','custom','{}','2025-01-01T00:00:00Z')",
