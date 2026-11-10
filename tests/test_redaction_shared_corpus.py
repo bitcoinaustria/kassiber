@@ -54,6 +54,10 @@ def test_adversarial_secret_shapes_keep_a_bounded_deadline():
     import subprocess
     import sys
 
+    # 53 recipes of 40,000 characters. Linear redaction of them takes about
+    # 2.5 s of CPU on the build machine and 3.1-3.5 s on CI runners (plain
+    # prose of the same size, about 3.7 s here), so the bound sits at twice
+    # the local cost; the 400k test below catches growth.
     recipes = Path(__file__).parent / 'fixtures/secret_redaction_stress_cases.json'
     script = """
 import json, sys, time
@@ -64,7 +68,7 @@ for case in json.load(sys.stdin):
     start = time.process_time()
     redact_secret_text(text)
     cpu_seconds += time.process_time() - start
-assert cpu_seconds < 3, cpu_seconds
+assert cpu_seconds < 5, cpu_seconds
 """
     subprocess.run([sys.executable, '-c', script], input=recipes.read_text(),
                    text=True, check=True, timeout=120)
