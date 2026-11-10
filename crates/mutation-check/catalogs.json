@@ -946,12 +946,15 @@
    ],
    "cargo": [
     "-p",
-    "kassiber-transfers",
+    "kassiber",
     "--features",
     "test-harness"
    ],
    "env": {
     "RUST_TEST_THREADS": "1"
+   },
+   "resolve_target": {
+    "tests_dir": "crates/kassiber/tests"
    }
   },
   {
