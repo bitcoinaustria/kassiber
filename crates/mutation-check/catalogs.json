@@ -12,7 +12,12 @@
     "kassiber-net",
     "-p",
     "kassiber-transfers"
-   ]
+   ],
+   "package_features": {
+    "kassiber": [
+     "test-harness"
+    ]
+   }
   },
   {
    "name": "backup",
@@ -55,7 +60,12 @@
     "kassiber-journals",
     "-p",
     "kassiber-store"
-   ]
+   ],
+   "package_features": {
+    "kassiber": [
+     "test-harness"
+    ]
+   }
   },
   {
    "name": "credentials",
@@ -99,7 +109,12 @@
     "-p",
     "kassiber-journals",
     "--lib"
-   ]
+   ],
+   "package_features": {
+    "kassiber": [
+     "test-harness"
+    ]
+   }
   },
   {
    "name": "daemon-shell",
@@ -127,14 +142,24 @@
     "kassiber",
     "--features",
     "kassiber/test-harness"
-   ]
+   ],
+   "package_features": {
+    "kassiber": [
+     "test-harness"
+    ]
+   }
   },
   {
    "name": "daemon-sync-s8-s10",
    "catalogs": [
     "crates/daemon/scripts/sync_s8_s10_mutations.json"
    ],
-   "cargo": []
+   "cargo": [],
+   "package_features": {
+    "kassiber": [
+     "test-harness"
+    ]
+   }
   },
   {
    "name": "diagnostics",

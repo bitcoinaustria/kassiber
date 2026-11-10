@@ -315,7 +315,11 @@ impl<'a> Runner<'a> {
     /// The `cargo test` arguments that run one filter.
     pub fn test_command(&self, mutation: &Mutation, test: &str) -> Result<Vec<String>, Error> {
         let mut args = if let Some((package, binary, name)) = package_filter(test) {
-            let mut args = self.base_args("test", &["-p".into(), package]);
+            let mut cargo = vec!["-p".to_owned(), package.clone()];
+            if let Some(features) = self.suite.package_features.get(&package) {
+                cargo.extend(["--features".to_owned(), features.join(",")]);
+            }
+            let mut args = self.base_args("test", &cargo);
             match binary {
                 Some(binary) => args.extend(["--test".into(), binary]),
                 None => args.push("--lib".into()),
@@ -541,6 +545,39 @@ mod tests {
         );
         assert_eq!(package_filter("tests::module::name"), None);
         assert_eq!(package_filter("plain_name"), None);
+    }
+
+    #[test]
+    fn package_filters_take_their_package_features() {
+        let suite: Suite = serde_json::from_str(
+            r#"{"name": "s", "catalogs": [], "cargo": ["-p", "other"],
+                "package_features": {"kassiber": ["test-harness", "x"]}}"#,
+        )
+        .unwrap();
+        let runner = Runner::new(&suite, Path::new("/repo"), Path::new("/repo/target"));
+        let mutation = Mutation {
+            id: "m".into(),
+            file: "f.rs".into(),
+            find: "a".into(),
+            replace: "b".into(),
+            expect_failing: vec![],
+            rule: "r".into(),
+            catalog: "c".into(),
+        };
+        let args = runner
+            .test_command(&mutation, "kassiber/black_box:a_test")
+            .unwrap();
+        assert_eq!(
+            args.join(" "),
+            "test -p kassiber --features test-harness,x --offline --locked --test black_box -- a_test"
+        );
+        let args = runner
+            .test_command(&mutation, "kassiber-daemon:a_test")
+            .unwrap();
+        assert_eq!(
+            args.join(" "),
+            "test -p kassiber-daemon --offline --locked --lib -- a_test"
+        );
     }
 
     #[test]
