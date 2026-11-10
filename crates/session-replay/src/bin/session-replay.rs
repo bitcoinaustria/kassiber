@@ -3,6 +3,9 @@
 //!     session-replay replay DIR --bin NAME=PATH ... [--examples DIR] [--only TEXT] [--jobs N]
 //!                           [--keep] [--report FILE [--resume]] [--coverage DIR]
 //!     session-replay list DIR
+//!     session-replay pack SRC DST --sessions FILE [--keep-ciphertext FILE]
+//!     session-replay archive PACK OUT     (deterministic tars for test data)
+//!     session-replay extract OUT DIR
 //!
 //! DIR holds `sessions/*.json` and `blobs/` as `session-shim` wrote them. A
 //! session replays from its recorded starting state at a fresh path under
@@ -161,12 +164,143 @@ fn pack(args: &[String]) -> ExitCode {
     ExitCode::SUCCESS
 }
 
+/// The shard a pack file goes to: `sessions.tar` for the sessions, and
+/// `blobs-<first hex digit>.tar` for the blobs, so the test-data lock pins
+/// 17 files whatever the number of recordings.
+fn shard(relative: &Path) -> String {
+    let mut parts = relative.components();
+    match parts
+        .next()
+        .map(|c| c.as_os_str().to_string_lossy().into_owned())
+    {
+        Some(top) if top == "blobs" => {
+            let prefix = parts
+                .next()
+                .map(|c| {
+                    c.as_os_str()
+                        .to_string_lossy()
+                        .chars()
+                        .next()
+                        .unwrap_or('0')
+                })
+                .unwrap_or('0');
+            format!("blobs-{prefix}.tar")
+        }
+        _ => "sessions.tar".to_owned(),
+    }
+}
+
+fn walk(dir: &Path, base: &Path, out: &mut Vec<PathBuf>) {
+    for entry in fs::read_dir(dir).into_iter().flatten().flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            walk(&path, base, out);
+        } else if let Ok(relative) = path.strip_prefix(base) {
+            out.push(relative.to_path_buf());
+        }
+    }
+}
+
+/// `archive PACK OUT`: a pack directory as deterministic tars (sorted
+/// names, zero times and owners, mode 0644), so an unchanged recording
+/// archives to identical bytes.
+fn archive(args: &[String]) -> ExitCode {
+    let (Some(src), Some(out)) = (args.first(), args.get(1)) else {
+        eprintln!("usage: session-replay archive PACK OUT");
+        return ExitCode::from(2);
+    };
+    let (src, out) = (PathBuf::from(src), PathBuf::from(out));
+    let mut files = Vec::new();
+    walk(&src, &src, &mut files);
+    files.sort();
+    let mut shards: BTreeMap<String, Vec<PathBuf>> = BTreeMap::new();
+    for file in files {
+        shards.entry(shard(&file)).or_default().push(file);
+    }
+    if fs::create_dir_all(&out).is_err() {
+        eprintln!("cannot create {}", out.display());
+        return ExitCode::from(2);
+    }
+    for (name, files) in &shards {
+        let mut builder = tar::Builder::new(Vec::new());
+        builder.mode(tar::HeaderMode::Deterministic);
+        for file in files {
+            let Ok(bytes) = fs::read(src.join(file)) else {
+                eprintln!("cannot read {}", file.display());
+                return ExitCode::from(2);
+            };
+            let mut header = tar::Header::new_gnu();
+            header.set_size(bytes.len() as u64);
+            header.set_mode(0o644);
+            header.set_mtime(0);
+            header.set_uid(0);
+            header.set_gid(0);
+            header.set_cksum();
+            if builder
+                .append_data(&mut header, file, bytes.as_slice())
+                .is_err()
+            {
+                eprintln!("cannot archive {}", file.display());
+                return ExitCode::from(2);
+            }
+        }
+        let Ok(bytes) = builder.into_inner() else {
+            return ExitCode::from(2);
+        };
+        if fs::write(out.join(name), bytes).is_err() {
+            eprintln!("cannot write {name}");
+            return ExitCode::from(2);
+        }
+    }
+    println!("{} archives in {}", shards.len(), out.display());
+    ExitCode::SUCCESS
+}
+
+/// `extract OUT DIR`: the archives `archive` wrote, back as a pack directory.
+fn extract(args: &[String]) -> ExitCode {
+    let (Some(src), Some(dst)) = (args.first(), args.get(1)) else {
+        eprintln!("usage: session-replay extract ARCHIVES DIR");
+        return ExitCode::from(2);
+    };
+    let (src, dst) = (PathBuf::from(src), PathBuf::from(dst));
+    let mut names: Vec<PathBuf> = fs::read_dir(&src)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|e| e == "tar"))
+        .collect();
+    names.sort();
+    if names.is_empty() {
+        eprintln!("no archives in {}", src.display());
+        return ExitCode::from(2);
+    }
+    for name in names {
+        let Ok(file) = fs::File::open(&name) else {
+            return ExitCode::from(2);
+        };
+        let mut archive = tar::Archive::new(file);
+        // `unpack` refuses entries that would land outside DST.
+        if let Err(error) = archive.unpack(&dst) {
+            eprintln!("cannot extract {}: {error}", name.display());
+            return ExitCode::from(2);
+        }
+    }
+    ExitCode::SUCCESS
+}
+
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let Some(command) = args.first() else {
         eprintln!("usage: session-replay replay|list DIR ...");
         return ExitCode::from(2);
     };
+    if command == "archive" {
+        return archive(&args[1..]);
+    }
+    if command == "extract" {
+        return extract(&args[1..]);
+    }
     if command == "pack" {
         return pack(&args[1..]);
     }

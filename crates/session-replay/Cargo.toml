@@ -17,6 +17,8 @@ sha2 = "0.10"
 base64 = "0.22"
 flate2 = { version = "=1.1.9", default-features = false, features = ["rust_backend"] }
 libc = "0.2"
+# Recordings travel on the test-data branch as a few deterministic tars.
+tar = "0.4"
 regex = "1"
 rusqlite = { version = "=0.40.1", features = ["bundled-sqlcipher", "backup"] }
 # The product's own SQLCipher keying and encryption for recorded books.
