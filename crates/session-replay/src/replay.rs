@@ -406,6 +406,11 @@ pub fn replay(
     if let Some(path) = std::env::var_os("PATH") {
         command.env("PATH", path);
     }
+    // The runner's own I/O shim (the tests' fast-io wrapper), never the
+    // session's.
+    if let Some(preload) = std::env::var_os("LD_PRELOAD") {
+        command.env("LD_PRELOAD", preload);
+    }
     command.env("HOME", scratch.join("home"));
     for (key, value) in &session.env {
         let value = paths.forward(value);

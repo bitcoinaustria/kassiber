@@ -1,7 +1,7 @@
 //! Replay recorded process sessions against the current binaries.
 //!
 //!     session-replay replay DIR --bin NAME=PATH ... [--examples DIR] [--only TEXT] [--jobs N]
-//!                           [--keep] [--report FILE] [--coverage DIR]
+//!                           [--keep] [--report FILE [--resume]] [--coverage DIR]
 //!     session-replay list DIR
 //!
 //! DIR holds `sessions/*.json` and `blobs/` as `session-shim` wrote them. A
@@ -178,6 +178,7 @@ fn main() -> ExitCode {
     let mut only = Vec::new();
     let mut jobs = 4usize;
     let mut keep = false;
+    let mut resume = false;
     let mut report: Option<PathBuf> = None;
     let mut coverage: Option<PathBuf> = None;
     let mut rest = args[2..].iter();
@@ -193,6 +194,8 @@ fn main() -> ExitCode {
             "--only" => only.extend(rest.next().cloned()),
             "--jobs" => jobs = rest.next().and_then(|v| v.parse().ok()).unwrap_or(4),
             "--keep" => keep = true,
+            // Skip the sessions the --report file already lists, and append.
+            "--resume" => resume = true,
             "--report" => report = rest.next().map(PathBuf::from),
             "--coverage" => coverage = rest.next().map(PathBuf::from),
             // Every executable in DIR, by file name (cargo examples).
@@ -258,9 +261,31 @@ fn main() -> ExitCode {
     let outcomes = Arc::new(Mutex::new(Vec::<String>::new()));
     // Each outcome is appended as it completes, so an interrupted run keeps
     // what it finished.
-    let report_file = Arc::new(Mutex::new(
-        report.as_ref().and_then(|path| fs::File::create(path).ok()),
-    ));
+    let done: std::collections::HashSet<String> = match (&report, resume) {
+        (Some(path), true) => fs::read_to_string(path)
+            .unwrap_or_default()
+            .lines()
+            .filter_map(|l| l.split('\t').next())
+            .map(str::to_owned)
+            .collect(),
+        _ => Default::default(),
+    };
+    let files: Vec<PathBuf> = files
+        .into_iter()
+        .filter(|f| {
+            let name = f.file_name().unwrap().to_string_lossy();
+            !done.contains(name.trim_end_matches(".gz"))
+        })
+        .collect();
+    let report_file = Arc::new(Mutex::new(report.as_ref().and_then(|path| {
+        fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(resume)
+            .truncate(!resume)
+            .open(path)
+            .ok()
+    })));
     let files = Arc::new(files);
     let binaries = Arc::new(binaries);
     let workers: Vec<_> = (0..jobs.max(1))
