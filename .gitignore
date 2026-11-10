@@ -25,6 +25,4 @@ log/
 kassiber/ai/provider_broker/*.mjs
 # >>> generated test data: tests/test-data.lock (scripts/fetch-test-data.sh --ignore)
 /.test-data/
-/tests/fixtures/secret_redaction_5e_cases.json
-/tests/fixtures/secret_redaction_cases.json
 # <<< generated test data

@@ -52,6 +52,8 @@ def test_locked_files_are_ignored_and_not_tracked():
     assert BEGIN in text and END in text
     block = text.split(BEGIN, 1)[1].split(END, 1)[0].split()
     assert block == ["/.test-data/", *("/" + path for path in paths)]
+    if not paths:
+        return  # `git ls-files --` with no paths would list the whole tree
     tracked = subprocess.run(
         ["git", "ls-files", "--", *paths], cwd=ROOT, capture_output=True, text=True, check=True
     ).stdout.split()
