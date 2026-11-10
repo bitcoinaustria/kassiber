@@ -1014,6 +1014,9 @@
    ],
    "env": {
     "KASSIBER_TEST_NO_EGRESS": "strict"
+   },
+   "resolve_target": {
+    "tests_dir": "crates/wallets/tests"
    }
   },
   {
