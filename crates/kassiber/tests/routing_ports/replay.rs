@@ -33,6 +33,8 @@ use kassiber_store::rusqlite::{self, types::ValueRef, Connection};
 use serde_json::{json, Map, Value};
 
 const BIG: usize = 16384;
+/// A table change with more rows compares by its count and digest.
+const MANY: usize = 2000;
 const TIMEOUT: Duration = Duration::from_secs(180);
 /// How long before its first recorded process a test may have written state.
 const LOOKBACK_US: i64 = 600_000_000;
@@ -344,6 +346,25 @@ fn book_patch(before: &Book, after: &Book, for_expect: bool) -> Option<Value> {
                         Table::Rows(_) => vec![],
                     };
                     tables.insert(name.clone(), json!({"replace": rows}));
+                }
+            }
+        }
+    }
+    if for_expect {
+        for change in tables.values_mut() {
+            let Some(change) = change.as_object_mut() else {
+                continue;
+            };
+            for key in ["upsert", "replace", "delete"] {
+                if change
+                    .get(key)
+                    .and_then(Value::as_array)
+                    .is_some_and(|rows| rows.len() > MANY)
+                {
+                    let rows = change.remove(key).unwrap();
+                    let mut digest = big(serde_json::to_string(&rows).unwrap().as_bytes());
+                    digest["rows"] = json!(rows.as_array().unwrap().len());
+                    change.insert(format!("{key}_digest"), digest);
                 }
             }
         }

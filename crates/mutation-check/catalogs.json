@@ -1207,6 +1207,15 @@
     "kassiber",
     "--features",
     "test-harness"
+   ],
+   "resolve_target": {
+    "tests_dir": "crates/kassiber/tests",
+    "extra": {
+     "routing_ports": "crates/kassiber/tests/routing_ports/main.rs"
+    }
+   },
+   "test_args": [
+    "--exact"
    ]
   },
   {

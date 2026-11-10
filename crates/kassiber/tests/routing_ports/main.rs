@@ -134,6 +134,12 @@ fn test_file_sourced_wallet_selection_syncs_directly_like_python() {
     replay("freshness_sources/test_file_sourced_wallet_selection_syncs_directly_like_python");
 }
 
+/// `tests/test_rust_freshness_sources.py::test_market_rate_coverage_seeds_then_refuses_live_lookups_without_egress[coingecko]`
+#[test]
+fn test_market_rate_coverage_seeds_then_refuses_live_lookups_without_egress_coingecko() {
+    replay("freshness_sources/test_market_rate_coverage_seeds_then_refuses_live_lookups_without_egress_coingecko");
+}
+
 /// `tests/test_rust_freshness_sources.py::test_wallets_without_freshness_sources_do_not_refuse_a_run[core-silent-payment]`
 #[test]
 fn test_wallets_without_freshness_sources_do_not_refuse_a_run_core_silent_payment() {
