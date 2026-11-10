@@ -26,7 +26,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::Engine;
 use kassiber_session_replay::{
-    keeps_env, snapshot, Blobs, Exit, Root, Session, SignalEvent, StdinChunk, SESSION_FORMAT,
+    keeps_env, keeps_secret_env, snapshot, Blobs, Exit, Root, Session, SignalEvent, StdinChunk,
+    SESSION_FORMAT,
 };
 
 static CHILD: AtomicI32 = AtomicI32::new(0);
@@ -271,7 +272,17 @@ fn main() {
         .iter()
         .map(|a| a.to_string_lossy().into_owned())
         .collect();
-    let env: BTreeMap<String, String> = std::env::vars().filter(|(k, _)| keeps_env(k)).collect();
+    // Passphrases and tokens the test hands over must be synthetic: literals
+    // of the test sources.
+    let allowlist = kassiber_session_replay::encrypted::Allowlist::load(Path::new(
+        config
+            .passphrase_allowlist
+            .as_deref()
+            .unwrap_or("/nonexistent"),
+    ));
+    let env: BTreeMap<String, String> = std::env::vars()
+        .filter(|(k, v)| keeps_env(k) || keeps_secret_env(k, v, &allowlist))
+        .collect();
     let prefixes: Vec<PathBuf> = config.root_prefixes.iter().map(PathBuf::from).collect();
     let blobs = record.as_ref().map(|dir| Blobs::new(dir));
     // Inherited input descriptors (a test's passphrase pipe): read them,
@@ -330,14 +341,23 @@ fn main() {
                         let named = roots(&[text.into_owned()], &BTreeMap::new(), &stdin_prefixes);
                         let mut known = stdin_roots.lock().unwrap();
                         for root in named {
-                            let covered = known
-                                .0
-                                .iter()
-                                .any(|k| root.starts_with(k) || k.starts_with(&root));
-                            if !covered {
-                                known.1.extend(capture(std::slice::from_ref(&root), blobs));
-                                known.0.push(root);
+                            if known.0.iter().any(|k| root.starts_with(k)) {
+                                continue;
                             }
+                            // A root named inside this one (the scratch
+                            // directory in TMPDIR, say) gives way to it.
+                            let (roots, captured) = &mut *known;
+                            let mut index = 0;
+                            while index < roots.len() {
+                                if roots[index].starts_with(&root) {
+                                    roots.remove(index);
+                                    captured.remove(index);
+                                } else {
+                                    index += 1;
+                                }
+                            }
+                            captured.extend(capture(std::slice::from_ref(&root), blobs));
+                            roots.push(root);
                         }
                     }
                     if recording {
@@ -432,13 +452,13 @@ fn main() {
                     .unwrap_or_default()
             })
             .collect();
-        let candidates = kassiber_session_replay::passphrase_candidates(&fd_bytes, &stdin_bytes);
-        let allowlist = kassiber_session_replay::encrypted::Allowlist::load(Path::new(
-            config
-                .passphrase_allowlist
-                .as_deref()
-                .unwrap_or("/nonexistent"),
-        ));
+        let mut candidates =
+            kassiber_session_replay::passphrase_candidates(&fd_bytes, &stdin_bytes);
+        for (name, value) in &env {
+            if kassiber_session_replay::secret_name(name) && !candidates.contains(value) {
+                candidates.push(value.clone());
+            }
+        }
         let refused: Vec<&String> = candidates.iter().filter(|p| !allowlist.allows(p)).collect();
         if !refused.is_empty() {
             let _ = fs::create_dir_all(dir.join("refused"));

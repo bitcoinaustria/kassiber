@@ -501,6 +501,18 @@ pub fn keeps_env(name: &str) -> bool {
     (product && !recorder && (test_switch || !secret_name(name))) || NAMES.contains(&name)
 }
 
+/// A secret-named product variable is kept only when its value is a
+/// synthetic test literal (the passphrase allowlist), as a test's fixture
+/// token or passphrase is; any other secret never enters a recording.
+pub fn keeps_secret_env(name: &str, value: &str, allowlist: &encrypted::Allowlist) -> bool {
+    let product = name.starts_with("KASSIBER_") || name.starts_with("SATBOOKS_");
+    product
+        && !name.starts_with("KASSIBER_SESSION_")
+        && secret_name(name)
+        && !value.is_empty()
+        && allowlist.allows(value)
+}
+
 /// `PASSWORD`, `TOKEN`, `KEY` and similar as a `_`-separated name segment.
 pub fn secret_name(name: &str) -> bool {
     const SEGMENTS: &[&str] = &[
@@ -575,5 +587,20 @@ mod tests {
         assert!(!keeps_env("KASSIBER_SESSION_RECORD_DIR"));
         assert!(!keeps_env("GITHUB_TOKEN"));
         assert!(keeps_env("HOME"));
+        let dir = tempfile::tempdir().unwrap();
+        let list = dir.path().join("allow.txt");
+        fs::write(&list, "secret-token\n").unwrap();
+        let allow = encrypted::Allowlist::load(&list);
+        assert!(keeps_secret_env(
+            "KASSIBER_BACKEND_FIXTURE_TOKEN",
+            "secret-token",
+            &allow
+        ));
+        assert!(!keeps_secret_env(
+            "KASSIBER_BACKEND_FIXTURE_TOKEN",
+            "real",
+            &allow
+        ));
+        assert!(!keeps_secret_env("GITHUB_TOKEN", "secret-token", &allow));
     }
 }

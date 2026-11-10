@@ -2,13 +2,17 @@
 //!
 //! A run's generated values differ between runs: uuid4s, `uuid4().hex`
 //! values, and wall-clock readings inside the run's own window (or a whole
-//! number of hours, up to three days, after it, as for expiries). Each side's
+//! number of hours, up to three days, or a policy period of 7, 14, 30, 60,
+//! 90, 180 or 365 days, away from it, as for expiries). Each side's
 //! transcript is rewritten so every such value becomes a placeholder numbered
 //! by first appearance; equal transcripts then mean the two runs generated
 //! values in the same pattern, the same bijection everywhere. Values that came
 //! in through the inputs (argv, stdin, the starting state) are pinned and
-//! never replaced. Everything else (hashes, uuid5s, fixture dates) compares
-//! exactly.
+//! never replaced. A uuid5 derived from a generated value differs between
+//! runs too, so a uuid5 is numbered like a uuid4 unless an input names it or
+//! both runs printed it (`pin_shared_uuid5`). Random request ids
+//! (`chat-<32 hex>`) and url-safe `*_token` values are generated as well. Everything else (hashes, fixture
+//! dates) compares exactly.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::OnceLock;
@@ -18,6 +22,8 @@ use regex::Regex;
 pub const SLACK_US: i64 = 5_000_000;
 const HOUR_US: i64 = 3_600_000_000;
 const MAX_OFFSET_HOURS: i64 = 72;
+/// Expiry periods the product uses (a dismissal lasts 90 days).
+const OFFSET_DAYS: [i64; 7] = [7, 14, 30, 60, 90, 180, 365];
 
 fn uuid4() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
@@ -30,6 +36,28 @@ fn uuid4() -> &'static Regex {
 fn uuid4_hex() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| Regex::new(r"[0-9a-f]{12}4[0-9a-f]{3}[89ab][0-9a-f]{15}").unwrap())
+}
+
+fn uuid5() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(r"(?i)[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")
+            .unwrap()
+    })
+}
+
+/// The CLI chat's random request ids: `chat-`, `chat-consent-`,
+/// `chat-provider-list-` and the like, then 32 random hex digits.
+fn chat_request() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"\bchat-(?:[a-z]+-)*([0-9a-f]{32})\b").unwrap())
+}
+
+/// Random 256-bit url-safe tokens under a `*token` key (a document import's
+/// `document_token`).
+fn url_token() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r#"_token\\?"\s*:\s*\\?"([A-Za-z0-9_-]{43})\\?""#).unwrap())
 }
 
 fn datetime() -> &'static Regex {
@@ -93,7 +121,9 @@ impl Window {
                 return true;
             }
             let hours = ((instant - start) as f64 / HOUR_US as f64).round() as i64;
-            hours != 0 && hours.abs() <= MAX_OFFSET_HOURS && inside(instant - hours * HOUR_US)
+            let days = ((instant - start) as f64 / (24 * HOUR_US) as f64).round() as i64;
+            (hours != 0 && hours.abs() <= MAX_OFFSET_HOURS && inside(instant - hours * HOUR_US))
+                || (OFFSET_DAYS.contains(&days.abs()) && inside(instant - days * 24 * HOUR_US))
         })
     }
 
@@ -177,6 +207,18 @@ pub fn generated_spans(
         if boundary_ok(text, m.start(), m.end(), false) {
             take_identity(m.start(), m.end(), &mut spans);
         }
+    }
+    for m in uuid5().find_iter(text) {
+        if boundary_ok(text, m.start(), m.end(), false) {
+            take_identity(m.start(), m.end(), &mut spans);
+        }
+    }
+    for caps in chat_request()
+        .captures_iter(text)
+        .chain(url_token().captures_iter(text))
+    {
+        let token = caps.get(1).unwrap();
+        take_identity(token.start(), token.end(), &mut spans);
     }
     for m in uuid4_hex().find_iter(text) {
         // Only a whole value: quoted, or delimited by non-word characters.
@@ -504,8 +546,9 @@ fn json_id(object: &str) -> Option<&str> {
     None
 }
 
-/// Durations (`*elapsed*` / `*duration*` keys or columns) vary run to run;
-/// they compare as present, never by value.
+/// Durations (`*elapsed*` / `*duration*` keys or columns, and measured times:
+/// fractional `seconds`, `user`, `sys` and `*_seconds`/`*_user`/`*_sys` keys)
+/// vary run to run; they compare as present, never by value.
 pub fn mask_durations(text: &str) -> String {
     static JSON: OnceLock<Regex> = OnceLock::new();
     static ROW: OnceLock<Regex> = OnceLock::new();
@@ -524,7 +567,16 @@ pub fn mask_durations(text: &str) -> String {
         )
         .unwrap()
     });
+    static MEASURED: OnceLock<Regex> = OnceLock::new();
+    // Measured times are fractional; whole numbers under these keys stay.
+    let measured = MEASURED.get_or_init(|| {
+        Regex::new(
+            r#"(\\?"(?:[A-Za-z_]*_)?(?:seconds|user|sys)\\?"\s*:\s*)-?\d+\.\d+(?:[eE]-?\d+)?"#,
+        )
+        .unwrap()
+    });
     let text = typed.replace_all(text, "${1}<duration>");
+    let text = measured.replace_all(&text, "${1}<duration>");
     let text = json.replace_all(&text, "${1}<duration>");
     row.replace_all(&text, "${1}<duration>").into_owned()
 }
@@ -568,6 +620,19 @@ pub fn identities(text: &str) -> Vec<String> {
         .filter(|(_, _, identity)| *identity)
         .map(|(start, end, _)| text[start..end].to_owned())
         .collect()
+}
+
+/// Pin the uuid5s both runs printed: those did not derive from a generated
+/// value, so they compare literally.
+pub fn pin_shared_uuid5(recorded: &str, replayed: &str, pinned: &mut HashSet<String>) {
+    let found = |text: &str| -> HashSet<String> {
+        uuid5()
+            .find_iter(text)
+            .map(|m| m.as_str().to_owned())
+            .collect()
+    };
+    let replayed = found(replayed);
+    pinned.extend(found(recorded).into_iter().filter(|u| replayed.contains(u)));
 }
 
 pub fn pin_inputs(text: &str, pinned: &mut HashSet<String>) {
@@ -655,6 +720,8 @@ mod tests {
             canon.rewrite("2026-11-20T12:00:01Z", true),
             "2026-11-20T12:00:01Z"
         );
+        // A 90-day dismissal expiry.
+        assert_eq!(canon.rewrite("2027-02-08T12:00:03Z", true), "<time>");
     }
 
     #[test]
@@ -683,11 +750,49 @@ mod tests {
             mask_durations(r#"{"duration_ms":{"type":"duration_ms","value":39}}"#),
             r#"{"duration_ms":{"type":"duration_ms","value":<duration>}}"#
         );
+        assert_eq!(
+            mask_durations(
+                r#"{"seconds":0.87,"adapter_sys":4.9e-5,"user":0.01,"transactions":3,"sys":2}"#
+            ),
+            r#"{"seconds":<duration>,"adapter_sys":<duration>,"user":<duration>,"transactions":3,"sys":2}"#
+        );
         // Inside JSON stored as text, with escaped quotes.
         assert_eq!(
             mask_durations(r#"{\"elapsed_ms\":1257,\"n\":1}"#),
             r#"{\"elapsed_ms\":<duration>,\"n\":1}"#
         );
+    }
+
+    #[test]
+    fn derived_uuid5s_and_chat_requests_number_unless_shared() {
+        let mut pinned = HashSet::new();
+        let shared = "64f35537-8fa9-551c-87da-04a22bef228c";
+        pin_shared_uuid5(
+            &format!("{shared} 11111111-2222-5333-8444-555555555555"),
+            &format!("{shared} 21111111-2222-5333-8444-555555555555"),
+            &mut pinned,
+        );
+        let mut a = Canon::new(window(), &pinned);
+        let mut b = Canon::new(window(), &pinned);
+        let left = a.rewrite(
+            &format!("{shared} 11111111-2222-5333-8444-555555555555 chat-ff226452ce6acd3a9a0c4192351dabb5"),
+            true,
+        );
+        let right = b.rewrite(
+            &format!("{shared} 21111111-2222-5333-8444-555555555555 chat-258731caf09b53238d7e7a13292c9c0f"),
+            true,
+        );
+        assert_eq!(left, right);
+        assert!(left.starts_with(shared), "{left}");
+        let left = a.rewrite(
+            r#"{"document_token":"x1J2WRUXPP0soDDwndV6djrhK_OrFAnCFU8uNiuNixo"} chat-provider-list-4d741916abc1550a2e3ff9fa483dbab3"#,
+            true,
+        );
+        let right = b.rewrite(
+            r#"{"document_token":"zIJsCmBiD4H0mSFKOwqB0mKzzmOxs76DYdSeSlVhSPk"} chat-provider-list-d949957e66972ad045439423d93fb062"#,
+            true,
+        );
+        assert_eq!(left, right);
     }
 
     #[test]

@@ -11,7 +11,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use base64::Engine;
 
-use crate::compare::{identities, pin_inputs, Canon, Window};
+use crate::compare::{identities, pin_inputs, pin_shared_uuid5, Canon, Window};
 use crate::{dbdump, entry_path, restore, Blobs, Entry, Session};
 
 /// How long a replayed process may run, and wait for the output a recorded
@@ -592,7 +592,12 @@ pub fn replay(
         ));
     }
 
-    let pinned = pinned_inputs(session, blobs);
+    let mut pinned = pinned_inputs(session, blobs);
+    pin_shared_uuid5(
+        &String::from_utf8_lossy(&blobs.get(&session.stdout).unwrap_or_default()),
+        &paths.back(&String::from_utf8_lossy(&stdout)),
+        &mut pinned,
+    );
     // The recorded state was written during the recording test, which began
     // before this process; its readings count as generated on both sides.
     let recorded_window = Window {
