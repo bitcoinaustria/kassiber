@@ -50,13 +50,8 @@ py() {
 run cargo fmt --all --check
 run cargo clippy --workspace --all-targets --features kassiber-journals/test-harness --locked -- -D warnings
 run cargo test --workspace --features kassiber-journals/test-harness --locked
-run py crates/custody/scripts/mutation_check.py --check
-run py crates/secrets/scripts/mutation_check.py --check
-run py crates/backup/scripts/mutation_check.py --check
-run py crates/daemon/scripts/shell_mutation_check.py --check
-run py crates/envelope/scripts/mutation_check.py --check
-run py crates/tax-countries/scripts/mutation_check.py --check
-run py crates/custody/scripts/check_ledger_features.py
+run cargo run --locked -p kassiber-mutation-check -- check
+run scripts/check-ledger-features.sh
 run cargo test -p kassiber-net --features test-observer --locked
 run cargo clippy -p kassiber -p kassiber-daemon -p kassiber-runtime --all-targets --features kassiber/test-harness --locked -- -D warnings
 run cargo test -p kassiber --features test-harness --locked
@@ -80,23 +75,6 @@ run cargo build -p kassiber-wallets --example freshness_sync_fixture --features 
 run cargo build -p kassiber-wallets --example graph_fixture --features test-harness --offline --locked
 run cargo build -p kassiber-wallets --example document_fixture --features test-harness --offline --locked
 run cargo build -p kassiber-wallets --example exchange_fixture --features test-harness --offline --locked
-run py crates/wallets/scripts/discovery_mutation_check.py --check
-run py crates/wallets/scripts/acquisition_mutation_check.py --check
-run py crates/wallets/scripts/observer_mutation_check.py --check
-run py crates/wallets/scripts/bdk_mutation_check.py --check
-run py crates/wallets/scripts/lwk_mutation_check.py --check
-run py crates/wallets/scripts/record_mutation_check.py --check
-run py crates/wallets/scripts/sync_mutation_check.py --check
-run py crates/wallets/scripts/routing_mutation_check.py --check
-run py crates/wallets/scripts/freshness_mutation_check.py --check
-run py crates/wallets/scripts/exchange_mutation_check.py --check
-run py crates/wallets/scripts/freshness_mutation_check.py --mutations crates/wallets/scripts/freshness_admission_mutations.json --check
-run py crates/wallets/scripts/freshness_mutation_check.py --mutations crates/wallets/scripts/freshness_execution_mutations.json --check
-run py crates/wallets/scripts/freshness_mutation_check.py --mutations crates/wallets/scripts/freshness_progress_mutations.json --check
-run py crates/wallets/scripts/freshness_mutation_check.py --mutations crates/wallets/scripts/freshness_lifecycle_mutations.json --check
-run py crates/wallets/scripts/freshness_mutation_check.py --mutations crates/wallets/scripts/freshness_graph_mutations.json --check
-run py crates/wallets/scripts/freshness_mutation_check.py --mutations crates/wallets/scripts/freshness_product_mutations.json --check
-run py crates/wallets/scripts/freshness_mutation_check.py --mutations crates/wallets/scripts/freshness_journal_mutations.json --check
 export KASSIBER_RUST_BIN="$ROOT/target/debug/kassiber"
 run py -m compileall -q kassiber tests scripts/python_test_shards.py
 run py scripts/python_test_shards.py validate

@@ -105,7 +105,7 @@
     "find": "if !tx.compute_txid().to_string().eq_ignore_ascii_case(id) {",
     "replace": "if false && !tx.compute_txid().to_string().eq_ignore_ascii_case(id) {",
     "expect_failing": [
-      "tests/test_rust_freshness_graph.py::test_reference_electrum_mismatched_transaction_repro_and_native_refusal"
+      "tests/test_rust_freshness_graph.py::test_electrum_mismatched_transaction_is_refused_like_python"
     ],
     "rule": "Refuse raw Electrum transactions whose computed identifier differs from the requested reference."
   },

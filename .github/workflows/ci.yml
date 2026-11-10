@@ -685,7 +685,11 @@ jobs:
         run: cargo test --workspace --features kassiber-journals/test-harness --locked
 
       - name: Verify ledger bytes under custody JSON features
-        run: python3 crates/custody/scripts/check_ledger_features.py
+        run: scripts/check-ledger-features.sh
+
+      # Every catalog entry applies to the tree and belongs to a suite.
+      - name: Validate mutation catalogs
+        run: cargo run --locked -p kassiber-mutation-check -- check
 
       # The egress observer only exists in harness builds; test it there too.
       - name: Run egress observer tests

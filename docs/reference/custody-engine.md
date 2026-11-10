@@ -733,7 +733,7 @@ Cargo unifies custody's `serde_json/arbitrary_precision` and `float_roundtrip`
 features into the ledger build. The former preserves unbounded JSON integers;
 the latter makes float literal loading agree with CPython. This is an explicit
 shared build contract, not an isolated custody dependency choice.
-`crates/custody/scripts/check_ledger_features.py` builds the ledger example twice,
+`scripts/check-ledger-features.sh` builds the ledger example twice,
 with and without those features, and compares all 145 stored ledger response
 strings byte for byte. CI's Rust job and the quality gate require this check.
 

@@ -221,17 +221,31 @@ adapter and its normalizer are left only as the frozen oracle. Three entries
 edit the shadow summary's capability classifier in
 `tests/tax_engine_compare.py`:
 
+Every catalog (`crates/*/scripts/*mutations*.json` and this one) belongs to
+a suite in `crates/mutation-check/catalogs.json`, which says how its cargo
+tests run: packages, features, targets and environment. The Rust runner
+validates or runs them:
+
 ```bash
-uv run --locked python tax-engine/scripts/mutation_check.py [--only ID ...] [--keep]
+cargo run -p kassiber-mutation-check -- check            # every entry applies, every catalog has a suite
+cargo run -p kassiber-mutation-check -- list             # suites and entry counts
+cargo run -p kassiber-mutation-check -- run SUITE [--only ID ...] [--keep]
 ```
 
-The check copies the working tree to a scratch directory under the system
-temporary directory, runs each named test there once unmutated, then applies
-one edit at a time and fails if a named test still passes. Python edits run
-pytest on production with the installed extension; Rust edits run their
-cargo test filters. It is too slow for CI; run it when `mutations.json` or
-the code it edits changes. CI only checks that every entry still applies once
-and names existing tests (`tests/test_tax_mutations.py`).
+`run` copies the working tree, plus the fetched test data the lock pins, to
+`target/mutation-scratch/<suite>`, runs each named test there once
+unmutated, then applies one edit at a time and fails if the mutated tree does
+not build, a named test still passes, or a filter selects no test. Every
+suite builds into the one shared `target/scratch-build`. Full runs are too
+slow for CI; run a suite when its catalog or the code it edits changes. CI and
+the quality gate run `check`.
+
+Entries killed only by a pytest test, or that edit a Python file, are legacy
+while Python is being removed ([plan 22](../plan/22-python-removal.md)):
+`check` validates and counts them, `check --strict` refuses them, and `run`
+refuses to start a suite that selects one. Until each gets a Rust killer, the
+retired Python runner (`tax-engine/scripts/mutation_check.py` and the
+per-crate wrappers) still runs them.
 
 ## Product subprocesses and recorded sessions
 
@@ -1636,11 +1650,13 @@ only synthetic fixtures. Product code reads none of these test switches.
 
 Every newly ported custody stage must supply killed entries in the
 [custody mutation catalog](../../crates/custody/scripts/mutations.json). Run
-`uv run --locked python crates/custody/scripts/mutation_check.py` after changing
-ported behavior or entries; `--check` only validates applicability and named
-selections. Mutation runs build only `kassiber-custody` in a disposable scratch
-tree. `check_ledger_features.py` also proves byte equality of the ledger with and
-without custody's unified JSON features; the Rust CI lane and local gate run it.
+`cargo run -p kassiber-mutation-check -- run custody` after changing ported
+behavior or entries; `check` only validates applicability. Mutation runs build
+only `kassiber-custody` in a disposable scratch tree.
+`scripts/check-ledger-features.sh` also proves byte equality of the ledger with
+and without custody's unified JSON features; the Rust CI lane and local gate
+run it.
+
 
 ## Generated test data
 

@@ -2730,6 +2730,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "kassiber-mutation-check"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "kassiber-net"
 version = "0.1.0"
 dependencies = [
@@ -2857,6 +2866,16 @@ dependencies = [
  "sha2 0.11.1",
  "signature",
  "ssh-key",
+]
+
+[[package]]
+name = "kassiber-repo-checks"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "tempfile",
 ]
 
 [[package]]
