@@ -93,7 +93,7 @@ if [ "$mode" = publish ]; then
   index=$(mktemp)
   trap 'rm -f "$index"' EXIT
   if [ -n "$parent" ]; then GIT_INDEX_FILE=$index git read-tree "$parent"; else GIT_INDEX_FILE=$index git read-tree --empty; fi
-  { printf '%s\n' "$entries" | cut -d' ' -f2-; printf '%s\n' ${@+"$@"}; } | sed '/^$/d' | sort -u > "$index.paths"
+  { printf '%s\n' "$entries" | cut -d' ' -f2-; printf '%s\n' ${@+"$@"}; } | sed '/^$/d' | LC_ALL=C sort -u > "$index.paths"
   while IFS= read -r path; do
     [ -f "$path" ] || { echo "cannot publish $path: no such file" >&2; exit 1; }
     blob=$(git hash-object -w "$path")

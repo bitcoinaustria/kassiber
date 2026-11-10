@@ -2,7 +2,7 @@
 # scripts/fetch-test-data.sh; never edit by hand (see
 # docs/reference/testing.md#generated-test-data). <git blob id> <path>
 branch t3code/test-data
-commit a668d7133a5c18b3a8af002d5382d907a02fbad3
+commit 2f2a8114d009821bda4b23e5cb758c5c18fd44b8
 ab2bfbb90cc8996dcee6933efaf1a0fd9ea88f89 crates/ai/tests/data/vectors.json
 b02df587ab3b14801a923c1049f1ce4062b1188e crates/chain/fixtures/python_btcpay.json
 76906734c1ea7bd4f09690ad90894cfcadf9f333 crates/chain/fixtures/python_cln.json
@@ -393,4 +393,4 @@ f14aeff58f16070e90dfc6c4b19bfa79d0c3cfbd tests/fixtures/historical/pre_partial_p
 d0c9f64583769f07a964e39079bb6605db806a1a tests/fixtures/rust_port/commands_describe.json
 1e12c3a9c3894617b0fab6b4ec1e91211acf72c6 tests/fixtures/rust_port/daemon_kinds.json
 d37e1ac79d10a0fed38f2bf2ec5a1b3357519216 tests/fixtures/rust_port/environment.json
-20f3f9bb89585674ef498713728377d80df59554 tests/fixtures/rust_port/error_codes.json
+0258e13d840b9e55b6bbef4e11836c5ee0d6c5d2 tests/fixtures/rust_port/error_codes.json

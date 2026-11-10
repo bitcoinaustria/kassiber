@@ -310,8 +310,20 @@ class PythonShardContractTest(unittest.TestCase):
         gate = (ROOT / "scripts/quality-gate.sh").read_text(encoding="utf-8")
         select = 'export KASSIBER_RUST_BIN="$ROOT/target/debug/kassiber"'
         self.assertIn(select, gate)
-        for build in (
-            "cargo build -p kassiber --features test-harness --locked",
+        self.assertLess(gate.index(build), gate.index(select))
+        self.assertLess(gate.index("run " + fixture_build), gate.index(select))
+        self.assertLess(gate.index("run " + acquisition_build), gate.index(select))
+        self.assertLess(gate.index("run " + observer_build), gate.index(select))
+        self.assertLess(gate.index("run " + bdk_build), gate.index(select))
+        self.assertLess(gate.index("run " + records_build), gate.index(select))
+        self.assertLess(gate.index("run " + publication_build), gate.index(select))
+        self.assertLess(gate.index("run " + freshness_build), gate.index(select))
+        # The Rust mutation runner checks every catalog, the wallet ones included.
+        self.assertIn("run cargo run --locked -p kassiber-mutation-check -- check", gate)
+        self.assertLess(gate.index("run " + document_build), gate.index(select))
+        self.assertLess(gate.index("run cargo build -p kassiber-chain --example client_fixture --features test-harness --offline --locked"), gate.index(select))
+        self.assertLess(gate.index(select), gate.index("-m pytest tests"))
+        for fixture_build in (
             "cargo build -p kassiber-backup --example kassiber-backup-probe --features test-hooks --offline --locked",
             "cargo build -p kassiber-store --example kassiber-storage-probe --features test-hooks --offline --locked",
             "cargo build -p kassiber-secrets --example kassiber-secrets-probe --features test-hooks,native-keyring --offline --locked",
