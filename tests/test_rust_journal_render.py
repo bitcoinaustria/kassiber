@@ -17,6 +17,10 @@ from tests.rust_port.journal_native_vectors import PATH as NATIVE_PATH, vectors 
 from tests.rust_port.journal_nonfinite_vectors import PATH as NONFINITE_PATH, vectors as nonfinite_vectors
 
 
+# The render oracle replaces the projection, the ledger read and the ids, and
+# its refusal vectors are shapes no finalized projection has, so the tax
+# shadow runs this rebuild uncompared (stubs_tax_engine).
+@pytest.mark.stubs_tax_engine
 def test_render_vectors_rebuild_from_python_build():
     assert_rebuilt(json.dumps(json.loads(NONFINITE_PATH.read_text()), sort_keys=True, ensure_ascii=True), json.dumps(nonfinite_vectors(), sort_keys=True, ensure_ascii=True), NONFINITE_PATH.name)
     assert_rebuilt(json.dumps(json.loads(GRAPH_PATH.read_text()), sort_keys=True, ensure_ascii=True), json.dumps(graph_vectors(), sort_keys=True, ensure_ascii=True), GRAPH_PATH.name)
