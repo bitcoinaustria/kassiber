@@ -17,18 +17,18 @@ exit 0
 … [3332 bytes, 117 lines fnv128 f733155d98289c5aeaeeac3da4b2f11c]
 === book changes after the step
 - (116 tables, 99 empty)
-+ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000001" | node_id=t:"bitcoin:main:record:out"
-+ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000001" | node_id=t:"liquid:liquidv1:record:earn"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000004" | node_id=t:"bitcoin:main:record:in"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000001" | node_id=t:"bitcoin:main:record:out"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000004" | node_id=t:"bitcoin:main:record:out"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000005" | node_id=t:"bitcoin:main:record:out"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000001" | node_id=t:"liquid:liquidv1:record:earn"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000005" | node_id=t:"record:custody:0000000000000000000000000000000000000000000000000000000000000005"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:main:record:excluded" | node_id=t:"bitcoin:main:record:excluded"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:main:record:in" | node_id=t:"bitcoin:main:record:in"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:main:record:no-tax" | node_id=t:"bitcoin:main:record:no-tax"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:main:record:out" | node_id=t:"bitcoin:main:record:out"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"cold" | node_id=t:"bitcoin:main:record:excluded"
-… [20507 bytes, 54 lines fnv128 3bea25d968ba7c8d1cb60c28fca8b24c]
+… [20507 bytes, 54 lines fnv128 ff85c09168015157d3e18f4e7c197b74]
 $ --machine reports privacy-mirror
 exit 0
 --- stdout
@@ -82,17 +82,17 @@ exit 0
 === book changes after the step
 - (116 tables, 99 empty)
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000001" | node_id=t:"bitcoin:main:record:out"
-+ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000001" | node_id=t:"liquid:liquidv1:record:earn"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000004" | node_id=t:"bitcoin:main:record:out"
-+ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000004" | node_id=t:"bitcoin:main:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000005" | node_id=t:"bitcoin:main:record:out"
-+ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000005" | node_id=t:"record:custody:0000000000000000000000000000000000000000000000000000000000000005"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" | node_id=t:"bitcoin:main:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" | node_id=t:"bitcoin:main:tx:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000004" | node_id=t:"bitcoin:main:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000001" | node_id=t:"liquid:liquidv1:record:earn"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000005" | node_id=t:"record:custody:0000000000000000000000000000000000000000000000000000000000000005"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:0" | node_id=t:"bitcoin:main:out:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:0"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0" | node_id=t:"bitcoin:main:out:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0"
-+ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:main:out:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0" | node_id=t:"bitcoin:main:out:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:main:out:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:0" | node_id=t:"bitcoin:main:out:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:0"
-+ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:main:record:excluded" | node_id=t:"bitcoin:main:record:excluded"
-… [48240 bytes, 90 lines fnv128 35874197d39e27c0cb598c0b3f7ccc05]
+… [48240 bytes, 90 lines fnv128 d75cb5f735779b7b5f401c8b82edaedb]
 $ --machine reports privacy-mirror
 exit 0
 --- stdout

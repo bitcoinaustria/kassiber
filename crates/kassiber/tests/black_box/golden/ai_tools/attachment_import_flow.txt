@@ -1,0 +1,62 @@
+# fixture desktop
+> {"args":{"arguments":{"new_wallet":{"label":"Exchange import"}},"call_id":"call_restricted","name"… [502 bytes fnv128 fadcf13be27f3f5d16b0ddd695f34673]
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [4106 bytes fnv128 c828280eee71d3a7b1528c42552cf06e]
+> {"args":{"arguments":{"new_wallet":{"label":"Exchange import"}},"call_id":"call_plan","name":"ui_w… [488 bytes fnv128 e2ab4499883618bb41de0b3e1c385646]
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [4174 bytes fnv128 59f394d2af25da4787b7dfb3d7a34a39]
+> {"args":{"arguments":{"expected_content_sha256":"124fffca79efe0f0fcbb2fd7057699245026a90cdcbf7d3cc… [605 bytes fnv128 760f31558291b1a679bd1adc2098ea6d]
+< {"kind":"test.ai_consent_preview","schema_version":1,"data":{"card":{"call_id":"call_apply","name"… [2203 bytes fnv128 4e795102c5e69956f9aae211f42b00af]
+> {"args":{"arguments":{"expected_content_sha256":"124fffca79efe0f0fcbb2fd7057699245026a90cdcbf7d3cc… [636 bytes fnv128 9f22ae473df7a5fe4389e0578ec550c4]
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [818 bytes fnv128 722a1913493b7335d5a4f2de760d462d]
+> {"args":{"arguments":{"expected_content_sha256":"124fffca79efe0f0fcbb2fd7057699245026a90cdcbf7d3cc… [634 bytes fnv128 19488a916b2050aa05f460f0fbc14880]
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1275 bytes fnv128 4dc7792ea4d1ff0dc63af1e60123ce20]
+> {"args":{"arguments":{"expected_content_sha256":"124fffca79efe0f0fcbb2fd7057699245026a90cdcbf7d3cc… [630 bytes fnv128 81766562a1dcea3381c81c3cec97f4ed]
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [812 bytes fnv128 6f9ceb563274bb36b3d5346961246d87]
+> {"args":{"arguments":{"expected_content_sha256":"124fffca79efe0f0fcbb2fd7057699245026a90cdcbf7d3cc… [630 bytes fnv128 85df32f05919aa2b4f9808e875794906]
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [812 bytes fnv128 38bc6dfbefe28c8174336e1d02ab4800]
+> {"args":{"arguments":{"wallet":"Exchange import"},"call_id":"call_present","name":"ui_wallets_impo… [480 bytes fnv128 121921de3ede044aca39469e13a2b8cb]
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [808 bytes fnv128 a773571a3ad30f73f2fcb38b209ae065]
+> {"args":{"arguments":{"wallet":"Exchange import"},"call_id":"call_present_r","name":"ui_wallets_im… [486 bytes fnv128 61fc396f8784001907c7be82e407c9b2]
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [814 bytes fnv128 a674e3f6436e16fc582d585ae223a5c0]
+> {"args":{"arguments":{},"call_id":"call_runs","name":"ui_imports_list","state":{"chat_files":[{"fi… [431 bytes fnv128 e9e082f7f173c91eb45ea7eb3b9b1df0]
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [759 bytes fnv128 cf5f9550626374fb6af4ed6778ab051c]
+> {"args":{"arguments":{"batch":"missing"},"call_id":"call_rollback","name":"ui_imports_rollback_pla… [465 bytes fnv128 479e647cd27c46e20f1bb749a4a65c21]
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [911 bytes fnv128 4950d0025cf09e94c6742e5c59daee87]
+=== book changes after the flow
+(unchanged)
+# fixture reports
+> {"args":{"arguments":{"new_wallet":{"label":"Exchange import"}},"call_id":"call_restricted","name"… [503 bytes fnv128 076018554dc7a30cec232c75dccf367a]
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [4273 bytes fnv128 aba79001e29724cb54f7f75e1c29371f]
+> {"args":{"arguments":{"new_wallet":{"label":"Exchange import"}},"call_id":"call_plan","name":"ui_w… [489 bytes fnv128 0be40a694e0d55286df430e78793a117]
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [5177 bytes fnv128 3623098f116a981df7e53054e4bf89aa]
+> {"args":{"arguments":{"expected_content_sha256":"124fffca79efe0f0fcbb2fd7057699245026a90cdcbf7d3cc… [606 bytes fnv128 3deb5978acbbcb45c1fbd8f2ee12f85c]
+< {"kind":"test.ai_consent_preview","schema_version":1,"data":{"card":{"call_id":"call_apply","name"… [2676 bytes fnv128 be6ef07ed91cab10bf093c0d7df3a873]
+> {"args":{"arguments":{"expected_content_sha256":"124fffca79efe0f0fcbb2fd7057699245026a90cdcbf7d3cc… [637 bytes fnv128 974438344c8a188492a3e9bf98197f7f]
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1215 bytes fnv128 797d7ea8211ec60d8c70758f7e047d2b]
+> {"args":{"arguments":{"expected_content_sha256":"124fffca79efe0f0fcbb2fd7057699245026a90cdcbf7d3cc… [635 bytes fnv128 56bd77f98143265843c21ebfa7add8bf]
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1276 bytes fnv128 ed041cb42c2c0956bac4fb9ce9a5f72f]
+> {"args":{"arguments":{"expected_content_sha256":"124fffca79efe0f0fcbb2fd7057699245026a90cdcbf7d3cc… [631 bytes fnv128 b9afd08f167e19b708740531e1c54896]
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [2413 bytes fnv128 530fecb226222ab9ef07ef44db89af69]
+> {"args":{"arguments":{"expected_content_sha256":"124fffca79efe0f0fcbb2fd7057699245026a90cdcbf7d3cc… [631 bytes fnv128 8e140e2f773181a4f5f580ad4b6ba13d]
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1205 bytes fnv128 388077ef532f4a1bd33e15b5d434dbaa]
+> {"args":{"arguments":{"wallet":"Exchange import"},"call_id":"call_present","name":"ui_wallets_impo… [481 bytes fnv128 ca520a34f758a62cdeb99f3801162a9c]
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [5073 bytes fnv128 a73b4893113cc3a6fd6cd06cbb501c98]
+> {"args":{"arguments":{"wallet":"Exchange import"},"call_id":"call_present_r","name":"ui_wallets_im… [487 bytes fnv128 21397a2fcaab437d0dcb60b1655f7899]
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [4407 bytes fnv128 b9fc00a5b9fa77a2795bb449c22af15b]
+> {"args":{"arguments":{},"call_id":"call_runs","name":"ui_imports_list","state":{"chat_files":[{"fi… [432 bytes fnv128 9873ff01199aa72bdb4c81317da9c8bd]
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1272 bytes fnv128 70baac6fdbca2ca32e82dcff9c332171]
+> {"args":{"arguments":{"batch":"<uuid#1>"},"call_id":"call_rollback","name":"ui_imports_rollback_pl… [467 bytes fnv128 ffe94f0c8a8928494fbc9b0181ba29f5]
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1598 bytes fnv128 f574f0748fd7789e4cc543dbdbfdf435]
+=== book changes after the flow
+- chain_index_clock: id=i:1 | revision=i:27
+- chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:16
+- chain_index_dirty: source_table=t:"wallets" | source_key=i:-1 | revision=i:19
+- profiles: id=t:"p" | workspace_id=t:"ws" | label=t:"Book" | fiat_currency=t:"EUR" | tax_country=t:… [558 bytes fnv128 7c5f21536e61a5bb8dc4568530e62371]
+- (116 tables, 99 empty)
++ chain_index_clock: id=i:1 | revision=i:35
++ chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:35
++ chain_index_dirty: source_table=t:"transactions" | source_key=i:6 | revision=i:31
++ chain_index_dirty: source_table=t:"transactions" | source_key=i:7 | revision=i:32
++ chain_index_dirty: source_table=t:"transactions" | source_key=i:8 | revision=i:33
++ chain_index_dirty: source_table=t:"wallets" | source_key=i:-1 | revision=i:28
++ import_batch_transactions: batch_id=t:"<uuid>" | transaction_id=t:"<uuid>" | source_position=i:1
+… [6857 bytes, 21 lines fnv128 f64998af408d9bc8e6fd78b789630a07]

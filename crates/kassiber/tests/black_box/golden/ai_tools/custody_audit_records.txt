@@ -1,0 +1,52 @@
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_custody_record","schema_version":1,"data":{"recorded":true,"state":{"provider_kind":"local","provider_on_device":true,"scope_profile_id":"p","scope_workspace_id":"w"}},"request_id":"0"}
+> #1
+< {"kind":"test.ai_custody_record","schema_version":1,"data":{"recorded":true,"state":{"provider_kind":"local","provider_on_device":true,"scope_profile_id":"p","scope_workspace_id":"w"}},"request_id":"1"}
+> #2
+< {"kind":"test.ai_custody_record","schema_version":1,"data":{"recorded":true,"state":{"provider_kind":"local","provider_on_device":true,"scope_profile_id":"p","scope_workspace_id":"w"}},"request_id":"2"}
+> #3
+< {"kind":"test.ai_custody_record","schema_version":1,"data":{"recorded":true,"state":{"provider_kind":"local","provider_on_device":true,"scope_profile_id":"p","scope_workspace_id":"w"}},"request_id":"3"}
+> #4
+< {"kind":"test.ai_custody_record","schema_version":1,"data":{"recorded":false,"state":{"provider_kind":"local","provider_on_device":true}},"request_id":"4"}
+> #5
+< {"kind":"test.ai_custody_record","schema_version":1,"data":{"recorded":false,"state":{"provider_kind":"local","provider_on_device":true,"scope_profile_id":"p","scope_workspace_id":"w"}},"request_id":"5"}
+> #6
+< {"kind":"test.ai_custody_record","schema_version":1,"data":{"recorded":true,"state":{"provider_kind":"local","provider_on_device":true,"scope_profile_id":"p","scope_workspace_id":"w"}},"request_id":"6"}
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+- (116 tables, 105 empty)
++ custody_ai_assistance_audits: id=t:"<uuid#1>" | workspace_id=t:"w" | profile_id=t:"p" | tool_name=… [3289 bytes fnv128 410d06b00b5ccd987dd3d682ac8d622a]
++ custody_ai_assistance_audits: id=t:"<uuid#2>" | workspace_id=t:"w" | profile_id=t:"p" | tool_name=… [3304 bytes fnv128 530a733773351d7d263094db884b10f8]
++ custody_ai_assistance_audits: id=t:"<uuid#3>" | workspace_id=t:"w" | profile_id=t:"p" | tool_name=… [3298 bytes fnv128 3bde9fd7fbe136e6e78b8844bb339e7c]
++ custody_ai_assistance_audits: id=t:"<uuid#4>" | workspace_id=t:"w" | profile_id=t:"p" | tool_name=… [3283 bytes fnv128 2500767da9d0190930b96823174c088c]
++ (116 tables, 104 empty)
+… [13230 bytes, 6 lines fnv128 3816726907174cd778ef278aab9cf9d4]
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_custody_record","schema_version":1,"data":{"recorded":true,"state":{"provider_kind":"local","provider_on_device":true,"scope_profile_id":"p","scope_workspace_id":"ws"}},"request_id":"0"}
+> #1
+< {"kind":"test.ai_custody_record","schema_version":1,"data":{"recorded":true,"state":{"provider_kind":"local","provider_on_device":true,"scope_profile_id":"p","scope_workspace_id":"ws"}},"request_id":"1"}
+> #2
+< {"kind":"test.ai_custody_record","schema_version":1,"data":{"recorded":true,"state":{"provider_kind":"local","provider_on_device":true,"scope_profile_id":"p","scope_workspace_id":"ws"}},"request_id":"2"}
+> #3
+< {"kind":"test.ai_custody_record","schema_version":1,"data":{"recorded":true,"state":{"provider_kind":"local","provider_on_device":true,"scope_profile_id":"p","scope_workspace_id":"ws"}},"request_id":"3"}
+> #4
+< {"kind":"test.ai_custody_record","schema_version":1,"data":{"recorded":false,"state":{"provider_kind":"local","provider_on_device":true}},"request_id":"4"}
+> #5
+< {"kind":"test.ai_custody_record","schema_version":1,"data":{"recorded":false,"state":{"provider_kind":"local","provider_on_device":true,"scope_profile_id":"p","scope_workspace_id":"ws"}},"request_id":"5"}
+> #6
+< {"kind":"test.ai_custody_record","schema_version":1,"data":{"recorded":true,"state":{"provider_kind":"local","provider_on_device":true,"scope_profile_id":"p","scope_workspace_id":"ws"}},"request_id":"6"}
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+- (116 tables, 99 empty)
++ custody_ai_assistance_audits: id=t:"<uuid#1>" | workspace_id=t:"ws" | profile_id=t:"p" | tool_name… [3290 bytes fnv128 f9ffdf7628cb399e91078426d92805e3]
++ custody_ai_assistance_audits: id=t:"<uuid#2>" | workspace_id=t:"ws" | profile_id=t:"p" | tool_name… [3305 bytes fnv128 d25dc75a8e3ecd33c2d362883dea5461]
++ custody_ai_assistance_audits: id=t:"<uuid#3>" | workspace_id=t:"ws" | profile_id=t:"p" | tool_name… [3299 bytes fnv128 267535a1999a51003046e3e5da4f949f]
++ custody_ai_assistance_audits: id=t:"<uuid#4>" | workspace_id=t:"ws" | profile_id=t:"p" | tool_name… [3284 bytes fnv128 aad7c4309610f96ab86d0c080d933c53]
++ (116 tables, 98 empty)
+… [13232 bytes, 6 lines fnv128 da681669f7cbbd9c3cfe226dbb621f32]

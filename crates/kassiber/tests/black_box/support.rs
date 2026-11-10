@@ -408,8 +408,9 @@ pub fn dump(conn: &Connection) -> String {
             empty += 1;
             continue;
         }
-        // Generated ids are random: order rows as if they were blank.
-        rows.sort_by_cached_key(|row| blank_uuids(row));
+        // Generated ids, and digests over them, are random: order rows as
+        // if they were blank (ties keep rowid order).
+        rows.sort_by_cached_key(|row| blank_hex64(&blank_uuids(row)));
         for row in rows {
             let _ = writeln!(out, "{table}: {row}");
         }
@@ -442,6 +443,11 @@ pub struct Transcript {
     text: String,
     start: i64,
     masks: Vec<Mask>,
+    /// Compact transcripts name requests by index and keep shorter heads.
+    compact: bool,
+    /// Readings after the run (expiries the product counts from the wall
+    /// clock) are generated too.
+    future: bool,
 }
 
 impl Transcript {
@@ -451,6 +457,31 @@ impl Transcript {
             text: String::new(),
             start: process_start(),
             masks: Vec::new(),
+            compact: false,
+            future: false,
+        }
+    }
+
+    /// Mask readings later than the run as `<later>`: for books without
+    /// future fixture dates whose expiries count from the wall clock.
+    pub fn future_is_generated(&mut self) -> &mut Self {
+        self.future = true;
+        self
+    }
+
+    /// Requests by index (their bodies live in the test's input file) and
+    /// long lines digested past a short head: for sessions of hundreds of
+    /// requests.
+    pub fn compact(&mut self) -> &mut Self {
+        self.compact = true;
+        self
+    }
+
+    fn shown(&self, index: usize, request: &serde_json::Value, sandbox: &Sandbox) -> String {
+        if self.compact {
+            format!("#{index}")
+        } else {
+            sandbox.scrub(&request.to_string())
         }
     }
 
@@ -517,11 +548,12 @@ impl Transcript {
             let request = if index < offset {
                 "<unlock>".to_owned()
             } else {
-                requests
-                    .get(index - offset)
-                    .map_or_else(|| "<shutdown>".to_owned(), ToString::to_string)
+                requests.get(index - offset).map_or_else(
+                    || "<shutdown>".to_owned(),
+                    |r| self.shown(index - offset, r, sandbox),
+                )
             };
-            let _ = writeln!(self.text, "> {}", sandbox.scrub(&request));
+            let _ = writeln!(self.text, "> {request}");
             let _ = writeln!(self.text, "< {}", sandbox.scrub(line));
         }
         lines[offset..lines.len() - 1]
@@ -622,14 +654,29 @@ impl Transcript {
         self.section(&format!("book changes {title}"), &sandbox.scrub(&body));
     }
 
+    /// `changes` with generated ids blank: rows a run lists in random id
+    /// order would otherwise number those ids differently each run.
+    pub fn changes_blanked(&mut self, sandbox: &Sandbox, before: &str, title: &str) {
+        let mut scratch = Transcript::new("scratch");
+        scratch.start = self.start;
+        scratch.changes(sandbox, before, title);
+        self.text.push_str(&blank_uuids(&scratch.text));
+    }
+
     /// Compare with the golden, or rewrite it under `KASSIBER_BLESS=1`.
     pub fn finish(mut self) {
-        self.text = mask_generated(&self.text, self.start, now_us(), &mut Vec::new());
+        let end = if self.future { i64::MAX } else { now_us() };
+        self.text = mask_generated(&self.text, self.start, end, &mut Vec::new());
         for mask in &self.masks {
             self.text = mask(&self.text);
         }
         let full = std::mem::take(&mut self.text);
-        self.text = digest_long_lines(&digest_blocks(&full));
+        let (limit, head) = if self.compact {
+            (320, 100)
+        } else {
+            (LONG_LINE, 240)
+        };
+        self.text = digest_long_lines(&digest_blocks(&full), limit, head);
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/black_box/golden")
             .join(format!("{}.txt", self.name));
@@ -766,6 +813,28 @@ fn is_uuid4(bytes: &[u8]) -> bool {
         })
 }
 
+/// `text` with every run of exactly 64 lowercase hex digits blanked.
+pub fn blank_hex64(text: &str) -> String {
+    let bytes = text.as_bytes();
+    let hex = |b: &u8| b.is_ascii_digit() || (b'a'..=b'f').contains(b);
+    let mut out = String::with_capacity(text.len());
+    let mut at = 0;
+    while at < bytes.len() {
+        if hex(&bytes[at]) && (at == 0 || !hex(&bytes[at - 1])) {
+            let run = bytes[at..].iter().take_while(|b| hex(b)).count();
+            if run == 64 {
+                out.push_str("<hex64>");
+                at += 64;
+                continue;
+            }
+        }
+        let ch = text[at..].chars().next().unwrap();
+        out.push(ch);
+        at += ch.len_utf8();
+    }
+    out
+}
+
 /// `text` with every uuid4 replaced by `<uuid>`.
 pub fn blank_uuids(text: &str) -> String {
     let bytes = text.as_bytes();
@@ -807,8 +876,12 @@ pub fn mask_generated(text: &str, start: i64, end: i64, seen: &mut Vec<String>) 
             continue;
         }
         if let Some((us, len)) = reading(bytes, at) {
-            if us >= start - SLACK && us <= end + SLACK {
-                out.push_str("<now>");
+            if us >= start - SLACK && us <= end.saturating_add(SLACK) {
+                out.push_str(if us > now_us() + SLACK {
+                    "<later>"
+                } else {
+                    "<now>"
+                });
                 at += len;
                 continue;
             }
@@ -892,12 +965,12 @@ pub fn fnv128(bytes: &[u8]) -> u128 {
 
 /// Each line over `LONG_LINE` bytes becomes `<head>… [<len> bytes fnv128
 /// <digest>]`, so large payloads pin every byte without filling the golden.
-pub fn digest_long_lines(text: &str) -> String {
+pub fn digest_long_lines(text: &str, limit: usize, head: usize) -> String {
     let mut out = String::with_capacity(text.len().min(1 << 20));
     for line in text.split_inclusive('\n') {
         let body = line.strip_suffix('\n').unwrap_or(line);
-        if body.len() > LONG_LINE {
-            let head = &body[..body.floor_char_boundary(240)];
+        if body.len() > limit {
+            let head = &body[..body.floor_char_boundary(head)];
             let _ = write!(
                 out,
                 "{head}… [{} bytes fnv128 {:032x}]",
@@ -1000,4 +1073,74 @@ pub fn mask_until(text: &str, prefix: &str, terminator: &str, placeholder: &str)
     }
     out.push_str(rest);
     out
+}
+
+/// A daemon driven one request at a time, each built from earlier replies.
+pub struct Live {
+    child: std::process::Child,
+    stdin: Option<std::process::ChildStdin>,
+    stdout: std::io::BufReader<std::process::ChildStdout>,
+    pub records: Vec<serde_json::Value>,
+}
+
+impl Live {
+    pub fn start(sandbox: &Sandbox) -> Self {
+        use std::io::BufRead as _;
+        let root = sandbox.root.to_string_lossy().into_owned();
+        let mut command = sandbox.command();
+        command
+            .args(["--machine", "--data-root", &root, "daemon"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        let mut child = command.spawn().expect("the daemon starts");
+        let stdin = child.stdin.take();
+        let mut stdout = std::io::BufReader::new(child.stdout.take().unwrap());
+        let mut ready = String::new();
+        stdout.read_line(&mut ready).unwrap();
+        assert!(ready.contains("\"daemon.ready\""), "{ready}");
+        Self {
+            child,
+            stdin,
+            stdout,
+            records: Vec::new(),
+        }
+    }
+
+    /// Send one request (its `request_id` numbered from 1) and record the
+    /// reply in `t`.
+    pub fn send(
+        &mut self,
+        t: &mut Transcript,
+        sandbox: &Sandbox,
+        mut request: serde_json::Value,
+    ) -> serde_json::Value {
+        use std::io::BufRead as _;
+        request["request_id"] = serde_json::json!((self.records.len() + 1).to_string());
+        let stdin = self.stdin.as_mut().unwrap();
+        stdin.write_all(request.to_string().as_bytes()).unwrap();
+        stdin.write_all(b"\n").unwrap();
+        stdin.flush().unwrap();
+        let mut line = String::new();
+        self.stdout.read_line(&mut line).unwrap();
+        let line = line.trim_end_matches('\n');
+        let _ = writeln!(t.text, "> {}", sandbox.scrub(&request.to_string()));
+        let _ = writeln!(t.text, "< {}", sandbox.scrub(line));
+        let record: serde_json::Value = serde_json::from_str(line)
+            .unwrap_or_else(|e| panic!("reply is not JSON ({e}): {line}"));
+        self.records.push(record.clone());
+        record
+    }
+
+    /// Close stdin; the daemon must exit 0 with nothing on stderr.
+    pub fn finish(mut self) {
+        use std::io::Read as _;
+        drop(self.stdin.take());
+        let status = self.child.wait().unwrap();
+        let mut stderr = String::new();
+        if let Some(mut pipe) = self.child.stderr.take() {
+            pipe.read_to_string(&mut stderr).unwrap();
+        }
+        assert_eq!((status.code(), stderr.as_str()), (Some(0), ""));
+    }
 }

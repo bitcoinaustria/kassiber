@@ -14,6 +14,8 @@ mod cli_leaves;
 #[path = "black_box/desktop.rs"]
 mod desktop;
 
+#[path = "black_box/ai_tools.rs"]
+mod ai_tools;
 #[path = "black_box/audit_package.rs"]
 mod audit_package;
 #[path = "black_box/evidence_summary.rs"]

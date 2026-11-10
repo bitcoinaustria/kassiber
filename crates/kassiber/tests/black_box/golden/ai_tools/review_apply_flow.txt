@@ -1,0 +1,46 @@
+# fixture desktop
+> {"args":{"arguments":{},"call_id":"call_cases","name":"ui_review_cases","state":{"consented_call_ids":["call_cases"],"provider_kind":"remote","provider_on_device":false,"scope_profile_id":"p","scope_workspace_id":"w"}},"kind":"test.ai_tool","request_id":"1"}
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [873 bytes fnv128 546ac3837521d19928ebe19d031d564b]
+> {"args":{"arguments":{"action":"attach_evidence","case_ids":["quarantine:none"],"expected_input_ve… [430 bytes fnv128 5b78b077fcd16265d9cb53b629559192]
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [784 bytes fnv128 7e0585fd212ad05cba2ec7b30f7b71cb]
+> {"args":{"arguments":{"expected_input_version":0,"operations":[{"reason":"Spam dust","transaction_… [359 bytes fnv128 d85e17528fe70372ac1d9251db2f11c5]
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [764 bytes fnv128 9bdaee92e48f7c76c16a8b9c44e10b5c]
+> {"args":{"arguments":{"artifact":{"operations":[]},"idempotency_key":"ai-review-1"},"call_id":"call_apply","name":"ui_review_apply","state":{"provider_kind":"remote","provider_on_device":false,"scope_profile_id":"p","scope_workspace_id":"w"}},"kind":"test.ai_consent_preview","request_id":"4"}
+< {"kind":"test.ai_consent_preview","schema_version":1,"data":{"card":{"call_id":"call_apply","name"… [454 bytes fnv128 478a1ec817696d5e262b8c41142e97c7]
+> {"args":{"arguments":{"artifact":{"operations":[]},"idempotency_key":"ai-review-1"},"call_id":"call_apply","name":"ui_review_apply","state":{"consented_call_ids":["call_apply"],"provider_kind":"remote","provider_on_device":false,"scope_profile_id":"p","scope_workspace_id":"w"}},"kind":"test.ai_tool","request_id":"5"}
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [667 bytes fnv128 ac75f1e4115671dd2d502eb2d948a0df]
+> {"args":{"arguments":{"artifact":{"operations":[]},"idempotency_key":"ai-review-1"},"call_id":"call_apply","name":"ui_review_apply","state":{"provider_kind":"remote","provider_on_device":false,"scope_profile_id":"p","scope_workspace_id":"w"}},"kind":"test.ai_consent_preview","request_id":"6"}
+< {"kind":"test.ai_consent_preview","schema_version":1,"data":{"card":{"call_id":"call_apply","name"… [454 bytes fnv128 478a15bbe9696d5e262b8c41107a41d5]
+> {"args":{"arguments":{"idempotency_key":"ai-review-1"},"call_id":"call_receipt","name":"ui_review_receipt","state":{"consented_call_ids":["call_receipt"],"provider_kind":"remote","provider_on_device":false,"scope_profile_id":"p","scope_workspace_id":"w"}},"kind":"test.ai_tool","request_id":"7"}
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [592 bytes fnv128 5d0465df29d03dd1a1fa58826e6b59ea]
+=== book changes after the flow
+(unchanged)
+# fixture reports
+> {"args":{"arguments":{},"call_id":"call_cases","name":"ui_review_cases","state":{"consented_call_ids":["call_cases"],"provider_kind":"remote","provider_on_device":false,"scope_profile_id":"p","scope_workspace_id":"ws"}},"kind":"test.ai_tool","request_id":"1"}
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [2193 bytes fnv128 a37d1a121278ebcd7edf7d8a54205c99]
+> {"args":{"arguments":{"action":"attach_evidence","case_ids":["quarantine:no-tax"],"expected_input_… [433 bytes fnv128 08284898de2f2d6e95f6a129099d6809]
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1513 bytes fnv128 5fb083782f7da344df5e24b85af52e5e]
+> {"args":{"arguments":{"expected_input_version":7,"operations":[{"reason":"Spam dust","transaction_… [365 bytes fnv128 5fe5dd84cb4a074adeafc9c2cc8484ad]
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [3819 bytes fnv128 c84889659c3b23567da0d229fa8303f3]
+> {"args":{"arguments":{"artifact":{"after":{"entries_count":4,"journal_digest":"05ab44603e54c7b97f1… [1811 bytes fnv128 fbbcd9f4addf356291034729ca4db2a0]
+< {"kind":"test.ai_consent_preview","schema_version":1,"data":{"card":{"call_id":"call_apply","name"… [3477 bytes fnv128 193ea6d3c86ba1850066e7fc584032fb]
+> {"args":{"arguments":{"artifact":{"after":{"entries_count":4,"journal_digest":"05ab44603e54c7b97f1… [1836 bytes fnv128 880b95cc9758162b3ce1574aa743bd08]
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [4609 bytes fnv128 a608316604acdeef21e4e3bc4f233d93]
+> {"args":{"arguments":{"artifact":{"after":{"entries_count":4,"journal_digest":"05ab44603e54c7b97f1… [1811 bytes fnv128 fbbcd0d47fdf356291034729c68cdd76]
+< {"kind":"test.ai_consent_preview","schema_version":1,"data":{"card":{"call_id":"call_apply","name"… [3846 bytes fnv128 efcc7876fce50f18261daea9e34aec8b]
+> {"args":{"arguments":{"idempotency_key":"ai-review-1"},"call_id":"call_receipt","name":"ui_review_receipt","state":{"consented_call_ids":["call_receipt"],"provider_kind":"remote","provider_on_device":false,"scope_profile_id":"p","scope_workspace_id":"ws"}},"kind":"test.ai_tool","request_id":"7"}
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [4621 bytes fnv128 b7bec9eca35979f72995ab76c569a267]
+=== book changes after the flow
+- chain_index_clock: id=i:1 | revision=i:27
+- chain_index_dirty: source_table=t:"journal_custody_decisions" | source_key=i:-1 | revision=i:26
+- chain_index_dirty: source_table=t:"journal_custody_economic_relations" | source_key=i:-1 | revision=i:27
+- chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:16
+- chain_index_dirty: source_table=t:"transactions" | source_key=i:4 | revision=i:23
+- journal_account_holdings: id=t:"aa" | workspace_id=t:"ws" | profile_id=t:"p" | account_id=NULL | account_code=t:"treasury" | account_label=t:"Treasury" | asset=t:"BTC" | quantity=i:1 | cost_basis=r:1e-7 | created_at=t:"fixed"
+- journal_account_holdings: id=t:"az" | workspace_id=t:"ws" | profile_id=t:"p" | account_id=NULL | account_code=t:"treasury" | account_label=t:"Treasury" | asset=t:"BTC" | quantity=i:111111111111 | cost_basis=r:12345.67890123456 | created_at=t:"fixed"
+- journal_account_holdings: id=t:"fallback" | workspace_id=t:"ws" | profile_id=t:"p" | account_id=NULL | account_code=NULL | account_label=t:"Fallback" | asset=t:"OTHER" | quantity=i:100000000001 | cost_basis=r:9876.54321098765 | created_at=t:"fixed"
+- journal_account_holdings: id=t:"l" | workspace_id=t:"ws" | profile_id=t:"p" | account_id=NULL | account_code=t:"other" | account_label=t:"Other" | asset=t:"LBTC" | quantity=i:789001 | cost_basis=r:0.1234567891234 | created_at=t:"fixed"
+- journal_account_holdings: id=t:"negative" | workspace_id=t:"ws" | profile_id=t:"p" | account_id=NULL | account_code=NULL | account_label=t:"Fallback" | asset=t:"BTC" | quantity=i:-1 | cost_basis=r:5.0 | created_at=t:"fixed"
+- journal_account_holdings: id=t:"zero" | workspace_id=t:"ws" | profile_id=t:"p" | account_id=NULL | account_code=NULL | account_label=t:"Fallback" | asset=t:"BTC" | quantity=i:0 | cost_basis=r:5.0 | created_at=t:"fixed"
+- journal_custody_decisions: decision_id=t:"00000000000000000000000000000000000000000000000000000000… [966 bytes fnv128 181bafffd4f91b5403ae71c7bdd17f1c]
+… [28543 bytes, 66 lines fnv128 4089634350cf6d91050af5e8989a687b]

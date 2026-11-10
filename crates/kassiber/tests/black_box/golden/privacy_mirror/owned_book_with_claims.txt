@@ -18,17 +18,17 @@ exit 0
 === book changes after the step
 - (116 tables, 96 empty)
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000001" | node_id=t:"bitcoin:main:record:out"
-+ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000001" | node_id=t:"liquid:liquidv1:record:earn"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000004" | node_id=t:"bitcoin:main:record:out"
-+ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000004" | node_id=t:"bitcoin:main:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000005" | node_id=t:"bitcoin:main:record:out"
-+ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000005" | node_id=t:"record:custody:0000000000000000000000000000000000000000000000000000000000000005"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" | node_id=t:"bitcoin:main:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" | node_id=t:"bitcoin:main:tx:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000004" | node_id=t:"bitcoin:main:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000001" | node_id=t:"liquid:liquidv1:record:earn"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000005" | node_id=t:"record:custody:0000000000000000000000000000000000000000000000000000000000000005"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:0" | node_id=t:"bitcoin:main:out:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:0"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0" | node_id=t:"bitcoin:main:out:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0"
-+ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:main:out:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0" | node_id=t:"bitcoin:main:out:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:main:out:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:0" | node_id=t:"bitcoin:main:out:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:0"
-+ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:main:record:excluded" | node_id=t:"bitcoin:main:record:excluded"
-… [53783 bytes, 101 lines fnv128 5c9f97bdec2c9f2b5df77e2f4bbfcab7]
+… [53783 bytes, 101 lines fnv128 a8c6f34181e48f35d14a6dbecf5010b5]
 $ --machine reports privacy-mirror
 exit 0
 --- stdout
@@ -261,17 +261,17 @@ exit 0
 === book changes after the step
 - (116 tables, 96 empty)
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000001" | node_id=t:"bitcoin:main:record:out"
-+ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000001" | node_id=t:"liquid:liquidv1:record:earn"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000004" | node_id=t:"bitcoin:main:record:out"
-+ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000004" | node_id=t:"bitcoin:main:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000005" | node_id=t:"bitcoin:main:record:out"
-+ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000005" | node_id=t:"record:custody:0000000000000000000000000000000000000000000000000000000000000005"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" | node_id=t:"bitcoin:main:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" | node_id=t:"bitcoin:main:tx:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000004" | node_id=t:"bitcoin:main:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000001" | node_id=t:"liquid:liquidv1:record:earn"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"0000000000000000000000000000000000000000000000000000000000000005" | node_id=t:"record:custody:0000000000000000000000000000000000000000000000000000000000000005"
++ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:0" | node_id=t:"bitcoin:main:out:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:0"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0" | node_id=t:"bitcoin:main:out:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0"
-+ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:main:out:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0" | node_id=t:"bitcoin:main:out:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:main:out:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:0" | node_id=t:"bitcoin:main:out:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:0"
-+ chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:main:record:excluded" | node_id=t:"bitcoin:main:record:excluded"
-… [53783 bytes, 101 lines fnv128 5c9f97bdec2c9f2b5df77e2f4bbfcab7]
+… [53783 bytes, 101 lines fnv128 a8c6f34181e48f35d14a6dbecf5010b5]
 $ --machine reports privacy-mirror
 exit 0
 --- stdout
