@@ -2263,7 +2263,7 @@
       "RatesIncrementalTest": {"disposition": "rust-test", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "chain-sync", "reason": "calls kassiber.core.rates, kassiber.db directly", "reviewed": false, "tests": 1}
     },
     "tests/test_rates_kraken_csv.py": {
-      "KrakenCsvRatesTest": {"disposition": "rust-test", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "imports", "reason": "calls kassiber.core.rates, kassiber.db directly", "reviewed": false, "tests": 24},
+      "KrakenCsvRatesTest": {"disposition": "rust-test", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "imports", "reason": "calls kassiber.core.rates, kassiber.db directly", "reviewed": false, "tests": 23},
       "KrakenCsvRatesTest::test_ingests_kraken_csv_and_stores_ohlcvt": {"disposition": "subprocess-scenario", "flags": ["sql", "subprocess"], "group": "imports", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.core.rates", "reviewed": false, "tests": 1},
       "KrakenCsvRatesTest::test_reingest_is_idempotent": {"disposition": "boundary-fixture", "flags": ["sql", "subprocess"], "group": "imports", "reason": "spawns `python -m kassiber` (cli) and checks its output only", "reviewed": false, "tests": 1},
       "KrakenCsvRatesTest::test_desktop_daemon_import_payload_supports_incremental_archives": {"disposition": "subprocess-scenario", "flags": ["sql"], "group": "imports", "reason": "drives the daemon entry in process", "reviewed": false, "tests": 1},
