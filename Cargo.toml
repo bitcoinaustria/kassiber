@@ -41,3 +41,9 @@ panic = "unwind"
 opt-level = 3
 [profile.dev.package.salsa20]
 opt-level = 3
+
+# The bundled SQLCipher (C) runs every test book's queries, page codec and
+# key derivation. Unoptimized it made a quarter of the Rust test time; the
+# Rust code it serves stays at the dev level.
+[profile.dev.package.libsqlite3-sys]
+opt-level = 3
