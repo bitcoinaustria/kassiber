@@ -103,6 +103,7 @@ fn run_taped(
             format!("replay:{}", dir.join("net.tape").display()),
         )
         .env("KASSIBER_TEST_NET_TAPE_HOLD", dir.join("hold"))
+        .env("KASSIBER_TEST_NET_TAPE_WRITES", dir.join("net.writes"))
         // Never the account's app-data root or its offline switch.
         .env("XDG_DATA_HOME", scratch.0.join("xdg-data"))
         .env(
@@ -137,6 +138,21 @@ fn run_taped(
         status.success(),
         "the taped fixture failed: {status}\n{}",
         std::fs::read_to_string(dir.join("stderr")).unwrap_or_default()
+    );
+    // No request the recording's chain did not receive (the pytest tests
+    // counted its hits).
+    let recorded = std::fs::read_to_string(dir.join("net.tape"))
+        .unwrap()
+        .lines()
+        .filter(|line| line.starts_with("w\t"))
+        .count();
+    let replayed = std::fs::read_to_string(dir.join("net.writes"))
+        .unwrap_or_default()
+        .lines()
+        .count();
+    assert!(
+        replayed <= recorded,
+        "{replayed} requests, recorded {recorded}"
     );
     std::fs::read_to_string(dir.join("stdout")).unwrap()
 }

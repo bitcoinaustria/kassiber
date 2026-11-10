@@ -120,6 +120,10 @@ impl Daemon {
                 "KASSIBER_TEST_NET_TAPE",
                 format!("replay:{}", tape.display()),
             )
+            .env(
+                "KASSIBER_TEST_NET_TAPE_WRITES",
+                tape.with_extension("writes"),
+            )
             .stdin(Stdio::piped())
             .stdout(Stdio::from(std::os::fd::OwnedFd::from(theirs)))
             .stderr(Stdio::piped());
@@ -413,6 +417,12 @@ pub fn replay_session(
         .map(|text| kassiber_pytext::loads(&py_str(&text)).unwrap())
         .collect();
     assert_same_rows(name, &rows, expected);
+    let recorded = recorded_requests(&prepared.tape, "");
+    let replayed = replayed_requests(&prepared.tape, "");
+    assert!(
+        replayed <= recorded,
+        "{name}: {replayed} requests, recorded {recorded}"
+    );
     let after = value(session, "after");
     if !matches!(after, Value::Null) {
         assert_same_book(
@@ -427,4 +437,55 @@ pub fn replay_session(
 /// placeholder, so rows naming paths compare.
 fn scratch_unplace(scratch: &Scratch, text: &str) -> String {
     text.replace(&scratch.path(), "@TMP@").replace(BIN, "@BIN@")
+}
+
+/// Standard base64, as the tape stores payloads.
+pub fn base64(text: &str) -> Vec<u8> {
+    const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = Vec::new();
+    let (mut buffer, mut bits) = (0u32, 0);
+    for byte in text.bytes().filter(|b| *b != b'=') {
+        let Some(value) = ALPHABET.iter().position(|a| *a == byte) else {
+            continue;
+        };
+        buffer = (buffer << 6) | value as u32;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((buffer >> bits) as u8);
+            buffer &= (1 << bits) - 1;
+        }
+    }
+    out
+}
+
+/// How often `needle` occurs in one request; an empty needle counts the
+/// request once.
+fn occurrences(bytes: &[u8], needle: &str) -> usize {
+    if needle.is_empty() {
+        return 1;
+    }
+    String::from_utf8_lossy(bytes).matches(needle).count()
+}
+
+/// How often `needle` occurs in the requests the recording made.
+pub fn recorded_requests(tape: &Path, needle: &str) -> usize {
+    std::fs::read_to_string(tape)
+        .unwrap()
+        .lines()
+        .filter_map(|line| {
+            let parts: Vec<&str> = line.split('\t').collect();
+            (parts.first() == Some(&"w") && parts.len() >= 4)
+                .then(|| occurrences(&base64(parts[3]), needle))
+        })
+        .sum()
+}
+
+/// How often `needle` occurs in the requests the replays from `tape` made.
+pub fn replayed_requests(tape: &Path, needle: &str) -> usize {
+    std::fs::read_to_string(tape.with_extension("writes"))
+        .unwrap_or_default()
+        .lines()
+        .map(|line| occurrences(&base64(line), needle))
+        .sum()
 }

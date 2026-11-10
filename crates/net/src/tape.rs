@@ -22,6 +22,10 @@
 //! most a minute), as a server that answers nothing while it holds one
 //! request. It fires once per process.
 //!
+//! `KASSIBER_TEST_NET_TAPE_WRITES=<file>` appends every replayed write to
+//! the file, one base64 line each, so a test can count the requests a replay
+//! made: the recording's server counted the ones it received.
+//!
 //! The tape is one line per event, tab separated, payloads base64:
 //! `open id tls host port`, `attempts id n`, `fail id error`, `r id bytes`,
 //! `w id count bytes`, `re id error`, `eof id`.
@@ -41,6 +45,7 @@ use crate::{Connection, Error};
 
 const VARIABLE: &str = "KASSIBER_TEST_NET_TAPE";
 const HOLD_VARIABLE: &str = "KASSIBER_TEST_NET_TAPE_HOLD";
+const WRITES_VARIABLE: &str = "KASSIBER_TEST_NET_TAPE_WRITES";
 
 enum Mode {
     Record(Mutex<File>),
@@ -74,6 +79,25 @@ enum Event {
 static MODE: OnceLock<Option<Mode>> = OnceLock::new();
 static HOLD: OnceLock<Option<PathBuf>> = OnceLock::new();
 static HOLD_FIRED: AtomicBool = AtomicBool::new(false);
+static WRITES: OnceLock<Option<Mutex<File>>> = OnceLock::new();
+
+/// Note one replayed write for the test.
+fn log_write(bytes: &[u8]) {
+    let log = WRITES.get_or_init(|| {
+        let path = std::env::var_os(WRITES_VARIABLE)?;
+        let file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .ok()?;
+        Some(Mutex::new(file))
+    });
+    if let Some(file) = log {
+        let mut file = file.lock().unwrap_or_else(|e| e.into_inner());
+        let _ = writeln!(file, "{}", b64(bytes));
+        let _ = file.flush();
+    }
+}
 
 fn hold_dir() -> Option<&'static PathBuf> {
     HOLD.get_or_init(|| std::env::var_os(HOLD_VARIABLE).map(PathBuf::from))
@@ -438,6 +462,7 @@ impl Write for Stream {
             Stream::Replay(tape) => {
                 let mut tape = tape.lock().unwrap_or_else(|e| e.into_inner());
                 let recorded = tape.bound(Some(bytes));
+                log_write(bytes);
                 if hold_dir().is_some_and(|dir| fires(dir, bytes)) {
                     recorded.held = true;
                 }

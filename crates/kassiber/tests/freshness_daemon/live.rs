@@ -168,3 +168,14 @@ pub fn same(value: &Value, json: &str) -> bool {
 pub fn snapshot_keyed(book: &Path, key: &str) -> Value {
     crate::golden::snapshot_of(&open(book, Some(key)))
 }
+
+/// The replay sent no request the recording did not: the pytest test
+/// counted what its chain received (`len(hits)`), and this counts writes.
+pub fn no_extra_requests(live: &Live) {
+    let recorded = crate::session::recorded_requests(&live.prepared.tape, "");
+    let replayed = crate::session::replayed_requests(&live.prepared.tape, "");
+    assert!(
+        replayed <= recorded,
+        "{replayed} requests, recorded {recorded}"
+    );
+}

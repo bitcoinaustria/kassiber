@@ -111,6 +111,7 @@ fn controls_during_fetch(param: &str, control: &str) {
     unpublished(&live);
     assert_eq!(graph_pending(&mut daemon, "fenced-graph"), 0);
     daemon.finish();
+    crate::live::no_extra_requests(&live);
 }
 
 pub fn test_live_freshness_controls_remain_available_during_fetch() {
@@ -130,6 +131,7 @@ pub fn test_live_freshness_closed_output_stops_and_joins_the_request() {
     let status = wait_timeout(&mut child);
     assert_eq!(status.code(), Some(1));
     unpublished(&live);
+    crate::live::no_extra_requests(&live);
 }
 
 fn wait_timeout(child: &mut std::process::Child) -> std::process::ExitStatus {
@@ -165,6 +167,7 @@ pub fn test_live_freshness_eof_joins_the_request_before_exit() {
     let (status, stderr, _) = daemon.wait();
     assert!(status.success(), "{status}: {stderr}");
     unpublished(&live);
+    crate::live::no_extra_requests(&live);
 }
 
 pub fn test_live_freshness_private_graph_handoff_and_discard() {
@@ -207,6 +210,7 @@ pub fn test_live_freshness_private_graph_handoff_and_discard() {
         ));
         assert_eq!(graph_pending(&mut daemon, "discarded"), 0);
         daemon.finish();
+        crate::live::no_extra_requests(&live);
     }
 }
 
@@ -235,6 +239,7 @@ pub fn test_live_freshness_graph_handoff_deduplicates_and_never_recovers_authori
     ));
     assert_eq!(graph_pending(&mut daemon, "current"), 1);
     daemon.finish();
+    crate::live::no_extra_requests(&live);
     live.execute("INSERT INTO freshness_jobs(id,profile_id,job_type,source_key,source_type,source_label,status,phase,priority,created_at,updated_at) VALUES('persisted-graph','p','wallet_graph_references','wallet_graph:a','onchain_wallet','Graph','running','backend_fetch',200,'now','now')");
     // The second session reaches no chain: its recorded tape is empty.
     let second = Live::new(MODULE, test, "esplora", 1);
@@ -261,6 +266,7 @@ pub fn test_live_freshness_graph_handoff_deduplicates_and_never_recovers_authori
         1
     );
     daemon.finish();
+    crate::live::no_extra_requests(&second);
 }
 
 pub fn test_live_freshness_preconsent_and_early_request_fences() {
@@ -297,6 +303,7 @@ pub fn test_live_freshness_preconsent_and_early_request_fences() {
     );
     assert_eq!(graph_pending(&mut daemon, "fenced-graph"), 0);
     daemon.finish();
+    crate::live::no_extra_requests(&live);
 }
 
 pub fn test_live_freshness_refuses_replay_and_foreign_request_cancellation() {
@@ -342,6 +349,7 @@ pub fn test_live_freshness_refuses_replay_and_foreign_request_cancellation() {
         &before,
     );
     daemon.finish();
+    crate::live::no_extra_requests(&live);
 }
 
 pub fn test_live_freshness_quiesces_before_lifecycle_acknowledgement() {
@@ -382,6 +390,7 @@ pub fn test_live_freshness_quiesces_before_lifecycle_acknowledgement() {
     unpublished(&live);
     assert_eq!(field(&daemon.until("barrier", None), "kind"), "status");
     daemon.finish();
+    crate::live::no_extra_requests(&live);
 }
 
 pub fn test_live_freshness_encrypted_graph_handoff_drops_on_lock() {
@@ -427,6 +436,7 @@ pub fn test_live_freshness_encrypted_graph_handoff_drops_on_lock() {
     let rows: String = daemon.rows.iter().map(crate::session::text).collect();
     assert!(!rows.contains(key) && !rows.contains("\\ud83d"));
     daemon.finish();
+    crate::live::no_extra_requests(&live);
 }
 
 pub fn test_reference_source_control_checkpoint_repro_and_native_parity() {
@@ -464,6 +474,7 @@ pub fn test_reference_source_control_checkpoint_repro_and_native_parity() {
         crate::session::text(&recorded)
     );
     daemon.finish();
+    crate::live::no_extra_requests(&live);
     crate::golden::assert_same_book(
         test,
         &crate::golden::snapshot(&live.prepared.book),

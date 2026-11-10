@@ -163,6 +163,7 @@ fn worker_controls(control: &str) {
         );
     }
     daemon.finish();
+    crate::live::no_extra_requests(&live);
 }
 
 pub fn test_native_graph_worker_controls_and_owned_connection() {
@@ -208,6 +209,7 @@ pub fn test_native_graph_request_identity_and_replay_are_fenced() {
         "interaction_required"
     );
     daemon.finish();
+    crate::live::no_extra_requests(&live);
     assert_eq!(
         live.count("SELECT count(*) FROM freshness_jobs WHERE job_type='onchain_wallet_history'"),
         1
@@ -249,6 +251,7 @@ pub fn test_native_graph_closed_output_joins_worker_before_exit() {
         live.count("SELECT count(*) FROM freshness_jobs WHERE status='running'"),
         0
     );
+    crate::live::no_extra_requests(&live);
 }
 
 pub fn test_native_graph_enabled_worker_waits_for_terminal_handoff() {
@@ -287,30 +290,11 @@ pub fn test_native_graph_enabled_worker_waits_for_terminal_handoff() {
         "test.freshness.graph.start"
     );
     daemon.finish();
+    crate::live::no_extra_requests(&live);
     assert_eq!(
         live.count("SELECT count(*) FROM freshness_jobs WHERE job_type='wallet_graph_references'"),
         1
     );
-}
-
-/// Standard base64, as the tape stores payloads.
-fn base64(text: &str) -> Vec<u8> {
-    const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = Vec::new();
-    let (mut buffer, mut bits) = (0u32, 0);
-    for byte in text.bytes().filter(|b| *b != b'=') {
-        let Some(value) = ALPHABET.iter().position(|a| *a == byte) else {
-            continue;
-        };
-        buffer = (buffer << 6) | value as u32;
-        bits += 6;
-        if bits >= 8 {
-            bits -= 8;
-            out.push((buffer >> bits) as u8);
-            buffer &= (1 << bits) - 1;
-        }
-    }
-    out
 }
 
 /// Every 64-digit hex run in `text`, in order.
@@ -341,7 +325,7 @@ fn first_prevout_lookup(tape: &str, txid: &str) -> String {
         if parts.first() != Some(&"w") || parts.len() < 4 {
             continue;
         }
-        let bytes = base64(parts[3]);
+        let bytes = crate::session::base64(parts[3]);
         let text = String::from_utf8_lossy(&bytes);
         if !text.contains("blockchain.transaction.get\"") {
             continue;
@@ -400,6 +384,13 @@ pub fn test_native_graph_cancels_between_electrum_prevout_batches() {
         0
     );
     daemon.finish();
+    crate::live::no_extra_requests(&live);
+    // No prevout batch after the cancel: the same lookups as recorded.
+    let needle = "blockchain.transaction.get\"";
+    assert_eq!(
+        crate::session::replayed_requests(&live.prepared.tape, needle),
+        crate::session::recorded_requests(&live.prepared.tape, needle)
+    );
 }
 
 fn encrypted(param: &str) {
@@ -494,6 +485,7 @@ fn encrypted(param: &str) {
         "test.freshness.graph.start"
     );
     let rows = daemon.finish();
+    crate::live::no_extra_requests(&live);
     let text: String = rows.iter().map(crate::session::text).collect();
     for secret in [key, replacement] {
         assert!(!text.contains(secret));

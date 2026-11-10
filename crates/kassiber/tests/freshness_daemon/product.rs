@@ -78,6 +78,7 @@ pub fn test_product_source_controls_remain_available_during_fetch() {
     ));
     unpublished(&live);
     daemon.finish();
+    crate::live::no_extra_requests(&live);
     crate::golden::assert_same_book(
         param,
         &crate::golden::snapshot(&live.prepared.book),
