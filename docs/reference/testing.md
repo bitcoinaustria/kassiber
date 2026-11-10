@@ -1216,3 +1216,24 @@ Existing accounting/Lightning/Elements lanes cover their stated adapters. LDK,
 Ark and Spark still need Kassiber observation adapters and real protocol evidence
 before a cross-rail edge can claim more than a reviewed custody relation. A
 successful payment in an external demo alone does not establish that integration.
+
+## Generated test data
+
+Fixtures a generator or recorder produces (Python-produced vectors, oracle
+outputs, recorded server replies) are not in this tree. They live on the
+orphan branch `t3code/test-data`, and `tests/test-data.lock` pins the commit
+and the git blob id of every file this tree's tests read. Small fixtures
+people write and read stay next to their tests.
+
+- `scripts/fetch-test-data.sh` fetches the pinned commit from the same
+  repository with git, writes each locked file at its path (the `.gitignore`
+  block lists them all), and verifies every hash. CI runs it before any Python
+  or Rust test; `scripts/quality-gate.sh` refuses to start without it.
+- Without the data, pytest stops at once with "run scripts/fetch-test-data.sh",
+  and a Rust test build names the missing file; nothing is skipped silently.
+  `scripts/fetch-test-data.sh --check` verifies without fetching.
+- To change data: run the generator (it writes at the same paths), then
+  `scripts/fetch-test-data.sh --publish [new paths]` commits the files to the
+  data branch locally and rewrites the lock and the `.gitignore` block. Push
+  `t3code/test-data`, and commit the lock in the same PR as the generator or
+  code change. A new data file needs its path on the `--publish` line once.

@@ -1,0 +1,7 @@
+# Generated test data this tree's tests read. Fetch it with
+# scripts/fetch-test-data.sh; never edit by hand (see
+# docs/reference/testing.md#generated-test-data). <git blob id> <path>
+branch t3code/test-data
+commit fcb97231d0828d16c168618601c75449a7b53a67
+17b31b90f23db9829198cf13a368d9ef3de23217 tests/fixtures/secret_redaction_5e_cases.json
+f7f401756bf58eb95ed115da49f399ef39ec4635 tests/fixtures/secret_redaction_cases.json

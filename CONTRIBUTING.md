@@ -47,6 +47,10 @@ pnpm --dir ui-tauri install --frozen-lockfile
 The daemon-backed preview and disposable regtest setup are documented in
 [Testing](docs/reference/testing.md). Keep development commands off real books.
 
+Generated test data (recorded and Python-produced fixtures) is fetched, not
+committed: run `scripts/fetch-test-data.sh` once after checkout and after the
+lock changes. See [generated test data](docs/reference/testing.md#generated-test-data).
+
 ## Verification and review
 
 During development, run the smallest relevant checks. For example:
