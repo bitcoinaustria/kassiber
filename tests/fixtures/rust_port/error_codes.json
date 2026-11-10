@@ -377,28 +377,28 @@
       }
     },
     {
-      "at": "kassiber/core/rates.py:119",
+      "at": "kassiber/core/rates.py:118",
       "name": "asset_code",
       "value": {
         "expression": "str(asset or '').strip().upper()"
       }
     },
     {
-      "at": "kassiber/core/rates.py:120",
+      "at": "kassiber/core/rates.py:119",
       "name": "fiat_code",
       "value": {
         "expression": "str(fiat_currency or '').strip().upper()"
       }
     },
     {
-      "at": "kassiber/core/rates.py:123",
+      "at": "kassiber/core/rates.py:122",
       "name": "asset_code",
       "value": {
         "expression": "_RATE_ASSET_ALIASES.get(asset_code, asset_code)"
       }
     },
     {
-      "at": "kassiber/core/rates.py:1703",
+      "at": "kassiber/core/rates.py:1702",
       "name": "code",
       "value": {
         "expression": "str(pair_code or '').strip().upper()"
@@ -12003,287 +12003,287 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/rates.py:88",
+      "at": "kassiber/core/rates.py:87",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/rates.py:91",
+      "at": "kassiber/core/rates.py:90",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/rates.py:98",
+      "at": "kassiber/core/rates.py:97",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/rates.py:105",
+      "at": "kassiber/core/rates.py:104",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/rates.py:133",
+      "at": "kassiber/core/rates.py:132",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/rates.py:253",
+      "at": "kassiber/core/rates.py:252",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/rates.py:346",
+      "at": "kassiber/core/rates.py:345",
       "callee": "AppError",
       "code": "not_found",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/rates.py:369",
+      "at": "kassiber/core/rates.py:368",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/rates.py:371",
+      "at": "kassiber/core/rates.py:370",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/rates.py:522",
+      "at": "kassiber/core/rates.py:521",
       "callee": "AppError",
       "code": "upstream_error",
       "form": "call",
       "retryable": true
     },
     {
-      "at": "kassiber/core/rates.py:547",
+      "at": "kassiber/core/rates.py:546",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/rates.py:563",
+      "at": "kassiber/core/rates.py:562",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/rates.py:607",
+      "at": "kassiber/core/rates.py:606",
       "callee": "AppError",
       "code": "config_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/rates.py:691",
+      "at": "kassiber/core/rates.py:690",
       "callee": "AppError",
       "code": "upstream_error",
       "form": "call",
       "retryable": true
     },
     {
-      "at": "kassiber/core/rates.py:702",
+      "at": "kassiber/core/rates.py:701",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/rates.py:731",
+      "at": "kassiber/core/rates.py:730",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/rates.py:773",
+      "at": "kassiber/core/rates.py:772",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/rates.py:791",
+      "at": "kassiber/core/rates.py:790",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/rates.py:801",
+      "at": "kassiber/core/rates.py:800",
       "callee": "AppError",
       "code": "upstream_error",
       "form": "call",
       "retryable": true
     },
     {
-      "at": "kassiber/core/rates.py:1230",
+      "at": "kassiber/core/rates.py:1229",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/rates.py:1237",
+      "at": "kassiber/core/rates.py:1236",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/rates.py:1242",
+      "at": "kassiber/core/rates.py:1241",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/rates.py:1250",
+      "at": "kassiber/core/rates.py:1249",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/rates.py:1252",
+      "at": "kassiber/core/rates.py:1251",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/rates.py:1306",
+      "at": "kassiber/core/rates.py:1305",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/rates.py:1309",
+      "at": "kassiber/core/rates.py:1308",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/rates.py:1456",
+      "at": "kassiber/core/rates.py:1455",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/rates.py:1547",
+      "at": "kassiber/core/rates.py:1546",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/rates.py:1645",
+      "at": "kassiber/core/rates.py:1644",
       "callee": "AppError",
       "code": "not_found",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/rates.py:1670",
+      "at": "kassiber/core/rates.py:1669",
       "callee": "AppError",
       "code": "not_found",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/rates.py:1738",
+      "at": "kassiber/core/rates.py:1737",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/rates.py:1761",
+      "at": "kassiber/core/rates.py:1760",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/rates.py:1763",
+      "at": "kassiber/core/rates.py:1762",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/rates.py:1765",
+      "at": "kassiber/core/rates.py:1764",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/rates.py:1767",
+      "at": "kassiber/core/rates.py:1766",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/rates.py:1788",
+      "at": "kassiber/core/rates.py:1787",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/rates.py:2064",
+      "at": "kassiber/core/rates.py:2063",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/rates.py:2078",
+      "at": "kassiber/core/rates.py:2077",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/rates.py:2091",
+      "at": "kassiber/core/rates.py:2090",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/rates.py:2105",
+      "at": "kassiber/core/rates.py:2104",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/rates.py:2116",
+      "at": "kassiber/core/rates.py:2115",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
