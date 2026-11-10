@@ -33,6 +33,7 @@ members = [
   "crates/transactions",
   "crates/transfers",
   "crates/secrets",
+  "crates/session-replay",
   "crates/pydecimal",
   "crates/pyjson",
   "crates/pytext",
