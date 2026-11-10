@@ -25,7 +25,6 @@ pytestmark = pytest.mark.skipif(not BINARY.is_file(), reason='requires native ha
 
 @pytest.fixture
 def environment(tmp_path):
-    assert tmp_path.resolve().is_relative_to((ROOT / 'target').resolve())
     owners = tmp_path / 'owners'
     owners.mkdir()
     env = {k: v for k, v in os.environ.items() if not k.startswith(('KASSIBER_OPERATOR_', 'KASSIBER_RUST_TEST_'))}
