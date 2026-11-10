@@ -56,6 +56,7 @@ from .ai import (
     redact_ai_provider_for_output,
     require_ai_provider_contactable,
     require_ai_provider_enabled,
+    require_ai_provider_kind_supported,
     require_ai_provider_endpoint,
     require_ai_test_target_acknowledged,
     resolve_ai_provider,
@@ -20719,7 +20720,9 @@ def handle_request(
                 named_row = None
             if named_row is not None:
                 # Testing a saved provider's form is still contacting that
-                # provider; a switched-off one is refused like any other path.
+                # provider; a switched-off one is refused like any other path,
+                # and so is a kind only the Rust backend implements.
+                require_ai_provider_kind_supported(named_row)
                 require_ai_provider_enabled(named_row)
         test_formats = _ai_provider_format_args(args, "ai.test_connection")
         test_model = args.get("model")

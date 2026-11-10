@@ -1,0 +1,336 @@
+//! The capability tables of `kassiber/command_capabilities.py`.
+//!
+//! The operator broker authorizes by these declarations, and the daemon
+//! refuses a kind they do not classify (`unsupported_kind`). The tables are
+//! Python's text blocks verbatim; `tests/capabilities.rs` checks them
+//! against Python's registries.
+
+use std::collections::HashMap;
+use std::sync::OnceLock;
+
+/// `Capability`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Capability {
+    Read,
+    Operator,
+    AccountingDecisions,
+    Admin,
+}
+
+impl Capability {
+    /// The enum's value, as `commands describe` prints it.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Capability::Read => "read",
+            Capability::Operator => "operator",
+            Capability::AccountingDecisions => "accounting_decisions",
+            Capability::Admin => "admin",
+        }
+    }
+}
+
+const CLI_READ_PATHS: &str = "
+    chain-analysis.watches.preview chain-analysis.watches.list chain-analysis.watches.inbox
+    chain-analysis.sources.plan chain-analysis.sources.list
+    chain-analysis.psbt.analyze chain-analysis.psbt.compare chain-analysis.psbt.entropy chain-analysis.datasets.query chain-analysis.datasets.list chain-analysis.datasets.get chain-analysis.datasets.preview
+    chain-analysis.overview chain-analysis.trace chain-analysis.path chain-analysis.entropy chain-analysis.cases.list chain-analysis.cases.get chain-analysis.cases.compare chain-analysis.labels.list chain-analysis.acquire.plan
+    status update verify-download offline.status health next-actions commands.describe projects.list projects.show
+    operator.status operator.operation.status operator.touch-id.status
+    chats.list chats.show secrets.status
+    networks.inventory networks.plan networks.split-plan
+    backends.list backends.kinds backends.get context.show context.current
+    workspaces.list profiles.list profiles.get accounts.list wallets.list
+    wallets.kinds wallets.get wallets.preview-document wallets.identify
+    wallets.analyze-file
+    transactions.list transactions.verify transfers.dismissals.list attachments.list attachments.verify metadata.tags.list
+    metadata.bip329.preview metadata.bip329.list metadata.records.list
+    metadata.records.get metadata.records.history.list
+    metadata.records.history.activity metadata.records.history.stale
+    imports.list
+    review.cases review.plan review.receipt
+    journals.list journals.quarantined journals.transfers.list
+    journals.events.list journals.events.get journals.quarantine.show journals.quarantine.groups loans.list
+    transfers.list transfers.gaps.list transfers.gaps.history transfers.gaps.plan
+    transfers.components.list transfers.components.show transfers.components.plan
+    transfers.payouts.list transfers.suggest transfers.rules.list views.list
+    btcpay.provenance.list btcpay.provenance.links btcpay.key-url documents.list
+    source-funds.sources.list source-funds.links.list source-funds.cases.list
+    source-funds.review-context source-funds.request-input
+    source-funds.coverage source-funds.recipients.list reports.summary
+    reports.tax-summary reports.balance-sheet reports.portfolio-summary
+    reports.capital-gains reports.explain-capital-gain reports.journal-entries reports.privacy-hygiene
+    reports.privacy-mirror reports.psbt-privacy reports.austrian-e1kv
+    reports.austrian-tax-summary reports.exit-tax reports.filed-snapshots.list
+    reports.balance-history reports.lightning-profitability
+    reports.commercial-subledger reports.source-funds rates.pairs rates.latest
+    rates.range ai.providers.list ai.providers.get ai.models
+    mcp.serve mcp.tools mcp.call mcp.status
+";
+
+const CLI_OPERATOR_PATHS: &str = "
+    chain-analysis.watches.create chain-analysis.watches.configure chain-analysis.watches.delete chain-analysis.watches.acknowledge chain-analysis.watches.evaluate
+    chain-analysis.sources.authorize chain-analysis.sources.revoke chain-analysis.sources.run
+    chain-analysis.datasets.import chain-analysis.datasets.revoke chain-analysis.datasets.discard
+    chain-analysis.cases.save chain-analysis.cases.delete chain-analysis.labels.upsert chain-analysis.labels.delete chain-analysis.labels.import chain-analysis.acquire.apply
+    networks.bind networks.split offline.on offline.off
+    projects.select chat backends.create backends.update backends.set-default
+    backends.clear-default context.set workspaces.create profiles.create
+    accounts.create wallets.create wallets.update
+    wallets.import-json wallets.import-csv wallets.import-btcpay
+    wallets.import-phoenix wallets.import-wasabi wallets.import-river
+    wallets.import-bull wallets.import-bullbitcoin wallets.import-coinfinity
+    wallets.import-21bitcoin wallets.import-pocket wallets.import-pocketbitcoin
+    wallets.import-strike wallets.import-ledger-live
+    wallets.import-cointracking wallets.import-blockpit
+    wallets.import-binance-supplemental wallets.sync-kraken
+    wallets.sync-coinbase wallets.sync-binance wallets.sync-bitpanda wallets.import-ledger
+    wallets.ledger-template wallets.import-document wallets.import-samourai
+    wallets.sync-btcpay wallets.attach-btcpay wallets.attach-bullbitcoin-wallet
+    wallets.sync wallets.derive transactions.export attachments.add
+    attachments.rename attachments.remove attachments.gc metadata.notes.set
+    metadata.notes.clear metadata.tags.create metadata.tags.add
+    metadata.tags.remove metadata.bip329.import metadata.bip329.export
+    metadata.records.note.set metadata.records.note.clear mcp.disable
+    metadata.records.tag.add metadata.records.tag.remove journals.process
+    btcpay.provenance.sync btcpay.provenance.suggest btcpay.inspect btcpay.setup documents.create
+    documents.attach documents.import-report source-funds.sources.create
+    source-funds.sources.attach
+    source-funds.links.create source-funds.links.attach source-funds.suggest
+    source-funds.assemble source-funds.recipients.create
+    source-funds.recipients.update source-funds.recipients.delete
+    reports.export-pdf reports.export-summary-pdf reports.export-csv
+    reports.export-xlsx reports.export-lightning-profitability-csv
+    reports.export-commercial-subledger-csv reports.export-source-funds-pdf
+    reports.export-source-funds-bundle reports.export-austrian-e1kv-pdf
+    reports.export-austrian reports.export-austrian-e1kv-xlsx
+    reports.export-austrian-e1kv-csv reports.export-exit-tax-pdf
+    reports.export-exit-tax-xlsx reports.export-year-handoff reports.cross-check rates.sync
+    rates.rebuild rates.set
+    diagnostics.collect
+";
+
+const CLI_ACCOUNTING_DECISION_PATHS: &str = "
+    review.apply
+    profiles.set metadata.exclude metadata.include metadata.records.excluded.set
+    metadata.records.excluded.clear metadata.records.kind.set
+    metadata.records.kind.clear metadata.records.history.revert
+    journals.quarantine.clear journals.quarantine.resolve.price-override
+    journals.quarantine.resolve.exclude loans.mark loans.unmark loans.link
+    transfers.pair transfers.unpair transfers.update transfers.gaps.review
+    transfers.gaps.apply transfers.components.apply transfers.payouts.create
+    transfers.payouts.delete transfers.bulk-pair transfers.dismiss transfers.dismissals.delete
+    transfers.rules.create transfers.rules.delete transfers.rules.enable
+    transfers.rules.disable transfers.rules.apply views.create views.delete
+    btcpay.provenance.review source-funds.links.review
+    source-funds.links.bulk-review reports.filed-snapshots.create
+";
+
+const CLI_ADMIN_PATHS: &str = "
+    daemon init projects.create chats.delete chats.clear chats.config mcp.enable
+    operator.unlock operator.lock operator.stop operator.mode operator.operation.cancel
+    operator.touch-id.enroll operator.touch-id.forget
+    secrets.init secrets.init-resume secrets.change-passphrase
+    secrets.remember-unlock secrets.forget-unlock secrets.verify
+    secrets.migrate-credentials backup.export backup.import
+    backends.delete backends.reveal-token wallets.delete imports.rollback
+    maintenance.purge-legacy-ledger
+    wallets.reveal-descriptor ai.providers.create ai.providers.update
+    ai.providers.delete ai.providers.set-default ai.providers.clear-default
+    ai.providers.test
+";
+
+const DAEMON_READ_KINDS: &str = "
+    ui.chain_analysis.watches.preview ui.chain_analysis.watches.list ui.chain_analysis.watches.inbox
+    ui.chain_analysis.sources.plan ui.chain_analysis.sources.list
+    ui.chain_analysis.entropy.start ui.chain_analysis.jobs.get ui.chain_analysis.jobs.cancel
+    ui.chain_analysis.psbt.analyze ui.chain_analysis.psbt.compare ui.chain_analysis.psbt.entropy ui.chain_analysis.psbt.entropy.start ui.chain_analysis.datasets.query
+    ui.chain_analysis.datasets.list ui.chain_analysis.datasets.get ui.chain_analysis.datasets.preview ui.chain_analysis.datasets.preview.start
+    ui.chain_analysis.ai_context
+    ui.chain_analysis.query ui.chain_analysis.entropy ui.chain_analysis.cases.list ui.chain_analysis.cases.get ui.chain_analysis.cases.compare ui.chain_analysis.labels.list ui.chain_analysis.acquire.plan
+    status ui.logs.snapshot ui.agent_access.status ui.egress.snapshot ui.network.offline ui.overview.snapshot
+    ui.workspace.overview.snapshot ui.transactions.list
+    ui.transactions.dashboard ui.transactions.extremes ui.transactions.resolve
+    ui.transactions.graph
+    ui.transactions.search ui.transactions.ledger_template
+    ui.transactions.history ui.activity.history ui.activity.stale
+    ui.attachments.list ui.attachments.open ui.wallets.list ui.wallets.utxos
+    ui.privacy_hygiene.snapshot ui.wallets.identify ui.loans.list
+    ui.backends.list ui.backends.options ui.backends.public_defaults
+    ui.backends.settings.list
+    ui.reports.privacy_hygiene ui.reports.privacy_mirror
+    ui.reports.psbt_privacy ui.reports.explain_capital_gain
+    ui.source_funds.preview ui.source_funds.review_context ui.source_funds.request_input ui.source_funds.cases.list
+    ui.source_funds.sources.list ui.source_funds.links.list
+    ui.source_funds.evidence.list ui.source_funds.coverage
+    ui.source_funds.recipients.list ui.btcpay.provenance.list
+    ui.btcpay.provenance.links ui.transactions.commercial_context
+    ui.documents.list ui.journals.snapshot ui.journals.events.list
+    ui.journals.quarantine ui.journals.transfers.list ui.transfers.suggest ui.transfers.dismissals.list
+    ui.transfers.list ui.transfers.payouts.list
+    ui.transfers.components.list ui.transfers.components.get
+    ui.transfers.components.plan ui.custody.coverage.snapshot
+    ui.custody.lineage.snapshot ui.custody.gaps.list
+    ui.custody.gaps.review_context ui.custody.gaps.history
+    ui.custody.review.plan ui.transfers.rules.list ui.saved_views.list
+    ui.networks.binding ui.networks.inventory ui.networks.plan ui.networks.partition_plan
+    ui.profiles.snapshot ui.rates.summary ui.rates.coverage
+    ui.audit.changes_since_last_answer
+    ui.audit.evidence.summary ui.review.worklist ui.maintenance.settings
+    ui.review.cases ui.review.request_input ui.review.plan ui.review.receipt
+    ui.freshness.status
+    ui.workspace.health ui.projects.list ui.next_actions ui.review.badges
+    ui.wallets.ledger_preview ui.wallets.analyze_file ui.wallets.preview_descriptor
+    ui.imports.list
+    ui.wallets.detect_script_types ui.connections.sources ui.connections.btcpay.key_guide
+    ui.connections.exchange.status
+    ui.connections.node.snapshot ui.reports.lightning_profitability
+    ui.metadata.bip329.preview ui.exports.preview ui.reports.cross_check
+    ai.providers.list ai.providers.get
+    ai.provider_runtime.status ai.list_models
+    ui.chat.sessions.list ui.chat.sessions.get
+";
+
+const DAEMON_OPERATOR_KINDS: &str = "
+    ui.chain_analysis.watches.create ui.chain_analysis.watches.configure ui.chain_analysis.watches.delete ui.chain_analysis.watches.acknowledge ui.chain_analysis.watches.evaluate
+    ui.chain_analysis.sources.authorize ui.chain_analysis.sources.revoke ui.chain_analysis.sources.run
+    ui.chain_analysis.datasets.import ui.chain_analysis.datasets.import.start ui.chain_analysis.datasets.revoke ui.chain_analysis.datasets.discard ui.chain_analysis.datasets.discard.start
+    ui.chain_analysis.cases.save ui.chain_analysis.cases.delete ui.chain_analysis.labels.upsert ui.chain_analysis.labels.delete ui.chain_analysis.labels.import ui.chain_analysis.acquire.apply
+    ui.transactions.export_csv ui.transactions.export_xlsx
+    ui.transactions.export_platform_csv
+    ui.reports.capital_gains ui.reports.summary ui.reports.balance_sheet
+    ui.reports.portfolio_summary ui.reports.tax_summary
+    ui.reports.balance_history ui.reports.exit_tax_preview
+    ui.transfers.review_context ui.transactions.review_context
+    ui.report.blockers
+    ui.rates.latest ui.attachments.add ui.attachments.copy
+    ui.attachments.rename ui.attachments.remove ui.wallets.identify_onchain
+    ui.wallets.identify_onchain.cancel
+    ui.backends.create ui.backends.update ui.backends.set_default
+    ui.backends.bitcoinrpc.test ui.backends.btcpay.test
+    ui.backends.detect_core ui.backends.electrum.test ui.backends.http.test
+    ui.backends.lightning.test ui.reports.export_pdf
+    ui.reports.export_summary_pdf ui.reports.export_csv ui.reports.export_xlsx
+    ui.reports.export_capital_gains_csv ui.reports.export_austrian_e1kv_pdf
+    ui.reports.export_austrian_e1kv_xlsx ui.reports.export_austrian_e1kv_csv
+    ui.reports.export_exit_tax_pdf ui.reports.export_exit_tax_xlsx
+    ui.reports.export_year_handoff ui.reports.export_cross_check
+    ui.reports.export_audit_package ui.source_funds.sources.create
+    ui.source_funds.sources.attach ui.source_funds.links.create
+    ui.source_funds.links.attach ui.source_funds.suggest
+    ui.source_funds.assemble ui.source_funds.export_pdf
+    ui.source_funds.export_bundle ui.source_funds.recipients.create
+    ui.source_funds.recipients.update ui.source_funds.recipients.delete
+    ui.btcpay.provenance.sync ui.btcpay.provenance.suggest
+    ui.documents.create ui.documents.attach ui.documents.import_report
+    ui.journals.process
+    ui.saved_views.create ui.saved_views.delete ui.onboarding.complete
+    ui.networks.bind ui.networks.partition_export
+    ui.profiles.create ui.profiles.rename
+    ui.profiles.switch ui.rates.kraken_csv.import ui.rates.rebuild
+    ui.maintenance.configure ui.maintenance.run ui.freshness.configure
+    ui.network.offline.set
+    ui.freshness.run ui.freshness.cancel ui.freshness.pause
+    ui.freshness.resume ui.workspace.freshness.run ui.workspace.create
+    ui.workspace.rename ui.wallets.create ui.wallets.import_file
+    internal.chain_analysis.stage internal.document_import.stage ui.wallets.document_import.preview
+    ui.wallets.document_import.import ui.wallets.import_samourai
+    ui.connections.btcpay.create ui.connections.bullbitcoin_wallet.create
+    ui.connections.btcpay.discover ui.connections.btcpay.test
+    ui.connections.exchange.test ui.connections.exchange.create ui.connections.exchange.sync
+    ui.metadata.bip329.import ui.metadata.bip329.export ui.wallets.update
+    ui.wallets.sync ai.chat ai.chat.cancel ai.chat.permission_mode ai.tool_call.consent ui.chat.attachments.upload
+";
+
+const DAEMON_ACCOUNTING_DECISION_KINDS: &str = "
+    ui.profiles.update ui.transactions.metadata.update
+    ui.transactions.history.revert ui.loans.link ui.loans.mark ui.loans.unmark
+    ui.source_funds.cases.save ui.source_funds.links.review
+    ui.source_funds.links.bulk_review ui.btcpay.provenance.review
+    ui.journals.quarantine.resolve ui.review.apply ui.transfers.payouts.create
+    ui.transfers.payouts.delete ui.transfers.pair ui.transfers.unpair
+    ui.transfers.update ui.transfers.bulk_pair ui.transfers.dismiss ui.transfers.dismissals.delete
+    ui.transfers.components.apply ui.custody.review.apply ui.transfers.rules.create
+    ui.transfers.rules.delete ui.transfers.rules.set_enabled
+    ui.transfers.rules.apply
+";
+
+const DAEMON_ADMIN_KINDS: &str = "
+    ui.backends.delete
+    ui.workspace.delete ui.profiles.reset_data ui.projects.create
+    ui.projects.select ui.backup.export ui.backup.preview ui.backup.apply ui.backup.cancel
+    ui.secrets.init ui.secrets.change_passphrase
+    ui.secrets.forget_cli_unlock ui.wallets.delete ui.imports.rollback daemon.lock daemon.unlock
+    ai.providers.create ai.providers.update ai.providers.set_api_key
+    ai.providers.move_api_key ai.providers.delete ai.providers.set_default
+    ai.providers.clear_default ai.providers.acknowledge ai.test_connection
+    ui.chat.sessions.delete ui.chat.sessions.clear ui.chat.history.configure
+    ui.agent_access.configure ui.agent_access.unlock ui.agent_access.lock
+    ui.agent_access.pairing
+    wallets.reveal_descriptor backends.reveal_token daemon.shutdown
+";
+
+fn registry(groups: [(Capability, &'static str); 4]) -> HashMap<&'static str, Capability> {
+    let mut registry = HashMap::new();
+    for (capability, paths) in groups {
+        for path in paths.split_whitespace() {
+            if registry.insert(path, capability).is_some() {
+                panic!("duplicate capability declaration for {path:?}");
+            }
+        }
+    }
+    registry
+}
+
+fn cli_registry() -> &'static HashMap<&'static str, Capability> {
+    static REGISTRY: OnceLock<HashMap<&'static str, Capability>> = OnceLock::new();
+    REGISTRY.get_or_init(|| {
+        registry([
+            (Capability::Read, CLI_READ_PATHS),
+            (Capability::Operator, CLI_OPERATOR_PATHS),
+            (
+                Capability::AccountingDecisions,
+                CLI_ACCOUNTING_DECISION_PATHS,
+            ),
+            (Capability::Admin, CLI_ADMIN_PATHS),
+        ])
+    })
+}
+
+fn daemon_registry() -> &'static HashMap<&'static str, Capability> {
+    static REGISTRY: OnceLock<HashMap<&'static str, Capability>> = OnceLock::new();
+    REGISTRY.get_or_init(|| {
+        registry([
+            (Capability::Read, DAEMON_READ_KINDS),
+            (Capability::Operator, DAEMON_OPERATOR_KINDS),
+            (
+                Capability::AccountingDecisions,
+                DAEMON_ACCOUNTING_DECISION_KINDS,
+            ),
+            (Capability::Admin, DAEMON_ADMIN_KINDS),
+        ])
+    })
+}
+
+/// `cli_capability(path)`, or `None` for an unclassified command.
+pub fn cli_capability(path: &str) -> Option<Capability> {
+    cli_registry().get(path).copied()
+}
+
+/// `daemon_capability(kind)`, or `None` for an unclassified kind.
+pub fn daemon_capability(kind: &str) -> Option<Capability> {
+    daemon_registry().get(kind).copied()
+}
+
+/// Every classified CLI path and its capability.
+pub fn cli_capabilities() -> impl Iterator<Item = (&'static str, Capability)> {
+    cli_registry()
+        .iter()
+        .map(|(path, capability)| (*path, *capability))
+}
+
+/// Every classified daemon kind and its capability.
+pub fn daemon_capabilities() -> impl Iterator<Item = (&'static str, Capability)> {
+    daemon_registry()
+        .iter()
+        .map(|(kind, capability)| (*kind, *capability))
+}

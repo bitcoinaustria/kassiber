@@ -1,0 +1,33 @@
+[package]
+name = "kassiber-runtime"
+description = "Capability tables, build identity, status payload, and the store interface for Kassiber's Rust shell"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lib]
+name = "kassiber_runtime"
+
+[features]
+# The in-memory store the CLI and daemon tests run against. Never in a
+# release build.
+fake = []
+
+[dependencies]
+kassiber-envelope = { path = "../envelope" }
+kassiber-pyjson = { path = "../pyjson" }
+kassiber-transactions = { path = "../transactions" }
+
+kassiber-imports = { path = "../imports" }
+kassiber-wallets = { path = "../wallets" }
+kassiber-ai = { path = "../ai" }
+kassiber-backup = { path = "../backup" }
+
+[dev-dependencies]
+kassiber-pytext = { path = "../pytext" }
+
+[lints.rust]
+unsafe_code = "forbid"

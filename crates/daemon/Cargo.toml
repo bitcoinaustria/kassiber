@@ -1,0 +1,43 @@
+[package]
+name = "kassiber-daemon"
+description = "Kassiber's JSONL daemon protocol: handshake, request routing, control channel, and lifecycle"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lib]
+name = "kassiber_daemon"
+
+[features]
+# Protocol-exercising kinds for black-box tests (streaming, events, late
+# records, the secret-store control channel). Never in a release build.
+test-kinds = []
+
+[dependencies]
+kassiber-ai = { path = "../ai" }
+kassiber-backup = { path = "../backup" }
+kassiber-paths = { path = "../paths" }
+kassiber-transactions = { path = "../transactions" }
+
+kassiber-imports = { path = "../imports" }
+kassiber-mcp = { path = "../mcp" }
+kassiber-wallets = { path = "../wallets" }
+serde_json = "1"
+kassiber-envelope = { path = "../envelope" }
+kassiber-net = { path = "../net" }
+kassiber-pyjson = { path = "../pyjson" }
+kassiber-pytext = { path = "../pytext" }
+kassiber-runtime = { path = "../runtime" }
+kassiber-setup = { path = "../setup" }
+kassiber-operator = { path = "../operator" }
+zeroize = "1"
+
+[dev-dependencies]
+kassiber-runtime = { path = "../runtime", features = ["fake"] }
+tempfile = "3"
+
+[lints.rust]
+unsafe_code = "forbid"

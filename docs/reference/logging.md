@@ -80,7 +80,8 @@ extended private/public keys, descriptors, Silent Payments `sp()` / `spscan` /
 `spspend` material, BDK/LWK observer blobs or opaque store values, API keys,
 bearer tokens, and passphrase assignments. These are scrubbed by
 [`kassiber/redaction.py`](../../kassiber/redaction.py) (Python),
-`redact_sensitive_text` (Rust), and `redactSecretFloorText` (TypeScript)
+`kassiber_envelope::redaction` (Rust backend and desktop supervisor), and
+`redactSecretFloorText` (TypeScript)
 before a record is stored, so this material never exists in any buffer and
 cannot leak through later code paths, exports, or memory dumps.
 
@@ -94,9 +95,8 @@ checks. Nostr `nsec` private keys also pass through the key-material backstop.
 See [the scanner design and limits](#free-text-credential-scanner-and-limits)
 for encoding support, ambiguous URL text and prose-safe flag handling.
 
-The native Rust floor still uses its legacy token scanner. It must adopt the
-same scanners, aliases, exact corpora and all six generators during Rust
-integration; native-only stderr does not yet have Python/webview parity.
+The Rust backend and the desktop supervisor run the same floor as Python: see
+[the Rust mirror](#rust-mirror).
 
 **Operational redaction — applied at render/export time.** Amounts,
 addresses, txids, paths, URLs, labels. The Logs page renders redacted by
@@ -195,11 +195,18 @@ message.
 
 ## Tracebacks in error envelopes
 
-`internal_error` envelopes carry a sanitized traceback in `error.debug`:
+Python `internal_error` envelopes carry a sanitized traceback in `error.debug`:
 paths relativized (never absolute, never containing the home directory),
 secret-floor scrubbed, length-capped. The CLI sanitizes the envelope copy
 of `--debug` tracebacks the same way while keeping the raw traceback on
 the local stderr.
+
+The [native Rust diagnostic contract](rust-shell.md#diagnostics-service-slice-r5)
+uses an empty string when no bounded native frames are available. For
+[configuration-hygiene corrupt-marker daemon errors](rust-shell.md#corrupt-marker-daemon-diagnostics-r5-privacy-continuation),
+that string is present with or without global `--debug`, matching Python's
+field presence. Typed refusals retain null. Native stderr stays empty; Python
+tracebacks and native frame paths are never fabricated or serialized.
 
 The AI surface never sees `error.debug`. Error envelopes are not embedded
 in provider-bound content today, and `redact_tool_arguments`
@@ -323,6 +330,18 @@ including indented continuation lines: `user: alice Pw9Leak`,
 are masked. `credentials` remains a secret alias. Colon status literals `none`,
 `expired` and `(not set)` remain readable on their own; `=` assignments are
 secret-bearing.
+
+One exception sits before the scanner, in `sanitize_traceback_text` (Python
+`log_ring.py`, Rust `kassiber_envelope::redaction`): the macOS Touch ID helper
+reports failures as `kassiber native auth: <text>`, which reads as an
+`auth: <secret>` pair. When the whole message is that prefix followed by one
+of the helper's fixed texts (`NATIVE_AUTH_ERROR_MESSAGES`), or by one of four
+texts that end in an OSStatus number (`NATIVE_AUTH_ERROR_STATUS_TEMPLATES`, at
+most ten ASCII digits with an optional minus), it passes unchanged. Anything
+else after `auth:`, including a known text with more appended, stays redacted.
+Both runtimes share the vectors in
+`crates/envelope/tests/data/native_auth_errors.json`, and a test checks that
+every allowlisted text is still one the helper source can print.
 
 An unquoted value after a secret key is masked through the end of its line and
 any following lines indented deeper than that line's own indent (past YAML
@@ -468,7 +487,27 @@ streams have the same SHA-256 digest in both runtimes; the first four also asser
 that planted identifiers, hostnames, prose and help remain readable. The webview bare-mnemonic heuristic retains its three
 known corpus differences from Python.
 
-The native Rust secret floor and supervisor need the same scanners, aliases,
-exact corpora and all six generators before claiming this free-text contract.
-Forwarding already-redacted Python records does not cover arbitrary native
-stderr. See the implementation verification report for the required Rust mirror.
+### Rust mirror
+
+[`crates/envelope/src/redaction/scanner.rs`](../../crates/envelope/src/redaction/scanner.rs)
+mirrors `kassiber/redaction_scanner.py` function by function, and
+[`floor.rs`](../../crates/envelope/src/redaction/floor.rs) the key, descriptor
+and token patterns and `is_sensitive_key` of `redaction.py`. Python's regular
+expressions are written out as matchers that accept exactly what `re` accepts,
+over code points, with no regex engine; a surrogate stands in as a
+private-use character, as elsewhere in the envelope. Both files use only the
+standard library, so the desktop supervisor
+([`secret_floor.rs`](../../ui-tauri/src-tauri/src/secret_floor.rs)) compiles
+the same source for its stderr tail, lifecycle records and error details,
+including the eight-level `[truncated]` depth of `redact_secret_value`.
+Every Rust caller (daemon errors and log ring, chain and wallet diagnostics,
+metadata history, provider previews) goes through these functions.
+
+`crates/envelope/tests/scanner_corpus.rs` checks Rust output byte for byte
+against Python's for every case of the shared fixture corpora, and, from
+`crates/envelope/scripts/gen_scanner_vectors.py generators`, for all six
+generators at their pinned seeds (reproducing the pinned digests), their pinned
+extra seeds and two more seeds each. `scanner_scaling.rs` times every scaling
+and stress shape at 40,000 and 400,000 characters in thread CPU time (release
+build); `scanner_families.rs` names one test per rule family, which the entries
+of `crates/envelope/scripts/mutations.json` must make fail.

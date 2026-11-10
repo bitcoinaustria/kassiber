@@ -1,0 +1,1146 @@
+[
+  {
+    "id": "json-frame-receive-limit",
+    "file": "crates/operator/src/protocol.rs",
+    "find": "    if size > limit {",
+    "replace": "    if size >= limit {",
+    "expect_failing": [
+      "frame_limits_hold_at_their_boundaries"
+    ],
+    "rule": "A frame of exactly the limit is read; one byte more is refused before its body."
+  },
+  {
+    "id": "json-frame-send-limit",
+    "file": "crates/operator/src/protocol.rs",
+    "find": "    if body.len() > MAX_JSON_FRAME {",
+    "replace": "    if body.len() >= MAX_JSON_FRAME {",
+    "expect_failing": [
+      "frame_limits_hold_at_their_boundaries"
+    ],
+    "rule": "A JSON body of exactly 8 MiB is sent."
+  },
+  {
+    "id": "secret-payload-send-limit",
+    "file": "crates/operator/src/protocol.rs",
+    "find": "    if secret.len() > MAX_SECRET_PAYLOAD_BYTES {\n        return Err(Error::App(\n",
+    "replace": "    if secret.len() >= MAX_SECRET_PAYLOAD_BYTES {\n        return Err(Error::App(\n",
+    "expect_failing": [
+      "secret_payload_limit_round_trips_at_the_shared_boundary"
+    ],
+    "rule": "A secret of exactly the shared payload limit is sent."
+  },
+  {
+    "id": "secret-frame-send-limit",
+    "file": "crates/operator/src/protocol.rs",
+    "find": "    if body_length > MAX_SECRET_FRAME {",
+    "replace": "    if body_length >= MAX_SECRET_FRAME {",
+    "expect_failing": [
+      "secret_payload_limit_round_trips_at_the_shared_boundary"
+    ],
+    "rule": "A secret frame of exactly 16 KiB is sent."
+  },
+  {
+    "id": "secret-payload-receive-limit",
+    "file": "crates/operator/src/protocol.rs",
+    "find": "    let secret = &body[index + 1..];\n    if secret.len() > MAX_SECRET_PAYLOAD_BYTES {",
+    "replace": "    let secret = &body[index + 1..];\n    if secret.len() > MAX_SECRET_PAYLOAD_BYTES + 1 {",
+    "expect_failing": [
+      "secret_payload_limit_round_trips_at_the_shared_boundary"
+    ],
+    "rule": "A received secret over the payload limit is refused even when the frame fits."
+  },
+  {
+    "id": "challenge-length",
+    "file": "crates/operator/src/protocol.rs",
+    "find": "    if left.len() != right.len() {\n        return false;",
+    "replace": "    if left.len() != right.len() && left.is_empty() {\n        return false;",
+    "expect_failing": [
+      "challenge_comparison_is_exact_and_length_checked",
+      "wrong_secret_challenge_fails_closed"
+    ],
+    "rule": "A challenge prefix never matches the issued challenge."
+  },
+  {
+    "id": "challenge-bytes",
+    "file": "crates/operator/src/protocol.rs",
+    "find": "        difference |= a ^ b;",
+    "replace": "        difference |= a & 0;",
+    "expect_failing": [
+      "challenge_comparison_is_exact_and_length_checked",
+      "wrong_secret_challenge_fails_closed"
+    ],
+    "rule": "Every challenge byte is compared."
+  },
+  {
+    "id": "peer-uid",
+    "file": "crates/operator/src/runtime.rs",
+    "find": "    if credentials.uid != expected_uid {",
+    "replace": "    if credentials.uid == u32::MAX {",
+    "expect_failing": [
+      "cross_user_unix_peer_is_rejected"
+    ],
+    "rule": "A peer of another OS user is refused."
+  },
+  {
+    "id": "runtime-mode",
+    "file": "crates/operator/src/runtime.rs",
+    "find": "        if info.mode() & 0o077 != 0 {",
+    "replace": "        if info.mode() & 0o007 != 0 {",
+    "expect_failing": [
+      "permissive_runtime_directory_is_rejected"
+    ],
+    "rule": "Group permission bits on the runtime directory are refused too."
+  },
+  {
+    "id": "runtime-owner",
+    "file": "crates/operator/src/runtime.rs",
+    "find": "        if info.uid() != kassiber_ipc::unix::current_uid() {\n            return Err(unsafe_directory(",
+    "replace": "        if info.uid() == u32::MAX {\n            return Err(unsafe_directory(",
+    "expect_failing": [
+      "runtime_directory_of_another_user_is_rejected"
+    ],
+    "rule": "A runtime directory of another OS user is refused."
+  },
+  {
+    "id": "runtime-symlink",
+    "file": "crates/operator/src/runtime.rs",
+    "find": "    if std::fs::symlink_metadata(path).is_ok_and(|info| info.file_type().is_symlink()) {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "runtime_directory_symlinks_and_files_are_refused"
+    ],
+    "rule": "A symlinked runtime directory is refused."
+  },
+  {
+    "id": "override-frozen",
+    "file": "crates/operator/src/runtime.rs",
+    "find": "            .filter(|dir| !dir.is_empty() && gate && !self.frozen)",
+    "replace": "            .filter(|dir| !dir.is_empty() && gate)",
+    "expect_failing": [
+      "runtime_override_requires_explicit_nonfrozen_test_gate"
+    ],
+    "rule": "A frozen build never honours the test runtime override."
+  },
+  {
+    "id": "stale-unlink-kinds",
+    "file": "crates/operator/src/runtime.rs",
+    "find": "                io::ErrorKind::ConnectionRefused | io::ErrorKind::NotFound\n",
+    "replace": "                io::ErrorKind::ConnectionRefused | io::ErrorKind::NotFound | io::ErrorKind::TimedOut\n",
+    "expect_failing": [
+      "only_refused_or_vanished_probes_allow_the_unlink"
+    ],
+    "rule": "Only a refused or vanished probe proves the socket stale."
+  },
+  {
+    "id": "stale-unlink-live",
+    "file": "crates/operator/src/runtime.rs",
+    "find": "        if stale_probe_allows_unlink(&probe) {",
+    "replace": "        if stale_probe_allows_unlink(&probe) || probe.is_ok() {",
+    "expect_failing": [
+      "live_endpoints_and_non_sockets_are_never_unlinked"
+    ],
+    "rule": "A live broker's endpoint is never unlinked."
+  },
+  {
+    "id": "stale-unlink-socket-type",
+    "file": "crates/operator/src/runtime.rs",
+    "find": "        if !info.file_type().is_socket() {",
+    "replace": "        if info.file_type().is_symlink() {",
+    "expect_failing": [
+      "live_endpoints_and_non_sockets_are_never_unlinked"
+    ],
+    "rule": "Only a socket is ever unlinked as stale."
+  },
+  {
+    "id": "close-inode",
+    "file": "crates/operator/src/runtime.rs",
+    "find": "                Ok(info) if self.identity == Some((info.dev(), info.ino())) => {",
+    "replace": "                Ok(info) if self.identity.is_some() || info.ino() == 0 => {",
+    "expect_failing": [
+      "listener_close_does_not_unlink_a_replacement_endpoint"
+    ],
+    "rule": "Closing unlinks only the inode this listener bound."
+  },
+  {
+    "id": "socket-read-timeout",
+    "file": "crates/operator/src/runtime.rs",
+    "find": "        stream.set_read_timeout(timeout)?;",
+    "replace": "        stream.set_read_timeout(None)?;",
+    "expect_failing": [
+      "ping_read_is_bounded_when_endpoint_accepts_but_never_replies",
+      "simple_requests_are_bounded_at_two_seconds"
+    ],
+    "rule": "Every receive is bounded by the connection's I/O deadline."
+  },
+  {
+    "id": "ping-timeout",
+    "file": "crates/operator/src/client.rs",
+    "find": "pub const PING_TIMEOUT: Duration = Duration::from_secs(1);",
+    "replace": "pub const PING_TIMEOUT: Duration = Duration::from_secs(3);",
+    "expect_failing": [
+      "ping_read_is_bounded_when_endpoint_accepts_but_never_replies",
+      "connection_timeouts_follow_each_action"
+    ],
+    "rule": "A ping waits at most one second to connect and per read."
+  },
+  {
+    "id": "simple-request-timeout",
+    "file": "crates/operator/src/client.rs",
+    "find": "pub const SIMPLE_REQUEST_IO_TIMEOUT: Duration = Duration::from_secs(2);",
+    "replace": "pub const SIMPLE_REQUEST_IO_TIMEOUT: Duration = Duration::from_secs(1);",
+    "expect_failing": [
+      "simple_requests_are_bounded_at_two_seconds",
+      "connection_timeouts_follow_each_action"
+    ],
+    "rule": "Simple requests keep Python's two-second I/O deadline."
+  },
+  {
+    "id": "same-build",
+    "file": "crates/operator/src/client.rs",
+    "find": "        if build.is_some_and(|build| py_eq(build, &this_build)) {",
+    "replace": "        if build.is_some() {",
+    "expect_failing": [
+      "unlock_never_sends_a_passphrase_to_another_builds_broker",
+      "build_identity_equality_is_pythons",
+      "the_broker_asking_for_the_secret_must_be_this_build"
+    ],
+    "rule": "A passphrase or command goes only to a broker that names this build."
+  },
+  {
+    "id": "accepted-build",
+    "file": "crates/operator/src/client.rs",
+    "find": "        if require_same_build && !py_eq(&build, &self.this_build()) {",
+    "replace": "        if require_same_build && matches!(build, Value::Null) {",
+    "expect_failing": [
+      "work_another_build_accepted_is_withdrawn_when_this_build_is_required",
+      "a_retry_accepted_by_another_build_is_still_refused"
+    ],
+    "rule": "Work another build accepted is withdrawn when this build is required."
+  },
+  {
+    "id": "build-equality-strings",
+    "file": "crates/operator/src/values.rs",
+    "find": "        (Value::Str(a), Value::Str(b)) => a == b,",
+    "replace": "        (Value::Str(_), Value::Str(_)) => true,",
+    "expect_failing": [
+      "equality_follows_python",
+      "build_identity_equality_is_pythons"
+    ],
+    "rule": "Build identities compare their strings."
+  },
+  {
+    "id": "secret-label-order",
+    "file": "crates/operator/src/client.rs",
+    "find": "            labels.sort_by(|(a, _), (b, _)| a.code_points().cmp(b.code_points()));",
+    "replace": "            labels.sort_by(|(a, _), (b, _)| b.code_points().cmp(a.code_points()));",
+    "expect_failing": [
+      "submit_sends_command_secrets_in_label_order_then_admin"
+    ],
+    "rule": "Command secrets follow in sorted label order."
+  },
+  {
+    "id": "egress-kill-switch",
+    "file": "crates/operator/src/client.rs",
+    "find": "        matches!(value.as_str(), \"1\" | \"true\" | \"yes\" | \"on\")",
+    "replace": "        matches!(value.as_str(), \"1\" | \"true\" | \"on\")",
+    "expect_failing": [
+      "submit_carries_the_callers_egress_kill_switch"
+    ],
+    "rule": "Every truthy KASSIBER_NO_EGRESS spelling reaches the broker."
+  },
+  {
+    "id": "inherit-cloexec",
+    "file": "crates/ipc/src/process.rs",
+    "find": "                        || libc::fcntl(*fd, libc::F_SETFD, flags & !libc::FD_CLOEXEC) == -1",
+    "replace": "                        || libc::fcntl(*fd, libc::F_SETFD, flags) == -1",
+    "expect_failing": [
+      "only_listed_descriptors_cross_exec",
+      "inherited_owner_handles_exclude_a_second_owner_after_parent_release"
+    ],
+    "rule": "Listed descriptors cross exec into the child."
+  },
+  {
+    "id": "prune-age-floor",
+    "file": "crates/ownership/src/lib.rs",
+    "find": "    mtime(path).is_some_and(|modified| now - modified >= PRUNE_MIN_AGE_SECONDS)",
+    "replace": "    mtime(path).is_some_and(|modified| now - modified >= 0.0)",
+    "expect_failing": [
+      "prune_spares_records_younger_than_the_age_floor"
+    ],
+    "rule": "Records younger than seven days are never swept."
+  },
+  {
+    "id": "prune-live",
+    "file": "crates/ownership/src/lib.rs",
+    "find": "        let dead = try_lock(&handle, false).unwrap_or(false);",
+    "replace": "        let dead = try_lock(&handle, true).unwrap_or(true) || true;",
+    "expect_failing": [
+      "prune_drops_dead_records_and_spares_live_ones"
+    ],
+    "rule": "A record a live process holds is never swept."
+  },
+  {
+    "id": "owner-record-bytes",
+    "file": "crates/ownership/src/lib.rs",
+    "find": "    let mut text = dumps(&record, &Options::new().sort_keys(true)).expect(\"owner record\");",
+    "replace": "    let mut text = dumps(&record, &Options::new().sort_keys(true).compact()).expect(\"owner record\");",
+    "expect_failing": [
+      "owner_records_are_python_json_dumps_bytes"
+    ],
+    "rule": "Owner records are Python's json.dumps(sort_keys=True) bytes."
+  },
+  {
+    "id": "in-use-pid-hint",
+    "file": "crates/ownership/src/lib.rs",
+    "find": "        .map_or_else(String::new, |pid| format!(\" It is held by pid {pid}.\"));",
+    "replace": "        .map_or_else(String::new, |_| String::new());",
+    "expect_failing": [
+      "conflict_names_the_holding_process"
+    ],
+    "rule": "project_in_use names the holder's pid."
+  },
+  {
+    "id": "admission-capability",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "            if !Capability::allows(lease.capability, parsed.capability) {",
+    "replace": "            if !Capability::allows(Capability::AccountingDecisions, parsed.capability) {",
+    "expect_failing": [
+      "test_rejected_submissions_wipe_every_staged_secret"
+    ],
+    "rule": "Admission checks the command's capability against the lease's grant."
+  },
+  {
+    "id": "dispatch-capability-recheck",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "                    && !Capability::allows(lease.capability, capability)\n",
+    "replace": "                    && false\n",
+    "expect_failing": [
+      "test_capability_is_rechecked_immediately_before_dispatch"
+    ],
+    "rule": "A narrowed lease cancels queued work it no longer grants."
+  },
+  {
+    "id": "capability-order",
+    "file": "crates/operator/src/service/backend.rs",
+    "find": "        granted.order() >= required.order()",
+    "replace": "        granted.order() > required.order()",
+    "expect_failing": [
+      "test_capabilities_are_cumulative_and_never_admin"
+    ],
+    "rule": "Grants are cumulative: a capability covers itself and below."
+  },
+  {
+    "id": "lease-before-scope",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "            self.require_lease_locked(&mut state, &project)?;\n            Ok(())",
+    "replace": "            Ok(())",
+    "expect_failing": [
+      "test_missing_lease_precedes_scope_validation"
+    ],
+    "rule": "A missing lease is reported before scope validation."
+  },
+  {
+    "id": "scope-required",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": ".filter(|(_, declared, value)| *declared && value.is_none())",
+    "replace": ".filter(|(_, declared, value)| !*declared && value.is_none())",
+    "expect_failing": [
+      "test_scoped_command_without_explicit_book_fails_closed"
+    ],
+    "rule": "Every declared scope flag must be given explicitly."
+  },
+  {
+    "id": "context-set-scope",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "        if workspace.is_some() || profile.is_some() {",
+    "replace": "        if workspace.is_some() {",
+    "expect_failing": [
+      "test_context_set_needs_one_scope_flag"
+    ],
+    "rule": "context set accepts either scope flag."
+  },
+  {
+    "id": "project-mismatch",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "            if requested_project.identity != project.identity {",
+    "replace": "            if requested_project.identity == \"\" {",
+    "expect_failing": [
+      "test_child_project_locator_cannot_borrow_another_projects_lease"
+    ],
+    "rule": "A command naming another project never borrows this lease."
+  },
+  {
+    "id": "replay-egress",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "                    || existing.no_egress != no_egress\n",
+    "replace": "",
+    "expect_failing": [
+      "test_operation_id_replay_must_repeat_the_callers_directory"
+    ],
+    "rule": "A replayed operation id must repeat the caller's egress switch."
+  },
+  {
+    "id": "fingerprint-context",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "        Value::Bool(no_egress),\n    ]);",
+    "replace": "        Value::Bool(false),\n    ]);",
+    "expect_failing": [
+      "test_fingerprints_follow_python_json"
+    ],
+    "rule": "Tombstone fingerprints bind the caller context."
+  },
+  {
+    "id": "tombstone-conflict",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "                    || *bound_fingerprint\n",
+    "replace": "                    || false && *bound_fingerprint\n",
+    "expect_failing": [
+      "test_evicted_operation_id_is_not_reexecuted"
+    ],
+    "rule": "An evicted id with another request is a conflict."
+  },
+  {
+    "id": "retention-count",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "            && (terminal.len() > limits.max_retained_results",
+    "replace": "            && (terminal.len() > limits.max_retained_results + 1",
+    "expect_failing": [
+      "test_terminal_transition_prunes_retained_results"
+    ],
+    "rule": "At most 256 terminal results are kept."
+  },
+  {
+    "id": "retention-bytes",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "|| (retained_bytes > limits.max_retained_result_bytes && terminal.len() > 1))",
+    "replace": "|| (retained_bytes > limits.max_retained_result_bytes && terminal.len() > 2))",
+    "expect_failing": [
+      "test_result_byte_budget_evicts_to_bounded_fingerprint_tombstones"
+    ],
+    "rule": "The byte budget evicts down to the newest result."
+  },
+  {
+    "id": "tombstone-bound",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "        while state.tombstones.len() > limits.max_tombstones {",
+    "replace": "        while state.tombstones.len() > limits.max_tombstones + 1 {",
+    "expect_failing": [
+      "test_tombstones_are_bounded_oldest_first"
+    ],
+    "rule": "Tombstones are bounded, oldest first."
+  },
+  {
+    "id": "lease-expiry",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "        if self.expires_at.is_some_and(|deadline| now >= deadline) {",
+    "replace": "        if self.expires_at.is_some_and(|deadline| now >= deadline + Duration::from_secs(3600)) {",
+    "expect_failing": [
+      "test_lease_expires_by_duration_and_status_reports_locked"
+    ],
+    "rule": "A lease ends at its deadline."
+  },
+  {
+    "id": "idle-expiry",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "now.saturating_duration_since(self.last_used).as_secs_f64() >= timeout as f64",
+    "replace": "now.saturating_duration_since(self.last_used).as_secs_f64() >= timeout as f64 + 1.0",
+    "expect_failing": [
+      "test_idle_timeout_ends_an_agent_lease"
+    ],
+    "rule": "An agent lease ends once its idle timeout has passed, not a second later."
+  },
+  {
+    "id": "admin-ttl",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "                expires_at: Instant::now() + self.inner.limits.admin_auth_ttl,",
+    "replace": "                expires_at: Instant::now() + self.inner.limits.admin_auth_ttl * 2,",
+    "expect_failing": [
+      "test_admin_authorization_lives_sixty_seconds"
+    ],
+    "rule": "Fresh admin authorization lives 60 seconds."
+  },
+  {
+    "id": "admin-single-use",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "let already_consumed = authorization.consumed.swap(true, Ordering::SeqCst);",
+    "replace": "let already_consumed = authorization.consumed.load(Ordering::SeqCst);",
+    "expect_failing": [
+      "test_admin_authorization_is_single_use_and_bound_to_lease_epoch"
+    ],
+    "rule": "An admin authorization is consumed by its first use."
+  },
+  {
+    "id": "admin-epoch",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "                && authorization.lease_epoch == lease.epoch\n",
+    "replace": "",
+    "expect_failing": [
+      "test_admin_authorization_is_single_use_and_bound_to_lease_epoch"
+    ],
+    "rule": "An admin authorization is bound to the lease it was issued under."
+  },
+  {
+    "id": "admin-dispatch-recheck",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "                let admin_expired = capability == Capability::Admin\n",
+    "replace": "                let admin_expired = false && capability == Capability::Admin\n",
+    "expect_failing": [
+      "test_admin_authentication_is_rechecked_after_owner_inheritance"
+    ],
+    "rule": "Admin authorization is rechecked after owner inheritance."
+  },
+  {
+    "id": "failed-versus-unknown",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "|| (result.exit_code != 0 && dispatch.capability != Capability::Read)",
+    "replace": "|| (result.exit_code != 0 && dispatch.capability == Capability::Admin)",
+    "expect_failing": [
+      "test_unproven_nonzero_mutation_is_unknown_but_read_failure_is_failed"
+    ],
+    "rule": "Only a read's failure is failed; a mutation's is result_unknown."
+  },
+  {
+    "id": "signal-unknown",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "                    || result.exit_code < 0\n",
+    "replace": "",
+    "expect_failing": [
+      "test_signalled_read_child_is_result_unknown"
+    ],
+    "rule": "A signalled child is result_unknown."
+  },
+  {
+    "id": "lease-ending-rotation",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "        \"secrets.change-passphrase\" => Some(",
+    "replace": "        \"secrets.change-passphrase-x\" => Some(",
+    "expect_failing": [
+      "test_successful_passphrase_rotation_revokes_the_lease"
+    ],
+    "rule": "A rotation ends the lease."
+  },
+  {
+    "id": "lease-ending-remembered",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "        \"secrets.remember-unlock\" => {",
+    "replace": "        \"secrets.remember-unlock-x\" => {",
+    "expect_failing": [
+      "test_credential_mode_commands_revoke_lease_after_success",
+      "test_credential_mode_partial_outcomes_revoke_and_drain_lease"
+    ],
+    "rule": "Remembered-unlock enrollment ends the lease."
+  },
+  {
+    "id": "pin-data-root",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "        if token == \"--project\" || token == \"--data-root\" {",
+    "replace": "        if token == \"--project\" {",
+    "expect_failing": [
+      "test_pinning_strips_every_project_locator"
+    ],
+    "rule": "Pinning strips the caller's --data-root."
+  },
+  {
+    "id": "pin-inline",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "        if token.starts_with(\"--project=\") || token.starts_with(\"--data-root=\") {",
+    "replace": "        if token.starts_with(\"--project=\") {",
+    "expect_failing": [
+      "test_pinning_strips_every_project_locator"
+    ],
+    "rule": "Pinning strips inline locators too."
+  },
+  {
+    "id": "queue-limit",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "        if queue.0.len() >= limit {",
+    "replace": "        if queue.0.len() > limit {",
+    "expect_failing": [
+      "test_bounded_queue_rejects_before_false_acceptance"
+    ],
+    "rule": "A project queue holds 64 operations."
+  },
+  {
+    "id": "result-too-large",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "    encoded > MAX_JSON_FRAME - OPERATION_STATUS_FRAME_HEADROOM",
+    "replace": "    encoded >= MAX_JSON_FRAME - OPERATION_STATUS_FRAME_HEADROOM",
+    "expect_failing": [
+      "test_oversized_result_is_measured_on_the_escaped_length"
+    ],
+    "rule": "The result limit is measured on the escaped length, at its boundary."
+  },
+  {
+    "id": "stderr-redaction",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "            redact_secret_text(&result.stderr),",
+    "replace": "            result.stderr.clone(),",
+    "expect_failing": [
+      "test_completed_child_stderr_is_secret_floor_redacted"
+    ],
+    "rule": "A child's stderr passes the secret floor."
+  },
+  {
+    "id": "client-limit",
+    "file": "crates/operator/src/server.rs",
+    "find": "(count < MAX_CLIENT_THREADS).then_some(count + 1)",
+    "replace": "(count <= MAX_CLIENT_THREADS).then_some(count + 1)",
+    "expect_failing": [
+      "test_excess_clients_get_retryable_backpressure"
+    ],
+    "rule": "At most 64 clients are served at once."
+  },
+  {
+    "id": "public-details-paths",
+    "file": "crates/operator/src/server.rs",
+    "find": "\"path\" | \"database\" | \"data_root\"",
+    "replace": "\"path\" | \"data_root\"",
+    "expect_failing": [
+      "test_error_details_recursively_redact_secret_keys_and_values"
+    ],
+    "rule": "Error details never carry a database path."
+  },
+  {
+    "id": "expected-build",
+    "file": "crates/operator/src/server.rs",
+    "find": "            if !py_eq(expected, &self.inner.build) {",
+    "replace": "            if false {",
+    "expect_failing": [
+      "test_submit_for_another_build_is_refused_before_admission"
+    ],
+    "rule": "A submit for another build is refused before admission."
+  },
+  {
+    "id": "login-required",
+    "file": "crates/operator/src/server.rs",
+    "find": "            && (logind_alive == Some(false)\n                || (logind_alive.is_none() && session_runtime.is_none()))",
+    "replace": "            && (logind_alive == Some(false))",
+    "expect_failing": [
+      "test_linux_refuses_broker_without_logout_lifetime_primitive"
+    ],
+    "rule": "A broker needs logind or the runtime directory to start."
+  },
+  {
+    "id": "logind-logout",
+    "file": "crates/operator/src/session.rs",
+    "find": "    if logind_alive == Some(false) {\n        return false;",
+    "replace": "    if false {\n        return false;",
+    "expect_failing": [
+      "runtime_guard_can_cover_transient_logind_query_loss"
+    ],
+    "rule": "A logout logind reports ends the broker."
+  },
+  {
+    "id": "logind-states",
+    "file": "crates/operator/src/session.rs",
+    "find": "    matches!(state, \"online\" | \"active\")",
+    "replace": "    matches!(state, \"online\" | \"active\" | \"lingering\")",
+    "expect_failing": [
+      "logind_user_state_distinguishes_login_from_linger"
+    ],
+    "rule": "Lingering is not a live login."
+  },
+  {
+    "id": "logind-missing-record",
+    "file": "crates/operator/src/session.rs",
+    "find": "            return Some(\"offline\".into())",
+    "replace": "            return None",
+    "expect_failing": [
+      "user_records_parse_as_sd_uid_get_state",
+      "logind_is_unknown_without_a_running_systemd"
+    ],
+    "rule": "A missing logind user record is offline."
+  },
+  {
+    "id": "volatile-runtime",
+    "file": "crates/operator/src/session.rs",
+    "find": "best.is_some_and(|(_, filesystem)| matches!(filesystem, \"ramfs\" | \"tmpfs\"))",
+    "replace": "best.is_some_and(|(_, filesystem)| matches!(filesystem, \"ramfs\" | \"tmpfs\" | \"ext4\"))",
+    "expect_failing": [
+      "runtime_fallback_requires_the_canonical_volatile_owner_directory"
+    ],
+    "rule": "Only a memory-backed runtime directory counts."
+  },
+  {
+    "id": "backoff-threshold",
+    "file": "crates/operator/src/backoff.rs",
+    "find": "        if counters.failures < AUTH_FAILURES_BEFORE_BACKOFF {",
+    "replace": "        if counters.failures <= AUTH_FAILURES_BEFORE_BACKOFF {",
+    "expect_failing": [
+      "three_failures_start_a_persisted_backoff",
+      "test_wrong_passphrases_feed_the_shared_backoff"
+    ],
+    "rule": "The third failed passphrase starts a backoff."
+  },
+  {
+    "id": "runner-caller-directory",
+    "file": "crates/operator/src/runner.rs",
+    "find": ".is_some_and(|directory| !std::path::Path::new(directory).is_dir())",
+    "replace": ".is_some_and(|_| false)",
+    "expect_failing": [
+      "worker_refuses_when_the_callers_directory_disappeared"
+    ],
+    "rule": "A vanished caller directory refuses the launch."
+  },
+  {
+    "id": "runner-egress",
+    "file": "crates/operator/src/runner.rs",
+    "find": "        if operation.no_egress {",
+    "replace": "        if !operation.no_egress {",
+    "expect_failing": [
+      "worker_child_gets_caller_directory_and_tightened_egress"
+    ],
+    "rule": "The caller's egress kill switch reaches the child."
+  },
+  {
+    "id": "agent-access-schema-exact",
+    "file": "crates/setup/src/agent_access.rs",
+    "find": "Some(Value::Int(v)) if *v == SCHEMA_VERSION.into())",
+    "replace": "Some(Value::Int(_) | Value::Bool(_)))",
+    "expect_failing": [
+      "agent_access_parsing_fails_closed"
+    ],
+    "rule": "agent-access.json counts only with schema_version exactly the integer 1."
+  },
+  {
+    "id": "agent-access-size-cap",
+    "file": "crates/setup/src/agent_access.rs",
+    "find": "read_small_regular_file(path, MAX_BYTES)",
+    "replace": "read_small_regular_file(path, MAX_BYTES + 1)",
+    "expect_failing": [
+      "agent_access_parsing_fails_closed"
+    ],
+    "rule": "agent-access.json over 1,024 bytes reads as off."
+  },
+  {
+    "id": "agent-access-literal-true",
+    "file": "crates/setup/src/agent_access.rs",
+    "find": "mcp_enabled: get(&payload, \"mcp_enabled\") == Some(&Value::Bool(true)),",
+    "replace": "mcp_enabled: get(&payload, \"mcp_enabled\").is_some_and(kassiber_envelope::truthy),",
+    "expect_failing": [
+      "agent_access_parsing_fails_closed"
+    ],
+    "rule": "Only a literal true turns external agents on."
+  },
+  {
+    "id": "agent-access-reason-precedence",
+    "file": "crates/setup/src/agent_access.rs",
+    "find": "if !self.mcp_enabled {",
+    "replace": "if !self.mcp_enabled && self.ai_features_enabled != Some(false) {",
+    "expect_failing": [
+      "agent_access_reason_precedence"
+    ],
+    "rule": "MCP off outranks AI off as the reason agents are refused."
+  },
+  {
+    "id": "agent-access-keeps-other-field",
+    "file": "crates/setup/src/agent_access.rs",
+    "find": "                .or(current.ai_features_enabled)\n                .map_or(Value::Null, Value::Bool),",
+    "replace": "                .map_or(Value::Null, Value::Bool),",
+    "expect_failing": [
+      "agent_access_writes_sorted_keys_and_keeps_the_other_field"
+    ],
+    "rule": "Setting one agent-access field keeps the other."
+  },
+  {
+    "id": "agent-peer-pid",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "peer_pid.is_some_and(|pid| session.pid == pid)",
+    "replace": "peer_pid.is_some()",
+    "expect_failing": [
+      "test_an_allowed_process_reads_and_its_activity_is_counted"
+    ],
+    "rule": "An agent call must come from the process id the session was opened by."
+  },
+  {
+    "id": "agent-session-token",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "constant_time_eq(session.token.as_bytes(), token.as_bytes())",
+    "replace": "!token.is_empty()",
+    "expect_failing": [
+      "test_an_allowed_process_reads_and_its_activity_is_counted"
+    ],
+    "rule": "An agent call must present the token only its session's process received."
+  },
+  {
+    "id": "agent-denial-memory",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "state.agent_denials.push((identity, epoch, pid));",
+    "replace": "let _ = (identity, epoch, pid);",
+    "expect_failing": [
+      "test_denying_withdraws_and_cannot_be_undone_for_that_process"
+    ],
+    "rule": "A denied process stays refused for the rest of the grant."
+  },
+  {
+    "id": "agent-denial-cap",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "if denials >= self.inner.limits.max_remembered_agent_denials {",
+    "replace": "if denials > self.inner.limits.max_remembered_agent_denials {",
+    "expect_failing": [
+      "test_denials_are_never_forgotten_while_the_grant_lasts"
+    ],
+    "rule": "Rather than forget a denial, a full denial list refuses new agents."
+  },
+  {
+    "id": "agent-scope-mcp-only",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "if command_path != \"mcp.call\" {",
+    "replace": "if command_path.is_empty() {",
+    "expect_failing": [
+      "test_an_agent_lease_admits_only_mcp_tool_calls"
+    ],
+    "rule": "An agent lease admits only mcp call."
+  },
+  {
+    "id": "agent-heartbeat-only",
+    "file": "crates/operator/src/server.rs",
+    "find": "if get(&message, \"action\") == Some(&s(\"agent_session_heartbeat\")) => {}",
+    "replace": "if get(&message, \"action\").is_some() => {}",
+    "expect_failing": [
+      "test_a_session_ends_on_any_other_frame_or_when_its_lease_ends"
+    ],
+    "rule": "Any frame but a heartbeat ends an agent session."
+  },
+  {
+    "id": "agent-session-ends-with-lease",
+    "file": "crates/operator/src/server.rs",
+    "find": "while service.agent_session_alive(&ticket.id) {",
+    "replace": "while !ticket.id.is_empty() {",
+    "expect_failing": [
+      "test_a_session_ends_on_any_other_frame_or_when_its_lease_ends"
+    ],
+    "rule": "An agent session ends with its lease, before the next read."
+  },
+  {
+    "id": "desktop-check-interval",
+    "file": "crates/daemon/src/agent_access.rs",
+    "find": "next_check: granted_at + CHECK_INTERVAL,",
+    "replace": "next_check: granted_at,",
+    "expect_failing": [
+      "test_the_loop_checks_a_live_session_only_every_so_often",
+      "test_expire_leaves_a_live_lease_alone"
+    ],
+    "rule": "The request loop first asks the broker 30 s after the grant."
+  },
+  {
+    "id": "desktop-recheck-interval",
+    "file": "crates/daemon/src/agent_access.rs",
+    "find": "lease.next_check = now + CHECK_INTERVAL;",
+    "replace": "lease.next_check = now;",
+    "expect_failing": [
+      "test_a_live_check_waits_another_thirty_seconds"
+    ],
+    "rule": "After a check the loop waits another 30 s."
+  },
+  {
+    "id": "desktop-restore-manual",
+    "file": "crates/daemon/src/agent_access.rs",
+    "find": "restore_manual: get(&granted, \"previous_mode\") == Some(&s(\"manual\")),",
+    "replace": "restore_manual: true,",
+    "expect_failing": [
+      "test_only_a_book_the_broker_saw_as_manual_is_restored"
+    ],
+    "rule": "Only a book the broker saw as manual goes back to manual."
+  },
+  {
+    "id": "desktop-conditional-lock",
+    "file": "crates/daemon/src/agent_access.rs",
+    "find": "&kassiber_envelope::py_str(&lease.lease_id),",
+    "replace": "\"\",",
+    "expect_failing": [
+      "test_locking_names_the_lease_and_restores_manual_in_the_broker"
+    ],
+    "rule": "The desktop locks only the lease it granted, by its id."
+  },
+  {
+    "id": "desktop-lost-connection",
+    "file": "crates/daemon/src/agent_access.rs",
+    "find": "            Ok(_) => Err(kassiber_operator::Error::App(AppError::new(",
+    "replace": "            Ok(_) => Ok(()),\n            #[allow(unreachable_patterns)]\n            Ok(_) => Err(kassiber_operator::Error::App(AppError::new(",
+    "expect_failing": [
+      "test_a_lost_connection_is_not_taken_for_a_stopped_broker"
+    ],
+    "rule": "A stopped reply from a broker that still answers ping is not proof the lease ended."
+  },
+  {
+    "id": "desktop-retry-interval",
+    "file": "crates/daemon/src/agent_access.rs",
+    "find": "let retry_at = self.now() + RETRY_INTERVAL;",
+    "replace": "let retry_at = self.now();",
+    "expect_failing": [
+      "test_a_failed_lock_keeps_the_lease_visible_and_retries"
+    ],
+    "rule": "A failed lock is retried 5 s later, not at once."
+  },
+  {
+    "id": "desktop-status-memory",
+    "file": "crates/daemon/src/agent_access.rs",
+    "find": "if !refresh || lease.ending {",
+    "replace": "if lease.ending {",
+    "expect_failing": [
+      "test_unlock_grants_a_read_lease_only_if_none_exists"
+    ],
+    "rule": "Without refresh, agent-access status reads memory only."
+  },
+  {
+    "id": "desktop-only-if-locked",
+    "file": "crates/daemon/src/agent_access.rs",
+    "find": "            // else's session: never replace it, which could narrow it.\n            true,",
+    "replace": "            // else's session: never replace it, which could narrow it.\n            false,",
+    "expect_failing": [
+      "test_the_desktop_grant_asks_for_an_agent_only_read_lease"
+    ],
+    "rule": "The desktop grant never replaces an existing lease."
+  },
+  {
+    "id": "desktop-idle-timeout",
+    "file": "crates/daemon/src/agent_access.rs",
+    "find": "            Some(AGENT_IDLE_TIMEOUT_SECONDS),\n",
+    "replace": "            Some(AGENT_IDLE_TIMEOUT_SECONDS * 2),\n",
+    "expect_failing": [
+      "test_the_desktop_grant_asks_for_an_agent_only_read_lease"
+    ],
+    "rule": "The desktop grant asks for a 15-minute idle timeout."
+  },
+  {
+    "id": "cli-never-start-broker",
+    "file": "crates/cli/src/operator_cli.rs",
+    "find": "                start_broker: false,",
+    "replace": "                start_broker: true,",
+    "expect_failing": [
+      "ordinary_commands_never_start_a_broker"
+    ],
+    "rule": "A brokered command never starts a broker."
+  },
+  {
+    "id": "cli-same-build",
+    "file": "crates/cli/src/operator_cli.rs",
+    "find": "                require_same_build: true,",
+    "replace": "                require_same_build: false,",
+    "expect_failing": [
+      "brokered_work_goes_only_to_this_builds_broker"
+    ],
+    "rule": "Brokered work goes only to this build's broker."
+  },
+  {
+    "id": "cli-ctrl-c-exit",
+    "file": "crates/cli/src/operator_cli.rs",
+    "find": "    Ok(130)\n}",
+    "replace": "    Ok(1)\n}",
+    "expect_failing": [
+      "ctrl_c_cancels_the_operation_and_exits_130"
+    ],
+    "rule": "Ctrl-C while waiting cancels the operation and exits 130."
+  },
+  {
+    "id": "cli-pin-admin-fd",
+    "file": "crates/cli/src/operator_cli.rs",
+    "find": "[\"--project\", \"--data-root\", \"--operator-auth-fd\"].contains(&token.as_str())",
+    "replace": "[\"--project\", \"--data-root\"].contains(&token.as_str())",
+    "expect_failing": [
+      "pinning_drops_locators_and_the_admin_fd"
+    ],
+    "rule": "The admin descriptor never reaches the broker's command line."
+  },
+  {
+    "id": "cli-interactive-check",
+    "file": "crates/cli/src/operator_cli.rs",
+    "find": "if !interaction.non_interactive && interaction.stdin_is_tty {",
+    "replace": "if !interaction.non_interactive {",
+    "expect_failing": [
+      "interactive_auth_is_refused_to_machines_and_pipes"
+    ],
+    "rule": "Piped callers are refused instead of prompted."
+  },
+  {
+    "id": "cli-cancelled-retryable",
+    "file": "crates/cli/src/operator_cli.rs",
+    "find": "                terminal == \"cancelled\",",
+    "replace": "                false,",
+    "expect_failing": [
+      "machine_cancelled_operation_writes_typed_envelope"
+    ],
+    "rule": "A cancelled operation is retryable; a failed one is not."
+  },
+  {
+    "id": "cli-unknown-keeps-child",
+    "file": "crates/cli/src/operator_cli.rs",
+    "find": "        if !child_wrote_stdout {",
+    "replace": "        if true {",
+    "expect_failing": [
+      "machine_unknown_result_keeps_the_childs_single_envelope"
+    ],
+    "rule": "An unknown result keeps the child's own envelope as the only stdout."
+  },
+  {
+    "id": "cli-signal-exit",
+    "file": "crates/cli/src/operator_cli.rs",
+    "find": "exit_code.filter(|code| *code > 0).map_or(1, exit_status)",
+    "replace": "exit_code.map_or(1, exit_status)",
+    "expect_failing": [
+      "machine_failed_operation_exits_with_a_positive_child_code"
+    ],
+    "rule": "A signal-killed child's negative code exits plainly as 1."
+  },
+  {
+    "id": "r64-identifier",
+    "file": "crates/operator/src/native_auth.rs",
+    "find": "    identity.identifier == NATIVE_AUTH_IDENTIFIER\n",
+    "replace": "    !identity.identifier.is_empty()\n",
+    "expect_failing": [
+      "inspect_code_pins_identifier_team_and_cdhash"
+    ],
+    "rule": "Only the desktop app's signing identifier at.bitcoinaustria.kassiber is a native-auth helper."
+  },
+  {
+    "id": "r64-team-length",
+    "file": "crates/operator/src/native_auth.rs",
+    "find": "        && identity.team.chars().count() == 10\n",
+    "replace": "        && identity.team.chars().count() >= 9\n",
+    "expect_failing": [
+      "inspect_code_pins_identifier_team_and_cdhash"
+    ],
+    "rule": "A team identifier has exactly ten characters."
+  },
+  {
+    "id": "r64-team-alphabet",
+    "file": "crates/operator/src/native_auth.rs",
+    "find": "            .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())\n",
+    "replace": "            .all(|c| c.is_ascii_alphanumeric())\n",
+    "expect_failing": [
+      "inspect_code_pins_identifier_team_and_cdhash"
+    ],
+    "rule": "A team identifier is uppercase ASCII letters and digits; `not set` and lowercase are refused."
+  },
+  {
+    "id": "r64-cdhash-length",
+    "file": "crates/operator/src/native_auth.rs",
+    "find": "        && matches!(identity.cdhash.chars().count(), 40 | 64)\n",
+    "replace": "        && identity.cdhash.chars().count() >= 39\n",
+    "expect_failing": [
+      "inspect_code_pins_identifier_team_and_cdhash"
+    ],
+    "rule": "A cdhash is a 40- or 64-digit hex string."
+  },
+  {
+    "id": "r64-cdhash-alphabet",
+    "file": "crates/operator/src/native_auth.rs",
+    "find": "('a'..='f').contains(&c)",
+    "replace": "c.is_ascii_lowercase()",
+    "expect_failing": [
+      "inspect_code_pins_identifier_team_and_cdhash"
+    ],
+    "rule": "A cdhash is hexadecimal."
+  },
+  {
+    "id": "r64-requirement-developer-id",
+    "file": "crates/operator/src/native_auth.rs",
+    "find": " and certificate leaf[field.1.2.840.113635.100.6.1.13] exists\",",
+    "replace": "\",",
+    "expect_failing": [
+      "identity_vectors_match_python"
+    ],
+    "rule": "The requirement demands a Developer ID Application leaf, not just any Apple-anchored team certificate."
+  },
+  {
+    "id": "r64-opaque-identity",
+    "file": "crates/operator/src/native_auth.rs",
+    "find": "\"kassiber-native-auth-signature-v1:{}:{}:{}\"",
+    "replace": "\"kassiber-native-auth-signature-v2:{}:{}:{}\"",
+    "expect_failing": [
+      "identity_vectors_match_python"
+    ],
+    "rule": "The opaque helper identity is the Python digest, so either runtime's broker accepts the other's CLI."
+  },
+  {
+    "id": "r64-parent-pid",
+    "file": "crates/operator/src/native_auth.rs",
+    "find": "        if parent != helper {\n",
+    "replace": "        if false {\n",
+    "expect_failing": [
+      "caller_identity_binds_the_cli_to_its_live_signed_parent"
+    ],
+    "rule": "The CLI's parent process must be the signed helper itself."
+  },
+  {
+    "id": "r64-running-helper",
+    "file": "crates/operator/src/native_auth.rs",
+    "find": "        if running != helper\n",
+    "replace": "        if false\n",
+    "expect_failing": [
+      "store_validates_live_helper_before_writing_passphrase"
+    ],
+    "rule": "The launched helper's live code must be the configured signed helper even without an expected identity."
+  },
+  {
+    "id": "r64-expected-helper",
+    "file": "crates/operator/src/native_auth.rs",
+    "find": "            if !constant_time_eq(actual.as_bytes(), expected.as_bytes()) {\n",
+    "replace": "            if false {\n",
+    "expect_failing": [
+      "helper_identity_detects_replacement_before_secret_handoff"
+    ],
+    "rule": "A helper replaced after the caller named it is refused before any secret moves."
+  },
+  {
+    "id": "r64-launch-gate",
+    "file": "crates/operator/src/native_auth.rs",
+    "find": "matches!(ready.read(&mut byte), Ok(1)) && byte == *b\"R\"",
+    "replace": "true",
+    "expect_failing": [
+      "launch_gate_refuses_a_helper_that_never_signals"
+    ],
+    "rule": "A helper that never reaches its gate is refused, never released."
+  },
+  {
+    "id": "r64-exit-four",
+    "file": "crates/operator/src/native_auth.rs",
+    "find": "        if code == 4 {\n",
+    "replace": "        if code == 5 {\n",
+    "expect_failing": [
+      "broker_touch_id_maps_the_helper_exit_codes"
+    ],
+    "rule": "Exit 4 from broker-get is operator_native_auth_not_configured with the enroll hint."
+  },
+  {
+    "id": "r64-status-exit-four",
+    "file": "crates/operator/src/native_auth.rs",
+    "find": "            4 => dict([\n",
+    "replace": "            5 => dict([\n",
+    "expect_failing": [
+      "touch_id_status_uses_the_live_validated_helper_gate"
+    ],
+    "rule": "Status exit 4 is available and not configured, not a failure."
+  },
+  {
+    "id": "r64-secret-limit",
+    "file": "crates/operator/src/native_auth.rs",
+    "find": "        if value.len() > SECRET_LIMIT {\n",
+    "replace": "        if value.len() > SECRET_LIMIT + 1 {\n",
+    "expect_failing": [
+      "broker_touch_id_refuses_a_secret_over_16_kib"
+    ],
+    "rule": "A helper secret over 16 KiB is wiped and refused."
+  },
+  {
+    "id": "r64-fresh-native-auth-label",
+    "file": "crates/operator/src/server.rs",
+    "find": "self.continue_secret(\"fresh_native_auth\", &challenge)",
+    "replace": "self.continue_secret(\"fresh_admin_auth\", &challenge)",
+    "expect_failing": [
+      "test_touch_id_configuration_is_challenge_bound_and_binds_the_policy"
+    ],
+    "rule": "Enrollment asks for the fresh_native_auth secret, Python's challenge label."
+  },
+  {
+    "id": "r64-enrollment-binding",
+    "file": "crates/operator/src/service/mod.rs",
+    "find": "                    authenticated,\n                    Some(&project.identity),\n                )?;\n                if configured {",
+    "replace": "                    authenticated,\n                    None,\n                )?;\n                if configured {",
+    "expect_failing": [
+      "test_touch_id_configuration_is_challenge_bound_and_binds_the_policy"
+    ],
+    "rule": "Enrollment binds the policy to the project it authenticated, refusing a swapped file."
+  }
+]

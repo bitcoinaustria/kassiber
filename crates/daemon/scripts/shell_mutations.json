@@ -1,0 +1,565 @@
+[
+  {
+    "id": "wire-project-select-default",
+    "file": "crates/daemon/src/projects.rs",
+    "find": "let select = get(args, \"select\") != Some(&Value::Bool(false));",
+    "replace": "let select = get(args, \"select\").map_or(true, truthy);",
+    "expect_failing": [
+      "tests/test_rust_project_desktop.py::test_project_catalog_creation_and_switching_match_python"
+    ],
+    "rule": "Only a literal false declines selection after creation; other falsy values still select."
+  },
+  {
+    "id": "wire-project-list-daemon-selection",
+    "file": "crates/daemon/src/projects.rs",
+    "find": "let selected = daemon.project_id.as_deref() == Some(field(&entry, \"id\").as_str());",
+    "replace": "let selected = daemon.project_id.as_deref() != Some(field(&entry, \"id\").as_str());",
+    "expect_failing": [
+      "tests/test_rust_project_desktop.py::test_project_catalog_creation_and_switching_match_python"
+    ],
+    "rule": "The list marks the daemon's open project as selected."
+  },
+  {
+    "id": "wire-project-passphrase-minimum",
+    "file": "crates/daemon/src/projects.rs",
+    "find": "if text.code_points().count() < MIN_PASSPHRASE_CHARS {",
+    "replace": "if text.code_points().count() <= MIN_PASSPHRASE_CHARS {",
+    "expect_failing": [
+      "tests/test_rust_project_desktop.py::test_explicit_root_switches_to_encrypted_project_and_reunlocks"
+    ],
+    "rule": "A new database passphrase of exactly twelve characters is accepted."
+  },
+  {
+    "id": "wire-project-encrypted-stamp",
+    "file": "crates/daemon/src/projects.rs",
+    "find": "            stamp: select,\n",
+    "replace": "            stamp: true,\n",
+    "expect_failing": [
+      "tests/test_rust_project_desktop.py::test_project_catalog_creation_and_switching_match_python"
+    ],
+    "rule": "An unselected encrypted project refreshes its metadata without a last-opened stamp."
+  },
+  {
+    "id": "wire-project-verify-target-root",
+    "file": "crates/daemon/src/projects.rs",
+    "find": "let root = if switching {",
+    "replace": "let root = if !switching {",
+    "expect_failing": [
+      "tests/test_rust_project_desktop.py::test_project_catalog_creation_and_switching_match_python"
+    ],
+    "rule": "A switch verifies the passphrase against the target project's database."
+  },
+  {
+    "id": "wire-project-status-layout",
+    "file": "crates/kassiber/src/real_store.rs",
+    "find": "        let p = context()?\n            .resolve_for_bootstrap(&ResolveOptions {\n                data_root: Some(PathBuf::from(&self.data_root)),",
+    "replace": "        let p = context()?\n            .resolve(&ResolveOptions {\n                data_root: Some(PathBuf::from(&self.data_root)),",
+    "expect_failing": [
+      "tests/test_rust_project_desktop.py::test_project_catalog_creation_and_switching_match_python"
+    ],
+    "rule": "Status reads paths without requiring the layout a new desktop project does not have yet."
+  },
+  {
+    "id": "wire-store-require-existing-missing",
+    "file": "crates/store/src/lib.rs",
+    "find": "            if require_existing_schema {\n                return Err(invalid_project_database(",
+    "replace": "            if false {\n                return Err(invalid_project_database(",
+    "expect_failing": [
+      "tests/test_rust_project_desktop.py::test_project_creation_refuses_existing_databases_and_unlocked_lock_cycle"
+    ],
+    "rule": "Requiring an existing project refuses a missing database with Python's typed error."
+  },
+  {
+    "id": "wire-store-require-existing-core-schema",
+    "file": "crates/store/src/lib.rs",
+    "find": "if require_existing_schema && !has_core_schema(&connection)? {",
+    "replace": "if false && !has_core_schema(&connection)? {",
+    "expect_failing": [
+      "tests/test_rust_project_desktop.py::test_require_existing_refuses_unrelated_sqlite_without_migrating_it"
+    ],
+    "rule": "Requiring an existing project refuses an unrelated SQLite file instead of migrating it."
+  },
+  {
+    "id": "project-clock-format",
+    "file": "crates/kassiber/src/real_store.rs",
+    "find": "        .query_row(\"SELECT strftime('%Y-%m-%dT%H:%M:%SZ','now')\", [], |r| {",
+    "replace": "        .query_row(\"SELECT strftime('%Y-%m-%dT%H:%M:%f','now') || '000+00:00'\", [], |r| {",
+    "expect_failing": [
+      "project_clock_matches_python_now_iso"
+    ],
+    "rule": "Project catalog and layout stamps use Python's whole-second Z format."
+  },
+  {
+    "id": "workspace-ready-quarantine",
+    "file": "crates/workspace/src/readiness.rs",
+    "find": "        && text(freshness, \"status\") == \"current\"\n        && quarantines == 0;",
+    "replace": "        && text(freshness, \"status\") == \"current\";",
+    "expect_failing": [
+      "workspace_health_matches_python_scopes_freshness_semantics_and_queue"
+    ],
+    "rule": "Quarantined rows keep a current book from being reported ready."
+  },
+  {
+    "id": "workspace-semantics-required",
+    "file": "crates/workspace/src/readiness.rs",
+    "find": "!truthy(&required) || (built == version && ge(&built, &required))",
+    "replace": "truthy(&required) || (built == version && ge(&built, &required))",
+    "expect_failing": [
+      "workspace_health_matches_python_scopes_freshness_semantics_and_queue"
+    ],
+    "rule": "A required calculation-semantics stamp must match the current version before journals count as current."
+  },
+  {
+    "id": "workspace-price-choice",
+    "file": "crates/workspace/src/readiness.rs",
+    "find": "let uncovered = truthy(&val(&summary, \"cache_uncovered_missing\"));",
+    "replace": "let uncovered = !truthy(&val(&summary, \"cache_uncovered_missing\"));",
+    "expect_failing": [
+      "workspace_next_actions_matches_python_priority_prices_and_reports"
+    ],
+    "rule": "Cached and uncovered missing prices suggest different actions."
+  },
+  {
+    "id": "workspace-root-unique-basis",
+    "file": "crates/workspace/src/readiness.rs",
+    "find": "                if matches.len() == 1 {",
+    "replace": "                if !matches.is_empty() {",
+    "expect_failing": [
+      "workspace_badges_match_python_roots_chains_cycles_and_cached_swaps"
+    ],
+    "rule": "A basis timestamp names a root only when one root row of that asset sits there."
+  },
+  {
+    "id": "workspace-root-chains",
+    "file": "crates/workspace/src/readiness.rs",
+    "find": "        if roots.is_empty() {\n            for candidate in &candidates {",
+    "replace": "        if false {\n            for candidate in &candidates {",
+    "expect_failing": [
+      "workspace_badges_match_python_roots_chains_cycles_and_cached_swaps"
+    ],
+    "rule": "A downstream row whose candidates are themselves downstream follows the chain to its root."
+  },
+  {
+    "id": "workspace-group-bool-key",
+    "file": "crates/workspace/src/readiness.rs",
+    "find": "        Value::Bool(b) => Some(GroupKey::Integer(u8::from(*b).into())),",
+    "replace": "        Value::Bool(_) => None,",
+    "expect_failing": [
+      "workspace_badges_match_python_roots_chains_cycles_and_cached_swaps"
+    ],
+    "rule": "A boolean transfer group id is Python's integer dict key."
+  },
+  {
+    "id": "overview-duplicate-outpoints",
+    "file": "crates/workspace/src/overview.rs",
+    "find": "duplicate += (sum - list.iter().max().unwrap()).max(0);",
+    "replace": "duplicate += 0 * (sum - list.iter().max().unwrap()).max(0);",
+    "expect_failing": [
+      "book_overview_matches_python_balances_series_valuation_and_rows"
+    ],
+    "rule": "An outpoint watched by several chain wallets counts once in the displayed total."
+  },
+  {
+    "id": "overview-daily-cutoff",
+    "file": "crates/workspace/src/overview.rs",
+    "find": "while tx_index < days.len() && days[tx_index] <= rate_day {",
+    "replace": "while tx_index < days.len() && days[tx_index] < rate_day {",
+    "expect_failing": [
+      "book_overview_matches_python_balances_series_valuation_and_rows"
+    ],
+    "rule": "A day's portfolio point includes that day's quantity changes."
+  },
+  {
+    "id": "overview-incomplete-start",
+    "file": "crates/workspace/src/overview.rs",
+    "find": "if !starts.is_empty() && starts.iter().all(|s| truthy(s)) {",
+    "replace": "if !starts.is_empty() && starts.iter().any(|s| truthy(s)) {",
+    "expect_failing": [
+      "book_overview_matches_python_balances_series_valuation_and_rows"
+    ],
+    "rule": "A blocker without a known start keeps the incomplete start unknown."
+  },
+  {
+    "id": "overview-alt-out-sign",
+    "file": "crates/workspace/src/overview.rs",
+    "find": "delta = Some(if kind == \"transfer_out\" { -alt } else { alt });",
+    "replace": "delta = Some(alt);",
+    "expect_failing": [
+      "book_overview_matches_python_balances_series_valuation_and_rows"
+    ],
+    "rule": "A transfer's Altbestand split leaves the sending wallet."
+  },
+  {
+    "id": "overview-mixed-fiat",
+    "file": "crates/workspace/src/overview.rs",
+    "find": "    if currencies.len() == 1 {\n        return dict([\n            (\"mode\", s(\"single\")),",
+    "replace": "    if !currencies.is_empty() {\n        return dict([\n            (\"mode\", s(\"single\")),",
+    "expect_failing": [
+      "book_set_overview_matches_python_rollups_and_book_boundaries"
+    ],
+    "rule": "Book sets with several fiat currencies are never summed into one currency."
+  },
+  {
+    "id": "wire-onboarding-liquid",
+    "file": "crates/setup/src/onboarding.rs",
+    "find": "                if include_liquid {",
+    "replace": "                if false {",
+    "expect_failing": [
+      "tests/test_rust_workspace_shell.py::test_onboarding_matches_python_wire_and_all_tables"
+    ],
+    "rule": "Choosing Liquid presets during onboarding restores them instead of omitting them."
+  },
+  {
+    "id": "wire-onboarding-manual-tombstones",
+    "file": "crates/setup/src/onboarding.rs",
+    "find": "                removed.extend(BUILTINS.iter().map(|n| (*n).to_owned()));",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_workspace_shell.py::test_onboarding_matches_python_wire_and_all_tables"
+    ],
+    "rule": "Custom and skipped backend setup tombstones every bundled preset."
+  },
+  {
+    "id": "wire-overview-unknown-args",
+    "file": "crates/workspace/src/overview.rs",
+    "find": "kassiber_pyjson::Key::Str(key) if !key.is(\"workspace_id\") => Some(key.clone()),",
+    "replace": "kassiber_pyjson::Key::Str(key) if false && !key.is(\"workspace_id\") => Some(key.clone()),",
+    "expect_failing": [
+      "tests/test_rust_workspace_shell.py::test_workspace_reads_match_python_bytes_and_leave_books_unchanged"
+    ],
+    "rule": "The book-set overview refuses arguments other than workspace_id."
+  },
+  {
+    "id": "wire-secrets-migrate-flag",
+    "file": "crates/daemon/src/secrets.rs",
+    "find": "if get(&args, \"migrate_credentials\") != Some(&Value::Bool(false)) {",
+    "replace": "if get(&args, \"migrate_credentials\") == Some(&Value::Bool(true)) {",
+    "expect_failing": [
+      "tests/test_rust_workspace_shell.py::test_secrets_init_matches_python_and_migrates_dotenv_credentials"
+    ],
+    "rule": "Desktop encryption migrates dotenv credentials unless the request opts out with false."
+  },
+  {
+    "id": "wire-secrets-already-encrypted",
+    "file": "crates/daemon/src/secrets.rs",
+    "find": "            (\"already_encrypted\", Value::Bool(true)),",
+    "replace": "            (\"already_encrypted\", Value::Bool(false)),",
+    "expect_failing": [
+      "tests/test_rust_workspace_shell.py::test_secrets_init_matches_python_and_migrates_dotenv_credentials"
+    ],
+    "rule": "Re-initializing an encrypted book only verifies and unlocks it."
+  },
+  {
+    "id": "diag-sensitive-field",
+    "file": "crates/daemon/src/diagnostics.rs",
+    "find": "    if is_sensitive_key(name) {",
+    "replace": "    if false && is_sensitive_key(name) {",
+    "expect_failing": [
+      "ring_floors_secrets_and_sensitive_fields_and_evicts_with_gap"
+    ],
+    "rule": "Log fields with sensitive names are stored as [redacted]."
+  },
+  {
+    "id": "diag-ring-bound",
+    "file": "crates/daemon/src/diagnostics.rs",
+    "find": "            && (self.records.len() > MAX_RECORDS || self.buffer_bytes > MAX_BYTES)",
+    "replace": "            && (self.records.len() > MAX_RECORDS + 1 || self.buffer_bytes > MAX_BYTES)",
+    "expect_failing": [
+      "ring_floors_secrets_and_sensitive_fields_and_evicts_with_gap"
+    ],
+    "rule": "The log ring keeps at most 5,000 records."
+  },
+  {
+    "id": "diag-endpoint-port-zero",
+    "file": "crates/daemon/src/diagnostics.rs",
+    "find": "        port.filter(|p| *p != 0).or(default),",
+    "replace": "        port.or(default),",
+    "expect_failing": [
+      "endpoint_matches_urlsplit_hosts_ports_and_errors"
+    ],
+    "rule": "Port 0 falls back to the scheme default, as Python's `parsed.port or default`."
+  },
+  {
+    "id": "wire-logs-skip-snapshots",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "                !matches!(kind, Some(Value::Str(k)) if diagnostics::KINDS.iter().any(|d| k.is(d)));",
+    "replace": "                { let _ = &kind; true };",
+    "expect_failing": [
+      "tests/test_rust_daemon_diagnostics.py::test_snapshots_match_python_on_plaintext_book"
+    ],
+    "rule": "The two snapshot kinds are not logged."
+  },
+  {
+    "id": "wire-egress-complete",
+    "file": "crates/daemon/src/diagnostics.rs",
+    "find": "    let complete = inputs.ai_providers.is_some();",
+    "replace": "    let complete = true;",
+    "expect_failing": [
+      "tests/test_rust_daemon_diagnostics.py::test_snapshots_match_python_on_plaintext_book"
+    ],
+    "rule": "The allowlist is complete only while a book is open."
+  },
+  {
+    "id": "wire-egress-locked-view",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "            None => match &self.egress_backends {",
+    "replace": "            None => match &None::<Value> {",
+    "expect_failing": [
+      "tests/test_rust_daemon_diagnostics.py::test_snapshots_match_python_on_plaintext_book"
+    ],
+    "rule": "A locked daemon keeps reporting the last merged backend view."
+  },
+  {
+    "id": "wire-update-disable-env",
+    "file": "crates/release/src/update.rs",
+    "find": ".is_some_and(|v| [\"1\", \"true\", \"yes\"].contains(&strip(&v)));",
+    "replace": ".is_some_and(|v| [\"1\", \"true\"].contains(&strip(&v)));",
+    "expect_failing": [
+      "tests/test_rust_release_cli.py::test_update_preferences_and_refusals_match_python_without_contacting_github"
+    ],
+    "rule": "KASSIBER_DISABLE_UPDATE_CHECK accepts 1, true and yes."
+  },
+  {
+    "id": "wire-update-schema-exact",
+    "file": "crates/release/src/update.rs",
+    "find": "        && get(&payload, \"schema_version\") == Some(&Value::Int(1.into()))",
+    "replace": "        && get(&payload, \"schema_version\").is_some_and(truthy)",
+    "expect_failing": [
+      "tests/test_rust_release_cli.py::test_update_preferences_and_refusals_match_python_without_contacting_github"
+    ],
+    "rule": "Update consent requires an integer schema_version of exactly 1."
+  },
+  {
+    "id": "wire-update-offline-first",
+    "file": "crates/release/src/update.rs",
+    "find": "    if offline_enabled(context)? {",
+    "replace": "    if false && offline_enabled(context)? {",
+    "expect_failing": [
+      "tests/test_rust_release_cli.py::test_update_preferences_and_refusals_match_python_without_contacting_github"
+    ],
+    "rule": "Offline mode refuses an update check before the consent check."
+  },
+  {
+    "id": "wire-verify-pinned-key",
+    "file": "crates/release/src/verify.rs",
+    "find": "    if fingerprint(&blob) != expected {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "tests/test_rust_release_cli.py::test_verify_download_matches_python_for_success_and_every_refusal"
+    ],
+    "rule": "The supplied public key must hash to the pinned fingerprint before the signature is checked."
+  },
+  {
+    "id": "wire-verify-artifact-hash",
+    "file": "crates/release/src/verify.rs",
+    "find": "    if actual != *digest {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "tests/test_rust_release_cli.py::test_verify_download_matches_python_for_success_and_every_refusal"
+    ],
+    "rule": "A tampered artifact fails its manifest digest."
+  },
+  {
+    "id": "wire-verify-signed-version",
+    "file": "crates/release/src/verify.rs",
+    "find": "    if lines[1] != format!(\"{MANIFEST_VERSION_PREFIX}{expected}\") {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "tests/test_rust_release_cli.py::test_verify_download_matches_python_for_success_and_every_refusal"
+    ],
+    "rule": "The signed version must match the manifest filename."
+  },
+  {
+    "id": "wire-verify-nofollow",
+    "file": "crates/release/src/verify.rs",
+    "find": "        options.custom_flags(nix::libc::O_NOFOLLOW);",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_release_cli.py::test_verify_download_matches_python_for_success_and_every_refusal"
+    ],
+    "rule": "Release inputs are never read through a final symlink."
+  },
+  {
+    "id": "release-prerelease-zero",
+    "file": "crates/release/src/update.rs",
+    "find": ".any(|p| p.bytes().all(|b| b.is_ascii_digit()) && p.len() > 1 && p.starts_with('0'))",
+    "replace": ".any(|p| p.bytes().all(|b| b.is_ascii_digit()) && p.len() > 2 && p.starts_with('0'))",
+    "expect_failing": [
+      "version_parsing_and_ordering_match_python",
+      "versions_order_like_semver_and_python"
+    ],
+    "rule": "Numeric prerelease identifiers may not have leading zeros."
+  },
+  {
+    "id": "release-numeric-order",
+    "file": "crates/release/src/update.rs",
+    "find": "    left.len().cmp(&right.len()).then_with(|| left.cmp(right))",
+    "replace": "    left.cmp(right)",
+    "expect_failing": [
+      "version_parsing_and_ordering_match_python",
+      "versions_order_like_semver_and_python"
+    ],
+    "rule": "Version numbers compare numerically, not as text."
+  },
+  {
+    "id": "release-skip-drafts",
+    "file": "crates/release/src/update.rs",
+    "find": "        if !matches!(item, Value::Dict(_)) || get(item, \"draft\").is_some_and(truthy) {",
+    "replace": "        if !matches!(item, Value::Dict(_)) {",
+    "expect_failing": [
+      "release_selection_and_status_text_match_python",
+      "release_selection_skips_drafts_and_keeps_the_first_highest"
+    ],
+    "rule": "Draft releases are never offered."
+  },
+  {
+    "id": "sshsig-version-zero",
+    "file": "crates/release/src/verify.rs",
+    "find": "    if sig.take(6)? != b\"SSHSIG\" || sig.u32()? > 1 {",
+    "replace": "    if sig.take(6)? != b\"SSHSIG\" || sig.u32()? != 1 {",
+    "expect_failing": [
+      "sshsig_verdicts_match_python_and_ssh_keygen"
+    ],
+    "rule": "OpenSSH refuses only versions above 1; version 0 verifies."
+  },
+  {
+    "id": "sshsig-namespace",
+    "file": "crates/release/src/verify.rs",
+    "find": "    if !sig.0.is_empty() || namespace != NAMESPACE.as_bytes() {",
+    "replace": "    if !sig.0.is_empty() {",
+    "expect_failing": [
+      "sshsig_verdicts_match_python_and_ssh_keygen"
+    ],
+    "rule": "The declared namespace must be kassiber-release even when the signed data uses it."
+  },
+  {
+    "id": "sshsig-outer-trailing",
+    "file": "crates/release/src/verify.rs",
+    "find": "    if !sig.0.is_empty() || namespace != NAMESPACE.as_bytes() {",
+    "replace": "    if namespace != NAMESPACE.as_bytes() {",
+    "expect_failing": [
+      "sshsig_verdicts_match_python_and_ssh_keygen"
+    ],
+    "rule": "Bytes after the SSHSIG signature field are refused."
+  },
+  {
+    "id": "sshsig-signer-identity",
+    "file": "crates/release/src/verify.rs",
+    "find": "    if key != pinned || application.is_some_and(|app| app.contains(&0)) {",
+    "replace": "    if application.is_some_and(|app| app.contains(&0)) {",
+    "expect_failing": [
+      "sshsig_verdicts_match_python_and_ssh_keygen"
+    ],
+    "rule": "Only the pinned allowed-signers key may sign; a different embedded key blob is refused."
+  },
+  {
+    "id": "sshsig-sk-application-nul",
+    "file": "crates/release/src/verify.rs",
+    "find": "    if key != pinned || application.is_some_and(|app| app.contains(&0)) {",
+    "replace": "    if key != pinned {",
+    "expect_failing": [
+      "sshsig_verdicts_match_python_and_ssh_keygen"
+    ],
+    "rule": "OpenSSH cannot load a pinned SK key whose application contains NUL."
+  },
+  {
+    "id": "sshsig-inner-type",
+    "file": "crates/release/src/verify.rs",
+    "find": "    if inner.cstring()? != key_type.as_bytes() {",
+    "replace": "    if inner.cstring().is_none() {",
+    "expect_failing": [
+      "sshsig_verdicts_match_python_and_ssh_keygen"
+    ],
+    "rule": "The signature blob's key type must equal the pinned key's type."
+  },
+  {
+    "id": "sshsig-inner-trailing",
+    "file": "crates/release/src/verify.rs",
+    "find": "    if !inner.0.is_empty() || raw.len() != 64 {",
+    "replace": "    if raw.len() != 64 {",
+    "expect_failing": [
+      "sshsig_verdicts_match_python_and_ssh_keygen"
+    ],
+    "rule": "Bytes after the Ed25519 or SK signature fields are refused."
+  },
+  {
+    "id": "sshsig-sk-application-hash",
+    "file": "crates/release/src/verify.rs",
+    "find": "            &Sha256::digest(application)[..],",
+    "replace": "            &Sha256::digest(b\"ssh:\")[..],",
+    "expect_failing": [
+      "sshsig_verdicts_match_python_and_ssh_keygen"
+    ],
+    "rule": "The SK payload hashes the pinned key's own FIDO application."
+  },
+  {
+    "id": "dearmor-crlf-header",
+    "file": "crates/release/src/verify.rs",
+    "find": "        .strip_prefix(b\"\\r\\n\")",
+    "replace": "        .strip_prefix(b\"\\n\\n\")",
+    "expect_failing": [
+      "sshsig_verdicts_match_python_and_ssh_keygen"
+    ],
+    "rule": "The header line may end in CRLF."
+  },
+  {
+    "id": "dearmor-trailing-nul",
+    "file": "crates/release/src/verify.rs",
+    "find": "        if nul + 1 != body.len() {",
+    "replace": "        if nul + 1 == body.len() {",
+    "expect_failing": [
+      "sshsig_verdicts_match_python_and_ssh_keygen"
+    ],
+    "rule": "sshbuf_dup_string tolerates one NUL, and only as the body's last byte."
+  },
+  {
+    "id": "b64-whitespace",
+    "file": "crates/release/src/verify.rs",
+    "find": "    matches!(byte, b' ' | b'\\t' | b'\\n' | 0x0b | 0x0c | b'\\r')",
+    "replace": "    matches!(byte, b'\\n' | b'\\r')",
+    "expect_failing": [
+      "sshsig_verdicts_match_python_and_ssh_keygen"
+    ],
+    "rule": "b64_pton skips every C-locale space anywhere in the body."
+  },
+  {
+    "id": "b64-unpadded-quantum",
+    "file": "crates/release/src/verify.rs",
+    "find": "        return (state == 0).then_some(out);",
+    "replace": "        return Some(out);",
+    "expect_failing": [
+      "sshsig_verdicts_match_python_and_ssh_keygen"
+    ],
+    "rule": "A partial final quantum needs padding."
+  },
+  {
+    "id": "b64-second-padding",
+    "file": "crates/release/src/verify.rs",
+    "find": "            if bytes.by_ref().find(|byte| !c_space(*byte)) != Some(b'=') {",
+    "replace": "            if false {",
+    "expect_failing": [
+      "sshsig_verdicts_match_python_and_ssh_keygen"
+    ],
+    "rule": "Two data characters in the last quantum need two padding characters."
+  },
+  {
+    "id": "b64-slop-bits",
+    "file": "crates/release/src/verify.rs",
+    "find": "    (bytes.all(c_space) && pending == 0).then_some(out)",
+    "replace": "    bytes.all(c_space).then_some(out)",
+    "expect_failing": [
+      "sshsig_verdicts_match_python_and_ssh_keygen"
+    ],
+    "rule": "The bits padding drops must be zero."
+  },
+  {
+    "id": "b64-after-padding",
+    "file": "crates/release/src/verify.rs",
+    "find": "    (bytes.all(c_space) && pending == 0).then_some(out)",
+    "replace": "    (pending == 0).then_some(out)",
+    "expect_failing": [
+      "sshsig_verdicts_match_python_and_ssh_keygen"
+    ],
+    "rule": "Only whitespace may follow the padding."
+  }
+]

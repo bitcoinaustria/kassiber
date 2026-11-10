@@ -1,0 +1,373 @@
+[
+  {
+    "id": "completeness-address-list",
+    "rule": "A fixed address list is its own class, incomplete by construction.",
+    "file": "crates/wallets/src/completeness.rs",
+    "find": "    if kind == \"address\" {\n        return \"address-list\";",
+    "replace": "    if kind == \"address\" {\n        return \"file-import\";",
+    "expect_failing": [
+      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_classes_and_scan_bounds_match_wire_bytes"
+    ]
+  },
+  {
+    "id": "completeness-node-needs-backend",
+    "rule": "A Lightning node is read from the node only when a backend is configured.",
+    "file": "crates/wallets/src/completeness.rs",
+    "find": "if LIGHTNING_NODE_KINDS.contains(&kind) && backend {",
+    "replace": "if LIGHTNING_NODE_KINDS.contains(&kind) {",
+    "expect_failing": [
+      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_classes_and_scan_bounds_match_wire_bytes"
+    ]
+  },
+  {
+    "id": "completeness-api-without-file",
+    "rule": "An exchange wallet with an imported file is an export, not a provider API.",
+    "file": "crates/wallets/src/completeness.rs",
+    "find": "if EXCHANGE_API_KINDS.contains(&kind) && backend && !has_file {",
+    "replace": "if EXCHANGE_API_KINDS.contains(&kind) && backend {",
+    "expect_failing": [
+      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_classes_and_scan_bounds_match_wire_bytes"
+    ]
+  },
+  {
+    "id": "completeness-manual-generic-ledger",
+    "rule": "A generic-ledger custom wallet is manual.",
+    "file": "crates/wallets/src/completeness.rs",
+    "find": ".is_none_or(|f| f == \"generic_ledger\")",
+    "replace": ".is_none_or(|f| f == \"generic-ledger\")",
+    "expect_failing": [
+      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_classes_and_scan_bounds_match_wire_bytes"
+    ]
+  },
+  {
+    "id": "completeness-btcpay-before-kind",
+    "rule": "A BTCPay sync source is matched case- and space-insensitively.",
+    "file": "crates/wallets/src/completeness.rs",
+    "find": ".is_some_and(|source| kassiber_pytext::lower(kassiber_pytext::strip(&source)) == \"btcpay\")",
+    "replace": ".is_some_and(|source| source == \"btcpay\")",
+    "expect_failing": [
+      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_classes_and_scan_bounds_match_wire_bytes"
+    ]
+  },
+  {
+    "id": "bounds-never-synced-live-only",
+    "rule": "Only live sources warn that they never synced.",
+    "file": "crates/wallets/src/completeness.rs",
+    "find": "if live && last_synced_at.is_none() {",
+    "replace": "if last_synced_at.is_none() {",
+    "expect_failing": [
+      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_classes_and_scan_bounds_match_wire_bytes"
+    ]
+  },
+  {
+    "id": "bounds-empty-address-list-not-live",
+    "rule": "An address list without addresses is not a live source.",
+    "file": "crates/wallets/src/completeness.rs",
+    "find": "!(klass == \"address-list\" && !has_addresses(",
+    "replace": "!(klass == \"address-list\" && has_addresses(",
+    "expect_failing": [
+      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_classes_and_scan_bounds_match_wire_bytes"
+    ]
+  },
+  {
+    "id": "bounds-full-history-ignores-start",
+    "rule": "A full-history Silent Payments wallet declares no scan start.",
+    "file": "crates/wallets/src/completeness.rs",
+    "find": "if kind == \"silent-payment\" && !parse_bool(field(config, \"sp_full_history\"))? {",
+    "replace": "if kind == \"silent-payment\" {",
+    "expect_failing": [
+      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_classes_and_scan_bounds_match_wire_bytes"
+    ]
+  },
+  {
+    "id": "bounds-start-height-int-only",
+    "rule": "Only an integer scan start height is declared.",
+    "file": "crates/wallets/src/completeness.rs",
+    "find": "height @ Value::Int(_) => height.clone(),",
+    "replace": "height @ (Value::Int(_) | Value::Float(_)) => height.clone(),",
+    "expect_failing": [
+      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_classes_and_scan_bounds_match_wire_bytes"
+    ]
+  },
+  {
+    "id": "bounds-undated-unknown",
+    "rule": "The unknown-date sentinel is undated, not 1970.",
+    "file": "crates/wallets/src/completeness.rs",
+    "find": ".filter(|at| !row::blank(at) && **at != Value::from(UNKNOWN_OCCURRED_AT))",
+    "replace": ".filter(|at| !row::blank(at))",
+    "expect_failing": [
+      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_classes_and_scan_bounds_match_wire_bytes"
+    ]
+  },
+  {
+    "id": "bounds-deficit-warning",
+    "rule": "A wallet spending coins its history never received is flagged.",
+    "file": "crates/wallets/src/completeness.rs",
+    "find": "        warnings.push(\"history_starts_after_first_funding\");\n",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_classes_and_scan_bounds_match_wire_bytes"
+    ]
+  },
+  {
+    "id": "bounds-declared-birthday",
+    "rule": "A birthday is a declared scan start.",
+    "file": "crates/wallets/src/completeness.rs",
+    "find": "} else if declared_at != Value::Null || declared_height != Value::Null {",
+    "replace": "} else if declared_height != Value::Null {",
+    "expect_failing": [
+      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_classes_and_scan_bounds_match_wire_bytes"
+    ]
+  },
+  {
+    "id": "bounds-unconfirmed-raw-only-when-null",
+    "rule": "Only rows without a confirmation column consult raw_json for unconfirmed ordering.",
+    "file": "crates/wallets/src/completeness.rs",
+    "find": "CASE WHEN confirmed_at IS NULL THEN raw_json END AS raw_json",
+    "replace": "raw_json",
+    "expect_failing": [
+      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_classes_and_scan_bounds_match_wire_bytes"
+    ]
+  },
+  {
+    "id": "snapshot-carries-class",
+    "rule": "ui.wallets.list names each wallet's completeness class.",
+    "file": "crates/wallets/src/snapshot.rs",
+    "find": "            (\"completeness_class\", completeness_class),\n",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_classes_and_scan_bounds_match_wire_bytes"
+    ]
+  },
+  {
+    "id": "cli-list-annotated",
+    "rule": "wallets list carries completeness and scan bounds.",
+    "file": "crates/cli/src/wallets.rs",
+    "find": "\"list\" => Operation::ListWithCompleteness { profile_id },",
+    "replace": "\"list\" => Operation::List { profile_id },",
+    "expect_failing": [
+      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_cli_list_matches_every_format"
+    ]
+  },
+  {
+    "id": "cli-list-config-failure",
+    "rule": "A stored configuration that is not an object fails wallets list as Python does.",
+    "file": "crates/wallets/src/lifecycle.rs",
+    "find": "if let Some(failure) = config_failure(raw.as_deref()) {",
+    "replace": "if let Some(failure) = None::<AppError> {",
+    "expect_failing": [
+      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_cli_list_matches_every_format"
+    ]
+  },
+  {
+    "id": "verify-fee-differs",
+    "rule": "A recorded fee that differs from inputs minus outputs is a mismatch.",
+    "file": "crates/journals/src/transaction_graph/verify.rs",
+    "find": "} else if Some(expected) != recorded {",
+    "replace": "} else if false {",
+    "expect_failing": [
+      "tests/test_rust_wallet_completeness.py::RustTransactionVerifyTest::test_stored_graphs_match_bytes"
+    ]
+  },
+  {
+    "id": "verify-missing-leg",
+    "rule": "An owning wallet without a row for the txid is a mismatch.",
+    "file": "crates/journals/src/transaction_graph/verify.rs",
+    "find": "(\"mismatch\", Some(\"missing_imported_leg\"))",
+    "replace": "(\"ok\", None)",
+    "expect_failing": [
+      "tests/test_rust_wallet_completeness.py::RustTransactionVerifyTest::test_stored_graphs_match_bytes"
+    ]
+  },
+  {
+    "id": "verify-several-legs",
+    "rule": "Several active rows of one wallet for the txid are a mismatch.",
+    "file": "crates/journals/src/transaction_graph/verify.rs",
+    "find": "} else if active.len() > 1 {",
+    "replace": "} else if false {",
+    "expect_failing": [
+      "tests/test_rust_wallet_completeness.py::RustTransactionVerifyTest::test_stored_graphs_match_bytes"
+    ]
+  },
+  {
+    "id": "verify-excluded-leg",
+    "rule": "An excluded leg is reported, not failed.",
+    "file": "crates/journals/src/transaction_graph/verify.rs",
+    "find": "(\"excluded\", Some(\"imported_leg_excluded\"))",
+    "replace": "(\"mismatch\", Some(\"imported_leg_excluded\"))",
+    "expect_failing": [
+      "tests/test_rust_wallet_completeness.py::RustTransactionVerifyTest::test_stored_graphs_match_bytes"
+    ]
+  },
+  {
+    "id": "verify-observed-unexplained",
+    "rule": "A row of an observed wallet with no owned leg is a mismatch; other rows are external records.",
+    "file": "crates/journals/src/transaction_graph/verify.rs",
+    "find": "} else if observed {",
+    "replace": "} else if false {",
+    "expect_failing": [
+      "tests/test_rust_wallet_completeness.py::RustTransactionVerifyTest::test_stored_graphs_match_bytes"
+    ]
+  },
+  {
+    "id": "verify-ambiguous-partial",
+    "rule": "Ambiguous ownership makes legs unverifiable.",
+    "file": "crates/journals/src/transaction_graph/verify.rs",
+    "find": "if ambiguous > 0 {",
+    "replace": "if false {",
+    "expect_failing": [
+      "tests/test_rust_wallet_completeness.py::RustTransactionVerifyTest::test_stored_graphs_match_bytes"
+    ]
+  },
+  {
+    "id": "verify-keychain-agreement",
+    "rule": "A keychain is named only when every exact branch agrees.",
+    "file": "crates/journals/src/transaction_graph/verify.rs",
+    "find": "Some(role) if roles.len() == 1 => role,",
+    "replace": "Some(role) => role,",
+    "expect_failing": [
+      "tests/test_rust_wallet_completeness.py::RustTransactionVerifyTest::test_stored_graphs_match_bytes"
+    ]
+  },
+  {
+    "id": "verify-delta-includes-fee",
+    "rule": "An outbound row's wallet delta includes its fee.",
+    "file": "crates/journals/src/transaction_graph/verify.rs",
+    "find": "        -(principal + fee)\n",
+    "replace": "        -principal\n",
+    "expect_failing": [
+      "tests/test_rust_wallet_completeness.py::RustTransactionVerifyTest::test_stored_graphs_match_bytes"
+    ]
+  },
+  {
+    "id": "verify-amount-includes-fee",
+    "rule": "A fee already included in the amount is not counted twice.",
+    "file": "crates/journals/src/transaction_graph/verify.rs",
+    "find": "if direction == \"outbound\" && truthy(g(row, \"amount_includes_fee\")) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "tests/test_rust_wallet_completeness.py::RustTransactionVerifyTest::test_stored_graphs_match_bytes"
+    ]
+  },
+  {
+    "id": "verify-unspendable",
+    "rule": "OP_RETURN outputs are unspendable, never matched to a wallet.",
+    "file": "crates/journals/src/transaction_graph/verify.rs",
+    "find": "if is_unspendable(script.as_deref()) || truthy(g(node, \"_pegoutAddress\")) {",
+    "replace": "if truthy(g(node, \"_pegoutAddress\")) {",
+    "expect_failing": [
+      "tests/test_rust_wallet_completeness.py::RustTransactionVerifyTest::test_stored_graphs_match_bytes"
+    ]
+  },
+  {
+    "id": "verify-not-found-details",
+    "rule": "An unknown reference fails not_found naming it.",
+    "file": "crates/journals/src/transaction_graph/verify.rs",
+    "find": "                .with_details(dict([(\"transaction\", s(reference.as_str()))])),\n",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_wallet_completeness.py::RustTransactionVerifyTest::test_refusals_and_graphless_rows_match_bytes"
+    ]
+  },
+  {
+    "id": "verify-cli-route",
+    "rule": "transactions verify is served natively.",
+    "file": "crates/cli/src/run.rs",
+    "find": "if operation == \"transactions.verify\" {",
+    "replace": "if operation == \"transactions.verify-unrouted\" {",
+    "expect_failing": [
+      "tests/test_rust_wallet_completeness.py::RustTransactionVerifyTest::test_stored_graphs_match_bytes"
+    ]
+  },
+  {
+    "id": "dashboard-yearly-buckets",
+    "rule": "All over a decade or more groups buckets by year.",
+    "file": "crates/transactions/src/desktop/dashboard.rs",
+    "find": "        \"all\" if history_years >= YEARLY_BUCKET_MIN_YEARS => \"year\",\n",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_transaction_dashboard.py::RustTransactionDashboardYearsTest::test_years_index_and_bucket_sizes_match_wire_bytes"
+    ]
+  },
+  {
+    "id": "dashboard-four-year-quarters",
+    "rule": "The four-year range groups by quarter.",
+    "file": "crates/transactions/src/desktop/dashboard.rs",
+    "find": "\"4years\" | \"5years\" | \"10years\" | \"15years\" | \"all\" => \"quarter\",",
+    "replace": "\"5years\" | \"10years\" | \"15years\" | \"all\" => \"quarter\",",
+    "expect_failing": [
+      "tests/test_rust_transaction_dashboard.py::RustTransactionDashboardYearsTest::test_years_index_and_bucket_sizes_match_wire_bytes"
+    ]
+  },
+  {
+    "id": "dashboard-four-year-period",
+    "rule": "The dashboard accepts the four-year range.",
+    "file": "crates/transactions/src/desktop/dashboard.rs",
+    "find": "| \"6m\" | \"1year\" | \"1years\" | \"1y\" | \"4years\" | \"4year\" | \"4y\" | \"5years\" | \"5year\"",
+    "replace": "| \"6m\" | \"1year\" | \"1years\" | \"1y\" | \"5years\" | \"5year\"",
+    "expect_failing": [
+      "tests/test_rust_transaction_dashboard.py::RustTransactionDashboardYearsTest::test_years_index_and_bucket_sizes_match_wire_bytes"
+    ]
+  },
+  {
+    "id": "dashboard-auto-no-ytd",
+    "rule": "Auto without qualifying rows settles on twelve months.",
+    "file": "crates/transactions/src/desktop/dashboard.rs",
+    "find": "    if found.is_empty() {\n        return Ok(\"1year\".into());",
+    "replace": "    if found.is_empty() {\n        return Ok(\"ytd\".into());",
+    "expect_failing": [
+      "tests/test_rust_transaction_dashboard.py::RustTransactionDashboardTest::test_auto_period_selection_matches_wire_bytes"
+    ]
+  },
+  {
+    "id": "dashboard-years-undated",
+    "rule": "The unknown-date sentinel is not a year.",
+    "file": "crates/transactions/src/desktop/dashboard.rs",
+    "find": "dated_bind.push(SqlValue::Text(\"1970-01-01T00:00:00Z\".into()));",
+    "replace": "dated_bind.push(SqlValue::Text(\"\".into()));",
+    "expect_failing": [
+      "tests/test_rust_transaction_dashboard.py::RustTransactionDashboardYearsTest::test_years_index_and_bucket_sizes_match_wire_bytes"
+    ]
+  },
+  {
+    "id": "dashboard-years-display-zone",
+    "rule": "Year bounds are the display calendar's new years in UTC.",
+    "file": "crates/transactions/src/desktop/dashboard.rs",
+    "find": "        Ok(local - offset)\n",
+    "replace": "        Ok(local)\n",
+    "expect_failing": [
+      "tests/test_rust_transaction_dashboard.py::RustTransactionDashboardYearsTest::test_years_index_and_bucket_sizes_match_wire_bytes"
+    ]
+  },
+  {
+    "id": "dashboard-years-inclusive-until",
+    "rule": "A year's until is its last whole second.",
+    "file": "crates/transactions/src/desktop/dashboard.rs",
+    "find": "(\"until\", s(utc_text(end - 1))),",
+    "replace": "(\"until\", s(utc_text(end))),",
+    "expect_failing": [
+      "tests/test_rust_transaction_dashboard.py::RustTransactionDashboardYearsTest::test_years_index_and_bucket_sizes_match_wire_bytes"
+    ]
+  },
+  {
+    "id": "dashboard-bucket-size-field",
+    "rule": "The dashboard names its bucket size.",
+    "file": "crates/transactions/src/desktop/dashboard.rs",
+    "find": "        (\"bucketSize\", s(size)),\n",
+    "replace": "",
+    "expect_failing": [
+      "tests/test_rust_transaction_dashboard.py::RustTransactionDashboardYearsTest::test_years_index_and_bucket_sizes_match_wire_bytes"
+    ]
+  },
+  {
+    "id": "readiness-definitions",
+    "rule": "Workspace health defines each counter.",
+    "file": "crates/workspace/src/readiness.rs",
+    "find": "        (\n            \"definitions\",\n            dict(COUNT_DEFINITIONS.map(|(key, text)| (key, s(text)))),\n        ),\n",
+    "replace": "",
+    "expect_failing": [
+      "kassiber-workspace/vectors:workspace_health_matches_python",
+      "kassiber-workspace/vectors:workspace_next_actions_matches_python"
+    ]
+  }
+]

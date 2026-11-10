@@ -69,11 +69,15 @@ kassiber/ai/provider_broker/*.mjs
 /crates/journals/tests/data/render.json
 /crates/journals/tests/data/review-builds.json
 /crates/journals/tests/data/storage.json
+/crates/mcp/tests/data/registry.json
+/crates/operator/tests/data/protocol_corpus.json
 /crates/pyjson/tests/data/json_vectors.txt
 /crates/pytext/tests/data/casefold.txt
 /crates/pytext/tests/data/lower.txt
 /crates/pytext/tests/data/upper.txt
 /crates/pytext/tests/data/vectors.txt
+/crates/release/tests/data/sshsig_vectors.json
+/crates/release/tests/data/vectors.json
 /crates/reports/tests/data/artifact_csv.json
 /crates/reports/tests/data/austrian_pdf.json
 /crates/reports/tests/data/austrian_xlsx.json
@@ -120,6 +124,7 @@ kassiber/ai/provider_broker/*.mjs
 /crates/reports/tests/data/summary_model.json
 /crates/reports/tests/data/vectors.json
 /crates/reports/tests/data/year_handoff.json
+/crates/runtime/tests/data/capabilities.json
 /crates/setup/fixtures/python_backends.json
 /crates/setup/fixtures/python_desktop.json
 /crates/setup/fixtures/python_networks.json
@@ -407,4 +412,5 @@ kassiber/ai/provider_broker/*.mjs
 /tests/fixtures/custody_transfer_cases.json
 /tests/fixtures/historical/pre_pair_fee_c0a015de.sqlite3.gz.b64
 /tests/fixtures/historical/pre_partial_payout_ca9a672f.sqlite3.gz.b64
+/tests/fixtures/rust_port/daemon_kinds.json
 # <<< generated test data

@@ -1,0 +1,33 @@
+[package]
+name = "kassiber-release"
+description = "Explicit GitHub update checks and offline release verification shared by the CLI"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[dependencies]
+kassiber-envelope = { path = "../envelope" }
+kassiber-net = { path = "../net" }
+kassiber-paths = { path = "../paths" }
+kassiber-pyjson = { path = "../pyjson" }
+kassiber-pytext = { path = "../pytext" }
+kassiber-setup = { path = "../setup" }
+kassiber-store = { path = "../store" }
+# Already locked by the chain, backup and ownership crates.
+base64 = "0.22"
+sha2 = "0.11"
+# OpenSSH SSHSIG signed data and Ed25519 verification (through ed25519-dalek)
+# in process, replacing `ssh-keygen -Y verify`; verification features only.
+ssh-key = { version = "=0.6.7", default-features = false, features = ["std", "ed25519"] }
+# The `Verifier` trait ssh-key implements but does not re-export; already locked.
+signature = { version = "=2.2.0", default-features = false }
+
+[target.'cfg(unix)'.dependencies]
+# Already locked by kassiber-paths; only the libc re-export is used.
+nix = { version = "0.30", features = ["fs"] }
+
+[lints.rust]
+unsafe_code = "forbid"

@@ -45,11 +45,15 @@ a96bcfd0b38b84c7bd1a2edc55781e2570eb52cb crates/journals/tests/data/render-scala
 5a9eee337be84ea311c9b2a31a5438220bf7e738 crates/journals/tests/data/render.json
 491ee323ee3c1d1cf6557dc86b7387a7dbabebee crates/journals/tests/data/review-builds.json
 ea0bdb6deb73051f96246e20dd0a9d39c7659b1b crates/journals/tests/data/storage.json
+0b8a978320bf3a1a06e99ec4e3e897dcf8e0995b crates/mcp/tests/data/registry.json
+147ab7270f11ba14249c7381350ff1541f3c9f33 crates/operator/tests/data/protocol_corpus.json
 fd81642d3a974032eedbb4d6c283ac43d5b03d03 crates/pyjson/tests/data/json_vectors.txt
 d78c59b28c2713a0c6cd4f4a6ccde03db46a7216 crates/pytext/tests/data/casefold.txt
 4cde391b4867995dd68a6870dca9ca976badc256 crates/pytext/tests/data/lower.txt
 fabc789d2fd4e1979860958108dcd73b87e9e2bc crates/pytext/tests/data/upper.txt
 781dcc9d2aadfcc0f4ecd575aafb8807dfc93ff1 crates/pytext/tests/data/vectors.txt
+f2dc0da08919ec120726e388ef05c2b196147762 crates/release/tests/data/sshsig_vectors.json
+7012877ececda5a316965fc2c9c5f7ba342adbef crates/release/tests/data/vectors.json
 9598d5bbc1fb8ae86a985fbe1c4dafcce1fcea62 crates/reports/tests/data/artifact_csv.json
 03152bf10b8fc541a3281082198688002436c11b crates/reports/tests/data/austrian_pdf.json
 9fbdd1661e36e6ec3a691d4824d183468e4b11f2 crates/reports/tests/data/austrian_xlsx.json
@@ -96,6 +100,7 @@ b5be982cc2e823c5d4262530384e7453fb3096b3 crates/reports/tests/data/source_funds_
 1776aa12d62d831facb9e66ff947edc01e18f104 crates/reports/tests/data/summary_model.json
 1b7f87202438138f99f846ab50d063903c69c07f crates/reports/tests/data/vectors.json
 499299990c5d154ec458f6a4c40d9c181406e0d1 crates/reports/tests/data/year_handoff.json
+b356971470abfd48ce8e63727b8efa333837cb0d crates/runtime/tests/data/capabilities.json
 c3c14e550f251aae34a87b5b7479a7ad47c63919 crates/setup/fixtures/python_backends.json
 10f4b4262109f40866723bc7058e92704f280c91 crates/setup/fixtures/python_desktop.json
 22ca3c64c15c0e232216ce26e0a04768237c2d42 crates/setup/fixtures/python_networks.json
@@ -383,3 +388,4 @@ caafe766948921e180017b424e3436023eb6da6d tests/fixtures/custody_safety_helpers.j
 e8255f5013b3c19a1f1256345f126d6c202e2db8 tests/fixtures/custody_transfer_cases.json
 8f650eebc442f3d717a07a0d9820a12393c039fc tests/fixtures/historical/pre_pair_fee_c0a015de.sqlite3.gz.b64
 f14aeff58f16070e90dfc6c4b19bfa79d0c3cfbd tests/fixtures/historical/pre_partial_payout_ca9a672f.sqlite3.gz.b64
+1e12c3a9c3894617b0fab6b4ec1e91211acf72c6 tests/fixtures/rust_port/daemon_kinds.json
