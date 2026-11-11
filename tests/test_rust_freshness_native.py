@@ -32,8 +32,12 @@ CONTEXT_SQL = "INSERT INTO settings VALUES('context_workspace','w'); INSERT INTO
 
 
 def invoke(tmp_path, payload, **extra_env):
+    # The debug fixture's widened-gap rescan alone takes ~40 s of CPU; under
+    # load its default 60 s request budget runs out and the job ends in
+    # `error`. Give it the budget its Rust replays use.
+    budget = {"KASSIBER_FRESHNESS_FIXTURE_BUDGET_SECS": "900"}
     result = subprocess.run([str(Path(FIXTURE).resolve())], input=json.dumps(payload).encode(),
-        capture_output=True, timeout=90, env={**child_env(tmp_path), **extra_env})
+        capture_output=True, timeout=900, env={**child_env(tmp_path), **budget, **extra_env})
     assert result.returncode == 0 and result.stderr == b"", result.stderr.decode()
     return json.loads(result.stdout)
 

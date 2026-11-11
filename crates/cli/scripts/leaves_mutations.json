@@ -505,5 +505,35 @@
       "kassiber/black_box:test_transfer_audit_matches_python_byte_for_byte"
     ],
     "rule": "Every leaf but the gated chat and MCP ones is native."
+  },
+  {
+    "id": "HH-backup-import-no-cutover",
+    "file": "crates/cli/src/run.rs",
+    "find": "        && path[..] != [\"backup\", \"import\"]\n",
+    "replace": "",
+    "expect_failing": [
+      "kassiber/black_box:test_backup_import_does_not_migrate_hidden_home_state"
+    ],
+    "rule": "`backup import` restores into the root it finds; it never moves hidden-home state first."
+  },
+  {
+    "id": "HH-explicit-root-catalog",
+    "file": "crates/paths/src/lib.rs",
+    "find": "let catalog = load_catalog(&catalog_path, self).unwrap_or_default();",
+    "replace": "let catalog = load_catalog(&catalog_path, self)?;",
+    "expect_failing": [
+      "kassiber/black_box:test_explicit_data_root_does_not_migrate_hidden_home_state"
+    ],
+    "rule": "An explicit data root wins: a default-root catalog Rust refuses names nothing and blocks nothing."
+  },
+  {
+    "id": "HH-legacy-root-in-place",
+    "file": "crates/paths/src/lib.rs",
+    "find": "            if native.join(MIGRATION_MARKER).exists() && movable_state(&legacy)? {\n",
+    "replace": "            if global == legacy && !native.exists() {\n                return Err(Error::migration(\"legacy_state_root\"));\n            }\n            if native.join(MIGRATION_MARKER).exists() && movable_state(&legacy)? {\n",
+    "expect_failing": [
+      "kassiber/black_box:test_explicit_env_file_does_not_migrate_hidden_home_state"
+    ],
+    "rule": "A hidden-home root the cutover did not move is used where it is, as Python does."
   }
 ]

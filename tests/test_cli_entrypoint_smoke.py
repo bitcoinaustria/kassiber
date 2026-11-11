@@ -172,7 +172,13 @@ def test_explicit_data_root_does_not_migrate_hidden_home_state(tmp_path):
 def test_explicit_env_file_does_not_migrate_hidden_home_state(tmp_path):
     legacy_catalog = tmp_path / ".kassiber" / "config" / "projects.json"
     legacy_catalog.parent.mkdir(parents=True)
-    legacy_catalog.write_text("{}\n", encoding="utf-8")
+    # The old root stays the live one here, so its catalog has the shape
+    # Python writes: Rust refuses a schema-less catalog in a live root
+    # (docs/reference/rust-store.md), where Python would replace it.
+    legacy_catalog.write_text(
+        '{"schema_version": 1, "selected_project_id": null, "projects": []}\n',
+        encoding="utf-8",
+    )
     env_file = tmp_path / "backends.env"
     env_file.write_text("", encoding="utf-8")
 
