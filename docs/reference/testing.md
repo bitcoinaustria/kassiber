@@ -157,7 +157,8 @@ scripts/fetch-test-data.sh --publish tests/data/sessions/*
 
 The script passes its options to `session-replay replay`; `--update`
 writes the new run's output, exit and state into each session that differs,
-in the extracted copy under `target/session-replay-data`. Review every
+in the extracted copy under `target/session-replay-data`; it is refused
+when `CI` is set. Review every
 changed session before archiving; see
 [changing a frozen golden](#changing-a-frozen-golden).
 
@@ -1387,8 +1388,8 @@ could is tagged `archive/python-backend`. For a deliberate change:
    mode take `KASSIBER_GOLDEN_WRITE=1` (the custody recordings, the routing
    replays, the `kassiber` crate's golden helper, the wallet analysis
    recovery goldens); black-box transcripts take `KASSIBER_BLESS=1`; recorded
-   sessions take `scripts/replay-sessions.sh --update`. The two switches
-   refuse to run under `CI`. A golden without a write mode is edited by hand. A golden that
+   sessions take `scripts/replay-sessions.sh --update`. All three refuse
+   to run under `CI`. A golden without a write mode is edited by hand. A golden that
    needs new network traffic is re-taped against a regtest stack with
    `KASSIBER_TEST_NET_TAPE=record:<file>`.
 3. Review the diff. Every changed golden must be explained by the change;

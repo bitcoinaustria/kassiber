@@ -687,6 +687,12 @@ fn main() -> ExitCode {
             }
         }
     }
+    // Recordings are reviewed changes, never rewritten by a CI run (as
+    // KASSIBER_BLESS and KASSIBER_GOLDEN_WRITE are refused there).
+    if update && std::env::var_os("CI").is_some() {
+        eprintln!("--update is refused under CI");
+        return ExitCode::from(2);
+    }
     let files: Vec<PathBuf> = sessions(&dir)
         .into_iter()
         .filter(|f| {
