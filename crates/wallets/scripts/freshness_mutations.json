@@ -5,7 +5,6 @@
     "find": "if truthy(field(&state, \"paused\")) {",
     "replace": "if false && truthy(field(&state, \"paused\")) {",
     "expect_failing": [
-      "tests/test_rust_freshness_queue.py::test_freshness_queue_paused_enqueue_keeps_private_checkpoint",
       "test_freshness_queue_paused_enqueue_keeps_private_checkpoint"
     ],
     "rule": "Paused sources cannot acquire a new queue entry."
@@ -16,7 +15,6 @@
     "find": "get(input,\"single_flight\").is_none_or(truthy)",
     "replace": "get(input,\"single_flight\").is_some_and(|_| false)",
     "expect_failing": [
-      "tests/test_rust_freshness_queue.py::test_freshness_queue_singleflight_force_and_running_owner",
       "test_freshness_queue_singleflight_force_and_running_owner"
     ],
     "rule": "An incremental request reuses its pending job."
@@ -27,7 +25,6 @@
     "find": "|| field(&existing,\"status\") == &s(\"running\")",
     "replace": "|| false && field(&existing,\"status\") == &s(\"running\")",
     "expect_failing": [
-      "tests/test_rust_freshness_queue.py::test_freshness_queue_singleflight_force_and_running_owner",
       "test_freshness_queue_singleflight_force_and_running_owner"
     ],
     "rule": "A forced request cannot replace a job still owned by its worker."
@@ -38,7 +35,6 @@
     "find": "self.cancelled(&existing)?;",
     "replace": "let _ = &existing;",
     "expect_failing": [
-      "tests/test_rust_freshness_queue.py::test_freshness_queue_singleflight_force_and_running_owner",
       "test_freshness_queue_singleflight_force_and_running_owner"
     ],
     "rule": "Forced requests settle the pending row before taking its unique slot."
@@ -49,7 +45,6 @@
     "find": "if truthy(field(incoming,\"auto_pair\"))",
     "replace": "if false && truthy(field(incoming,\"auto_pair\"))",
     "expect_failing": [
-      "tests/test_rust_freshness_queue.py::test_freshness_queue_journal_merge",
       "test_freshness_queue_journal_merge"
     ],
     "rule": "Reused journal jobs retain either request's automatic-pairing intent."
@@ -60,7 +55,6 @@
     "find": "truthy(field(current,\"skip_rebuild_when_current\")) && truthy(field(incoming,\"skip_rebuild_when_current\"))",
     "replace": "truthy(field(current,\"skip_rebuild_when_current\")) || truthy(field(incoming,\"skip_rebuild_when_current\"))",
     "expect_failing": [
-      "tests/test_rust_freshness_queue.py::test_freshness_queue_journal_merge",
       "test_freshness_queue_journal_merge"
     ],
     "rule": "A rebuild may be skipped only when both requests allow it."
@@ -71,7 +65,6 @@
     "find": "if field(&job, \"job_type\") == &s(\"wallet_graph_references\") {",
     "replace": "if false && field(&job, \"job_type\") == &s(\"wallet_graph_references\") {",
     "expect_failing": [
-      "tests/test_rust_freshness_queue.py::test_freshness_queue_recovery_excludes_graph_and_other_profiles",
       "test_freshness_queue_recovery_excludes_graph_and_other_profiles"
     ],
     "rule": "Foreground recovery cannot take a live graph worker's job."
@@ -82,7 +75,6 @@
     "find": "SET status='queued',phase='discovery',cancel_requested=0,",
     "replace": "SET status='queued',phase='discovery',cancel_requested=1,",
     "expect_failing": [
-      "tests/test_rust_freshness_queue.py::test_freshness_queue_recovery_excludes_graph_and_other_profiles",
       "test_freshness_queue_recovery_excludes_graph_and_other_profiles"
     ],
     "rule": "Recovered jobs clear an interrupted worker's cancellation flag."
@@ -93,7 +85,6 @@
     "find": "let checkpoint = inherited(\"checkpoint\");",
     "replace": "let checkpoint = &Value::Null;",
     "expect_failing": [
-      "tests/test_rust_freshness_queue.py::test_freshness_queue_paused_enqueue_keeps_private_checkpoint",
       "test_freshness_queue_paused_enqueue_keeps_private_checkpoint"
     ],
     "rule": "Queue transitions retain private source checkpoints."
@@ -104,7 +95,6 @@
     "find": "json(&checkpoint)?,now]",
     "replace": "json(&redact(&checkpoint))?,now]",
     "expect_failing": [
-      "tests/test_rust_freshness_queue.py::test_freshness_queue_redacts_results_and_retains_private_state",
       "test_freshness_queue_redacts_results_and_retains_private_state"
     ],
     "rule": "Private source checkpoints are stored separately from sanitized results."
@@ -115,7 +105,6 @@
     "find": ".contains(&lower.as_str())\n                {\n                    continue;\n                }",
     "replace": ".contains(&lower.as_str())\n                {\n                    let _ = value;\n                }",
     "expect_failing": [
-      "tests/test_rust_freshness_queue.py::test_freshness_queue_redacts_results_and_retains_private_state",
       "test_freshness_queue_redacts_results_and_retains_private_state"
     ],
     "rule": "Result projections omit private observer membership and checkpoint data."
@@ -126,7 +115,6 @@
     "find": ".any(|part| lower.contains(part))",
     "replace": ".any(|part| false && lower.contains(part))",
     "expect_failing": [
-      "tests/test_rust_freshness_queue.py::test_freshness_queue_redacts_results_and_retains_private_state",
       "test_freshness_queue_redacts_results_and_retains_private_state"
     ],
     "rule": "Nested secret-shaped keys are redacted before queue persistence."
@@ -137,7 +125,6 @@
     "find": "AND freshness_source_states.source_key=freshness_jobs.source_key AND paused=1)",
     "replace": "AND freshness_source_states.source_key=freshness_jobs.source_key AND paused=0)",
     "expect_failing": [
-      "tests/test_rust_freshness_queue.py::test_freshness_queue_dispatch_rechecks_pause_cooldown_profile_and_running",
       "test_freshness_queue_dispatch_rechecks_pause_cooldown_profile_and_running"
     ],
     "rule": "Dispatch rechecks the current source pause flag."
@@ -148,7 +135,6 @@
     "find": "cooldown_until <= ?",
     "replace": "cooldown_until >= ?",
     "expect_failing": [
-      "tests/test_rust_freshness_queue.py::test_freshness_queue_due_order_and_timestamp_boundaries",
       "test_freshness_queue_due_order_and_timestamp_boundaries"
     ],
     "rule": "Only expired cooldowns permit another dispatch."
@@ -159,7 +145,6 @@
     "find": "run_after <= ?",
     "replace": "run_after >= ?",
     "expect_failing": [
-      "tests/test_rust_freshness_queue.py::test_freshness_queue_due_order_and_timestamp_boundaries",
       "test_freshness_queue_due_order_and_timestamp_boundaries"
     ],
     "rule": "Scheduled jobs remain deferred until their run-after boundary."
@@ -170,7 +155,6 @@
     "find": "status IN ('done','error','cancelled') OR ({DUE})",
     "replace": "status IN ('done','error','cancelled','running') OR ({DUE})",
     "expect_failing": [
-      "tests/test_rust_freshness_queue.py::test_freshness_queue_dispatch_rechecks_pause_cooldown_profile_and_running",
       "test_freshness_queue_dispatch_rechecks_pause_cooldown_profile_and_running"
     ],
     "rule": "A running job is never returned as a finished result."
@@ -181,7 +165,6 @@
     "find": "WHERE id=? AND profile_id=? AND (status IN",
     "replace": "WHERE id=? AND ? IS NOT NULL AND (status IN",
     "expect_failing": [
-      "tests/test_rust_freshness_queue.py::test_freshness_queue_dispatch_rechecks_pause_cooldown_profile_and_running",
       "test_freshness_queue_dispatch_rechecks_pause_cooldown_profile_and_running"
     ],
     "rule": "Exact dispatch cannot borrow another profile's work."
@@ -192,7 +175,6 @@
     "find": "        if count == 0 {\n            return Err(AppError::new(\n                \"state_not_ready\",\n                \"Freshness job disappeared\",\n            ));\n        }\n        let mut state = Self::state_input(job, \"syncing\");",
     "replace": "        let _ = count;\n        let mut state = Self::state_input(job, \"syncing\");",
     "expect_failing": [
-      "tests/test_rust_freshness_queue.py::test_freshness_queue_removed_progress_cannot_recreate_source",
       "test_freshness_queue_removed_progress_cannot_recreate_source"
     ],
     "rule": "Progress on a removed job cannot resurrect its source."
@@ -203,7 +185,6 @@
     "find": "or_text(field(job, \"job_type\")) != \"wallet_graph_references\"",
     "replace": "or_text(field(job, \"job_type\")) == \"wallet_graph_references\"",
     "expect_failing": [
-      "tests/test_rust_freshness_queue.py::test_freshness_queue_cancel_statuses_and_graph_blocking",
       "test_freshness_queue_cancel_statuses_and_graph_blocking"
     ],
     "rule": "Graph cancellation does not establish an accounting report blocker."
@@ -214,7 +195,6 @@
     "find": ".filter(|v| requested.contains(or_text(field(v, \"id\")).as_str()))",
     "replace": ".filter(|v| !requested.contains(or_text(field(v, \"id\")).as_str()))",
     "expect_failing": [
-      "tests/test_rust_freshness_queue.py::test_freshness_queue_requested_jobs_do_not_borrow_other_work",
       "test_freshness_queue_requested_jobs_do_not_borrow_other_work"
     ],
     "rule": "Selection cannot borrow higher-priority unrelated work."
@@ -225,7 +205,6 @@
     "find": ".take(limit.max(0) as usize)",
     "replace": ".take(limit.max(0) as usize + 1)",
     "expect_failing": [
-      "tests/test_rust_freshness_queue.py::test_freshness_queue_requested_jobs_do_not_borrow_other_work",
       "test_freshness_queue_requested_jobs_do_not_borrow_other_work"
     ],
     "rule": "Selected job completion respects the explicit limit."
@@ -236,7 +215,6 @@
     "find": "u8::from(!terminal),",
     "replace": "u8::from(terminal),",
     "expect_failing": [
-      "tests/test_rust_freshness_queue.py::test_freshness_queue_dispatch_order_prioritizes_exact_terminal_results",
       "test_freshness_queue_dispatch_order_prioritizes_exact_terminal_results"
     ],
     "rule": "Already terminal selected results precede pending dispatches in request order."
@@ -247,7 +225,6 @@
     "find": "ORDER BY created_at ASC,label ASC",
     "replace": "ORDER BY label ASC,created_at ASC",
     "expect_failing": [
-      "tests/test_rust_freshness_queue.py::test_freshness_workspace_order_preserves_active_context",
       "test_freshness_workspace_order_preserves_active_context"
     ],
     "rule": "Workspace refresh follows profile creation order before labels."
@@ -258,7 +235,6 @@
     "find": "last_success_at=COALESCE(excluded.last_success_at,freshness_source_states.last_success_at)",
     "replace": "last_success_at=excluded.last_success_at",
     "expect_failing": [
-      "tests/test_rust_freshness_queue.py::test_freshness_queue_state_precedence_and_preservation",
       "test_freshness_queue_state_precedence_and_preservation"
     ],
     "rule": "Queue transitions preserve the last successful refresh."
@@ -269,7 +245,6 @@
     "find": "} else if blocked {",
     "replace": "} else if false && blocked {",
     "expect_failing": [
-      "tests/test_rust_freshness_queue.py::test_freshness_queue_state_precedence_and_preservation",
       "test_freshness_queue_state_precedence_and_preservation"
     ],
     "rule": "Persisted report blockers control the normalized source status."
@@ -280,7 +255,6 @@
     "find": "report_read = true;",
     "replace": "report_read = false;",
     "expect_failing": [
-      "tests/test_rust_freshness_queue.py::test_freshness_queue_policy_defaults_legacy_and_saved",
       "test_freshness_queue_policy_defaults_legacy_and_saved"
     ],
     "rule": "Legacy report-read consent retains its narrowly enabled source policy."
@@ -291,7 +265,6 @@
     "find": "if get(&classes, &key).is_none() {",
     "replace": "if false && get(&classes, &key).is_none() {",
     "expect_failing": [
-      "tests/test_rust_freshness_queue.py::test_freshness_queue_policy_updates_and_invalid_class",
       "test_freshness_queue_policy_updates_and_invalid_class"
     ],
     "rule": "Policy writes refuse unknown source classes."
@@ -302,7 +275,6 @@
     "find": "ids.iter().filter(|id| unique.insert(id.as_str())).collect()",
     "replace": "ids.iter().filter(|id| { unique.insert(id.as_str()); true }).collect()",
     "expect_failing": [
-      "tests/test_rust_freshness_queue.py::test_freshness_queue_selected_batches_and_duplicates",
       "test_freshness_queue_selected_batches_and_duplicates"
     ],
     "rule": "Selected jobs are unique across SQLite parameter batches."
@@ -313,7 +285,6 @@
     "find": "if !py_eq(&merged, current) {",
     "replace": "if merged != *current {",
     "expect_failing": [
-      "tests/test_rust_freshness_queue.py::test_freshness_queue_journal_merge",
       "test_freshness_queue_journal_merge"
     ],
     "rule": "Equivalent boolean and numeric journal intent does not rewrite the reused job or advance its timestamp."
@@ -324,7 +295,6 @@
     "find": "                discovered.push((\n                    or_text(field(job, \"id\")),\n                    self.discover(conn, job, observer),\n                ));",
     "replace": "                let found = self.discover(conn, job, observer);\n                let found = found.and_then(|found| self.fetch(conn, found, observer));\n                self.prefetched.insert(or_text(field(job, \"id\")), found);\n                let _: &Vec<(String, Result<Discovered>)> = &discovered;",
     "expect_failing": [
-      "tests/test_rust_freshness_native.py::test_native_freshness_several_wallets_match_python[distinct-False]",
       "test_native_freshness_several_wallets_match_python"
     ],
     "rule": "A freshness batch discovers every wallet before its first request, as Python does."
@@ -335,7 +305,6 @@
     "find": "let result = result.and_then(|prepared| self.repair(conn, prepared, observer));",
     "replace": "let result = result;",
     "expect_failing": [
-      "tests/test_rust_freshness_native.py::test_native_freshness_negative_balance_repair_matches_python[False]",
       "test_native_freshness_negative_balance_repair_matches_python"
     ],
     "rule": "A freshness batch repairs after every job's fetch."
@@ -346,7 +315,6 @@
     "find": "                // The repair is a whole `fetch_wallet_backend`, discovery first.\n                emit(&dict([\n                    (\"phase\", s(\"discovery\")),\n                    (\"wallet\", field(&selected.wallet, \"label\").clone()),\n                ]))?;\n",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_freshness_native.py::test_native_freshness_negative_balance_repair_matches_python[False]",
       "test_native_freshness_negative_balance_repair_matches_python"
     ],
     "rule": "The repair fetch reports its discovery first."
@@ -357,7 +325,6 @@
     "find": "                    rescan.check_permission(this.gate, Some(&grant))?;",
     "replace": "                    return Err(AppError::new(\"cancelled\", \"mutated\"));",
     "expect_failing": [
-      "tests/test_rust_freshness_native.py::test_native_freshness_rescan_after_apply_matches_python[esplora]",
       "test_native_freshness_rescan_after_apply_matches_python"
     ],
     "rule": "A freshness job re-syncs inside its savepoint when applying leaves a deficit."

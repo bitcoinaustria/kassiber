@@ -5,7 +5,6 @@
     "find": "let result = conn.execute(sql, params)?;",
     "replace": "let result = conn.execute(sql, params)?; conn.execute_batch(\"COMMIT; BEGIN IMMEDIATE\")?;",
     "expect_failing": [
-      "tests/test_rust_analysis_recovery.py::test_native_mirror_every_write_kill_recovers_python_state[DELETE-sqlite]",
       "native_mirror_every_write_kill_recovers_python_state"
     ],
     "rule": "Every index statement remains inside its caller transaction until publication commits."
@@ -16,7 +15,6 @@
     "find": "INSERT OR REPLACE INTO chain_index_state VALUES",
     "replace": "INSERT OR IGNORE INTO chain_index_state VALUES",
     "expect_failing": [
-      "tests/test_rust_analysis_recovery.py::test_native_mirror_every_write_kill_recovers_python_state[DELETE-sqlite]",
       "native_mirror_every_write_kill_recovers_python_state"
     ],
     "rule": "Recovered publication replaces the retained generation instead of acknowledging stale state."

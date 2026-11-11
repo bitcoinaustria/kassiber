@@ -5,7 +5,6 @@
     "find": "    kinds.push(\"ui.report.blockers\");\n",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_report_blockers.py::RustReportBlockersTest::test_every_barrier_matches_wire_bytes",
       "kassiber/black_box:test_every_barrier_matches_wire_bytes"
     ],
     "rule": "Report blockers are advertised and served by the Rust daemon."
@@ -16,7 +15,6 @@
     "find": "        if failed_count != BigInt::from(0) {",
     "replace": "        if false {",
     "expect_failing": [
-      "tests/test_rust_report_blockers.py::RustReportBlockersTest::test_every_barrier_matches_wire_bytes",
       "kassiber/black_box:test_every_barrier_matches_wire_bytes"
     ],
     "rule": "A source whose refresh failed blocks final reports."
@@ -27,7 +25,6 @@
     "find": "        .filter(|c| c[\"effective_state\"] != \"active\")",
     "replace": "        .filter(|c| c[\"effective_state\"] == \"never\")",
     "expect_failing": [
-      "tests/test_rust_report_blockers.py::RustReportBlockersTest::test_every_barrier_matches_wire_bytes",
       "kassiber/black_box:test_every_barrier_matches_wire_bytes"
     ],
     "rule": "An incomplete authored-active custody component blocks reports."
@@ -38,7 +35,6 @@
     "find": "        if truthy(&val(&journals, \"needs_processing\")) {",
     "replace": "        if false {",
     "expect_failing": [
-      "tests/test_rust_report_blockers.py::RustReportBlockersTest::test_every_barrier_matches_wire_bytes",
       "stale_journals_block_reports_with_their_edit_history"
     ],
     "rule": "Stale journals block reports and carry the edit history."
@@ -49,7 +45,6 @@
     "find": "    if total <= BigInt::from(0) {",
     "replace": "    if total < BigInt::from(0) {",
     "expect_failing": [
-      "tests/test_rust_report_blockers.py::RustReportBlockersTest::test_cached_counts_and_partial_barriers_match_wire_bytes",
       "kassiber/black_box:test_cached_counts_and_partial_barriers_match_wire_bytes"
     ],
     "rule": "A cached ownership count of zero raises no blocker."
@@ -60,7 +55,6 @@
     "find": "                    \"ui.rates.rebuild\"",
     "replace": "                    \"ui.journals.process\"",
     "expect_failing": [
-      "tests/test_rust_report_blockers.py::RustReportBlockersTest::test_every_barrier_matches_wire_bytes",
       "kassiber/black_box:test_every_barrier_matches_wire_bytes"
     ],
     "rule": "Uncovered missing prices route to the rates rebuild."
@@ -81,7 +75,6 @@
     "find": "    if !unknown.is_empty() {",
     "replace": "    if false {",
     "expect_failing": [
-      "tests/test_rust_maintenance_run.py::RustMaintenanceRunTest::test_refusals_leave_every_table_unchanged",
       "kassiber/black_box:test_refusals_leave_every_table_unchanged"
     ],
     "rule": "Maintenance runs refuse unsupported arguments before any work."
@@ -92,7 +85,6 @@
     "find": "        Value::Str(text) if text.as_str() == Some(\"never\") => None,",
     "replace": "        Value::Str(text) if text.as_str() == Some(\"never\") => Some(true),",
     "expect_failing": [
-      "tests/test_rust_report_read_sync.py::RustReportReadSyncTest::test_maintenance_runs_sync_modes",
       "kassiber/black_box:test_maintenance_runs_sync_modes"
     ],
     "rule": "sync=never makes no refresh."
@@ -103,7 +95,6 @@
     "find": "    if let Some(journals) = book.auto_process_journals()? {",
     "replace": "    if let Some(journals) = None::<Value> {",
     "expect_failing": [
-      "tests/test_rust_maintenance_run.py::RustMaintenanceStaleBookTest::test_stale_journals_are_processed_and_reported",
       "kassiber/black_box:test_stale_journals_are_processed_and_reported"
     ],
     "rule": "A maintenance run processes stale journals and reports the payload."
@@ -114,7 +105,6 @@
     "find": "COALESCE(p.journal_input_version,0) AND {} AS current FROM profiles p WHERE p.id=?",
     "replace": "COALESCE(p.journal_input_version,0) AND ({} OR 1) AS current FROM profiles p WHERE p.id=?",
     "expect_failing": [
-      "tests/test_rust_maintenance_run.py::RustMaintenanceRunTest::test_journals_of_other_semantics_are_rebuilt",
       "kassiber/black_box:test_journals_of_other_semantics_are_rebuilt"
     ],
     "rule": "Journals from another calculation semantics are stale, so a maintenance run rebuilds them as Python's projection_freshness does."
@@ -125,7 +115,6 @@
     "find": "        !user.is_empty() || !password.is_empty()",
     "replace": "        false",
     "expect_failing": [
-      "tests/test_rust_evidence_summary.py::RustEvidenceSummaryTest::test_whole_book_and_option_variants_match_wire_bytes",
       "kassiber/black_box:test_whole_book_and_option_variants_match_wire_bytes"
     ],
     "rule": "URL references with embedded credentials are redacted."
@@ -136,7 +125,6 @@
     "find": "            (\"review_details_redacted\", Value::Bool(!reviewed)),",
     "replace": "            (\"review_details_redacted\", Value::Bool(reviewed)),",
     "expect_failing": [
-      "tests/test_rust_evidence_summary.py::RustEvidenceSummaryTest::test_whole_book_and_option_variants_match_wire_bytes",
       "kassiber/black_box:test_whole_book_and_option_variants_match_wire_bytes"
     ],
     "rule": "Unreviewed source-of-funds links stay redacted."
@@ -147,7 +135,6 @@
     "find": "    if !has_pricing_evidence(tx, quarantine) {",
     "replace": "    if has_pricing_evidence(tx, quarantine) {",
     "expect_failing": [
-      "tests/test_rust_evidence_summary.py::RustEvidenceSummaryTest::test_whole_book_and_option_variants_match_wire_bytes",
       "kassiber/black_box:test_whole_book_and_option_variants_match_wire_bytes"
     ],
     "rule": "Missing pricing evidence blocks the transaction."
@@ -158,7 +145,6 @@
     "find": "    tokens.contains(\"change\") || tokens.contains(\"internal\")",
     "replace": "    tokens.contains(\"internal\")",
     "expect_failing": [
-      "tests/test_rust_transaction_graph.py::RustTransactionGraphTest::test_local_graphs_match_wire_bytes",
       "kassiber/black_box:test_local_graphs_match_wire_bytes"
     ],
     "rule": "Only an exact change branch makes an owned return change."
@@ -169,7 +155,6 @@
     "find": "            set(node, \"role\", s(\"coinbase\"));",
     "replace": "            set(node, \"role\", s(\"input\"));",
     "expect_failing": [
-      "tests/test_rust_transaction_graph.py::RustTransactionGraphTest::test_local_graphs_match_wire_bytes",
       "kassiber/black_box:test_local_graphs_match_wire_bytes"
     ],
     "rule": "A coinbase input is newly issued, not an external wallet."
@@ -180,7 +165,6 @@
     "find": "    if !allow_public_lookup {",
     "replace": "    if false {",
     "expect_failing": [
-      "tests/test_rust_transaction_graph.py::RustTransactionGraphTest::test_local_graphs_match_wire_bytes",
       "kassiber/black_box:test_local_graphs_match_wire_bytes"
     ],
     "rule": "Without an explicit public lookup the graph stays local."
@@ -191,7 +175,6 @@
     "find": "                ![\"descriptor\", \"xpub\", \"config\", \"token\", \"secret\", \"raw\"]",
     "replace": "                ![\"xpub\", \"config\", \"token\", \"secret\", \"raw\"]",
     "expect_failing": [
-      "tests/test_rust_transaction_graph.py::RustTransactionGraphTest::test_local_graphs_match_wire_bytes",
       "kassiber/black_box:test_local_graphs_match_wire_bytes"
     ],
     "rule": "Quarantine detail never carries descriptor-like keys."
@@ -202,7 +185,6 @@
     "find": "    scheme\n        || stripped.starts_with('/')",
     "replace": "    false\n        || stripped.starts_with('/')",
     "expect_failing": [
-      "tests/test_rust_transaction_review_context.py::RustTransactionReviewContextTest::test_review_bundles_match_wire_bytes",
       "kassiber/black_box:test_review_bundles_match_wire_bytes"
     ],
     "rule": "Review context sections redact URL targets."
@@ -213,7 +195,6 @@
     "find": "        (\"returned\", \"inbound\"),",
     "replace": "        (\"returned\", \"outbound\"),",
     "expect_failing": [
-      "tests/test_rust_transaction_review_context.py::RustTransactionReviewContextTest::test_review_bundles_match_wire_bytes",
       "kassiber/black_box:test_review_bundles_match_wire_bytes"
     ],
     "rule": "Loan marks offered match the transaction direction."
@@ -224,7 +205,6 @@
     "find": "                if elapsed < MIN_INTERVAL {",
     "replace": "                if false {",
     "expect_failing": [
-      "tests/test_rust_report_read_sync.py::RustReportReadSyncTest::test_failed_refresh_blocks_and_is_rate_limited",
       "kassiber/black_box:test_failed_refresh_blocks_and_is_rate_limited"
     ],
     "rule": "A second report read within a minute reuses the last refresh."
@@ -235,7 +215,6 @@
     "find": "        let specs = sources::filter_by_policy(specs.clone(), policy, force);",
     "replace": "        let specs = sources::filter_by_policy(specs.clone(), policy, true);",
     "expect_failing": [
-      "tests/test_rust_report_read_sync.py::RustReportReadSyncTest::test_policy_without_source_classes_runs_nothing",
       "kassiber/black_box:test_policy_without_source_classes_runs_nothing"
     ],
     "rule": "Report-read refresh only runs source classes the policy enables."
@@ -246,7 +225,6 @@
     "find": "    let force = match &mode {",
     "replace": "    if let Value::List(_) | Value::Dict(_) = mode {\n        return Err(AppError::new(\"internal_error\", format!(\"unhashable type: '{}'\", type_name(&mode))));\n    }\n    let force = match &mode {",
     "expect_failing": [
-      "tests/test_rust_maintenance_run.py::RustMaintenanceRunTest::test_unhashable_sync_is_the_typed_validation_refusal",
       "kassiber/black_box:test_unhashable_sync_is_the_typed_validation_refusal"
     ],
     "rule": "A list or object maintenance sync mode is the ordinary validation refusal."
@@ -257,7 +235,6 @@
     "find": "            bucket_size(canonical_period(&period), history_years(earliest, end_us)?)\n",
     "replace": "            bucket_size(&period, history_years(earliest, end_us)?)\n",
     "expect_failing": [
-      "tests/test_rust_transaction_dashboard.py::RustTransactionDashboardTest::test_period_aliases_bucket_like_their_canonical_names",
       "kassiber/black_box:test_period_aliases_bucket_like_their_canonical_names"
     ],
     "rule": "Dashboard transactions bucket by the canonical period, whatever its spelling."
@@ -268,7 +245,6 @@
     "find": "            if reason.is_empty() {\n                reason = \"secret-like query parameter\".into();\n            }\n            *value = \"REDACTED\".into();",
     "replace": "            if reason.is_empty() {\n                reason = \"secret-like query parameter\".into();\n            }",
     "expect_failing": [
-      "tests/test_rust_audit_package.py::RustAuditPackageTest::test_whole_book_options_and_redacted_urls_match_python",
       "kassiber/black_box:test_whole_book_options_and_redacted_urls_match_python"
     ],
     "rule": "A secret-like query value never reaches the package's redacted URL."
@@ -289,7 +265,6 @@
     "find": "        if truthy(&expected) && digest != py_str(&expected) {",
     "replace": "        if false {",
     "expect_failing": [
-      "tests/test_rust_audit_package.py::RustAuditPackageTest::test_whole_book_options_and_redacted_urls_match_python",
       "kassiber/black_box:test_whole_book_options_and_redacted_urls_match_python"
     ],
     "rule": "A managed file whose bytes no longer match its stored hash is withheld and blocks."
@@ -300,7 +275,6 @@
     "find": "        let mut manifest = if options.include_url_references {",
     "replace": "        let mut manifest = if true {",
     "expect_failing": [
-      "tests/test_rust_audit_package.py::RustAuditPackageTest::test_whole_book_options_and_redacted_urls_match_python",
       "kassiber/black_box:test_whole_book_options_and_redacted_urls_match_python"
     ],
     "rule": "Excluding URL references removes them from every attachment list in the manifest."
@@ -311,7 +285,6 @@
     "find": "    output.set_permissions(metadata.permissions())?;",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_audit_package.py::RustAuditPackageTest::test_whole_book_options_and_redacted_urls_match_python",
       "kassiber/black_box:test_whole_book_options_and_redacted_urls_match_python"
     ],
     "rule": "Copied evidence keeps the source's permission bits, as shutil.copy2 does."
@@ -322,7 +295,6 @@
     "find": "    fs::create_dir_all(directory).map_err(|e| write_failed(e, directory))?;",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_audit_package.py::RustAuditPackageTest::test_bounded_scopes_and_refusals_match_python",
       "kassiber/black_box:test_bounded_scopes_and_refusals_match_python"
     ],
     "rule": "A refused summary leaves Python's empty directory, so later managed names match."
@@ -343,7 +315,6 @@
     "find": "    \"reports.privacy-mirror\",\n",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_privacy_mirror_process.py::RustPrivacyMirrorProcessTest::test_empty_and_stored_books_match_python",
       "kassiber/black_box:test_empty_and_stored_books_match_python"
     ],
     "rule": "`reports privacy-mirror` is served natively."
@@ -354,7 +325,6 @@
     "find": "        if let Value::Dict(pairs) = finding {\n            pairs.retain(|(key, _)| *key != \"source_ids\".into());\n            pairs.push((\"source_ids\".into(), Value::List(sources)));\n        }",
     "replace": "        set(finding, \"source_ids\", Value::List(sources));",
     "expect_failing": [
-      "tests/test_rust_privacy_mirror_process.py::RustPrivacyMirrorProcessTest::test_owned_book_with_claims_matches_python_offline_off_and_on",
       "kassiber/black_box:test_owned_book_with_claims_matches_python_offline_off_and_on"
     ],
     "rule": "Projected findings list `source_ids` last, as Python's pop and reassignment do."
@@ -365,7 +335,6 @@
     "find": "            (\"conditional_on_model\", Value::Bool(true)),\n        ]);",
     "replace": "            (\"conditional_on_model\", Value::Bool(true)),\n            (\"investigation\", Value::Null),\n        ]);",
     "expect_failing": [
-      "tests/test_rust_privacy_mirror_process.py::RustPrivacyMirrorProcessTest::test_empty_and_stored_books_match_python",
       "kassiber/black_box:test_empty_and_stored_books_match_python"
     ],
     "rule": "Entropy rows end with their investigation handoff, as Python builds them."

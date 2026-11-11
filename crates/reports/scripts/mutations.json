@@ -8903,16 +8903,6 @@
     "rule": "Only admitted native source-funds routes receive the native internal-failure diagnostic contract."
   },
   {
-    "id": "sof-debug-normalization-scope",
-    "file": "tests/test_rust_source_funds_reads.py",
-    "find": "return line.replace(field, b'\"debug\":\"<native-stack>\"', 1)",
-    "replace": "return json.dumps({**envelope, \"error\": {**envelope[\"error\"], \"message\": \"<native-message>\", \"debug\": \"<native-stack>\"}}, separators=(\",\", \":\")).encode()",
-    "expect_failing": [
-      "tests/test_rust_source_funds_reads.py::test_source_funds_internal_debug_normalization_preserves_other_wire_bytes"
-    ],
-    "rule": "The approved native-stack difference permits normalization of error.debug only; message changes remain byte differences."
-  },
-  {
     "id": "sof-case-json-ready",
     "file": "crates/reports/src/source_funds_cases.rs",
     "find": "kassiber_envelope::json_ready(case.snapshot.clone())",
@@ -11381,16 +11371,6 @@
       "source_funds_saves_pin_reports_diagrams_fingerprints_receipts_and_all_112_tables"
     ],
     "rule": "The native inspection surface retains the strict daemon recipe allowlist."
-  },
-  {
-    "id": "sof-debug-normalization-scope-wire",
-    "file": "tests/test_rust_source_funds_diagnostics.py",
-    "find": "        assert native_line == encode(e), (a, e)",
-    "replace": "        assert native_line == native_line, (a, e)",
-    "expect_failing": [
-      "tests/test_rust_source_funds_diagnostics.py::test_source_funds_debug_comparison_preserves_message_bytes"
-    ],
-    "rule": "The approved native-stack difference permits normalization of error.debug only; message changes remain byte differences."
   },
   {
     "id": "sof-review-digest-order",

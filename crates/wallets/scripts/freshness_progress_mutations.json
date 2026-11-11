@@ -5,7 +5,6 @@
     "find": "if workspace.is_none() && !automatic {\n                    handler.prefetch",
     "replace": "if false && workspace.is_none() && !automatic {\n                    handler.prefetch",
     "expect_failing": [
-      "tests/test_rust_freshness_native.py::test_native_freshness_full_book_execution_matches_python[empty-False-electrum]",
       "test_native_freshness_full_book_execution_matches_python"
     ],
     "rule": "Active-book prefetch emits before running-job progress and must not be folded into handler execution."
@@ -16,7 +15,6 @@
     "find": "if workspace.is_none() && !automatic {\n                    handler.prefetch",
     "replace": "if !automatic {\n                    handler.prefetch",
     "expect_failing": [
-      "tests/test_rust_freshness_native.py::test_native_freshness_full_book_execution_matches_python[empty-True-electrum]",
       "test_native_freshness_full_book_execution_matches_python"
     ],
     "rule": "Workspace jobs fetch inside their own progress context rather than active-book prefetch."
@@ -27,7 +25,6 @@
     "find": "json!({\"phase\":\"backend_fetch\",\"observer\":\"bdk\",\"status\":\"scanning\"})",
     "replace": "json!({\"phase\":\"backend_fetch\",\"observer\":\"bdk\",\"status\":\"complete\"})",
     "expect_failing": [
-      "tests/test_rust_freshness_native.py::test_native_freshness_full_book_execution_matches_python[empty-False-electrum]",
       "test_native_freshness_full_book_execution_matches_python"
     ],
     "rule": "Live BDK scanning progress preserves the Python payload."
@@ -38,7 +35,6 @@
     "find": "\"transactions_seen\":update[\"facts\"][\"transaction_records\"].as_array().map_or(0,Vec::len)",
     "replace": "\"transactions_seen\":0",
     "expect_failing": [
-      "tests/test_rust_freshness_native.py::test_native_freshness_full_book_execution_matches_python[receive-change-False-electrum]",
       "test_native_freshness_full_book_execution_matches_python"
     ],
     "rule": "Decode progress reports the actual normalized transaction count."
@@ -49,7 +45,6 @@
     "find": "cancel.progress(event)?;",
     "replace": "let _ = event;",
     "expect_failing": [
-      "tests/test_rust_freshness_native.py::test_native_freshness_full_book_execution_matches_python[empty-False-esplora]",
       "test_native_freshness_full_book_execution_matches_python"
     ],
     "rule": "Compatibility discovery batches reach the request stream with their counts."
@@ -60,7 +55,6 @@
     "find": "fetched(index + 1, total)?;",
     "replace": "let _ = (index, total);",
     "expect_failing": [
-      "tests/test_rust_freshness_native.py::test_native_freshness_full_book_execution_matches_python[empty-False-esplora]",
       "test_native_freshness_full_book_execution_matches_python"
     ],
     "rule": "Esplora stats fetch progress is separate from the later stats-summary pass."
@@ -71,7 +65,6 @@
     "find": "fetched(histories.len(), changed)?;",
     "replace": "let _ = changed;",
     "expect_failing": [
-      "tests/test_rust_freshness_native.py::test_native_freshness_full_book_execution_matches_python[empty-False-esplora]",
       "test_native_freshness_full_book_execution_matches_python"
     ],
     "rule": "Esplora history fetch progress is emitted before history-summary progress."
@@ -82,7 +75,6 @@
     "find": "utxos_seen += script[\"utxos\"].as_array().map_or(0, Vec::len);",
     "replace": "utxos_seen += 0;",
     "expect_failing": [
-      "tests/test_rust_freshness_native.py::test_native_freshness_full_book_execution_matches_python[receive-change-False-esplora]",
       "test_native_freshness_full_book_execution_matches_python"
     ],
     "rule": "UTXO batch progress counts every output received so far."
@@ -93,7 +85,6 @@
     "find": "put(&mut event, \"wallet\", label.clone());",
     "replace": "put(&mut event, \"wallet\", s(\"wallet\"));",
     "expect_failing": [
-      "tests/test_rust_freshness_native.py::test_native_freshness_full_book_execution_matches_python[empty-False-electrum]",
       "test_native_freshness_full_book_execution_matches_python"
     ],
     "rule": "Fetch progress retains the selected wallet label without adding private inputs."
@@ -104,7 +95,6 @@
     "find": "(self.progress.borrow_mut())(event)",
     "replace": "(self.progress.borrow_mut())(event).or(Ok(()))",
     "expect_failing": [
-      "tests/test_rust_freshness_native.py::test_native_freshness_progress_authority_fences[decode_enrich-closed-esplora]",
       "test_native_freshness_progress_authority_fences"
     ],
     "rule": "A failed stream stops further acquisition and publication."
@@ -115,7 +105,6 @@
     "find": ".run(gate, scope, Some(&grant), deadline, cancel, start_time)?;",
     "replace": ".run(gate, scope, Some(&grant), deadline, cancel.cancellation(), start_time)?;",
     "expect_failing": [
-      "tests/test_rust_freshness_native.py::test_native_freshness_controls_between_fetch_batches[False-cancel-electrum]",
       "test_native_freshness_controls_between_fetch_batches"
     ],
     "rule": "BDK RPC batches retain database/request authority checks, not only the atomic stop flag."
@@ -126,7 +115,6 @@
     "find": "discovery.run(gate, scope, Some(&grant), deadline, cancel, |_| {})?;",
     "replace": "discovery.run(gate, scope, Some(&grant), deadline, cancel.cancellation(), |_| {})?;",
     "expect_failing": [
-      "tests/test_rust_freshness_native.py::test_native_freshness_controls_between_fetch_batches[False-cancel-esplora]",
       "test_native_freshness_controls_between_fetch_batches"
     ],
     "rule": "Compatibility discovery rechecks job cancellation, book scope and wallet inputs between batches."
@@ -137,7 +125,6 @@
     "find": "success(&format!(\"{kind}.progress\"), event.clone()),",
     "replace": "success(&format!(\"{kind}.wrong\"), event.clone()),",
     "expect_failing": [
-      "tests/test_rust_freshness_native.py::test_native_freshness_live_stream_matches_python[electrum]",
       "test_native_freshness_live_stream_matches_python"
     ],
     "rule": "The guarded admitted-book stream emits ordered, request-bound envelopes before its terminal response."
@@ -148,7 +135,6 @@
     "find": "(self.check)()",
     "replace": "Ok(())",
     "expect_failing": [
-      "tests/test_rust_freshness_native.py::test_native_freshness_controls_between_fetch_batches[False-book-electrum]",
       "test_native_freshness_controls_between_fetch_batches"
     ],
     "rule": "Synchronous request checks run at protocol boundaries in addition to the atomic cancellation flag."
@@ -159,7 +145,6 @@
     "find": "if resolver.borrow_mut()(conn, &selected.backend_name) != selected.backend {",
     "replace": "if false && resolver.borrow_mut()(conn, &selected.backend_name) != selected.backend {",
     "expect_failing": [
-      "tests/test_rust_freshness_native.py::test_native_freshness_controls_between_fetch_batches[False-backend-electrum]",
       "test_native_freshness_controls_between_fetch_batches"
     ],
     "rule": "A backend revision ends the admitted fetch before another batch starts."
@@ -170,7 +155,6 @@
     "find": "[\"kind\", \"config_json\"]\n                    .iter()",
     "replace": "[\"kind\"]\n                    .iter()",
     "expect_failing": [
-      "tests/test_rust_freshness_native.py::test_native_freshness_controls_between_fetch_batches[False-config-electrum]",
       "test_native_freshness_controls_between_fetch_batches"
     ],
     "rule": "Invalid wallet edits are stale request inputs, never a capability handoff after transport has started."
@@ -181,7 +165,6 @@
     "find": "cancel.progress(json!({\"phase\":\"backend_fetch\",\"target_count\":total,",
     "replace": "cancel.progress(json!({\"phase\":\"backend_fetch_statuses\",\"target_count\":total,",
     "expect_failing": [
-      "tests/test_rust_freshness_native.py::test_native_freshness_electrum_address_list_matches_python",
       "test_native_freshness_electrum_address_list_matches_python"
     ],
     "rule": "The compatibility Electrum route reports its status round as Python does."
@@ -192,7 +175,6 @@
     "find": "\"targets_checked\":position+1,\"known_txids\":txids.len(),",
     "replace": "\"targets_checked\":position+1,\"known_txids\":0,",
     "expect_failing": [
-      "tests/test_rust_freshness_native.py::test_native_freshness_electrum_address_list_matches_python",
       "test_native_freshness_electrum_address_list_matches_python"
     ],
     "rule": "The compatibility Electrum route reports its known txids as Python does."

@@ -5,7 +5,6 @@
   "find": "                s(&id),\n                (ordinal as i64).into(),\n",
   "replace": "                s(&id),\n                (ordinal as i64 + 1).into(),\n",
   "expect_failing": [
-   "tests/test_rust_review_workflow.py::ReviewLegacyPairFeeParity::test_repair_apply_matches_python",
    "review_legacy_repair_apply_matches_python"
   ],
   "rule": "An activated revision's evidence commitment id hashes its component id and ordinal as Python does."
@@ -16,8 +15,6 @@
   "find": "                s(&id),\n                (ordinal as i64).into(),\n",
   "replace": "                s(c.query_row(\"SELECT hex(randomblob(16))\", [], |r| r.get::<_, String>(0)).unwrap()),\n                (ordinal as i64).into(),\n",
   "expect_failing": [
-   "tests/test_rust_review_workflow.py::ReviewLegacyPairFeeParity::test_repair_apply_matches_python",
-   "tests/test_rust_review_workflow.py::ReviewLegacyPairFeeParity::test_repair_apply_stores_the_same_rows_on_every_run",
    "review_legacy_repair_apply_matches_python",
    "review_legacy_repair_apply_stores_the_same_rows_on_every_run"
   ],
@@ -29,7 +26,6 @@
   "find": "    result.sort();\n    Ok(result)\n}\npub(super) fn evidence_status(",
   "replace": "    result.sort();\n    result.reverse();\n    Ok(result)\n}\npub(super) fn evidence_status(",
   "expect_failing": [
-   "tests/test_rust_review_workflow.py::ReviewLegacyPairFeeParity::test_repair_apply_matches_python",
    "review_legacy_repair_apply_matches_python"
   ],
   "rule": "Commitment ordinals follow (quantity_hash, detail_hash) order, as Python's persist_component_evidence_commitments does."
@@ -40,7 +36,6 @@
   "find": "    \"deleted_at\",\n    \"created_at\",\n];",
   "replace": "    \"deleted_at\",\n];",
   "expect_failing": [
-   "tests/test_rust_review_workflow.py::ReviewLegacyPairFeeParity::test_repair_apply_matches_python",
    "review_legacy_repair_apply_matches_python"
   ],
   "rule": "A pair revision's component id hashes its created_at, as Python's _PAIR_HASH_FIELDS do."
@@ -51,7 +46,6 @@
   "find": "    set(&mut revised, \"created_at\", s(sources.now(c)?));\n",
   "replace": "    set(&mut revised, \"created_at\", value(old, \"created_at\"));\n",
   "expect_failing": [
-   "tests/test_rust_review_workflow.py::ReviewLegacyPairFeeParity::test_repair_apply_matches_python",
    "review_legacy_repair_apply_matches_python"
   ],
   "rule": "A pair revision is authored at the current clock (now_iso), not at the revised row's time."

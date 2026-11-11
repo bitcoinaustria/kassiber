@@ -5,7 +5,6 @@
     "find": "    kinds.push(\"ui.wallets.sync\");\n",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_freshness_product.py::test_product_sync_envelopes_events_and_all_tables[empty-ui.wallets.sync-esplora]",
       "test_product_sync_envelopes_events_and_all_tables"
     ],
     "rule": "The accepted no-refresh invocation must execute through a registered product route."
@@ -16,7 +15,6 @@
     "find": "if !unknown.is_empty() {",
     "replace": "if false && !unknown.is_empty() {",
     "expect_failing": [
-      "tests/test_rust_freshness_product.py::test_product_argument_errors_match_reference_without_effects[ui.freshness.run-extra10]",
       "test_product_argument_errors_match_reference_without_effects"
     ],
     "rule": "Reject unsupported freshness arguments before preparing or executing a source job."
@@ -27,7 +25,6 @@
     "find": ".filter(|v| !matches!(v, Value::Null))\n            .map(truthy),\n            force_full,",
     "replace": ".filter(|v| !matches!(v, Value::Null))\n            .map(truthy).or(Some(false)),\n            force_full,",
     "expect_failing": [
-      "tests/test_rust_freshness_journals.py::test_default_refresh_envelopes_events_and_all_tables[empty-ui.wallets.sync-esplora]",
       "test_default_refresh_envelopes_events_and_all_tables"
     ],
     "rule": "Default wallet sync performs its local journal refresh after the wallet work."
@@ -38,7 +35,6 @@
     "find": "matches!(id, RequestId::Value(Value::Str(value)) if value.as_str().is_some_and(|v| !v.is_empty()))",
     "replace": "{ let _ = id; true }",
     "expect_failing": [
-      "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[missing-id-ui.freshness.run]",
       "test_product_selection_refuses_whole_invocation_without_effects"
     ],
     "rule": "Missing request IDs cannot mint native freshness authority."
@@ -49,7 +45,6 @@
     "find": "        Err(_) => Ok(false),",
     "replace": "        Err(_) => Ok(true),",
     "expect_failing": [
-      "tests/test_rust_freshness_product.py::test_product_selection_refuses_whole_invocation_without_effects[unported-ui.freshness.run]",
       "test_product_selection_refuses_whole_invocation_without_effects"
     ],
     "rule": "Decline the complete unsupported source invocation before consent."
@@ -60,8 +55,6 @@
     "find": "            if self.request.wallets_sync && enqueued.is_empty() && completed.is_empty() {",
     "replace": "            if false {",
     "expect_failing": [
-      "tests/test_rust_freshness_product.py::test_product_wallet_selection_direct_sync_matches_python[no-source]",
-      "tests/test_rust_freshness_product.py::test_product_wallet_selection_direct_sync_matches_python[paused]",
       "test_product_wallet_selection_direct_sync_matches_python"
     ],
     "rule": "A wallet sync whose run queued nothing syncs the selection directly, as Python does."
@@ -72,7 +65,6 @@
     "find": "                    if direct.is_some() && !journal_step_runs {",
     "replace": "                    if false {",
     "expect_failing": [
-      "tests/test_rust_freshness_product.py::test_product_wallet_selection_direct_sync_matches_python[paused]",
       "test_product_wallet_selection_direct_sync_matches_python"
     ],
     "rule": "Without the journal step the payload keeps the snapshot taken before the direct sync."
@@ -83,7 +75,6 @@
     "find": "Value::List(direct.unwrap_or_else(|| ui::results(&completed))),",
     "replace": "Value::List(ui::results(&completed)),",
     "expect_failing": [
-      "tests/test_rust_freshness_product.py::test_product_wallet_selection_direct_sync_matches_python[no-source]",
       "test_product_wallet_selection_direct_sync_matches_python"
     ],
     "rule": "The direct sync's rows are the payload's results."
@@ -94,7 +85,6 @@
     "find": "run: wallets || get(args, \"run\").is_none_or(truthy),",
     "replace": "run: true,",
     "expect_failing": [
-      "tests/test_rust_freshness_product.py::test_product_enqueue_only_and_run_limit[False-ui.freshness.run]",
       "test_product_enqueue_only_and_run_limit"
     ],
     "rule": "Enqueue-only product requests must not acquire backend data."
@@ -105,7 +95,6 @@
     "find": "Scope::Workspace(value.as_str().ok_or_else(fallback)?.to_owned())",
     "replace": "{ let _ = value; Scope::ActiveProfile }",
     "expect_failing": [
-      "tests/test_rust_freshness_product.py::test_product_workspace_preserves_active_context_and_book_order[esplora]",
       "test_product_workspace_preserves_active_context_and_book_order"
     ],
     "rule": "Workspace runs retain book ordering and visit each selected profile without switching context."
@@ -116,7 +105,6 @@
     "find": "            force_full,",
     "replace": "            force_full: { let _ = force_full; false },",
     "expect_failing": [
-      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[force-full-ui.wallets.sync-esplora]",
       "test_product_sync_restart_sequences"
     ],
     "rule": "Preserve explicit full scans through the product parser."
@@ -127,7 +115,6 @@
     "find": "if automatic_graph {\n            self.freshness_requests.graph_enabled = true;",
     "replace": "if false && automatic_graph {\n            self.freshness_requests.graph_enabled = true;",
     "expect_failing": [
-      "tests/test_rust_freshness_product.py::test_product_automatic_graph_lookup_matches_reference[ui.wallets.sync-esplora]",
       "test_product_automatic_graph_lookup_matches_reference"
     ],
     "rule": "A product terminal response must automatically hand off its graph grants."
@@ -138,7 +125,6 @@
     "find": "if daemon.freshness_requests.running() {",
     "replace": "if false && daemon.freshness_requests.running() {",
     "expect_failing": [
-      "tests/test_rust_freshness_product.py::test_product_source_controls_remain_available_during_fetch[pause-ui.wallets.sync-esplora]",
       "test_product_source_controls_remain_available_during_fetch"
     ],
     "rule": "An occupied native refresh must block hybrid fallback before any reference execution."
@@ -149,7 +135,6 @@
     "find": "                    | \"ui.freshness.pause\"\n",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_freshness_product.py::test_product_source_controls_remain_available_during_fetch[pause-ui.wallets.sync-esplora]",
       "test_product_source_controls_remain_available_during_fetch"
     ],
     "rule": "Product source controls remain available while the worker owns its connection."
@@ -160,7 +145,6 @@
     "find": "                | \"ui.backup.apply\"\n                | \"ui.projects.create\"",
     "replace": "                | \"ui.projects.create\"",
     "expect_failing": [
-      "tests/test_rust_freshness_graph.py::test_native_graph_worker_controls_and_owned_connection[restore-esplora]",
       "test_native_graph_worker_controls_and_owned_connection"
     ],
     "rule": "Restore handling must cancel and join graph work before acknowledgement."
@@ -171,7 +155,6 @@
     "find": "    daemon.ensure_owner()?;\n    daemon.reap_freshness(true)?;\n    // Authentication and owner validation",
     "replace": "    daemon.ensure_owner()?;\n    let _ = &daemon;\n    // Authentication and owner validation",
     "expect_failing": [
-      "tests/test_rust_freshness_graph.py::test_native_graph_encrypted_worker_handoff_and_cleanup[rotate-esplora]",
       "test_native_graph_encrypted_worker_handoff_and_cleanup"
     ],
     "rule": "Authenticated rotation must stop the connection owner before retiring its database."
@@ -182,7 +165,6 @@
     "find": "            return Err(AppError::new(\n                \"observer_state_rebuild_required\",\n                \"Stored BDK observer state is incomplete\",\n            ));",
     "replace": "            return Err(invalid(\"bdk_changeset\"));",
     "expect_failing": [
-      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[force-without-state-ui.workspace.freshness.run-electrum]",
       "test_product_sync_restart_sequences"
     ],
     "rule": "Incomplete stored observer state must retain the product error projection and every persisted failure field."
@@ -193,7 +175,6 @@
     "find": "        emit(&dict([\n            (\"phase\", s(\"discovery\")),\n            (\"wallet\", label.clone()),\n        ]))?;\n",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_freshness_product.py::test_product_sync_restart_sequences[force-without-state-ui.workspace.freshness.run-esplora]",
       "test_product_sync_restart_sequences"
     ],
     "rule": "Workspace observer discovery must be emitted even when stored state construction fails."

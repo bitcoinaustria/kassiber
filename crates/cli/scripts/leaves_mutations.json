@@ -5,7 +5,6 @@
     "find": "if limit.is_some_and(|limit| *limit <= BigInt::from(0)) {",
     "replace": "if limit.is_some_and(|limit| *limit < BigInt::from(0)) {",
     "expect_failing": [
-      "tests/test_rust_cli_leaves.py::test_journal_entries_and_events_match_python_byte_for_byte[False]",
       "kassiber/black_box:test_journal_entries_and_events_match_python_byte_for_byte"
     ],
     "rule": "`journals list --limit 0` is refused, not an empty page."
@@ -16,7 +15,6 @@
     "find": "            WHERE je.profile_id = ? {cursor_sql}\n            ORDER BY je.occurred_at DESC,",
     "replace": "            WHERE je.profile_id = ? {cursor_sql}\n            ORDER BY je.occurred_at ASC,",
     "expect_failing": [
-      "tests/test_rust_cli_leaves.py::test_journal_entries_and_events_match_python_byte_for_byte[False]",
       "kassiber/black_box:test_journal_entries_and_events_match_python_byte_for_byte"
     ],
     "rule": "Entries list newest first."
@@ -27,7 +25,6 @@
     "find": "(name == \"at_category\" || name == \"at_kennzahl\")",
     "replace": "(name == \"at_category\")",
     "expect_failing": [
-      "tests/test_rust_cli_leaves.py::test_journal_entries_and_events_match_python_byte_for_byte[False]",
       "kassiber/black_box:test_journal_entries_and_events_match_python_byte_for_byte"
     ],
     "rule": "An absent Austrian Kennzahl is dropped from the row, as Python pops it."
@@ -38,7 +35,6 @@
     "find": "    fields.push((Key::from(\"quantity_msat\"), Py::Int(quantity)));\n    Ok(Py::Dict(fields))\n}\n\n/// A row",
     "replace": "    Ok(Py::Dict(fields))\n}\n\n/// A row",
     "expect_failing": [
-      "tests/test_rust_cli_leaves.py::test_journal_entries_and_events_match_python_byte_for_byte[False]",
       "kassiber/black_box:test_journal_entries_and_events_match_python_byte_for_byte"
     ],
     "rule": "Every entry carries its integer msat quantity."
@@ -49,7 +45,6 @@
     "find": "\"metadata.bip329.list\" | \"transactions.list\" | \"journals.list\"",
     "replace": "\"metadata.bip329.list\" | \"transactions.list\"",
     "expect_failing": [
-      "tests/test_rust_cli_leaves.py::test_journal_entries_and_events_match_python_byte_for_byte[False]",
       "kassiber/black_box:test_journal_entries_and_events_match_python_byte_for_byte"
     ],
     "rule": "`journals list` pages through envelope meta, not the payload."
@@ -60,7 +55,6 @@
     "find": "    if limit > BigInt::from(MAX_EVENTS_LIMIT) {",
     "replace": "    if limit >= BigInt::from(MAX_EVENTS_LIMIT) {",
     "expect_failing": [
-      "tests/test_rust_cli_leaves.py::test_journal_entries_and_events_match_python_byte_for_byte[False]",
       "kassiber/black_box:test_journal_entries_and_events_match_python_byte_for_byte"
     ],
     "rule": "An events page may hold exactly 1000 rows."
@@ -71,7 +65,6 @@
     "find": "nonempty(filters.asset).map_or_else(String::new, kassiber_pytext::upper)",
     "replace": "nonempty(filters.asset).map_or_else(String::new, str::to_owned)",
     "expect_failing": [
-      "tests/test_rust_cli_leaves.py::test_journal_entries_and_events_match_python_byte_for_byte[False]",
       "kassiber/black_box:test_journal_entries_and_events_match_python_byte_for_byte"
     ],
     "rule": "The asset filter is case-insensitive."
@@ -82,7 +75,6 @@
     "find": "        conditions.push(\"je.wallet_id = ?\".into());",
     "replace": "        conditions.push(\"je.wallet_id <> ?\".into());",
     "expect_failing": [
-      "tests/test_rust_cli_leaves.py::test_journal_entries_and_events_match_python_byte_for_byte[False]",
       "kassiber/black_box:test_journal_entries_and_events_match_python_byte_for_byte"
     ],
     "rule": "The wallet filter keeps the wallet's events."
@@ -93,7 +85,6 @@
     "find": "for (bound, op) in [(&start, \">=\"), (&end, \"<=\")]",
     "replace": "for (bound, op) in [(&start, \">\"), (&end, \"<=\")]",
     "expect_failing": [
-      "tests/test_rust_cli_leaves.py::test_journal_entries_and_events_match_python_byte_for_byte[False]",
       "kassiber/black_box:test_journal_entries_and_events_match_python_byte_for_byte"
     ],
     "rule": "Timestamp bounds are inclusive."
@@ -104,7 +95,6 @@
     "find": "            \"calculation_compact\" => continue,\n",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_cli_leaves.py::test_journal_entries_and_events_match_python_byte_for_byte[False]",
       "kassiber/black_box:test_journal_entries_and_events_match_python_byte_for_byte"
     ],
     "rule": "`journals events get` never prints the compact column."
@@ -115,7 +105,6 @@
     "find": "            fee = int_or_zero(row.get(\"source_fee_msat\"))?;\n",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_cli_leaves.py::test_transfer_audit_matches_python_byte_for_byte[False]",
       "kassiber/black_box:test_transfer_audit_matches_python_byte_for_byte"
     ],
     "rule": "A source's fee is booked on its first transfer."
@@ -126,7 +115,6 @@
     "find": "            if truthy(row.get(\"atomic_group_id\")) {",
     "replace": "            if !matches!(row.get(\"atomic_group_id\"), Sql::Null) {",
     "expect_failing": [
-      "tests/test_rust_cli_leaves.py::test_transfer_audit_matches_python_byte_for_byte[False]",
       "kassiber/black_box:test_transfer_audit_matches_python_byte_for_byte"
     ],
     "rule": "An empty atomic group id is no transfer group."
@@ -137,7 +125,6 @@
     "find": "(\"processed_journals_current\", field(\"is_current\"))",
     "replace": "(\"processed_journals_current\", field(\"needs_processing\"))",
     "expect_failing": [
-      "tests/test_rust_cli_leaves.py::test_transfer_audit_matches_python_byte_for_byte[False]",
       "kassiber/black_box:test_transfer_audit_matches_python_byte_for_byte"
     ],
     "rule": "The processing status reports whether journals are current."
@@ -148,7 +135,6 @@
     "find": "    require_tax_processing(&profile)?;\n",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_cli_leaves.py::test_transfer_audit_tax_country_gate_matches_python[unsupported]",
       "kassiber/black_box:test_transfer_audit_tax_country_gate_matches_python"
     ],
     "rule": "An unsupported tax country refuses the transfer audit, as it refuses processing."
@@ -159,7 +145,6 @@
     "find": "(\"payout_amount\", Py::Float(btc_of(&payout_amount)?)),",
     "replace": "(\"payout_amount\", Py::Float(btc_of(&swap_fee)?)),",
     "expect_failing": [
-      "tests/test_rust_cli_leaves.py::test_transfer_audit_matches_python_byte_for_byte[False]",
       "kassiber/black_box:test_transfer_audit_matches_python_byte_for_byte"
     ],
     "rule": "Direct payouts report the payout leg's amount."
@@ -170,7 +155,6 @@
     "find": "        WHERE q.profile_id = ?\n        ORDER BY t.occurred_at DESC\",",
     "replace": "        WHERE q.profile_id = ?\n        ORDER BY t.occurred_at ASC\",",
     "expect_failing": [
-      "tests/test_rust_cli_leaves.py::test_quarantine_reads_match_python_byte_for_byte[False]",
       "kassiber/black_box:test_quarantine_reads_match_python_byte_for_byte"
     ],
     "rule": "Quarantines list newest first."
@@ -181,7 +165,6 @@
     "find": "            None => fields.push((key.clone(), value.clone())),",
     "replace": "            None => {}",
     "expect_failing": [
-      "tests/test_rust_cli_leaves.py::test_quarantine_reads_match_python_byte_for_byte[False]",
       "kassiber/black_box:test_quarantine_reads_match_python_byte_for_byte"
     ],
     "rule": "Each held row carries its explained cause, root and actions."
@@ -192,7 +175,6 @@
     "find": "        _ if !truthy(value) => \"{}\".to_owned(),",
     "replace": "        _ if !truthy(value) => \"null\".to_owned(),",
     "expect_failing": [
-      "tests/test_rust_cli_leaves.py::test_quarantine_reads_parse_stored_detail_as_python[]",
       "kassiber/black_box:test_quarantine_reads_parse_stored_detail_as_python"
     ],
     "rule": "An empty stored detail reads as `{}`."
@@ -203,7 +185,6 @@
     "find": "format!(\"Transaction '{reference}' has no active quarantine\"),",
     "replace": "format!(\"Transaction '{reference}' is not quarantined\"),",
     "expect_failing": [
-      "tests/test_rust_cli_leaves.py::test_quarantine_reads_match_python_byte_for_byte[False]",
       "kassiber/black_box:test_quarantine_reads_match_python_byte_for_byte"
     ],
     "rule": "`quarantine show` names a row with no active quarantine."
@@ -214,7 +195,6 @@
     "find": "        kassiber_wallets::invalidate_journals(conn, scope.profile_id)?;\n        Ok(dict([\n            (\"transaction_id\", s(id.as_str())),\n            (\"resolution\", s(\"clear\")),",
     "replace": "        Ok(dict([\n            (\"transaction_id\", s(id.as_str())),\n            (\"resolution\", s(\"clear\")),",
     "expect_failing": [
-      "tests/test_rust_cli_leaves.py::test_quarantine_clear_matches_python_envelope_and_book[root-False]",
       "kassiber/black_box:test_quarantine_clear_matches_python_envelope_and_book"
     ],
     "rule": "Clearing a quarantine invalidates the journals."
@@ -225,8 +205,6 @@
     "find": "        let (id, _) = transaction_id(conn, scope, reference)?;\n        ensure_quarantined(conn, scope.profile_id, &id)?;\n",
     "replace": "        let (id, _) = transaction_id(conn, scope, reference)?;\n",
     "expect_failing": [
-      "tests/test_rust_cli_leaves.py::test_quarantine_clear_matches_python_envelope_and_book[root-False]",
-      "tests/test_rust_cli_leaves.py::test_quarantine_clear_refuses_a_row_that_is_not_held",
       "kassiber/black_box:test_quarantine_clear_matches_python_envelope_and_book",
       "kassiber/black_box:test_quarantine_clear_refuses_a_row_that_is_not_held"
     ],
@@ -238,7 +216,6 @@
     "find": "            return Err(AppError::new(\"validation\", \"Provide a fiat rate or value\"));",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_cli_leaves.py::test_quarantine_resolve_refusals_match_python_without_writes",
       "kassiber/black_box:test_quarantine_resolve_refusals_match_python_without_writes"
     ],
     "rule": "A price override needs a reviewed rate or value."
@@ -249,7 +226,6 @@
     "find": "                Parsed::Finite(total) if !total.is_negative() => Ok((Some(rate), Some(total))),",
     "replace": "                Parsed::Finite(total) => Ok((Some(rate), Some(total))),",
     "expect_failing": [
-      "tests/test_rust_cli_leaves.py::test_quarantine_resolve_refusals_match_python_without_writes",
       "kassiber/black_box:test_quarantine_resolve_refusals_match_python_without_writes"
     ],
     "rule": "With both prices given, a negative value is still refused."
@@ -260,7 +236,6 @@
     "find": "                Parsed::Finite(total) if !total.is_negative() => Ok((Some(rate), Some(total))),",
     "replace": "                Parsed::Finite(total) if !total.is_negative() => Ok((Some(rate), None)),",
     "expect_failing": [
-      "tests/test_rust_cli_leaves.py::test_quarantine_resolve_matches_python_envelope_and_book[price-override-transaction-a-fiat-rate-10-fiat-value-2-False]",
       "kassiber/black_box:test_quarantine_resolve_matches_python_envelope_and_book"
     ],
     "rule": "Both given prices are stored as given."
@@ -271,7 +246,6 @@
     "find": "        if kassiber_envelope::get(&record, \"updated\") != Some(&Py::Bool(true)) {",
     "replace": "        if kassiber_envelope::get(&record, \"updated\") == Some(&Py::Bool(true)) {",
     "expect_failing": [
-      "tests/test_rust_cli_leaves.py::test_quarantine_resolve_matches_python_envelope_and_book[exclude-transaction-t-False]",
       "kassiber/black_box:test_quarantine_resolve_matches_python_envelope_and_book"
     ],
     "rule": "Journals are invalidated only when the metadata edit changed nothing."
@@ -282,7 +256,6 @@
     "find": "                            source: \"cli\",\n                            reason,\n                        },\n                    );",
     "replace": "                            source: \"gui\",\n                            reason,\n                        },\n                    );",
     "expect_failing": [
-      "tests/test_rust_cli_leaves.py::test_quarantine_resolve_matches_python_envelope_and_book[exclude-transaction-t-False]",
       "kassiber/black_box:test_quarantine_resolve_matches_python_envelope_and_book"
     ],
     "rule": "CLI resolutions are authored by the CLI."
@@ -293,7 +266,6 @@
     "find": "                    payload.retain(|(key, _)| *key != \"note\".into());\n",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_cli_leaves.py::test_quarantine_resolve_matches_python_envelope_and_book[exclude-transaction-t-reprocess-False]",
       "kassiber/black_box:test_quarantine_resolve_matches_python_envelope_and_book"
     ],
     "rule": "A reprocessed resolution drops the process-journals note."
@@ -304,7 +276,6 @@
     "find": "                    Some(group) => {\n                        kassiber_journals::quarantine::groups::root_transaction_for_group(\n                            conn,\n                            &profile_id,\n                            group,\n                        )?\n                    }",
     "replace": "                    Some(group) => group.clone(),",
     "expect_failing": [
-      "tests/test_rust_cli_leaves.py::test_quarantine_resolve_matches_python_envelope_and_book[exclude-group-id-root:t-False]",
       "kassiber/black_box:test_quarantine_resolve_matches_python_envelope_and_book"
     ],
     "rule": "A root group resolves its root transaction."
@@ -315,7 +286,6 @@
     "find": "        format!(\" AND w.id IN ({})\", vec![\"?\"; wallet_ids.len()].join(\", \"))",
     "replace": "        String::new()",
     "expect_failing": [
-      "tests/test_rust_cli_leaves.py::test_identify_matches_python_in_every_format[False]",
       "kassiber/black_box:test_identify_matches_python_in_every_format"
     ],
     "rule": "`--wallet` restricts the scan to the selected wallets."
@@ -326,7 +296,6 @@
     "find": "    if args.scan_to_index < BigInt::from(0) {",
     "replace": "    if args.scan_to_index < BigInt::from(-1) {",
     "expect_failing": [
-      "tests/test_rust_cli_leaves.py::test_identify_matches_python_in_every_format[False]",
       "kassiber/black_box:test_identify_matches_python_in_every_format"
     ],
     "rule": "A negative scan depth is refused."
@@ -337,7 +306,6 @@
     "find": "        && !given(&csv_text)\n",
     "replace": "        && given(&csv_text)\n",
     "expect_failing": [
-      "tests/test_rust_cli_leaves.py::test_identify_matches_python_in_every_format[False]",
       "kassiber/black_box:test_identify_matches_python_in_every_format"
     ],
     "rule": "Identify without any input is refused."
@@ -348,7 +316,6 @@
     "find": "    if text.contains('\\0') {",
     "replace": "    if text.contains('\\u{1}') {",
     "expect_failing": [
-      "tests/test_rust_cli_leaves.py::test_identify_matches_python_in_every_format[False]",
       "kassiber/black_box:test_identify_matches_python_in_every_format"
     ],
     "rule": "A candidate file with NUL bytes is refused as binary."
@@ -359,7 +326,6 @@
     "find": "        (\"note\", or_empty(item, \"note\")),\n    ])\n}",
     "replace": "        (\"note\", s(\"\")),\n    ])\n}",
     "expect_failing": [
-      "tests/test_rust_cli_leaves.py::test_identify_matches_python_in_every_format[False]",
       "kassiber/black_box:test_identify_matches_python_in_every_format"
     ],
     "rule": "Flat identify rows keep the note."
@@ -370,7 +336,6 @@
     "find": "    if format == crate::render::Format::Json {\n        return report;",
     "replace": "    if format != crate::render::Format::Json {\n        return report;",
     "expect_failing": [
-      "tests/test_rust_cli_leaves.py::test_identify_matches_python_in_every_format[False]",
       "kassiber/black_box:test_identify_matches_python_in_every_format"
     ],
     "rule": "JSON keeps the full identify report; other formats flatten it."
@@ -381,7 +346,6 @@
     "find": "        Some(material) if kassiber_envelope::truthy(material) => {",
     "replace": "        Some(material) => {",
     "expect_failing": [
-      "tests/test_rust_cli_leaves.py::test_reveal_descriptor_matches_python_and_keeps_its_gates[False]",
       "kassiber/black_box:test_reveal_descriptor_matches_python_and_keeps_its_gates"
     ],
     "rule": "`--material-only` refuses a wallet without descriptor material."
@@ -392,7 +356,6 @@
     "find": "        (\"config\", config),\n    ]))",
     "replace": "        (\"config\", Value::Null),\n    ]))",
     "expect_failing": [
-      "tests/test_rust_cli_leaves.py::test_reveal_descriptor_matches_python_and_keeps_its_gates[False]",
       "kassiber/black_box:test_reveal_descriptor_matches_python_and_keeps_its_gates"
     ],
     "rule": "The reveal prints the whole stored configuration."
@@ -403,7 +366,6 @@
     "find": "        .map(|value| kassiber_pytext::strip(&kassiber_envelope::py_str(value)).to_owned())",
     "replace": "        .map(|value| kassiber_envelope::py_str(value))",
     "expect_failing": [
-      "tests/test_rust_cli_leaves.py::test_reveal_descriptor_matches_python_and_keeps_its_gates[False]",
       "kassiber/black_box:test_reveal_descriptor_matches_python_and_keeps_its_gates"
     ],
     "rule": "Descriptor material is stripped."
@@ -414,7 +376,6 @@
     "find": "        Some(Value::Int(_)) => 0,",
     "replace": "        Some(Value::Int(_)) => analysis::DEFAULT_SAMPLE_ROWS,",
     "expect_failing": [
-      "tests/test_rust_cli_leaves.py::test_analyze_file_matches_python_without_a_book[--file-ledger.csv---sample-rows--4]",
       "kassiber/black_box:test_analyze_file_matches_python_without_a_book"
     ],
     "rule": "A negative sample size shows no rows."
@@ -425,7 +386,6 @@
     "find": ".and_then(|payload| emit(&mut sink, format, \"wallets.file_analysis\", payload)),",
     "replace": ".and_then(|payload| emit(&mut sink, format, &kind, payload)),",
     "expect_failing": [
-      "tests/test_rust_cli_leaves.py::test_analyze_file_matches_python_without_a_book[default]",
       "kassiber/black_box:test_analyze_file_matches_python_without_a_book"
     ],
     "rule": "File analysis answers kind wallets.file_analysis."
@@ -436,7 +396,6 @@
     "find": "        \"wallets.analyze-file\" => store",
     "replace": "        \"wallets.analyze-file-unrouted\" => store",
     "expect_failing": [
-      "tests/test_rust_cli_leaves.py::test_analyze_file_matches_python_without_a_book[default]",
       "kassiber/black_box:test_analyze_file_matches_python_without_a_book"
     ],
     "rule": "File analysis opens no book."
@@ -447,7 +406,6 @@
     "find": ".or(plan_only.then_some(\"maintenance.purge-legacy-ledger.plan\")),",
     "replace": ".or(None),",
     "expect_failing": [
-      "tests/test_rust_cli_leaves.py::test_purge_legacy_ledger_matches_python_envelope_and_book[False]",
       "kassiber/black_box:test_purge_legacy_ledger_matches_python_envelope_and_book"
     ],
     "rule": "Without --confirm the purge only plans, under its plan kind."
@@ -458,7 +416,6 @@
     "find": "        let plan = if confirm {\n            kassiber_store::retired::purge_legacy_ledger(conn)",
     "replace": "        let plan = if true {\n            kassiber_store::retired::purge_legacy_ledger(conn)",
     "expect_failing": [
-      "tests/test_rust_cli_leaves.py::test_purge_legacy_ledger_matches_python_envelope_and_book[False]",
       "kassiber/black_box:test_purge_legacy_ledger_matches_python_envelope_and_book"
     ],
     "rule": "Nothing is removed without --confirm."
@@ -469,7 +426,6 @@
     "find": "        tables: counted.into_iter().filter(|(_, rows)| *rows != 0).collect(),",
     "replace": "        tables: counted.into_iter().collect(),",
     "expect_failing": [
-      "tests/test_rust_cli_leaves.py::test_purge_legacy_ledger_matches_python_envelope_and_book[False]",
       "kassiber/black_box:test_purge_legacy_ledger_matches_python_envelope_and_book"
     ],
     "rule": "The plan lists only tables that hold rows."
@@ -480,7 +436,6 @@
     "find": "        if legacy_ledger(&kind, &name, &table, sql.as_deref()) {\n            continue;\n        }\n",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_cli_leaves.py::test_purge_legacy_ledger_matches_python_envelope_and_book[False]",
       "kassiber/black_box:test_purge_legacy_ledger_matches_python_envelope_and_book"
     ],
     "rule": "A book that keeps populated ledger archives opens natively."
@@ -501,7 +456,6 @@
     "find": "    \"journals.transfers.list\",\n",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_cli_leaves.py::test_transfer_audit_matches_python_byte_for_byte[False]",
       "kassiber/black_box:test_transfer_audit_matches_python_byte_for_byte"
     ],
     "rule": "Every leaf but the gated chat and MCP ones is native."

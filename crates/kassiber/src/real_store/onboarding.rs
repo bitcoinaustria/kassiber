@@ -47,8 +47,6 @@ impl RealBook {
 
     fn local_journal_refresh(&mut self, profile_id: &str) -> Result<Value, AppError> {
         let cancel = kassiber_wallets::scan::Cancellation::default();
-        #[cfg(feature = "test-harness")]
-        let passphrase = self.db_passphrase.as_ref().map(|v| v.expose().to_owned());
         let conn = self
             .book
             .as_mut()
@@ -59,8 +57,6 @@ impl RealBook {
             consent: None,
             context: kassiber_setup::context::snapshot(conn)?,
             deadline: Instant::now() + Duration::from_secs(900),
-            #[cfg(feature = "test-harness")]
-            test_passphrase: passphrase.as_deref(),
         };
         let (mut sources, _) = super::sync_sources();
         kassiber_wallets::freshness::planning::local_journal_refresh(

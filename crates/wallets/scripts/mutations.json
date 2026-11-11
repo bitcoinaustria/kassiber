@@ -1176,8 +1176,8 @@
   {
     "id": "W-river-casefold",
     "file": "crates/wallets/src/file_import/river.rs",
-    "find": ".replace('\u017f', \"s\")",
-    "replace": ".replace('\u017f', \"z\")",
+    "find": ".replace('ſ', \"s\")",
+    "replace": ".replace('ſ', \"z\")",
     "expect_failing": [
       "python_river_import_vectors"
     ],
@@ -4055,8 +4055,8 @@
   {
     "id": "W-strike-dash",
     "file": "crates/wallets/src/file_import/strike.rs",
-    "find": "[\"-\", \"\u2013\", \"\u2014\"]",
-    "replace": "[\"missing\", \"\u2013\", \"\u2014\"]",
+    "find": "[\"-\", \"–\", \"—\"]",
+    "replace": "[\"missing\", \"–\", \"—\"]",
     "expect_failing": [
       "python_strike_import_vectors"
     ],
@@ -4486,7 +4486,7 @@
     "id": "W-strike-date-month-case",
     "file": "crates/wallets/src/file_import/strike.rs",
     "find": ".map(|ch| ch.to_ascii_lowercase())",
-    "replace": ".map(|ch| if ch == '\u0131' { 'i' } else { ch.to_ascii_lowercase() })",
+    "replace": ".map(|ch| if ch == 'ı' { 'i' } else { ch.to_ascii_lowercase() })",
     "expect_failing": [
       "python_strike_import_vectors"
     ],
@@ -5099,46 +5099,6 @@
     "replace": "        if !invalidated && result.iter().any(|(key, _)| *key == \"reactivated\") {\n            invalidate_journals(conn, profile)?;\n            result\n                .iter_mut()\n                .find(|(key, _)| *key == \"journal_invalidated\")\n                .unwrap()\n                .1 = Py::Bool(false);\n        }",
     "expect_failing": [
       "twentyone_legacy_reactivation_invalidates_ready_journals_once"
-    ],
-    "rule": "Reactivated legacy observations invalidate journals once, including unpriced rows; tag-only cleanup preserves readiness and the response reports the change."
-  },
-  {
-    "id": "W-twentyone-readiness-reference-invalidate",
-    "file": "kassiber/core/imports.py",
-    "find": "if outcome.get(\"reactivated\") and not outcome.get(\"journal_invalidated\"):",
-    "replace": "if False:",
-    "expect_failing": [
-      "tests/test_twentyonebitcoin_import.py::TwentyOneBitcoinLegacyReadinessTest::test_legacy_reactivation_invalidates_ready_journals_once"
-    ],
-    "rule": "Reactivated legacy observations invalidate journals once, including unpriced rows; tag-only cleanup preserves readiness and the response reports the change."
-  },
-  {
-    "id": "W-twentyone-readiness-reference-once",
-    "file": "kassiber/core/imports.py",
-    "find": "if outcome.get(\"reactivated\") and not outcome.get(\"journal_invalidated\"):",
-    "replace": "if outcome.get(\"reactivated\"):",
-    "expect_failing": [
-      "tests/test_twentyonebitcoin_import.py::TwentyOneBitcoinLegacyReadinessTest::test_legacy_reactivation_invalidates_ready_journals_once"
-    ],
-    "rule": "Reactivated legacy observations invalidate journals once, including unpriced rows; tag-only cleanup preserves readiness and the response reports the change."
-  },
-  {
-    "id": "W-twentyone-readiness-reference-reactivated",
-    "file": "kassiber/core/imports.py",
-    "find": "if outcome.get(\"reactivated\") and not outcome.get(\"journal_invalidated\"):",
-    "replace": "if not outcome.get(\"journal_invalidated\"):",
-    "expect_failing": [
-      "tests/test_twentyonebitcoin_import.py::TwentyOneBitcoinLegacyReadinessTest::test_legacy_reactivation_invalidates_ready_journals_once"
-    ],
-    "rule": "Reactivated legacy observations invalidate journals once, including unpriced rows; tag-only cleanup preserves readiness and the response reports the change."
-  },
-  {
-    "id": "W-twentyone-readiness-reference-result",
-    "file": "kassiber/core/imports.py",
-    "find": "        if outcome.get(\"reactivated\") and not outcome.get(\"journal_invalidated\"):\n            hooks.invalidate_journals(conn, profile[\"id\"])\n            outcome[\"journal_invalidated\"] = True",
-    "replace": "        if outcome.get(\"reactivated\") and not outcome.get(\"journal_invalidated\"):\n            hooks.invalidate_journals(conn, profile[\"id\"])\n            outcome[\"journal_invalidated\"] = False",
-    "expect_failing": [
-      "tests/test_twentyonebitcoin_import.py::TwentyOneBitcoinLegacyReadinessTest::test_legacy_reactivation_invalidates_ready_journals_once"
     ],
     "rule": "Reactivated legacy observations invalidate journals once, including unpriced rows; tag-only cleanup preserves readiness and the response reports the change."
   },
@@ -6095,8 +6055,8 @@
   {
     "id": "W-blockpit-label-payment",
     "file": "crates/wallets/src/file_import/tax_platform.rs",
-    "find": "\"payment\" | \"zahlung\" | \"fee\" | \"geb\u00fchr\" => \"spend\",",
-    "replace": "\"payment\" | \"zahlung\" | \"fee\" | \"geb\u00fchr\" => \"unsupported\",",
+    "find": "\"payment\" | \"zahlung\" | \"fee\" | \"gebühr\" => \"spend\",",
+    "replace": "\"payment\" | \"zahlung\" | \"fee\" | \"gebühr\" => \"unsupported\",",
     "expect_failing": [
       "python_blockpit_import_vectors"
     ],

@@ -80,13 +80,7 @@ pub fn environment(scratch: &Scratch, recorded: &Value) -> Vec<(String, String)>
         ),
     ];
     for (key, item) in entries(recorded) {
-        let mut item = scratch.place(&py_str(item)).replace("@BIN@", BIN);
-        // The development journal replay ran the Python reference; with no
-        // Python left it stands for a reference that always fails, which a
-        // valid book never reaches.
-        if key == "KASSIBER_RUST_TEST_JOURNAL_PYTHON" {
-            item = "/bin/false".into();
-        }
+        let item = scratch.place(&py_str(item)).replace("@BIN@", BIN);
         env.push((key, item));
     }
     env

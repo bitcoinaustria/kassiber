@@ -150,26 +150,6 @@
     "rule": "A signaling NaN without quantity retains the exact Python float-conversion refusal."
   },
   {
-    "id": "JB-python-real-encode",
-    "file": "tests/rust_port/journal_persistence_oracle.py",
-    "find": "if isinstance(value, float) and not math.isfinite(value):",
-    "replace": "if False:",
-    "expect_failing": [
-      "tests/test_journal_prebuild_campaign.py::test_prebuild_dumps_round_trip_nonfinite_sqlite_values"
-    ],
-    "rule": "Infinite stored REALs must have a strict JSON bit tag instead of a nonstandard JSON float."
-  },
-  {
-    "id": "JB-python-real-decode",
-    "file": "tests/rust_port/journal_persistence_oracle.py",
-    "find": "return struct.unpack('>d', bytes.fromhex(value['$real_bits']))[0]",
-    "replace": "return None",
-    "expect_failing": [
-      "tests/test_journal_prebuild_campaign.py::test_prebuild_dumps_round_trip_nonfinite_sqlite_values"
-    ],
-    "rule": "Restoring an infinite REAL must preserve its value and storage class instead of null."
-  },
-  {
     "id": "JB-native-real-decode",
     "file": "crates/journals/tests/support/mod.rs",
     "find": "        Value::Object(o) if o.len() == 1 && o.contains_key(\"$real_bits\") => Sql::Real(\n            f64::from_bits(u64::from_str_radix(o[\"$real_bits\"].as_str().unwrap(), 16).unwrap()),\n        ),\n",

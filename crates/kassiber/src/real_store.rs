@@ -3015,8 +3015,6 @@ impl Book for RealBook {
             consent,
             context: kassiber_setup::context::snapshot(conn)?,
             deadline: Instant::now() + Duration::from_secs(900),
-            #[cfg(feature = "test-harness")]
-            test_passphrase: self.db_passphrase.as_ref().map(Secret::expose),
         };
         plan.execute_native(
             conn,

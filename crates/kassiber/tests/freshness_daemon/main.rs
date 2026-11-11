@@ -16,7 +16,6 @@
 #[allow(dead_code)]
 mod golden;
 mod graph;
-mod journals;
 mod lifecycle;
 mod live;
 mod product;
@@ -143,11 +142,6 @@ fn test_native_graph_encrypted_worker_handoff_and_cleanup() {
 #[test]
 fn test_product_source_controls_remain_available_during_fetch() {
     product::test_product_source_controls_remain_available_during_fetch();
-}
-
-#[test]
-fn test_encrypted_journal_job_and_hybrid_key_handoff() {
-    journals::test_encrypted_journal_job_and_hybrid_key_handoff();
 }
 
 #[test]

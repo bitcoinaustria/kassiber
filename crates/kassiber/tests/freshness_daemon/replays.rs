@@ -105,9 +105,8 @@ pub fn test_journal_job_pairing_and_caller_authority() {
 }
 
 pub fn test_journal_refusal_census_and_hybrid_only_replay() {
-    // The development journal replay is armed (it ran Python); after a first
-    // committed build it must not run, so the stand-in that always fails is
-    // never reached.
+    // An armed failure after the first committed build: the refusal is
+    // stored, and the committed journals stay.
     replay(
         "journals",
         "test_journal_refusal_census_and_hybrid_only_replay",

@@ -149,8 +149,6 @@ pub(super) struct Refresh<'a> {
     pub consent: Option<&'a kassiber_wallets::freshness::native::Consent>,
     pub context: Value,
     pub deadline: std::time::Instant,
-    #[cfg(feature = "test-harness")]
-    pub test_passphrase: Option<&'a str>,
 }
 
 impl Refresh<'_> {
@@ -220,8 +218,6 @@ pub(super) fn explicit<'a>(
         // Python's direct desktop action has no time limit; only cancellation,
         // retirement and a context change stop it.
         deadline: std::time::Instant::now() + std::time::Duration::from_secs(u64::from(u32::MAX)),
-        #[cfg(feature = "test-harness")]
-        test_passphrase: None,
     };
     let output_error = std::cell::RefCell::new(None);
     let check = || {
@@ -340,10 +336,6 @@ impl kassiber_wallets::freshness::execution::Handler for Refresh<'_> {
         #[cfg(not(feature = "test-harness"))]
         let sources = kassiber_transfers::SystemSources;
         #[cfg(feature = "test-harness")]
-        let guard = kassiber_journals::service::ReplayGuard::capture(conn);
-        let last_phase = std::cell::Cell::new("admission");
-        let paired_phase = std::cell::Cell::new(false);
-        #[cfg(feature = "test-harness")]
         let committed = std::cell::Cell::new(false);
         #[cfg(feature = "test-harness")]
         let observed = std::cell::Cell::new(0);
@@ -367,26 +359,18 @@ impl kassiber_wallets::freshness::execution::Handler for Refresh<'_> {
             &mut |phase| {
                 self.check(conn)?;
                 progress.emit(conn, &dict([("phase", s(phase))]))?;
-                paired_phase.set(phase == "auto_pair");
-                last_phase.set(phase);
                 self.check(conn)?;
                 Ok(())
             },
-            &mut |phase| {
-                last_phase.set(phase);
+            &mut |_phase| {
                 #[cfg(feature = "test-harness")]
-                if phase == "complete" {
+                if _phase == "complete" {
                     committed.set(true);
                 }
             },
             &mut writes,
         )
         .map_err(|error| {
-            #[cfg(feature = "test-harness")]
-            {
-                let replay_safe = last_phase.get() != "complete" && guard.unchanged(conn);
-                hybrid::record(&error, last_phase.get(), replay_safe);
-            }
             if error.family == "AppError" {
                 Failure::App(kassiber_journals::service::application_error(error))
             } else if let Some(code) = error.sqlite_code {
@@ -413,20 +397,6 @@ impl kassiber_wallets::freshness::execution::Handler for Refresh<'_> {
                 }
             }
         });
-        #[cfg(feature = "test-harness")]
-        let result = match result {
-            Err(error)
-                if last_phase.get() != "complete"
-                    && guard.unchanged(conn)
-                    && hybrid::enabled()
-                    && hybrid::replayable(&error) =>
-            {
-                self.check(conn)?;
-                progress.check(conn)?;
-                return hybrid::replay(self, conn, job, progress, paired_phase.get());
-            }
-            result => result,
-        };
         let result = result?;
         let mut payload = result.ordered_payload.clone();
         drop(result);
@@ -434,9 +404,6 @@ impl kassiber_wallets::freshness::execution::Handler for Refresh<'_> {
         Ok(payload)
     }
 }
-
-#[cfg(feature = "test-harness")]
-mod hybrid;
 
 /// `journals quarantine groups` (`handlers.quarantine_groups`): the scope
 /// first, then the `--limit` bounds, then the rollup or one group's page.
