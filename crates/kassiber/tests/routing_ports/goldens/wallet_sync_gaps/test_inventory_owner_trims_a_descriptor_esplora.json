@@ -1,0 +1,608 @@
+{
+ "pytest": "tests/test_rust_wallet_sync_gaps.py::test_inventory_owner_trims_a_descriptor[esplora]",
+ "sessions": [
+  {
+   "args": [
+    "--machine",
+    "--data-root",
+    "{tmp}/rust",
+    "wallets",
+    "sync",
+    "--wallet",
+    "a"
+   ],
+   "cwd": "{repo}",
+   "env": {
+    "COLUMNS": "80",
+    "KASSIBER_AGENT_ACCESS_FILE": "{tmp}/agents.json",
+    "KASSIBER_BACKEND_FIXTURE_BATCH_SIZE": "2",
+    "KASSIBER_BACKEND_FIXTURE_KIND": "esplora",
+    "KASSIBER_BACKEND_FIXTURE_URL": "http://127.0.0.1:42581",
+    "KASSIBER_DEFAULT_BACKEND": "fixture",
+    "KASSIBER_DISABLE_UPDATE_CHECK": "1",
+    "KASSIBER_OFFLINE_PREFERENCE_FILE": "{tmp}/offline.json",
+    "KASSIBER_RUST_TEST_OWNER_ROOT": "{tmp}/owners",
+    "KASSIBER_RUST_TEST_SYNC_NOW": "0",
+    "KASSIBER_RUST_TEST_SYNC_PREFIX": "r0",
+    "KASSIBER_RUST_TEST_SYNC_START": "1700000000",
+    "KASSIBER_TEST_NO_EGRESS": "1",
+    "KASSIBER_UPDATE_CACHE_FILE": "{tmp}/update-cache.json",
+    "KASSIBER_UPDATE_PREFERENCE_FILE": "{tmp}/updates.json",
+    "LANG": "en_US.UTF-8",
+    "LINES": "24",
+    "LOCALAPPDATA": "{tmp}",
+    "TMPDIR": "{tmp}",
+    "USERPROFILE": "{tmp}",
+    "XDG_CONFIG_HOME": "{tmp}/xdg-config",
+    "XDG_DATA_HOME": "{tmp}/xdg-data",
+    "XDG_STATE_HOME": "{tmp}/xdg-state"
+   },
+   "roots": [
+    "{tmp}"
+   ],
+   "recorded_us": [
+    1794333619819938,
+    1794333619819938,
+    1794333621376598
+   ],
+   "setup": [
+    {
+     "mkdir": "{tmp}/python",
+     "mode": 493
+    },
+    {
+     "mkdir": "{tmp}/python/attachments",
+     "mode": 493
+    },
+    {
+     "mkdir": "{tmp}/python/config",
+     "mode": 493
+    },
+    {
+     "write": "{tmp}/python/config/settings.json",
+     "mode": 384,
+     "text": "{\n  \"app\": \"kassiber\",\n  \"paths\": {\n    \"attachments_root\": \"{tmp}/python/attachments\",\n    \"config_root\": \"{tmp}/python/config\",\n    \"data_root\": \"{tmp}/python\",\n    \"database\": \"{tmp}/python/kassiber.sqlite3\",\n    \"env_file\": \"{tmp}/python/config/backends.env\",\n    \"exports_root\": \"{tmp}/python/exports\",\n    \"settings_file\": \"{tmp}/python/config/settings.json\",\n    \"state_root\": \"{tmp}/python\"\n  },\n  \"schema_version\": 1\n}\n"
+    },
+    {
+     "mkdir": "{tmp}/python/exports",
+     "mode": 493
+    },
+    {
+     "mkdir": "{tmp}/rust",
+     "mode": 493
+    },
+    {
+     "book": "{tmp}/rust/kassiber.sqlite3",
+     "create": {
+      "schema": "current",
+      "pragmas": {
+       "user_version": 0,
+       "application_id": 0
+      },
+      "tables": {
+       "chain_analysis_dataset_claims": {
+        "replace": []
+       },
+       "chain_index_clock": {
+        "upsert": [
+         [
+          1,
+          1,
+          4
+         ]
+        ]
+       },
+       "chain_index_dirty": {
+        "upsert": [
+         [
+          1,
+          "profiles",
+          -1,
+          1
+         ],
+         [
+          2,
+          "wallets",
+          -1,
+          3
+         ],
+         [
+          3,
+          "wallet_utxos",
+          1,
+          4
+         ]
+        ]
+       },
+       "profiles": {
+        "upsert": [
+         [
+          1,
+          "p",
+          "w",
+          "book",
+          "EUR",
+          "generic",
+          365,
+          "FIFO",
+          0,
+          1,
+          "global",
+          0,
+          0,
+          0,
+          0,
+          null,
+          0,
+          null,
+          "fixed",
+          null
+         ]
+        ]
+       },
+       "schema_migration_audits": {
+        "upsert": [
+         [
+          1,
+          "journal-calculation-semantics-adoption-v1",
+          "journal-calculation-semantics-adoption-v1",
+          1,
+          "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
+          "2026-11-10T18:00:16.313Z"
+         ],
+         [
+          2,
+          "wages-acquisition-semantics-v1",
+          "wages-acquisition-semantics-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"affected_transaction_count\":0,\"after\":{\"journal_treatment\":\"basis_bearing_acquisition\"},\"before\":{\"journal_treatment\":\"employment_income\"},\"explanation\":\"Marks wage-bearing journal projections stale so they are rebuilt without employment-income or Kennzahl 172 rows.\",\"name\":\"wages_acquisition_semantics\"}],\"migration\":\"wages-acquisition-semantics-v1\",\"schema_version\":1}",
+          "2026-11-10T18:00:16.313Z"
+         ],
+         [
+          3,
+          "rp2-pool-basis-semantics-v1",
+          "rp2-pool-basis-semantics-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"explanation\":\"Marks previously processed pool journals stale to rebuild holdings with report-cutoff basis; retained journals are unchanged.\",\"name\":\"report_cutoff_pool_basis\"}],\"migration\":\"rp2-pool-basis-semantics-v1\",\"schema_version\":1}",
+          "2026-11-10T18:00:16.313Z"
+         ],
+         [
+          4,
+          "custody-fail-closed-holds-v1",
+          "custody-fail-closed-holds-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"explanation\":\"Marks processed journals stale so unscoped, fan-out, pending and replaced spends are held on the next rebuild; retained journals are unchanged until then.\",\"name\":\"pre_arbitration_custody_holds\"}],\"migration\":\"custody-fail-closed-holds-v1\",\"schema_version\":1}",
+          "2026-11-10T18:00:16.313Z"
+         ],
+         [
+          5,
+          "kassiber-tax-engine-v1",
+          "kassiber-tax-engine-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"explanation\":\"Marks processed journals stale so the next rebuild uses Kassiber's own tax engine at one fixed decimal precision; retained journals are unchanged until then.\",\"name\":\"kassiber_tax_engine\"}],\"migration\":\"kassiber-tax-engine-v1\",\"schema_version\":1}",
+          "2026-11-10T18:00:16.313Z"
+         ],
+         [
+          6,
+          "at-outflow-consumed-regime-v2",
+          "at-outflow-consumed-regime-v2",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+          "2026-11-10T18:00:16.314Z"
+         ],
+         [
+          7,
+          "same-time-source-order-v1",
+          "same-time-source-order-v1",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"same-time-source-order-v1\", \"required_journal_semantics_version\": 8, \"schema_version\": 1}",
+          "2026-11-10T18:00:16.314Z"
+         ],
+         [
+          8,
+          "at-acquisition-valuation-support-v1",
+          "at-acquisition-valuation-support-v1",
+          1,
+          "{\"schema_version\": 1, \"affected_profile_count\": 0, \"explanation\": \"Rebuild Austrian airdrop/hardfork journals with the explicit unsupported-valuation barrier.\"}",
+          "2026-11-10T18:00:16.317Z"
+         ],
+         [
+          9,
+          "custody-partial-payout-pricing-v1",
+          "custody-partial-payout-pricing-v1",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+          "2026-11-10T18:00:16.322Z"
+         ],
+         [
+          10,
+          "custody-legacy-pair-fee-review-v1",
+          "custody-legacy-pair-fee-review-v1",
+          1,
+          "{\"affected_component_count\": 0, \"affected_profile_count\": 0, \"explanation\": \"Legacy pair fee allocations require review; authored economics and retained journals are unchanged.\", \"migration\": \"custody-legacy-pair-fee-review-v1\", \"required_journal_semantics_version\": 7, \"schema_version\": 1}",
+          "2026-11-10T18:00:16Z"
+         ],
+         [
+          11,
+          "price-currency-mismatch-hold-v1",
+          "price-currency-mismatch-hold-v1",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"price-currency-mismatch-hold-v1\", \"required_journal_semantics_version\": 10, \"schema_version\": 1}",
+          "2026-11-10T18:00:16.323Z"
+         ],
+         [
+          12,
+          "stored-error-credentials-v1",
+          "stored-error-credentials-v1",
+          1,
+          "{\"migration\": \"stored-error-credentials-v1\", \"schema_version\": 1, \"scrubbed_value_count\": 0}",
+          "2026-11-10T18:00:16.325Z"
+         ]
+        ]
+       },
+       "settings": {
+        "upsert": [
+         [
+          1,
+          "database_instance_id",
+          "ed88ace9d799470cb978a8d006d6cf36"
+         ],
+         [
+          2,
+          "context_workspace",
+          "w"
+         ],
+         [
+          3,
+          "context_profile",
+          "p"
+         ]
+        ]
+       },
+       "wallet_utxos": {
+        "upsert": [
+         [
+          1,
+          "u",
+          "w",
+          "p",
+          "b",
+          null,
+          null,
+          "bitcoin",
+          "main",
+          "BTC",
+          1000,
+          "abababababababababababababababababababababababababababababababab",
+          0,
+          "abababababababababababababababababababababababababababababababab:0",
+          "confirmed",
+          null,
+          null,
+          null,
+          null,
+          "0014ce23876b24b9b9b77040da0ba56324ee62aa5139",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          "[]",
+          "fixed",
+          "fixed",
+          null,
+          "{}"
+         ]
+        ]
+       },
+       "wallets": {
+        "upsert": [
+         [
+          1,
+          "a",
+          "w",
+          "p",
+          null,
+          "Cold",
+          "descriptor",
+          "{\"descriptor\": \"wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)\", \"gap_limit\": 3, \"backend\": \"fixture\"}",
+          "fixed"
+         ],
+         [
+          2,
+          "b",
+          "w",
+          "p",
+          null,
+          "Alpha",
+          "descriptor",
+          "{\"descriptor\": \"tr([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)\", \"gap_limit\": 3, \"backend\": \"fixture\"}",
+          "fixed"
+         ]
+        ]
+       },
+       "workspaces": {
+        "upsert": [
+         [
+          1,
+          "w",
+          "ws",
+          "fixed"
+         ]
+        ]
+       }
+      }
+     }
+    }
+   ],
+   "tape": {"templates":["GET /scripthash/\u0001 HTTP/1.1\r\nHost: 127.0.0.1:42581\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nUser-Agent: kassiber/0.22.78\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 242\r\n\r\n","{\"chain_stats\": {\"funded_txo_count\": 1, \"funded_txo_sum\": 40000, \"spent_txo_count\": 0, \"spent_txo_sum\": 0, \"tx_count\": 1}, \"mempool_stats\": {\"funded_txo_count\": 0, \"funded_txo_sum\": 0, \"spent_txo_count\": 0, \"spent_txo_sum\": 0, \"tx_count\": 0}}","{\"chain_stats\": {\"funded_txo_count\": 1, \"funded_txo_sum\": 50000, \"spent_txo_count\": 0, \"spent_txo_sum\": 0, \"tx_count\": 1}, \"mempool_stats\": {\"funded_txo_count\": 0, \"funded_txo_sum\": 0, \"spent_txo_count\": 0, \"spent_txo_sum\": 0, \"tx_count\": 0}}","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 238\r\n\r\n","{\"chain_stats\": {\"funded_txo_count\": 0, \"funded_txo_sum\": 0, \"spent_txo_count\": 0, \"spent_txo_sum\": 0, \"tx_count\": 0}, \"mempool_stats\": {\"funded_txo_count\": 0, \"funded_txo_sum\": 0, \"spent_txo_count\": 0, \"spent_txo_sum\": 0, \"tx_count\": 0}}","GET /blocks/tip/hash HTTP/1.1\r\nHost: 127.0.0.1:42581\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: text/plain\r\nUser-Agent: kassiber/0.22.78\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 64\r\n\r\n","GET /blocks/tip/height HTTP/1.1\r\nHost: 127.0.0.1:42581\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: text/plain\r\nUser-Agent: kassiber/0.22.78\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 2\r\n\r\n","GET /block-height/20 HTTP/1.1\r\nHost: 127.0.0.1:42581\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: text/plain\r\nUser-Agent: kassiber/0.22.78\r\n\r\n","GET /scripthash/\u0001/txs/chain HTTP/1.1\r\nHost: 127.0.0.1:42581\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nUser-Agent: kassiber/0.22.78\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 881\r\n\r\n","[{\"txid\": \"\u0001\", \"version\": 2, \"locktime\": 0, \"vin\": [{\"txid\": \"\u0001\", \"vout\": 0, \"scriptsig\": \"\", \"witness\": [\"\u0001\u0001ababababababab\", \"\u0001cd\"], \"is_coinbase\": false, \"sequence\": 4294967294, \"prevout\": {\"scriptpubkey\": \"00143333333333333333333333333333333333333333\", \"value\": 51000}}], \"vout\": [{\"scriptpubkey\": \"0014cbd1e051255041224649ef67da8082850856a983\", \"value\": 50000}], \"size\": 191, \"weight\": 764, \"fee\": 1000, \"status\": {\"confirmed\": true, \"block_height\": 2, \"block_hash\": \"\u0001\", \"block_time\": 1700001200}}]","GET /scripthash/\u0001/txs/mempool HTTP/1.1\r\nHost: 127.0.0.1:42581\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nUser-Agent: kassiber/0.22.78\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 238\r\n\r\n{\"chain_stats\": {\"funded_txo_count\": 0, \"funded_txo_sum\": 0, \"spent_txo_count\": 0, \"spent_txo_sum\": 0, \"tx_count\": 0}, \"mempool_stats\": {\"funded_txo_count\": 0, \"funded_txo_sum\": 0, \"spent_txo_count\": 0, \"spent_txo_sum\": 0, \"tx_count\": 0}}","GET /scripthash/\u0001/utxo HTTP/1.1\r\nHost: 127.0.0.1:42581\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nUser-Agent: kassiber/0.22.78\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 263\r\n\r\n[{\"txid\": \"\u0001\", \"vout\": 0, \"value\": 50000, \"status\": {\"confirmed\": true, \"block_height\": 2, \"block_hash\": \"\u0001\", \"block_time\": 1700001200}}]"],"connections":[[1,false,"127.0.0.1",42581,1,null,[["w",218,[0,"a2869e58e0d503ed30d8b40f3da78576dcc790e0cb21c5ed4bd9c2ffc1634300"]],["r",[1]],["r",[2]]]],[2,false,"127.0.0.1",42581,1,null,[["w",218,[0,"8dc07b53303a09ced2e063b0b18980ccc7a5cb5278dbec11ab9478520137a22c"]],["r",[1]],["r",[3]]]],[3,false,"127.0.0.1",42581,1,null,[["w",218,[0,"827f67def0137cc8098f65adb020a71d309e914544fb748747b5f682853c274a"]],["r",[4]],["r",[5]]]],[4,false,"127.0.0.1",42581,1,null,[["w",218,[0,"5c7b0c67f6048f0ab789bdf8bc8fe20d004db6b5fd38d4cedaab6a68d5ccc478"]],["r",[4]],["r",[5]]]],[5,false,"127.0.0.1",42581,1,null,[["w",218,[0,"34a566a3fc45cefda67ae67cf03aacb9acf29782167878125c0b9deb170530d2"]],["r",[4]],["r",[5]]]],[6,false,"127.0.0.1",42581,1,null,[["w",218,[0,"f9a1e84b5cd53415b9877432f64726fcc1ff12935231a8b1c0838e613ab22ae3"]],["r",[4]],["r",[5]]]],[7,false,"127.0.0.1",42581,1,null,[["w",218,[0,"a5070c03f2f57e6948d50883105d7cf820e033dd1afa4f801551d99b221bf253"]],["r",[4]],["r",[5]]]],[8,false,"127.0.0.1",42581,1,null,[["w",218,[0,"822e8171c51abcaaf556174f0c418c3ce6ee40f6eb069d0f3c1d0fe7824b62dd"]],["r",[4]],["r",[5]]]],[10,false,"127.0.0.1",42581,1,null,[["w",218,[0,"57cc9ec581231a60952e2e9c177b51ebe81273fe7e7b075d6e540b531db0a42c"]],["r",[4]],["r",[5]]]],[9,false,"127.0.0.1",42581,1,null,[["w",218,[0,"bf5815a5a2a19ac707c72cba2cf15fd6702772f60ef01b141db096a86f805feb"]],["r",[4]],["r",[5]]]],[11,false,"127.0.0.1",42581,1,null,[["w",152,[6]],["r",[7]],["r","91a8cb8adbda409dbe90c1243b9699838b12619510d874fe08efca405a32e022"]]],[12,false,"127.0.0.1",42581,1,null,[["w",154,[8]],["r",[9]],["r","20"]]],[13,false,"127.0.0.1",42581,1,null,[["w",152,[10]],["r",[7]],["r","91a8cb8adbda409dbe90c1243b9699838b12619510d874fe08efca405a32e022"]]],[14,false,"127.0.0.1",42581,1,null,[["w",218,[0,"8dc07b53303a09ced2e063b0b18980ccc7a5cb5278dbec11ab9478520137a22c"]],["r",[1]],["r",[3]]]],[15,false,"127.0.0.1",42581,1,null,[["w",218,[0,"5c7b0c67f6048f0ab789bdf8bc8fe20d004db6b5fd38d4cedaab6a68d5ccc478"]],["r",[4]],["r",[5]]]],[16,false,"127.0.0.1",42581,1,null,[["w",218,[0,"827f67def0137cc8098f65adb020a71d309e914544fb748747b5f682853c274a"]],["r",[4]],["r",[5]]]],[17,false,"127.0.0.1",42581,1,null,[["w",218,[0,"34a566a3fc45cefda67ae67cf03aacb9acf29782167878125c0b9deb170530d2"]],["r",[4]],["r",[5]]]],[18,false,"127.0.0.1",42581,1,null,[["w",218,[0,"822e8171c51abcaaf556174f0c418c3ce6ee40f6eb069d0f3c1d0fe7824b62dd"]],["r",[4]],["r",[5]]]],[19,false,"127.0.0.1",42581,1,null,[["w",218,[0,"a5070c03f2f57e6948d50883105d7cf820e033dd1afa4f801551d99b221bf253"]],["r",[4]],["r",[5]]]],[20,false,"127.0.0.1",42581,1,null,[["w",218,[0,"bf5815a5a2a19ac707c72cba2cf15fd6702772f60ef01b141db096a86f805feb"]],["r",[4]],["r",[5]]]],[21,false,"127.0.0.1",42581,1,null,[["w",228,[11,"8dc07b53303a09ced2e063b0b18980ccc7a5cb5278dbec11ab9478520137a22c"]],["r",[12]],["r",[13,"e1949efd01a35e424d1812dd6a6ebe741bb38975a9aaa86ca7e54c9b28c829d1","160a367528d37fc98e1b24ef27048090e009f2ff494e77e633f9813a5460012f","abababababababababababababababababababababababababababababababab","abababababababababababababababababababababababababababababababab","02cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd","e648913eb8b23452b513f7cd41a990ddf8e600313472d1676b6104209800ef3f"]]]],[22,false,"127.0.0.1",42581,1,null,[["w",230,[14,"8dc07b53303a09ced2e063b0b18980ccc7a5cb5278dbec11ab9478520137a22c"]],["r",[9]],["r","[]"]]],[23,false,"127.0.0.1",42581,1,null,[["w",218,[0,"8dc07b53303a09ced2e063b0b18980ccc7a5cb5278dbec11ab9478520137a22c"]],["r",[1]],["r",[3]]]],[24,false,"127.0.0.1",42581,1,null,[["w",228,[11,"5c7b0c67f6048f0ab789bdf8bc8fe20d004db6b5fd38d4cedaab6a68d5ccc478"]],["r",[9]],["r","[]"]]],[25,false,"127.0.0.1",42581,1,null,[["w",230,[14,"5c7b0c67f6048f0ab789bdf8bc8fe20d004db6b5fd38d4cedaab6a68d5ccc478"]],["r",[9]],["r","[]"]]],[26,false,"127.0.0.1",42581,1,null,[["w",218,[0,"5c7b0c67f6048f0ab789bdf8bc8fe20d004db6b5fd38d4cedaab6a68d5ccc478"]],["r",[4]],["r",[5]]]],[27,false,"127.0.0.1",42581,1,null,[["w",228,[11,"827f67def0137cc8098f65adb020a71d309e914544fb748747b5f682853c274a"]],["r",[9]],["r","[]"]]],[28,false,"127.0.0.1",42581,1,null,[["w",230,[14,"827f67def0137cc8098f65adb020a71d309e914544fb748747b5f682853c274a"]],["r",[9]],["r","[]"]]],[29,false,"127.0.0.1",42581,1,null,[["w",218,[0,"827f67def0137cc8098f65adb020a71d309e914544fb748747b5f682853c274a"]],["r",[4]],["r",[5]]]],[30,false,"127.0.0.1",42581,1,null,[["w",228,[11,"34a566a3fc45cefda67ae67cf03aacb9acf29782167878125c0b9deb170530d2"]],["r",[9]],["r","[]"]]],[31,false,"127.0.0.1",42581,1,null,[["w",230,[14,"34a566a3fc45cefda67ae67cf03aacb9acf29782167878125c0b9deb170530d2"]],["r",[9]],["r","[]"]]],[32,false,"127.0.0.1",42581,1,null,[["w",218,[0,"34a566a3fc45cefda67ae67cf03aacb9acf29782167878125c0b9deb170530d2"]],["r",[4]],["r",[5]]]],[33,false,"127.0.0.1",42581,1,null,[["w",228,[11,"822e8171c51abcaaf556174f0c418c3ce6ee40f6eb069d0f3c1d0fe7824b62dd"]],["r",[9]],["r","[]"]]],[34,false,"127.0.0.1",42581,1,null,[["w",230,[14,"822e8171c51abcaaf556174f0c418c3ce6ee40f6eb069d0f3c1d0fe7824b62dd"]],["r",[9]],["r","[]"]]],[35,false,"127.0.0.1",42581,1,null,[["w",218,[0,"822e8171c51abcaaf556174f0c418c3ce6ee40f6eb069d0f3c1d0fe7824b62dd"]],["r",[4]],["r",[5]]]],[36,false,"127.0.0.1",42581,1,null,[["w",228,[11,"a5070c03f2f57e6948d50883105d7cf820e033dd1afa4f801551d99b221bf253"]],["r",[9]],["r","[]"]]],[37,false,"127.0.0.1",42581,1,null,[["w",230,[14,"a5070c03f2f57e6948d50883105d7cf820e033dd1afa4f801551d99b221bf253"]],["r",[9]],["r","[]"]]],[38,false,"127.0.0.1",42581,1,null,[["w",218,[0,"a5070c03f2f57e6948d50883105d7cf820e033dd1afa4f801551d99b221bf253"]],["r",[4]],["r",[5]]]],[39,false,"127.0.0.1",42581,1,null,[["w",228,[11,"bf5815a5a2a19ac707c72cba2cf15fd6702772f60ef01b141db096a86f805feb"]],["r",[9]],["r","[]"]]],[40,false,"127.0.0.1",42581,1,null,[["w",230,[14,"bf5815a5a2a19ac707c72cba2cf15fd6702772f60ef01b141db096a86f805feb"]],["r",[9]],["r","[]"]]],[41,false,"127.0.0.1",42581,1,null,[["w",218,[0,"bf5815a5a2a19ac707c72cba2cf15fd6702772f60ef01b141db096a86f805feb"]],["r",[15]]]],[42,false,"127.0.0.1",42581,1,null,[["w",154,[8]],["r",[9]],["r","20"]]],[43,false,"127.0.0.1",42581,1,null,[["w",223,[16,"8dc07b53303a09ced2e063b0b18980ccc7a5cb5278dbec11ab9478520137a22c"]],["r",[17,"e1949efd01a35e424d1812dd6a6ebe741bb38975a9aaa86ca7e54c9b28c829d1","e648913eb8b23452b513f7cd41a990ddf8e600313472d1676b6104209800ef3f"]]]],[44,false,"127.0.0.1",42581,1,null,[["w",223,[16,"5c7b0c67f6048f0ab789bdf8bc8fe20d004db6b5fd38d4cedaab6a68d5ccc478"]],["r",[9]],["r","[]"]]],[45,false,"127.0.0.1",42581,1,null,[["w",223,[16,"827f67def0137cc8098f65adb020a71d309e914544fb748747b5f682853c274a"]],["r",[9]],["r","[]"]]],[46,false,"127.0.0.1",42581,1,null,[["w",223,[16,"34a566a3fc45cefda67ae67cf03aacb9acf29782167878125c0b9deb170530d2"]],["r",[9]],["r","[]"]]],[47,false,"127.0.0.1",42581,1,null,[["w",223,[16,"822e8171c51abcaaf556174f0c418c3ce6ee40f6eb069d0f3c1d0fe7824b62dd"]],["r",[9]],["r","[]"]]],[48,false,"127.0.0.1",42581,1,null,[["w",223,[16,"a5070c03f2f57e6948d50883105d7cf820e033dd1afa4f801551d99b221bf253"]],["r",[9]],["r","[]"]]],[49,false,"127.0.0.1",42581,1,null,[["w",223,[16,"bf5815a5a2a19ac707c72cba2cf15fd6702772f60ef01b141db096a86f805feb"]],["r",[9]],["r","[]"]]]]},
+   "expect": {
+    "exit": 0,
+    "stdout": "{\n  \"kind\": \"wallets.sync\",\n  \"schema_version\": 1,\n  \"data\": [\n    {\n      \"wallet\": \"Cold\",\n      \"status\": \"synced\",\n      \"source\": \"backend:fixture\",\n      \"imported\": 1,\n      \"skipped\": 0,\n      \"unchanged\": 0,\n      \"journal_invalidated\": true,\n      \"inserted_records\": [\n        {\n          \"transaction_id\": \"r0-0002\",\n          \"external_id\": \"e1949efd01a35e424d1812dd6a6ebe741bb38975a9aaa86ca7e54c9b28c829d1\",\n          \"wallet\": \"Cold\",\n          \"asset\": \"BTC\",\n          \"direction\": \"inbound\",\n          \"amount_msat\": 50000000,\n          \"changed_fields\": [\n            \"metadata\",\n            \"pricing\",\n            \"transaction\"\n          ],\n          \"pricing_external_ref\": null\n        }\n      ],\n      \"updated_records\": [],\n      \"saved_report_impacts\": 0,\n      \"output_inventory\": {\n        \"observed\": 1,\n        \"active\": 1,\n        \"spent\": 0,\n        \"last_seen_at\": \"2030-01-01T00:00:03Z\"\n      },\n      \"backend\": \"fixture\",\n      \"backend_kind\": \"esplora\",\n      \"backend_url\": \"http://127.0.0.1:42581\",\n      \"chain\": \"bitcoin\",\n      \"network\": \"main\",\n      \"sync_mode\": \"descriptor\",\n      \"target_count\": 7,\n      \"records_fetched\": 1,\n      \"updated\": 0,\n      \"gap_limit\": 3,\n      \"esplora_history_complete\": true,\n      \"freshness_checkpoint\": {\n        \"backend\": {\n          \"batch_size\": 2,\n          \"chain\": \"bitcoin\",\n          \"kind\": \"esplora\",\n          \"name\": \"fixture\",\n          \"network\": \"main\"\n        },\n        \"compatibility_history_anchor_version\": 2,\n        \"esplora_history_memberships\": {\n          \"backend_key\": \"71e450e1c5915d4c64ae9ae0cd317d4fff9e20126e508da391546153839c08a8\",\n          \"scripts\": {\n            \"34a566a3fc45cefda67ae67cf03aacb9acf29782167878125c0b9deb170530d2\": {\n              \"complete\": true,\n              \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n              \"txids\": []\n            },\n            \"5c7b0c67f6048f0ab789bdf8bc8fe20d004db6b5fd38d4cedaab6a68d5ccc478\": {\n              \"complete\": true,\n              \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n              \"txids\": []\n            },\n            \"822e8171c51abcaaf556174f0c418c3ce6ee40f6eb069d0f3c1d0fe7824b62dd\": {\n              \"complete\": true,\n              \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n              \"txids\": []\n            },\n            \"827f67def0137cc8098f65adb020a71d309e914544fb748747b5f682853c274a\": {\n              \"complete\": true,\n              \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n              \"txids\": []\n            },\n            \"8dc07b53303a09ced2e063b0b18980ccc7a5cb5278dbec11ab9478520137a22c\": {\n              \"complete\": true,\n              \"fingerprint\": \"377e88b1a9c1660ac5e929747af70c31e84b809c23ee113a83b1959704734d70\",\n              \"txids\": [\n                \"e1949efd01a35e424d1812dd6a6ebe741bb38975a9aaa86ca7e54c9b28c829d1\"\n              ]\n            },\n            \"a5070c03f2f57e6948d50883105d7cf820e033dd1afa4f801551d99b221bf253\": {\n              \"complete\": true,\n              \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n              \"txids\": []\n            },\n            \"bf5815a5a2a19ac707c72cba2cf15fd6702772f60ef01b141db096a86f805feb\": {\n              \"complete\": true,\n              \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n              \"txids\": []\n            }\n          },\n          \"version\": 1\n        },\n        \"esplora_scripthashes\": {\n          \"34a566a3fc45cefda67ae67cf03aacb9acf29782167878125c0b9deb170530d2\": {\n            \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n            \"mempool_dirty\": false,\n            \"mempool_tx_count\": 0,\n            \"tx_count\": 0\n          },\n          \"5c7b0c67f6048f0ab789bdf8bc8fe20d004db6b5fd38d4cedaab6a68d5ccc478\": {\n            \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n            \"mempool_dirty\": false,\n            \"mempool_tx_count\": 0,\n            \"tx_count\": 0\n          },\n          \"822e8171c51abcaaf556174f0c418c3ce6ee40f6eb069d0f3c1d0fe7824b62dd\": {\n            \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n            \"mempool_dirty\": false,\n            \"mempool_tx_count\": 0,\n            \"tx_count\": 0\n          },\n          \"827f67def0137cc8098f65adb020a71d309e914544fb748747b5f682853c274a\": {\n            \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n            \"mempool_dirty\": false,\n            \"mempool_tx_count\": 0,\n            \"tx_count\": 0\n          },\n          \"8dc07b53303a09ced2e063b0b18980ccc7a5cb5278dbec11ab9478520137a22c\": {\n            \"fingerprint\": \"377e88b1a9c1660ac5e929747af70c31e84b809c23ee113a83b1959704734d70\",\n            \"mempool_dirty\": false,\n            \"mempool_tx_count\": 0,\n            \"tx_count\": 1\n          },\n          \"a5070c03f2f57e6948d50883105d7cf820e033dd1afa4f801551d99b221bf253\": {\n            \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n            \"mempool_dirty\": false,\n            \"mempool_tx_count\": 0,\n            \"tx_count\": 0\n          },\n          \"bf5815a5a2a19ac707c72cba2cf15fd6702772f60ef01b141db096a86f805feb\": {\n            \"fingerprint\": \"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\n            \"mempool_dirty\": false,\n            \"mempool_tx_count\": 0,\n            \"tx_count\": 0\n          }\n        },\n        \"esplora_tip_hash\": \"91a8cb8adbda409dbe90c1243b9699838b12619510d874fe08efca405a32e022\",\n        \"esplora_tip_height\": 20,\n        \"highest_used\": {\n          \"0\": 0\n        }\n      },\n      \"known_txids\": 1,\n      \"observer_compatibility_reason\": \"http_route_policy\",\n      \"observer_route\": \"compatibility\",\n      \"scripts_changed\": 7,\n      \"scripts_unchanged\": 0,\n      \"scripts_checked\": 7,\n      \"utxos_refreshed\": true,\n      \"elapsed_ms\": 0\n    }\n  ]\n}\n",
+    "stderr": "",
+    "changes": {
+     "{tmp}/rust/attachments": {
+      "dir": true
+     },
+     "{tmp}/rust/config": {
+      "dir": true
+     },
+     "{tmp}/rust/config/settings.json": {
+      "mode": 384,
+      "text": "{\n  \"app\": \"kassiber\",\n  \"paths\": {\n    \"attachments_root\": \"{tmp}/rust/attachments\",\n    \"config_root\": \"{tmp}/rust/config\",\n    \"data_root\": \"{tmp}/rust\",\n    \"database\": \"{tmp}/rust/kassiber.sqlite3\",\n    \"env_file\": \"{tmp}/rust/config/backends.env\",\n    \"exports_root\": \"{tmp}/rust/exports\",\n    \"settings_file\": \"{tmp}/rust/config/settings.json\",\n    \"state_root\": \"{tmp}/rust\"\n  },\n  \"schema_version\": 1\n}\n"
+     },
+     "{tmp}/rust/exports": {
+      "dir": true
+     },
+     "{tmp}/rust/kassiber.sqlite3": {
+      "book": {
+       "tables": {
+        "chain_index_clock": {
+         "upsert": [
+          [
+           1,
+           1,
+           9
+          ]
+         ]
+        },
+        "chain_index_dirty": {
+         "upsert": [
+          [
+           1,
+           "profiles",
+           -1,
+           7
+          ],
+          [
+           2,
+           "wallets",
+           -1,
+           9
+          ],
+          [
+           4,
+           "transactions",
+           1,
+           5
+          ],
+          [
+           5,
+           "wallet_utxos",
+           2,
+           8
+          ]
+         ]
+        },
+        "chain_observation_provenance": {
+         "upsert": [
+          [
+           1,
+           "r0-0002",
+           "w",
+           "p",
+           "a",
+           1,
+           "[\"adapter:esplora:a\"]",
+           "[\"esplora\"]",
+           "bitcoin",
+           "main",
+           "r0-0001",
+           "8a60c61e30563db9a0cdfc20c879418749bd0493714986fbc76315cb6ba2a4f5",
+           "cce26a57b3a588897f252772b6994b25548865d55228a5ad3d3f4dc7ef08e978",
+           "unknown",
+           "2030-01-01T00:00:02Z",
+           "2030-01-01T00:00:02Z"
+          ]
+         ]
+        },
+        "freshness_source_states": {
+         "upsert": [
+          [
+           1,
+           "p",
+           "onchain_wallet:a",
+           "onchain_wallet",
+           "Cold",
+           "fresh",
+           "fresh",
+           null,
+           0,
+           0,
+           null,
+           null,
+           0,
+           "2030-01-01T00:00:04Z",
+           null,
+           null,
+           null,
+           "done",
+           "{\"phase\":\"done\"}",
+           "{\"backend\":{\"batch_size\":2,\"chain\":\"bitcoin\",\"kind\":\"esplora\",\"name\":\"fixture\",\"network\":\"main\"},\"compatibility_history_anchor_version\":2,\"esplora_history_memberships\":{\"backend_key\":\"71e450e1c5915d4c64ae9ae0cd317d4fff9e20126e508da391546153839c08a8\",\"scripts\":{\"34a566a3fc45cefda67ae67cf03aacb9acf29782167878125c0b9deb170530d2\":{\"complete\":true,\"fingerprint\":\"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\"txids\":[]},\"5c7b0c67f6048f0ab789bdf8bc8fe20d004db6b5fd38d4cedaab6a68d5ccc478\":{\"complete\":true,\"fingerprint\":\"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\"txids\":[]},\"822e8171c51abcaaf556174f0c418c3ce6ee40f6eb069d0f3c1d0fe7824b62dd\":{\"complete\":true,\"fingerprint\":\"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\"txids\":[]},\"827f67def0137cc8098f65adb020a71d309e914544fb748747b5f682853c274a\":{\"complete\":true,\"fingerprint\":\"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\"txids\":[]},\"8dc07b53303a09ced2e063b0b18980ccc7a5cb5278dbec11ab9478520137a22c\":{\"complete\":true,\"fingerprint\":\"377e88b1a9c1660ac5e929747af70c31e84b809c23ee113a83b1959704734d70\",\"txids\":[\"e1949efd01a35e424d1812dd6a6ebe741bb38975a9aaa86ca7e54c9b28c829d1\"]},\"a5070c03f2f57e6948d50883105d7cf820e033dd1afa4f801551d99b221bf253\":{\"complete\":true,\"fingerprint\":\"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\"txids\":[]},\"bf5815a5a2a19ac707c72cba2cf15fd6702772f60ef01b141db096a86f805feb\":{\"complete\":true,\"fingerprint\":\"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\"txids\":[]}},\"version\":1},\"esplora_scripthashes\":{\"34a566a3fc45cefda67ae67cf03aacb9acf29782167878125c0b9deb170530d2\":{\"fingerprint\":\"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\"mempool_dirty\":false,\"mempool_tx_count\":0,\"tx_count\":0},\"5c7b0c67f6048f0ab789bdf8bc8fe20d004db6b5fd38d4cedaab6a68d5ccc478\":{\"fingerprint\":\"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\"mempool_dirty\":false,\"mempool_tx_count\":0,\"tx_count\":0},\"822e8171c51abcaaf556174f0c418c3ce6ee40f6eb069d0f3c1d0fe7824b62dd\":{\"fingerprint\":\"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\"mempool_dirty\":false,\"mempool_tx_count\":0,\"tx_count\":0},\"827f67def0137cc8098f65adb020a71d309e914544fb748747b5f682853c274a\":{\"fingerprint\":\"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\"mempool_dirty\":false,\"mempool_tx_count\":0,\"tx_count\":0},\"8dc07b53303a09ced2e063b0b18980ccc7a5cb5278dbec11ab9478520137a22c\":{\"fingerprint\":\"377e88b1a9c1660ac5e929747af70c31e84b809c23ee113a83b1959704734d70\",\"mempool_dirty\":false,\"mempool_tx_count\":0,\"tx_count\":1},\"a5070c03f2f57e6948d50883105d7cf820e033dd1afa4f801551d99b221bf253\":{\"fingerprint\":\"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\"mempool_dirty\":false,\"mempool_tx_count\":0,\"tx_count\":0},\"bf5815a5a2a19ac707c72cba2cf15fd6702772f60ef01b141db096a86f805feb\":{\"fingerprint\":\"985313d5e09c80e622c9d3063168ec33b5e2be8888b5944859f2e4c998d29474\",\"mempool_dirty\":false,\"mempool_tx_count\":0,\"tx_count\":0}},\"esplora_tip_hash\":\"91a8cb8adbda409dbe90c1243b9699838b12619510d874fe08efca405a32e022\",\"esplora_tip_height\":20,\"highest_used\":{\"0\":0}}",
+           "2030-01-01T00:00:05Z"
+          ]
+         ]
+        },
+        "profiles": {
+         "upsert": [
+          [
+           1,
+           "p",
+           "w",
+           "book",
+           "EUR",
+           "generic",
+           365,
+           "FIFO",
+           0,
+           1,
+           "global",
+           1,
+           0,
+           1,
+           0,
+           null,
+           0,
+           null,
+           "fixed",
+           null
+          ]
+         ]
+        },
+        "transactions": {
+         "upsert": [
+          [
+           1,
+           "r0-0002",
+           "w",
+           "p",
+           "a",
+           "e1949efd01a35e424d1812dd6a6ebe741bb38975a9aaa86ca7e54c9b28c829d1",
+           "txid",
+           "c48f707f634f7f2a089d6e6e21c333f752c23914604625bd9e63af5e1757c3fc",
+           "2023-11-14T22:33:20Z",
+           "2023-11-14T22:33:20Z",
+           "inbound",
+           "BTC",
+           50000000,
+           0,
+           0,
+           "EUR",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "missing",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "deposit",
+           "Synced from fixture",
+           null,
+           null,
+           0,
+           "{\"fee\": 1000, \"locktime\": 0, \"observer_owned_scripts\": [\"0014cbd1e051255041224649ef67da8082850856a983\"], \"size\": 191, \"status\": {\"block_hash\": \"e648913eb8b23452b513f7cd41a990ddf8e600313472d1676b6104209800ef3f\", \"block_height\": 2, \"block_time\": 1700001200, \"confirmed\": true}, \"txid\": \"e1949efd01a35e424d1812dd6a6ebe741bb38975a9aaa86ca7e54c9b28c829d1\", \"version\": 2, \"vin\": [{\"is_coinbase\": false, \"prevout\": {\"scriptpubkey\": \"00143333333333333333333333333333333333333333\", \"value\": 51000}, \"scriptsig\": \"\", \"sequence\": 4294967294, \"txid\": \"160a367528d37fc98e1b24ef27048090e009f2ff494e77e633f9813a5460012f\", \"vout\": 0, \"witness\": [\"ababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab\", \"02cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\"]}], \"vout\": [{\"scriptpubkey\": \"0014cbd1e051255041224649ef67da8082850856a983\", \"value\": 50000}], \"weight\": 764}",
+           null,
+           null,
+           null,
+           null,
+           "2030-01-01T00:00:01Z"
+          ]
+         ]
+        },
+        "wallet_utxo_refreshes": {
+         "upsert": [
+          [
+           1,
+           "a",
+           "w",
+           "p",
+           "fixture",
+           "esplora",
+           "bitcoin",
+           "main",
+           1,
+           1,
+           "2030-01-01T00:00:03Z"
+          ]
+         ]
+        },
+        "wallet_utxos": {
+         "upsert": [
+          [
+           2,
+           "3c7457d8b79d96cb62401e178217fc386bd9773ba0fc834b8fae81058aafd113",
+           "w",
+           "p",
+           "a",
+           "fixture",
+           "esplora",
+           "bitcoin",
+           "main",
+           "BTC",
+           50000000,
+           "e1949efd01a35e424d1812dd6a6ebe741bb38975a9aaa86ca7e54c9b28c829d1",
+           0,
+           "e1949efd01a35e424d1812dd6a6ebe741bb38975a9aaa86ca7e54c9b28c829d1:0",
+           "confirmed",
+           19,
+           2,
+           "2023-11-14T22:33:20Z",
+           "bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff",
+           "0014cbd1e051255041224649ef67da8082850856a983",
+           "receive #0",
+           "receive",
+           0,
+           0,
+           null,
+           null,
+           null,
+           null,
+           "[]",
+           "2030-01-01T00:00:03Z",
+           "2030-01-01T00:00:03Z",
+           null,
+           "{\"confirmed\": true, \"source\": \"esplora_scripthash_utxo\"}"
+          ]
+         ]
+        },
+        "wallets": {
+         "upsert": [
+          [
+           1,
+           "a",
+           "w",
+           "p",
+           null,
+           "Cold",
+           "descriptor",
+           "{\"backend\": \"fixture\", \"descriptor\": \"wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)\", \"gap_limit\": 3, \"last_synced_at\": \"2030-01-01T00:00:04Z\"}",
+           "fixed"
+          ]
+         ]
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ ]
+}

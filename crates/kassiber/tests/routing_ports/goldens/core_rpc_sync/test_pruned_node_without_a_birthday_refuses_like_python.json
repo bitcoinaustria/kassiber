@@ -1,0 +1,310 @@
+{
+ "pytest": "tests/test_rust_core_rpc_sync.py::test_pruned_node_without_a_birthday_refuses_like_python",
+ "sessions": [
+  {
+   "args": [
+    "--machine",
+    "--data-root",
+    "{tmp}/rust",
+    "wallets",
+    "sync",
+    "--wallet",
+    "a"
+   ],
+   "cwd": "{repo}",
+   "env": {
+    "COLUMNS": "80",
+    "KASSIBER_AGENT_ACCESS_FILE": "{tmp}/agents.json",
+    "KASSIBER_BACKEND_FIXTURE_BATCH_SIZE": "2",
+    "KASSIBER_BACKEND_FIXTURE_KIND": "bitcoinrpc",
+    "KASSIBER_BACKEND_FIXTURE_PASSWORD": "secret",
+    "KASSIBER_BACKEND_FIXTURE_URL": "http://127.0.0.1:36505",
+    "KASSIBER_BACKEND_FIXTURE_USERNAME": "fixture",
+    "KASSIBER_DEFAULT_BACKEND": "fixture",
+    "KASSIBER_DISABLE_UPDATE_CHECK": "1",
+    "KASSIBER_OFFLINE_PREFERENCE_FILE": "{tmp}/offline.json",
+    "KASSIBER_RUST_TEST_OWNER_ROOT": "{tmp}/owners",
+    "KASSIBER_RUST_TEST_SYNC_NOW": "0",
+    "KASSIBER_RUST_TEST_SYNC_PREFIX": "r0",
+    "KASSIBER_RUST_TEST_SYNC_START": "1700000000",
+    "KASSIBER_TEST_NO_EGRESS": "1",
+    "KASSIBER_UPDATE_CACHE_FILE": "{tmp}/update-cache.json",
+    "KASSIBER_UPDATE_PREFERENCE_FILE": "{tmp}/updates.json",
+    "LANG": "en_US.UTF-8",
+    "LINES": "24",
+    "LOCALAPPDATA": "{tmp}",
+    "TMPDIR": "{tmp}",
+    "USERPROFILE": "{tmp}",
+    "XDG_CONFIG_HOME": "{tmp}/xdg-config",
+    "XDG_DATA_HOME": "{tmp}/xdg-data",
+    "XDG_STATE_HOME": "{tmp}/xdg-state"
+   },
+   "roots": [
+    "{tmp}"
+   ],
+   "recorded_us": [
+    1794333579291378,
+    1794333579291378,
+    1794333581676130
+   ],
+   "setup": [
+    {
+     "mkdir": "{tmp}/python",
+     "mode": 493
+    },
+    {
+     "mkdir": "{tmp}/python/attachments",
+     "mode": 493
+    },
+    {
+     "mkdir": "{tmp}/python/config",
+     "mode": 493
+    },
+    {
+     "write": "{tmp}/python/config/settings.json",
+     "mode": 384,
+     "text": "{\n  \"app\": \"kassiber\",\n  \"paths\": {\n    \"attachments_root\": \"{tmp}/python/attachments\",\n    \"config_root\": \"{tmp}/python/config\",\n    \"data_root\": \"{tmp}/python\",\n    \"database\": \"{tmp}/python/kassiber.sqlite3\",\n    \"env_file\": \"{tmp}/python/config/backends.env\",\n    \"exports_root\": \"{tmp}/python/exports\",\n    \"settings_file\": \"{tmp}/python/config/settings.json\",\n    \"state_root\": \"{tmp}/python\"\n  },\n  \"schema_version\": 1\n}\n"
+    },
+    {
+     "mkdir": "{tmp}/python/exports",
+     "mode": 493
+    },
+    {
+     "mkdir": "{tmp}/rust",
+     "mode": 493
+    },
+    {
+     "book": "{tmp}/rust/kassiber.sqlite3",
+     "create": {
+      "schema": "current",
+      "pragmas": {
+       "user_version": 0,
+       "application_id": 0
+      },
+      "tables": {
+       "chain_analysis_dataset_claims": {
+        "replace": []
+       },
+       "chain_index_clock": {
+        "upsert": [
+         [
+          1,
+          1,
+          2
+         ]
+        ]
+       },
+       "chain_index_dirty": {
+        "upsert": [
+         [
+          1,
+          "profiles",
+          -1,
+          1
+         ],
+         [
+          2,
+          "wallets",
+          -1,
+          2
+         ]
+        ]
+       },
+       "profiles": {
+        "upsert": [
+         [
+          1,
+          "p",
+          "w",
+          "book",
+          "EUR",
+          "generic",
+          365,
+          "FIFO",
+          0,
+          1,
+          "global",
+          0,
+          0,
+          0,
+          0,
+          null,
+          0,
+          null,
+          "fixed",
+          null
+         ]
+        ]
+       },
+       "schema_migration_audits": {
+        "upsert": [
+         [
+          1,
+          "journal-calculation-semantics-adoption-v1",
+          "journal-calculation-semantics-adoption-v1",
+          1,
+          "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
+          "2026-11-10T17:59:37.063Z"
+         ],
+         [
+          2,
+          "wages-acquisition-semantics-v1",
+          "wages-acquisition-semantics-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"affected_transaction_count\":0,\"after\":{\"journal_treatment\":\"basis_bearing_acquisition\"},\"before\":{\"journal_treatment\":\"employment_income\"},\"explanation\":\"Marks wage-bearing journal projections stale so they are rebuilt without employment-income or Kennzahl 172 rows.\",\"name\":\"wages_acquisition_semantics\"}],\"migration\":\"wages-acquisition-semantics-v1\",\"schema_version\":1}",
+          "2026-11-10T17:59:37.064Z"
+         ],
+         [
+          3,
+          "rp2-pool-basis-semantics-v1",
+          "rp2-pool-basis-semantics-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"explanation\":\"Marks previously processed pool journals stale to rebuild holdings with report-cutoff basis; retained journals are unchanged.\",\"name\":\"report_cutoff_pool_basis\"}],\"migration\":\"rp2-pool-basis-semantics-v1\",\"schema_version\":1}",
+          "2026-11-10T17:59:37.064Z"
+         ],
+         [
+          4,
+          "custody-fail-closed-holds-v1",
+          "custody-fail-closed-holds-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"explanation\":\"Marks processed journals stale so unscoped, fan-out, pending and replaced spends are held on the next rebuild; retained journals are unchanged until then.\",\"name\":\"pre_arbitration_custody_holds\"}],\"migration\":\"custody-fail-closed-holds-v1\",\"schema_version\":1}",
+          "2026-11-10T17:59:37.064Z"
+         ],
+         [
+          5,
+          "kassiber-tax-engine-v1",
+          "kassiber-tax-engine-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"explanation\":\"Marks processed journals stale so the next rebuild uses Kassiber's own tax engine at one fixed decimal precision; retained journals are unchanged until then.\",\"name\":\"kassiber_tax_engine\"}],\"migration\":\"kassiber-tax-engine-v1\",\"schema_version\":1}",
+          "2026-11-10T17:59:37.064Z"
+         ],
+         [
+          6,
+          "at-outflow-consumed-regime-v2",
+          "at-outflow-consumed-regime-v2",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+          "2026-11-10T17:59:37.064Z"
+         ],
+         [
+          7,
+          "same-time-source-order-v1",
+          "same-time-source-order-v1",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"same-time-source-order-v1\", \"required_journal_semantics_version\": 8, \"schema_version\": 1}",
+          "2026-11-10T17:59:37.064Z"
+         ],
+         [
+          8,
+          "at-acquisition-valuation-support-v1",
+          "at-acquisition-valuation-support-v1",
+          1,
+          "{\"schema_version\": 1, \"affected_profile_count\": 0, \"explanation\": \"Rebuild Austrian airdrop/hardfork journals with the explicit unsupported-valuation barrier.\"}",
+          "2026-11-10T17:59:37.068Z"
+         ],
+         [
+          9,
+          "custody-partial-payout-pricing-v1",
+          "custody-partial-payout-pricing-v1",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+          "2026-11-10T17:59:37.074Z"
+         ],
+         [
+          10,
+          "custody-legacy-pair-fee-review-v1",
+          "custody-legacy-pair-fee-review-v1",
+          1,
+          "{\"affected_component_count\": 0, \"affected_profile_count\": 0, \"explanation\": \"Legacy pair fee allocations require review; authored economics and retained journals are unchanged.\", \"migration\": \"custody-legacy-pair-fee-review-v1\", \"required_journal_semantics_version\": 7, \"schema_version\": 1}",
+          "2026-11-10T17:59:37Z"
+         ],
+         [
+          11,
+          "price-currency-mismatch-hold-v1",
+          "price-currency-mismatch-hold-v1",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"price-currency-mismatch-hold-v1\", \"required_journal_semantics_version\": 10, \"schema_version\": 1}",
+          "2026-11-10T17:59:37.074Z"
+         ],
+         [
+          12,
+          "stored-error-credentials-v1",
+          "stored-error-credentials-v1",
+          1,
+          "{\"migration\": \"stored-error-credentials-v1\", \"schema_version\": 1, \"scrubbed_value_count\": 0}",
+          "2026-11-10T17:59:37.076Z"
+         ]
+        ]
+       },
+       "settings": {
+        "upsert": [
+         [
+          1,
+          "database_instance_id",
+          "2acdae4933dd485cb0917ffa1d067cce"
+         ],
+         [
+          2,
+          "context_workspace",
+          "w"
+         ],
+         [
+          3,
+          "context_profile",
+          "p"
+         ]
+        ]
+       },
+       "wallets": {
+        "upsert": [
+         [
+          1,
+          "a",
+          "w",
+          "p",
+          null,
+          "Cold",
+          "descriptor",
+          "{\"descriptor\": \"wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)\", \"gap_limit\": 3, \"backend\": \"fixture\"}",
+          "fixed"
+         ]
+        ]
+       },
+       "workspaces": {
+        "upsert": [
+         [
+          1,
+          "w",
+          "ws",
+          "fixed"
+         ]
+        ]
+       }
+      }
+     }
+    }
+   ],
+   "tape": {"templates":["POST / HTTP/1.1\r\nHost: 127.0.0.1:36505\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nContent-Type: application/json\r\nUser-Agent: kassiber/0.22.78\r\nAuthorization: Basic Zml4dHVyZTpzZWNyZXQ=\r\nContent-Length: 80\r\n\r\n{\"id\":\"kassiber-listwallets\",\"jsonrpc\":\"1.0\",\"method\":\"listwallets\",\"params\":[]}","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Type: application/json\r\nContent-Length: 59\r\n\r\n","{\"result\": [], \"error\": null, \"id\": \"kassiber-listwallets\"}","POST / HTTP/1.1\r\nHost: 127.0.0.1:36505\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nContent-Type: application/json\r\nUser-Agent: kassiber/0.22.78\r\nAuthorization: Basic Zml4dHVyZTpzZWNyZXQ=\r\nContent-Length: 95\r\n\r\n{\"id\":\"kassiber-loadwallet\",\"jsonrpc\":\"1.0\",\"method\":\"loadwallet\",\"params\":[\"kassiber-a\",true]}","HTTP/1.0 500 Internal Server Error\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Type: application/json\r\nContent-Length: 105\r\n\r\n","{\"result\": null, \"error\": {\"code\": -18, \"message\": \"Wallet file not found\"}, \"id\": \"kassiber-loadwallet\"}","POST / HTTP/1.1\r\nHost: 127.0.0.1:36505\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nContent-Type: application/json\r\nUser-Agent: kassiber/0.22.78\r\nAuthorization: Basic Zml4dHVyZTpzZWNyZXQ=\r\nContent-Length: 123\r\n\r\n{\"id\":\"kassiber-createwallet\",\"jsonrpc\":\"1.0\",\"method\":\"createwallet\",\"params\":[\"kassiber-a\",true,true,\"\",false,true,true]}","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Type: application/json\r\nContent-Length: 80\r\n\r\n","{\"result\": {\"name\": \"kassiber-a\"}, \"error\": null, \"id\": \"kassiber-createwallet\"}","POST / HTTP/1.1\r\nHost: 127.0.0.1:36505\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nContent-Type: application/json\r\nUser-Agent: kassiber/0.22.78\r\nAuthorization: Basic Zml4dHVyZTpzZWNyZXQ=\r\nContent-Length: 235\r\n\r\n{\"id\":\"kassiber-getdescriptorinfo\",\"jsonrpc\":\"1.0\",\"method\":\"getdescriptorinfo\",\"params\":[\"wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)\"]}","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Type: application/json\r\nContent-Length: 248\r\n\r\n","{\"result\": {\"descriptor\": \"wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)#fixture0\", \"isrange\": true}, \"error\": null, \"id\": \"kassiber-getdescriptorinfo\"}","POST / HTTP/1.1\r\nHost: 127.0.0.1:36505\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nContent-Type: application/json\r\nUser-Agent: kassiber/0.22.78\r\nAuthorization: Basic Zml4dHVyZTpzZWNyZXQ=\r\nContent-Length: 235\r\n\r\n{\"id\":\"kassiber-getdescriptorinfo\",\"jsonrpc\":\"1.0\",\"method\":\"getdescriptorinfo\",\"params\":[\"wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/1/*)\"]}","{\"result\": {\"descriptor\": \"wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/1/*)#fixture0\", \"isrange\": true}, \"error\": null, \"id\": \"kassiber-getdescriptorinfo\"}","POST / HTTP/1.1\r\nHost: 127.0.0.1:36505\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nContent-Type: application/json\r\nUser-Agent: kassiber/0.22.78\r\nAuthorization: Basic Zml4dHVyZTpzZWNyZXQ=\r\nContent-Length: 92\r\n\r\n{\"id\":\"kassiber-getblockchaininfo\",\"jsonrpc\":\"1.0\",\"method\":\"getblockchaininfo\",\"params\":[]}","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Type: application/json\r\nContent-Length: 110\r\n\r\n","{\"result\": {\"chain\": \"main\", \"blocks\": 20, \"pruned\": true}, \"error\": null, \"id\": \"kassiber-getblockchaininfo\"}"],"connections":[[1,false,"127.0.0.1",36505,1,null,[["w",319,[0]],["r",[1]],["r",[2]]]],[2,false,"127.0.0.1",36505,1,null,[["w",334,[3]],["r",[4]],["r",[5]]]],[3,false,"127.0.0.1",36505,1,null,[["w",363,[6]],["r",[7]],["r",[8]]]],[4,false,"127.0.0.1",36505,1,null,[["w",475,[9]],["r",[10]],["r",[11]]]],[5,false,"127.0.0.1",36505,1,null,[["w",475,[12]],["r",[10]],["r",[13]]]],[6,false,"127.0.0.1",36505,1,null,[["w",331,[14]],["r",[15]],["r",[16]]]]]},
+   "expect": {
+    "exit": 1,
+    "stdout": "{\n  \"kind\": \"error\",\n  \"schema_version\": 1,\n  \"error\": {\n    \"code\": \"bitcoinrpc_birthday_required\",\n    \"message\": \"A wallet birthday is required when Bitcoin Core is pruned\",\n    \"hint\": \"Set the wallet's real first-use date, or use an unpruned Core node or archival backend.\",\n    \"details\": {\n      \"earliest_retained_at\": null,\n      \"pruneheight\": null\n    },\n    \"retryable\": false,\n    \"debug\": null\n  }\n}\n",
+    "stderr": "",
+    "changes": {
+     "{tmp}/rust/attachments": {
+      "dir": true
+     },
+     "{tmp}/rust/config": {
+      "dir": true
+     },
+     "{tmp}/rust/config/settings.json": {
+      "mode": 384,
+      "text": "{\n  \"app\": \"kassiber\",\n  \"paths\": {\n    \"attachments_root\": \"{tmp}/rust/attachments\",\n    \"config_root\": \"{tmp}/rust/config\",\n    \"data_root\": \"{tmp}/rust\",\n    \"database\": \"{tmp}/rust/kassiber.sqlite3\",\n    \"env_file\": \"{tmp}/rust/config/backends.env\",\n    \"exports_root\": \"{tmp}/rust/exports\",\n    \"settings_file\": \"{tmp}/rust/config/settings.json\",\n    \"state_root\": \"{tmp}/rust\"\n  },\n  \"schema_version\": 1\n}\n"
+     },
+     "{tmp}/rust/exports": {
+      "dir": true
+     }
+    }
+   }
+  }
+ ]
+}

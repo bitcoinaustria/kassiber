@@ -512,6 +512,49 @@ without naming them, such as the machine-wide project catalog, are neither
 recorded nor restored; and a wrapper candidate's own process id is what gets
 mapped, not its child's.
 
+### Frozen routing replays
+
+`cargo test -p kassiber --features test-harness --test routing_ports` holds
+the Rust replacements for the pytest parity modules whose tests were the only
+killers of `crates/wallets/scripts/routing_mutations.json` entries (plan 22,
+D1 option 3). Each test is named after the pytest test it replaces and
+replays the `kassiber` processes that test started, from a golden under
+`crates/kassiber/tests/routing_ports/goldens/` recorded once where Rust and
+the Python reference agreed. A session lists:
+
+- `setup`: what brings the state from the previous session's end to this
+  one's start (books as row patches against the current-schema manifest or
+  the last state, other files whole);
+- `args`, `env`, `cwd`, `stdin` and `tape`: the inputs; the tape is
+  `kassiber-net`'s test-observer tape of the fake servers' replies (stdin
+  chunks also wait for the reply to the previous request);
+- `expect`: exit status, stdout, stderr, and every row and file the process
+  changed under its roots.
+
+Paths are templated (`{tmp}`, `{repo}`). Generated uuids and 32-digit hex
+ids compare by order of first appearance and are restored to the recorded
+values after each session, so later sessions and orderings by id see the
+recorded state; ISO timestamps inside the run's window compare as `<now>`;
+wall-clock `elapsed_ms` is 0. Values over 16 KiB, and table changes of more
+than 2,000 rows, compare by length or count and an FNV-1a 64 digest. A test
+may mask further clock-derived numbers (`age_seconds`). A client whose
+request order varies between runs is answered by a loopback JSON-RPC server
+built from the tape (`replay_served`, `kassiber-net`'s `FakeJsonRpc`) instead
+of the byte tape.
+
+The replays run on strict tapes (`KASSIBER_TEST_NET_TAPE=replay-strict:`):
+a request no recording began with, a connect with no recording left, or a
+connection writing past its recording's bytes is noted in
+`<tape>.misses`, and any note fails the replay even when the product
+swallows the failed request. A daemon session sends each stdin chunk once
+the output reached what the recording had seen, or once every earlier
+request has its final reply.
+
+After a reviewed behaviour change, `KASSIBER_GOLDEN_WRITE=1` rewrites the
+`expect` blocks from the current binary instead of comparing; it refuses to
+run under `CI`. Diff the goldens and explain every change; tax numbers,
+stored data and exports need the owner's sign-off.
+
 ## Tiers
 
 | Tier | Command | Docker | Purpose |

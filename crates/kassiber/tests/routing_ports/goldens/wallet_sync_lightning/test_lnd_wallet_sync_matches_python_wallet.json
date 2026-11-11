@@ -1,0 +1,2097 @@
+{
+ "pytest": "tests/test_rust_wallet_sync_lightning.py::test_lnd_wallet_sync_matches_python[wallet]",
+ "sessions": [
+  {
+   "args": [
+    "--data-root",
+    "{tmp}/data",
+    "--machine",
+    "wallets",
+    "sync",
+    "--wallet",
+    "Cold"
+   ],
+   "cwd": "{repo}",
+   "env": {
+    "KASSIBER_DISABLE_UPDATE_CHECK": "1",
+    "KASSIBER_OFFLINE_PREFERENCE_FILE": "{tmp}/offline.json",
+    "KASSIBER_RUST_TEST_OWNER_ROOT": "{tmp}/owners",
+    "KASSIBER_RUST_TEST_PROBE": "1",
+    "KASSIBER_TEST_NO_EGRESS": "1",
+    "LANG": "en_US.UTF-8",
+    "TMPDIR": "{tmp}/systmp",
+    "XDG_CONFIG_HOME": "{tmp}/config",
+    "XDG_DATA_HOME": "{tmp}/xdg-data",
+    "XDG_STATE_HOME": "{tmp}/state"
+   },
+   "roots": [
+    "{tmp}"
+   ],
+   "recorded_us": [
+    1794333640971855,
+    1794333640971855,
+    1794333640984180
+   ],
+   "setup": [
+    {
+     "mkdir": "{tmp}/attachments",
+     "mode": 493
+    },
+    {
+     "mkdir": "{tmp}/config",
+     "mode": 493
+    },
+    {
+     "write": "{tmp}/config/settings.json",
+     "mode": 384,
+     "text": "{\n  \"app\": \"kassiber\",\n  \"paths\": {\n    \"attachments_root\": \"{tmp}/attachments\",\n    \"config_root\": \"{tmp}/config\",\n    \"data_root\": \"{tmp}/data\",\n    \"database\": \"{tmp}/data/kassiber.sqlite3\",\n    \"env_file\": \"{tmp}/config/backends.env\",\n    \"exports_root\": \"{tmp}/exports\",\n    \"settings_file\": \"{tmp}/config/settings.json\",\n    \"state_root\": \"{tmp}\"\n  },\n  \"schema_version\": 1\n}\n"
+    },
+    {
+     "mkdir": "{tmp}/data",
+     "mode": 493
+    },
+    {
+     "book": "{tmp}/data/kassiber.sqlite3",
+     "create": {
+      "schema": "current",
+      "pragmas": {
+       "user_version": 0,
+       "application_id": 0
+      },
+      "tables": {
+       "accounts": {
+        "upsert": [
+         [
+          1,
+          "acct",
+          "ws",
+          "p",
+          "treasury",
+          "Treasury",
+          "asset",
+          null,
+          "fixed"
+         ]
+        ]
+       },
+       "backends": {
+        "upsert": [
+         [
+          1,
+          "fake",
+          "lnd",
+          null,
+          null,
+          "http://127.0.0.1:34651",
+          null,
+          "aabb",
+          null,
+          2,
+          null,
+          "{}",
+          null,
+          "fixed",
+          "fixed"
+         ]
+        ]
+       },
+       "chain_analysis_dataset_claims": {
+        "replace": []
+       },
+       "chain_index_clock": {
+        "upsert": [
+         [
+          1,
+          1,
+          28
+         ]
+        ]
+       },
+       "chain_index_dirty": {
+        "upsert": [
+         [
+          1,
+          "transactions",
+          -1,
+          1
+         ],
+         [
+          2,
+          "transaction_graph_cache",
+          -1,
+          2
+         ],
+         [
+          3,
+          "wallet_utxos",
+          -1,
+          3
+         ],
+         [
+          4,
+          "chain_analysis_observations",
+          -1,
+          4
+         ],
+         [
+          5,
+          "chain_analysis_reference_assertions",
+          -1,
+          5
+         ],
+         [
+          6,
+          "wallets",
+          -1,
+          28
+         ],
+         [
+          7,
+          "profiles",
+          -1,
+          16
+         ],
+         [
+          8,
+          "journal_custody_decisions",
+          -1,
+          26
+         ],
+         [
+          9,
+          "journal_custody_economic_relations",
+          -1,
+          27
+         ],
+         [
+          10,
+          "chain_analysis_labels",
+          -1,
+          10
+         ],
+         [
+          11,
+          "chain_analysis_datasets",
+          -1,
+          11
+         ],
+         [
+          12,
+          "chain_analysis_dataset_claims",
+          -1,
+          12
+         ],
+         [
+          13,
+          "book_network_bindings",
+          -1,
+          13
+         ],
+         [
+          14,
+          "chain_analysis_acquisition_grants",
+          -1,
+          14
+         ],
+         [
+          15,
+          "transactions",
+          1,
+          20
+         ],
+         [
+          16,
+          "transactions",
+          2,
+          21
+         ],
+         [
+          17,
+          "transactions",
+          3,
+          22
+         ],
+         [
+          18,
+          "transactions",
+          4,
+          23
+         ],
+         [
+          19,
+          "transactions",
+          5,
+          24
+         ]
+        ]
+       },
+       "journal_account_holdings": {
+        "upsert": [
+         [
+          1,
+          "az",
+          "ws",
+          "p",
+          null,
+          "treasury",
+          "Treasury",
+          "BTC",
+          111111111111,
+          {
+           "real": "40c81cd6e63c53d3"
+          },
+          "fixed"
+         ],
+         [
+          2,
+          "aa",
+          "ws",
+          "p",
+          null,
+          "treasury",
+          "Treasury",
+          "BTC",
+          1,
+          {
+           "real": "3e7ad7f29abcaf48"
+          },
+          "fixed"
+         ],
+         [
+          3,
+          "l",
+          "ws",
+          "p",
+          null,
+          "other",
+          "Other",
+          "LBTC",
+          789001,
+          {
+           "real": "3fbf9add37c11162"
+          },
+          "fixed"
+         ],
+         [
+          4,
+          "zero",
+          "ws",
+          "p",
+          null,
+          null,
+          "Fallback",
+          "BTC",
+          0,
+          {
+           "real": "4014000000000000"
+          },
+          "fixed"
+         ],
+         [
+          5,
+          "negative",
+          "ws",
+          "p",
+          null,
+          null,
+          "Fallback",
+          "BTC",
+          -1,
+          {
+           "real": "4014000000000000"
+          },
+          "fixed"
+         ],
+         [
+          6,
+          "fallback",
+          "ws",
+          "p",
+          null,
+          null,
+          "Fallback",
+          "OTHER",
+          100000000001,
+          {
+           "real": "40c34a4587f00964"
+          },
+          "fixed"
+         ]
+        ]
+       },
+       "journal_custody_decisions": {
+        "upsert": [
+         [
+          1,
+          "0000000000000000000000000000000000000000000000000000000000000001",
+          "ws",
+          "p",
+          "out",
+          "earn",
+          "0000000000000000000000000000000000000000000000000000000000000002",
+          0,
+          10001,
+          "0000000000000000000000000000000000000000000000000000000000000003",
+          0,
+          10001,
+          "cold",
+          "hot",
+          "mainnet",
+          "mainnet",
+          "bitcoin",
+          "liquid",
+          "BTC",
+          "LBTC",
+          "internal_reviewed",
+          "eligible",
+          null,
+          "reviewed",
+          null,
+          null,
+          "2024-12-31T23:30:00Z",
+          "2025-01-02T00:00:00Z",
+          "b"
+         ],
+         [
+          2,
+          "0000000000000000000000000000000000000000000000000000000000000004",
+          "ws",
+          "p",
+          "out",
+          "in",
+          "0000000000000000000000000000000000000000000000000000000000000002",
+          10001,
+          20002,
+          "0000000000000000000000000000000000000000000000000000000000000003",
+          10001,
+          20002,
+          "cold",
+          "cold",
+          "mainnet",
+          "mainnet",
+          "bitcoin",
+          "bitcoin",
+          "BTC",
+          "BTC",
+          "internal_reviewed",
+          "eligible",
+          null,
+          "reviewed",
+          null,
+          null,
+          "2024-12-31T23:30:00Z",
+          "2025-01-02T00:00:00Z",
+          "a"
+         ]
+        ]
+       },
+       "journal_custody_economic_relations": {
+        "upsert": [
+         [
+          1,
+          "0000000000000000000000000000000000000000000000000000000000000005",
+          "ws",
+          "p",
+          "direct_payout",
+          "out",
+          null,
+          null,
+          "BTC",
+          "LBTC",
+          10001,
+          9999,
+          "eligible",
+          "2024-12-31T23:30:00Z",
+          null,
+          "c"
+         ]
+        ]
+       },
+       "journal_entries": {
+        "upsert": [
+         [
+          1,
+          "z",
+          "ws",
+          "p",
+          "out",
+          "cold",
+          "acct",
+          "2024-12-31T23:30:00Z",
+          "disposal",
+          "BTC",
+          -100000001,
+          {
+           "real": "4028ae147ae147ae"
+          },
+          {
+           "real": "0000000000000000"
+          },
+          {
+           "real": "402400000055e63c"
+          },
+          {
+           "real": "4028ae147ae147ae"
+          },
+          {
+           "real": "4002b851ea2d85ca"
+          },
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          "Split z",
+          null,
+          null,
+          "long_term",
+          "same"
+         ],
+         [
+          2,
+          "a",
+          "ws",
+          "p",
+          "out",
+          "cold",
+          "acct",
+          "2024-12-31T23:30:00Z",
+          "disposal",
+          "BTC",
+          -23456788,
+          {
+           "real": "4002a3d70a3d70a4"
+          },
+          {
+           "real": "0000000000000000"
+          },
+          {
+           "real": "3ff3ae147ae147ae"
+          },
+          {
+           "real": "4002a3d70a3d70a4"
+          },
+          {
+           "real": "3ff199999999999a"
+          },
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          "Split a",
+          "neu_gain",
+          174,
+          "short_term",
+          "same"
+         ],
+         [
+          3,
+          "first",
+          "ws",
+          "p",
+          "out",
+          "cold",
+          "acct",
+          "2024-12-31T23:30:00Z",
+          "disposal",
+          "BTC",
+          -3,
+          {
+           "real": "0000000000000000"
+          },
+          {
+           "real": "0000000000000000"
+          },
+          {
+           "real": "0000000000000000"
+          },
+          {
+           "real": "0000000000000000"
+          },
+          {
+           "real": "0000000000000000"
+          },
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          "Earlier creation",
+          "alt_taxfree",
+          null,
+          null,
+          "before"
+         ],
+         [
+          4,
+          "income",
+          "ws",
+          "p",
+          "earn",
+          "hot",
+          "acct",
+          "2025-01-02T00:00:00Z",
+          "income",
+          "LBTC",
+          789001,
+          {
+           "real": "3fbf7ced916872b0"
+          },
+          {
+           "real": "0000000000000000"
+          },
+          {
+           "real": "3fbf7ced916872b0"
+          },
+          {
+           "real": "3fbf7ced916872b0"
+          },
+          {
+           "real": "3fbf7ced916872b0"
+          },
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          "Income €",
+          "income_general",
+          172,
+          "income",
+          "fixed"
+         ],
+         [
+          5,
+          "hidden",
+          "ws",
+          "p",
+          "no-tax",
+          "hot",
+          "acct",
+          "2025-02-01T00:00:00Z",
+          "disposal",
+          "BTC",
+          -100001,
+          {
+           "real": "4059000000000000"
+          },
+          {
+           "real": "0000000000000000"
+          },
+          {
+           "real": "4024000000000000"
+          },
+          {
+           "real": "4059000000000000"
+          },
+          {
+           "real": "4056800000000000"
+          },
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          "short_term",
+          "fixed"
+         ],
+         [
+          6,
+          "swap",
+          "ws",
+          "p",
+          "out",
+          "cold",
+          "acct",
+          "2024-12-31T23:30:00Z",
+          "disposal",
+          "BTC",
+          -100001,
+          {
+           "real": "4059000000000000"
+          },
+          {
+           "real": "0000000000000000"
+          },
+          {
+           "real": "4024000000000000"
+          },
+          {
+           "real": "4059000000000000"
+          },
+          {
+           "real": "4056800000000000"
+          },
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          "neu_swap",
+          null,
+          "short_term",
+          "fixed"
+         ],
+         [
+          7,
+          "fee",
+          "ws",
+          "p",
+          "out",
+          "cold",
+          "acct",
+          "2024-12-31T23:30:00Z",
+          "fee",
+          "BTC",
+          -456,
+          {
+           "real": "3f847ae147ae147b"
+          },
+          {
+           "real": "0000000000000000"
+          },
+          {
+           "real": "3f847ae147ae147b"
+          },
+          {
+           "real": "0000000000000000"
+          },
+          {
+           "real": "0000000000000000"
+          },
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          "Fee",
+          null,
+          null,
+          null,
+          "fixed"
+         ]
+        ]
+       },
+       "journal_quarantines": {
+        "upsert": [
+         [
+          1,
+          "no-tax",
+          "ws",
+          "p",
+          "missing_price",
+          "{}",
+          "fixed"
+         ]
+        ]
+       },
+       "journal_wallet_holdings": {
+        "upsert": [
+         [
+          1,
+          "wz",
+          "ws",
+          "p",
+          "cold",
+          "Cold",
+          "treasury",
+          "BTC",
+          111111111111,
+          {
+           "real": "40c81cd6e63c53d3"
+          },
+          "fixed"
+         ],
+         [
+          2,
+          "wa",
+          "ws",
+          "p",
+          "cold",
+          "Cold",
+          "treasury",
+          "BTC",
+          1,
+          {
+           "real": "3e7ad7f29abcaf48"
+          },
+          "fixed"
+         ],
+         [
+          3,
+          "wh",
+          "ws",
+          "p",
+          "hot",
+          "Hot",
+          "treasury",
+          "LBTC",
+          789001,
+          {
+           "real": "3fbf9add37c11162"
+          },
+          "fixed"
+         ],
+         [
+          4,
+          "wn",
+          "ws",
+          "p",
+          "hot",
+          "Hot",
+          "treasury",
+          "BTC",
+          -1,
+          {
+           "real": "401c000000000000"
+          },
+          "fixed"
+         ],
+         [
+          5,
+          "w0",
+          "ws",
+          "p",
+          "hot",
+          "Hot",
+          "treasury",
+          "BTC",
+          0,
+          {
+           "real": "401c000000000000"
+          },
+          "fixed"
+         ],
+         [
+          6,
+          "wo",
+          "ws",
+          "p",
+          "other",
+          "Other",
+          "treasury",
+          "BTC",
+          100000000001,
+          {
+           "real": "3ff0000000000000"
+          },
+          "fixed"
+         ]
+        ]
+       },
+       "profiles": {
+        "upsert": [
+         [
+          1,
+          "p",
+          "ws",
+          "Book",
+          "EUR",
+          "generic",
+          365,
+          "FIFO",
+          0,
+          1,
+          "global",
+          7,
+          7,
+          0,
+          0,
+          "2026-01-01T00:00:00Z",
+          4,
+          null,
+          "fixed",
+          null
+         ],
+         [
+          2,
+          "other",
+          "ws",
+          "Other",
+          "USD",
+          "generic",
+          365,
+          "FIFO",
+          0,
+          1,
+          "global",
+          0,
+          0,
+          0,
+          0,
+          null,
+          0,
+          null,
+          "fixed",
+          null
+         ]
+        ]
+       },
+       "schema_migration_audits": {
+        "upsert": [
+         [
+          1,
+          "journal-calculation-semantics-adoption-v1",
+          "journal-calculation-semantics-adoption-v1",
+          1,
+          "{\"affected_profile_count\":0,\"explanation\":\"Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.\",\"migration\":\"journal-calculation-semantics-adoption-v1\",\"required_journal_semantics_version\":1,\"schema_version\":1}",
+          "2026-11-10T18:00:39.473Z"
+         ],
+         [
+          2,
+          "wages-acquisition-semantics-v1",
+          "wages-acquisition-semantics-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"affected_transaction_count\":0,\"after\":{\"journal_treatment\":\"basis_bearing_acquisition\"},\"before\":{\"journal_treatment\":\"employment_income\"},\"explanation\":\"Marks wage-bearing journal projections stale so they are rebuilt without employment-income or Kennzahl 172 rows.\",\"name\":\"wages_acquisition_semantics\"}],\"migration\":\"wages-acquisition-semantics-v1\",\"schema_version\":1}",
+          "2026-11-10T18:00:39.476Z"
+         ],
+         [
+          3,
+          "rp2-pool-basis-semantics-v1",
+          "rp2-pool-basis-semantics-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"explanation\":\"Marks previously processed pool journals stale to rebuild holdings with report-cutoff basis; retained journals are unchanged.\",\"name\":\"report_cutoff_pool_basis\"}],\"migration\":\"rp2-pool-basis-semantics-v1\",\"schema_version\":1}",
+          "2026-11-10T18:00:39.476Z"
+         ],
+         [
+          4,
+          "custody-fail-closed-holds-v1",
+          "custody-fail-closed-holds-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"explanation\":\"Marks processed journals stale so unscoped, fan-out, pending and replaced spends are held on the next rebuild; retained journals are unchanged until then.\",\"name\":\"pre_arbitration_custody_holds\"}],\"migration\":\"custody-fail-closed-holds-v1\",\"schema_version\":1}",
+          "2026-11-10T18:00:39.476Z"
+         ],
+         [
+          5,
+          "kassiber-tax-engine-v1",
+          "kassiber-tax-engine-v1",
+          1,
+          "{\"changes\":[{\"affected_profile_count\":0,\"explanation\":\"Marks processed journals stale so the next rebuild uses Kassiber's own tax engine at one fixed decimal precision; retained journals are unchanged until then.\",\"name\":\"kassiber_tax_engine\"}],\"migration\":\"kassiber-tax-engine-v1\",\"schema_version\":1}",
+          "2026-11-10T18:00:39.476Z"
+         ],
+         [
+          6,
+          "at-outflow-consumed-regime-v2",
+          "at-outflow-consumed-regime-v2",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"at-outflow-consumed-regime-v2\", \"required_journal_semantics_version\": 2, \"schema_version\": 1}",
+          "2026-11-10T18:00:39.476Z"
+         ],
+         [
+          7,
+          "same-time-source-order-v1",
+          "same-time-source-order-v1",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"same-time-source-order-v1\", \"required_journal_semantics_version\": 8, \"schema_version\": 1}",
+          "2026-11-10T18:00:39.477Z"
+         ],
+         [
+          8,
+          "at-acquisition-valuation-support-v1",
+          "at-acquisition-valuation-support-v1",
+          1,
+          "{\"schema_version\": 1, \"affected_profile_count\": 0, \"explanation\": \"Rebuild Austrian airdrop/hardfork journals with the explicit unsupported-valuation barrier.\"}",
+          "2026-11-10T18:00:39.492Z"
+         ],
+         [
+          9,
+          "custody-partial-payout-pricing-v1",
+          "custody-partial-payout-pricing-v1",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"custody-partial-payout-pricing-v1\", \"schema_version\": 1}",
+          "2026-11-10T18:00:39.497Z"
+         ],
+         [
+          10,
+          "custody-legacy-pair-fee-review-v1",
+          "custody-legacy-pair-fee-review-v1",
+          1,
+          "{\"affected_component_count\": 0, \"affected_profile_count\": 0, \"explanation\": \"Legacy pair fee allocations require review; authored economics and retained journals are unchanged.\", \"migration\": \"custody-legacy-pair-fee-review-v1\", \"required_journal_semantics_version\": 7, \"schema_version\": 1}",
+          "2026-11-10T18:00:39Z"
+         ],
+         [
+          11,
+          "price-currency-mismatch-hold-v1",
+          "price-currency-mismatch-hold-v1",
+          1,
+          "{\"affected_profile_count\": 0, \"migration\": \"price-currency-mismatch-hold-v1\", \"required_journal_semantics_version\": 10, \"schema_version\": 1}",
+          "2026-11-10T18:00:39.497Z"
+         ],
+         [
+          12,
+          "stored-error-credentials-v1",
+          "stored-error-credentials-v1",
+          1,
+          "{\"migration\": \"stored-error-credentials-v1\", \"schema_version\": 1, \"scrubbed_value_count\": 0}",
+          "2026-11-10T18:00:39.499Z"
+         ]
+        ]
+       },
+       "settings": {
+        "upsert": [
+         [
+          2,
+          "context_workspace",
+          "ws"
+         ],
+         [
+          3,
+          "context_profile",
+          "p"
+         ],
+         [
+          4,
+          "database_instance_id",
+          "0123456789abcdef0123456789abcdef"
+         ]
+        ]
+       },
+       "tags": {
+        "upsert": [
+         [
+          1,
+          "tag1",
+          "ws",
+          "p",
+          "one",
+          "One",
+          "fixed"
+         ],
+         [
+          2,
+          "tag2",
+          "ws",
+          "p",
+          "two",
+          "Two",
+          "fixed"
+         ]
+        ]
+       },
+       "transaction_tags": {
+        "upsert": [
+         [
+          1,
+          "in",
+          "tag1"
+         ],
+         [
+          2,
+          "in",
+          "tag2"
+         ],
+         [
+          3,
+          "excluded",
+          "tag1"
+         ]
+        ]
+       },
+       "transactions": {
+        "upsert": [
+         [
+          1,
+          "in",
+          "ws",
+          "p",
+          "cold",
+          null,
+          null,
+          "in",
+          "2024-01-01T00:00:00Z",
+          null,
+          "inbound",
+          "BTC",
+          123456789001,
+          123,
+          0,
+          null,
+          {
+           "real": "40dd4c0000000000"
+          },
+          null,
+          null,
+          "30000.12345678901234567890123456789",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          "deposit",
+          null,
+          null,
+          " Has note ",
+          0,
+          "{}",
+          null,
+          null,
+          null,
+          null,
+          "a"
+         ],
+         [
+          2,
+          "out",
+          "ws",
+          "p",
+          "cold",
+          null,
+          null,
+          "out",
+          "2024-12-31T23:30:00Z",
+          null,
+          "outbound",
+          "BTC",
+          123456789,
+          456,
+          0,
+          null,
+          {
+           "real": "40e3880000000000"
+          },
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          "withdrawal",
+          null,
+          null,
+          "",
+          0,
+          "{}",
+          null,
+          null,
+          null,
+          null,
+          "b"
+         ],
+         [
+          3,
+          "earn",
+          "ws",
+          "p",
+          "hot",
+          null,
+          null,
+          "earn",
+          "2025-01-02T00:00:00Z",
+          null,
+          "inbound",
+          "LBTC",
+          789001,
+          789,
+          0,
+          null,
+          null,
+          {
+           "real": "3fbf7ced916872b0"
+          },
+          null,
+          null,
+          "0.123456789123456789",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          "interest",
+          null,
+          null,
+          null,
+          0,
+          "{}",
+          null,
+          null,
+          null,
+          null,
+          "c"
+         ],
+         [
+          4,
+          "no-tax",
+          "ws",
+          "p",
+          "hot",
+          null,
+          null,
+          "no-tax",
+          "2025-02-01T00:00:00Z",
+          null,
+          "outbound",
+          "BTC",
+          100001,
+          0,
+          0,
+          null,
+          {
+           "real": "40ed4c0000000000"
+          },
+          null,
+          null,
+          "60000.123",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          0,
+          null,
+          null,
+          null,
+          null,
+          "withdrawal",
+          null,
+          null,
+          null,
+          0,
+          "{}",
+          null,
+          null,
+          null,
+          null,
+          "d"
+         ],
+         [
+          5,
+          "excluded",
+          "ws",
+          "p",
+          "cold",
+          null,
+          null,
+          "excluded",
+          "2026-02-01T00:00:00Z",
+          null,
+          "inbound",
+          "BTC",
+          999999,
+          9,
+          0,
+          null,
+          {
+           "real": "40f5f90000000000"
+          },
+          null,
+          null,
+          "90000",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          "deposit",
+          null,
+          null,
+          "Excluded",
+          1,
+          "{}",
+          null,
+          null,
+          null,
+          null,
+          "e"
+         ]
+        ]
+       },
+       "wallets": {
+        "upsert": [
+         [
+          1,
+          "cold",
+          "ws",
+          "p",
+          "acct",
+          "Cold",
+          "lnd",
+          "{\"backend\": \"fake\"}",
+          "fixed"
+         ],
+         [
+          2,
+          "hot",
+          "ws",
+          "p",
+          "acct",
+          "Hot",
+          "custom",
+          "{}",
+          "fixed"
+         ],
+         [
+          3,
+          "other",
+          "ws",
+          "other",
+          null,
+          "Other",
+          "custom",
+          "{}",
+          "fixed"
+         ]
+        ]
+       },
+       "workspaces": {
+        "upsert": [
+         [
+          1,
+          "ws",
+          "Main",
+          "fixed"
+         ]
+        ]
+       }
+      }
+     }
+    },
+    {
+     "mkdir": "{tmp}/exports",
+     "mode": 493
+    }
+   ],
+   "expect": {
+    "exit": 0,
+    "stdout": "wallets.sync\n",
+    "stderr": "",
+    "changes": {}
+   }
+  },
+  {
+   "args": [
+    "--data-root",
+    "{tmp}/data",
+    "--machine",
+    "wallets",
+    "sync",
+    "--wallet",
+    "Cold"
+   ],
+   "cwd": "{repo}",
+   "env": {
+    "KASSIBER_DISABLE_UPDATE_CHECK": "1",
+    "KASSIBER_OFFLINE_PREFERENCE_FILE": "{tmp}/offline.json",
+    "KASSIBER_RUST_TEST_OWNER_ROOT": "{tmp}/owners",
+    "KASSIBER_RUST_TEST_SYNC_HANDOFF": "1",
+    "KASSIBER_TEST_NO_EGRESS": "1",
+    "LANG": "en_US.UTF-8",
+    "TMPDIR": "{tmp}/systmp",
+    "XDG_CONFIG_HOME": "{tmp}/config",
+    "XDG_DATA_HOME": "{tmp}/xdg-data",
+    "XDG_STATE_HOME": "{tmp}/state"
+   },
+   "roots": [
+    "{tmp}"
+   ],
+   "recorded_us": [
+    1794333640971855,
+    1794333641097651,
+    1794333641381437
+   ],
+   "tape": {"templates":["GET /v1/getinfo HTTP/1.1\r\nHost: 127.0.0.1:34651\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nContent-Type: application/json\r\nGrpc-Metadata-macaroon: aabb\r\nUser-Agent: kassiber/0.1.0\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 161\r\n\r\n","{\"identity_pubkey\": \"\u000144\", \"alias\": \"LND\", \"chains\": [{\"chain\": \"bitcoin\", \"network\": \"regtest\"}]}","GET /v1/payments?include_incomplete=false&index_offset=0&max_payments=1000&reversed=false HTTP/1.1\r\nHost: 127.0.0.1:34651\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nContent-Type: application/json\r\nGrpc-Metadata-macaroon: aabb\r\nUser-Agent: kassiber/0.1.0\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 719\r\n\r\n","{\"payments\": [{\"payment_hash\": \"\u0001\", \"value_msat\": \"10000\", \"fee_msat\": \"250\", \"status\": \"SUCCEEDED\", \"payment_index\": \"1\", \"creation_date\": \"1736460000\", \"htlcs\": [{\"status\": \"SUCCEEDED\", \"resolve_time_ns\": \"1736463000000000000\", \"route\": {\"hops\": [\"private\"]}}]}, {\"payment_hash\": \"\u0001\", \"value_sat\": \"5\", \"value\": \"5\", \"fee\": \"1\", \"status\": \"SUCCEEDED\", \"payment_index\": \"2\", \"creation_time_ns\": \"1736470000000000000\"}, {\"payment_hash\": \"\u0001\", \"value_msat\": \"9\", \"status\": \"FAILED\", \"payment_index\": \"3\"}], \"last_index_offset\": \"3\"}","GET /v1/payments?include_incomplete=false&index_offset=3&max_payments=1000&reversed=false HTTP/1.1\r\nHost: 127.0.0.1:34651\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nContent-Type: application/json\r\nGrpc-Metadata-macaroon: aabb\r\nUser-Agent: kassiber/0.1.0\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 42\r\n\r\n","{\"payments\": [], \"last_index_offset\": \"0\"}","GET /v1/invoices?index_offset=0&num_max_invoices=1000&reversed=false HTTP/1.1\r\nHost: 127.0.0.1:34651\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nContent-Type: application/json\r\nGrpc-Metadata-macaroon: aabb\r\nUser-Agent: kassiber/0.1.0\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 449\r\n\r\n","{\"invoices\": [{\"r_hash\": \"oaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaE=\", \"amt_paid_msat\": \"25000\", \"settled\": true, \"settle_date\": \"1736460000\", \"add_index\": \"1\", \"memo\": \"Coffee\", \"r_preimage\": \"private\"}, {\"r_hash\": \"5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eU=\", \"value\": \"7\", \"state\": \"SETTLED\", \"settle_date\": \"1736461000\", \"add_index\": \"2\"}, {\"r_hash\": \"not-a-hash\", \"value\": \"3\", \"state\": \"OPEN\", \"add_index\": \"3\"}], \"last_index_offset\": \"3\"}","GET /v1/invoices?index_offset=3&num_max_invoices=1000&reversed=false HTTP/1.1\r\nHost: 127.0.0.1:34651\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nContent-Type: application/json\r\nGrpc-Metadata-macaroon: aabb\r\nUser-Agent: kassiber/0.1.0\r\n\r\n","{\"invoices\": [], \"last_index_offset\": \"0\"}","POST /v1/switch HTTP/1.1\r\nHost: 127.0.0.1:34651\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nContent-Type: application/json\r\nGrpc-Metadata-macaroon: aabb\r\nUser-Agent: kassiber/0.1.0\r\nContent-Length: 59\r\n\r\n{\"index_offset\":\"0\",\"num_max_events\":1000,\"start_time\":\"0\"}","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 311\r\n\r\n","{\"forwarding_events\": [{\"timestamp\": \"1736463600\", \"chan_id_in\": \"1\", \"chan_id_out\": \"2\", \"fee_msat\": \"1500\", \"amt_in_msat\": \"101500\", \"amt_out_msat\": \"100000\"}, {\"timestamp_ns\": \"1736553600000000000\", \"chan_id_in\": \"2\", \"chan_id_out\": \"1\", \"fee\": \"2\", \"amt_in\": \"52\", \"amt_out\": \"50\"}], \"last_offset_index\": 2}","POST /v1/switch HTTP/1.1\r\nHost: 127.0.0.1:34651\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nContent-Type: application/json\r\nGrpc-Metadata-macaroon: aabb\r\nUser-Agent: kassiber/0.1.0\r\nContent-Length: 59\r\n\r\n{\"index_offset\":\"2\",\"num_max_events\":1000,\"start_time\":\"0\"}","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 49\r\n\r\n{\"forwarding_events\": [], \"last_offset_index\": 0}","GET /v1/channels HTTP/1.1\r\nHost: 127.0.0.1:34651\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nContent-Type: application/json\r\nGrpc-Metadata-macaroon: aabb\r\nUser-Agent: kassiber/0.1.0\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 307\r\n\r\n","{\"channels\": [{\"channel_point\": \"\u0001:0\", \"chan_id\": \"1\", \"initiator\": true, \"capacity\": \"200000\"}, {\"channel_point\": \"\u0001:1\", \"chan_id\": \"2\", \"initiator\": false, \"capacity\": \"300000\"}]}","GET /v1/channels/closed HTTP/1.1\r\nHost: 127.0.0.1:34651\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nContent-Type: application/json\r\nGrpc-Metadata-macaroon: aabb\r\nUser-Agent: kassiber/0.1.0\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 528\r\n\r\n","{\"channels\": [{\"channel_point\": \"\u0001:0\", \"chan_id\": \"3\", \"open_initiator\": \"INITIATOR_LOCAL\", \"capacity\": \"50000\", \"closing_tx_hash\": \"\u0001\", \"settled_balance\": \"40000\", \"time_locked_balance\": \"1000\", \"resolutions\": [{\"outcome\": \"CLAIMED\", \"sweep_txid\": \"\u0001\", \"outpoint\": \"\u0001:1\"}]}]}"],"connections":[[1,false,"127.0.0.1",34651,1,null,[["w",213,[0]],["r",[1]],["r",[2,"0344444444444444444444444444444444444444444444444444444444444444"]]]],[2,false,"127.0.0.1",34651,1,null,[["w",287,[3]],["r",[4]],["r",[5,"b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2","c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3","d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4"]]]],[3,false,"127.0.0.1",34651,1,null,[["w",287,[6]],["r",[7]],["r",[8]]]],[4,false,"127.0.0.1",34651,1,null,[["w",266,[9]],["r",[10]],["r",[11]]]],[5,false,"127.0.0.1",34651,1,null,[["w",266,[12]],["r",[7]],["r",[13]]]],[6,false,"127.0.0.1",34651,1,null,[["w",292,[14]],["r",[15]],["r",[16]]]],[7,false,"127.0.0.1",34651,1,null,[["w",292,[17]],["r",[18]]]],[8,false,"127.0.0.1",34651,1,null,[["w",214,[19]],["r",[20]],["r",[21,"f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6","a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7"]]]],[9,false,"127.0.0.1",34651,1,null,[["w",221,[22]],["r",[23]],["r",[24,"b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8","c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9","dadadadadadadadadadadadadadadadadadadadadadadadadadadadadadadada","c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9"]]]]]},
+   "expect": {
+    "exit": 0,
+    "stdout": "{\n  \"kind\": \"wallets.sync\",\n  \"schema_version\": 1,\n  \"data\": [\n    {\n      \"wallet\": \"Cold\",\n      \"backend\": \"fake\",\n      \"backend_kind\": \"lnd\",\n      \"status\": \"synced\",\n      \"transactions\": {\n        \"fetched\": 6,\n        \"imported\": 6,\n        \"skipped\": 0\n      },\n      \"channels\": {\n        \"records\": 3\n      },\n      \"routing\": {\n        \"forward_events_aggregated\": 2\n      }\n    }\n  ]\n}\n",
+    "stderr": "",
+    "changes": {
+     "{tmp}/data/kassiber.sqlite3": {
+      "book": {
+       "tables": {
+        "chain_index_clock": {
+         "upsert": [
+          [
+           1,
+           1,
+           39
+          ]
+         ]
+        },
+        "chain_index_dirty": {
+         "upsert": [
+          [
+           6,
+           "wallets",
+           -1,
+           39
+          ],
+          [
+           7,
+           "profiles",
+           -1,
+           38
+          ],
+          [
+           20,
+           "transactions",
+           6,
+           29
+          ],
+          [
+           21,
+           "transactions",
+           7,
+           30
+          ],
+          [
+           22,
+           "transactions",
+           8,
+           31
+          ],
+          [
+           23,
+           "transactions",
+           9,
+           32
+          ],
+          [
+           24,
+           "transactions",
+           10,
+           33
+          ],
+          [
+           25,
+           "transactions",
+           11,
+           34
+          ]
+         ]
+        },
+        "lightning_node_records": {
+         "upsert": [
+          [
+           1,
+           "cold:fake:channel:channel:channel_close:lnd:b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8:0:c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9",
+           "ws",
+           "p",
+           "cold",
+           "fake",
+           null,
+           "channel",
+           "channel:channel_close:lnd:b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8:0:c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9",
+           "1970-01-01T00:00:00Z",
+           null,
+           null,
+           "lnd:b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8:0",
+           "",
+           41000000,
+           0,
+           "channel_close",
+           "complete",
+           "bc",
+           null,
+           "c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9",
+           "b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8:0",
+           null,
+           "{\"_kassiber_provenance\": {\"import_source\": \"lnd_adapter\"}, \"chain\": \"bitcoin\", \"channel_close_local_sweeps\": [{\"outpoint\": \"c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9:1\", \"sweep_txid\": \"dadadadadadadadadadadadadadadadadadadadadadadadadadadadadadadada\"}], \"network\": \"regtest\"}",
+           "<now>",
+           "<now>"
+          ],
+          [
+           2,
+           "cold:fake:channel:channel:channel_open:lnd:b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8:0:b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8",
+           "ws",
+           "p",
+           "cold",
+           "fake",
+           null,
+           "channel",
+           "channel:channel_open:lnd:b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8:0:b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8",
+           "1970-01-01T00:00:00Z",
+           null,
+           null,
+           "lnd:b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8:0",
+           "",
+           -1,
+           0,
+           "channel_open",
+           "incomplete",
+           "bc",
+           null,
+           "b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8",
+           "b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8:0",
+           null,
+           "{\"chain\": \"bitcoin\", \"network\": \"regtest\"}",
+           "<now>",
+           "<now>"
+          ],
+          [
+           3,
+           "cold:fake:channel:channel:channel_open:lnd:f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6:0:f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6",
+           "ws",
+           "p",
+           "cold",
+           "fake",
+           null,
+           "channel",
+           "channel:channel_open:lnd:f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6:0:f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6",
+           "1970-01-01T00:00:00Z",
+           null,
+           null,
+           "lnd:f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6:0",
+           "",
+           200000000,
+           0,
+           "channel_open",
+           "complete",
+           "bc",
+           null,
+           "f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6",
+           "f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6:0",
+           null,
+           "{\"chain\": \"bitcoin\", \"network\": \"regtest\"}",
+           "<now>",
+           "<now>"
+          ]
+         ]
+        },
+        "profiles": {
+         "upsert": [
+          [
+           1,
+           "p",
+           "ws",
+           "Book",
+           "EUR",
+           "generic",
+           365,
+           "FIFO",
+           0,
+           1,
+           "global",
+           9,
+           7,
+           1,
+           0,
+           null,
+           0,
+           null,
+           "fixed",
+           null
+          ]
+         ]
+        },
+        "transactions": {
+         "upsert": [
+          [
+           6,
+           "908413ee-1181-40a3-ac68-95b24779b9e7",
+           "ws",
+           "p",
+           "cold",
+           "lnd:invoice:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+           null,
+           "32b6a4b935fe2ad48d700367ea027b135851e747f973793fbbe645fab27afc06",
+           "2025-01-09T22:00:00Z",
+           "2025-01-09T22:00:00Z",
+           "inbound",
+           "BTC",
+           25000,
+           0,
+           0,
+           "EUR",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "missing",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "lnd_invoice",
+           "Coffee",
+           null,
+           null,
+           0,
+           "{\"_kassiber_provenance\": {\"import_source\": \"lnd\"}, \"chain\": \"lightning\", \"network\": \"regtest\"}",
+           "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+           "lnd",
+           null,
+           null,
+           "<now>"
+          ],
+          [
+           7,
+           "25f7d6e5-a43e-4975-8b9b-ca601c673cb1",
+           "ws",
+           "p",
+           "cold",
+           "lnd:invoice:e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5",
+           null,
+           "9a43bbdc95f98c9afe4b122378606abafea2f3bcc43308dd56e7300731f6f671",
+           "2025-01-09T22:16:40Z",
+           "2025-01-09T22:16:40Z",
+           "inbound",
+           "BTC",
+           7000,
+           0,
+           0,
+           "EUR",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "missing",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "lnd_invoice",
+           "LND invoice",
+           null,
+           null,
+           0,
+           "{\"_kassiber_provenance\": {\"import_source\": \"lnd\"}, \"chain\": \"lightning\", \"network\": \"regtest\"}",
+           "e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5",
+           "lnd",
+           null,
+           null,
+           "<now>"
+          ],
+          [
+           8,
+           "8be742a4-26e3-4567-8b3e-b55c9e10ab6a",
+           "ws",
+           "p",
+           "cold",
+           "lnd:pay:b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+           null,
+           "083de3a5d422b8c9aa601bf9fb5c44f9f10df690b82f40bf897923903d2681f9",
+           "2025-01-09T22:50:00Z",
+           "2025-01-09T22:50:00Z",
+           "outbound",
+           "BTC",
+           10000,
+           250,
+           0,
+           "EUR",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "missing",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "lnd_pay",
+           "LND payment",
+           null,
+           null,
+           0,
+           "{\"_kassiber_provenance\": {\"import_source\": \"lnd\"}, \"chain\": \"lightning\", \"network\": \"regtest\"}",
+           "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+           "lnd",
+           null,
+           null,
+           "<now>"
+          ],
+          [
+           9,
+           "0194a61e-80c8-45b6-967b-eb639668581a",
+           "ws",
+           "p",
+           "cold",
+           "lnd:pay:c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3",
+           null,
+           "0a8913c03df60a1e868378fc9c35e98350b7068a41e7665ecd54beb5087353fb",
+           "2025-01-10T00:46:40Z",
+           "2025-01-10T00:46:40Z",
+           "outbound",
+           "BTC",
+           5000,
+           1000,
+           0,
+           "EUR",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "missing",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "lnd_pay",
+           "LND payment",
+           null,
+           null,
+           0,
+           "{\"_kassiber_provenance\": {\"import_source\": \"lnd\"}, \"chain\": \"lightning\", \"network\": \"regtest\"}",
+           "c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3",
+           "lnd",
+           null,
+           null,
+           "<now>"
+          ],
+          [
+           10,
+           "9d3a7f7d-34c5-49f8-b38e-9ac0f7ddf734",
+           "ws",
+           "p",
+           "cold",
+           "lnd:routing:2025-01-09",
+           null,
+           "3c4f4b5fa2a7fef1d59f804de7f2ba6d87e33d5fa3dd1bc217dab0a77da46e02",
+           "2025-01-09T23:59:59Z",
+           "2025-01-09T23:59:59Z",
+           "inbound",
+           "BTC",
+           1500,
+           0,
+           0,
+           "EUR",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "missing",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "routing_income",
+           "Lightning routing fees (2025-01-09)",
+           null,
+           null,
+           0,
+           "{\"_kassiber_provenance\": {\"import_source\": \"lnd\"}, \"chain\": \"lightning\", \"network\": \"regtest\"}",
+           null,
+           null,
+           null,
+           null,
+           "<now>"
+          ],
+          [
+           11,
+           "8caa6786-dfff-420b-b963-78a005c897b8",
+           "ws",
+           "p",
+           "cold",
+           "lnd:routing:2025-01-11",
+           null,
+           "544fa0d90490eb4081a8aa2b289bcf4060ac9df9617aa0719f26c83df499ba4c",
+           "2025-01-11T23:59:59Z",
+           "2025-01-11T23:59:59Z",
+           "inbound",
+           "BTC",
+           2000,
+           0,
+           0,
+           "EUR",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "missing",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "routing_income",
+           "Lightning routing fees (2025-01-11)",
+           null,
+           null,
+           0,
+           "{\"_kassiber_provenance\": {\"import_source\": \"lnd\"}, \"chain\": \"lightning\", \"network\": \"regtest\"}",
+           null,
+           null,
+           null,
+           null,
+           "<now>"
+          ]
+         ]
+        },
+        "wallets": {
+         "upsert": [
+          [
+           1,
+           "cold",
+           "ws",
+           "p",
+           "acct",
+           "Cold",
+           "lnd",
+           "{\"backend\": \"fake\", \"last_synced_at\": \"<now>\"}",
+           "fixed"
+          ]
+         ]
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  {
+   "args": [
+    "--data-root",
+    "{tmp}/data",
+    "--machine",
+    "wallets",
+    "sync",
+    "--wallet",
+    "Cold"
+   ],
+   "cwd": "{repo}",
+   "env": {
+    "KASSIBER_DISABLE_UPDATE_CHECK": "1",
+    "KASSIBER_OFFLINE_PREFERENCE_FILE": "{tmp}/offline.json",
+    "KASSIBER_RUST_TEST_OWNER_ROOT": "{tmp}/owners",
+    "KASSIBER_RUST_TEST_PROBE": "1",
+    "KASSIBER_TEST_NO_EGRESS": "1",
+    "LANG": "en_US.UTF-8",
+    "TMPDIR": "{tmp}/systmp",
+    "XDG_CONFIG_HOME": "{tmp}/config",
+    "XDG_DATA_HOME": "{tmp}/xdg-data",
+    "XDG_STATE_HOME": "{tmp}/state"
+   },
+   "roots": [
+    "{tmp}"
+   ],
+   "recorded_us": [
+    1794333640971855,
+    1794333642328607,
+    1794333642340476
+   ],
+   "expect": {
+    "exit": 0,
+    "stdout": "wallets.sync\n",
+    "stderr": "",
+    "changes": {}
+   }
+  },
+  {
+   "args": [
+    "--data-root",
+    "{tmp}/data",
+    "--machine",
+    "wallets",
+    "sync",
+    "--wallet",
+    "Cold"
+   ],
+   "cwd": "{repo}",
+   "env": {
+    "KASSIBER_DISABLE_UPDATE_CHECK": "1",
+    "KASSIBER_OFFLINE_PREFERENCE_FILE": "{tmp}/offline.json",
+    "KASSIBER_RUST_TEST_OWNER_ROOT": "{tmp}/owners",
+    "KASSIBER_RUST_TEST_SYNC_HANDOFF": "1",
+    "KASSIBER_TEST_NO_EGRESS": "1",
+    "LANG": "en_US.UTF-8",
+    "TMPDIR": "{tmp}/systmp",
+    "XDG_CONFIG_HOME": "{tmp}/config",
+    "XDG_DATA_HOME": "{tmp}/xdg-data",
+    "XDG_STATE_HOME": "{tmp}/state"
+   },
+   "roots": [
+    "{tmp}"
+   ],
+   "recorded_us": [
+    1794333640971855,
+    1794333642546860,
+    1794333642643935
+   ],
+   "tape": {"templates":["GET /v1/getinfo HTTP/1.1\r\nHost: 127.0.0.1:34651\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nContent-Type: application/json\r\nGrpc-Metadata-macaroon: aabb\r\nUser-Agent: kassiber/0.1.0\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 161\r\n\r\n","{\"identity_pubkey\": \"\u000144\", \"alias\": \"LND\", \"chains\": [{\"chain\": \"bitcoin\", \"network\": \"regtest\"}]}","GET /v1/payments?include_incomplete=false&index_offset=0&max_payments=1000&reversed=false HTTP/1.1\r\nHost: 127.0.0.1:34651\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nContent-Type: application/json\r\nGrpc-Metadata-macaroon: aabb\r\nUser-Agent: kassiber/0.1.0\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 719\r\n\r\n","{\"payments\": [{\"payment_hash\": \"\u0001\", \"value_msat\": \"10000\", \"fee_msat\": \"250\", \"status\": \"SUCCEEDED\", \"payment_index\": \"1\", \"creation_date\": \"1736460000\", \"htlcs\": [{\"status\": \"SUCCEEDED\", \"resolve_time_ns\": \"1736466600000000000\", \"route\": {\"hops\": [\"private\"]}}]}, {\"payment_hash\": \"\u0001\", \"value_sat\": \"5\", \"value\": \"5\", \"fee\": \"1\", \"status\": \"SUCCEEDED\", \"payment_index\": \"2\", \"creation_time_ns\": \"1736470000000000000\"}, {\"payment_hash\": \"\u0001\", \"value_msat\": \"9\", \"status\": \"FAILED\", \"payment_index\": \"3\"}], \"last_index_offset\": \"3\"}","GET /v1/payments?include_incomplete=false&index_offset=3&max_payments=1000&reversed=false HTTP/1.1\r\nHost: 127.0.0.1:34651\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nContent-Type: application/json\r\nGrpc-Metadata-macaroon: aabb\r\nUser-Agent: kassiber/0.1.0\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 42\r\n\r\n{\"payments\": [], \"last_index_offset\": \"0\"}","GET /v1/invoices?index_offset=0&num_max_invoices=1000&reversed=false HTTP/1.1\r\nHost: 127.0.0.1:34651\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nContent-Type: application/json\r\nGrpc-Metadata-macaroon: aabb\r\nUser-Agent: kassiber/0.1.0\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 449\r\n\r\n{\"invoices\": [{\"r_hash\": \"oaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaE=\", \"amt_paid_msat\": \"25000\", \"settled\": true, \"settle_date\": \"1736460000\", \"add_index\": \"1\", \"memo\": \"Coffee\", \"r_preimage\": \"private\"}, {\"r_hash\": \"5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eU=\", \"value\": \"7\", \"state\": \"SETTLED\", \"settle_date\": \"1736461000\", \"add_index\": \"2\"}, {\"r_hash\": \"not-a-hash\", \"value\": \"3\", \"state\": \"OPEN\", \"add_index\": \"3\"}], \"last_index_offset\": \"3\"}","GET /v1/invoices?index_offset=3&num_max_invoices=1000&reversed=false HTTP/1.1\r\nHost: 127.0.0.1:34651\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nContent-Type: application/json\r\nGrpc-Metadata-macaroon: aabb\r\nUser-Agent: kassiber/0.1.0\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 42\r\n\r\n","{\"invoices\": [], \"last_index_offset\": \"0\"}","POST /v1/switch HTTP/1.1\r\nHost: 127.0.0.1:34651\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nContent-Type: application/json\r\nGrpc-Metadata-macaroon: aabb\r\nUser-Agent: kassiber/0.1.0\r\nContent-Length: 59\r\n\r\n{\"index_offset\":\"0\",\"num_max_events\":1000,\"start_time\":\"0\"}","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 311\r\n\r\n","{\"forwarding_events\": [{\"timestamp\": \"1736463600\", \"chan_id_in\": \"1\", \"chan_id_out\": \"2\", \"fee_msat\": \"1500\", \"amt_in_msat\": \"101500\", \"amt_out_msat\": \"100000\"}, {\"timestamp_ns\": \"1736553600000000000\", \"chan_id_in\": \"2\", \"chan_id_out\": \"1\", \"fee\": \"2\", \"amt_in\": \"52\", \"amt_out\": \"50\"}], \"last_offset_index\": 2}","POST /v1/switch HTTP/1.1\r\nHost: 127.0.0.1:34651\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nContent-Type: application/json\r\nGrpc-Metadata-macaroon: aabb\r\nUser-Agent: kassiber/0.1.0\r\nContent-Length: 59\r\n\r\n{\"index_offset\":\"2\",\"num_max_events\":1000,\"start_time\":\"0\"}","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 49\r\n\r\n{\"forwarding_events\": [], \"last_offset_index\": 0}","GET /v1/channels HTTP/1.1\r\nHost: 127.0.0.1:34651\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nContent-Type: application/json\r\nGrpc-Metadata-macaroon: aabb\r\nUser-Agent: kassiber/0.1.0\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 307\r\n\r\n","{\"channels\": [{\"channel_point\": \"\u0001:0\", \"chan_id\": \"1\", \"initiator\": true, \"capacity\": \"200000\"}, {\"channel_point\": \"\u0001:1\", \"chan_id\": \"2\", \"initiator\": false, \"capacity\": \"300000\"}]}","GET /v1/channels/closed HTTP/1.1\r\nHost: 127.0.0.1:34651\r\nConnection: close\r\nAccept-Encoding: identity\r\nAccept: application/json\r\nContent-Type: application/json\r\nGrpc-Metadata-macaroon: aabb\r\nUser-Agent: kassiber/0.1.0\r\n\r\n","HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.11.17\r\nDate: Thu, 01 Jan 2026 00:00:00 GMT\r\nContent-Length: 528\r\n\r\n{\"channels\": [{\"channel_point\": \"\u0001:0\", \"chan_id\": \"3\", \"open_initiator\": \"INITIATOR_LOCAL\", \"capacity\": \"50000\", \"closing_tx_hash\": \"\u0001\", \"settled_balance\": \"40000\", \"time_locked_balance\": \"1000\", \"resolutions\": [{\"outcome\": \"CLAIMED\", \"sweep_txid\": \"\u0001\", \"outpoint\": \"\u0001:1\"}]}]}"],"connections":[[1,false,"127.0.0.1",34651,1,null,[["w",213,[0]],["r",[1]],["r",[2,"0344444444444444444444444444444444444444444444444444444444444444"]]]],[2,false,"127.0.0.1",34651,1,null,[["w",287,[3]],["r",[4]],["r",[5,"b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2","c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3","d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4"]]]],[3,false,"127.0.0.1",34651,1,null,[["w",287,[6]],["r",[7]]]],[4,false,"127.0.0.1",34651,1,null,[["w",266,[8]],["r",[9]]]],[5,false,"127.0.0.1",34651,1,null,[["w",266,[10]],["r",[11]],["r",[12]]]],[6,false,"127.0.0.1",34651,1,null,[["w",292,[13]],["r",[14]],["r",[15]]]],[7,false,"127.0.0.1",34651,1,null,[["w",292,[16]],["r",[17]]]],[8,false,"127.0.0.1",34651,1,null,[["w",214,[18]],["r",[19]],["r",[20,"f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6","a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7"]]]],[9,false,"127.0.0.1",34651,1,null,[["w",221,[21]],["r",[22,"b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8","c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9","dadadadadadadadadadadadadadadadadadadadadadadadadadadadadadadada","c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9"]]]]]},
+   "expect": {
+    "exit": 0,
+    "stdout": "{\n  \"kind\": \"wallets.sync\",\n  \"schema_version\": 1,\n  \"data\": [\n    {\n      \"wallet\": \"Cold\",\n      \"backend\": \"fake\",\n      \"backend_kind\": \"lnd\",\n      \"status\": \"synced\",\n      \"transactions\": {\n        \"fetched\": 6,\n        \"imported\": 0,\n        \"skipped\": 6\n      },\n      \"channels\": {\n        \"records\": 3\n      },\n      \"routing\": {\n        \"forward_events_aggregated\": 2\n      }\n    }\n  ]\n}\n",
+    "stderr": "",
+    "changes": {
+     "{tmp}/data/kassiber.sqlite3": {
+      "book": {
+       "tables": {
+        "chain_index_clock": {
+         "upsert": [
+          [
+           1,
+           1,
+           45
+          ]
+         ]
+        },
+        "chain_index_dirty": {
+         "upsert": [
+          [
+           6,
+           "wallets",
+           -1,
+           45
+          ],
+          [
+           7,
+           "profiles",
+           -1,
+           44
+          ],
+          [
+           22,
+           "transactions",
+           8,
+           40
+          ]
+         ]
+        },
+        "profiles": {
+         "upsert": [
+          [
+           1,
+           "p",
+           "ws",
+           "Book",
+           "EUR",
+           "generic",
+           365,
+           "FIFO",
+           0,
+           1,
+           "global",
+           11,
+           7,
+           1,
+           0,
+           null,
+           0,
+           null,
+           "fixed",
+           null
+          ]
+         ]
+        },
+        "transactions": {
+         "upsert": [
+          [
+           8,
+           "8be742a4-26e3-4567-8b3e-b55c9e10ab6a",
+           "ws",
+           "p",
+           "cold",
+           "lnd:pay:b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+           null,
+           "27217516ede1a6442c14ff2c691d2e6ecc9acb0d3577a0cec8d6eafe02246e25",
+           "2025-01-09T23:50:00Z",
+           "2025-01-09T23:50:00Z",
+           "outbound",
+           "BTC",
+           10000,
+           250,
+           0,
+           "EUR",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "missing",
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           null,
+           "lnd_pay",
+           "LND payment",
+           null,
+           null,
+           0,
+           "{\"_kassiber_provenance\": {\"import_source\": \"lnd\"}, \"chain\": \"lightning\", \"network\": \"regtest\"}",
+           "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+           "lnd",
+           null,
+           null,
+           "<now>"
+          ]
+         ]
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ ]
+}

@@ -16,6 +16,7 @@ ui-tauri/src-tauri/src/lib.rs|default_browser_command|let mut command = Command:
 ui-tauri/src-tauri/src/lib.rs|verified_codesign_identity|let verified = Command::new("/usr/bin/codesign")
 ui-tauri/src-tauri/src/lib.rs|verified_codesign_identity|let details = Command::new("/usr/bin/codesign")
 crates/kassiber/tests/supervisor_protocol.rs|spawn|let mut child = Command::new(env!("CARGO_BIN_EXE_kassiber"))
+crates/kassiber/tests/routing_ports/replay.rs|run_process|let mut command = Command::new(env!("CARGO_BIN_EXE_kassiber"));
 crates/kassiber/tests/binary.rs|kassiber|let mut command = Command::new(env!("CARGO_BIN_EXE_kassiber"));
 crates/kassiber/tests/binary.rs|every_leaf_but_gated_chat_and_mcp_runs_natively|let mut command = Command::new(env!("CARGO_BIN_EXE_kassiber"));
 crates/kassiber/tests/operator_broker.rs|binary|let mut command = Command::new(env!("CARGO_BIN_EXE_kassiber"));
