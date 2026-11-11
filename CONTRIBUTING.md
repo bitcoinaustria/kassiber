@@ -21,17 +21,18 @@ dependency changes. Regenerate lockfiles instead of copying them.
 
 ## Setup
 
-Python development uses the locked `uv` environment:
-
 ```sh
 ./scripts/bootstrap-dev-env.sh
 ```
 
-The script checks system prerequisites, including the Rust toolchain that
-builds the [tax engine](docs/reference/tax-engine.md) (it installs the Rust
-release `rust-toolchain.toml` pins through rustup), runs `uv sync --locked`,
-and verifies imports. Use `uv run --locked` for Python commands so a stale lockfile fails
-instead of being rewritten. End-user pip installation remains a packaging
+The script installs the Rust release `rust-toolchain.toml` pins through
+rustup, checks the C toolchain the bundled SQLCipher build needs, installs
+the frontend's locked pnpm dependencies, and reports whether `python3` 3.11
+or newer is available for the regtest harness (standard library only). It
+sets up no Python environment. Until the Python test suite is removed
+([plan 22](docs/plan/22-python-removal.md)), running it needs
+`uv sync --locked`; use `uv run --locked` for those Python commands so a
+stale lockfile fails instead of being rewritten. End-user pip installation remains a packaging
 contract, not a second contributor workflow. A pip install needs the tax
 engine's binding installed from the checkout first, for example
 `pip install ./tax-engine/python .`, which needs a Rust toolchain. Kassiber pins

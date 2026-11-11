@@ -134,10 +134,12 @@ class DependencyDriftTests(unittest.TestCase):
         )
 
         self.assertIn('cd "$ROOT"', bootstrap)
-        self.assertIn("uv sync --locked", bootstrap)
+        # The Rust workspace needs no Python environment; the harness is
+        # standard-library python3 -I (plan 22, D2).
+        self.assertNotIn("uv sync", bootstrap)
         self.assertNotIn(" -m pip ", bootstrap)
         self.assertIn("uv run --locked python", quality_gate)
-        self.assertIn("uv run --locked python", integration)
+        self.assertNotIn("uv run", integration)
         self.assertEqual(package_json["packageManager"], "pnpm@10.33.0")
         self.assertNotIn("npx ", "\n".join(package_json["scripts"].values()))
         self.assertTrue((_ROOT / "uv.lock").is_file())
