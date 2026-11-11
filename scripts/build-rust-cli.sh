@@ -60,12 +60,10 @@ case "$commit" in
 esac
 short_commit="$(printf '%s' "$commit" | cut -c1-12)"
 
-# The product version lives in the backend crate and pyproject.toml, bumped
-# together; the Rust build reads the crate and refuses a disagreement.
+# The product version lives in the backend crate.
 version="$(sed -n 's/^version *= *"\([^"]*\)".*/\1/p' crates/kassiber/Cargo.toml | head -n 1)"
-pyproject_version="$(sed -n 's/^version *= *"\([^"]*\)".*/\1/p' pyproject.toml | head -n 1)"
-if [ -z "$version" ] || [ "$version" != "$pyproject_version" ]; then
-  echo "crates/kassiber ($version) and pyproject.toml ($pyproject_version) disagree on the version." >&2
+if [ -z "$version" ]; then
+  echo "crates/kassiber/Cargo.toml names no version." >&2
   exit 1
 fi
 
