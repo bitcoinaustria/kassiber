@@ -224,7 +224,12 @@ reads either book the same way.
   out; XLSX and CSV keep the zero.
 - **Dates:** per [language](#language).
 - **Page:** A4 portrait, 18 mm side margins. Tables wider than the page
-  switch the section to landscape pages. Running header from page 2:
+  switch the section to landscape pages. A table whose header words do not
+  fit side by side (a long unbroken wallet name) hyphenates its headers
+  instead, so its last columns stay on the page. The PDF tests check every
+  rendered page for text past its edge (`Rendered::off_page`); only text
+  wider than any page (a 400-character unbroken description) may still run
+  off, never a figure. Running header from page 2:
   *Kassiber · report title* left, *book · period* right. Footer on every page:
   *Generated … · journal input v…* left, *Page x of y* right.
 - **Charts:** few and quiet: a balance line (market value solid, cost basis

@@ -965,16 +965,21 @@ fn pdf_data(doc: &Document, stamp: kassiber_pdf::engine::Stamp) -> Value {
 
 /// The PDF and its page count.
 pub fn pdf(doc: &Document) -> Result<(Vec<u8>, usize)> {
+    let rendered = rendered_pdf(doc)?;
+    Ok((rendered.bytes, rendered.pages.len()))
+}
+
+/// The rendered PDF with its page geometry and any text past a page edge.
+pub fn rendered_pdf(doc: &Document) -> Result<kassiber_pdf::engine::Rendered> {
     let stamp = kassiber_pdf::engine::Stamp::parse(&doc.generated_at)
         .ok_or_else(|| AppError::new("internal_error", "invalid report timestamp"))?;
-    let rendered = kassiber_pdf::engine::render(kassiber_pdf::engine::Document {
+    kassiber_pdf::engine::render(kassiber_pdf::engine::Document {
         template: kassiber_pdf::engine::REPORT,
         data: pdf_data(doc, stamp),
         files: Vec::new(),
         created: stamp,
     })
-    .map_err(|e| AppError::new("internal_error", format!("PDF rendering failed: {e}")))?;
-    Ok((rendered.bytes, rendered.pages.len()))
+    .map_err(|e| AppError::new("internal_error", format!("PDF rendering failed: {e}")))
 }
 
 // ------------------------------------------------------------------ XLSX

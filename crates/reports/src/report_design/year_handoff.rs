@@ -46,6 +46,19 @@ fn typed(v: &Value, kind: Kind) -> Cell {
                 .map(Cell::Count)
                 .unwrap_or_else(|_| Cell::Text(py_str(v))),
             Value::Bool(b) => Cell::Count(i64::from(*b)),
+            // Satoshis are exact decimals (msat / 1000), never text: a whole
+            // number is a count, a fraction keeps its milli-satoshi digits.
+            Value::Decimal(d) => {
+                let fixed = d.to_fixed_string().unwrap_or_else(|_| d.to_string());
+                let whole = match fixed.split_once('.') {
+                    None => Some(fixed.as_str()),
+                    Some((whole, fraction)) => fraction.bytes().all(|b| b == b'0').then_some(whole),
+                };
+                match whole.and_then(|w| w.parse::<i64>().ok()) {
+                    Some(n) => Cell::Count(n),
+                    None => Cell::Btc(d.clone()),
+                }
+            }
             _ => Cell::Text(py_str(v)),
         },
         _ => Cell::Text(match v {
