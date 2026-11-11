@@ -889,119 +889,62 @@ fn tape_lines(tape: &Value) -> String {
 }
 
 /// Newline-delimited JSON-RPC answers by request (method and params), from a
-/// tape that kept every write; listens on the recorded port.
-struct JsonRpcServer {
-    stop: Arc<std::sync::atomic::AtomicBool>,
-    thread: Option<std::thread::JoinHandle<()>>,
-}
-
-impl JsonRpcServer {
-    fn start(tape: &Value) -> Self {
-        let text = tape_lines(tape);
-        let mut writes: BTreeMap<String, Vec<u8>> = BTreeMap::new();
-        let mut reads: BTreeMap<String, Vec<u8>> = BTreeMap::new();
-        let mut port = 0u16;
-        for line in text.lines() {
-            let parts: Vec<&str> = line.split('\t').collect();
-            match parts[0] {
-                "open" => port = parts[4].parse().unwrap(),
-                "w" => writes
-                    .entry(parts[1].to_owned())
-                    .or_default()
-                    .extend(b64decode(parts.get(3).copied().unwrap_or(""))),
-                "r" => reads
-                    .entry(parts[1].to_owned())
-                    .or_default()
-                    .extend(b64decode(parts[2])),
-                _ => {}
-            }
-        }
-        let parse = |bytes: &[u8]| -> Vec<Value> {
-            String::from_utf8_lossy(bytes)
-                .lines()
-                .filter_map(|l| serde_json::from_str::<Value>(l).ok())
-                .flat_map(|v| match v {
-                    Value::Array(items) => items,
-                    other => vec![other],
-                })
-                .collect()
-        };
-        let mut answers: BTreeMap<String, Value> = BTreeMap::new();
-        for (id, written) in &writes {
-            let replies: BTreeMap<String, Value> =
-                parse(reads.get(id).map(Vec::as_slice).unwrap_or(&[]))
-                    .into_iter()
-                    .filter_map(|r| Some((r.get("id")?.to_string(), r)))
-                    .collect();
-            for request in parse(written) {
-                let (Some(rid), Some(method)) = (request.get("id"), request.get("method")) else {
-                    continue;
-                };
-                if let Some(reply) = replies.get(&rid.to_string()) {
-                    answers
-                        .entry(format!("{method}{}", request["params"]))
-                        .or_insert_with(|| reply.clone());
-                }
-            }
-        }
-        let listener = std::net::TcpListener::bind(("127.0.0.1", port))
-            .unwrap_or_else(|e| panic!("the recorded port {port} is taken: {e}"));
-        listener.set_nonblocking(true).unwrap();
-        let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
-        let stopping = Arc::clone(&stop);
-        let answers = Arc::new(answers);
-        let thread = std::thread::spawn(move || {
-            while !stopping.load(std::sync::atomic::Ordering::SeqCst) {
-                match listener.accept() {
-                    Ok((stream, _)) => {
-                        let answers = Arc::clone(&answers);
-                        std::thread::spawn(move || serve_jsonrpc(stream, &answers));
-                    }
-                    Err(_) => std::thread::sleep(Duration::from_millis(5)),
-                }
-            }
-        });
-        Self {
-            stop,
-            thread: Some(thread),
+/// tape that kept every write, served by `kassiber-net`'s loopback fake on
+/// the recorded port.
+fn jsonrpc_server(tape: &Value) -> kassiber_net::test_support::FakeJsonRpc {
+    let text = tape_lines(tape);
+    let mut writes: BTreeMap<String, Vec<u8>> = BTreeMap::new();
+    let mut reads: BTreeMap<String, Vec<u8>> = BTreeMap::new();
+    let mut port = 0u16;
+    for line in text.lines() {
+        let parts: Vec<&str> = line.split('\t').collect();
+        match parts[0] {
+            "open" => port = parts[4].parse().unwrap(),
+            "w" => writes
+                .entry(parts[1].to_owned())
+                .or_default()
+                .extend(b64decode(parts.get(3).copied().unwrap_or(""))),
+            "r" => reads
+                .entry(parts[1].to_owned())
+                .or_default()
+                .extend(b64decode(parts[2])),
+            _ => {}
         }
     }
-}
-
-impl Drop for JsonRpcServer {
-    fn drop(&mut self) {
-        self.stop.store(true, std::sync::atomic::Ordering::SeqCst);
-        if let Some(thread) = self.thread.take() {
-            let _ = thread.join();
+    let parse = |bytes: &[u8]| -> Vec<Value> {
+        String::from_utf8_lossy(bytes)
+            .lines()
+            .filter_map(|l| serde_json::from_str::<Value>(l).ok())
+            .collect()
+    };
+    let mut answers: BTreeMap<String, Value> = BTreeMap::new();
+    for (id, written) in &writes {
+        let replies: BTreeMap<String, Value> =
+            parse(reads.get(id).map(Vec::as_slice).unwrap_or(&[]))
+                .into_iter()
+                .filter_map(|r| Some((r.get("id")?.to_string(), r)))
+                .collect();
+        for request in parse(written) {
+            let (Some(rid), Some(method)) = (request.get("id"), request.get("method")) else {
+                continue;
+            };
+            if let Some(reply) = replies.get(&rid.to_string()) {
+                answers
+                    .entry(format!("{method}{}", request["params"]))
+                    .or_insert_with(|| reply.clone());
+            }
         }
     }
-}
-
-fn serve_jsonrpc(stream: std::net::TcpStream, answers: &BTreeMap<String, Value>) {
-    use std::io::BufRead;
-    let _ = stream.set_nonblocking(false);
-    let mut writer = stream.try_clone().unwrap();
-    let reply = |request: &Value| -> Value {
+    kassiber_net::test_support::FakeJsonRpc::start(port, move |line| {
+        let request: Value = serde_json::from_str(line).unwrap_or(Value::Null);
         let key = format!("{}{}", request["method"], request["params"]);
         let mut reply = answers.get(&key).cloned().unwrap_or_else(
             || json!({"jsonrpc": "2.0", "error": {"code": -32601, "message": "not recorded"}}),
         );
         reply["id"] = request["id"].clone();
-        reply
-    };
-    for line in std::io::BufReader::new(stream).lines() {
-        let Ok(line) = line else { break };
-        let Ok(request) = serde_json::from_str::<Value>(&line) else {
-            continue;
-        };
-        let answer = match &request {
-            Value::Array(items) => Value::Array(items.iter().map(reply).collect()),
-            single => reply(single),
-        };
-        if writer.write_all(format!("{answer}\n").as_bytes()).is_err() {
-            break;
-        }
-    }
+        reply.to_string()
+    })
+    .unwrap_or_else(|e| panic!("the recorded port {port} is taken: {e}"))
 }
 
 // ---------------------------------------------------------------- process
@@ -1625,10 +1568,7 @@ pub fn replay_with(name: &str, normalize: impl Fn(usize, &mut Value)) {
             snapshot(root, &books, &mut before);
         }
         let served = SERVED.with(|s| s.get());
-        let _server = session
-            .get("tape")
-            .filter(|_| served)
-            .map(JsonRpcServer::start);
+        let _server = session.get("tape").filter(|_| served).map(jsonrpc_server);
         let tape = session.get("tape").filter(|_| !served).map(|tape| {
             let file = base_path.join(format!("tape-{index}"));
             fs::write(&file, tape_lines(tape)).unwrap();

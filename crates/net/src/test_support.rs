@@ -197,6 +197,75 @@ impl Drop for FakeElectrum {
     }
 }
 
+/// Owned newline-delimited JSON-RPC fake whose reply to each request line is
+/// whatever `answer` returns for it, on every connection; for replays whose
+/// client orders its requests differently from run to run. Binds `port`
+/// (0 for any).
+pub struct FakeJsonRpc {
+    url: String,
+    stop: Arc<AtomicBool>,
+    thread: Option<JoinHandle<()>>,
+}
+impl FakeJsonRpc {
+    pub fn start(
+        port: u16,
+        answer: impl Fn(&str) -> String + Send + Sync + 'static,
+    ) -> std::io::Result<Self> {
+        use std::io::{BufRead, BufReader};
+        let listener = TcpListener::bind(("127.0.0.1", port))?;
+        listener.set_nonblocking(true)?;
+        let url = format!("tcp://{}", listener.local_addr()?);
+        let answer = Arc::new(answer);
+        let stop = Arc::new(AtomicBool::new(false));
+        let stopped = stop.clone();
+        let thread = thread::spawn(move || {
+            let mut sessions = Vec::new();
+            while !stopped.load(Ordering::SeqCst) {
+                match listener.accept() {
+                    Ok((stream, _)) => {
+                        let _ = stream.set_nonblocking(false);
+                        let _ = stream.set_read_timeout(Some(Duration::from_secs(60)));
+                        let answer = answer.clone();
+                        sessions.push(thread::spawn(move || {
+                            let Ok(mut writer) = stream.try_clone() else {
+                                return;
+                            };
+                            for line in BufReader::new(stream).lines() {
+                                let Ok(line) = line else { return };
+                                let reply = answer(&line) + "\n";
+                                if writer.write_all(reply.as_bytes()).is_err() {
+                                    return;
+                                }
+                            }
+                        }));
+                    }
+                    Err(_) => thread::sleep(Duration::from_millis(2)),
+                }
+            }
+            drop(listener);
+            for session in sessions {
+                let _ = session.join();
+            }
+        });
+        Ok(Self {
+            url,
+            stop,
+            thread: Some(thread),
+        })
+    }
+    pub fn url(&self) -> &str {
+        &self.url
+    }
+}
+impl Drop for FakeJsonRpc {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::SeqCst);
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
+        }
+    }
+}
+
 /// One scripted answer of a [`ScriptedProvider`].
 #[derive(Clone)]
 pub struct Reply {
