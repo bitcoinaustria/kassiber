@@ -321,6 +321,10 @@ _SHADOW_EXTRA_MODULES = frozenset(
         # (`daemon_freshness._auto_maintain_for_read`).
         "test_chain_analysis_consent",
         "test_daemon_swap_matching",
+        # It runs scripts/check-journal-process-campaign.py, whose
+        # `journal_native_process_oracle.capture` processes journals through
+        # Python's handlers; the script is loaded by path, not imported.
+        "test_journal_process_campaign",
     }
 )
 SHADOW_MODE = "shadow"
