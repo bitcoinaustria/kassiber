@@ -3,31 +3,30 @@
 
 The benchmark builds one large descriptor wallet on regtest, then times the
 steps a user waits for: the first sync, a no-op resync, a small incremental
-sync, a forced full replay, and the journal step the desktop runs after every
-user-triggered sync (exact automatic pairing plus the journal rebuild). Each
-step runs the real CLI or core entry point in a child process, so the timings
-include interpreter start-up exactly as a user sees it.
+sync, a forced full replay, and the journal step after each (`journals
+process`). Each step runs the Rust `kassiber` binary in a child process
+(`KASSIBER_TEST_CLI` or `KASSIBER_RUST_BIN`), so the timings include start-up
+exactly as a user sees it.
 
 It needs bitcoind and Fulcrum on loopback; run it through the harness, which
 starts both in a disposable per-worktree Compose project:
 
     ./scripts/integration-harness.sh sync-benchmark
     ./scripts/integration-harness.sh sync-benchmark --txs 5000 --addresses 1000
-    ./scripts/integration-harness.sh sync-benchmark --smoke --profile-dir /tmp/kb-prof
-    ./scripts/integration-harness.sh sync-benchmark --runtimes python,rust
+    ./scripts/integration-harness.sh sync-benchmark --smoke
+    ./scripts/integration-harness.sh sync-benchmark --runtimes rust,rust
 
-`--runtimes python,rust` syncs one book per runtime from the same chain, each
-stage on every book in turn, with the Rust binary `KASSIBER_RUST_BIN` names;
-`python,python` is the control for differences between books alone.
-Rust has no in-process desktop journal step, so with more than one runtime
-both time the CLI's `journals process` instead, and the final books are
-compared table by table (`tests/integration/runtime_parity.py`).
+`--runtimes rust,rust` syncs two books from the same chain, each stage on
+every book in turn, and compares the final books table by table
+(`tests/integration/runtime_parity.py`): the control for differences between
+books alone. The script itself is standard-library Python (`python3 -I`).
 
 Every Kassiber backend in the benchmark book is a regtest backend on a loopback
-host, and child processes run under the test socket guard, so nothing leaves
-the machine. Kassiber data lives in a temporary directory that is removed at
-the end. Output is one JSON object per line so an interrupted run still leaves
-machine-readable results. Timings are observations, not pass/fail thresholds.
+host, and a test-harness build runs under its test socket guard, so nothing
+leaves the machine. Kassiber data lives in a temporary directory that is
+removed at the end. Output is one JSON object per line so an interrupted run
+still leaves machine-readable results. Timings are observations, not
+pass/fail thresholds.
 """
 
 from __future__ import annotations
@@ -37,7 +36,6 @@ import base64
 import json
 import os
 import platform
-import pstats
 import shutil
 import sqlite3
 import subprocess
@@ -56,10 +54,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from tests.integration.test_live_bitcoin_electrum_parity import (  # noqa: E402
-    _electrum_call,
-    _wait_for_electrum,
-)
+from tests.integration import cli  # noqa: E402
+from tests.integration.book import electrum_call as _electrum_call  # noqa: E402
 
 
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
@@ -68,7 +64,6 @@ BACKEND_NAME = "electrum-regtest"
 RPC_TIMEOUT = 600
 SEND_ROUND = 500
 FANOUT_SATS = 5_000_000
-PROFILE_TOP = 25
 # Coinbases mature after 100 blocks; mine in steps until the faucet can fund.
 MATURITY_BLOCKS = 101
 FUNDING_STEP_BLOCKS = 50
@@ -76,57 +71,36 @@ FUNDING_MAX_BLOCKS = 3_000
 PROXY_VARIABLES = {"http_proxy", "https_proxy", "all_proxy", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"}
 SCHEMA_VERSION = 1
 
-JOURNAL_STEP = """\
-import json
-import sys
-
-from kassiber import daemon_freshness
-from kassiber.db import open_db
-
-conn = open_db(sys.argv[1])
-try:
-    profile_id = conn.execute("SELECT id FROM profiles ORDER BY rowid LIMIT 1").fetchone()[0]
-    # The desktop's post-sync step: see daemon_freshness._wallets_sync_payload.
-    result = daemon_freshness.refresh_journals_step(
-        conn,
-        str(profile_id),
-        auto_pair=True,
-        skip_rebuild_when_current=True,
-    )
-    conn.commit()
-finally:
-    conn.close()
-print(json.dumps({"data": {key: value for key, value in result.items() if isinstance(value, (int, str, bool))}}))
-"""
-
-# `python -m cProfile` catches SystemExit to write its stats and then exits 0,
-# which would report a failed step as a success. This keeps the exit code.
-PROFILE_SHIM = """\
-import cProfile
-import runpy
-import sys
-
-out, kind, target, *argv = sys.argv[1:]
-sys.argv = [target, *argv]
-profiler = cProfile.Profile()
-code = 0
-profiler.enable()
-try:
-    if kind == "module":
-        runpy.run_module(target, run_name="__main__", alter_sys=True)
-    else:
-        runpy.run_path(target, run_name="__main__")
-except SystemExit as exc:
-    code = exc.code if isinstance(exc.code, int) else (0 if exc.code is None else 1)
-finally:
-    profiler.disable()
-    profiler.dump_stats(out)
-sys.exit(code)
-"""
-
-
 def _emit(payload: dict[str, Any]) -> None:
     print(json.dumps(payload, sort_keys=True), flush=True)
+
+
+def _wait_for_electrum(url: str, *, min_height: int, txids: list[str]) -> None:
+    """Wait until Fulcrum serves `min_height` and every txid in `txids`."""
+    deadline = time.monotonic() + 180
+    last_error: Exception | None = None
+    while time.monotonic() < deadline:
+        try:
+            header = _electrum_call(url, "blockchain.headers.subscribe")
+            if int((header or {}).get("height") or 0) >= min_height:
+                for txid in txids:
+                    _electrum_call(url, "blockchain.transaction.get", [txid])
+                return
+        except (OSError, AssertionError, ValueError) as exc:  # Fulcrum may still be indexing.
+            last_error = exc
+        time.sleep(2)
+    raise RuntimeError(f"Fulcrum at {url} did not reach height {min_height}: {last_error}")
+
+
+def _guard_capable(prefix: Sequence[str]) -> bool:
+    """Whether the binary carries the test socket guard (a test-harness build).
+
+    A release build refuses an armed `KASSIBER_TEST_NO_EGRESS` with exit 78.
+    """
+    env = {key: value for key, value in os.environ.items() if not key.startswith("KASSIBER_")}
+    env["KASSIBER_TEST_NO_EGRESS"] = "1"
+    result = subprocess.run([*prefix, "--version"], env=env, capture_output=True, timeout=60)
+    return result.returncode != 78
 
 
 def _require_loopback(url: str, what: str) -> None:
@@ -293,33 +267,16 @@ class Chain:
 class Book:
     """One disposable Kassiber data root with the benchmark wallet."""
 
-    def __init__(
-        self,
-        data_root: Path,
-        profile_dir: Path | None,
-        runtime: str = "python",
-        journal_cli: bool = False,
-    ) -> None:
+    def __init__(self, data_root: Path, label: str) -> None:
         self.data_root = data_root
-        self.profile_dir = profile_dir
-        self.runtime = runtime
-        self.journal_cli = journal_cli
-        self.rust_bin = os.environ.get("KASSIBER_RUST_BIN", "")
-        if runtime == "rust" and not os.access(self.rust_bin, os.X_OK):
-            raise SystemExit("--runtimes rust needs KASSIBER_RUST_BIN naming the Rust binary")
+        self.label = label
+        self.prefix = list(cli.prefix())
         data_root.parent.mkdir(parents=True, exist_ok=True)
-        self.journal_script = data_root.parent / "journal_step.py"
-        self.journal_script.write_text(JOURNAL_STEP, encoding="utf-8")
-        self.profile_shim = data_root.parent / "profile_shim.py"
-        self.profile_shim.write_text(PROFILE_SHIM, encoding="utf-8")
         self.env = self._child_env(data_root.parent)
-        if runtime == "rust":
-            from tests.integration.runtime_parity import rust_guard_capable
-
-            # A release build has no test socket guard and refuses it armed;
-            # every backend it can reach is a checked loopback URL.
-            if not rust_guard_capable(self.rust_bin):
-                self.env.pop("KASSIBER_TEST_NO_EGRESS", None)
+        # A release build has no test socket guard and refuses it armed;
+        # every backend it can reach is a checked loopback URL.
+        if not _guard_capable(self.prefix):
+            self.env.pop("KASSIBER_TEST_NO_EGRESS", None)
 
     @staticmethod
     def _child_env(scratch: Path) -> dict[str, str]:
@@ -334,22 +291,10 @@ class Book:
         # switch would also refuse the loopback Fulcrum that BDK talks to.
         env["KASSIBER_TEST_NO_EGRESS"] = "1"
         env["KASSIBER_OFFLINE_PREFERENCE_FILE"] = str(scratch / "offline-preference.json")
-        guard = REPO_ROOT / "tests" / "_child_hooks"
-        env["PYTHONPATH"] = os.pathsep.join(
-            part for part in (str(guard), str(REPO_ROOT), env.get("PYTHONPATH", "")) if part
-        )
         return env
 
-    def _spawn(self, argv: list[str], stage: str | None) -> tuple[dict[str, Any], float, float]:
-        command = [sys.executable, *argv]
-        if self.runtime == "rust" and argv[:2] == ["-m", "kassiber"]:
-            command = [self.rust_bin, *argv[2:]]
-        elif stage and self.profile_dir is not None:
-            kind, target = ("module", argv[1]) if argv[0] == "-m" else ("path", argv[0])
-            rest = argv[2:] if kind == "module" else argv[1:]
-            command = [
-                sys.executable, str(self.profile_shim), str(self.profile_dir / f"{stage}.prof"), kind, target, *rest,
-            ]
+    def cli(self, *args: str) -> tuple[dict[str, Any], float, float]:
+        command = [*self.prefix, "--data-root", str(self.data_root), "--machine", *args]
         with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
             started = time.perf_counter()
             process = subprocess.Popen(command, cwd=REPO_ROOT, env=self.env, stdout=out, stderr=err)
@@ -360,19 +305,13 @@ class Book:
             err.seek(0)
             stdout, stderr = out.read().decode("utf-8"), err.read().decode("utf-8")
         if process.returncode != 0:
-            raise RuntimeError(f"{' '.join(argv[:6])} failed ({process.returncode})\n{stdout[-2000:]}\n{stderr[-4000:]}")
+            raise RuntimeError(f"kassiber {' '.join(args[:4])} failed ({process.returncode})\n{stdout[-2000:]}\n{stderr[-4000:]}")
         # ru_maxrss is KiB on Linux and bytes on macOS.
         rss_mb = usage.ru_maxrss / (1024 * 1024 if platform.system() == "Darwin" else 1024)
         return json.loads(stdout) if stdout.strip() else {}, seconds, rss_mb
 
-    def cli(self, *args: str, stage: str | None = None) -> tuple[dict[str, Any], float, float]:
-        return self._spawn(["-m", "kassiber", "--data-root", str(self.data_root), "--machine", *args], stage)
-
-    def journal(self, stage: str) -> tuple[dict[str, Any], float, float]:
-        if self.runtime == "rust" or self.journal_cli:
-            return self.cli("journals", "process", stage=stage)
-        return self._spawn([str(self.journal_script), str(self.data_root)], stage)
-
+    def journal(self, _stage: str) -> tuple[dict[str, Any], float, float]:
+        return self.cli("journals", "process")
     def create(self, electrum_url: str, receive: str, change: str) -> None:
         with tempfile.TemporaryDirectory(prefix="kassiber-bench-descriptors-") as tmp:
             receive_path = Path(tmp) / "receive.txt"
@@ -445,20 +384,6 @@ class Book:
         return max(matches, key=lambda path: path.stat().st_size)
 
 
-def _profile_top(path: Path) -> list[dict[str, Any]]:
-    stats = pstats.Stats(str(path))
-    rows = []
-    for (filename, line, name), (_cc, calls, tottime, cumtime, _callers) in stats.stats.items():  # type: ignore[attr-defined]
-        rows.append({
-            "function": f"{os.path.relpath(filename, REPO_ROOT) if filename.startswith(str(REPO_ROOT)) else filename}:{line}:{name}",
-            "calls": calls,
-            "tottime": round(tottime, 4),
-            "cumtime": round(cumtime, 4),
-        })
-    rows.sort(key=lambda row: row["tottime"], reverse=True)
-    return rows[:PROFILE_TOP]
-
-
 def _sync_fields(payload: dict[str, Any]) -> dict[str, Any]:
     data = payload.get("data")
     if isinstance(data, list):
@@ -472,14 +397,12 @@ def _run_stage(book: Book, stage: str, action) -> dict[str, Any]:
         "event": "benchmark_result",
         "schema_version": SCHEMA_VERSION,
         "stage": stage,
-        "runtime": book.runtime,
+        "book": book.label,
         "ok": True,
         "seconds": round(seconds, 3),
         "peak_rss_mb": round(rss_mb, 1),
         "output": _sync_fields(payload),
     }
-    if book.profile_dir is not None:
-        result["profile_top_tottime"] = _profile_top(book.profile_dir / f"{stage}.prof")
     _emit(result)
     return result
 
@@ -487,7 +410,7 @@ def _run_stage(book: Book, stage: str, action) -> dict[str, Any]:
 def _parity(books: list[Book]) -> dict[str, Any]:
     """Compare every book with the first, identity- and order-blind.
 
-    Each runtime created its own rows, so random identities and clocks are
+    Each book created its own rows, so random identities and clocks are
     masked and every list is compared as a multiset.
     """
     from datetime import datetime, timezone
@@ -502,11 +425,11 @@ def _parity(books: list[Book]) -> dict[str, Any]:
     details: dict[str, dict[str, Any]] = {}
     for book, dump in zip(books[1:], dumps[1:]):
         tables = sorted(table for table in dumps[0] if dumps[0][table] != dump.get(table))
-        differing[book.runtime] = tables
+        differing[book.label] = tables
         for table in tables:
             want, got = dumps[0][table][1], dump[table][1]
             first = next(((a, b) for a, b in zip(want, got) if a != b), (None, None))
-            details[f"{book.runtime}:{table}"] = {
+            details[f"{book.label}:{table}"] = {
                 "rows": [len(want), len(got)],
                 "columns": dumps[0][table][0],
                 "first_difference": [str(first[0])[:1500], str(first[1])[:1500]],
@@ -514,7 +437,7 @@ def _parity(books: list[Book]) -> dict[str, Any]:
     return {
         "event": "benchmark_parity",
         "schema_version": SCHEMA_VERSION,
-        "reference": books[0].runtime,
+        "reference": books[0].label,
         "differing_tables": differing,
         "details": details,
         "ok": not any(differing.values()),
@@ -528,10 +451,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--spend-ratio", type=float, default=0.1, help="outgoing payments per incoming one")
     parser.add_argument("--increment", type=int, default=25, help="payments added before the incremental sync")
     parser.add_argument("--noop-runs", type=int, default=3)
-    parser.add_argument("--profile-dir", type=Path, help="write a cProfile file per stage and report the hottest functions")
     parser.add_argument("--smoke", action="store_true", help="tiny sizes to check the harness quickly")
-    parser.add_argument("--runtimes", default="python",
-                        help="comma-separated runtimes to time on the same chain: python, rust")
+    parser.add_argument("--runtimes", default="rust",
+                        help="comma-separated runtimes, one book each, synced from the same chain: only rust "
+                             "(`rust,rust` compares two books, the control)")
     args = parser.parse_args(argv)
     if args.smoke:
         args.txs, args.addresses, args.increment, args.noop_runs = 60, 20, 5, 1
@@ -546,20 +469,22 @@ def main(argv: Sequence[str] | None = None) -> int:
         os.environ.get("KASSIBER_REGTEST_RPC_USER", "kassiber"),
         os.environ.get("KASSIBER_REGTEST_RPC_PASSWORD", "kassiber"),
     )
-    if args.profile_dir is not None:
-        args.profile_dir.mkdir(parents=True, exist_ok=True)
 
     spends = int(args.txs * args.spend_ratio)
     runtimes = [part.strip() for part in args.runtimes.split(",") if part.strip()]
-    if not runtimes or set(runtimes) - {"python", "rust"}:
-        raise SystemExit("--runtimes takes python and/or rust")
+    if not runtimes or set(runtimes) != {"rust"}:
+        raise SystemExit("--runtimes takes only rust: the Python runtime is gone (rust,rust is the control)")
+    try:
+        version = subprocess.run([*cli.prefix(), "--version"], capture_output=True, text=True, timeout=60).stdout.strip()
+    except cli.CandidateConfigError as exc:
+        raise SystemExit(str(exc)) from exc
     _emit({
         "event": "benchmark_start",
         "schema_version": SCHEMA_VERSION,
         "txs": args.txs,
         "addresses": args.addresses,
         "spends": spends,
-        "python": platform.python_version(),
+        "kassiber": version,
         "platform": platform.platform(),
     })
 
@@ -579,13 +504,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             "seconds": round(time.perf_counter() - started, 3),
         })
 
-        journal_cli = len(runtimes) > 1
-        # A repeated runtime (`python,python`) is the control: two books of
-        # one runtime over one chain show what differs between books alone.
+        # Two books over one chain show what differs between books alone.
         books = [
-            Book(scratch / (f"{index}-{runtime}" if len(runtimes) > 1 else "") / "data", args.profile_dir, runtime,
-                 journal_cli)
-            for index, runtime in enumerate(runtimes)
+            Book(scratch / (f"{index}-rust" if len(runtimes) > 1 else "") / "data", f"{index}-rust")
+            for index in range(len(runtimes))
         ]
         for book in books:
             book.create(electrum_url, chain.receive_descriptor, chain.change_descriptor)
@@ -595,12 +517,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                 if journal:
                     _run_stage(book, name, book.journal)
                 else:
-                    _run_stage(book, name, lambda s, book=book: book.cli(
-                        "wallets", "sync", "--wallet", WALLET_LABEL, *extra, stage=s))
+                    _run_stage(book, name, lambda _s, book=book: book.cli(
+                        "wallets", "sync", "--wallet", WALLET_LABEL, *extra))
 
         def stats() -> None:
             for book in books:
-                _emit({"event": "benchmark_book", "schema_version": SCHEMA_VERSION, "runtime": book.runtime,
+                _emit({"event": "benchmark_book", "schema_version": SCHEMA_VERSION, "book": book.label,
                        **book.stats()})
 
         stage("sync_cold")
