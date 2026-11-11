@@ -405,6 +405,19 @@ Goldens were re-blessed through the Rust path only and each diff reviewed:
 | Golden | How | What changed |
 | --- | --- | --- |
 | `crates/kassiber/tests/black_box/golden/ai_tools/mutating_tools.txt` | `KASSIBER_BLESS=1` | fixture `reports`, `ui.reports.export_csv` (full report bundle): the tool result's `bytes` and `report_snapshot.content_sha256`, the saved `filed_report_snapshots` row's content hash and the digest of that write block. All follow from the bundle's BTC cells; with the old cell text the golden passes unchanged |
+| Recorded sessions in `tests/data/sessions` that export: `test_rust_report_exports` (12 `test_cli_csv_export_rendering_formats`, 8 `test_cli_csv_export_sequences_and_rust_routing`, 2 `test_daemon_csv_exports_response_artifact_and_state_parity`, 1 `test_cli_stale_admission_and_transaction_drafts`), `test_cli_smoke` (2 `07ab` CSV bundle, 2 `07ae` transactions CSV), `test_pyfix_review` `test_export_survives_legacy_nonfinite_price`, and the `test_rust_ai_tools` and `test_rust_mcp` sessions that export a CSV bundle | `scripts/replay-sessions.sh --update` | the transactions CSV's `status` column and BTC cells at eight places (eleven only where msat leave a remainder, zero as `0.00000000`), and what follows from those bytes: `bytes`, `content_sha256`, saved snapshot hashes. Every changed numeric cell holds the same value as before; no other column, row or figure changed |
+
+The same re-recording covers sessions whose output changed for reasons other
+than exports, each diff reviewed: the stored-value refusals (`test_rust_store_interop`,
+18 sessions: the new reason, value shape, hint and message), the drift
+details that now name the drifted object (the same module and the unshipped
+ledger trigger, 1 session in `test_rust_cli_leaves`), the in-product AI
+references without uv and pyrage (`read_skill_reference` in
+`test_rust_ai_tools` and `test_rust_mcp`), and 6 pure-Rust sessions of
+`test_rust_freshness_journals` that no longer write the removed hybrid
+census file. 7 sessions of the same module ran the journal pipeline through
+the Python reference (`KASSIBER_RUST_TEST_JOURNAL_PYTHON`) and are dropped,
+listed in `dropped.tsv`; each case keeps its pure-Rust session.
 
 No report vector under `crates/reports/tests/data` changed: the artifact
 vectors compare the transactions CSV to Python's file by value (the new
