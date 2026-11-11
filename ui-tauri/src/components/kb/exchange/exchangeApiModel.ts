@@ -207,7 +207,7 @@ const CODE_KINDS: Record<string, ExchangeErrorKind> = {
   network_proxy_unsupported: "network",
   app_error: "http",
   conflict: "conflict",
-  // A daemon without these kinds: the Python backend, or an older build.
+  // A daemon without these kinds: an older build.
   daemon_unavailable: "needsRust",
   unsupported_kind: "needsRust",
   kind_not_allowed: "needsRust",

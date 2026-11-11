@@ -98,7 +98,7 @@ pub const AI_PROVIDER_KIND_HELP: &str = "local = on-machine, remote = data leave
 pub const AI_PROVIDER_KIND_CHANGE_HELP: &str = "Change the privacy kind, or make the provider a cli_proxy (Rust only). Unchanged by default, except that a local provider given a non-loopback --base-url becomes remote; leaving local always needs --acknowledge again";
 
 /// Leaves only the Rust backend serves; Python's grammar lacks them
-/// (`scripts/gen_parser_spec.py::RUST_ONLY_LEAVES` grafts them on).
+/// (added by hand).
 pub const RUST_ONLY_LEAVES: &[&str] = &["wallets.sync-bitpanda"];
 /// Backend kinds only the Rust backend accepts, extra `--kind` choices of
 /// `backends create` and `backends update`.

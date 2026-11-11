@@ -1457,7 +1457,7 @@
       "network": "Kassiber could not reach {{provider}}. Check the network connection and any proxy settings.",
       "http": "{{provider}} answered with an error.",
       "conflict": "A wallet with this name already exists in this book. Choose another name.",
-      "needsRust": "Exchange API connections need Kassiber's Rust backend. This app runs the Python backend, which offers exchange syncs only from the command line.",
+      "needsRust": "Exchange API connections need a newer Kassiber backend than the one this app is talking to. Update Kassiber, or sync from the command line.",
       "unknown": "The request failed.",
       "permissions": "Permissions still on: {{list}}",
       "serverSaid": "Details: {{message}}"

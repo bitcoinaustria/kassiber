@@ -4121,10 +4121,11 @@ implemented kind subset.
 Child wrappers inject indentation, key-order, and separator changes to prove
 the oracle rejects them, including usage and caught output errors.
 
-Golden data and the scripts that write it, all run with the locked Python
-3.11:
+Golden data the Python 3.11 reference wrote. It is frozen now: the scripts
+went with the Python tree under [plan 22](../plan/22-python-removal.md#generators-become-frozen-goldens)
+(tag `archive/python-backend`), and `spec_data.rs` is edited by hand.
 
-| Data | Script |
+| Data | Former generator |
 | --- | --- |
 | `crates/pytext/src/unicode_tables.rs` | `crates/pytext/scripts/gen_unicode_tables.py` |
 | `crates/pytext/tests/data/vectors.txt` | `crates/pytext/scripts/gen_vectors.py` |

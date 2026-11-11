@@ -67,7 +67,7 @@ pub(crate) fn backend(passphrase: bool) -> Result<Backend> {
         "recipient-mode backups require an age or rage binary",
     )
     .with_hint(
-        "Install `age` or `rage` on PATH, or use passphrase-mode backups with pyrage installed.",
+        "Install `age` or `rage` on PATH, or use a passphrase-mode backup.",
     ))
 }
 

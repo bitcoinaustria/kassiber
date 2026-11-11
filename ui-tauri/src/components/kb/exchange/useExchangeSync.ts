@@ -34,7 +34,7 @@ export function useExchangeSync({
   const status = useDaemon<{ connections: ExchangeConnectionStatus[] }>(
     "ui.connections.exchange.status",
     { wallet: walletId },
-    // A display read: local only, and a Python backend answers it with an
+    // A display read: local only, and an older backend answers it with an
     // error that retrying cannot fix.
     { enabled: exchange !== null, retry: false },
   );

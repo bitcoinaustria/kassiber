@@ -1,8 +1,7 @@
 [package]
 name = "kassiber"
 description = "Kassiber's backend binary: the CLI, the desktop daemon, the MCP server, and the operator broker"
-# The product version (kassiber.__version__ and pyproject.toml), which
-# --version, daemon.ready, and status report; bumped with them.
+# The product version, which --version, daemon.ready, and status report.
 version = "0.22.78"
 edition.workspace = true
 rust-version.workspace = true
