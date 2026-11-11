@@ -6,17 +6,21 @@ import binascii
 import json
 import os
 import re
+import secrets
 import shlex
+import sqlite3
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from functools import cache
 from pathlib import Path
 from typing import Any
-from urllib import error, request
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib import error, parse, request
 
 from tests.integration import cli as cli_runner
 
@@ -198,6 +202,28 @@ def _mine_liquid_blocks(count: int = 1) -> None:
         _elements_cli("-generate", str(int(count)), timeout=120)
 
 
+# The invoice fields the product's LND invoice import reads
+# (crates/chain/src/lightning/lnd_wallet.rs, `invoice`).
+_LND_INVOICE_IMPORT_FIELDS = (
+    "r_hash",
+    "state",
+    "settled",
+    "amt_paid_msat",
+    "amt_paid_sat",
+    "value_msat",
+    "value",
+    "settle_date",
+    "creation_date",
+    "settle_index",
+    "add_index",
+    "memo",
+)
+
+
+def _lnd_invoice_import_fields(invoice: dict[str, Any]) -> dict[str, Any]:
+    return {key: invoice[key] for key in _LND_INVOICE_IMPORT_FIELDS if key in invoice}
+
+
 def _lncli_json(*args: str, timeout: int = 60) -> dict[str, Any]:
     return _docker_json("lncli-sim-client", *args, timeout=timeout)
 
@@ -207,9 +233,13 @@ def _settled_lnd_invoice(
     *,
     timeout_seconds: int = 30,
 ) -> dict[str, Any]:
-    """Read and sanitize the actual paid invoice from the regtest LND node."""
+    """Read the actual paid invoice from the regtest LND node.
 
-    from kassiber.core.lightning import lnd as core_lnd
+    Only the fields the product's LND invoice import reads are kept, so the
+    bolt11, preimage and HTLC details never reach the scenario summary. The
+    Rust adapter applies its own discard policy when it imports the row
+    (`_insert_native_lnd_invoice`).
+    """
 
     deadline = time.monotonic() + timeout_seconds
     errors: list[str] = []
@@ -225,9 +255,7 @@ def _settled_lnd_invoice(
                 continue
             state = str(invoice.get("state") or "").strip().upper()
             if invoice.get("settled") is True or state == "SETTLED":
-                # Apply the production adapter's Tier-1 discard policy before
-                # this payload can enter the scenario summary or accounting DB.
-                return core_lnd._sanitize_invoice(invoice)  # noqa: SLF001
+                return _lnd_invoice_import_fields(invoice)
         time.sleep(1)
     raise BoltzProbeError(
         f"LND invoice {payment_hash} was not observed settled: "
@@ -514,6 +542,10 @@ def execute_liquid_submarine_swap(
 
 
 def _run_kassiber(data_root: Path, *args: str) -> dict[str, Any]:
+    return _run_kassiber_input(data_root, None, *args)
+
+
+def _run_kassiber_input(data_root: Path, stdin: str | None, *args: str) -> dict[str, Any]:
     result = cli_runner.run(
         [
             "--data-root",
@@ -522,6 +554,7 @@ def _run_kassiber(data_root: Path, *args: str) -> dict[str, Any]:
             *args,
         ],
         cwd=ROOT,
+        input=stdin,
         capture_output=True,
         text=True,
         check=False,
@@ -553,9 +586,9 @@ def _require_kassiber_cli_ready() -> None:
     )
     if result.returncode != 0:
         raise BoltzProbeError(
-            "Kassiber CLI is not importable in this Python environment; "
-            "install the project dependencies before running the live Boltz "
-            f"execution lane.\nstderr: {result.stderr.strip()}"
+            "The Rust kassiber binary does not start; build it and point "
+            "KASSIBER_RUST_BIN at it before running the live Boltz execution "
+            f"lane.\nstderr: {result.stderr.strip()}"
         )
 
 
@@ -873,20 +906,92 @@ def _write_executed_liquid_import_json(
     _write_json_rows(path, rows)
 
 
-def _insert_native_lnd_invoice(data_root: Path, *, swap: dict[str, Any]) -> dict[str, Any]:
-    """Persist the paid invoice through the trusted LND adapter import seam."""
+class _LndRestFake:
+    """A loopback LND REST node that holds exactly one settled invoice.
 
-    from kassiber.core import imports as core_imports
-    from kassiber.core.lightning import lnd as core_lnd
-    from kassiber.core.repo import invalidate_journals
-    from kassiber.db import open_db
+    It answers the reads the product's LND wallet sync makes
+    (crates/chain/src/lightning/lnd_wallet.rs) and refuses any request
+    without the read-only macaroon header, so the invoice reaches the book
+    through the Rust binary's own LND adapter and import source.
+    """
+
+    def __init__(self, invoice: dict[str, Any]):
+        self.invoice = invoice
+        self.macaroon = secrets.token_hex(32)
+        self.requests: list[str] = []
+        self.unauthorized = 0
+        fake = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, _format: str, *_args: Any) -> None:
+                return
+
+            def _answer(self) -> None:
+                length = int(self.headers.get("Content-Length") or 0)
+                if length:
+                    self.rfile.read(length)
+                fake.requests.append(f"{self.command} {self.path}")
+                if self.headers.get("Grpc-Metadata-macaroon") != fake.macaroon:
+                    fake.unauthorized += 1
+                    self._send(401, {"code": 2, "message": "verification failed: signature mismatch"})
+                    return
+                status, body = fake.route(self.path)
+                self._send(status, body)
+
+            def _send(self, status: int, body: dict[str, Any]) -> None:
+                payload = json.dumps(body).encode("utf-8")
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+
+            do_GET = _answer
+            do_POST = _answer
+
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+
+    @property
+    def url(self) -> str:
+        return f"http://127.0.0.1:{self.server.server_address[1]}"
+
+    def route(self, raw_path: str) -> tuple[int, dict[str, Any]]:
+        parsed = parse.urlsplit(raw_path)
+        query = parse.parse_qs(parsed.query)
+        offset = int((query.get("index_offset") or ["0"])[0])
+        if parsed.path == "/v1/getinfo":
+            return 200, {"alias": "boltz-regtest-fake", "chains": [{"chain": "bitcoin", "network": "regtest"}]}
+        if parsed.path == "/v1/payments":
+            return 200, {"payments": [], "first_index_offset": "0", "last_index_offset": "0"}
+        if parsed.path == "/v1/invoices":
+            rows = [self.invoice] if offset == 0 else []
+            return 200, {"invoices": rows, "first_index_offset": "1", "last_index_offset": "1"}
+        if parsed.path == "/v1/switch":
+            return 200, {"forwarding_events": [], "last_offset_index": 0}
+        if parsed.path in ("/v1/channels", "/v1/channels/closed"):
+            return 200, {"channels": []}
+        return 404, {"code": 5, "message": f"unexpected LND path {parsed.path}"}
+
+    def __enter__(self) -> "_LndRestFake":
+        self.thread.start()
+        return self
+
+    def __exit__(self, *_exc: Any) -> None:
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join(timeout=5)
+
+
+def _insert_native_lnd_invoice(data_root: Path, *, swap: dict[str, Any]) -> dict[str, Any]:
+    """Import the paid invoice through the Rust binary's LND wallet sync."""
 
     settled_at = int(
         datetime(2026, 7, 2, 10, 4, tzinfo=timezone.utc).timestamp()
     )
     invoice = swap.get("lnd_invoice")
     if not isinstance(invoice, dict):
-        # Static plumbing tests use the same curated adapter record shape without
+        # Static plumbing tests use the same curated invoice shape without
         # requiring Docker. The live lane always supplies lookupinvoice evidence.
         invoice = {
             "r_hash": base64.b64encode(bytes.fromhex(swap["payment_hash"])).decode(
@@ -897,45 +1002,53 @@ def _insert_native_lnd_invoice(data_root: Path, *, swap: dict[str, Any]) -> dict
             "state": "SETTLED",
             "settle_date": str(settled_at),
             "creation_date": str(settled_at - 120),
+            "add_index": "1",
+            "settle_index": "1",
             "memo": "Executed Boltz Liquid submarine settlement",
         }
-    invoice = core_lnd._sanitize_invoice(invoice)  # noqa: SLF001
-    records = core_lnd._stamp_lightning_import_network(  # noqa: SLF001
-        core_lnd.lnd_import_records([invoice], []),
-        "regtest",
-    )
-    if (
-        len(records) != 1
-        or records[0].get("payment_hash") != swap["payment_hash"]
-        or records[0].get("kind") != "lnd_invoice"
-    ):
-        raise BoltzProbeError(
-            f"LND adapter did not produce the expected settled invoice: {records}"
+    invoice = _lnd_invoice_import_fields(invoice)
+    with _LndRestFake(invoice) as node:
+        scope = ("--workspace", "Boltz", "--profile", "LiquidSwap")
+        _run_kassiber_input(
+            data_root,
+            node.macaroon + "\n",
+            "backends", "create", "lnd-regtest-node", "--kind", "lnd", "--url", node.url,
+            "--network", "regtest", "--timeout", "10", "--token-stdin",
         )
-    conn = open_db(data_root)
+        _run_kassiber(data_root, "wallets", "update", *scope, "--wallet", "lnd-regtest",
+                      "--backend", "lnd-regtest-node")
+        synced = _run_kassiber(data_root, "wallets", "sync", *scope, "--wallet", "lnd-regtest")
+        if node.unauthorized:
+            raise BoltzProbeError(f"Kassiber reached the LND node without its macaroon: {node.requests}")
+    outcome = synced["data"]
+    if isinstance(outcome, list):
+        if len(outcome) != 1:
+            raise BoltzProbeError(f"Expected one LND wallet sync result, got {outcome}")
+        outcome = outcome[0]
+    conn = sqlite3.connect(data_root / "kassiber.sqlite3")
+    conn.row_factory = sqlite3.Row
     try:
-        profile = conn.execute(
-            "SELECT * FROM profiles WHERE label = 'LiquidSwap'"
-        ).fetchone()
-        wallet = conn.execute(
-            "SELECT * FROM wallets WHERE profile_id = ? AND label = 'lnd-regtest'",
-            (profile["id"],),
-        ).fetchone()
-        outcome = core_imports.insert_wallet_records(
-            conn,
-            profile,
-            wallet,
-            records,
-            core_lnd.LND_IMPORT_SOURCE,
-            core_imports.ImportCoordinatorHooks(
-                ensure_tag_row=lambda *args: None,
-                invalidate_journals=invalidate_journals,
-            ),
-        )
-        conn.commit()
-        return outcome
+        rows = conn.execute(
+            """
+            SELECT t.kind, t.payment_hash
+            FROM transactions t JOIN wallets w ON w.id = t.wallet_id
+            WHERE w.label = 'lnd-regtest'
+            """
+        ).fetchall()
     finally:
         conn.close()
+    if (
+        len(rows) != 1
+        or rows[0]["payment_hash"] != swap["payment_hash"]
+        or rows[0]["kind"] != "lnd_invoice"
+    ):
+        raise BoltzProbeError(
+            f"LND adapter did not import the expected settled invoice: {[dict(r) for r in rows]}"
+        )
+    transactions = outcome.get("transactions") or {}
+    if outcome.get("status") != "synced" or int(transactions.get("imported") or 0) != 1:
+        raise BoltzProbeError(f"LND wallet sync did not import exactly one invoice: {outcome}")
+    return {"imported": int(transactions["imported"]), "sync": outcome}
 
 
 def _build_accounting_book(
