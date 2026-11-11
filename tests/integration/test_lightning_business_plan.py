@@ -7,14 +7,14 @@ import unittest
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 
 
 class LightningBusinessPlanTest(unittest.TestCase):
     def _plan(self, *args: str) -> dict:
         script = ROOT / "dev" / "regtest" / "lightning-business-plan.py"
         return json.loads(
-            subprocess.check_output([sys.executable, str(script), *args], cwd=ROOT, text=True)
+            subprocess.check_output([sys.executable, "-I", str(script), *args], cwd=ROOT, text=True)
         )
 
     def _sum_msat(self, plan: dict, key: str) -> int:

@@ -37,7 +37,7 @@ class RegtestSourceFundsFixtureTest(unittest.TestCase):
                 purchase_fixture(self.fixture(Path(directory), amount="0.001"))
 
     def test_rebuild_removes_receipt_before_seeding_new_transaction_ids(self):
-        root = Path(__file__).resolve().parents[1]
+        root = Path(__file__).resolve().parents[2]
         harness = (root / "scripts/integration-harness.sh").read_text()
         build = "demo_build_book() {" + harness.split("demo_build_book() {", 1)[1].split("\ndemo_print_instructions()", 1)[0]
         with tempfile.TemporaryDirectory() as directory:
