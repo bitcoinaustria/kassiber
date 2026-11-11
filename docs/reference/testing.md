@@ -364,7 +364,9 @@ that each fetch the locked test data first:
    the `kassiber-repo-checks` tests inside the workspace run.
 2. `Recorded sessions` runs `scripts/replay-sessions.sh` (see
    [above](#replaying-the-recorded-sessions)) and uploads
-   `target/session-replay-report.tsv` even after failure.
+   `target/session-replay-report.tsv` even after failure. Both jobs install
+   Poppler (`poppler-utils`), so the PDF import and chat paths run instead of
+   skipping.
 3. `Frontend checks` runs TypeScript, ESLint and Vitest and uploads a JUnit
    report even after failure.
 4. `Chain observers (Linux Docker)` runs the
