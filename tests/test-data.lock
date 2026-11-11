@@ -2,7 +2,7 @@
 # scripts/fetch-test-data.sh; never edit by hand (see
 # docs/reference/testing.md#generated-test-data). <git blob id> <path>
 branch t3code/test-data
-commit 1bfb1d377a4f611b2d860ff2bea2aaeb1c2e7c06
+commit 994bc4036d80a891a3680f3f9b3638b01cd8fb64
 ab2bfbb90cc8996dcee6933efaf1a0fd9ea88f89 crates/ai/tests/data/vectors.json
 b02df587ab3b14801a923c1049f1ce4062b1188e crates/chain/fixtures/python_btcpay.json
 76906734c1ea7bd4f09690ad90894cfcadf9f333 crates/chain/fixtures/python_cln.json
@@ -563,3 +563,17 @@ d0c9f64583769f07a964e39079bb6605db806a1a tests/fixtures/rust_port/commands_descr
 1e12c3a9c3894617b0fab6b4ec1e91211acf72c6 tests/fixtures/rust_port/daemon_kinds.json
 d37e1ac79d10a0fed38f2bf2ec5a1b3357519216 tests/fixtures/rust_port/environment.json
 0258e13d840b9e55b6bbef4e11836c5ee0d6c5d2 tests/fixtures/rust_port/error_codes.json
+64528835f96bb83117fb0a5acc23d50aca948c04 tests/fixtures/secret_redaction/fifth-1-100000.jsonl.gz
+22ca4b79720c9e3b0cd7fe0ae1e763c0d929e957 tests/fixtures/secret_redaction/fifth-2-20000.jsonl.gz
+2a6df2d634e8365349310d1e03cde523bcf7e6c1 tests/fixtures/secret_redaction/fifth-3-20000.jsonl.gz
+21ea3726be2f085951089ba85f2a1d73db1b2980 tests/fixtures/secret_redaction/fifth-4-20000.jsonl.gz
+17ac977dfa8a03c1528f76cdc475165901f70228 tests/fixtures/secret_redaction/fourth-1-20000.jsonl.gz
+91beec3924708dcc74ecba9f731295735ff34276 tests/fixtures/secret_redaction/fourth-2-20000.jsonl.gz
+63c50ad0ebe2298608d981857c6f992e0143a127 tests/fixtures/secret_redaction/fourth-3-20000.jsonl.gz
+9e381109af2167a6ad16b59bcb6c0684eb4cc2cb tests/fixtures/secret_redaction/fourth-41-100000.jsonl.gz
+ceaa4b4f297fd400f185af56d871d2721bc9a180 tests/fixtures/secret_redaction/fourth-5-20000.jsonl.gz
+30058eeff96ed10d69ef4f13df073f65b7833184 tests/fixtures/secret_redaction/independent-7-100000.jsonl.gz
+0b66ed42dcdf6d896974cc913ed48aa2c246344f tests/fixtures/secret_redaction/sixth-1-100000.jsonl.gz
+02879c2efa8097e18cd6c213f5573259908e7169 tests/fixtures/secret_redaction/sixth-2-20000.jsonl.gz
+1a7633a01202817b50d769aabadf90a1caca4bc8 tests/fixtures/secret_redaction/sixth-3-20000.jsonl.gz
+09e8bd9f7ac0f9e946fbef0af79df1c23e67b74c tests/fixtures/secret_redaction/third-17-100000.jsonl.gz

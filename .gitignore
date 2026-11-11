@@ -592,4 +592,18 @@ ui-tauri/src-tauri/bin/provider_broker/
 /tests/fixtures/rust_port/daemon_kinds.json
 /tests/fixtures/rust_port/environment.json
 /tests/fixtures/rust_port/error_codes.json
+/tests/fixtures/secret_redaction/fifth-1-100000.jsonl.gz
+/tests/fixtures/secret_redaction/fifth-2-20000.jsonl.gz
+/tests/fixtures/secret_redaction/fifth-3-20000.jsonl.gz
+/tests/fixtures/secret_redaction/fifth-4-20000.jsonl.gz
+/tests/fixtures/secret_redaction/fourth-1-20000.jsonl.gz
+/tests/fixtures/secret_redaction/fourth-2-20000.jsonl.gz
+/tests/fixtures/secret_redaction/fourth-3-20000.jsonl.gz
+/tests/fixtures/secret_redaction/fourth-41-100000.jsonl.gz
+/tests/fixtures/secret_redaction/fourth-5-20000.jsonl.gz
+/tests/fixtures/secret_redaction/independent-7-100000.jsonl.gz
+/tests/fixtures/secret_redaction/sixth-1-100000.jsonl.gz
+/tests/fixtures/secret_redaction/sixth-2-20000.jsonl.gz
+/tests/fixtures/secret_redaction/sixth-3-20000.jsonl.gz
+/tests/fixtures/secret_redaction/third-17-100000.jsonl.gz
 # <<< generated test data
