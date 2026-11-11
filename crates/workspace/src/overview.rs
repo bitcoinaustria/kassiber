@@ -1169,6 +1169,46 @@ fn map_kind(kind: &str) -> String {
 }
 
 /// `_connections(conn, profile_id, balances)`.
+/// `_wallet_month_balances`: each wallet's bitcoin at the end of every month
+/// it moved, oldest first. Reads no clock; the desktop fills the window.
+fn wallet_month_balances(conn: &Connection, profile: &str) -> Result<BTreeMap<String, Vec<Value>>> {
+    let mut deltas: BTreeMap<String, BTreeMap<String, i128>> = BTreeMap::new();
+    for row in rows(
+        conn,
+        "SELECT wallet_id, occurred_at, direction, amount, fee FROM transactions \
+         WHERE profile_id = ? AND asset IN ('BTC', 'LBTC') AND COALESCE(excluded, 0) = 0 \
+         ORDER BY occurred_at ASC, created_at ASC, id ASC",
+        [profile],
+    )? {
+        let Some(day) = parse_day(&val(&row, "occurred_at")) else {
+            continue;
+        };
+        let delta = signed(&row)?;
+        *deltas
+            .entry(py_str(&val(&row, "wallet_id")))
+            .or_default()
+            .entry(day[..7].to_string())
+            .or_default() += delta;
+    }
+    Ok(deltas
+        .into_iter()
+        .map(|(wallet, by_month)| {
+            let mut running = 0i128;
+            let points = by_month
+                .into_iter()
+                .map(|(month, delta)| {
+                    running += delta;
+                    dict([
+                        ("month", s(month)),
+                        ("balanceBtc", Value::Float(btc(running))),
+                    ])
+                })
+                .collect();
+            (wallet, points)
+        })
+        .collect())
+}
+
 fn connections(
     conn: &Connection,
     profile: &str,
@@ -1177,6 +1217,7 @@ fn connections(
 ) -> Result<Vec<Value>> {
     let assets = observed_assets(conn, profile)?;
     let imports = import_summary(conn, profile)?;
+    let month_balances = wallet_month_balances(conn, profile)?;
     let mut output = Vec::new();
     for row in rows(
         conn,
@@ -1227,6 +1268,10 @@ fn connections(
                 },
             ),
             ("lastTransactionAt", val(&row, "last_tx_at")),
+            (
+                "monthBalances",
+                Value::List(month_balances.get(&py_str(&val(&row, "id"))).cloned().unwrap_or_default()),
+            ),
             (
                 "balance",
                 balance.map_or(Value::Float(0.0), |b| b.balance.clone()),
@@ -2883,5 +2928,110 @@ mod same_time_tests {
             conn.execute("INSERT INTO import_batch_transactions(batch_id,transaction_id,source_position) VALUES('b',?,?)", kassiber_store::rusqlite::params![id, position]).unwrap();
         }
         assert_eq!(latest_transaction_rate(conn, "p", "EUR").unwrap(), 10000.0);
+    }
+}
+
+#[cfg(test)]
+mod month_balance_tests {
+    use super::*;
+
+    const BTC_MSAT: i64 = 100_000_000_000;
+
+    /// Month-end balances only for months a wallet moved; Liquid bitcoin
+    /// counts, excluded rows, other assets and unreadable dates do not.
+    #[test]
+    fn month_end_balances_for_months_a_wallet_moved() {
+        let root = tempfile::tempdir().unwrap();
+        let book = kassiber_store::Book::create(root.path(), None).unwrap();
+        let conn = book.connection();
+        conn.execute_batch(
+            "INSERT INTO workspaces(id,label,created_at) VALUES('ws','W','t');
+            INSERT INTO profiles(id,workspace_id,label,created_at) VALUES('p','ws','P','t');
+            INSERT INTO wallets(id,workspace_id,profile_id,label,kind,created_at) VALUES
+                ('w1','ws','p','One','custom','t'),('w2','ws','p','Two','custom','t'),
+                ('w3','ws','p','Three','custom','t'),('w4','ws','p','Four','custom','t');",
+        )
+        .unwrap();
+        for (id, wallet, asset, excluded, occurred, direction, amount, fee) in [
+            (
+                "t1",
+                "w1",
+                "BTC",
+                0,
+                "2024-05-01T00:00:00Z",
+                "inbound",
+                2 * BTC_MSAT,
+                0,
+            ),
+            (
+                "t2",
+                "w1",
+                "BTC",
+                0,
+                "2024-05-20T00:00:00Z",
+                "inbound",
+                BTC_MSAT,
+                0,
+            ),
+            (
+                "t3",
+                "w1",
+                "BTC",
+                0,
+                "2026-09-10T00:00:00Z",
+                "outbound",
+                BTC_MSAT / 2,
+                1_000_000,
+            ),
+            (
+                "t4",
+                "w2",
+                "LBTC",
+                0,
+                "2026-11-02T00:00:00Z",
+                "inbound",
+                BTC_MSAT / 4,
+                0,
+            ),
+            (
+                "t5",
+                "w2",
+                "BTC",
+                1,
+                "2026-11-03T00:00:00Z",
+                "inbound",
+                BTC_MSAT,
+                0,
+            ),
+            (
+                "t6",
+                "w3",
+                "USDT",
+                0,
+                "2026-11-03T00:00:00Z",
+                "inbound",
+                BTC_MSAT,
+                0,
+            ),
+            ("t7", "w4", "BTC", 0, "not a date", "inbound", BTC_MSAT, 0),
+        ] {
+            conn.execute(
+                "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,occurred_at,direction,asset,amount,fee,excluded,created_at) \
+                 VALUES(?1,'ws','p',?2,?1,?5,?6,?3,?7,?8,?4,'t')",
+                kassiber_store::rusqlite::params![id, wallet, asset, excluded, occurred, direction, amount, fee],
+            )
+            .unwrap();
+        }
+        let balances = wallet_month_balances(conn, "p").unwrap();
+        let point =
+            |month: &str, btc: f64| dict([("month", s(month)), ("balanceBtc", Value::Float(btc))]);
+        assert_eq!(
+            balances["w1"],
+            vec![point("2024-05", 3.0), point("2026-09", 2.49999)]
+        );
+        assert_eq!(balances["w2"], vec![point("2026-11", 0.25)]);
+        assert!(!balances.contains_key("w3"));
+        assert!(!balances.contains_key("w4"));
+        assert!(wallet_month_balances(conn, "nobody").unwrap().is_empty());
     }
 }

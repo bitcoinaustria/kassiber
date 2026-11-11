@@ -4668,6 +4668,9 @@
     "tests/test_ui_transaction_payment_method.py": {
       "TransactionPaymentMethodTests": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "transactions", "reason": "calls kassiber.core.ui_snapshot, kassiber.db directly", "reviewed": false, "tests": 1}
     },
+    "tests/test_ui_wallet_month_balances.py": {
+      "WalletMonthBalancesTest": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.core.ui_snapshot directly", "reviewed": false, "tests": 2}
+    },
     "tests/test_update_check.py": {
       "test_update_check_consent_is_explicit_owner_only_and_fail_closed": {"disposition": "rust-test", "flags": [], "group": "network-egress", "reason": "calls kassiber.update_check directly", "reviewed": false, "tests": 1},
       "test_update_check_consent_rejects_boolean_and_float_schema_versions": {"disposition": "rust-test", "flags": [], "group": "network-egress", "reason": "calls kassiber.update_check directly", "reviewed": false, "tests": 1},
