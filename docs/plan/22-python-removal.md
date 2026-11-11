@@ -218,8 +218,10 @@ Recording and storage rules:
 - **Encrypted books are stored decrypted** with their passphrase, page size
   and page count. A replay encrypts them again with the product's
   `encrypt_plaintext`, then checks that the product opens the result with
-  the recorded passphrase, that page size and count match, and that the
-  decrypted contents equal the recording; any mismatch fails the session.
+  the recorded passphrase, that the page size matches, that it has no more
+  pages than the original (the product's encryption writes a compact book,
+  so an original with free pages had a few more), and that the decrypted
+  contents equal the recording; any mismatch fails the session.
   About 20 sessions covering unlock, rekey, wrong passphrase and crash
   recovery keep their original ciphertext.
 - **Shared pages.** Files over 64 KiB are stored as 4 KiB content-addressed

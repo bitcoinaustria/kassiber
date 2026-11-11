@@ -7,9 +7,10 @@
 //! `open_container` (the product's keying: SQLCipher 4 compatibility, its
 //! KDF iterations and page size) and `encrypt_plaintext` (the product's
 //! encryption of a plaintext book). Every re-encrypted book is checked: the
-//! product opens it with the recorded passphrase, its page size and page
-//! count match the recorded original's, and its decrypted contents equal the
-//! stored plaintext. SQLCipher's only file header is a random salt, so the
+//! product opens it with the recorded passphrase, its page size matches the
+//! recorded original's, it has no more pages than the original (the product's
+//! encryption writes a compact book, so an original with free pages had a few
+//! more), and its decrypted contents equal the stored plaintext. SQLCipher's only file header is a random salt, so the
 //! salt itself is not reproduced.
 //!
 //! Only passphrases that occur literally in the checked-in test sources may
@@ -149,11 +150,13 @@ pub fn encrypt(
         .map_err(|e| fail(&format!("{e:?}")))?;
     let encrypted = fs::read(&result.encrypted_path).map_err(|e| fail(&e.to_string()))?;
     // The product must open it with the recorded passphrase, and it must
-    // hold exactly the recorded pages and contents.
+    // hold the recorded contents.
     let conn = open_container(&result.encrypted_path, Some(&encryption.passphrase))
         .map_err(|e| fail(&format!("the product does not open it: {e:?}")))?;
     let (page_size, page_count) = page_facts(&conn).map_err(|e| fail(&e.to_string()))?;
-    if (page_size, page_count) != (encryption.page_size, encryption.page_count) {
+    // The product's encryption writes a compact book, so a recorded original
+    // with free pages had more of them; it never has fewer.
+    if page_size != encryption.page_size || page_count > encryption.page_count {
         return Err(fail(&format!(
             "page size/count {page_size}/{page_count}, recorded {}/{}",
             encryption.page_size, encryption.page_count
@@ -218,6 +221,18 @@ mod tests {
             page_count: count,
             ..probe
         };
+        // An original with free pages had more pages than the compact copy.
+        let roomier = Encryption {
+            page_count: count + 2,
+            ..recorded.clone()
+        };
+        encrypt(&plaintext, &roomier, &dir.path().join("b2")).unwrap();
+        // A different page size never passes.
+        let other = Encryption {
+            page_size: 1024,
+            ..recorded.clone()
+        };
+        assert!(encrypt(&plaintext, &other, &dir.path().join("b3")).is_err());
         let encrypted = encrypt(&plaintext, &recorded, &dir.path().join("b")).unwrap();
         assert!(maybe_encrypted(&encrypted));
         let (back, found) = decrypt(
