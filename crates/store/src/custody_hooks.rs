@@ -41,6 +41,10 @@ impl<'a> MigrationClock<'a> {
 /// The custody-layer migrations. Each runs inside the caller's write
 /// transaction and leaves committing (or rolling back) to the store.
 pub trait CustodyMigrations: Sync {
+    /// `backfill_legacy_componentless_review_relations`: scope dismissed
+    /// componentless gap reviews whose candidate the current matcher finds
+    /// with the same gap id and fingerprint; others stay unscoped.
+    fn recover_componentless_dismissals(&self, conn: &Connection) -> Result<()>;
     /// `refresh_legacy_authored_components`: consolidate pending legacy
     /// reviewed pairs and direct payouts into authored components.
     fn refresh_legacy_authored_components(

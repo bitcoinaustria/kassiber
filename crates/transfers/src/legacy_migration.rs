@@ -21,6 +21,10 @@ pub fn install() {
 }
 
 impl CustodyMigrations for Migrations {
+    fn recover_componentless_dismissals(&self, conn: &Connection) -> kassiber_store::Result<()> {
+        sql::capture_sqlite(|| recover_componentless_dismissals(conn).map_err(Error::App))
+            .map_err(|e| store_error("_backfill_legacy_componentless_review_transactions", e))
+    }
     fn refresh_legacy_authored_components(
         &self,
         conn: &Connection,
@@ -39,6 +43,156 @@ impl CustodyMigrations for Migrations {
         requires_legacy_pair_fee_review(conn, component_id)
             .map_err(|e| store_error("mark_legacy_pair_fee_reviews", Error::App(e)))
     }
+}
+
+/// `backfill_legacy_componentless_review_relations`: a dismissed
+/// componentless review from before review boundaries were stored gets its
+/// boundary relations and completeness header only when the current
+/// matcher (without journal claims) finds a candidate with its exact gap id
+/// and full candidate fingerprint. Any other review stays unscoped.
+fn recover_componentless_dismissals(c: &Connection) -> Result<()> {
+    let pending = rows(
+        c,
+        "SELECT r.id, r.workspace_id, r.profile_id, r.gap_id, r.candidate_fingerprint, r.created_at
+         FROM custody_gap_reviews r
+         WHERE r.component_id IS NULL AND r.action = 'dismissed'
+           AND COALESCE(r.event_kind, 'review_decision') = 'review_decision'
+         ORDER BY r.profile_id, r.created_at, r.id",
+        [],
+    )?;
+    let mut by_profile: Vec<(String, Vec<Value>)> = Vec::new();
+    for review in pending {
+        let profile = py_str(&value(&review, "profile_id"));
+        match by_profile.iter_mut().find(|(p, _)| *p == profile) {
+            Some((_, reviews)) => reviews.push(review),
+            None => by_profile.push((profile, vec![review])),
+        }
+    }
+    for (profile, reviews) in by_profile {
+        let workspace = text(&reviews[0], "workspace_id");
+        let loaded = super::gap_candidates::load_with(
+            c,
+            &Scope {
+                workspace_id: &workspace,
+                profile_id: &profile,
+            },
+            false,
+        )?;
+        // `{candidate.gap_id: candidate for candidate in (*candidates,
+        // *accounting_candidates)}`: a later candidate replaces an earlier one.
+        let mut by_gap: Vec<(String, Value)> = Vec::new();
+        for key in ["candidates", "accounting_candidates"] {
+            for candidate in store::list(&loaded.result, key) {
+                let gap = text(candidate, "gap_id");
+                match by_gap.iter_mut().find(|(g, _)| *g == gap) {
+                    Some((_, slot)) => *slot = candidate.clone(),
+                    None => by_gap.push((gap, candidate.clone())),
+                }
+            }
+        }
+        let mut exact = std::collections::BTreeMap::new();
+        for (gap, candidate) in by_gap {
+            let fingerprint = kassiber_custody::gaps::candidate_fingerprint(
+                &kassiber_custody::codec::to_json(&candidate),
+            )
+            .map_err(|e| AppError::new("internal_error", e))?;
+            exact.insert((gap, fingerprint), candidate);
+        }
+        for review in reviews {
+            let key = (
+                py_str(&value(&review, "gap_id")),
+                py_str(&value(&review, "candidate_fingerprint")),
+            );
+            let Some(candidate) = exact.get(&key) else {
+                continue;
+            };
+            backfill_review_relations(c, &review, candidate)?;
+        }
+    }
+    Ok(())
+}
+
+/// `backfill_custody_gap_review_relations` and
+/// `backfill_custody_gap_review_relation_set` for one recovered review.
+fn backfill_review_relations(c: &Connection, review: &Value, candidate: &Value) -> Result<()> {
+    let id = py_str(&value(review, "id"));
+    let ids = |key: &str| -> Vec<String> {
+        store::list(candidate, key)
+            .iter()
+            .map(|v| if truthy(v) { py_str(v) } else { String::new() })
+            .collect()
+    };
+    let (sources, returns) = (ids("source_ids"), ids("return_ids"));
+    let existing: std::collections::BTreeSet<(String, String)> = rows(
+        c,
+        "SELECT role, transaction_id FROM custody_gap_review_transactions WHERE review_id = ? ORDER BY role, transaction_id, id",
+        [&id],
+    )?
+    .iter()
+    .map(|r| (text(r, "role"), text(r, "transaction_id")))
+    .collect();
+    for (role, transactions) in [("source", &sources), ("return", &returns)] {
+        let wanted: std::collections::BTreeSet<&String> =
+            transactions.iter().filter(|t| !t.is_empty()).collect();
+        for transaction in wanted {
+            if existing.contains(&(role.to_owned(), transaction.clone())) {
+                continue;
+            }
+            let collision = !rows(
+                c,
+                "SELECT 1 FROM transactions WHERE id = ? AND (workspace_id != ? OR profile_id != ?) LIMIT 1",
+                kassiber_store::rusqlite::params![
+                    transaction,
+                    sql::bind(&value(review, "workspace_id"), 2)?,
+                    sql::bind(&value(review, "profile_id"), 3)?
+                ],
+            )?
+            .is_empty();
+            if collision {
+                continue;
+            }
+            let key = store::hash(
+                &Value::List(vec![
+                    s("custody-gap-review-transaction-v2"),
+                    s(&id),
+                    s(role),
+                    s(transaction),
+                ]),
+                true,
+            )?;
+            c.execute(
+                "INSERT OR IGNORE INTO custody_gap_review_transactions(id, review_id, workspace_id, profile_id, role, transaction_id, created_at) VALUES(?, ?, ?, ?, ?, ?, ?)",
+                kassiber_store::rusqlite::params![
+                    key,
+                    id,
+                    sql::bind(&value(review, "workspace_id"), 3)?,
+                    sql::bind(&value(review, "profile_id"), 4)?,
+                    role,
+                    transaction,
+                    sql::bind(&value(review, "created_at"), 7)?
+                ],
+            )
+            .map_err(sql::error)?;
+        }
+    }
+    let distinct = |v: &[String]| v.iter().collect::<std::collections::BTreeSet<_>>().len() as i64;
+    c.execute(
+        "INSERT OR IGNORE INTO custody_gap_review_relation_sets(id, review_id, workspace_id, profile_id, expected_source_count, expected_return_count, created_at) VALUES(?, ?, ?, ?, ?, ?, ?)",
+        kassiber_store::rusqlite::params![
+            store::hash(
+                &Value::List(vec![s("custody-gap-review-relation-set-v1"), s(&id)]),
+                true
+            )?,
+            id,
+            sql::bind(&value(review, "workspace_id"), 3)?,
+            sql::bind(&value(review, "profile_id"), 4)?,
+            distinct(&sources),
+            distinct(&returns),
+            sql::bind(&value(review, "created_at"), 7)?
+        ],
+    )
+    .map_err(sql::error)?;
+    Ok(())
 }
 
 /// A failure Python would raise out of `open_db`: the store rolls the step

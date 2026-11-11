@@ -150,5 +150,25 @@
    "interrupted_consolidation_leaves_no_partial_component_and_resumes"
   ],
   "rule": "The consolidation commits as one transaction: an interruption leaves none of its writes."
+ },
+ {
+  "id": "componentless-recovery-backfills",
+  "file": "crates/transfers/src/legacy_migration.rs",
+  "find": "            backfill_review_relations(c, &review, candidate)?;\n",
+  "replace": "",
+  "expect_failing": [
+   "rust_migration_matches_frozen_python_dumps_plaintext"
+  ],
+  "rule": "An exactly matched componentless dismissal gains its boundary relations and completeness header."
+ },
+ {
+  "id": "componentless-recovery-needs-fingerprint",
+  "file": "crates/transfers/src/legacy_migration.rs",
+  "find": "                py_str(&value(&review, \"candidate_fingerprint\")),",
+  "replace": "                exact.keys().find(|(g, _)| *g == py_str(&value(&review, \"gap_id\"))).map(|(_, f)| f.clone()).unwrap_or_default(),",
+  "expect_failing": [
+   "rust_migration_matches_frozen_python_dumps_plaintext"
+  ],
+  "rule": "Recovery requires the full candidate fingerprint, not only the gap id; a changed candidate stays unscoped."
  }
 ]

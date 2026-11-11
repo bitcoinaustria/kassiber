@@ -91,6 +91,13 @@ pub(super) struct Loaded {
 }
 
 pub(super) fn load(c: &Connection, scope: &Scope<'_>) -> Result<Loaded> {
+    load_with(c, scope, true)
+}
+
+/// `load_gap_search_result(..., include_journal_claims=...)`: without journal
+/// claims neither the stored gap inputs nor journal transfer entries suppress
+/// a boundary, whatever the journal's freshness.
+pub(super) fn load_with(c: &Connection, scope: &Scope<'_>, journal_claims: bool) -> Result<Loaded> {
     let profile = profile(c, scope)?;
     let count = integer(&value(&profile, "active_count"))?;
     let count = i64::try_from(count).map_err(|_| internal("transaction count overflow"))?;
@@ -113,7 +120,8 @@ pub(super) fn load(c: &Connection, scope: &Scope<'_>) -> Result<Loaded> {
     let (worklist, large) = worklist(c, scope.profile_id, count)?;
     let mut ignored = BTreeSet::new();
     let mut accounting = BTreeSet::new();
-    let stored = if current {
+    let claims = current && journal_claims;
+    let stored = if claims {
         rows(
             c,
             "SELECT * FROM journal_custody_gap_inputs WHERE profile_id=? AND input_version=?",
@@ -147,7 +155,7 @@ pub(super) fn load(c: &Connection, scope: &Scope<'_>) -> Result<Loaded> {
         for row in rows(c,"SELECT COALESCE(source.anchor_transaction_id,source.transaction_id) AS source_id,CASE WHEN term.term_kind='transaction_pair' THEN COALESCE(target.anchor_transaction_id,target.transaction_id) ELSE NULL END AS target_id FROM custody_component_economic_terms term JOIN custody_component_legs source ON source.id=term.source_leg_id JOIN custody_component_legs target ON target.id=term.target_leg_id WHERE term.profile_id=? AND term.component_id IN (SELECT component_id FROM custody_component_transaction_memberships WHERE profile_id=?)",[scope.profile_id,scope.profile_id])? {
             for key in ["source_id","target_id"] {if truthy(&value(&row,key)) {ignored.insert(text(&row,key));}}
         }
-        if current {
+        if claims {
             for row in rows(c,"SELECT DISTINCT transaction_id FROM journal_entries WHERE profile_id=? AND entry_type IN ('transfer_out','transfer_in')",[scope.profile_id])? {
                 ignored.insert(text(&row,"transaction_id"));
             }

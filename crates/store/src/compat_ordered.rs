@@ -1,12 +1,10 @@
 //! Python open_db's ordered compatibility pass. The custody steps it cannot
-//! evaluate itself (legacy review consolidation, the legacy pair fee review)
-//! run through `custody_hooks`; componentless dismissal recovery still
-//! refuses.
+//! evaluate itself (legacy review consolidation, the legacy pair fee review,
+//! componentless dismissal recovery) run through `custody_hooks`.
 use super::{backfills, custody, data, ensure_column, ownership, repairs};
 use crate::custody_hooks::MigrationClock;
-use crate::{map_sqlite_error, Error, ErrorKind, Result};
+use crate::{map_sqlite_error, Error, Result};
 use rusqlite::Connection;
-use serde_json::json;
 
 fn execute(conn: &Connection, sql: &str) -> Result<()> {
     conn.execute_batch(sql).map_err(map_sqlite_error)
@@ -52,18 +50,13 @@ fn columns_between(conn: &Connection, first: (&str, &str), last: (&str, &str)) -
     Ok(())
 }
 
-fn boundary(step: &str, reason: &str) -> Error {
-    Error::new(
-        ErrorKind::UnsupportedSchemaLayout,
-        "legacy custody migration requires the R2 custody matcher; migrate this book with Python",
-    )
-    .hint("Open this book with the Python build of Kassiber to migrate it first, then retry the Rust binary.")
-    .details(json!({"migration_step":step,"reason":reason}))
-}
-
-fn componentless_recovery(conn: &Connection) -> Result<()> {
-    // Same cheap pending predicate as Python. Without observations the higher
-    // layer cannot recover a candidate either; retain R1's no-op admission.
+/// `_backfill_legacy_componentless_review_transactions`: Python's cheap
+/// pending guard, then the custody layer's exact candidate recovery in one
+/// immediate transaction.
+fn componentless_recovery(
+    conn: &mut Connection,
+    observer: &mut impl FnMut(&str) -> Result<()>,
+) -> Result<()> {
     let pending: bool = conn
         .query_row(
             &format!(
@@ -78,19 +71,31 @@ fn componentless_recovery(conn: &Connection) -> Result<()> {
             |row| row.get(0),
         )
         .map_err(map_sqlite_error)?;
-    if pending {
+    if !pending {
+        return Ok(());
+    }
+    let Some(custody) = crate::custody_hooks::installed() else {
+        // Without observations no candidate can match: nothing to recover.
         let observations: bool = conn.query_row(
             "SELECT EXISTS(SELECT 1 FROM custody_gap_reviews r JOIN transactions t ON t.profile_id=r.profile_id WHERE r.component_id IS NULL AND r.action='dismissed' AND coalesce(r.event_kind,'review_decision')='review_decision' AND coalesce(t.excluded,0)=0 AND (NOT EXISTS(SELECT 1 FROM custody_gap_review_relation_sets s WHERE s.review_id=r.id) OR EXISTS(SELECT 1 FROM custody_gap_review_relation_sets s WHERE s.review_id=r.id AND (s.expected_source_count!=(SELECT COUNT(*) FROM custody_gap_review_transactions x WHERE x.review_id=r.id AND x.role='source') OR s.expected_return_count!=(SELECT COUNT(*) FROM custody_gap_review_transactions x WHERE x.review_id=r.id AND x.role='return')))))",
             [], |row| row.get(0),
         ).map_err(map_sqlite_error)?;
         if observations {
-            return Err(boundary(
+            return Err(crate::custody_hooks::unavailable(
                 "_backfill_legacy_componentless_review_transactions",
                 "legacy_gap_candidate_recovery",
             ));
         }
-    }
-    Ok(())
+        return Ok(());
+    };
+    let tx = conn
+        .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+        .map_err(map_sqlite_error)?;
+    observer("componentless_recovery.before")?;
+    custody.recover_componentless_dismissals(&tx)?;
+    observer("componentless_recovery.before_commit")?;
+    tx.commit().map_err(map_sqlite_error)?;
+    observer("componentless_recovery.after_commit")
 }
 
 #[cfg(test)]
@@ -230,7 +235,7 @@ fn ensure_schema_compat(
     repairs::step(conn, "projection-view", observer)?;
     custody::relation_schema(conn, observer)?;
     custody::review_relations(conn, observer)?;
-    componentless_recovery(conn)?;
+    componentless_recovery(conn, observer)?;
     repairs::immutability(conn)?;
     legacy_authored_components(conn, clock, observer)?;
     repairs::commercial(conn)?;

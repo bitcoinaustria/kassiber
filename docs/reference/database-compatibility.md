@@ -16,7 +16,7 @@ and asserts the resulting behavior, not merely that schema creation succeeds.
 | Journals built before the pre-arbitration custody holds | Not applicable | Not applicable | Tested in `test_wages_semantic_migration.py` | `custody-fail-closed-holds-v1` marks every processed book stale once, so the next (automatic) rebuild applies the unscoped, fan-out, pending and replaced-spend holds. Retained journals and evidence are unchanged until then. |
 | Journals that read a price as another currency | Not applicable | Not applicable | Tested in `test_price_currency_mismatch.py` | `price-currency-mismatch-hold-v1` invalidates, once, every processed book with an active priced transaction whose currency is not the book's, and requires calculation semantics version 10 of it, so the next rebuild holds those rows as `price_currency_mismatch` ([quarantines](tax.md#quarantines)). Other books keep their journals; the global version 10 still reports them stale until a rebuild. |
 | Journals built through RP2 | Not applicable | Not applicable | Tested in `test_wages_semantic_migration.py` | `kassiber-tax-engine-v1` marks every processed book stale once, so the next (automatic) rebuild uses Kassiber's own [tax engine](tax-engine.md) at one fixed decimal precision. Retained journals, evidence, and filed snapshots are unchanged until then. |
-| Pair components authored before observed-fee separation | Not applicable | Not applicable | Tested against an exact `c0a015de` book in `test_custody_pair_fee_compatibility.py`, including interrupted invalidation and repeat opens | `custody-legacy-pair-fee-review-v1` audits counts and marks affected journals stale once. A source below the complete observed debit with a `reviewed_residual:network_fee` allocation fails validation with `legacy_pair_fee_allocation_review_required`. The immutable component stays visible for revision; migration does not reinterpret its fee or suspense. Audit and invalidation roll back together. |
+| Pair components authored before observed-fee separation | Not applicable | Not applicable | Tested against an exact `c0a015de` book: the frozen Python migration in `crates/transfers/tests/legacy_migrations.rs` (plaintext and SQLCipher, interrupted invalidation and repeat opens) | `custody-legacy-pair-fee-review-v1` audits counts and marks affected journals stale once. A source below the complete observed debit with a `reviewed_residual:network_fee` allocation fails validation with `legacy_pair_fee_allocation_review_required`. The immutable component stays visible for revision; migration does not reinterpret its fee or suspense. Audit and invalidation roll back together. |
 | Journals built with a random same-time lot order | Not applicable | Not applicable | Tested in `test_lot_order_determinism.py` | `same-time-source-order-v1` requires calculation semantics version 8 of every processed book, once, so the next (automatic) rebuild orders same-time rows by the [source order](tax.md#same-time-order). Input markers, retained journals and filed snapshots are unchanged until then. |
 | Ancient REAL BTC to INTEGER msat rebuild | Tested with a focused legacy transaction/holdings fixture | Same migration path | Not applicable to a fresh current database | Amounts convert exactly and all later transaction metadata columns survive the rebuild. |
 | Credentials repeated in stored error text | Not applicable | Not applicable | Tested in `test_credential_echo.py` and `test_rust_store_migrations.py` | `stored-error-credentials-v1` withholds, once, every credential the book holds from the freshness, BTCPay store-sync, Lightning-sync and AI provider-check error columns; JSON columns are rewritten compactly. Python and the Rust store's migrating open produce the same bytes and audit. A credential no longer in the book cannot be recognized ([credential echoes](credential-echo.md)). |
@@ -355,13 +355,11 @@ an audit sentinel alone cannot establish what generated retained journals.
 
 ## Remaining fixture limits
 
-- Rust's private ordered pass matches both original fixtures exactly up to
-  the explicit R2 authored-consolidation refusal. Pair-free variants pass full
-  first-pass parity and unchanged Python reopen after the custody view was
-  moved after the leg-role rebuild. This does not establish full Rust migration
-  of the original books.
-- The checked-in fixtures are plaintext. R3 repeats those exact first-pass,
-  prefix and reopen comparisons on disposable SQLCipher copies.
+- The Rust store migrates both original fixtures completely, authored pair
+  consolidation included, to the exact rows Python's migration wrote (see
+  [legacy custody migrations](#legacy-custody-migrations-in-the-rust-store)).
+- The checked-in fixtures are plaintext. The Rust vectors repeat every
+  comparison on disposable SQLCipher copies.
   These do not replace the separate SQLCipher page-format and passphrase tests.
 - They do not simulate process termination at every migration statement;
   transaction/crash atomicity is covered by migration-specific tests rather
@@ -391,10 +389,8 @@ remove the index to bypass admission; deploy the matching Rust build instead.
 The page-index migration tests cover current books missing the index with
 Python-first and Rust-first upgrades, plaintext and SQLCipher, complete typed
 logical row dumps, subsequent opens, injected rollback and process termination.
-The existing ordered matrix covers both historical fixtures and SQLCipher
-copies: pair-free variants migrate in Rust; original authored-pair fixtures
-retain their explicit R2 refusal and must first migrate in Python. This index
-does not extend Rust's authored-consolidation support.
+The ordered matrix covers both historical fixtures and SQLCipher copies,
+original authored-pair fixtures included.
 
 Python's existing compatibility pass recreates unrelated indexes, views and
 triggers on every open (a fresh control book advances `schema_version` by 36).
@@ -462,9 +458,65 @@ checks compare their table names with `kassiber_store::table_names()` or
 `tests/rust_port/book_schema.py`, not with a fixed count.
 
 **Newer layouts.** The Rust store refuses a book carrying any object, column
-or migration audit it does not know (`requires_python_migration`), in both its
-admission-only and migrating opens, before writing anything. Python does not:
-its open is additive and leaves unknown tables, columns, indexes, triggers
-and audits in place. The asymmetry is deliberate. A Rust binary must not run
-accounting on a schema written by a newer build, and an older Python build
-keeps its existing behaviour. Upgrade the Rust binary together with Python.
+or migration audit it does not know (wire code `requires_python_migration`,
+kept from the coexistence period), in both its admission-only and migrating
+opens, before writing anything. Python did not: its open was additive and left
+unknown tables, columns, indexes, triggers and audits in place. The asymmetry
+is deliberate. A Kassiber binary must not run accounting on a schema written
+by a newer build; upgrade Kassiber instead.
+
+## Legacy custody migrations in the Rust store
+
+Python's `ensure_schema_compat` handed three book migrations to the custody
+core, because they need the component validator or the gap matcher. The
+store's ordered pass runs them at the same positions through
+`kassiber_store::custody_hooks`. The product binary installs their
+implementation, `kassiber_transfers::legacy_migration`, at start-up
+(`crates/kassiber/src/main.rs`) before any command runs, so every migrating
+open in the process gets them: CLI, daemon and desktop, `backup export`,
+`secrets init`/`rekey`, the open after a restore, and broker children. A
+library open that did not install them refuses a book that needs one with
+`unsupported_schema_layout` (`migration_step`, `reason`) before the step
+writes anything. No older book needs Python to open.
+
+| Step (Python) | Position | Books | What it writes |
+| --- | --- | --- | --- |
+| `backfill_legacy_componentless_review_relations` | after the review relation backfill, before the immutability triggers | dismissed componentless gap reviews without a complete relation set (main checkouts of 2026-07-15) | relations and completeness header only when the current matcher, without journal claims, finds a candidate with the review's gap id and full candidate fingerprint |
+| `refresh_legacy_authored_components` | after the immutability triggers | `transaction_pairs`/`direct_swap_payouts` without a component (v0.21.0 to v0.22.55), unresolved `custody_authored_migration_issues` | deleted rows: a component authored, activated at review time and superseded at deletion time; connected pair groups: one component, reusing an exact active one or revising the group's lineage; payouts: one conversion; Python's stable ids, hashes, terms, evidence and change reasons |
+| `mark_legacy_pair_fee_reviews` | before the price-currency audit | active quantity components with a `reviewed_residual:network_fee` fee leg and no `custody-legacy-pair-fee-review-v1` audit (v0.22.56 to v0.22.78) | the audit with the counts of components whose validation reports `legacy_pair_fee_allocation_review_required`, and the invalidation of their books with semantics version 7 |
+
+Each step commits as one immediate transaction; the earlier steps of the pass
+stay committed, as in Python. An interruption leaves none of the step's
+writes, and the next open completes the same migration. A legacy row whose
+consolidation fails with a review-level refusal keeps no component and gets
+an unresolved migration issue, which journals hold as
+`custody_authored_migration_incomplete`; every later open retries it, as
+Python does. Any other failure rolls the step back and refuses the open
+(`custody_migration_failed`, with the failure's `error_code`).
+
+Admission follows Python's open. A book with unresolved migration issues, or
+with a dismissed componentless review the matcher could not match (it stays
+unscoped and grants no authority), opens; before this port the Rust binary
+refused both. The `legacy_pair_components` admission probe flags only a legacy
+row the migration would still pick up: unlinked, reachable through its
+transactions and not held by an unresolved issue.
+
+The component normalizer also checks a payout's value per reviewed BTC, as
+Python's `normalize_economic_terms` does, so a payout whose implied rate is
+outside the supported price range becomes a migration issue in both runtimes.
+
+Coverage: `crates/transfers/tests/legacy_migrations.rs` migrates frozen input
+books with the product open (pinned clock and identity) and requires the
+complete typed dump Python's `open_db` produced from the same input, plaintext
+and SQLCipher, then an unchanged reopen; it also interrupts the consolidation
+and the fee review at their commits. The inputs (fetched test data under
+`crates/transfers/tests/data/legacy_migrations/`) are the historical fixtures,
+the books Python's legacy-custody tests migrate
+(`tests/rust_port/capture_legacy_books.py`) and era-shaped books for the
+outcomes those tests lack (`tests/rust_port/build_legacy_scenarios.py`);
+`tests/rust_port/gen_legacy_migration_vectors.py` froze the Python dumps.
+`crates/kassiber/tests/black_box/legacy_migrations.rs` opens such books with
+the binary. `crates/transfers/scripts/legacy_migration_mutations.json` (suite
+`transfers-legacy-migrations`) breaks each rule. The review-scope test's
+half-migrated book, whose rebuilt relation table lacks its foreign keys, is not
+a vector: the structural gate refuses that drift by design.

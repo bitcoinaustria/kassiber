@@ -390,7 +390,8 @@ fn migration_detail(name: &str) -> Error {
 }
 fn verify_gap_relations(conn: &Connection) -> Result<()> {
     // Derive only the durable IDs Python's low-level backfill reads. It never
-    // grants accounting authority. Candidate recovery remains Python-only.
+    // grants accounting authority. The custody layer recovers componentless
+    // dismissals from an exact candidate during the migrating open.
     let mut stmt = conn.prepare("SELECT id,workspace_id,profile_id,component_id,snapshot_json,action,event_kind FROM custody_gap_reviews").map_err(map_sqlite_error)?;
     let rows = stmt
         .query_map([], |r| {
@@ -406,7 +407,7 @@ fn verify_gap_relations(conn: &Connection) -> Result<()> {
         })
         .map_err(map_sqlite_error)?;
     for row in rows {
-        let (review, workspace, profile, component, snapshot, action, event) =
+        let (review, workspace, profile, component, snapshot, _action, _event) =
             row.map_err(map_sqlite_error)?;
         let mut relations = BTreeSet::<(String, String)>::new();
         let parsed: Value = parse_compat_json(snapshot.as_deref())?;
@@ -463,22 +464,10 @@ fn verify_gap_relations(conn: &Connection) -> Result<()> {
         if !relations.is_empty() && header.is_none() {
             return Err(Error::migration("gap_review_relation_set"));
         }
-        if component.is_none() && action == "dismissed" && event == "review_decision" {
-            let count = |role: &str| existing.iter().filter(|(r, _)| r == role).count() as i64;
-            if header != Some((count("source"), count("return"))) {
-                let observations:bool=conn.query_row("SELECT EXISTS(SELECT 1 FROM transactions WHERE profile_id=? AND coalesce(excluded,0)=0)",[&profile],|r|r.get(0)).map_err(map_sqlite_error)?;
-                if observations {
-                    // Exact recovery depends on the custody candidate matcher.
-                    // Do not claim Python migration can repair an unmatched
-                    // historical fingerprint, or silently admit a recoverable one.
-                    return Err(Error::new(
-                        crate::ErrorKind::UnsupportedSchemaLayout,
-                        "legacy gap candidate recovery requires a ported custody matcher",
-                    )
-                    .details(json!({"reason":"legacy_gap_candidate_recovery"})));
-                }
-            }
-        }
+        // A dismissed componentless review without a complete relation set
+        // is admitted, as Python admits it: the migrating open recovers it
+        // only from an exact current candidate, and an unscoped dismissal
+        // never grants authority (it only fails to suppress a candidate).
     }
     Ok(())
 }
