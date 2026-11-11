@@ -1,8 +1,10 @@
 # Rust write transactions
 
 Every Rust write transaction takes SQLite's writer lock before its first read.
-This mirrors Python fix `470334f61` (`kassiber.db.begin_write_savepoint`,
-`BEGIN IMMEDIATE`; `tests/test_write_transaction_locks.py`).
+`crates/store/tests/write_transactions.rs` enforces this over the source
+tree. The rule came from the Python backend's fix `470334f61`
+(`begin_write_savepoint`, `BEGIN IMMEDIATE`), removed with Python under
+[plan 22](../plan/22-python-removal.md).
 
 ## Why
 
@@ -67,9 +69,12 @@ halves on plaintext and SQLCipher books:
 resolve their scope first (`profiles.create`, `accounts.create`) wait for a
 held writer, and reads do not wait behind one.
 
-`tests/test_rust_write_transaction_locks.py` holds the writer from a second
-connection for 1 s before each write and requires the Rust binary to wait and
-succeed, on plaintext and SQLCipher books. It covers these flows:
+The Python parity module `tests/test_rust_write_transaction_locks.py` held
+the writer from a second connection for 1 s before each write and required
+the binary to wait and succeed, on plaintext and SQLCipher books. It went with
+Python; its recorded sessions replay the flows' outputs
+(`scripts/replay-sessions.sh`) but not the concurrent writer, and its
+SQLCipher sessions were dropped (plan 22). It covered these flows:
 
 - daemon: document import, `ui.wallets.create`, metadata update, journals
   process, review apply and `ui.workspace.create`
@@ -84,6 +89,8 @@ the daemon document import and `ui.wallets.create` failed `database_busy` at
 once.
 
 ## Verification (2026-11-07)
+
+Recorded at the time, with the Python tools that existed then.
 
 - `tests/rust_port/repro_document_import_busy.py --impl rust --hold-writer 2`:
   the previous binary failed 8 of 8 copies with `database_busy`. This branch

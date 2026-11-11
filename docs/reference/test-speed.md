@@ -1,5 +1,12 @@
 # Test speed
 
+> **Historical.** This measurement predates Python's removal under
+> [plan 22](../plan/22-python-removal.md). The pytest shards, the shadow lanes
+> and the Python tests named below no longer exist; the
+> [Rust test binaries](#rust-test-binaries) and
+> [dependency optimization](#optimizing-dependencies-in-test-builds) sections
+> still describe the Rust suites.
+
 Where the suites spend their time, what was changed to shorten the critical
 path, and what is left. Measured 2026-11-06/07 from 06e253ea6 on the shared
 48-thread build machine (about 12 agents; load between 15 and 175), so wall
@@ -296,17 +303,9 @@ profiles as dependency-bound.
 
 ## Recommendations
 
-- Run parallel shards locally with `--workers 16 --dist worksteal`.
-- Consider `worksteal` for CI's per-test-safe parallel lanes
-  (core-accounting, wallets-sync, security-replication, reports-contracts)
-  once the tax-shadow and custody-shadow lanes, which share the distribution,
-  have been measured with it; daemon-cli needs its classes kept together.
-- serial-daemon is about 14,000 CPU s; CI runs it on one worker (about four
-  hours). With 16 workers and `worksteal` it took 21 minutes here, its failures
-  the pre-existing ones. Running it with xdist in CI needs the Python document
-  import race above fixed first.
+The pytest recommendations of this measurement (worksteal scheduling for the
+Python shards, parallelizing serial-daemon, starting known-long Python tests
+first) ended with Python. The Rust one still applies:
+
 - Cap the `kassiber-wallets` lib test threads (8 here) or find the contention
   above; at 48 threads the binary uses 5,061 s CPU for 230 s.
-- Under `worksteal`, the remaining tails are single long tests that started
-  late (the 383 s Hybrid ledger test began at 859 s); starting known-long tests
-  first would bring serial-daemon close to its CPU bound (about 900 s).

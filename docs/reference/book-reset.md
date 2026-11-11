@@ -7,21 +7,17 @@ it, a reset deleted every authored decision, and on the regtest demo a reset
 plus full sync booked 12,190.32 EUR more realized gain with no hold, because
 the loan marks were gone.
 
-Code: `kassiber/core/book_reset.py` (keep and re-bind),
-`kassiber/core/maintenance.py` (the reset), and the claim in
-`core/imports.insert_wallet_records`. Tests:
-`tests/test_book_reset_keeps_decisions.py`.
-
-The Rust shell ports it byte for byte: `crates/setup/src/book_reset.rs` and
-`profile_reset.rs`, the claim in `crates/wallets/src/file_import.rs` and
-`publication/insert.rs`, and the hold in the journal loader
-(`reset_hold_quarantines`). `crates/setup/tests/book_reset.rs` pins each rule,
+Code: `crates/setup/src/book_reset.rs` (keep and re-bind) and
+`profile_reset.rs` (the reset), the claim in
+`crates/wallets/src/file_import.rs` and `publication/insert.rs`, and the hold
+in the journal loader (`reset_hold_quarantines`). It matches the Python
+reference byte for byte. `crates/setup/tests/book_reset.rs` pins each rule,
 the frozen desktop vectors (`crates/setup/fixtures/python_desktop.json`) pin
-the reset envelopes and stored rows, and `tests/test_rust_book_reset.py`
-compares a reset, a resync with a missing and a changed transaction, the
-journal run and the wipe between the runtimes. The mutation entries in
-`crates/setup/scripts/book_reset_mutations.json`
-(`book_reset_mutation_check.py`) each fail a named test.
+the reset envelopes and stored rows, and the recorded
+`test_book_reset_keeps_decisions` sessions (`scripts/replay-sessions.sh`)
+replay the end-to-end reset. The mutation entries in
+`crates/setup/scripts/book_reset_mutations.json` (the `setup-book-reset` suite
+of `cargo run -p kassiber-mutation-check`) each fail a named test.
 
 ## Two actions
 

@@ -4,9 +4,8 @@ Kassiber reads Bitpanda history through Bitpanda's public REST API, read-only.
 This page records the API as documented, how each event maps to Kassiber
 records, what is skipped or refused and why, and how to set up a key. The
 importer is `crates/wallets/src/file_import/exchange_api/bitpanda.rs`, on the
-shared [exchange API framework](rust-exchange-sync.md). It runs in the Rust
-backend only; Python has no Bitpanda importer and refuses the command (see
-[Python](#python)).
+shared [exchange API framework](rust-exchange-sync.md). The Python backend
+never had a Bitpanda importer.
 
 ## Sources
 
@@ -260,8 +259,9 @@ a key guide, Test connection (the write-scope check, currencies and one
 operations row), Create connection and Sync now; see
 [exchange connections in the desktop](exchange-desktop.md). No exchange sync
 is exposed to the assistant, so neither is Bitpanda: no assistant tool calls
-the Bitpanda API, and `ui.wallets.request_input` keeps Python's source list
-(its schema is generated from Python's catalog). Adding either is a separate
+the Bitpanda API, and `ui.wallets.request_input` keeps the source list of the
+AI tool catalog (`crates/ai/src/data/catalog.json`, generated from Python's
+catalog and now maintained by hand). Adding either is a separate
 consent and product decision.
 
 ## CSV export
@@ -276,17 +276,6 @@ would mean guessing fee semantics; a sample export with known balances is
 needed first. Until then a Bitpanda CSV can go through the generic ledger
 import with explicit columns.
 
-## Python
-
-Python's grammar has no `wallets sync-bitpanda` (argparse refuses it as an
-invalid choice, exit 2), its backend kinds lack `bitpanda`
-(`backends create --kind bitpanda` fails validation without writing), and its
-wallet kinds lack it (`wallets create --kind bitpanda` fails). A book holding a
-Rust-created Bitpanda wallet still lists in Python, and `wallets sync` skips
-it as sourceless without network access.
-`tests/test_python_rust_only_bitpanda.py` pins this; the Rust-only
-differences are listed in [Rust shell](rust-shell.md#rust-only-commands).
-
 ## Verification
 
 - `crates/wallets/src/file_import/exchange_api/tests/bitpanda_api.rs`: a
@@ -295,14 +284,13 @@ differences are listed in [Rust shell](rust-shell.md#rust-only-commands).
   readings, the write-scope refusal, auth errors and echoed keys, throttling
   and its exhaustion, malformed pages, the BTC asset lookup, each refusal
   above, consent, offline and missing-key refusals before any request.
-- `tests/test_rust_bitpanda_api.py`: every schema table on plaintext and
-  SQLCipher books, through the exchange fixture driver: the tables a sync
-  changes, the rows it writes, an idempotent re-sync, a refused trading key
-  that leaves the book untouched, identical bytes on both formats.
-- `tests/test_rust_bitpanda_cli.py`: the binary end to end (needs
-  `KASSIBER_RUST_BIN`): saving the backend and reading the book send
-  nothing, offline mode stops the sync before any request, an echoed key
-  reaches no output or table.
-- `tests/test_python_rust_only_bitpanda.py`: Python's refusals.
+- The recorded `test_rust_exchange_desktop` sessions
+  (`scripts/replay-sessions.sh`) replay the desktop's Bitpanda setup.
 - `crates/wallets/scripts/exchange_mutations.json`: the Bitpanda mutation
-  entries, each killed by named tests (`exchange_mutation_check.py`).
+  entries, each killed by named tests (the `wallets-exchange` suite of
+  `cargo run -p kassiber-mutation-check`).
+
+The Python suites that drove the binary (`test_rust_bitpanda_api.py`: every
+schema table on plaintext and SQLCipher books; `test_rust_bitpanda_cli.py`:
+no egress from saving the backend or reading the book, offline mode, echoed
+keys) were removed with Python under [plan 22](../plan/22-python-removal.md).

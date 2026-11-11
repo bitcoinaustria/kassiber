@@ -666,15 +666,17 @@ split the statement. The preview reports the total and rendered page set, and
 source regions outside that set are quarantined. Rendered page dimensions and
 encoded byte totals are capped before raster data reaches the local model.
 
-The Rust CLI uses Python's `pdfinfo` and `pdftoppm` OCR preparation
-with the same arguments, limits, timeouts, missing-tool refusals and temporary
-page cleanup. PDF report/export rendering remains outside that port. The native
-core also deliberately redacts generic database failures and removes a managed
-copy after a source-digest mismatch; these
-[privacy deviations](privacy-and-security.md) avoid disclosing source values or
-retaining untracked sensitive evidence. Both document CLI commands run natively;
-daemon registration remains deferred until native `journals process` is
-registered. R6 AI paths and the desktop document sessions remain in Python.
+Document import (`crates/wallets/src/file_import/document/pdf.rs`) prepares
+PDFs with the system `pdfinfo` and `pdftoppm`, with the arguments, limits,
+timeouts, missing-tool refusals and temporary page cleanup the Python backend
+used. PDF report/export rendering is separate (`crates/pdf`). The backend
+deliberately redacts generic database failures and removes a managed copy
+after a source-digest mismatch; these
+[privacy deviations](privacy-and-security.md) from the Python backend avoid
+disclosing source values or retaining untracked sensitive evidence. The CLI
+commands and the desktop's document sessions
+(`ui.wallets.document_import.preview`, `ui.wallets.document_import.import`)
+use the same path.
 
 The preview returns draft rows with `ready` / `quarantined` status, per-row and
 per-populated-field confidence, every financial field, evidence text, source
@@ -734,7 +736,7 @@ Kassiber cannot prove that a book holds every wallet you own, and most sources
 cannot prove that one wallet's history is whole. `wallets list` and the daemon's
 `ui.wallets.list` (and so the assistant) therefore state, per wallet, what kind
 of source it is and the observed edges of its history. Both come from
-`kassiber/core/wallet_completeness.py`; they read the wallet kind, whether a
+`crates/wallets/src/completeness.rs`; they read the wallet kind, whether a
 source is configured (never its descriptor, xpub, addresses or path), the last
 sync time and the wallet's non-excluded transactions.
 
@@ -1022,8 +1024,8 @@ source-set structure accepted by the CLI and daemon.
 Explicit descriptor source-set imports validate a plan covering both Samourai
 branches for each scanned section: branch `0` receive and branch `1` change.
 Provide a separate `change_descriptor` or a descriptor expression that expands
-to both branches. The Python reference and Rust compatibility importer also
-accept ranged receive-only descriptors when the shared parser synthesizes a
+to both branches. The importer also accepts ranged receive-only descriptors,
+as the Python reference did, when the shared parser synthesizes a
 change branch; that synthesized branch is not added to the stored source
 configuration. Fixed single-branch sources are rejected. This reference quirk
 is pinned by the [Rust Samourai checkpoint](rust-shell.md#samourai-core-and-cli-ingestion-r5-continuation)
@@ -1057,7 +1059,7 @@ Accounting behavior is intentionally conservative:
 Example CLI flows:
 
 ```bash
-python3 -m kassiber wallets import-samourai \
+kassiber wallets import-samourai \
   --label "Samourai Watch-Only" \
   --source-set-file /path/to/samourai-public-sources.json \
   --backend mempool \
@@ -1073,7 +1075,7 @@ boundaries, sync/rebuild rates when pricing is missing, then run
 Import directly into an existing wallet:
 
 ```bash
-python3 -m kassiber wallets import-btcpay \
+kassiber wallets import-btcpay \
   --wallet btcpay \
   --file /path/to/btcpay-transactions.csv \
   --input-format csv
@@ -1093,13 +1095,13 @@ inspect`, and apply the per-store plan with `btcpay setup`. The desktop Add
 Connection flow runs the same plan. The older single-store commands remain:
 
 ```bash
-python3 -m kassiber wallets create \
+kassiber wallets create \
   --label btcpay-shop \
   --kind custom \
   --backend btcpay-prod \
   --store-id <store-id>
 
-python3 -m kassiber wallets sync-btcpay \
+kassiber wallets sync-btcpay \
   --wallet btcpay-shop \
   --backend btcpay-prod \
   --store-id <store-id>
@@ -1126,15 +1128,15 @@ Merchant provenance is a separate path so invoice/payment facts do not duplicate
 wallet balances:
 
 ```bash
-python3 -m kassiber btcpay provenance sync --all
-python3 -m kassiber btcpay provenance sync \
+kassiber btcpay provenance sync --all
+kassiber btcpay provenance sync \
   --backend btcpay-prod \
   --store-id <store-id>
 
-python3 -m kassiber btcpay provenance list --record-type payout
-python3 -m kassiber btcpay provenance suggest
-python3 -m kassiber btcpay provenance links --state suggested
-python3 -m kassiber btcpay provenance review \
+kassiber btcpay provenance list --record-type payout
+kassiber btcpay provenance suggest
+kassiber btcpay provenance links --state suggested
+kassiber btcpay provenance review \
   --link <link-id> \
   --state reviewed \
   --commercial-kind income
@@ -1163,14 +1165,14 @@ External evidence uses the same managed attachment store as transaction
 attachments:
 
 ```bash
-python3 -m kassiber documents create \
+kassiber documents create \
   --type invoice \
   --label "Invoice 2026-001" \
   --external-ref inv-1 \
   --fiat-currency EUR \
   --fiat-value 500.00
 
-python3 -m kassiber documents attach \
+kassiber documents attach \
   --document <document-id> \
   --file /path/to/invoice.pdf
 ```
@@ -1179,14 +1181,14 @@ Reviewed rows can be exported for accountants without exposing unrelated wallet
 history:
 
 ```bash
-python3 -m kassiber reports commercial-subledger
-python3 -m kassiber reports export-commercial-subledger-csv --file commercial-subledger.csv
+kassiber reports commercial-subledger
+kassiber reports export-commercial-subledger-csv --file commercial-subledger.csv
 ```
 
 To wire BTCPay as enrichment-only metadata on a wallet whose balance is already tracked through descriptor or file sync, use `wallets attach-btcpay`:
 
 ```bash
-python3 -m kassiber wallets attach-btcpay \
+kassiber wallets attach-btcpay \
   --wallet settlement-wallet \
   --backend btcpay-prod \
   --store-id <store-id> \
@@ -1206,7 +1208,7 @@ Current BTCPay modeling:
 You can also create a wallet whose source file is a BTCPay export:
 
 ```bash
-python3 -m kassiber wallets create \
+kassiber wallets create \
   --label btcpay \
   --kind address \
   --address bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq \
@@ -1240,7 +1242,7 @@ result into Kassiber.
 Import directly:
 
 ```bash
-python3 -m kassiber wallets import-wasabi \
+kassiber wallets import-wasabi \
   --wallet wasabi \
   --file /path/to/wasabi-sanitized-bundle.json
 ```
@@ -1271,13 +1273,13 @@ Behavior:
 You can also create a wallet whose source file is a Wasabi bundle:
 
 ```bash
-python3 -m kassiber wallets create \
+kassiber wallets create \
   --label wasabi \
   --kind wasabi \
   --source-file /path/to/wasabi-sanitized-bundle.json \
   --source-format wasabi_bundle
 
-python3 -m kassiber wallets sync --wallet wasabi
+kassiber wallets sync --wallet wasabi
 ```
 
 ## Phoenix
@@ -1285,7 +1287,7 @@ python3 -m kassiber wallets sync --wallet wasabi
 Import directly:
 
 ```bash
-python3 -m kassiber wallets import-phoenix \
+kassiber wallets import-phoenix \
   --wallet phoenix \
   --file /path/to/phoenix-export.csv
 ```
@@ -1302,7 +1304,7 @@ Behavior:
 You can also create a wallet whose source file is a Phoenix export:
 
 ```bash
-python3 -m kassiber wallets create \
+kassiber wallets create \
   --label phoenix \
   --kind phoenix \
   --source-file /path/to/phoenix-export.csv \
@@ -1317,7 +1319,7 @@ Use Account Activity when available because it carries both BTC and cash legs.
 Import directly:
 
 ```bash
-python3 -m kassiber wallets import-river \
+kassiber wallets import-river \
   --wallet river \
   --file /path/to/river-account-activity.csv
 ```
@@ -1345,13 +1347,13 @@ Behavior:
 You can also create a wallet whose source file is a River export:
 
 ```bash
-python3 -m kassiber wallets create \
+kassiber wallets create \
   --label river \
   --kind river \
   --source-file /path/to/river-account-activity.csv \
   --source-format river_csv
 
-python3 -m kassiber wallets sync --wallet river
+kassiber wallets sync --wallet river
 ```
 
 ## Bull Bitcoin
@@ -1366,7 +1368,7 @@ without a transaction id are skipped.
 Import directly:
 
 ```bash
-python3 -m kassiber wallets import-bull \
+kassiber wallets import-bull \
   --file /path/to/bull-orders.csv
 ```
 
@@ -1387,7 +1389,7 @@ reconciliation tags:
   the row needs review
 
 ```bash
-python3 -m kassiber wallets import-bull \
+kassiber wallets import-bull \
   --mode full \
   --file /path/to/bull-orders.csv
 ```
@@ -1415,10 +1417,10 @@ match-existing-only: this attachment does not create standalone transaction
 rows, and matching is still profile-wide.
 
 ```bash
-python3 -m kassiber wallets update --wallet treasury \
+kassiber wallets update --wallet treasury \
   --config '{"source_file":"/path/to/bull-orders.csv","source_format":"bullbitcoin_csv"}'
 
-python3 -m kassiber wallets sync --wallet treasury
+kassiber wallets sync --wallet treasury
 ```
 
 ## Bull Bitcoin Wallet CSV
@@ -1434,22 +1436,22 @@ and Lightning rows stay separate. This lets the swap matcher see BTC/LBTC swap
 legs as different wallets instead of two rows inside one mixed wallet:
 
 ```bash
-python3 -m kassiber wallets create \
+kassiber wallets create \
   --label "Bull Bitcoin Wallet - Bitcoin" \
   --kind bullbitcoin \
   --source-file /path/to/bull_transactions.csv \
   --source-format bullbitcoin_wallet_csv \
   --config '{"bullbitcoin_wallet_network":"bitcoin"}'
 
-python3 -m kassiber wallets create \
+kassiber wallets create \
   --label "Bull Bitcoin Wallet - Liquid" \
   --kind bullbitcoin \
   --source-file /path/to/bull_transactions.csv \
   --source-format bullbitcoin_wallet_csv \
   --config '{"bullbitcoin_wallet_network":"liquid"}'
 
-python3 -m kassiber wallets sync --wallet "Bull Bitcoin Wallet - Bitcoin"
-python3 -m kassiber wallets sync --wallet "Bull Bitcoin Wallet - Liquid"
+kassiber wallets sync --wallet "Bull Bitcoin Wallet - Bitcoin"
+kassiber wallets sync --wallet "Bull Bitcoin Wallet - Liquid"
 ```
 
 Behavior:
@@ -1489,18 +1491,18 @@ or the on-chain/Liquid transactions will be duplicated. Attach the unified Bull
 export to those existing wallets instead:
 
 ```bash
-python3 -m kassiber wallets attach-bullbitcoin-wallet \
+kassiber wallets attach-bullbitcoin-wallet \
   --wallet "Bitcoin descriptor" \
   --file /path/to/bull_transactions.csv \
   --network bitcoin
 
-python3 -m kassiber wallets attach-bullbitcoin-wallet \
+kassiber wallets attach-bullbitcoin-wallet \
   --wallet "Liquid descriptor" \
   --file /path/to/bull_transactions.csv \
   --network liquid
 
-python3 -m kassiber wallets sync --wallet "Bitcoin descriptor"
-python3 -m kassiber wallets sync --wallet "Liquid descriptor"
+kassiber wallets sync --wallet "Bitcoin descriptor"
+kassiber wallets sync --wallet "Liquid descriptor"
 ```
 
 The next wallet refresh keeps the descriptor/file source authoritative and uses
@@ -1525,7 +1527,7 @@ wallet row; full mode imports excluded provider evidence and flags gaps.
 Import directly:
 
 ```bash
-python3 -m kassiber wallets import-coinfinity \
+kassiber wallets import-coinfinity \
   --file /path/to/coinfinity-orders.csv
 ```
 
@@ -1545,7 +1547,7 @@ adds reconciliation tags:
   the row needs review
 
 ```bash
-python3 -m kassiber wallets import-coinfinity \
+kassiber wallets import-coinfinity \
   --mode full \
   --file /path/to/coinfinity-orders.csv
 ```
@@ -1576,7 +1578,7 @@ so Kassiber never treats a broker reference as physical chain identity.
 Import directly:
 
 ```bash
-python3 -m kassiber wallets import-21bitcoin \
+kassiber wallets import-21bitcoin \
   --file /path/to/21bitcoin-transactions.csv
 ```
 
@@ -1626,7 +1628,7 @@ withdrawal row when present, and preserves the execution price as exact
 Import directly:
 
 ```bash
-python3 -m kassiber wallets import-pocket \
+kassiber wallets import-pocket \
   --file /path/to/pocket-account.csv
 ```
 
@@ -1648,7 +1650,7 @@ reconciliation tags:
   the row needs review
 
 ```bash
-python3 -m kassiber wallets import-pocket \
+kassiber wallets import-pocket \
   --mode full \
   --file /path/to/pocket-account.csv
 ```
@@ -1665,10 +1667,10 @@ Behavior:
 You can also attach a Pocket export to an existing wallet:
 
 ```bash
-python3 -m kassiber wallets update --wallet treasury \
+kassiber wallets update --wallet treasury \
   --config '{"source_file":"/path/to/pocket-account.csv","source_format":"pocketbitcoin_csv"}'
 
-python3 -m kassiber wallets sync --wallet treasury
+kassiber wallets sync --wallet treasury
 ```
 
 ## Strike
@@ -1681,7 +1683,7 @@ platform funding and reversal rows are skipped because they are not Bitcoin
 subledger activity.
 
 ```bash
-python3 -m kassiber wallets import-strike \
+kassiber wallets import-strike \
   --file /path/to/strike-export.csv
 ```
 
@@ -1711,7 +1713,7 @@ imports BTC/LBTC `IN` and `OUT` rows without exact fiat pricing. Account xpub
 columns are redacted from stored `raw_json`.
 
 ```bash
-python3 -m kassiber wallets import-ledger-live \
+kassiber wallets import-ledger-live \
   --workspace W --profile P --wallet "Ledger Live" \
   --file /path/to/ledger-live.csv
 ```
@@ -1741,11 +1743,11 @@ non-2xx body) shows `<redacted>` wherever it repeats the API key or secret,
 including percent- or JSON-escaped spellings.
 
 ```bash
-python3 -m kassiber backends create kraken-main \
+kassiber backends create kraken-main \
   --kind kraken --url https://api.kraken.com \
   --token-stdin --auth-header-stdin
 
-python3 -m kassiber wallets sync-kraken \
+kassiber wallets sync-kraken \
   --workspace W --profile P --backend kraken-main
 ```
 
@@ -1763,11 +1765,11 @@ Create a backend with `kind=coinbase`; store the API key in `token` and the
 API secret in `auth_header` (or `password`).
 
 ```bash
-python3 -m kassiber backends create coinbase-main \
+kassiber backends create coinbase-main \
   --kind coinbase --url https://api.coinbase.com \
   --token-stdin --auth-header-stdin
 
-python3 -m kassiber wallets sync-coinbase \
+kassiber wallets sync-coinbase \
   --workspace W --profile P --backend coinbase-main
 ```
 
@@ -1808,11 +1810,11 @@ Create a backend with `kind=binance`; store the API key in `token` and the API
 secret in `auth_header` (or `password`).
 
 ```bash
-python3 -m kassiber backends create binance-main \
+kassiber backends create binance-main \
   --kind binance --url https://api.binance.com \
   --token-stdin --auth-header-stdin
 
-python3 -m kassiber wallets sync-binance \
+kassiber wallets sync-binance \
   --workspace W --profile P --backend binance-main
 ```
 
@@ -1857,7 +1859,7 @@ a stored insertion sequence, not their one-second timestamp. See
 [identity compatibility](database-compatibility.md#id-less-csv-identity-compatibility).
 
 ```bash
-python3 -m kassiber wallets import-binance-supplemental \
+kassiber wallets import-binance-supplemental \
   --workspace W --profile P \
   --file /path/to/binance-supplemental.csv
 ```
@@ -1881,7 +1883,7 @@ decisions can round-trip.
 Preview before applying:
 
 ```bash
-python3 -m kassiber metadata bip329 preview --file /path/to/labels.jsonl
+kassiber metadata bip329 preview --file /path/to/labels.jsonl
 ```
 
 The preview reports exact matches, ambiguous matches, unmatched records,
@@ -1892,9 +1894,9 @@ transaction labels are preserved for export/review and skipped unless the CLI
 caller explicitly opts in:
 
 ```bash
-python3 -m kassiber metadata bip329 import --file /path/to/labels.jsonl
-python3 -m kassiber metadata bip329 import --file /path/to/labels.jsonl --apply-ambiguous
-python3 -m kassiber metadata bip329 list
+kassiber metadata bip329 import --file /path/to/labels.jsonl
+kassiber metadata bip329 import --file /path/to/labels.jsonl --apply-ambiguous
+kassiber metadata bip329 list
 ```
 
 Exports can replay stored BIP329 rows, synthesize wallet-readable transaction
@@ -1904,9 +1906,9 @@ chosen wallet with deterministic ownership; ambiguous and unmatched stored rows
 are excluded rather than guessed.
 
 ```bash
-python3 -m kassiber metadata bip329 export --mode stored --file /path/to/export.jsonl
-python3 -m kassiber metadata bip329 export --mode synthesized --wallet coldcard --file /path/to/coldcard-labels.jsonl
-python3 -m kassiber metadata bip329 export --mode all --file /path/to/book-labels.jsonl
+kassiber metadata bip329 export --mode stored --file /path/to/export.jsonl
+kassiber metadata bip329 export --mode synthesized --wallet coldcard --file /path/to/coldcard-labels.jsonl
+kassiber metadata bip329 export --mode all --file /path/to/book-labels.jsonl
 ```
 
 Synthesized labels are human-readable wallet context first. Kassiber may include
@@ -1922,13 +1924,13 @@ intent.
 The canonical interface for per-transaction bookkeeping is `metadata records`:
 
 ```bash
-python3 -m kassiber metadata records list --wallet coldcard --has-note --limit 50
-python3 -m kassiber metadata records get --transaction <TRANSACTION_ID>
-python3 -m kassiber metadata records note set --transaction <ID> --note "Cold storage move"
-python3 -m kassiber metadata records tag add --transaction <ID> --tag tax-lot
-python3 -m kassiber metadata records excluded set --transaction <ID>
-python3 -m kassiber metadata records history list --transaction <ID>
-python3 -m kassiber metadata records history activity --source ai_tool
+kassiber metadata records list --wallet coldcard --has-note --limit 50
+kassiber metadata records get --transaction <TRANSACTION_ID>
+kassiber metadata records note set --transaction <ID> --note "Cold storage move"
+kassiber metadata records tag add --transaction <ID> --tag tax-lot
+kassiber metadata records excluded set --transaction <ID>
+kassiber metadata records history list --transaction <ID>
+kassiber metadata records history activity --source ai_tool
 ```
 
 Metadata edits from the CLI, desktop, and approved AI tools write append-only
@@ -1940,10 +1942,10 @@ For raw transaction ranking, sort in Kassiber before applying `--limit`:
 
 ```bash
 # largest inbound and outbound rows
-python3 -m kassiber --machine transactions list --direction inbound --sort amount --order desc --limit 10
-python3 -m kassiber --machine transactions list --direction outbound --sort amount --order desc --limit 10
+kassiber --machine transactions list --direction inbound --sort amount --order desc --limit 10
+kassiber --machine transactions list --direction outbound --sort amount --order desc --limit 10
 # smallest outbound rows
-python3 -m kassiber --machine transactions list --direction outbound --sort amount --order asc --limit 10
+kassiber --machine transactions list --direction outbound --sort amount --order asc --limit 10
 ```
 
 Machine output includes `has_more` and `next_cursor` when the matching row set
@@ -1952,9 +1954,9 @@ continues beyond the current page.
 Attachments can be added after import:
 
 ```bash
-python3 -m kassiber attachments add --transaction <ID> --file /path/to/receipt.pdf
-python3 -m kassiber attachments add --transaction <ID> --url https://example.com/receipt
-python3 -m kassiber attachments rename <ATTACHMENT_ID> --label "Accountant approval"
+kassiber attachments add --transaction <ID> --file /path/to/receipt.pdf
+kassiber attachments add --transaction <ID> --url https://example.com/receipt
+kassiber attachments rename <ATTACHMENT_ID> --label "Accountant approval"
 ```
 
 File attachments are copied into Kassiber's managed attachment store. URL

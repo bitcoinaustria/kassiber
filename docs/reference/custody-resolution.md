@@ -572,11 +572,10 @@ chain-observer lane compares Bitcoin/Liquid adapters against local node truth.
 These fixtures prove the specified cases, not the completeness of any user's
 private book.
 
-Exact exchange withdrawals are pinned on both engines by the same 26 Strike
-and River books: `crates/custody/scripts/gen_exchange_txid_vectors.py` freezes
-Python's finalized projection, `crates/custody/tests/exchange_txid.rs`
-compares the Rust engine with it, and
-`tests/test_rust_exchange_txid_vectors.py` replays it in Python. The Docker
+Exact exchange withdrawals are pinned by 26 Strike and River books:
+`crates/custody/tests/exchange_txid.rs` compares the engine with the
+finalized projections the Python reference produced for them, now frozen
+goldens ([plan 22](../plan/22-python-removal.md#generators-become-frozen-goldens)). The Docker
 `demo-full` exchange book asserts the automatic `exchange_txid_exact` move;
 its fast CSV replay, whose imported rows prove no owned output, still reviews
 the withdrawal.
