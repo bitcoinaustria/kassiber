@@ -42,6 +42,7 @@ run cargo clippy --workspace --all-targets --features kassiber-journals/test-har
 run cargo test --workspace --features kassiber-journals/test-harness --locked
 run cargo run --locked -p kassiber-mutation-check -- check
 run scripts/check-ledger-features.sh
+run scripts/check-cli-archive.sh
 # Frozen custody recordings (docs/reference/testing.md#custody-recordings) are
 # local; replay them when this machine has them.
 if [ -n "${KASSIBER_CUSTODY_REPLAY_DIR:-}" ]; then

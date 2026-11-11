@@ -355,7 +355,9 @@ that each fetch the locked test data first:
 
 1. `Rust crates` checks formatting (`cargo fmt --all --check`) and clippy
    lints (warnings fail), runs the workspace tests with
-   `kassiber-journals/test-harness`, runs `scripts/check-ledger-features.sh`,
+   `kassiber-journals/test-harness`, runs `scripts/check-ledger-features.sh`
+   and `scripts/check-cli-archive.sh` (both archive formats land in a relative
+   `--output-dir`, as release CI packages them),
    validates the mutation catalogs with `kassiber-mutation-check -- check`,
    checks that a product build of the binary carries no test tape
    (`scripts/check-no-test-tape.sh`), runs the `kassiber-net` egress observer
