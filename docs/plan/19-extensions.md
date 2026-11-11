@@ -4,7 +4,10 @@ Status: proposed 2026-09-29. On 2026-09-30 the owner decided the
 contribution policy and the removal of the general ledger and device sync.
 Both removals are implemented; everything else is a proposal. Tasks move to
 [TODO.md](../../TODO.md) as each step is accepted; see
-[open decisions](#open-decisions).
+[open decisions](#open-decisions). The code tiers, the repository layout and
+the test setup below assume a Python core, which
+[plan 22](22-python-removal.md) removed; they need redesigning for the Rust
+backend before any step is accepted.
 
 ## Direction
 
@@ -409,5 +412,7 @@ use exact base units.
 
 ## Open decisions
 
+- The language, packaging and test setup of bundled and installed extensions
+  now that the backend is Rust only ([plan 22](22-python-removal.md)).
 - Tier-3 isolation: per-platform OS sandboxes or WebAssembly, after the
   prototype in step 3.

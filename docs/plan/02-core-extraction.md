@@ -1,7 +1,10 @@
 # Phase 0: Core Library Extraction
 
 **Status:** Archived reference. Phase 0 is complete.
-**Current source of truth:** `kassiber/cli/`, `kassiber/core/`, `kassiber/db.py`, `tests/test_cli_smoke.py`, and `TODO.md`.
+**Current source of truth:** the Rust crates (`crates/cli`, the shared core
+crates, `crates/store`; see [crate guidance](../../crates/AGENTS.md)) and
+`TODO.md`. The Python layout below was removed under
+[plan 22](22-python-removal.md); it survives at tag `archive/python-backend`.
 **Do not implement from:** the old wave plan. It records history, not open work.
 
 ## Essence

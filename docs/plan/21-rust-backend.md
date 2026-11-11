@@ -4,7 +4,12 @@
 backend to Rust and retire Python, including custody, which
 [plan 20](20-kassiber-tax-engine.md) left out. Stage R0 is in progress. The
 work lands as one stack of draft pull requests on top of plan 20's phases 4
-and 5; nothing reaches `main` until the stack is complete.
+and 5; nothing reaches `main` until the stack is complete. The Rust binary is
+the whole backend since the stack's B8 layer, and stage R7's deletion of Python is
+[plan 22](22-python-removal.md). Python is gone from the tree; the last Python
+commit is tagged `archive/python-backend`. The Python modules, tests and tools
+this plan names are history: they record what the port matched and where it
+deliberately differs, not current commands or code paths.
 **Current source of truth:** current code and tests, the
 [tax engine](../reference/tax-engine.md),
 [machine output](../reference/machine-output.md), [daemon](../reference/daemon.md),
@@ -1538,7 +1543,7 @@ parallel and stacked in any order.
   [test dispositions](../reference/rust-port.md) define its acceptance:
   - `boundary-fixture` and `subprocess-scenario` tests in the slice's group pass
     with `KASSIBER_TEST_CLI` naming the
-    [hybrid candidate](../reference/testing.md#hybrid-rust-candidate), and its
+    hybrid candidate (`tests/rust_port/hybrid_cli.py`, removed under plan 22), and its
     `KASSIBER_HYBRID_LOG` shows the slice's own commands were served by Rust.
     Setup commands another slice has not ported yet fall back to Python on the
     same book;

@@ -7,7 +7,9 @@ proof of implementation. Use [TODO.md](../../TODO.md) for remaining work and
 [desktop](../reference/desktop.md), [daemon](../reference/daemon.md),
 [testing](../reference/testing.md), and [packaging](../reference/prerelease-binaries.md)
 for current procedures. Security invariants and unresolved release gates remain
-binding; the token-WebSocket design and disk logging were not shipped.
+binding; the token-WebSocket design and disk logging were not shipped. The Python
+sidecar it describes was replaced by the Rust `kassiber` binary under
+[plan 21](21-rust-backend.md) and removed under [plan 22](22-python-removal.md).
 
 ## Scope and preconditions
 
@@ -745,7 +747,7 @@ These should be tracked at the project level, not silently accepted.
 - [Privacy & security](../reference/privacy-and-security.md) — local-first / network policy / secrets
 - [AGENTS.md](../../AGENTS.md) — architecture and verification
 - [pyproject.toml](../../pyproject.toml) — current dep set
-- [kassiber/envelope.py](../../kassiber/envelope.py) — envelope contract
+- [crates/envelope](../../crates/envelope/src/lib.rs) — envelope contract (ported from Python's `kassiber/envelope.py`)
 - Tauri 2: https://v2.tauri.app/
 - Tauri capabilities: https://v2.tauri.app/security/capabilities/
 - python-build-standalone: https://github.com/astral-sh/python-build-standalone
