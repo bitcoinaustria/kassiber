@@ -205,8 +205,11 @@ This is the normal situation, not a failure. Handle it like this:
   `bitcoinrpc`, and BTCPay Greenfield only. There is **no generic exchange-API
   sync backend pattern yet**. Capture the API (auth model, endpoints, rate
   limits) in the spec as a follow-up, and ship the CSV importer first. Do not
-  build a bespoke network fetcher into `importers.py` — that file is
-  file-parsers only.
+  build a network fetcher into the file importers under
+  `crates/wallets/src/file_import/` — they parse local files only. The existing
+  exchange API syncs (Kraken, Coinbase, Binance, Bitpanda) live in
+  `crates/wallets/src/file_import/exchange_api/` and are their own consent-bound
+  path; see [privacy and security](../../../docs/reference/privacy-and-security.md).
 
 ---
 
@@ -215,8 +218,9 @@ This is the normal situation, not a failure. Handle it like this:
 Only start once `docs/exchanges/<slug>.md` is complete. The normalized record
 shape every parser returns is documented under "Generic transaction imports" in
 [docs/reference/imports.md](../../../docs/reference/imports.md); read it before
-writing the parser. Mirror the closest existing importer — read its
-`normalize_*_record` in `kassiber/importers.py` and its `## ` section in
+writing the parser. Mirror the closest existing importer — read its module in
+`crates/wallets/src/file_import/` (for example `strike.rs`, `twentyone.rs`,
+`pocket.rs`, `bull.rs`, `coinfinity.rs`) and its `## ` section in
 `docs/reference/imports.md` as worked examples:
 
 | Provider | Custodial model | Default mode | Mirror for... |
@@ -226,14 +230,18 @@ writing the parser. Mirror the closest existing importer — read its
 | `pocketbitcoin` | non-custodial broker | `relevant` | matching when the export has no on-chain txid |
 | `bullbitcoin` / `coinfinity` | non-custodial broker | `relevant` | order/execution evidence enriching existing rows |
 
-Touch these files, in order. Each is required for the connection to work
-end-to-end and to pass the drift test.
+Touch these places, in order. Each is required for the connection to work
+end-to-end and to pass the drift tests. Search for the closest existing
+importer's slug (for example `pocketbitcoin_csv`, `import-pocket`) to find every
+site; the list below is what that search returns today.
 
-1. **`kassiber/importers.py`** — the parser. Following the module docstring,
-   add `normalize_<slug>_record`, `load_<slug>_csv_records`, and
-   `is_<slug>_format`, then wire `load_<slug>_csv_records` into
-   `load_import_records`. Map each row per the spec's row-type table. Raise
-   `AppError` on unparseable input. Skip fiat-only rows for BTC-side custodial
+1. **`crates/wallets/src/file_import/<slug>.rs`** — the parser, with
+   `pub(super) fn parse(rows: Vec<csv::Row>)` like the other modules. In
+   `crates/wallets/src/file_import.rs`, declare the module, add a `Format`
+   variant, map it in `from_source_format` and back to `<slug>_csv`, call its
+   `parse` in `load`, and add it to `evidence()` or `active()` and `provider()`
+   when it is an evidence broker or an active custodial ledger. Map each row
+   per the spec's row-type table. Return `AppError` on unparseable input. Skip fiat-only rows for BTC-side custodial
    ledgers. Set `pricing_source_kind="exchange_execution"`,
    `pricing_provider="<DisplayName>"`, and `pricing_quality="exact"` only when
    the export gives an exact price. Give every row a **stable** `txid` — the
@@ -241,24 +249,27 @@ end-to-end and to pass the drift test.
    stable column — so re-importing an updated export dedupes instead of
    duplicating rows.
 
-2. **`kassiber/core/wallets.py`** — add `<slug>` to `WALLET_KINDS` and register
-   its kind metadata (`config_fields: ["source_file", "source_format"]`,
-   matching the other CSV-source kinds).
+2. **Wallet kind and source format** — add `<slug>` to `WALLET_KINDS` in
+   `crates/wallets/src/config.rs` and its catalog row to
+   `crates/wallets/src/connections_catalog.json` (`config_fields:
+   "source_file, source_format"`, like the other CSV-source kinds). Add
+   `<slug>_csv` to `SOURCE_FORMATS` in `crates/wallets/src/connections.rs`, and
+   to `ACTIVE_FORMATS` or `EVIDENCE_FORMATS` in
+   `crates/wallets/src/sync/sources.rs` when it is one of those.
 
-3. **`kassiber/daemon.py`** — add `<slug>_csv` to `_UI_WALLET_SOURCE_FORMATS`,
-   and add the daemon import dispatch branch (mirror the `strike_csv` /
-   `21bitcoin_csv` block, choosing `full` vs `relevant` default per the
-   custodial decision).
+3. **`crates/daemon/src/onboarding.rs`** — add the `<slug>_csv` arm to the
+   desktop import dispatch, mirroring the `strike_csv` / `21bitcoin_csv` /
+   `pocketbitcoin_csv` arms and choosing the `full` vs `relevant` default per
+   the custodial decision.
 
-4. **`kassiber/cli/main.py`** — two edits in this one file. Add the
-   `wallets import-<slug>` **subparser** (`--workspace`, `--profile`,
-   `--wallet`; `--file` required; add `--mode` if the provider uses
-   relevant/full), and add the matching **dispatch branch** in the wallets
-   command handler that calls `import_into_wallet(conn, args.workspace,
-   args.profile, args.wallet, args.file, "<slug>_csv", <mode>)`. Mirror the
-   existing `import-strike` / `import-21bitcoin` blocks — both the parser and
-   the dispatch live in `main.py`; there is no separate `handlers.py` branch for
-   imports.
+4. **The CLI command** — add the `wallets import-<slug>` parser to
+   `crates/cli/src/spec_data.rs` (`--workspace`, `--profile`, `--wallet`;
+   `--file` required; `--mode` if the provider uses relevant/full), mirroring
+   the `kassiber wallets import-strike` entry and adding its name to the
+   `wallets` subparser list. Then add the dispatch arm in
+   `crates/cli/src/wallets.rs`, the dotted path to `IMPLEMENTED` in
+   `crates/cli/src/describe.rs`, and the path to its capability class in
+   `crates/runtime/src/capabilities.rs` next to `wallets.import-strike`.
 
 5. **`ui-tauri/src/assets/integrations/<slug>.svg`** — the connection logo.
    Prefer a **vector** (`.svg`): it stays crisp at every size and the existing
@@ -286,21 +297,22 @@ end-to-end and to pass the drift test.
      `imageFrameClassName: lightLogoFrame` like the other dark-on-light logos so
      it doesn't disappear. Check it renders cleanly in both themes.
    - A `status: "ready"` entry **must** reference the real `walletKind` and
-     `sourceFormat` or `tests/test_connection_catalog_drift.py` fails.
+     `sourceFormat`, or the catalog checks in
+     `crates/daemon/tests/desktop_boundaries.rs` fail.
    - Catalog `title` / `description` / `details` are inline English literals
      here (not `t()` keys). Only if you add keys to `connections.json` (e.g. a
      format label or import-mode helper) must you add them to **both** `en` and
      `de`, or the i18n key-parity test fails — see
      [docs/reference/i18n.md](../../../docs/reference/i18n.md).
 
-7. **`tests/test_cli_smoke.py`** — extend the behavior pin: a small fixture CSV
-   covering the main row types (and at least one unrecognized type to prove the
-   fail-safe fallback), an import, and assertions on inserted counts, `kind`,
-   msat amounts, and pricing. Follow the test-selection guidance in
+7. **Tests** — pin the behavior in `crates/wallets/src/file_import/tests.rs`:
+   a small fixture CSV covering the main row types (and at least one
+   unrecognized type to prove the fail-safe fallback), an import through
+   `import_kind(..., Format::<Variant>)`, and assertions on inserted counts,
+   `kind`, msat amounts, and pricing. Follow the test-selection guidance in
    [CONTRIBUTING.md](../../../CONTRIBUTING.md#verification-and-review).
-   Verify the new command appears in command discovery and existing CLI help
-   coverage; the gate uses the generated test inventory, not a hand-maintained
-   list of help commands.
+   Verify the new command appears in `kassiber --machine commands describe
+   wallets import-<slug>` and in `wallets import-<slug> --help`.
 
 8. **Docs, in the same change:**
    - `docs/reference/imports.md` — a "## <DisplayName>" section (supported-paths
@@ -331,7 +343,7 @@ end-to-end and to pass the drift test.
 - Anything whose tax treatment the export does not pin down → leave it to
   **quarantine**, with an actionable hint. Never zero-basis-guess.
 - The type→kind fallback must be **conservative, not pass-through**. Some
-  existing importers (e.g. `_strike_kind`) fall back to passing an unknown type
+  existing importers (e.g. `kind` in `strike.rs`) fall back to passing an unknown type
   string straight through as the `kind`; for a new importer prefer mapping
   unknown types to a sign-based `deposit` / `withdrawal` plus a
   `<slug>-unmapped-type` review tag, so an unrecognized row can never silently
@@ -344,13 +356,16 @@ end-to-end and to pass the drift test.
 Run the gate and a real round-trip before calling it done:
 
 ```bash
-./scripts/quality-gate.sh                                   # full Python + frontend gate
-uv run --locked python -m kassiber wallets import-<slug> --help       # parser wired
-# round-trip on a temp data root
-uv run --locked python -m kassiber --data-root /tmp/smoke/data init
-uv run --locked python -m kassiber --data-root /tmp/smoke/data wallets import-<slug> --file docs/exchanges/samples/<slug>/example.csv
-uv run --locked python -m kassiber --data-root /tmp/smoke/data journals process
-uv run --locked python -m kassiber --data-root /tmp/smoke/data --machine reports summary
+./scripts/quality-gate.sh                                   # full Rust + frontend gate
+cargo build --locked -p kassiber
+K=target/debug/kassiber
+$K wallets import-<slug> --help                             # parser wired
+# round-trip on a disposable data root
+SMOKE="$(mktemp -d)"
+$K --data-root "$SMOKE/data" init
+$K --data-root "$SMOKE/data" wallets import-<slug> --file docs/exchanges/samples/<slug>/example.csv
+$K --data-root "$SMOKE/data" journals process
+$K --data-root "$SMOKE/data" --machine reports summary
 ```
 
 For focused catalog/i18n checks while developing, use the frontend commands in

@@ -69,22 +69,24 @@ while [[ $# -gt 0 ]]; do
 done
 
 detect_runner() {
+  if [[ -n "${KASSIBER_BIN:-}" ]]; then
+    if [[ -x "$KASSIBER_BIN" ]]; then
+      RUNNER=("$KASSIBER_BIN")
+      RUNNER_MODE="path"
+      return 0
+    fi
+    printf '%s\n' "KASSIBER_BIN is not an executable file: $KASSIBER_BIN" >&2
+    return 1
+  fi
   if command -v kassiber >/dev/null 2>&1; then
     RUNNER=(kassiber)
     RUNNER_MODE="path"
     return 0
   fi
-  if command -v uv >/dev/null 2>&1 && [[ -f "$REPO_ROOT/pyproject.toml" ]]; then
-    if (cd "$REPO_ROOT" && uv run --locked kassiber status >/dev/null 2>&1); then
-      RUNNER=(uv run --locked kassiber)
-      RUNNER_MODE="uv"
-      return 0
-    fi
-    if (cd "$REPO_ROOT" && uv run --locked python -m kassiber status >/dev/null 2>&1); then
-      RUNNER=(uv run --locked python -m kassiber)
-      RUNNER_MODE="uv-python"
-      return 0
-    fi
+  if command -v cargo >/dev/null 2>&1 && [[ -f "$REPO_ROOT/crates/kassiber/Cargo.toml" ]]; then
+    RUNNER=(cargo run --quiet --locked -p kassiber --)
+    RUNNER_MODE="cargo"
+    return 0
   fi
   printf '%s\n' "Unable to find a runnable kassiber command" >&2
   return 1
@@ -126,7 +128,7 @@ run_status() {
   emit_error \
     "verify_state_status_failed" \
     "Unable to collect Kassiber status." \
-    "Ensure Kassiber is installed or run this helper from a Kassiber repo checkout with uv available." \
+    "Ensure kassiber is on PATH, set KASSIBER_BIN to the binary, or run this helper from a Kassiber checkout with cargo available." \
     "$(jq -n --arg stderr "$output" --arg repo_root "$REPO_ROOT" '{stderr: $stderr, repo_root: $repo_root}')"
   return 1
 }
