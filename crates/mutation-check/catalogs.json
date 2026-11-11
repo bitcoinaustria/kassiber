@@ -198,7 +198,6 @@
     "crates/journals/scripts/mutations.json",
     "crates/journals/scripts/branch_mutations.json",
     "crates/journals/scripts/builder_mutations.json",
-    "crates/journals/scripts/desktop_mutations.json",
     "crates/journals/scripts/legacy_mutations.json",
     "crates/journals/scripts/loader_blob_mutations.json",
     "crates/journals/scripts/native_graph_mutations.json",
@@ -229,6 +228,21 @@
    "test_args": [
     "--test-threads=1"
    ]
+  },
+  {
+   "name": "journals-desktop",
+   "catalogs": [
+    "crates/journals/scripts/desktop_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber",
+    "--features",
+    "test-harness"
+   ],
+   "resolve_target": {
+    "tests_dir": "crates/kassiber/tests"
+   }
   },
   {
    "name": "journals-review",
@@ -933,12 +947,15 @@
    ],
    "cargo": [
     "-p",
-    "kassiber-transfers",
+    "kassiber",
     "--features",
     "test-harness"
    ],
    "env": {
     "RUST_TEST_THREADS": "1"
+   },
+   "resolve_target": {
+    "tests_dir": "crates/kassiber/tests"
    }
   },
   {
@@ -998,6 +1015,9 @@
    ],
    "env": {
     "KASSIBER_TEST_NO_EGRESS": "strict"
+   },
+   "resolve_target": {
+    "tests_dir": "crates/wallets/tests"
    }
   },
   {
@@ -1026,7 +1046,10 @@
     "kassiber",
     "--features",
     "test-harness"
-   ]
+   ],
+   "resolve_target": {
+    "tests_dir": "crates/kassiber/tests"
+   }
   },
   {
    "name": "wallets-discovery",
@@ -1052,7 +1075,12 @@
     "-p",
     "kassiber-cli",
     "--lib"
-   ]
+   ],
+   "package_features": {
+    "kassiber": [
+     "test-harness"
+    ]
+   }
   },
   {
    "name": "wallets-exchange",
@@ -1144,7 +1172,12 @@
     "kassiber-wallets",
     "-p",
     "kassiber-daemon"
-   ]
+   ],
+   "package_features": {
+    "kassiber": [
+     "test-harness"
+    ]
+   }
   },
   {
    "name": "wallets-persistence",

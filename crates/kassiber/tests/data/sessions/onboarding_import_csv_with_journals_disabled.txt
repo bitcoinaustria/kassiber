@@ -1,0 +1,18 @@
+## session 1
+> {"request_id": "0", "kind": "ui.wallets.import_file", "args": {"source_format": "csv", "source_file": "$BASE/files/rows.csv", "wallet": "imports"}}
+< {"kind":"ui.wallets.import_file","schema_version":1,"data":{"wallet":"Imports","source":"file:csv","imported":2,"skipped":0,"unchanged":0,"journal_invalidated":true,"inserted_records":[{"transaction_id":"<uuid>","external_id":"csv-1","wallet":"Imports","asset":"BTC","direction":"inbound","amount_msat":25000000000,"changed_fields":["metadata","pricing","transaction"],"pricing_external_ref":null},{"transaction_id":"<uuid>","external_id":"csv-2","wallet":"Imports","asset":"BTC","direction":"outbound","amount_msat":5000000000,"changed_fields":["metadata","pricing","transaction"],"pricing_external_ref":null}],"updated_records":[],"import_batch_id":"<uuid>","input_format":"csv","file":"$BASE/files/rows.csv","journals":{"status":"disabled","rebuilt":false,"quarantines":null,"auto_pair_applied":0,"error":null}},"request_id":"0"}
+> (after the session ended) daemon.shutdown
+## tables after session 1
+- chain_index_clock (1, 35)
++ chain_index_clock (1, 39)
+- chain_index_dirty ("profiles", -1, 35)
++ chain_index_dirty ("profiles", -1, 39)
++ chain_index_dirty ("transactions", 10, 37)
++ chain_index_dirty ("transactions", 9, 36)
++ import_batch_transactions ("<uuid>", "<uuid>", 1)
++ import_batch_transactions ("<uuid>", "<uuid>", 2)
++ import_batches ("<uuid>", "w", "p", "imports", "csv", "rows.csv", NULL, "<now>", 1, 2, 0, 0)
+- profiles ("p", "w", "Book", "EUR", "at", 365, "FIFO", 0, 1, "global", 1, 0, 1, 0, NULL, 0, NULL, "2025", NULL)
++ profiles ("p", "w", "Book", "EUR", "at", 365, "FIFO", 0, 1, "global", 2, 0, 1, 0, NULL, 0, NULL, "2025", NULL)
++ transactions ("<uuid>", "w", "p", "imports", "csv-1", NULL, "272310147be00a8f2c9bca74caf7193609612fb531e5f761f6f04e3dd46a59a9", "2025-03-01T00:00:00Z", NULL, "inbound", "BTC", 25000000000, 0, 0, "EUR", 40000.0, 10000.0, "import", "40000", "10000.00", "generic_import", NULL, NULL, "2025-03-01T00:00:00Z", NULL, NULL, NULL, NULL, "provider_sample", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, "First", NULL, NULL, 0, "{\"amount\": \"0.25\", \"asset\": \"BTC\", \"description\": \"First\", \"direction\": \"inbound\", \"fee\": \"0\", \"fiat_rate\": \"40000\", \"occurred_at\": \"2025-03-01T00:00:00Z\", \"txid\": \"csv-1\"}", NULL, NULL, NULL, NULL, "<now>")
++ transactions ("<uuid>", "w", "p", "imports", "csv-2", NULL, "5ad05a7fb6ceb4a6bcb9b20e6da63f56950987842d022b430abb2fab54c5b226", "2025-03-02T00:00:00Z", NULL, "outbound", "BTC", 5000000000, 10000000, 0, "EUR", 41000.0, 2050.0, "import", "41000", "2050.00", "generic_import", NULL, NULL, "2025-03-02T00:00:00Z", NULL, NULL, NULL, NULL, "provider_sample", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, "Second", NULL, NULL, 0, "{\"amount\": \"0.05\", \"asset\": \"BTC\", \"description\": \"Second\", \"direction\": \"outbound\", \"fee\": \"0.0001\", \"fiat_rate\": \"41000\", \"occurred_at\": \"2025-03-02T00:00:00Z\", \"txid\": \"csv-2\"}", NULL, NULL, NULL, NULL, "<now>")

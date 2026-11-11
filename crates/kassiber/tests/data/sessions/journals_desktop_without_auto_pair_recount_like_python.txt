@@ -1,0 +1,36 @@
+## session 1
+> {"kind": "status", "request_id": "open"}
+< {"kind":"status","schema_version":1,"data":{"version":"$VERSION","schema_version":1,"auth":{"mode":"local","authenticated":true},"database_encrypted":false,"state_root":"$BASE","data_root":"$BASE/data","database":"$BASE/data/kassiber.sqlite3","project_id":null,"project_name":null,"project_root":null,"config_root":"$BASE/config","settings_file":"$BASE/config/settings.json","exports_root":"$BASE/exports","attachments_root":"$BASE/attachments","current_workspace":"Main","current_profile":"Book","workspaces":1,"profiles":1,"accounts":0,"wallets":2,"transactions":2,"journal_entries":0,"quarantines":0,"default_backend":"fulcrum","env_file":"$BASE/config/backends.env"},"request_id":"open"}
+> {"kind": "test.freshness.select", "request_id": "select", "args": {"kind": "ui.journals.process", "args": {"auto_pair": false}, "request_id": "process"}}
+< {"kind":"test.freshness.select","schema_version":1,"data":{"supported":true},"request_id":"select"}
+> {"kind": "ui.journals.process", "request_id": "process", "args": {"auto_pair": false}}
+< {"kind":"ui.journals.process.progress","schema_version":1,"data":{"phase":"writer_wait"},"request_id":"process"}
+< {"kind":"ui.journals.process.progress","schema_version":1,"data":{"phase":"preparing"},"request_id":"process"}
+< {"kind":"ui.journals.process.progress","schema_version":1,"data":{"phase":"repairing"},"request_id":"process"}
+< {"kind":"ui.journals.process.progress","schema_version":1,"data":{"phase":"pricing"},"request_id":"process"}
+< {"kind":"ui.journals.process.progress","schema_version":1,"data":{"phase":"building"},"request_id":"process"}
+< {"kind":"ui.journals.process.progress","schema_version":1,"data":{"phase":"storing"},"request_id":"process"}
+< {"kind":"ui.journals.process.progress","schema_version":1,"data":{"phase":"complete"},"request_id":"process"}
+< {"kind":"ui.journals.process","schema_version":1,"data":{"profile":"Book","entries_created":0,"quarantined":2,"transfers_detected":0,"cross_asset_pairs":0,"auto_priced":0,"processed_transactions":2,"processed_at":"2026-10-31T12:00:00Z","custody_quantity":{"postings":5,"issues":0,"balances":5,"decisions":0,"economic_relations":0,"differences":2,"blocked":false,"blocked_from":null},"rebuilt":true},"request_id":"process"}
+> {"request_id": "stop", "kind": "daemon.shutdown"}
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+## tables after session 1
+- chain_index_clock (1, 22)
++ chain_index_clock (1, 26)
+- chain_index_dirty ("profiles", -1, 22)
++ chain_index_dirty ("profiles", -1, 26)
++ journal_custody_gap_inputs ("w", "p", 0, "[]", "[]", "2026-10-31T12:00:00Z")
++ journal_quantity_balances ("w", "p", "external", "unmatched_outbound_default", "BTC", 244272502, "2026-10-31T12:00:00Z")
++ journal_quantity_balances ("w", "p", "external_origin", "unclassified_origin", "BTC", -244270469, "2026-10-31T12:00:00Z")
++ journal_quantity_balances ("w", "p", "fee", "network_fee", "BTC", 7, "2026-10-31T12:00:00Z")
++ journal_quantity_balances ("w", "p", "wallet", "source", "BTC", -244272509, "2026-10-31T12:00:00Z")
++ journal_quantity_balances ("w", "p", "wallet", "target", "BTC", 244270469, "2026-10-31T12:00:00Z")
++ journal_quantity_postings ("decision:17f98d04604b594c70c4e30b6529f5b30be5ce716cff97a9aa1de52ae54ec355:0:244272502", "w", "p", "a-o", "17f98d04604b594c70c4e30b6529f5b30be5ce716cff97a9aa1de52ae54ec355", "2026-03-14T17:30:00Z", "BTC", "external", "unmatched_outbound_default", 244272502, "external_presumed", "2026-10-31T12:00:00Z")
++ journal_quantity_postings ("fee:17f98d04604b594c70c4e30b6529f5b30be5ce716cff97a9aa1de52ae54ec355", "w", "p", "a-o", "17f98d04604b594c70c4e30b6529f5b30be5ce716cff97a9aa1de52ae54ec355", "2026-03-14T17:30:00Z", "BTC", "fee", "network_fee", 7, "external_confirmed", "2026-10-31T12:00:00Z")
++ journal_quantity_postings ("observed:17f98d04604b594c70c4e30b6529f5b30be5ce716cff97a9aa1de52ae54ec355", "w", "p", "a-o", "17f98d04604b594c70c4e30b6529f5b30be5ce716cff97a9aa1de52ae54ec355", "2026-03-14T17:30:00Z", "BTC", "wallet", "source", -244272509, "observed", "2026-10-31T12:00:00Z")
++ journal_quantity_postings ("observed:2d4109121e20c672c745a7ef8454ab63db66592ef82fd62d29b9fc40e1d46fe0", "w", "p", "a-i", "2d4109121e20c672c745a7ef8454ab63db66592ef82fd62d29b9fc40e1d46fe0", "2026-03-14T17:30:00Z", "BTC", "wallet", "target", 244270469, "observed", "2026-10-31T12:00:00Z")
++ journal_quantity_postings ("origin:2d4109121e20c672c745a7ef8454ab63db66592ef82fd62d29b9fc40e1d46fe0:0:244270469", "w", "p", "a-i", "2d4109121e20c672c745a7ef8454ab63db66592ef82fd62d29b9fc40e1d46fe0", "2026-03-14T17:30:00Z", "BTC", "external_origin", "unclassified_origin", -244270469, "unclassified_origin", "2026-10-31T12:00:00Z")
++ journal_quarantines ("a-i", "w", "p", "missing_spot_price", "{\"asset\":\"BTC\",\"direction\":\"inbound\",\"required_for\":\"acquisition\",\"wallet\":\"target\"}", "2026-10-31T12:00:00Z")
++ journal_quarantines ("a-o", "w", "p", "missing_spot_price", "{\"asset\":\"BTC\",\"direction\":\"outbound\",\"required_for\":\"disposal\",\"wallet\":\"source\"}", "2026-10-31T12:00:00Z")
+- profiles ("p", "w", "Book", "USD", "generic", 365, "FIFO", 0, 1, "global", 0, 0, 1, 0, NULL, 0, NULL, "2026-10-30T12:00:00Z", NULL)
++ profiles ("p", "w", "Book", "USD", "generic", 365, "FIFO", 0, 1, "global", 0, 0, 10, 10, "2026-10-31T12:00:00Z", 2, "{\"by_reason\": {}, \"total\": 0}", "2026-10-30T12:00:00Z", 1)

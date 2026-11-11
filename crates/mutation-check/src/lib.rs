@@ -274,6 +274,11 @@ pub struct Suite {
     /// Passed after `--` with the filter, e.g. `--test-threads=1`.
     #[serde(default)]
     pub test_args: Vec<String>,
+    /// Features a `package[/binary]:name` filter builds its package with,
+    /// keyed by package (`{"kassiber": ["test-harness"]}`): the black-box
+    /// tests need the harness binary.
+    #[serde(default)]
+    pub package_features: BTreeMap<String, Vec<String>>,
     #[serde(default = "default_timeout")]
     pub timeout_secs: u64,
 }

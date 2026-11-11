@@ -1,0 +1,13 @@
+exit Some(1)
+stdout {
+stdout   "kind": "error",
+stdout   "schema_version": 1,
+stdout   "error": {
+stdout     "code": "app_error",
+stdout     "message": "RP2 multi-asset tax calculation failed: Unsupported RP2 accounting method 'invalid-method'",
+stdout     "hint": null,
+stdout     "details": null,
+stdout     "retryable": false,
+stdout     "debug": null
+stdout   }
+stdout }

@@ -1,0 +1,69 @@
+## session 1
+> {"request_id": "0", "kind": "ui.freshness.configure", "args": []}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"daemon args must be an object","hint":null,"details":{"type":"list"},"retryable":false,"debug":null},"request_id":"0"}
+> {"request_id": "1", "kind": "ui.freshness.configure", "args": "x"}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"daemon args must be an object","hint":null,"details":{"type":"str"},"retryable":false,"debug":null},"request_id":"1"}
+> {"request_id": "2", "kind": "ui.freshness.configure", "args": {"bogus": 1, "also": 2, "source_classes": {}}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.freshness.configure received unsupported arguments","hint":null,"details":{"unknown":["also","bogus"]},"retryable":false,"debug":null},"request_id":"2"}
+> {"request_id": "3", "kind": "ui.freshness.configure", "args": {"source_classes": []}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.freshness.configure source_classes must be an object","hint":null,"details":{"type":"list"},"retryable":false,"debug":null},"request_id":"3"}
+> {"request_id": "4", "kind": "ui.freshness.configure", "args": {"source_classes": "x"}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.freshness.configure source_classes must be an object","hint":null,"details":{"type":"str"},"retryable":false,"debug":null},"request_id":"4"}
+> {"request_id": "5", "kind": "ui.freshness.configure", "args": {"market_rate_provider": 3}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.freshness.configure market_rate_provider must be a string","hint":null,"details":{"type":"int"},"retryable":false,"debug":null},"request_id":"5"}
+> {"request_id": "6", "kind": "ui.freshness.configure", "args": {"market_rate_provider": ["a"]}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.freshness.configure market_rate_provider must be a string","hint":null,"details":{"type":"list"},"retryable":false,"debug":null},"request_id":"6"}
+> {"request_id": "7", "kind": "ui.freshness.configure", "args": {"auto_sync_before_report_reads": 1}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.freshness.configure auto_sync_before_report_reads must be a boolean","hint":null,"details":{"type":"int"},"retryable":false,"debug":null},"request_id":"7"}
+> {"request_id": "8", "kind": "ui.freshness.configure", "args": {"auto_sync_before_report_reads": "yes"}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.freshness.configure auto_sync_before_report_reads must be a boolean","hint":null,"details":{"type":"str"},"retryable":false,"debug":null},"request_id":"8"}
+> {"request_id": "9", "kind": "ui.freshness.configure", "args": {"market_rate_provider": "kraken-csv"}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Market-rate provider 'kraken-csv' is not supported for automatic refresh","hint":"Supported automatic market-rate providers: coinbase-exchange, coingecko, mempool","details":null,"retryable":false,"debug":null},"request_id":"9"}
+> {"request_id": "10", "kind": "ui.freshness.configure", "args": {"market_rate_provider": "\ud800"}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Market-rate provider '\ud800' is not supported for automatic refresh","hint":"Supported automatic market-rate providers: coinbase-exchange, coingecko, mempool","details":null,"retryable":false,"debug":null},"request_id":"10"}
+> {"request_id": "11", "kind": "ui.freshness.configure", "args": {"source_classes": {"onchain_wallet": true, "bogus": true}}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Unsupported freshness source class 'bogus'","hint":null,"details":{"source_class":"bogus"},"retryable":false,"debug":null},"request_id":"11"}
+> {"request_id": "12", "kind": "ui.freshness.configure", "args": {"market_rate_provider": "mempool", "source_classes": {"bogus": 1}}}
+< same as line 25
+> {"request_id": "stop", "kind": "daemon.shutdown"}
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+## session 2
+> {"request_id": "0", "kind": "ui.maintenance.configure", "args": []}
+< same as line 3
+> {"request_id": "1", "kind": "ui.maintenance.configure", "args": "x"}
+< same as line 5
+> {"request_id": "2", "kind": "ui.maintenance.configure", "args": {"bogus": 1, "also": 2, "source_classes": {}}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.maintenance.configure received unsupported arguments","hint":null,"details":{"unknown":["also","bogus"]},"retryable":false,"debug":null},"request_id":"2"}
+> {"request_id": "3", "kind": "ui.maintenance.configure", "args": {"source_classes": []}}
+< same as line 9
+> {"request_id": "4", "kind": "ui.maintenance.configure", "args": {"source_classes": "x"}}
+< same as line 11
+> {"request_id": "5", "kind": "ui.maintenance.configure", "args": {"market_rate_provider": 3}}
+< same as line 13
+> {"request_id": "6", "kind": "ui.maintenance.configure", "args": {"market_rate_provider": ["a"]}}
+< same as line 15
+> {"request_id": "7", "kind": "ui.maintenance.configure", "args": {"auto_sync_before_report_reads": 1}}
+< same as line 17
+> {"request_id": "8", "kind": "ui.maintenance.configure", "args": {"auto_sync_before_report_reads": "yes"}}
+< same as line 19
+> {"request_id": "9", "kind": "ui.maintenance.configure", "args": {"market_rate_provider": "kraken-csv"}}
+< same as line 21
+> {"request_id": "10", "kind": "ui.maintenance.configure", "args": {"market_rate_provider": "\ud800"}}
+< same as line 23
+> {"request_id": "11", "kind": "ui.maintenance.configure", "args": {"source_classes": {"onchain_wallet": true, "bogus": true}}}
+< same as line 25
+> {"request_id": "12", "kind": "ui.maintenance.configure", "args": {"market_rate_provider": "mempool", "source_classes": {"bogus": 1}}}
+< same as line 25
+> {"request_id": "stop", "kind": "daemon.shutdown"}
+< same as line 29
+## session 3
+> {"request_id": "0", "kind": "ui.maintenance.configure", "args": {"require_coarse_review": 1}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.maintenance.configure require_coarse_review must be a boolean","hint":null,"details":{"type":"int"},"retryable":false,"debug":null},"request_id":"0"}
+> {"request_id": "1", "kind": "ui.maintenance.configure", "args": {"bitcoin_rail_carrying_value": "no"}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.maintenance.configure bitcoin_rail_carrying_value must be a boolean","hint":null,"details":{"type":"str"},"retryable":false,"debug":null},"request_id":"1"}
+> {"request_id": "2", "kind": "ui.maintenance.configure", "args": {"require_coarse_review": true, "bitcoin_rail_carrying_value": 0}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.maintenance.configure bitcoin_rail_carrying_value must be a boolean","hint":null,"details":{"type":"int"},"retryable":false,"debug":null},"request_id":"2"}
+> {"request_id": "3", "kind": "ui.maintenance.configure", "args": {"require_coarse_review": null, "source_classes": 1}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.freshness.configure source_classes must be an object","hint":null,"details":{"type":"int"},"retryable":false,"debug":null},"request_id":"3"}
+> {"request_id": "stop", "kind": "daemon.shutdown"}
+< same as line 29

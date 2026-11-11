@@ -1,0 +1,14 @@
+## session 1
+> {"request_id": "0", "kind": "ui.backends.lightning.test", "args": {"backend": "cln"}}
+< {"kind":"ui.backends.lightning.test","schema_version":1,"data":{"ok":true,"backend":"cln","kind":"coreln","lightningCapabilities":{"nodeSnapshot":true,"routingProfitability":true,"channelBalances":true,"channelLifecycle":true,"forwardEvents":true,"invoiceActivity":true,"paymentActivity":true,"onchainBalance":true},"alias":"DISCARDED_CLN_SECRET","network":"mainnet","block_height":42,"peer_count":3,"channel_count":1,"logs":["Opening Lightning connection to backend 'cln'","Connected to DISCARDED_CLN_SECRET: 1 channels, 3 peers","Block height: 42"]},"request_id":"0"}
+> {"request_id": "stop", "kind": "daemon.shutdown"}
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+cli --json --raw --rpc-file=$BASE/cln getinfo
+cli --json --raw --rpc-file=$BASE/cln listfunds
+cli --json --raw --rpc-file=$BASE/cln listpeerchannels
+cli --json --raw --rpc-file=$BASE/cln listforwards
+cli --json --raw --rpc-file=$BASE/cln listpays
+cli --json --raw --rpc-file=$BASE/cln listinvoices
+cli --json --raw --rpc-file=$BASE/cln bkpr-listincome
+cli --json --raw --rpc-file=$BASE/cln bkpr-listbalances
+cli --json --raw --rpc-file=$BASE/cln bkpr-listaccountevents

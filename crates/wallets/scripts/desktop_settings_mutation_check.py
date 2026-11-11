@@ -9,6 +9,7 @@ resolved ``target/`` directory, never under the system temporary directory.
     uv run --locked python crates/wallets/scripts/desktop_settings_mutation_check.py [--only ID ...]
     uv run --locked python crates/wallets/scripts/desktop_settings_mutation_check.py --check
 """
+import dataclasses
 import importlib.util
 import os
 from pathlib import Path
@@ -24,6 +25,16 @@ sys.modules[spec.name] = checker
 spec.loader.exec_module(checker)
 checker.MUTATIONS = Path(__file__).with_name("desktop_settings_mutations.json")
 checker.Mutation.runner = property(lambda self: "pytest")
+_load = checker.load
+
+
+def _pytest_killers(path=checker.MUTATIONS):
+    """Only the pytest killers: the Rust ones run under crates/mutation-check."""
+    return [dataclasses.replace(m, expect_failing=tuple(t for t in m.expect_failing if ".py::" in t))
+            for m in _load(path)]
+
+
+checker.load = _pytest_killers
 BaseRunner = checker._Runner
 
 

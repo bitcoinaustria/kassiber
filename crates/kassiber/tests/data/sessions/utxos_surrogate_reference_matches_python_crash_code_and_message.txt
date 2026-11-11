@@ -1,0 +1,9 @@
+## session 1
+> {"request_id": "0", "kind": "ui.wallets.utxos", "args": {"wallet": "\ud800"}}
+< {"kind":"error","schema_version":1,"error":{"code":"internal_error","message":"'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed","hint":null,"details":null,"retryable":false,"debug":null},"request_id":"0"}
+> {"request_id": "1", "kind": "ui.wallets.utxos", "args": {"wallet": "a\udc00\udc01b"}}
+< {"kind":"error","schema_version":1,"error":{"code":"internal_error","message":"'utf-8' codec can't encode characters in position 1-2: surrogates not allowed","hint":null,"details":null,"retryable":false,"debug":null},"request_id":"1"}
+> {"request_id": "2", "kind": "ui.wallets.utxos", "args": {"wallet": " \udfff "}}
+< {"kind":"error","schema_version":1,"error":{"code":"internal_error","message":"'utf-8' codec can't encode character '\\udfff' in position 0: surrogates not allowed","hint":null,"details":null,"retryable":false,"debug":null},"request_id":"2"}
+> {"request_id": "stop", "kind": "daemon.shutdown"}
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}

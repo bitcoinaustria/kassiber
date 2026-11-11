@@ -1,0 +1,104 @@
+$ --machine --data-root $BASE/data wallets import-document --wallet Source --file $BASE/receipt.png --provider local
+exit Some(1)
+stdout {
+stdout   "kind": "error",
+stdout   "schema_version": 1,
+stdout   "error": {
+stdout     "code": "interaction_required",
+stdout     "message": "Document OCR import requires an interactive review",
+stdout     "hint": "Run wallets preview-document first, then rerun wallets import-document in a terminal and explicitly select the reviewed rows.",
+stdout     "details": null,
+stdout     "retryable": false,
+stdout     "debug": null
+stdout   }
+stdout }
+$ --format json --data-root $BASE/data wallets import-document --wallet Source --file $BASE/receipt.png --provider local
+exit Some(1)
+stdout {
+stdout   "kind": "error",
+stdout   "schema_version": 1,
+stdout   "error": {
+stdout     "code": "interaction_required",
+stdout     "message": "Document OCR import requires an interactive review",
+stdout     "hint": "Run wallets preview-document first, then rerun wallets import-document in a terminal and explicitly select the reviewed rows.",
+stdout     "details": null,
+stdout     "retryable": false,
+stdout     "debug": null
+stdout   }
+stdout }
+$ --format json --non-interactive --data-root $BASE/data wallets import-document --wallet Source --file $BASE/receipt.png --provider local
+exit Some(1)
+stdout {
+stdout   "kind": "error",
+stdout   "schema_version": 1,
+stdout   "error": {
+stdout     "code": "interaction_required",
+stdout     "message": "Document OCR import requires an interactive review",
+stdout     "hint": "Run wallets preview-document first, then rerun wallets import-document in a terminal and explicitly select the reviewed rows.",
+stdout     "details": null,
+stdout     "retryable": false,
+stdout     "debug": null
+stdout   }
+stdout }
+$ --machine --data-root $BASE/data wallets import-document --wallet Source --file $BASE/receipt.png --provider local --wallet missing
+exit Some(1)
+stdout {
+stdout   "kind": "error",
+stdout   "schema_version": 1,
+stdout   "error": {
+stdout     "code": "not_found",
+stdout     "message": "Wallet 'missing' not found",
+stdout     "hint": null,
+stdout     "details": null,
+stdout     "retryable": false,
+stdout     "debug": null
+stdout   }
+stdout }
+$ --machine --data-root $BASE/data wallets preview-document --file $BASE/receipt.png --provider local --profile missing
+exit Some(1)
+stdout {
+stdout   "kind": "error",
+stdout   "schema_version": 1,
+stdout   "error": {
+stdout     "code": "not_found",
+stdout     "message": "Profile 'missing' not found in the selected workspace",
+stdout     "hint": null,
+stdout     "details": null,
+stdout     "retryable": false,
+stdout     "debug": null
+stdout   }
+stdout }
+$ --machine --data-root $BASE/data wallets preview-document --file $BASE/receipt.png --provider local --file $BASE/absent.png
+exit Some(1)
+stdout {
+stdout   "kind": "error",
+stdout   "schema_version": 1,
+stdout   "error": {
+stdout     "code": "not_found",
+stdout     "message": "Document source not found: $BASE/absent.png",
+stdout     "hint": "Choose an existing image or PDF file.",
+stdout     "details": null,
+stdout     "retryable": false,
+stdout     "debug": null
+stdout   }
+stdout }
++ ai_providers ("claude", "Claude", "claude-cli://default", NULL, "default", "remote", "Broker using the installed Claude CLI and existing login. Kassiber's typed tools are available; native coding tools are not.", NULL, 1, NULL, "auto", NULL, 0, "full", "2026-01-02T03:04:05Z", "2026-01-02T03:04:05Z")
++ ai_providers ("codex", "Codex", "codex-cli://default", NULL, "default", "remote", "Broker using the installed Codex app-server and existing login. Kassiber's typed tools are available; native coding tools are not.", NULL, 1, NULL, "auto", NULL, 0, "full", "2026-01-02T03:04:05Z", "2026-01-02T03:04:05Z")
++ ai_providers ("copilot", "GitHub Copilot", "copilot-cli://default", NULL, "default", "remote", "Broker using the installed GitHub Copilot CLI over the Agent Client Protocol and its existing login. Kassiber's typed tools are available; native coding tools are not.", NULL, 1, NULL, "auto", NULL, 0, "full", "2026-01-02T03:04:05Z", "2026-01-02T03:04:05Z")
++ ai_providers ("opencode", "OpenCode", "opencode-cli://default", NULL, NULL, "remote", "Broker using the installed OpenCode server and existing configuration. Kassiber's typed tools are available; native coding tools are not.", NULL, 1, NULL, "auto", NULL, 0, "full", "2026-01-02T03:04:05Z", "2026-01-02T03:04:05Z")
++ settings ("ai_acp_broker_providers_seeded", "1")
++ settings ("ai_native_broker_providers_seeded", "1")
+$ --machine --data-root $BASE/data wallets preview-document --file $BASE/receipt.png --provider local --provider missing
+exit Some(1)
+stdout {
+stdout   "kind": "error",
+stdout   "schema_version": 1,
+stdout   "error": {
+stdout     "code": "not_found",
+stdout     "message": "AI provider 'missing' not found",
+stdout     "hint": "Use `kassiber ai providers list` to see configured providers.",
+stdout     "details": null,
+stdout     "retryable": false,
+stdout     "debug": null
+stdout   }
+stdout }

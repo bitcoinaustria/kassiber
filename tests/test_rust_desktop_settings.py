@@ -158,7 +158,7 @@ class DesktopSettingsMutationCatalogTest(unittest.TestCase):
         )
         self.assertEqual(result.stdout, f"{len(entries)} entries apply\n".encode())
         self.assertTrue(all(test.startswith("tests/test_rust_desktop_") for entry in entries
-                            for test in entry["expect_failing"]))
+                            for test in entry["expect_failing"] if ".py::" in test))
 
 
 if __name__ == "__main__":

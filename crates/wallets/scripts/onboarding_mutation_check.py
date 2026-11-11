@@ -6,6 +6,7 @@ entries naming pytest node ids rebuild the harness binary in the scratch tree
 and run the daemon parity tests against it. Scratch and build trees live under
 ``target/`` and are removed afterwards.
 """
+import dataclasses
 import importlib.util
 import os
 from pathlib import Path
@@ -24,6 +25,17 @@ checker.Mutation.runner = property(
     lambda self: "pytest" if any("::" in test for test in self.expect_failing) else "cargo"
 )
 
+_load = checker.load
+
+
+def _pytest_or_cargo(path=checker.MUTATIONS):
+    """An entry with pytest killers runs only those here; its Rust killers
+    (kassiber black-box package filters) run under crates/mutation-check."""
+    return [dataclasses.replace(m, expect_failing=tuple(t for t in m.expect_failing if ".py::" in t))
+            if any(".py::" in t for t in m.expect_failing) else m for m in _load(path)]
+
+
+checker.load = _pytest_or_cargo
 _run = checker._run
 
 

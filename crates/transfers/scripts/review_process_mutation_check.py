@@ -11,6 +11,7 @@ share `target/scratch-build` (override with CARGO_BUILD_BUILD_DIR).
 `--mutations repair_determinism_mutations.json` runs the legacy pair repair
 catalog the same way (docs/reference/rust-pairing.md#legacy-pair-repair-identities).
 """
+import dataclasses
 import importlib.util
 import os
 from pathlib import Path
@@ -25,6 +26,16 @@ sys.modules[spec.name] = checker
 spec.loader.exec_module(checker)
 checker.MUTATIONS = Path(__file__).with_name("review_process_mutations.json")
 checker.Mutation.runner = property(lambda self: "pytest")
+_load = checker.load
+
+
+def _pytest_killers(path=checker.MUTATIONS):
+    """Only the pytest killers: the Rust ones run under crates/mutation-check."""
+    return [dataclasses.replace(m, expect_failing=tuple(t for t in m.expect_failing if ".py::" in t))
+            for m in _load(path)]
+
+
+checker.load = _pytest_killers
 BaseRunner = checker._Runner
 
 
