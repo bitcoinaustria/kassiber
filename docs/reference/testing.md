@@ -372,11 +372,17 @@ that each fetch the locked test data first:
    skipping.
 3. `Frontend checks` runs TypeScript, ESLint and Vitest and uploads a JUnit
    report even after failure.
-4. `Chain observers (Linux Docker)` runs the
+4. `Tooling scripts` runs the standard-library tests of the packaging,
+   publishing and harness scripts (`tests/tooling/`, `python3 -I`) and the
+   product-free check that keeps every Python module in the tree off the
+   removed Python product. `linux-packaging.yml` runs the Debian, RPM and
+   channel-renderer suites (`tests/test_linux_*.py`, `tests/test_rpm_packaging.py`)
+   in their package-tool environments.
+5. `Chain observers (Linux Docker)` runs the
    [chain-observer](#dependency-chain-observer-oracle) and
    [chain-analysis](#local-chain-analysis-oracle) regtest lanes when
    observer-sensitive paths change.
-5. The stable `required` aggregate succeeds only when every required job
+6. The stable `required` aggregate succeeds only when every required job
    passes. Platform credential jobs keep their separate credential/packaging
    path filter, and ordinary pull requests do not build release packages.
 

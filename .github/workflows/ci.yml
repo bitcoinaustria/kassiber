@@ -138,6 +138,21 @@ jobs:
           cargo clippy -p kassiber -p kassiber-daemon -p kassiber-runtime --all-targets --features kassiber/test-harness --locked -- -D warnings
           cargo test -p kassiber --features test-harness --locked
 
+  tooling:
+    name: Tooling scripts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      # Standard-library tests of the packaging, publishing and harness
+      # scripts, run isolated like the regtest harness (plan 22, D2); the
+      # product-free check keeps every such module off the Python product.
+      - name: Run the tooling tests
+        run: |
+          python3 -I -m unittest discover -s tests/tooling -t . -v
+          python3 -I -m unittest discover -s tests/integration -t . -p test_product_free.py -v
+
   session-replay:
     name: Recorded sessions
     runs-on: ubuntu-latest
@@ -268,6 +283,7 @@ jobs:
       - frontend
       - tax-engine
       - session-replay
+      - tooling
       - chain-observers
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -278,8 +294,9 @@ jobs:
           echo "- Frontend: ${{ needs.frontend.result }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Rust crates: ${{ needs.tax-engine.result }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Recorded sessions: ${{ needs.session-replay.result }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Tooling scripts: ${{ needs.tooling.result }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Chain observers: ${{ needs.chain-observers.result }}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Enforce required checks
-        if: ${{ needs.frontend.result != 'success' || needs.tax-engine.result != 'success' || needs.session-replay.result != 'success' || needs.chain-observers.result != 'success' }}
+        if: ${{ needs.frontend.result != 'success' || needs.tax-engine.result != 'success' || needs.session-replay.result != 'success' || needs.tooling.result != 'success' || needs.chain-observers.result != 'success' }}
         run: exit 1

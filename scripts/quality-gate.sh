@@ -43,6 +43,8 @@ run cargo test --workspace --features kassiber-journals/test-harness --locked
 run cargo run --locked -p kassiber-mutation-check -- check
 run scripts/check-ledger-features.sh
 run scripts/check-cli-archive.sh
+run python3 -I -m unittest discover -s tests/tooling -t .
+run python3 -I -m unittest discover -s tests/integration -t . -p test_product_free.py
 # Frozen custody recordings (docs/reference/testing.md#custody-recordings) are
 # local; replay them when this machine has them.
 if [ -n "${KASSIBER_CUSTODY_REPLAY_DIR:-}" ]; then

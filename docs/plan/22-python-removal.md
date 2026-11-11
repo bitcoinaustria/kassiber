@@ -187,6 +187,18 @@ it compares against a reference. The per-module list is in
 | `parity-compare`: Rust compared with Python | 204 | 11,767 | 26,349 | 601 | freeze, then D1 |
 | **Total** | 638 | 21,198 | 30,992 | 606 | |
 
+Where the `tooling` modules went: the release scripts' tests became the
+release tool's Rust tests and goldens (`crates/release`), the workflow-pin
+and test-data-lock checks `kassiber-repo-checks`, the macOS candidate
+workflow test `crates/repo-checks/tests/macos_candidate_workflow.rs`, and the
+packaged-CLI no-egress test a shell check. The packaging, publisher-shell,
+desktop-packaging, harness-safety and regtest-stack tests test scripts that
+ship, so they stay as standard-library Python run with `python3 -I`
+(`tests/tooling/`, and `tests/test_linux_*.py` and `tests/test_rpm_packaging.py`
+for `linux-packaging.yml`). Tests of deleted scripts (the Python release
+tools, the PyInstaller packager, the CI shard runner) and of the Python
+product (catalog, dependency and report-contract drift) went with them.
+
 How the 342 Rust-touching modules reach Rust:
 - 153 through the binary only (`cli_runner`, `KASSIBER_RUST_BIN`);
 - 49 through the binary plus an example binary;

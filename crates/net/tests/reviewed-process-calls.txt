@@ -61,6 +61,8 @@ crates/reports/src/export.rs|csv_exports_follow_the_python_report_writer|assert!
 # product binary behind the shim, the replayed binary in its own user and
 # mount namespace, signals the recording forwarded).
 crates/repo-checks/tests/test_data_lock.rs|locked_files_are_ignored_and_not_tracked|let tracked = Command::new("git")
+# The notarization workflow step under local git/gh mocks only; no network.
+crates/repo-checks/tests/macos_candidate_workflow.rs|run|let mut command = Command::new("/bin/bash");
 crates/mutation-check/src/runner.rs|worktree_files|let output = Command::new("git")
 crates/mutation-check/src/runner.rs|run_command|let _ = Command::new("kill").arg("-9").arg(id.to_string()).status();
 crates/mutation-check/src/runner.rs|cargo|let mut command = Command::new("cargo");
