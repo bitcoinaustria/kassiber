@@ -523,7 +523,16 @@ wall-clock `elapsed_ms` is 0. Values over 16 KiB, and table changes of more
 than 2,000 rows, compare by length or count and an FNV-1a 64 digest. A test
 may mask further clock-derived numbers (`age_seconds`). A client whose
 request order varies between runs is answered by a loopback JSON-RPC server
-built from the tape (`replay_served`) instead of the byte tape.
+built from the tape (`replay_served`, `kassiber-net`'s `FakeJsonRpc`) instead
+of the byte tape.
+
+The replays run on strict tapes (`KASSIBER_TEST_NET_TAPE=replay-strict:`):
+a request no recording began with, a connect with no recording left, or a
+connection writing past its recording's bytes is noted in
+`<tape>.misses`, and any note fails the replay even when the product
+swallows the failed request. A daemon session sends each stdin chunk once
+the output reached what the recording had seen, or once every earlier
+request has its final reply.
 
 After a reviewed behaviour change, `KASSIBER_GOLDEN_WRITE=1` rewrites the
 `expect` blocks from the current binary instead of comparing; it refuses to
