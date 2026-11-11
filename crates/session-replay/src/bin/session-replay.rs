@@ -401,99 +401,150 @@ fn rerecord(
     }
 }
 
-/// The shard a pack file goes to: `sessions.tar` for the sessions, and
-/// `blobs-<first hex digit>.tar` for the blobs, so the test-data lock pins
-/// 17 files whatever the number of recordings.
-fn shard(relative: &Path) -> String {
-    let mut parts = relative.components();
-    match parts
-        .next()
-        .map(|c| c.as_os_str().to_string_lossy().into_owned())
-    {
-        Some(top) if top == "blobs" => {
-            let prefix = parts
-                .next()
-                .map(|c| {
-                    c.as_os_str()
-                        .to_string_lossy()
-                        .chars()
-                        .next()
-                        .unwrap_or('0')
-                })
-                .unwrap_or('0');
-            format!("blobs-{prefix}.tar")
-        }
-        _ => "sessions.tar".to_owned(),
+/// Archives a recording travels in on the test-data branch: one gzip
+/// stream of every session (`sessions.tar.gz`, sorted by test so similar
+/// sessions sit together) and a few gzip streams of their blobs
+/// (`blobs-NN.tar.gz`, uncompressed parts in first-use order), so the
+/// compression sees across sessions and pages. Times, owners and gzip
+/// headers are fixed: an unchanged recording archives to the same bytes.
+const SHARD_RAW_BYTES: u64 = 256 << 20;
+
+fn gzip_tar(path: &Path, entries: &[(String, Vec<u8>)]) -> Result<(), String> {
+    let file = fs::File::create(path).map_err(|e| e.to_string())?;
+    let encoder = flate2::GzBuilder::new()
+        .mtime(0)
+        .write(file, flate2::Compression::best());
+    let mut builder = tar::Builder::new(encoder);
+    builder.mode(tar::HeaderMode::Deterministic);
+    for (name, bytes) in entries {
+        let mut header = tar::Header::new_gnu();
+        header.set_size(bytes.len() as u64);
+        header.set_mode(0o644);
+        header.set_mtime(0);
+        header.set_uid(0);
+        header.set_gid(0);
+        header.set_cksum();
+        builder
+            .append_data(&mut header, name, bytes.as_slice())
+            .map_err(|e| e.to_string())?;
     }
+    builder
+        .into_inner()
+        .and_then(|encoder| encoder.finish())
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }
 
-fn walk(dir: &Path, base: &Path, out: &mut Vec<PathBuf>) {
-    for entry in fs::read_dir(dir).into_iter().flatten().flatten() {
-        let path = entry.path();
-        if path.is_dir() {
-            walk(&path, base, out);
-        } else if let Ok(relative) = path.strip_prefix(base) {
-            out.push(relative.to_path_buf());
-        }
-    }
-}
-
-/// `archive PACK OUT`: a pack directory as deterministic tars (sorted
-/// names, zero times and owners, mode 0644), so an unchanged recording
-/// archives to identical bytes.
+/// `archive PACK OUT`: a pack directory as the archives above.
 fn archive(args: &[String]) -> ExitCode {
+    use kassiber_session_replay::Entry;
     let (Some(src), Some(out)) = (args.first(), args.get(1)) else {
         eprintln!("usage: session-replay archive PACK OUT");
         return ExitCode::from(2);
     };
     let (src, out) = (PathBuf::from(src), PathBuf::from(out));
-    let mut files = Vec::new();
-    walk(&src, &src, &mut files);
-    files.sort();
-    let mut shards: BTreeMap<String, Vec<PathBuf>> = BTreeMap::new();
-    for file in files {
-        shards.entry(shard(&file)).or_default().push(file);
+    let blobs = Blobs::new(&src);
+    let mut loaded: Vec<(String, String, Session)> = Vec::new();
+    for file in sessions(&src) {
+        let Ok(session) = read_session(&file) else {
+            eprintln!("unreadable session {}", file.display());
+            return ExitCode::from(2);
+        };
+        let name = file
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .trim_end_matches(".gz")
+            .to_owned();
+        loaded.push((session.test.clone().unwrap_or_default(), name, session));
     }
+    loaded.sort_by(|a, b| (&a.0, &a.1).cmp(&(&b.0, &b.1)));
     if fs::create_dir_all(&out).is_err() {
         eprintln!("cannot create {}", out.display());
         return ExitCode::from(2);
     }
-    for (name, files) in &shards {
-        let mut builder = tar::Builder::new(Vec::new());
-        builder.mode(tar::HeaderMode::Deterministic);
-        for file in files {
-            let Ok(bytes) = fs::read(src.join(file)) else {
-                eprintln!("cannot read {}", file.display());
-                return ExitCode::from(2);
-            };
-            let mut header = tar::Header::new_gnu();
-            header.set_size(bytes.len() as u64);
-            header.set_mode(0o644);
-            header.set_mtime(0);
-            header.set_uid(0);
-            header.set_gid(0);
-            header.set_cksum();
-            if builder
-                .append_data(&mut header, file, bytes.as_slice())
-                .is_err()
-            {
-                eprintln!("cannot archive {}", file.display());
-                return ExitCode::from(2);
-            }
-        }
-        let Ok(bytes) = builder.into_inner() else {
+    let mut session_entries = Vec::new();
+    let mut order: Vec<String> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for (_, name, session) in &loaded {
+        let Ok(bytes) = serde_json::to_vec(session) else {
             return ExitCode::from(2);
         };
-        if fs::write(out.join(name), bytes).is_err() {
-            eprintln!("cannot write {name}");
-            return ExitCode::from(2);
+        session_entries.push((format!("sessions/{name}"), bytes));
+        let mut hashes = vec![session.stdout.clone(), session.stderr.clone()];
+        hashes.extend(session.net_tape.clone());
+        for root in &session.roots {
+            for entry in root.before.iter().chain(&root.after) {
+                if let Entry::File {
+                    blob, encryption, ..
+                } = entry
+                {
+                    hashes.push(blob.clone());
+                    if let Some(ciphertext) = encryption.as_ref().and_then(|e| e.ciphertext.clone())
+                    {
+                        hashes.push(ciphertext);
+                    }
+                }
+            }
+        }
+        for hash in hashes {
+            if seen.insert(hash.clone()) {
+                order.push(hash);
+            }
         }
     }
-    println!("{} archives in {}", shards.len(), out.display());
+    if let Err(error) = gzip_tar(&out.join("sessions.tar.gz"), &session_entries) {
+        eprintln!("cannot write sessions.tar.gz: {error}");
+        return ExitCode::from(2);
+    }
+    drop(session_entries);
+    let mut shard: Vec<(String, Vec<u8>)> = Vec::new();
+    let (mut shard_bytes, mut shard_index) = (0u64, 0usize);
+    let mut parts_seen = std::collections::HashSet::new();
+    let flush = |shard: &mut Vec<(String, Vec<u8>)>, index: &mut usize| -> Result<(), String> {
+        if shard.is_empty() {
+            return Ok(());
+        }
+        gzip_tar(&out.join(format!("blobs-{:02}.tar.gz", *index)), shard)?;
+        shard.clear();
+        *index += 1;
+        Ok(())
+    };
+    for hash in &order {
+        let Ok(parts) = blobs.raw_parts(hash) else {
+            eprintln!("missing blob {hash}");
+            return ExitCode::from(2);
+        };
+        for (name, bytes) in parts {
+            if !parts_seen.insert(name.clone()) {
+                continue;
+            }
+            shard_bytes += bytes.len() as u64;
+            shard.push((format!("blobs/{name}"), bytes));
+        }
+        if shard_bytes >= SHARD_RAW_BYTES {
+            if let Err(error) = flush(&mut shard, &mut shard_index) {
+                eprintln!("cannot write a blob archive: {error}");
+                return ExitCode::from(2);
+            }
+            shard_bytes = 0;
+        }
+    }
+    if let Err(error) = flush(&mut shard, &mut shard_index) {
+        eprintln!("cannot write a blob archive: {error}");
+        return ExitCode::from(2);
+    }
+    println!(
+        "{} sessions, {} blob parts in {} archives under {}",
+        loaded.len(),
+        parts_seen.len(),
+        shard_index + 1,
+        out.display()
+    );
     ExitCode::SUCCESS
 }
 
-/// `extract OUT DIR`: the archives `archive` wrote, back as a pack directory.
+/// `extract OUT DIR`: the archives `archive` wrote, as a recording directory.
 fn extract(args: &[String]) -> ExitCode {
     let (Some(src), Some(dst)) = (args.first(), args.get(1)) else {
         eprintln!("usage: session-replay extract ARCHIVES DIR");
@@ -505,22 +556,62 @@ fn extract(args: &[String]) -> ExitCode {
         .flatten()
         .flatten()
         .map(|e| e.path())
-        .filter(|p| p.extension().is_some_and(|e| e == "tar"))
+        .filter(|p| p.to_string_lossy().ends_with(".tar.gz"))
         .collect();
     names.sort();
     if names.is_empty() {
         eprintln!("no archives in {}", src.display());
         return ExitCode::from(2);
     }
+    let blobs = Blobs::new(&dst);
+    if fs::create_dir_all(dst.join("sessions")).is_err() {
+        return ExitCode::from(2);
+    }
     for name in names {
         let Ok(file) = fs::File::open(&name) else {
             return ExitCode::from(2);
         };
-        let mut archive = tar::Archive::new(file);
-        // `unpack` refuses entries that would land outside DST.
-        if let Err(error) = archive.unpack(&dst) {
-            eprintln!("cannot extract {}: {error}", name.display());
+        let mut archive = tar::Archive::new(flate2::read::GzDecoder::new(file));
+        let Ok(entries) = archive.entries() else {
+            eprintln!("cannot read {}", name.display());
             return ExitCode::from(2);
+        };
+        for entry in entries {
+            let Ok(mut entry) = entry else {
+                eprintln!("cannot read {}", name.display());
+                return ExitCode::from(2);
+            };
+            let Ok(path) = entry.path().map(|p| p.to_string_lossy().into_owned()) else {
+                return ExitCode::from(2);
+            };
+            let mut bytes = Vec::new();
+            if std::io::Read::read_to_end(&mut entry, &mut bytes).is_err() {
+                return ExitCode::from(2);
+            }
+            // Only the two kinds of names `archive` writes; nothing else,
+            // and no path that could leave DIR.
+            let written = match path.split_once('/') {
+                Some(("sessions", file))
+                    if !file.contains('/') && !file.starts_with('.') && file.ends_with(".json") =>
+                {
+                    fs::write(dst.join("sessions").join(file), &bytes).map_err(|e| e.to_string())
+                }
+                Some(("blobs", part))
+                    if !part.contains('/')
+                        && part.trim_end_matches(".pages").len() == 64
+                        && part
+                            .trim_end_matches(".pages")
+                            .bytes()
+                            .all(|b| b.is_ascii_hexdigit()) =>
+                {
+                    blobs.put_part(part, &bytes).map_err(|e| e.to_string())
+                }
+                _ => Err(format!("unexpected entry {path}")),
+            };
+            if let Err(error) = written {
+                eprintln!("{}: {error}", name.display());
+                return ExitCode::from(2);
+            }
         }
     }
     ExitCode::SUCCESS

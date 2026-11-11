@@ -335,6 +335,44 @@ impl Blobs {
         }])
     }
 
+    /// A stored blob as uncompressed parts for an archive: its page list
+    /// (`<hash>.pages`) and its pages, or the blob itself (`<hash>`).
+    pub fn raw_parts(&self, hash: &str) -> io::Result<Vec<(String, Vec<u8>)>> {
+        let list = self.path(hash).with_extension("pages");
+        if list.exists() {
+            let hashes = Self::read_compressed(&list)?;
+            let mut parts = vec![(format!("{hash}.pages"), hashes.clone())];
+            for digest in hashes.chunks(32) {
+                let page = hex(digest);
+                let bytes = self.get(&page)?;
+                parts.push((page, bytes));
+            }
+            return Ok(parts);
+        }
+        Ok(vec![(hash.to_owned(), self.get(hash)?)])
+    }
+
+    /// Store one part `raw_parts` produced (a page list stays compressed,
+    /// content is kept as it is).
+    pub fn put_part(&self, name: &str, bytes: &[u8]) -> io::Result<()> {
+        let hash = name.trim_end_matches(".pages");
+        if name.ends_with(".pages") {
+            let path = self.path(hash).with_extension("pages");
+            if path.exists() {
+                return Ok(());
+            }
+            return self.write_compressed(&path, bytes);
+        }
+        let path = self.path(hash);
+        if path.exists() || path.with_extension("gz").exists() {
+            return Ok(());
+        }
+        fs::create_dir_all(path.parent().unwrap())?;
+        let tmp = path.with_extension(format!("tmp{}", std::process::id()));
+        fs::write(&tmp, bytes)?;
+        fs::rename(&tmp, &path)
+    }
+
     /// The stored (compressed) size of a blob.
     pub fn stored_size(&self, hash: &str) -> u64 {
         let compressed = self.path(hash).with_extension("gz");
