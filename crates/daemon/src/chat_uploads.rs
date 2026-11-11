@@ -393,14 +393,17 @@ impl ChatUploads {
     }
 }
 
-/// `tempfile.mkdtemp(prefix=..., dir=parent)`: a new owner-only directory.
+/// `tempfile.mkdtemp(prefix=..., dir=parent)`: a new owner-only directory
+/// (Windows ignores the mode, as `mkdtemp` does there).
 fn private_dir_named(parent: &Path, prefix: &str) -> std::io::Result<PathBuf> {
-    use std::os::unix::fs::DirBuilderExt;
     for _ in 0..100 {
         let name = crate::documents_import::token_urlsafe(6)
             .map_err(|_| std::io::Error::other("random"))?;
         let path = parent.join(format!("{prefix}{name}"));
-        match std::fs::DirBuilder::new().mode(0o700).create(&path) {
+        let mut builder = std::fs::DirBuilder::new();
+        #[cfg(unix)]
+        std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
+        match builder.create(&path) {
             Ok(()) => return Ok(path),
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
             Err(error) => return Err(error),
@@ -413,15 +416,14 @@ fn private_dir(parent: &Path) -> std::io::Result<PathBuf> {
     private_dir_named(parent, "tmp")
 }
 
-/// `os.open(path, O_WRONLY | O_CREAT | O_EXCL, 0o600)`.
+/// `os.open(path, O_WRONLY | O_CREAT | O_EXCL, 0o600)` (on Windows the mode
+/// only decides the read-only flag, which 0o600 leaves off).
 fn create_owner_only(path: &Path) -> std::io::Result<()> {
-    use std::os::unix::fs::OpenOptionsExt;
-    std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(0o600)
-        .open(path)
-        .map(drop)
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+    options.open(path).map(drop)
 }
 
 /// `base64.b64decode(raw, validate=True)`: the alphabet, then at most two

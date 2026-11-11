@@ -87,6 +87,7 @@ fn token() -> Result<String, AppError> {
 }
 
 /// `secrets.token_urlsafe(n)`.
+#[cfg(unix)]
 pub(crate) fn token_urlsafe(n: usize) -> Result<String, AppError> {
     use std::io::Read;
     let mut bytes = vec![0u8; n];
@@ -103,6 +104,15 @@ pub(crate) fn token_urlsafe(n: usize) -> Result<String, AppError> {
         }
     }
     Ok(out)
+}
+
+/// The same on Windows, which has no /dev/urandom: the operator's
+/// `secrets.token_urlsafe` draws the bytes from the OS generator and encodes
+/// them identically.
+#[cfg(not(unix))]
+pub(crate) fn token_urlsafe(n: usize) -> Result<String, AppError> {
+    kassiber_operator::clock::token_urlsafe(n)
+        .map_err(|_| AppError::new("internal_error", "Could not create a document session"))
 }
 
 impl Sessions {
