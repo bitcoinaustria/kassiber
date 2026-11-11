@@ -241,10 +241,21 @@ mod tests {
         deadline: Instant,
         limit: usize,
     ) -> Result<Vec<u8>, ClnProcessError> {
-        let consent = Consent::explicit_trigger(&request);
-        gate.authorize(request, Some(consent))
-            .unwrap()
-            .cln(ClnMethod::GetInfo, deadline, limit)
+        // A script written a moment ago can be "text file busy" (ETXTBSY)
+        // while another test thread's fork still holds its write descriptor;
+        // that spawn fails as Io. Retry it briefly; any other outcome stands.
+        for _ in 0..20 {
+            let consent = Consent::explicit_trigger(&request);
+            let result = gate
+                .authorize(request.clone(), Some(consent))
+                .unwrap()
+                .cln(ClnMethod::GetInfo, deadline, limit);
+            if !matches!(result, Err(ClnProcessError::Io)) {
+                return result;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        Err(ClnProcessError::Io)
     }
 
     #[test]
