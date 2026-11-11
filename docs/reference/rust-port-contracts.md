@@ -1,5 +1,9 @@
 # Rust backend contract inventory
 
+> **Historical.** This page records the Python-to-Rust port. Python was removed
+> under [plan 22](../plan/22-python-removal.md); the `kassiber/` paths and Python
+> tests it cites exist only at the `archive/python-backend` tag.
+
 R0 reference at base `8709d430`. This records observed Python behavior, including
 inconsistencies; it does not authorize changes to privacy or accounting policy.
 Line references are to that base's product code. See [plan 21](../plan/21-rust-backend.md),

@@ -1,5 +1,9 @@
 # Rust Liquid sync
 
+> **Historical.** This page records the Python-to-Rust port. Python was removed
+> under [plan 22](../plan/22-python-removal.md); the `kassiber/` paths and Python
+> tests it cites exist only at the `archive/python-backend` tag.
+
 Native Liquid wallet sync (plan 21) uses `lwk_wollet` 0.18.0, the same LWK
 release the Python `lwk` 0.18.0 binding ships. LWK owns gap discovery,
 unblinding and the wollet state. Kassiber owns every connection, the opaque

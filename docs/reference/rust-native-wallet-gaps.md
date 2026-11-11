@@ -1,5 +1,9 @@
 # Rust wallet-sync gaps
 
+> **Historical.** This page records the Python-to-Rust port. Python was removed
+> under [plan 22](../plan/22-python-removal.md); the `kassiber/` paths and Python
+> tests it cites exist only at the `archive/python-backend` tag.
+
 Every wallet-sync or freshness path where the Rust backend still answers
 `native_fallback_required` (or a `not_implemented` stand-in for it) instead of
 doing what Python does. Production has no Python handoff

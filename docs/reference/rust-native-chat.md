@@ -1,5 +1,9 @@
 # Rust native chat: writes through chat, and no feature gates
 
+> **Historical.** This page records the Python-to-Rust port. Python was removed
+> under [plan 22](../plan/22-python-removal.md); the `kassiber/` paths and Python
+> tests it cites exist only at the `archive/python-backend` tag.
+
 Branch `t3code/rust-native-chat` (from the integration tip d12d6e29e) makes
 the assistant's chat and the MCP server fully native in the product binary.
 Python stays the reference ([plan 21](../plan/21-rust-backend.md)); the

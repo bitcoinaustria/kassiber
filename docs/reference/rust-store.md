@@ -1,5 +1,9 @@
 # Rust book runtime (R1/R3)
 
+> **Historical.** This page records the Python-to-Rust port. Python was removed
+> under [plan 22](../plan/22-python-removal.md); the `kassiber/` paths and Python
+> tests it cites exist only at the `archive/python-backend` tag.
+
 Python remains the reference. The Rust `kassiber` binary now uses these
 crates for `init`, `status` and the daemon's supported book lifecycle, including
 SQLCipher fd unlock, bound remembered unlock, TTY fallback, compatible ownership,

@@ -1,5 +1,9 @@
 # Rust automatic transfer pairing (R4-14)
 
+> **Historical.** This page records the Python-to-Rust port. Python was removed
+> under [plan 22](../plan/22-python-removal.md); the `kassiber/` paths and Python
+> tests it cites exist only at the `archive/python-backend` tag.
+
 `kassiber_transfers::pairing` ports the automatic pairing used before journal
 processing. The journal stage remains separate from R4-13's pipeline wiring:
 CLI `journals process --auto-pair`, desktop `ui.journals.process` and freshness

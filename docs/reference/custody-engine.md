@@ -1,5 +1,9 @@
 # Custody engine
 
+> **Historical.** This page records the Python-to-Rust port. Python was removed
+> under [plan 22](../plan/22-python-removal.md); the `kassiber/` paths and Python
+> tests it cites exist only at the `archive/python-backend` tag.
+
 R2 is a parity port, described in [plan 21](../plan/21-rust-backend.md).
 Python remains the production reference. Rust receives a versioned, local,
 raw-fact request through `kassiber_tax.custody`, alongside the independent
