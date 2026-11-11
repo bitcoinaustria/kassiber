@@ -374,6 +374,9 @@ fn rerecord(
     session.stdout = blobs.put(&replayed.stdout).map_err(|e| e.to_string())?;
     session.stderr = blobs.put(&replayed.stderr).map_err(|e| e.to_string())?;
     session.exit = replayed.exit.clone();
+    session
+        .rerecorded_us
+        .push((replayed.started_us, replayed.ended_us));
     for (root, after) in session.roots.iter_mut().zip(&replayed.after) {
         let mut after = after.clone();
         for entry in &mut after {

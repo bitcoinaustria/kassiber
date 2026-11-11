@@ -72,6 +72,11 @@ pub struct Replayed {
     pub exit: crate::Exit,
     pub after: Vec<Vec<Entry>>,
     pub store: PathBuf,
+    /// When this run's process started and ended (µs since the epoch): a
+    /// re-recorded session takes them as its window, so the clock readings
+    /// it now holds are recognized as generated.
+    pub started_us: i64,
+    pub ended_us: i64,
 }
 
 /// Path substitutions, longest first: recorded text to replay text.
@@ -733,15 +738,22 @@ pub fn replay(
         start: session.started_us - RECORDING_LOOKBACK_US,
         end: session.ended_us,
         local_offset_us: local_offset_us(),
-        also: None,
+        also: session.rerecorded_us.clone(),
     };
     let replay_window = Window {
         start: started,
         end: ended,
         local_offset_us: local_offset_us(),
-        also: Some((recorded_window.start, recorded_window.end)),
+        also: std::iter::once((recorded_window.start, recorded_window.end))
+            .chain(session.rerecorded_us.iter().copied())
+            .collect(),
     };
-    let mut left = Canon::new(recorded_window, &pinned);
+    // Both sides are normalized with the same spans: a reading restored
+    // from the starting state appears on both, and a rule that matched it on
+    // one side only (the replay window's hour offsets line up with any
+    // instant whose minutes and seconds match the moment the replay runs)
+    // would make equal state differ.
+    let mut left = Canon::new(replay_window.clone(), &pinned);
     let mut right = Canon::new(replay_window, &pinned);
     let recorded_out =
         String::from_utf8_lossy(&blobs.get(&session.stdout).unwrap_or_default()).into_owned();
@@ -828,6 +840,8 @@ pub fn replay(
             },
             after: all_after,
             store: scratch.join("after-store"),
+            started_us: started,
+            ended_us: ended,
         },
     })
 }

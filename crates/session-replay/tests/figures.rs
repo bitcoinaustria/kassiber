@@ -63,7 +63,7 @@ fn now_window() -> Window {
         start: now - 10_000_000,
         end: now,
         local_offset_us: 0,
-        also: Some((now - 610_000_000, now - 600_000_000)),
+        also: vec![(now - 610_000_000, now - 600_000_000)],
     }
 }
 
@@ -127,7 +127,7 @@ fn figures_that_look_like_clock_readings_stay() {
         ms = ms,
         secs = secs
     );
-    assert_figures_survive("synthetic", &envelope, window);
+    assert_figures_survive("synthetic", &envelope, window.clone());
     // The same numbers under a clock field are clock readings.
     let pinned = HashSet::new();
     let mut canon = Canon::new(window, &pinned);
@@ -151,7 +151,7 @@ fn derived_ids_number_as_a_bijection() {
     let right = format!("{c} {b} {c} {} {}", token(2), token(2));
     let swapped = format!("{c} {b} {b} {} {}", token(2), token(2));
     let split = format!("{c} {b} {c} {} {}", token(2), token(3));
-    let rewrite = |text: &str| Canon::new(window, &pinned).rewrite(text, true);
+    let rewrite = |text: &str| Canon::new(window.clone(), &pinned).rewrite(text, true);
     assert_eq!(rewrite(&recorded), rewrite(&right));
     assert_ne!(rewrite(&recorded), rewrite(&swapped));
     assert_ne!(rewrite(&recorded), rewrite(&split));

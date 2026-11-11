@@ -114,6 +114,11 @@ pub struct Session {
     /// closed terminal); a replay closes its end of the pipe there too.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stdout_closed_after: Option<u64>,
+    /// Wall-clock spans of runs that re-recorded this session (`replay
+    /// --update`). Their clock readings count as generated alongside the
+    /// recording's own window, which still covers the frozen SQLite clock.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rerecorded_us: Vec<(i64, i64)>,
 }
 
 /// Passphrases a session hands its process: inherited descriptors and the

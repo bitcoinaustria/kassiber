@@ -125,21 +125,22 @@ fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
 
 /// The run's wall-clock span in epoch microseconds, and the local offset
 /// naive readings may carry.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct Window {
     pub start: i64,
     pub end: i64,
     pub local_offset_us: i64,
-    /// Another span whose readings also count as generated: on the replay
+    /// Other spans whose readings also count as generated: on the replay
     /// side, the recording's window, because the restored state carries
-    /// values the recorded run (or an earlier one) read from its clock.
-    pub also: Option<(i64, i64)>,
+    /// values the recorded run (or an earlier one) read from its clock; and
+    /// on both sides the window of a run that re-recorded the session.
+    pub also: Vec<(i64, i64)>,
 }
 
 impl Window {
     fn generated(&self, instant: i64) -> bool {
-        let spans = [Some((self.start, self.end)), self.also];
-        spans.into_iter().flatten().any(|(start, end)| {
+        let spans = std::iter::once((self.start, self.end)).chain(self.also.iter().copied());
+        spans.into_iter().any(|(start, end)| {
             let inside = |t: i64| start - SLACK_US <= t && t <= end + SLACK_US;
             if inside(instant) {
                 return true;
@@ -693,7 +694,7 @@ pub fn identities(text: &str) -> Vec<String> {
         start: 0,
         end: 0,
         local_offset_us: 0,
-        also: None,
+        also: Vec::new(),
     };
     let none = HashSet::new();
     generated_spans(text, &wide, &none)
@@ -721,7 +722,7 @@ pub fn pin_inputs(text: &str, pinned: &mut HashSet<String>) {
         start: i64::MIN / 4,
         end: i64::MAX / 4,
         local_offset_us: 0,
-        also: None,
+        also: Vec::new(),
     };
     let none = HashSet::new();
     for (start, end, _) in generated_spans(text, &wide, &none) {
@@ -740,7 +741,7 @@ mod tests {
             start,
             end: start + 10_000_000,
             local_offset_us: HOUR_US,
-            also: None,
+            also: Vec::new(),
         }
     }
 
