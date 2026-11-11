@@ -4,6 +4,7 @@
 //!                           [--keep] [--report FILE [--resume]] [--coverage DIR]
 //!     session-replay list DIR
 //!     session-replay pack SRC DST --sessions FILE [--keep-ciphertext FILE]
+//!     session-replay decrypt REC --allowlist FILE [--also PASSPHRASE...]
 //!     session-replay archive PACK OUT     (deterministic tars for test data)
 //!     session-replay extract OUT DIR
 //!
@@ -164,6 +165,116 @@ fn pack(args: &[String]) -> ExitCode {
     ExitCode::SUCCESS
 }
 
+/// `decrypt REC --allowlist FILE`: decrypt, in place, the encrypted books a
+/// session could not open itself (it never received their passphrase, such
+/// as a refused read of a locked book), with the synthetic passphrases other
+/// sessions of the recording used. Every passphrase tried must be on the
+/// allowlist. Each distinct ciphertext is tried once.
+fn decrypt(args: &[String]) -> ExitCode {
+    use kassiber_session_replay::encrypted::{maybe_encrypted, Allowlist};
+    use kassiber_session_replay::Entry;
+    let Some(rec) = args.first().map(PathBuf::from) else {
+        eprintln!("usage: session-replay decrypt REC --allowlist FILE");
+        return ExitCode::from(2);
+    };
+    let Some(allowlist) = args
+        .iter()
+        .position(|a| a == "--allowlist")
+        .and_then(|i| args.get(i + 1))
+        .map(|f| Allowlist::load(Path::new(f)))
+    else {
+        eprintln!("--allowlist FILE is required");
+        return ExitCode::from(2);
+    };
+    let blobs = Blobs::new(&rec);
+    let files = sessions(&rec);
+    // The passphrases the recording already opened books with.
+    let mut candidates: Vec<String> = Vec::new();
+    for file in &files {
+        let Ok(session) = read_session(file) else {
+            continue;
+        };
+        for root in &session.roots {
+            for entry in root.before.iter().chain(&root.after) {
+                if let Entry::File {
+                    encryption: Some(e),
+                    ..
+                } = entry
+                {
+                    if !candidates.contains(&e.passphrase) {
+                        candidates.push(e.passphrase.clone());
+                    }
+                }
+            }
+        }
+    }
+    candidates.extend(args.iter().skip_while(|a| *a != "--also").skip(1).cloned());
+    candidates.retain(|p| allowlist.allows(p));
+    let scratch = repo().join("target").join("session-replay-decrypt");
+    let mut known: BTreeMap<
+        String,
+        Option<(String, kassiber_session_replay::encrypted::Encryption)>,
+    > = BTreeMap::new();
+    let (mut opened, mut rewritten) = (0usize, 0usize);
+    for file in &files {
+        let Ok(mut session) = read_session(file) else {
+            continue;
+        };
+        let mut changed = false;
+        for root in &mut session.roots {
+            for entry in root.before.iter_mut().chain(root.after.iter_mut()) {
+                let Entry::File {
+                    blob, encryption, ..
+                } = entry
+                else {
+                    continue;
+                };
+                if encryption.is_some() {
+                    continue;
+                }
+                let result = known.entry(blob.clone()).or_insert_with(|| {
+                    let bytes = blobs.get(blob).ok()?;
+                    if !maybe_encrypted(&bytes) {
+                        return None;
+                    }
+                    let (plaintext, mut found) =
+                        kassiber_session_replay::encrypted::decrypt(&bytes, &candidates, &scratch)?;
+                    found.ciphertext = Some(blob.clone());
+                    opened += 1;
+                    Some((blobs.put(&plaintext).ok()?, found))
+                });
+                if let Some((plain, found)) = result.clone() {
+                    *blob = plain;
+                    *encryption = Some(found);
+                    changed = true;
+                }
+            }
+        }
+        if changed {
+            let bytes = serde_json::to_vec(&session).unwrap_or_default();
+            let written = if file.to_string_lossy().ends_with(".gz") {
+                let mut encoder =
+                    flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::new(9));
+                std::io::Write::write_all(&mut encoder, &bytes)
+                    .and_then(|_| encoder.finish())
+                    .and_then(|packed| fs::write(file, packed))
+            } else {
+                fs::write(file, bytes)
+            };
+            if written.is_err() {
+                eprintln!("cannot rewrite {}", file.display());
+                return ExitCode::from(2);
+            }
+            rewritten += 1;
+        }
+    }
+    println!(
+        "{} passphrases tried; {opened} books opened; {rewritten} sessions rewritten",
+        candidates.len()
+    );
+    ExitCode::SUCCESS
+}
+
 /// The shard a pack file goes to: `sessions.tar` for the sessions, and
 /// `blobs-<first hex digit>.tar` for the blobs, so the test-data lock pins
 /// 17 files whatever the number of recordings.
@@ -295,6 +406,9 @@ fn main() -> ExitCode {
         eprintln!("usage: session-replay replay|list DIR ...");
         return ExitCode::from(2);
     };
+    if command == "decrypt" {
+        return decrypt(&args[1..]);
+    }
     if command == "archive" {
         return archive(&args[1..]);
     }

@@ -27,7 +27,7 @@ shims="$target/shims"
 mkdir -p "$shims" "$rec" "$run/bt" "$run/tmp"
 # Synthetic passphrases: only literals of the checked-in test sources may
 # enter a recording (the shim refuses a session that hands over another).
-python3 -I - "$ROOT/tests" "$run/passphrase-allowlist.txt" <<'PY'
+python3 -I - "$ROOT/tests" "$run/passphrase-allowlist.txt" "$rec/fixture-keys.txt" <<'PY'
 import ast, pathlib, sys
 literals = set()
 for path in pathlib.Path(sys.argv[1]).rglob("*.py"):
@@ -40,8 +40,20 @@ for path in pathlib.Path(sys.argv[1]).rglob("*.py"):
                 except UnicodeEncodeError:
                     continue  # a lone surrogate: never a passphrase a process receives
                 literals.add(value)
+# Rust fixtures key their books themselves (`PRAGMA key='...'`).
+import re
+fixture_keys = set()
+for path in pathlib.Path(sys.argv[1]).parent.joinpath("crates").rglob("*.rs"):
+    if "/examples/" in str(path) or "/tests/" in str(path):
+        keys = re.findall(r"PRAGMA key\s*=\s*'([^']+)'", path.read_text(encoding="utf-8"))
+        literals.update(keys)
+        fixture_keys.update(keys)
 pathlib.Path(sys.argv[2]).write_text("\n".join(sorted(literals)) + "\n", encoding="utf-8")
+# For `session-replay decrypt`, after the run: books such fixtures keyed.
+pathlib.Path(sys.argv[3]).write_text("\n".join(sorted(fixture_keys)) + "\n", encoding="utf-8")
 PY
+# Kept beside the recording for `session-replay decrypt`; never packed.
+cp "$run/passphrase-allowlist.txt" "$rec/passphrase-allowlist.txt"
 python3 -I - "$shims" "$target" "$rec" "$ROOT" "$run/passphrase-allowlist.txt" <<'PY'
 import json, os, re, shutil, sys
 shims, target, rec, repo, allowlist = sys.argv[1:6]

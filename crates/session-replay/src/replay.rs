@@ -24,9 +24,21 @@ pub const NAMESPACE_ROOT: &str = "/mnt/";
 
 /// Bind the scratch copy at /mnt as root of a new user namespace, then drop
 /// back to the caller's uid and gid in a nested one and run the process.
+/// The tools come as absolute paths: the replayed environment's PATH is the
+/// session's, which may hide them on purpose.
 const NAMESPACE_SCRIPT: &str =
-    "mount --bind \"$1\" /mnt && cd \"$2\" && u=$3 && g=$4 && shift 4 && \
-     exec unshare --user --map-user=\"$u\" --map-group=\"$g\" \"$@\"";
+    "\"$5\" --bind \"$1\" /mnt && cd \"$2\" && u=$3 && g=$4 && un=$6 && shift 6 && \
+     exec \"$un\" --user --map-user=\"$u\" --map-group=\"$g\" \"$@\"";
+
+/// `name` on the runner's own PATH.
+fn tool(name: &str) -> Result<PathBuf, String> {
+    std::env::var_os("PATH")
+        .into_iter()
+        .flat_map(|path| std::env::split_paths(&path).collect::<Vec<_>>())
+        .map(|dir| dir.join(name))
+        .find(|candidate| candidate.is_file())
+        .ok_or_else(|| format!("{name} is not on PATH"))
+}
 
 /// Where a recorded root lives on disk during a replay.
 fn disk_path(scratch: &Path, index: usize, recorded: &str, namespaced: bool) -> PathBuf {
@@ -387,13 +399,17 @@ pub fn replay(
         };
         #[cfg(not(unix))]
         let (uid, gid) = (0, 0);
-        let mut command = Command::new("unshare");
-        command.args(["-Urm", "sh", "-c", NAMESPACE_SCRIPT, "sh"]);
+        let unshare = tool("unshare")?;
+        let mut command = Command::new(&unshare);
+        command.arg("-Urm").arg(tool("sh")?);
+        command.args(["-c", NAMESPACE_SCRIPT, "sh"]);
         command
             .arg(&mounted)
             .arg(&cwd)
             .arg(uid.to_string())
             .arg(gid.to_string())
+            .arg(tool("mount")?)
+            .arg(&unshare)
             .arg(binary);
         command
     } else {
