@@ -708,8 +708,40 @@ pub(super) fn economic_terms(
         }
         let price = field(raw, "payout_fiat_value_exact");
         if !matches!(price, Value::Null) && price != &s("") {
-            kassiber_pydecimal::finite_price(&py_str(price))
+            let value = kassiber_pydecimal::finite_price(&py_str(price))
                 .map_err(|e| AppError::new("validation", e.message("payout_fiat_value_exact")))?;
+            // The value per BTC of both reviewed quantities must be a
+            // supported price as well (`payout_value / msat_to_btc(q)` at
+            // the process context, precision 32).
+            for (key, leg) in [
+                ("reviewed_source_amount_msat", source),
+                ("payout_amount_msat", target),
+            ] {
+                let quantity = match signed(field(raw, key), key)? {
+                    Value::Null => field(leg, "amount_msat").clone(),
+                    quantity => quantity,
+                };
+                let Value::Int(quantity) = quantity else {
+                    continue;
+                };
+                if quantity <= BigInt::default() {
+                    continue;
+                }
+                let context = &kassiber_pydecimal::Context::RP2;
+                let rate = quantity
+                    .to_string()
+                    .parse::<kassiber_pydecimal::Decimal>()
+                    .and_then(|q| {
+                        q.div(
+                            &kassiber_pydecimal::Decimal::from(100_000_000_000_i64),
+                            context,
+                        )
+                    })
+                    .and_then(|btc| value.div(&btc, context))
+                    .map_err(|e| internal(e.to_string()))?;
+                kassiber_pydecimal::finite_price(&rate.to_string())
+                    .map_err(|e| AppError::new("validation", e.message("payout_fiat_rate")))?;
+            }
         }
         let id = match optional_text(field(raw, "id"), "id", false)? {
             Value::Null => s(sources.uuid(c)?),
