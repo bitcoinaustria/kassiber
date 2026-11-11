@@ -1,0 +1,90 @@
+## session 1
+> {"kind": "status", "request_id": "open"}
+< {"kind":"status","schema_version":1,"data":{"version":"$VERSION","schema_version":1,"auth":{"mode":"local","authenticated":true},"database_encrypted":false,"state_root":"$BASE","data_root":"$BASE/data","database":"$BASE/data/kassiber.sqlite3","project_id":null,"project_name":null,"project_root":null,"config_root":"$BASE/config","settings_file":"$BASE/config/settings.json","exports_root":"$BASE/exports","attachments_root":"$BASE/attachments","current_workspace":"Main","current_profile":"Book","workspaces":1,"profiles":1,"accounts":0,"wallets":2,"transactions":2,"journal_entries":0,"quarantines":0,"default_backend":"fulcrum","env_file":"$BASE/config/backends.env"},"request_id":"open"}
+> {"kind": "test.freshness.select", "request_id": "select", "args": {"kind": "ui.journals.process", "args": [], "request_id": "process"}}
+< {"kind":"test.freshness.select","schema_version":1,"data":{"supported":true},"request_id":"select"}
+> {"kind": "ui.journals.process", "request_id": "process", "args": []}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.journals.process accepts only a boolean auto_pair","hint":null,"details":{"type":"list"},"retryable":false,"debug":null},"request_id":"process"}
+> {"request_id": "stop", "kind": "daemon.shutdown"}
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+## session 2
+> {"kind": "status", "request_id": "open"}
+< same as line 3
+> {"kind": "test.freshness.select", "request_id": "select", "args": {"kind": "ui.journals.process", "args": false, "request_id": "process"}}
+< same as line 5
+> {"kind": "ui.journals.process", "request_id": "process", "args": false}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.journals.process accepts only a boolean auto_pair","hint":null,"details":{"type":"bool"},"retryable":false,"debug":null},"request_id":"process"}
+> {"request_id": "stop", "kind": "daemon.shutdown"}
+< same as line 9
+## session 3
+> {"kind": "status", "request_id": "open"}
+< same as line 3
+> {"kind": "test.freshness.select", "request_id": "select", "args": {"kind": "ui.journals.process", "args": 7, "request_id": "process"}}
+< same as line 5
+> {"kind": "ui.journals.process", "request_id": "process", "args": 7}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.journals.process accepts only a boolean auto_pair","hint":null,"details":{"type":"int"},"retryable":false,"debug":null},"request_id":"process"}
+> {"request_id": "stop", "kind": "daemon.shutdown"}
+< same as line 9
+## session 4
+> {"kind": "status", "request_id": "open"}
+< same as line 3
+> {"kind": "test.freshness.select", "request_id": "select", "args": {"kind": "ui.journals.process", "args": "text", "request_id": "process"}}
+< same as line 5
+> {"kind": "ui.journals.process", "request_id": "process", "args": "text"}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.journals.process accepts only a boolean auto_pair","hint":null,"details":{"type":"str"},"retryable":false,"debug":null},"request_id":"process"}
+> {"request_id": "stop", "kind": "daemon.shutdown"}
+< same as line 9
+## session 5
+> {"kind": "status", "request_id": "open"}
+< same as line 3
+> {"kind": "test.freshness.select", "request_id": "select", "args": {"kind": "ui.journals.process", "args": {"auto_pair": "no"}, "request_id": "process"}}
+< same as line 5
+> {"kind": "ui.journals.process", "request_id": "process", "args": {"auto_pair": "no"}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.journals.process accepts only a boolean auto_pair","hint":null,"details":{"unknown":[]},"retryable":false,"debug":null},"request_id":"process"}
+> {"request_id": "stop", "kind": "daemon.shutdown"}
+< same as line 9
+## session 6
+> {"kind": "status", "request_id": "open"}
+< same as line 3
+> {"kind": "test.freshness.select", "request_id": "select", "args": {"kind": "ui.journals.process", "args": {"auto_pair": null}, "request_id": "process"}}
+< same as line 5
+> {"kind": "ui.journals.process", "request_id": "process", "args": {"auto_pair": null}}
+< same as line 43
+> {"request_id": "stop", "kind": "daemon.shutdown"}
+< same as line 9
+## session 7
+> {"kind": "status", "request_id": "open"}
+< same as line 3
+> {"kind": "test.freshness.select", "request_id": "select", "args": {"kind": "ui.journals.process", "args": {"auto_pair": false, "profile": "foreign"}, "request_id": "process"}}
+< same as line 5
+> {"kind": "ui.journals.process", "request_id": "process", "args": {"auto_pair": false, "profile": "foreign"}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.journals.process accepts only a boolean auto_pair","hint":null,"details":{"unknown":["profile"]},"retryable":false,"debug":null},"request_id":"process"}
+> {"request_id": "stop", "kind": "daemon.shutdown"}
+< same as line 9
+## session 8
+> {"kind": "status", "request_id": "open"}
+< same as line 3
+> {"kind": "test.freshness.select", "request_id": "select", "args": {"kind": "ui.journals.process", "args": {"profile": "foreign"}, "request_id": "process"}}
+< same as line 5
+> {"kind": "ui.journals.process", "request_id": "process", "args": {"profile": "foreign"}}
+< same as line 61
+> {"request_id": "stop", "kind": "daemon.shutdown"}
+< same as line 9
+## session 9
+> {"kind": "status", "request_id": "open"}
+< same as line 3
+> {"kind": "test.freshness.select", "request_id": "select", "args": {"kind": "ui.journals.process", "args": {"wallet": "foreign", "all": true}, "request_id": "process"}}
+< same as line 5
+> {"kind": "ui.journals.process", "request_id": "process", "args": {"wallet": "foreign", "all": true}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.journals.process accepts only a boolean auto_pair","hint":null,"details":{"unknown":["all","wallet"]},"retryable":false,"debug":null},"request_id":"process"}
+> {"request_id": "stop", "kind": "daemon.shutdown"}
+< same as line 9
+## session 10
+> {"kind": "status", "request_id": "open"}
+< same as line 3
+> {"kind": "test.freshness.select", "request_id": "select", "args": {"kind": "ui.journals.process", "args": {"consent": true}, "request_id": "process"}}
+< same as line 5
+> {"kind": "ui.journals.process", "request_id": "process", "args": {"consent": true}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.journals.process accepts only a boolean auto_pair","hint":null,"details":{"unknown":["consent"]},"retryable":false,"debug":null},"request_id":"process"}
+> {"request_id": "stop", "kind": "daemon.shutdown"}
+< same as line 9

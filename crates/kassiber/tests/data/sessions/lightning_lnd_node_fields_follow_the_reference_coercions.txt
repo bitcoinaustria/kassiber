@@ -1,0 +1,90 @@
+## session 1
+> {"request_id": "0", "kind": "ui.backends.lightning.test", "args": {"backend": "node"}}
+< {"kind":"ui.backends.lightning.test","schema_version":1,"data":{"ok":true,"backend":"node","kind":"lnd","lightningCapabilities":{"nodeSnapshot":true,"routingProfitability":true,"channelBalances":true,"channelLifecycle":true,"forwardEvents":true,"invoiceActivity":true,"paymentActivity":true,"onchainBalance":true},"alias":"Synthetic Node","network":"regtest","block_height":812345,"peer_count":7,"channel_count":2,"logs":["Opening Lightning connection to backend 'node'","Connected to Synthetic Node: 2 channels, 7 peers","Block height: 812345"]},"request_id":"0"}
+> {"request_id": "stop", "kind": "daemon.shutdown"}
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+node GET /v1/getinfo HTTP/1.1
+node GET /v1/balance/blockchain HTTP/1.1
+node GET /v1/balance/channels HTTP/1.1
+node GET /v1/fees HTTP/1.1
+node GET /v1/channels HTTP/1.1
+node GET /v1/channels/closed HTTP/1.1
+node POST /v1/switch HTTP/1.1
+node POST /v1/switch HTTP/1.1
+node GET /v1/payments?include_incomplete=true&index_offset=0&max_payments=1000&reversed=false HTTP/1.1
+node GET /v1/payments?include_incomplete=true&index_offset=1&max_payments=1000&reversed=false HTTP/1.1
+node GET /v1/invoices?index_offset=0&num_max_invoices=1000&reversed=false HTTP/1.1
+node GET /v1/invoices?index_offset=1&num_max_invoices=1000&reversed=false HTTP/1.1
+node GET /v1/graph/node/DISCARDED_LIGHTNING_SECRET HTTP/1.1
+## session 2
+> {"request_id": "0", "kind": "ui.backends.lightning.test", "args": {"backend": "node"}}
+< {"kind":"ui.backends.lightning.test","schema_version":1,"data":{"ok":true,"backend":"node","kind":"lnd","lightningCapabilities":{"nodeSnapshot":true,"routingProfitability":true,"channelBalances":true,"channelLifecycle":true,"forwardEvents":true,"invoiceActivity":true,"paymentActivity":true,"onchainBalance":true},"alias":"5","network":"testnet","block_height":null,"peer_count":0,"channel_count":2,"logs":["Opening Lightning connection to backend 'node'","Connected to 5: 2 channels, 0 peers"]},"request_id":"0"}
+> {"request_id": "stop", "kind": "daemon.shutdown"}
+< same as line 5
+node GET /v1/getinfo HTTP/1.1
+node GET /v1/balance/blockchain HTTP/1.1
+node GET /v1/balance/channels HTTP/1.1
+node GET /v1/fees HTTP/1.1
+node GET /v1/channels HTTP/1.1
+node GET /v1/channels/closed HTTP/1.1
+node POST /v1/switch HTTP/1.1
+node POST /v1/switch HTTP/1.1
+node GET /v1/payments?include_incomplete=true&index_offset=0&max_payments=1000&reversed=false HTTP/1.1
+node GET /v1/payments?include_incomplete=true&index_offset=1&max_payments=1000&reversed=false HTTP/1.1
+node GET /v1/invoices?index_offset=0&num_max_invoices=1000&reversed=false HTTP/1.1
+node GET /v1/invoices?index_offset=1&num_max_invoices=1000&reversed=false HTTP/1.1
+node GET /v1/graph/node/DISCARDED_LIGHTNING_SECRET HTTP/1.1
+## session 3
+> {"request_id": "0", "kind": "ui.backends.lightning.test", "args": {"backend": "node"}}
+< {"kind":"ui.backends.lightning.test","schema_version":1,"data":{"ok":true,"backend":"node","kind":"lnd","lightningCapabilities":{"nodeSnapshot":true,"routingProfitability":true,"channelBalances":true,"channelLifecycle":true,"forwardEvents":true,"invoiceActivity":true,"paymentActivity":true,"onchainBalance":true},"alias":"","network":"signet","block_height":17,"peer_count":2,"channel_count":2,"logs":["Opening Lightning connection to backend 'node'","Connected to node: 2 channels, 2 peers","Block height: 17"]},"request_id":"0"}
+> {"request_id": "stop", "kind": "daemon.shutdown"}
+< same as line 5
+node GET /v1/getinfo HTTP/1.1
+node GET /v1/balance/blockchain HTTP/1.1
+node GET /v1/balance/channels HTTP/1.1
+node GET /v1/fees HTTP/1.1
+node GET /v1/channels HTTP/1.1
+node GET /v1/channels/closed HTTP/1.1
+node POST /v1/switch HTTP/1.1
+node POST /v1/switch HTTP/1.1
+node GET /v1/payments?include_incomplete=true&index_offset=0&max_payments=1000&reversed=false HTTP/1.1
+node GET /v1/payments?include_incomplete=true&index_offset=1&max_payments=1000&reversed=false HTTP/1.1
+node GET /v1/invoices?index_offset=0&num_max_invoices=1000&reversed=false HTTP/1.1
+node GET /v1/invoices?index_offset=1&num_max_invoices=1000&reversed=false HTTP/1.1
+node GET /v1/graph/node/DISCARDED_LIGHTNING_SECRET HTTP/1.1
+## session 4
+> {"request_id": "0", "kind": "ui.backends.lightning.test", "args": {"backend": "node"}}
+< {"kind":"ui.backends.lightning.test","schema_version":1,"data":{"ok":true,"backend":"node","kind":"lnd","lightningCapabilities":{"nodeSnapshot":true,"routingProfitability":true,"channelBalances":true,"channelLifecycle":true,"forwardEvents":true,"invoiceActivity":true,"paymentActivity":true,"onchainBalance":true},"alias":"","network":"signet","block_height":null,"peer_count":0,"channel_count":2,"logs":["Opening Lightning connection to backend 'node'","Connected to node: 2 channels, 0 peers"]},"request_id":"0"}
+> {"request_id": "stop", "kind": "daemon.shutdown"}
+< same as line 5
+node GET /v1/getinfo HTTP/1.1
+node GET /v1/balance/blockchain HTTP/1.1
+node GET /v1/balance/channels HTTP/1.1
+node GET /v1/fees HTTP/1.1
+node GET /v1/channels HTTP/1.1
+node GET /v1/channels/closed HTTP/1.1
+node POST /v1/switch HTTP/1.1
+node POST /v1/switch HTTP/1.1
+node GET /v1/payments?include_incomplete=true&index_offset=0&max_payments=1000&reversed=false HTTP/1.1
+node GET /v1/payments?include_incomplete=true&index_offset=1&max_payments=1000&reversed=false HTTP/1.1
+node GET /v1/invoices?index_offset=0&num_max_invoices=1000&reversed=false HTTP/1.1
+node GET /v1/invoices?index_offset=1&num_max_invoices=1000&reversed=false HTTP/1.1
+node GET /v1/graph/node/DISCARDED_LIGHTNING_SECRET HTTP/1.1
+## session 5
+> {"request_id": "0", "kind": "ui.backends.lightning.test", "args": {"backend": "node"}}
+< {"kind":"ui.backends.lightning.test","schema_version":1,"data":{"ok":true,"backend":"node","kind":"lnd","lightningCapabilities":{"nodeSnapshot":true,"routingProfitability":true,"channelBalances":true,"channelLifecycle":true,"forwardEvents":true,"invoiceActivity":true,"paymentActivity":true,"onchainBalance":true},"alias":"","network":"mainnet","block_height":null,"peer_count":0,"channel_count":2,"logs":["Opening Lightning connection to backend 'node'","Connected to node: 2 channels, 0 peers"]},"request_id":"0"}
+> {"request_id": "stop", "kind": "daemon.shutdown"}
+< same as line 5
+node GET /v1/getinfo HTTP/1.1
+node GET /v1/balance/blockchain HTTP/1.1
+node GET /v1/balance/channels HTTP/1.1
+node GET /v1/fees HTTP/1.1
+node GET /v1/channels HTTP/1.1
+node GET /v1/channels/closed HTTP/1.1
+node POST /v1/switch HTTP/1.1
+node POST /v1/switch HTTP/1.1
+node GET /v1/payments?include_incomplete=true&index_offset=0&max_payments=1000&reversed=false HTTP/1.1
+node GET /v1/payments?include_incomplete=true&index_offset=1&max_payments=1000&reversed=false HTTP/1.1
+node GET /v1/invoices?index_offset=0&num_max_invoices=1000&reversed=false HTTP/1.1
+node GET /v1/invoices?index_offset=1&num_max_invoices=1000&reversed=false HTTP/1.1
+node GET /v1/graph/node/DISCARDED_LIGHTNING_SECRET HTTP/1.1

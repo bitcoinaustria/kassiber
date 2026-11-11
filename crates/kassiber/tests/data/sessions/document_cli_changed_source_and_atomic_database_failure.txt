@@ -1,0 +1,50 @@
+$ --format json --data-root $BASE/data wallets import-document --wallet Source --file $BASE/receipt.png --provider local
+exit Some(1)
+stdout Enter comma-separated row numbers to import, or press Enter to cancel: {
+stdout   "kind": "error",
+stdout   "schema_version": 1,
+stdout   "error": {
+stdout     "code": "document_import_source_changed",
+stdout     "message": "The OCR source changed after preview",
+stdout     "hint": "Preview the document again before importing its rows.",
+stdout     "details": {
+stdout       "filename": "receipt.png"
+stdout     },
+stdout     "retryable": false,
+stdout     "debug": null
+stdout   }
+stdout }
+stderr OCR accounting draft (nothing is selected by default):
+stderr [1] selectable | ready | confidence 94% | page 1
+stderr     date=2026-01-02T00:00:00Z | side=inbound | asset=BTC | amount=0.01 | fee=0 | fiat=500 EUR | rate=—
+stderr     counterparty=OTC Desk | description=Receipt row
+stderr     cell_confidences={"amount_btc": 0.99, "asset": 0.99, "counterparty": 0.99, "description": 0.99, "direction": 0.99, "fee_btc": 0.99, "fiat_currency": 0.99, "fiat_rate": 0.99, "fiat_value": 0.99, "occurred_at": 0.99} | flags=none
++ ai_providers ("claude", "Claude", "claude-cli://default", NULL, "default", "remote", "Broker using the installed Claude CLI and existing login. Kassiber's typed tools are available; native coding tools are not.", NULL, 1, NULL, "auto", NULL, 0, "full", "2026-01-02T03:04:05Z", "2026-01-02T03:04:05Z")
++ ai_providers ("codex", "Codex", "codex-cli://default", NULL, "default", "remote", "Broker using the installed Codex app-server and existing login. Kassiber's typed tools are available; native coding tools are not.", NULL, 1, NULL, "auto", NULL, 0, "full", "2026-01-02T03:04:05Z", "2026-01-02T03:04:05Z")
++ ai_providers ("copilot", "GitHub Copilot", "copilot-cli://default", NULL, "default", "remote", "Broker using the installed GitHub Copilot CLI over the Agent Client Protocol and its existing login. Kassiber's typed tools are available; native coding tools are not.", NULL, 1, NULL, "auto", NULL, 0, "full", "2026-01-02T03:04:05Z", "2026-01-02T03:04:05Z")
++ ai_providers ("opencode", "OpenCode", "opencode-cli://default", NULL, NULL, "remote", "Broker using the installed OpenCode server and existing configuration. Kassiber's typed tools are available; native coding tools are not.", NULL, 1, NULL, "auto", NULL, 0, "full", "2026-01-02T03:04:05Z", "2026-01-02T03:04:05Z")
++ settings ("ai_acp_broker_providers_seeded", "1")
++ settings ("ai_native_broker_providers_seeded", "1")
+$ --format json --data-root $BASE/data wallets import-document --wallet Source --file $BASE/receipt.png --provider local
+exit Some(1)
+stdout Enter comma-separated row numbers to import, or press Enter to cancel: {
+stdout   "kind": "error",
+stdout   "schema_version": 1,
+stdout   "error": {
+stdout     "code": "internal_error",
+stdout     "message": "database operation failed",
+stdout     "hint": null,
+stdout     "details": null,
+stdout     "retryable": false,
+stdout     "debug": null
+stdout   }
+stdout }
+stderr OCR accounting draft (nothing is selected by default):
+stderr [1] selectable | ready | confidence 94% | page 1
+stderr     date=2026-01-02T00:00:00Z | side=inbound | asset=BTC | amount=0.01 | fee=0 | fiat=500 EUR | rate=—
+stderr     counterparty=OTC Desk | description=Receipt row
+stderr     cell_confidences={"amount_btc": 0.99, "asset": 0.99, "counterparty": 0.99, "description": 0.99, "direction": 0.99, "fee_btc": 0.99, "fiat_currency": 0.99, "fiat_rate": 0.99, "fiat_value": 0.99, "occurred_at": 0.99} | flags=none
+ocr GET /v1/models 
+ocr POST /v1/responses {"temperature": 0, "text": {"format": {"type": "json_object"}}, "model": "glm-ocr", "input": [{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "Extract a draft Kassiber transaction table from this local document. Return JSON only and include per-cell confidence plus source regions."}, {"type": "input_image", "image_url": "data:image/png;base64,S2Fzc2liZXIgc3ludGhldGljIGxvY2FsIE9DUiBldmlkZW5jZQo="}]}], "stream": false, "store": false, "instructions": "You are Kassiber's local document transaction importer.\nExtract Bitcoin accounting transactions from the supplied image or PDF page text.\nReturn JSON only. Do not include markdown.\n\nSchema:\n{\n  \"rows\": [\n    {\n      \"occurred_at\": \"YYYY-MM-DD or RFC3339 or null\",\n      \"direction\": \"inbound|outbound|null\",\n      \"asset\": \"BTC|LBTC|... or null\",\n      \"amount_btc\": \"decimal BTC amount or null\",\n      \"fee_btc\": \"decimal BTC fee or null\",\n      \"fiat_currency\": \"EUR|USD|... or null\",\n      \"fiat_value\": \"decimal fiat value or null\",\n      \"fiat_rate\": \"decimal fiat per BTC or null\",\n      \"counterparty\": \"string or null\",\n      \"description\": \"short evidence-backed string or null\",\n      \"confidence\": 0.0,\n      \"cell_confidences\": {\n        \"occurred_at\": 0.0,\n        \"direction\": 0.0,\n        \"asset\": 0.0,\n        \"amount_btc\": 0.0,\n        \"fee_btc\": 0.0,\n        \"fiat_currency\": 0.0,\n        \"fiat_value\": 0.0,\n        \"fiat_rate\": 0.0,\n        \"counterparty\": 0.0,\n        \"description\": 0.0\n      },\n      \"source_region\": {\n        \"page\": 1,\n        \"x\": 0.0,\n        \"y\": 0.0,\n        \"width\": 0.0,\n        \"height\": 0.0,\n        \"unit\": \"relative\"\n      },\n      \"evidence_text\": \"exact visible words/numbers supporting the row\"\n    }\n  ]\n}\n\nRules:\n- Extract only rows that appear to be Bitcoin, Lightning, Liquid, or fiat-to-Bitcoin activity.\n- Never invent missing values. Use null and low confidence when unsure.\n- Include a cell_confidences entry for every non-null accounting field.\n- Use positive amount_btc and direction to express side.\n- Fiat values and rates must be positive and must include their visible ISO currency.\n- If a row is a fiat-only bank movement without a Bitcoin amount, omit it.\n- If there are no transaction rows, return {\"rows\":[]}.\n"}
+ocr GET /v1/models 
+ocr POST /v1/responses {"temperature": 0, "text": {"format": {"type": "json_object"}}, "model": "glm-ocr", "input": [{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "Extract a draft Kassiber transaction table from this local document. Return JSON only and include per-cell confidence plus source regions."}, {"type": "input_image", "image_url": "data:image/png;base64,S2Fzc2liZXIgc3ludGhldGljIGxvY2FsIE9DUiBldmlkZW5jZQo="}]}], "stream": false, "store": false, "instructions": "You are Kassiber's local document transaction importer.\nExtract Bitcoin accounting transactions from the supplied image or PDF page text.\nReturn JSON only. Do not include markdown.\n\nSchema:\n{\n  \"rows\": [\n    {\n      \"occurred_at\": \"YYYY-MM-DD or RFC3339 or null\",\n      \"direction\": \"inbound|outbound|null\",\n      \"asset\": \"BTC|LBTC|... or null\",\n      \"amount_btc\": \"decimal BTC amount or null\",\n      \"fee_btc\": \"decimal BTC fee or null\",\n      \"fiat_currency\": \"EUR|USD|... or null\",\n      \"fiat_value\": \"decimal fiat value or null\",\n      \"fiat_rate\": \"decimal fiat per BTC or null\",\n      \"counterparty\": \"string or null\",\n      \"description\": \"short evidence-backed string or null\",\n      \"confidence\": 0.0,\n      \"cell_confidences\": {\n        \"occurred_at\": 0.0,\n        \"direction\": 0.0,\n        \"asset\": 0.0,\n        \"amount_btc\": 0.0,\n        \"fee_btc\": 0.0,\n        \"fiat_currency\": 0.0,\n        \"fiat_value\": 0.0,\n        \"fiat_rate\": 0.0,\n        \"counterparty\": 0.0,\n        \"description\": 0.0\n      },\n      \"source_region\": {\n        \"page\": 1,\n        \"x\": 0.0,\n        \"y\": 0.0,\n        \"width\": 0.0,\n        \"height\": 0.0,\n        \"unit\": \"relative\"\n      },\n      \"evidence_text\": \"exact visible words/numbers supporting the row\"\n    }\n  ]\n}\n\nRules:\n- Extract only rows that appear to be Bitcoin, Lightning, Liquid, or fiat-to-Bitcoin activity.\n- Never invent missing values. Use null and low confidence when unsure.\n- Include a cell_confidences entry for every non-null accounting field.\n- Use positive amount_btc and direction to express side.\n- Fiat values and rates must be positive and must include their visible ISO currency.\n- If a row is a fiat-only bank movement without a Bitcoin amount, omit it.\n- If there are no transaction rows, return {\"rows\":[]}.\n"}

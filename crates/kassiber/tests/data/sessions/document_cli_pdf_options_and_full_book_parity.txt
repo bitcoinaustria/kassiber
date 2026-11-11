@@ -1,0 +1,216 @@
+$ --machine --data-root $BASE/data wallets preview-document --file $BASE/statement.pdf --provider local --pages 9-10 --max-pages 2
+exit Some(0)
+stdout {
+stdout   "kind": "wallets.preview-document",
+stdout   "schema_version": 1,
+stdout   "data": {
+stdout     "source": {
+stdout       "path": "$BASE/statement.pdf",
+stdout       "filename": "statement.pdf",
+stdout       "media_type": "application/pdf",
+stdout       "size_bytes": 4807,
+stdout       "sha256": "c41817dc1d8aa516dd5ad5c0b8586f16c84a088750c687bd08187ce82ce1398c",
+stdout       "kind": "pdf",
+stdout       "pdf": {
+stdout         "total_pages": 10,
+stdout         "rendered_pages": [
+stdout           9,
+stdout           10
+stdout         ],
+stdout         "complete": false,
+stdout         "selection_explicit": true,
+stdout         "selection": "9-10"
+stdout       }
+stdout     },
+stdout     "provider": {
+stdout       "name": "local",
+stdout       "kind": "local"
+stdout     },
+stdout     "model": "glm-ocr",
+stdout     "installed_models": [
+stdout       "glm-ocr"
+stdout     ],
+stdout     "recommendations": [
+stdout       {
+stdout         "id": "glm-ocr",
+stdout         "command": "ollama pull glm-ocr",
+stdout         "use": "Fast document OCR and table extraction on modest hardware."
+stdout       },
+stdout       {
+stdout         "id": "qwen3-vl:8b",
+stdout         "command": "ollama pull qwen3-vl:8b",
+stdout         "use": "Best default for OCR plus table reasoning when memory allows it."
+stdout       },
+stdout       {
+stdout         "id": "qwen3-vl:4b",
+stdout         "command": "ollama pull qwen3-vl:4b",
+stdout         "use": "Smaller Qwen3-VL option for laptops."
+stdout       },
+stdout       {
+stdout         "id": "llama3.2-vision:11b",
+stdout         "command": "ollama pull llama3.2-vision:11b",
+stdout         "use": "General image reasoning fallback with broad Ollama availability."
+stdout       },
+stdout       {
+stdout         "id": "minicpm-v:8b",
+stdout         "command": "ollama pull minicpm-v:8b",
+stdout         "use": "Compact multimodal fallback for receipts and screenshots."
+stdout       }
+stdout     ],
+stdout     "confidence_threshold": 0.78,
+stdout     "expected_fiat_currency": "EUR",
+stdout     "rows": [
+stdout       {
+stdout         "id": "docrow-c41817dc1d8aa516-6ffefd6afaa75714-001",
+stdout         "status": "ready",
+stdout         "flags": [],
+stdout         "confidence": 0.94,
+stdout         "cell_confidences": {
+stdout           "amount_btc": 0.99,
+stdout           "asset": 0.99,
+stdout           "counterparty": 0.99,
+stdout           "description": 0.99,
+stdout           "direction": 0.99,
+stdout           "fee_btc": 0.99,
+stdout           "fiat_currency": 0.99,
+stdout           "fiat_rate": 0.99,
+stdout           "fiat_value": 0.99,
+stdout           "occurred_at": 0.99
+stdout         },
+stdout         "confidence_threshold": 0.78,
+stdout         "source_region": {
+stdout           "page": 9,
+stdout           "unit": "relative"
+stdout         },
+stdout         "evidence_text": "02.01.2026 BTC 0.01000000 EUR 500 OTC Desk",
+stdout         "record": {
+stdout           "occurred_at": "2026-01-02T00:00:00Z",
+stdout           "direction": "inbound",
+stdout           "asset": "BTC",
+stdout           "amount_btc": "0.01",
+stdout           "fee_btc": "0",
+stdout           "fee_defaulted": false,
+stdout           "fiat_currency": "EUR",
+stdout           "fiat_value": "500",
+stdout           "fiat_rate": null,
+stdout           "counterparty": "OTC Desk",
+stdout           "description": "Receipt row"
+stdout         },
+stdout         "import_record": {
+stdout           "id": "docrow-c41817dc1d8aa516-6ffefd6afaa75714-001",
+stdout           "occurred_at": "2026-01-02T00:00:00Z",
+stdout           "direction": "inbound",
+stdout           "asset": "BTC",
+stdout           "amount": "0.01",
+stdout           "fee": "0",
+stdout           "fiat_currency": "EUR",
+stdout           "fiat_value": "500",
+stdout           "fiat_rate": null,
+stdout           "counterparty": "OTC Desk",
+stdout           "description": "Receipt row",
+stdout           "raw_json": {
+stdout             "source": "document_import",
+stdout             "row_id": "docrow-c41817dc1d8aa516-6ffefd6afaa75714-001",
+stdout             "model_row_id": null,
+stdout             "model_confidence": 0.94,
+stdout             "cell_confidences": {
+stdout               "amount_btc": 0.99,
+stdout               "asset": 0.99,
+stdout               "counterparty": 0.99,
+stdout               "description": 0.99,
+stdout               "direction": 0.99,
+stdout               "fee_btc": 0.99,
+stdout               "fiat_currency": 0.99,
+stdout               "fiat_rate": 0.99,
+stdout               "fiat_value": 0.99,
+stdout               "occurred_at": 0.99
+stdout             },
+stdout             "fee_defaulted": false,
+stdout             "source_region": {
+stdout               "page": 9,
+stdout               "unit": "relative"
+stdout             },
+stdout             "evidence_text": "02.01.2026 BTC 0.01000000 EUR 500 OTC Desk"
+stdout           }
+stdout         }
+stdout       }
+stdout     ],
+stdout     "summary": {
+stdout       "rows": 1,
+stdout       "ready": 1,
+stdout       "quarantined": 0,
+stdout       "has_importable_rows": true
+stdout     },
+stdout     "created_at": "2026-01-02T03:04:05Z"
+stdout   }
+stdout }
++ ai_providers ("claude", "Claude", "claude-cli://default", NULL, "default", "remote", "Broker using the installed Claude CLI and existing login. Kassiber's typed tools are available; native coding tools are not.", NULL, 1, NULL, "auto", NULL, 0, "full", "2026-01-02T03:04:05Z", "2026-01-02T03:04:05Z")
++ ai_providers ("codex", "Codex", "codex-cli://default", NULL, "default", "remote", "Broker using the installed Codex app-server and existing login. Kassiber's typed tools are available; native coding tools are not.", NULL, 1, NULL, "auto", NULL, 0, "full", "2026-01-02T03:04:05Z", "2026-01-02T03:04:05Z")
++ ai_providers ("copilot", "GitHub Copilot", "copilot-cli://default", NULL, "default", "remote", "Broker using the installed GitHub Copilot CLI over the Agent Client Protocol and its existing login. Kassiber's typed tools are available; native coding tools are not.", NULL, 1, NULL, "auto", NULL, 0, "full", "2026-01-02T03:04:05Z", "2026-01-02T03:04:05Z")
++ ai_providers ("opencode", "OpenCode", "opencode-cli://default", NULL, NULL, "remote", "Broker using the installed OpenCode server and existing configuration. Kassiber's typed tools are available; native coding tools are not.", NULL, 1, NULL, "auto", NULL, 0, "full", "2026-01-02T03:04:05Z", "2026-01-02T03:04:05Z")
++ settings ("ai_acp_broker_providers_seeded", "1")
++ settings ("ai_native_broker_providers_seeded", "1")
+$ --format json --data-root $BASE/data wallets import-document --wallet Source --file $BASE/statement.pdf --provider local --pages 9-10 --max-pages 2
+exit Some(0)
+stdout Enter comma-separated row numbers to import, or press Enter to cancel: {
+stdout   "kind": "wallets.import-document",
+stdout   "schema_version": 1,
+stdout   "data": {
+stdout     "wallet": "Source",
+stdout     "source": {
+stdout       "path": "$BASE/statement.pdf",
+stdout       "filename": "statement.pdf",
+stdout       "sha256": "c41817dc1d8aa516dd5ad5c0b8586f16c84a088750c687bd08187ce82ce1398c"
+stdout     },
+stdout     "imported": 1,
+stdout     "skipped": 0,
+stdout     "unchanged": 0,
+stdout     "journal_invalidated": true,
+stdout     "inserted_records": [
+stdout       {
+stdout         "transaction_id": "00000000-0000-4000-8000-000000000051",
+stdout         "external_id": "docrow-c41817dc1d8aa516-6ffefd6afaa75714-001",
+stdout         "wallet": "Source",
+stdout         "asset": "BTC",
+stdout         "direction": "inbound",
+stdout         "amount_msat": 1000000000,
+stdout         "changed_fields": [
+stdout           "metadata",
+stdout           "pricing",
+stdout           "transaction"
+stdout         ],
+stdout         "pricing_external_ref": null
+stdout       }
+stdout     ],
+stdout     "updated_records": [],
+stdout     "source_format": "document_import",
+stdout     "draft_rows_imported": 1,
+stdout     "quarantined_skipped": 0,
+stdout     "attached_evidence": [
+stdout       {
+stdout         "transaction_id": "00000000-0000-4000-8000-000000000051",
+stdout         "attachment_id": "00000000-0000-4000-8000-000000002051",
+stdout         "stored_relpath": "p/00000000-0000-4000-8000-000000002051-statement.pdf"
+stdout       }
+stdout     ]
+stdout   }
+stdout }
+stderr OCR accounting draft (nothing is selected by default):
+stderr [1] selectable | ready | confidence 94% | page 9
+stderr     date=2026-01-02T00:00:00Z | side=inbound | asset=BTC | amount=0.01 | fee=0 | fiat=500 EUR | rate=—
+stderr     counterparty=OTC Desk | description=Receipt row
+stderr     cell_confidences={"amount_btc": 0.99, "asset": 0.99, "counterparty": 0.99, "description": 0.99, "direction": 0.99, "fee_btc": 0.99, "fiat_currency": 0.99, "fiat_rate": 0.99, "fiat_value": 0.99, "occurred_at": 0.99} | flags=none
++ attachments ("00000000-0000-4000-8000-000000002051", "ws", "p", "00000000-0000-4000-8000-000000000051", "file", "OCR source: statement.pdf", "statement.pdf", "p/00000000-0000-4000-8000-000000002051-statement.pdf", NULL, "application/pdf", 4807, "c41817dc1d8aa516dd5ad5c0b8586f16c84a088750c687bd08187ce82ce1398c", NULL, NULL, "2026-01-02T03:04:05Z")
+- chain_index_clock (1, 18)
++ chain_index_clock (1, 21)
+- chain_index_dirty ("profiles", -1, 18)
++ chain_index_dirty ("profiles", -1, 21)
++ chain_index_dirty ("transactions", 1, 19)
+- profiles ("p", "ws", "Book", "EUR", "generic", 365, "FIFO", 0, 1, "global", 7, 0, 1, 0, "2025-01-01", 3, NULL, "2025-01-01", NULL)
++ profiles ("p", "ws", "Book", "EUR", "generic", 365, "FIFO", 0, 1, "global", 8, 0, 1, 0, NULL, 0, NULL, "2025-01-01", NULL)
++ transactions ("00000000-0000-4000-8000-000000000051", "ws", "p", "wallet", "docrow-c41817dc1d8aa516-6ffefd6afaa75714-001", NULL, "b42bbaa631387857ae2d46197ab32d621a89a68f0640070c7ae5bb5a1dd64209", "2026-01-02T00:00:00Z", NULL, "inbound", "BTC", 1000000000, 0, 0, "EUR", NULL, 500.0, "import", NULL, "500", "generic_import", NULL, NULL, "2026-01-02T00:00:00Z", NULL, NULL, NULL, NULL, "provider_sample", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, "Receipt row", "OTC Desk", NULL, 0, "{\"cell_confidences\": {\"amount_btc\": 0.99, \"asset\": 0.99, \"counterparty\": 0.99, \"description\": 0.99, \"direction\": 0.99, \"fee_btc\": 0.99, \"fiat_currency\": 0.99, \"fiat_rate\": 0.99, \"fiat_value\": 0.99, \"occurred_at\": 0.99}, \"evidence_text\": \"02.01.2026 BTC 0.01000000 EUR 500 OTC Desk\", \"fee_defaulted\": false, \"model_confidence\": 0.94, \"row_id\": \"docrow-c41817dc1d8aa516-6ffefd6afaa75714-001\", \"source\": \"document_import\", \"source_region\": {\"page\": 9, \"unit\": \"relative\"}}", NULL, NULL, NULL, NULL, "2026-01-02T03:04:05Z")
++ file attachments/p/00000000-0000-4000-8000-000000002051-statement.pdf 4807 fnv1a128:b8b44fc91c168dc7354d1c3142906859
+ocr GET /v1/models 
+ocr POST /v1/responses {"temperature": 0, "text": {"format": {"type": "json_object"}}, "model": "glm-ocr", "input": [{"type": "message", "role": "user", "content": ... bytes=61624 fnv1a128:52913eec1d27c71b9e8ce3b445715bbf
+ocr GET /v1/models 
+ocr POST /v1/responses {"temperature": 0, "text": {"format": {"type": "json_object"}}, "model": "glm-ocr", "input": [{"type": "message", "role": "user", "content": ... bytes=61624 fnv1a128:52913eec1d27c71b9e8ce3b445715bbf

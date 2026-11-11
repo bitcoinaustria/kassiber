@@ -1,0 +1,53 @@
+## session 1
+> {"kind": "status", "request_id": "open"}
+< {"kind":"status","schema_version":1,"data":{"version":"$VERSION","schema_version":1,"auth":{"mode":"local","authenticated":true},"database_encrypted":false,"state_root":"$BASE","data_root":"$BASE/data","database":"$BASE/data/kassiber.sqlite3","project_id":null,"project_name":null,"project_root":null,"config_root":"$BASE/config","settings_file":"$BASE/config/settings.json","exports_root":"$BASE/exports","attachments_root":"$BASE/attachments","current_workspace":"W","current_profile":"P","workspaces":1,"profiles":1,"accounts":0,"wallets":1,"transactions":5,"journal_entries":3,"quarantines":3,"default_backend":"fulcrum","env_file":"$BASE/config/backends.env"},"request_id":"open"}
+> {"kind": "ui.journals.quarantine.resolve", "request_id": "r0"}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.journals.quarantine.resolve requires exactly one of transaction or group_id","hint":null,"details":null,"retryable":false,"debug":null},"request_id":"r0"}
+> {"kind": "ui.journals.quarantine.resolve", "request_id": "r1", "args": []}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"daemon args must be an object","hint":null,"details":{"type":"list"},"retryable":false,"debug":null},"request_id":"r1"}
+> {"kind": "ui.journals.quarantine.resolve", "request_id": "r2", "args": {}}
+< same as line 5
+> {"kind": "ui.journals.quarantine.resolve", "request_id": "r3", "args": {"bogus": 1, "transaction": "a"}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.journals.quarantine.resolve received unsupported fields","hint":null,"details":{"unknown":["bogus"]},"retryable":false,"debug":null},"request_id":"r3"}
+> {"kind": "ui.journals.quarantine.resolve", "request_id": "r4", "args": {"transaction": "  ", "action": "exclude", "reason": "r"}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.journals.quarantine.resolve requires a transaction","hint":null,"details":null,"retryable":false,"debug":null},"request_id":"r4"}
+> {"kind": "ui.journals.quarantine.resolve", "request_id": "r5", "args": {"transaction": 7, "action": "exclude", "reason": "r"}}
+< same as line 13
+> {"kind": "ui.journals.quarantine.resolve", "request_id": "r6", "args": {"transaction": "a", "action": "delete", "reason": "r"}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.journals.quarantine.resolve action is invalid","hint":null,"details":{"allowed":["price_override","exclude"]},"retryable":false,"debug":null},"request_id":"r6"}
+> {"kind": "ui.journals.quarantine.resolve", "request_id": "r7", "args": {"transaction": "a", "action": ["exclude"], "reason": "r"}}
+< {"kind":"error","schema_version":1,"error":{"code":"internal_error","message":"unhashable type: 'list'","hint":null,"details":null,"retryable":false,"debug":null},"request_id":"r7"}
+> {"kind": "ui.journals.quarantine.resolve", "request_id": "r8", "args": {"transaction": "a", "action": "exclude"}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.journals.quarantine.resolve requires an audit reason","hint":null,"details":null,"retryable":false,"debug":null},"request_id":"r8"}
+> {"kind": "ui.journals.quarantine.resolve", "request_id": "r9", "args": {"transaction": "a", "action": "exclude", "reason": "   "}}
+< same as line 21
+> {"kind": "ui.journals.quarantine.resolve", "request_id": "r10", "args": {"transaction": "a", "action": "exclude", "reason": "r", "reprocess": 1}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"ui.journals.quarantine.resolve reprocess must be boolean","hint":null,"details":null,"retryable":false,"debug":null},"request_id":"r10"}
+> {"kind": "ui.journals.quarantine.resolve", "request_id": "r11", "args": {"transaction": "a", "action": "price_override", "reason": "r"}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"price_override requires fiat_rate or fiat_value from reviewed evidence","hint":null,"details":null,"retryable":false,"debug":null},"request_id":"r11"}
+> {"kind": "ui.journals.quarantine.resolve", "request_id": "r12", "args": {"transaction": "a", "action": "price_override", "reason": "r", "fiat_rate": 1, "fiat_value": 2}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"price_override accepts either fiat_rate or fiat_value, not both","hint":null,"details":null,"retryable":false,"debug":null},"request_id":"r12"}
+> {"kind": "ui.journals.quarantine.resolve", "request_id": "r13", "args": {"transaction": "a", "action": "exclude", "reason": "r", "fiat_value": 2}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"exclude does not accept fiat_rate or fiat_value","hint":null,"details":null,"retryable":false,"debug":null},"request_id":"r13"}
+> {"kind": "ui.journals.quarantine.resolve", "request_id": "r14", "args": {"transaction": "a", "action": "price_override", "reason": "r", "fiat_rate": "abc"}}
+< {"kind":"error","schema_version":1,"error":{"code":"app_error","message":"Invalid decimal value: abc","hint":null,"details":null,"retryable":false,"debug":null},"request_id":"r14"}
+> {"kind": "ui.journals.quarantine.resolve", "request_id": "r15", "args": {"transaction": "a", "action": "price_override", "reason": "r", "fiat_rate": "-1"}}
+< {"kind":"error","schema_version":1,"error":{"code":"validation","message":"Fiat rate must be positive and finite","hint":null,"details":null,"retryable":false,"debug":null},"request_id":"r15"}
+> {"kind": "ui.journals.quarantine.resolve", "request_id": "r16", "args": {"transaction": "a", "action": "price_override", "reason": "r", "fiat_rate": "0"}}
+< same as line 35
+> {"kind": "ui.journals.quarantine.resolve", "request_id": "r17", "args": {"transaction": "a", "action": "price_override", "reason": "r", "fiat_rate": ""}}
+< same as line 35
+> {"kind": "ui.journals.quarantine.resolve", "request_id": "r18", "args": {"transaction": "a", "action": "price_override", "reason": "r", "fiat_rate": "NaN"}}
+< same as line 35
+> {"kind": "ui.journals.quarantine.resolve", "request_id": "r19", "args": {"transaction": "a", "action": "price_override", "reason": "r", "fiat_value": "Infinity"}}
+< same as line 35
+> {"kind": "ui.journals.quarantine.resolve", "request_id": "r20", "args": {"transaction": "a", "action": "price_override", "reason": "r", "fiat_value": "-5"}}
+< same as line 35
+> {"kind": "ui.journals.quarantine.resolve", "request_id": "r21", "args": {"transaction": "a", "action": "price_override", "reason": "r", "fiat_rate": true}}
+< {"kind":"error","schema_version":1,"error":{"code":"app_error","message":"Invalid decimal value: True","hint":null,"details":null,"retryable":false,"debug":null},"request_id":"r21"}
+> {"kind": "ui.journals.quarantine.resolve", "request_id": "r22", "args": {"transaction": "b", "action": "exclude", "reason": "r"}}
+< {"kind":"error","schema_version":1,"error":{"code":"not_found","message":"Transaction is not quarantined","hint":"Run `kassiber journals quarantined` to see active entries.","details":null,"retryable":false,"debug":null},"request_id":"r22"}
+> {"kind": "ui.journals.quarantine.resolve", "request_id": "r23", "args": {"transaction": "missing", "action": "exclude", "reason": "r"}}
+< {"kind":"error","schema_version":1,"error":{"code":"app_error","message":"Transaction 'missing' not found","hint":null,"details":null,"retryable":false,"debug":null},"request_id":"r23"}
+> {"request_id": "stop", "kind": "daemon.shutdown"}
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}

@@ -1,0 +1,9 @@
+## session 1
+> {"request_id": "0", "kind": "ui.backends.lightning.test", "args": {"backend": "nomacaroon"}}
+< {"kind":"ui.backends.lightning.test","schema_version":1,"data":{"ok":false,"backend":"nomacaroon","kind":"lnd","logs":["Opening Lightning connection to backend 'nomacaroon'","Connection failed: LND backend is missing a read-only macaroon"],"error":{"message":"LND backend is missing a read-only macaroon"}},"request_id":"0"}
+> {"request_id": "1", "kind": "ui.backends.lightning.test", "args": {"backend": "badmacaroon"}}
+< {"kind":"ui.backends.lightning.test","schema_version":1,"data":{"ok":false,"backend":"badmacaroon","kind":"lnd","logs":["Opening Lightning connection to backend 'badmacaroon'","Connection failed: LND macaroon must be stored as hex"],"error":{"message":"LND macaroon must be stored as hex"}},"request_id":"1"}
+> {"request_id": "2", "kind": "ui.backends.lightning.test", "args": {"backend": "nourl"}}
+< {"kind":"ui.backends.lightning.test","schema_version":1,"data":{"ok":false,"backend":"nourl","kind":"lnd","logs":["Opening Lightning connection to backend 'nourl'","Connection failed: LND backend URL is required"],"error":{"message":"LND backend URL is required"}},"request_id":"2"}
+> {"request_id": "stop", "kind": "daemon.shutdown"}
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}

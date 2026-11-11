@@ -1,0 +1,288 @@
+$ --machine --data-root $BASE/data wallets preview-document --file $BASE/receipt.png --provider local
+exit Some(0)
+stdout {
+stdout   "kind": "wallets.preview-document",
+stdout   "schema_version": 1,
+stdout   "data": {
+stdout     "source": {
+stdout       "path": "$BASE/receipt.png",
+stdout       "filename": "receipt.png",
+stdout       "media_type": "image/png",
+stdout       "size_bytes": 38,
+stdout       "sha256": "f85736148c94b4c6ae60695c6614f5c33945b8a80d1b50d255243b21ab57b7f5",
+stdout       "kind": "image"
+stdout     },
+stdout     "provider": {
+stdout       "name": "local",
+stdout       "kind": "local"
+stdout     },
+stdout     "model": "glm-ocr",
+stdout     "installed_models": [
+stdout       "glm-ocr"
+stdout     ],
+stdout     "recommendations": [
+stdout       {
+stdout         "id": "glm-ocr",
+stdout         "command": "ollama pull glm-ocr",
+stdout         "use": "Fast document OCR and table extraction on modest hardware."
+stdout       },
+stdout       {
+stdout         "id": "qwen3-vl:8b",
+stdout         "command": "ollama pull qwen3-vl:8b",
+stdout         "use": "Best default for OCR plus table reasoning when memory allows it."
+stdout       },
+stdout       {
+stdout         "id": "qwen3-vl:4b",
+stdout         "command": "ollama pull qwen3-vl:4b",
+stdout         "use": "Smaller Qwen3-VL option for laptops."
+stdout       },
+stdout       {
+stdout         "id": "llama3.2-vision:11b",
+stdout         "command": "ollama pull llama3.2-vision:11b",
+stdout         "use": "General image reasoning fallback with broad Ollama availability."
+stdout       },
+stdout       {
+stdout         "id": "minicpm-v:8b",
+stdout         "command": "ollama pull minicpm-v:8b",
+stdout         "use": "Compact multimodal fallback for receipts and screenshots."
+stdout       }
+stdout     ],
+stdout     "confidence_threshold": 0.78,
+stdout     "expected_fiat_currency": "EUR",
+stdout     "rows": [
+stdout       {
+stdout         "id": "docrow-f85736148c94b4c6-6ffefd6afaa75714-001",
+stdout         "status": "ready",
+stdout         "flags": [],
+stdout         "confidence": 0.94,
+stdout         "cell_confidences": {
+stdout           "amount_btc": 0.99,
+stdout           "asset": 0.99,
+stdout           "counterparty": 0.99,
+stdout           "description": 0.99,
+stdout           "direction": 0.99,
+stdout           "fee_btc": 0.99,
+stdout           "fiat_currency": 0.99,
+stdout           "fiat_rate": 0.99,
+stdout           "fiat_value": 0.99,
+stdout           "occurred_at": 0.99
+stdout         },
+stdout         "confidence_threshold": 0.78,
+stdout         "source_region": {
+stdout           "page": 1,
+stdout           "x": 0.1,
+stdout           "y": 0.2,
+stdout           "width": 0.7,
+stdout           "height": 0.1,
+stdout           "unit": "relative"
+stdout         },
+stdout         "evidence_text": "02.01.2026 BTC 0.01000000 EUR 500 OTC Desk",
+stdout         "record": {
+stdout           "occurred_at": "2026-01-02T00:00:00Z",
+stdout           "direction": "inbound",
+stdout           "asset": "BTC",
+stdout           "amount_btc": "0.01",
+stdout           "fee_btc": "0",
+stdout           "fee_defaulted": false,
+stdout           "fiat_currency": "EUR",
+stdout           "fiat_value": "500",
+stdout           "fiat_rate": null,
+stdout           "counterparty": "OTC Desk",
+stdout           "description": "Receipt row"
+stdout         },
+stdout         "import_record": {
+stdout           "id": "docrow-f85736148c94b4c6-6ffefd6afaa75714-001",
+stdout           "occurred_at": "2026-01-02T00:00:00Z",
+stdout           "direction": "inbound",
+stdout           "asset": "BTC",
+stdout           "amount": "0.01",
+stdout           "fee": "0",
+stdout           "fiat_currency": "EUR",
+stdout           "fiat_value": "500",
+stdout           "fiat_rate": null,
+stdout           "counterparty": "OTC Desk",
+stdout           "description": "Receipt row",
+stdout           "raw_json": {
+stdout             "source": "document_import",
+stdout             "row_id": "docrow-f85736148c94b4c6-6ffefd6afaa75714-001",
+stdout             "model_row_id": null,
+stdout             "model_confidence": 0.94,
+stdout             "cell_confidences": {
+stdout               "amount_btc": 0.99,
+stdout               "asset": 0.99,
+stdout               "counterparty": 0.99,
+stdout               "description": 0.99,
+stdout               "direction": 0.99,
+stdout               "fee_btc": 0.99,
+stdout               "fiat_currency": 0.99,
+stdout               "fiat_rate": 0.99,
+stdout               "fiat_value": 0.99,
+stdout               "occurred_at": 0.99
+stdout             },
+stdout             "fee_defaulted": false,
+stdout             "source_region": {
+stdout               "page": 1,
+stdout               "x": 0.1,
+stdout               "y": 0.2,
+stdout               "width": 0.7,
+stdout               "height": 0.1,
+stdout               "unit": "relative"
+stdout             },
+stdout             "evidence_text": "02.01.2026 BTC 0.01000000 EUR 500 OTC Desk"
+stdout           }
+stdout         }
+stdout       }
+stdout     ],
+stdout     "summary": {
+stdout       "rows": 1,
+stdout       "ready": 1,
+stdout       "quarantined": 0,
+stdout       "has_importable_rows": true
+stdout     },
+stdout     "created_at": "2026-01-02T03:04:05Z"
+stdout   }
+stdout }
++ ai_providers ("claude", "Claude", "claude-cli://default", NULL, "default", "remote", "Broker using the installed Claude CLI and existing login. Kassiber's typed tools are available; native coding tools are not.", NULL, 1, NULL, "auto", NULL, 0, "full", "2026-01-02T03:04:05Z", "2026-01-02T03:04:05Z")
++ ai_providers ("codex", "Codex", "codex-cli://default", NULL, "default", "remote", "Broker using the installed Codex app-server and existing login. Kassiber's typed tools are available; native coding tools are not.", NULL, 1, NULL, "auto", NULL, 0, "full", "2026-01-02T03:04:05Z", "2026-01-02T03:04:05Z")
++ ai_providers ("copilot", "GitHub Copilot", "copilot-cli://default", NULL, "default", "remote", "Broker using the installed GitHub Copilot CLI over the Agent Client Protocol and its existing login. Kassiber's typed tools are available; native coding tools are not.", NULL, 1, NULL, "auto", NULL, 0, "full", "2026-01-02T03:04:05Z", "2026-01-02T03:04:05Z")
++ ai_providers ("opencode", "OpenCode", "opencode-cli://default", NULL, NULL, "remote", "Broker using the installed OpenCode server and existing configuration. Kassiber's typed tools are available; native coding tools are not.", NULL, 1, NULL, "auto", NULL, 0, "full", "2026-01-02T03:04:05Z", "2026-01-02T03:04:05Z")
++ settings ("ai_acp_broker_providers_seeded", "1")
++ settings ("ai_native_broker_providers_seeded", "1")
+$ --format json --data-root $BASE/data wallets import-document --wallet Source --file $BASE/receipt.png --provider local
+exit Some(0)
+stdout Enter comma-separated row numbers to import, or press Enter to cancel: {
+stdout   "kind": "wallets.import-document",
+stdout   "schema_version": 1,
+stdout   "data": {
+stdout     "wallet": "Source",
+stdout     "source": {
+stdout       "path": "$BASE/receipt.png",
+stdout       "filename": "receipt.png",
+stdout       "sha256": "f85736148c94b4c6ae60695c6614f5c33945b8a80d1b50d255243b21ab57b7f5"
+stdout     },
+stdout     "imported": 1,
+stdout     "skipped": 0,
+stdout     "unchanged": 0,
+stdout     "journal_invalidated": true,
+stdout     "inserted_records": [
+stdout       {
+stdout         "transaction_id": "00000000-0000-4000-8000-000000000051",
+stdout         "external_id": "docrow-f85736148c94b4c6-6ffefd6afaa75714-001",
+stdout         "wallet": "Source",
+stdout         "asset": "BTC",
+stdout         "direction": "inbound",
+stdout         "amount_msat": 1000000000,
+stdout         "changed_fields": [
+stdout           "metadata",
+stdout           "pricing",
+stdout           "transaction"
+stdout         ],
+stdout         "pricing_external_ref": null
+stdout       }
+stdout     ],
+stdout     "updated_records": [],
+stdout     "source_format": "document_import",
+stdout     "draft_rows_imported": 1,
+stdout     "quarantined_skipped": 0,
+stdout     "attached_evidence": [
+stdout       {
+stdout         "transaction_id": "00000000-0000-4000-8000-000000000051",
+stdout         "attachment_id": "00000000-0000-4000-8000-000000002051",
+stdout         "stored_relpath": "p/00000000-0000-4000-8000-000000002051-receipt.png"
+stdout       }
+stdout     ]
+stdout   }
+stdout }
+stderr OCR accounting draft (nothing is selected by default):
+stderr [1] selectable | ready | confidence 94% | page 1
+stderr     date=2026-01-02T00:00:00Z | side=inbound | asset=BTC | amount=0.01 | fee=0 | fiat=500 EUR | rate=—
+stderr     counterparty=OTC Desk | description=Receipt row
+stderr     cell_confidences={"amount_btc": 0.99, "asset": 0.99, "counterparty": 0.99, "description": 0.99, "direction": 0.99, "fee_btc": 0.99, "fiat_currency": 0.99, "fiat_rate": 0.99, "fiat_value": 0.99, "occurred_at": 0.99} | flags=none
++ attachments ("00000000-0000-4000-8000-000000002051", "ws", "p", "00000000-0000-4000-8000-000000000051", "file", "OCR source: receipt.png", "receipt.png", "p/00000000-0000-4000-8000-000000002051-receipt.png", NULL, "image/png", 38, "f85736148c94b4c6ae60695c6614f5c33945b8a80d1b50d255243b21ab57b7f5", NULL, NULL, "2026-01-02T03:04:05Z")
+- chain_index_clock (1, 18)
++ chain_index_clock (1, 21)
+- chain_index_dirty ("profiles", -1, 18)
++ chain_index_dirty ("profiles", -1, 21)
++ chain_index_dirty ("transactions", 1, 19)
+- profiles ("p", "ws", "Book", "EUR", "generic", 365, "FIFO", 0, 1, "global", 7, 0, 1, 0, "2025-01-01", 3, NULL, "2025-01-01", NULL)
++ profiles ("p", "ws", "Book", "EUR", "generic", 365, "FIFO", 0, 1, "global", 8, 0, 1, 0, NULL, 0, NULL, "2025-01-01", NULL)
++ transactions ("00000000-0000-4000-8000-000000000051", "ws", "p", "wallet", "docrow-f85736148c94b4c6-6ffefd6afaa75714-001", NULL, "d5be99463d785d5431dd479e81c69478a31611e96a9f36598703ada5315635d4", "2026-01-02T00:00:00Z", NULL, "inbound", "BTC", 1000000000, 0, 0, "EUR", NULL, 500.0, "import", NULL, "500", "generic_import", NULL, NULL, "2026-01-02T00:00:00Z", NULL, NULL, NULL, NULL, "provider_sample", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, "Receipt row", "OTC Desk", NULL, 0, "{\"cell_confidences\": {\"amount_btc\": 0.99, \"asset\": 0.99, \"counterparty\": 0.99, \"description\": 0.99, \"direction\": 0.99, \"fee_btc\": 0.99, \"fiat_currency\": 0.99, \"fiat_rate\": 0.99, \"fiat_value\": 0.99, \"occurred_at\": 0.99}, \"evidence_text\": \"02.01.2026 BTC 0.01000000 EUR 500 OTC Desk\", \"fee_defaulted\": false, \"model_confidence\": 0.94, \"row_id\": \"docrow-f85736148c94b4c6-6ffefd6afaa75714-001\", \"source\": \"document_import\", \"source_region\": {\"height\": 0.1, \"page\": 1, \"unit\": \"relative\", \"width\": 0.7, \"x\": 0.1, \"y\": 0.2}}", NULL, NULL, NULL, NULL, "2026-01-02T03:04:05Z")
++ file attachments/p/00000000-0000-4000-8000-000000002051-receipt.png 38 fnv1a128:78c48450b6c1abf64103f45c4817152e
+$ --format json --data-root $BASE/data wallets import-document --wallet Source --file $BASE/receipt.png --provider local
+exit Some(0)
+stdout Enter comma-separated row numbers to import, or press Enter to cancel: {
+stdout   "kind": "wallets.import-document",
+stdout   "schema_version": 1,
+stdout   "data": {
+stdout     "wallet": "Source",
+stdout     "source": {
+stdout       "path": "$BASE/receipt.png",
+stdout       "filename": "receipt.png",
+stdout       "sha256": "f85736148c94b4c6ae60695c6614f5c33945b8a80d1b50d255243b21ab57b7f5"
+stdout     },
+stdout     "imported": 0,
+stdout     "skipped": 1,
+stdout     "unchanged": 0,
+stdout     "journal_invalidated": true,
+stdout     "inserted_records": [],
+stdout     "updated_records": [
+stdout       {
+stdout         "transaction_id": "00000000-0000-4000-8000-000000000051",
+stdout         "external_id": "docrow-f85736148c94b4c6-6ffefd6afaa75714-001",
+stdout         "wallet": "Source",
+stdout         "asset": "BTC",
+stdout         "direction": "inbound",
+stdout         "amount_msat": 1000000000,
+stdout         "changed_fields": [
+stdout           "fiat_price_source",
+stdout           "fiat_rate",
+stdout           "fiat_rate_exact",
+stdout           "fiat_value",
+stdout           "fiat_value_exact",
+stdout           "pricing_external_ref",
+stdout           "pricing_fetched_at",
+stdout           "pricing_granularity",
+stdout           "pricing_method",
+stdout           "pricing_pair",
+stdout           "pricing_provider",
+stdout           "pricing_quality",
+stdout           "pricing_source_kind",
+stdout           "pricing_timestamp"
+stdout         ],
+stdout         "pricing_external_ref": null
+stdout       }
+stdout     ],
+stdout     "updated": 1,
+stdout     "source_format": "document_import",
+stdout     "draft_rows_imported": 1,
+stdout     "quarantined_skipped": 0,
+stdout     "attached_evidence": [
+stdout       {
+stdout         "transaction_id": "00000000-0000-4000-8000-000000000051",
+stdout         "attachment_id": "00000000-0000-4000-8000-000000002101",
+stdout         "stored_relpath": "p/00000000-0000-4000-8000-000000002101-receipt.png"
+stdout       }
+stdout     ]
+stdout   }
+stdout }
+stderr OCR accounting draft (nothing is selected by default):
+stderr [1] selectable | ready | confidence 94% | page 1
+stderr     date=2026-01-02T00:00:00Z | side=inbound | asset=BTC | amount=0.01 | fee=0 | fiat=500 EUR | rate=—
+stderr     counterparty=OTC Desk | description=Receipt row
+stderr     cell_confidences={"amount_btc": 0.99, "asset": 0.99, "counterparty": 0.99, "description": 0.99, "direction": 0.99, "fee_btc": 0.99, "fiat_currency": 0.99, "fiat_rate": 0.99, "fiat_value": 0.99, "occurred_at": 0.99} | flags=none
++ attachments ("00000000-0000-4000-8000-000000002101", "ws", "p", "00000000-0000-4000-8000-000000000051", "file", "OCR source: receipt.png", "receipt.png", "p/00000000-0000-4000-8000-000000002101-receipt.png", NULL, "image/png", 38, "f85736148c94b4c6ae60695c6614f5c33945b8a80d1b50d255243b21ab57b7f5", NULL, NULL, "2026-01-02T03:04:05Z")
+- chain_index_clock (1, 21)
++ chain_index_clock (1, 24)
+- chain_index_dirty ("profiles", -1, 21)
++ chain_index_dirty ("profiles", -1, 24)
+- chain_index_dirty ("transactions", 1, 19)
++ chain_index_dirty ("transactions", 1, 22)
+- profiles ("p", "ws", "Book", "EUR", "generic", 365, "FIFO", 0, 1, "global", 8, 0, 1, 0, NULL, 0, NULL, "2025-01-01", NULL)
++ profiles ("p", "ws", "Book", "EUR", "generic", 365, "FIFO", 0, 1, "global", 9, 0, 1, 0, NULL, 0, NULL, "2025-01-01", NULL)
++ file attachments/p/00000000-0000-4000-8000-000000002101-receipt.png 38 fnv1a128:78c48450b6c1abf64103f45c4817152e
+ocr GET /v1/models 
+ocr POST /v1/responses {"temperature": 0, "text": {"format": {"type": "json_object"}}, "model": "glm-ocr", "input": [{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "Extract a draft Kassiber transaction table from this local document. Return JSON only and include per-cell confidence plus source regions."}, {"type": "input_image", "image_url": "data:image/png;base64,S2Fzc2liZXIgc3ludGhldGljIGxvY2FsIE9DUiBldmlkZW5jZQo="}]}], "stream": false, "store": false, "instructions": "You are Kassiber's local document transaction importer.\nExtract Bitcoin accounting transactions from the supplied image or PDF page text.\nReturn JSON only. Do not include markdown.\n\nSchema:\n{\n  \"rows\": [\n    {\n      \"occurred_at\": \"YYYY-MM-DD or RFC3339 or null\",\n      \"direction\": \"inbound|outbound|null\",\n      \"asset\": \"BTC|LBTC|... or null\",\n      \"amount_btc\": \"decimal BTC amount or null\",\n      \"fee_btc\": \"decimal BTC fee or null\",\n      \"fiat_currency\": \"EUR|USD|... or null\",\n      \"fiat_value\": \"decimal fiat value or null\",\n      \"fiat_rate\": \"decimal fiat per BTC or null\",\n      \"counterparty\": \"string or null\",\n      \"description\": \"short evidence-backed string or null\",\n      \"confidence\": 0.0,\n      \"cell_confidences\": {\n        \"occurred_at\": 0.0,\n        \"direction\": 0.0,\n        \"asset\": 0.0,\n        \"amount_btc\": 0.0,\n        \"fee_btc\": 0.0,\n        \"fiat_currency\": 0.0,\n        \"fiat_value\": 0.0,\n        \"fiat_rate\": 0.0,\n        \"counterparty\": 0.0,\n        \"description\": 0.0\n      },\n      \"source_region\": {\n        \"page\": 1,\n        \"x\": 0.0,\n        \"y\": 0.0,\n        \"width\": 0.0,\n        \"height\": 0.0,\n        \"unit\": \"relative\"\n      },\n      \"evidence_text\": \"exact visible words/numbers supporting the row\"\n    }\n  ]\n}\n\nRules:\n- Extract only rows that appear to be Bitcoin, Lightning, Liquid, or fiat-to-Bitcoin activity.\n- Never invent missing values. Use null and low confidence when unsure.\n- Include a cell_confidences entry for every non-null accounting field.\n- Use positive amount_btc and direction to express side.\n- Fiat values and rates must be positive and must include their visible ISO currency.\n- If a row is a fiat-only bank movement without a Bitcoin amount, omit it.\n- If there are no transaction rows, return {\"rows\":[]}.\n"}
+ocr GET /v1/models 
+ocr POST /v1/responses {"temperature": 0, "text": {"format": {"type": "json_object"}}, "model": "glm-ocr", "input": [{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "Extract a draft Kassiber transaction table from this local document. Return JSON only and include per-cell confidence plus source regions."}, {"type": "input_image", "image_url": "data:image/png;base64,S2Fzc2liZXIgc3ludGhldGljIGxvY2FsIE9DUiBldmlkZW5jZQo="}]}], "stream": false, "store": false, "instructions": "You are Kassiber's local document transaction importer.\nExtract Bitcoin accounting transactions from the supplied image or PDF page text.\nReturn JSON only. Do not include markdown.\n\nSchema:\n{\n  \"rows\": [\n    {\n      \"occurred_at\": \"YYYY-MM-DD or RFC3339 or null\",\n      \"direction\": \"inbound|outbound|null\",\n      \"asset\": \"BTC|LBTC|... or null\",\n      \"amount_btc\": \"decimal BTC amount or null\",\n      \"fee_btc\": \"decimal BTC fee or null\",\n      \"fiat_currency\": \"EUR|USD|... or null\",\n      \"fiat_value\": \"decimal fiat value or null\",\n      \"fiat_rate\": \"decimal fiat per BTC or null\",\n      \"counterparty\": \"string or null\",\n      \"description\": \"short evidence-backed string or null\",\n      \"confidence\": 0.0,\n      \"cell_confidences\": {\n        \"occurred_at\": 0.0,\n        \"direction\": 0.0,\n        \"asset\": 0.0,\n        \"amount_btc\": 0.0,\n        \"fee_btc\": 0.0,\n        \"fiat_currency\": 0.0,\n        \"fiat_value\": 0.0,\n        \"fiat_rate\": 0.0,\n        \"counterparty\": 0.0,\n        \"description\": 0.0\n      },\n      \"source_region\": {\n        \"page\": 1,\n        \"x\": 0.0,\n        \"y\": 0.0,\n        \"width\": 0.0,\n        \"height\": 0.0,\n        \"unit\": \"relative\"\n      },\n      \"evidence_text\": \"exact visible words/numbers supporting the row\"\n    }\n  ]\n}\n\nRules:\n- Extract only rows that appear to be Bitcoin, Lightning, Liquid, or fiat-to-Bitcoin activity.\n- Never invent missing values. Use null and low confidence when unsure.\n- Include a cell_confidences entry for every non-null accounting field.\n- Use positive amount_btc and direction to express side.\n- Fiat values and rates must be positive and must include their visible ISO currency.\n- If a row is a fiat-only bank movement without a Bitcoin amount, omit it.\n- If there are no transaction rows, return {\"rows\":[]}.\n"}
+ocr GET /v1/models 
+ocr POST /v1/responses {"temperature": 0, "text": {"format": {"type": "json_object"}}, "model": "glm-ocr", "input": [{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "Extract a draft Kassiber transaction table from this local document. Return JSON only and include per-cell confidence plus source regions."}, {"type": "input_image", "image_url": "data:image/png;base64,S2Fzc2liZXIgc3ludGhldGljIGxvY2FsIE9DUiBldmlkZW5jZQo="}]}], "stream": false, "store": false, "instructions": "You are Kassiber's local document transaction importer.\nExtract Bitcoin accounting transactions from the supplied image or PDF page text.\nReturn JSON only. Do not include markdown.\n\nSchema:\n{\n  \"rows\": [\n    {\n      \"occurred_at\": \"YYYY-MM-DD or RFC3339 or null\",\n      \"direction\": \"inbound|outbound|null\",\n      \"asset\": \"BTC|LBTC|... or null\",\n      \"amount_btc\": \"decimal BTC amount or null\",\n      \"fee_btc\": \"decimal BTC fee or null\",\n      \"fiat_currency\": \"EUR|USD|... or null\",\n      \"fiat_value\": \"decimal fiat value or null\",\n      \"fiat_rate\": \"decimal fiat per BTC or null\",\n      \"counterparty\": \"string or null\",\n      \"description\": \"short evidence-backed string or null\",\n      \"confidence\": 0.0,\n      \"cell_confidences\": {\n        \"occurred_at\": 0.0,\n        \"direction\": 0.0,\n        \"asset\": 0.0,\n        \"amount_btc\": 0.0,\n        \"fee_btc\": 0.0,\n        \"fiat_currency\": 0.0,\n        \"fiat_value\": 0.0,\n        \"fiat_rate\": 0.0,\n        \"counterparty\": 0.0,\n        \"description\": 0.0\n      },\n      \"source_region\": {\n        \"page\": 1,\n        \"x\": 0.0,\n        \"y\": 0.0,\n        \"width\": 0.0,\n        \"height\": 0.0,\n        \"unit\": \"relative\"\n      },\n      \"evidence_text\": \"exact visible words/numbers supporting the row\"\n    }\n  ]\n}\n\nRules:\n- Extract only rows that appear to be Bitcoin, Lightning, Liquid, or fiat-to-Bitcoin activity.\n- Never invent missing values. Use null and low confidence when unsure.\n- Include a cell_confidences entry for every non-null accounting field.\n- Use positive amount_btc and direction to express side.\n- Fiat values and rates must be positive and must include their visible ISO currency.\n- If a row is a fiat-only bank movement without a Bitcoin amount, omit it.\n- If there are no transaction rows, return {\"rows\":[]}.\n"}

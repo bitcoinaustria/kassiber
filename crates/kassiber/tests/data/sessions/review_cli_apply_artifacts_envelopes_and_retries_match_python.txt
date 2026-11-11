@@ -1,0 +1,636 @@
+## cli 1
+$ review apply --artifact-file $BASE/inputs/list.json --idempotency-key k
+exit Some(1)
+stdout {
+stdout   "kind": "error",
+stdout   "schema_version": 1,
+stdout   "error": {
+stdout     "code": "validation",
+stdout     "message": "Review artifact file must contain a plan object",
+stdout     "hint": null,
+stdout     "details": null,
+stdout     "retryable": false,
+stdout     "debug": null
+stdout   }
+stdout }
+$ review apply --artifact-file $BASE/inputs/unhashable.json --idempotency-key k
+exit Some(1)
+stdout {
+stdout   "kind": "error",
+stdout   "schema_version": 1,
+stdout   "error": {
+stdout     "code": "review_artifact_invalid",
+stdout     "message": "Review artifact is malformed",
+stdout     "hint": null,
+stdout     "details": null,
+stdout     "retryable": false,
+stdout     "debug": null
+stdout   }
+stdout }
+$ review apply --artifact-file $BASE/inputs/object-kind.json --idempotency-key k
+exit Some(1)
+stdout {
+stdout   "kind": "error",
+stdout   "schema_version": 1,
+stdout   "error": {
+stdout     "code": "review_artifact_invalid",
+stdout     "message": "Review artifact is malformed",
+stdout     "hint": null,
+stdout     "details": null,
+stdout     "retryable": false,
+stdout     "debug": null
+stdout   }
+stdout }
+$ review apply --artifact-file $BASE/inputs/empty-envelope.json --idempotency-key k
+exit Some(1)
+stdout {
+stdout   "kind": "error",
+stdout   "schema_version": 1,
+stdout   "error": {
+stdout     "code": "validation",
+stdout     "message": "Review artifact file must contain a plan object",
+stdout     "hint": null,
+stdout     "details": null,
+stdout     "retryable": false,
+stdout     "debug": null
+stdout   }
+stdout }
+$ review apply --artifact-file $BASE/inputs/tampered.json --idempotency-key k
+exit Some(1)
+stdout {
+stdout   "kind": "error",
+stdout   "schema_version": 1,
+stdout   "error": {
+stdout     "code": "review_artifact_invalid",
+stdout     "message": "Review artifact digest is invalid",
+stdout     "hint": null,
+stdout     "details": null,
+stdout     "retryable": false,
+stdout     "debug": null
+stdout   }
+stdout }
+$ review apply --artifact-file $BASE/inputs/artifact.json --idempotency-key  
+exit Some(1)
+stdout {
+stdout   "kind": "error",
+stdout   "schema_version": 1,
+stdout   "error": {
+stdout     "code": "validation",
+stdout     "message": "Review requires an idempotency key of 1 to 200 characters",
+stdout     "hint": null,
+stdout     "details": null,
+stdout     "retryable": false,
+stdout     "debug": null
+stdout   }
+stdout }
+$ review apply --artifact-file $BASE/inputs/artifact.json --idempotency-key cli-key
+exit Some(0)
+stdout {
+stdout   "kind": "review.apply",
+stdout   "schema_version": 1,
+stdout   "data": {
+stdout     "id": "<uuid:0>",
+stdout     "schema_version": 1,
+stdout     "workspace_id": "ws",
+stdout     "profile_id": "profile",
+stdout     "idempotency_key": "cli-key",
+stdout     "artifact_digest": "f15d6bd24a5953f95838c7db72f09aaf27ceb4e1d2a57e09b68c2568ecdfee0b",
+stdout     "base_input_version": 0,
+stdout     "result_input_version": 2,
+stdout     "status": "verified",
+stdout     "operations": [
+stdout       {
+stdout         "type": "price_override",
+stdout         "result": {
+stdout           "transaction_id": "buy",
+stdout           "history_event_id": "<uuid:1>",
+stdout           "updated": true
+stdout         }
+stdout       },
+stdout       {
+stdout         "type": "exclude",
+stdout         "result": {
+stdout           "transaction_id": "sell",
+stdout           "history_event_id": "<uuid:2>",
+stdout           "updated": true
+stdout         }
+stdout       }
+stdout     ],
+stdout     "transaction_ids": [
+stdout       "buy",
+stdout       "sell"
+stdout     ],
+stdout     "before": {
+stdout       "entries_count": 1,
+stdout       "quarantine_count": 4,
+stdout       "quarantines": [
+stdout         {
+stdout           "transaction_id": "buy",
+stdout           "reason": "missing_spot_price"
+stdout         },
+stdout         {
+stdout           "transaction_id": "in",
+stdout           "reason": "missing_spot_price"
+stdout         },
+stdout         {
+stdout           "transaction_id": "out",
+stdout           "reason": "missing_spot_price"
+stdout         },
+stdout         {
+stdout           "transaction_id": "sell",
+stdout           "reason": "insufficient_lots"
+stdout         }
+stdout       ],
+stdout       "wallet_holdings": [
+stdout         {
+stdout           "wallet_id": "source-wallet",
+stdout           "asset": "BTC",
+stdout           "quantity": "0.00007",
+stdout           "cost_basis": "2.800000"
+stdout         }
+stdout       ],
+stdout       "report_ready": false,
+stdout       "journal_digest": "fa6748904ac743ca81174adf6f75af6454ce5b73a61b867e1ecc5f376d5504d1",
+stdout       "tax": {
+stdout         "fiat_currency": "USD",
+stdout         "jurisdiction": null,
+stdout         "years": [],
+stdout         "years_omitted": 0
+stdout       }
+stdout     },
+stdout     "delta": {
+stdout       "years": []
+stdout     },
+stdout     "proposed_operations": [
+stdout       {
+stdout         "fiat_rate": "45000",
+stdout         "reason": "Verified exchange rate",
+stdout         "transaction_id": "buy",
+stdout         "type": "price_override"
+stdout       },
+stdout       {
+stdout         "reason": "Duplicate",
+stdout         "transaction_id": "sell",
+stdout         "type": "exclude"
+stdout       }
+stdout     ],
+stdout     "verification": {
+stdout       "entries_count": 2,
+stdout       "quarantine_count": 2,
+stdout       "quarantines": [
+stdout         {
+stdout           "transaction_id": "in",
+stdout           "reason": "missing_spot_price"
+stdout         },
+stdout         {
+stdout           "transaction_id": "out",
+stdout           "reason": "missing_spot_price"
+stdout         }
+stdout       ],
+stdout       "wallet_holdings": [
+stdout         {
+stdout           "wallet_id": "sink-wallet",
+stdout           "asset": "BTC",
+stdout           "quantity": "0.00005",
+stdout           "cost_basis": "2.1041666666666666666666666666666"
+stdout         },
+stdout         {
+stdout           "wallet_id": "source-wallet",
+stdout           "asset": "BTC",
+stdout           "quantity": "0.00007",
+stdout           "cost_basis": "2.9458333333333333333333333333333"
+stdout         }
+stdout       ],
+stdout       "report_ready": false,
+stdout       "journal_digest": "e05ae518162830705943c2ea89a949adec5c3bf779d7132e50c6864122029499",
+stdout       "tax": {
+stdout         "fiat_currency": "USD",
+stdout         "jurisdiction": null,
+stdout         "years": [],
+stdout         "years_omitted": 0
+stdout       },
+stdout       "processed_at": "<now>"
+stdout     },
+stdout     "authored_source": "cli",
+stdout     "created_at": "<now>"
+stdout   }
+stdout }
+$ review apply --artifact-file $BASE/inputs/envelope.json --idempotency-key cli-key
+exit Some(0)
+stdout {
+stdout   "kind": "review.apply",
+stdout   "schema_version": 1,
+stdout   "data": {
+stdout     "artifact_digest": "f15d6bd24a5953f95838c7db72f09aaf27ceb4e1d2a57e09b68c2568ecdfee0b",
+stdout     "authored_source": "cli",
+stdout     "base_input_version": 0,
+stdout     "before": {
+stdout       "entries_count": 1,
+stdout       "journal_digest": "fa6748904ac743ca81174adf6f75af6454ce5b73a61b867e1ecc5f376d5504d1",
+stdout       "quarantine_count": 4,
+stdout       "quarantines": [
+stdout         {
+stdout           "reason": "missing_spot_price",
+stdout           "transaction_id": "buy"
+stdout         },
+stdout         {
+stdout           "reason": "missing_spot_price",
+stdout           "transaction_id": "in"
+stdout         },
+stdout         {
+stdout           "reason": "missing_spot_price",
+stdout           "transaction_id": "out"
+stdout         },
+stdout         {
+stdout           "reason": "insufficient_lots",
+stdout           "transaction_id": "sell"
+stdout         }
+stdout       ],
+stdout       "report_ready": false,
+stdout       "tax": {
+stdout         "fiat_currency": "USD",
+stdout         "jurisdiction": null,
+stdout         "years": [],
+stdout         "years_omitted": 0
+stdout       },
+stdout       "wallet_holdings": [
+stdout         {
+stdout           "asset": "BTC",
+stdout           "cost_basis": "2.800000",
+stdout           "quantity": "0.00007",
+stdout           "wallet_id": "source-wallet"
+stdout         }
+stdout       ]
+stdout     },
+stdout     "created_at": "<now>",
+stdout     "delta": {
+stdout       "years": []
+stdout     },
+stdout     "id": "<uuid:0>",
+stdout     "idempotency_key": "cli-key",
+stdout     "operations": [
+stdout       {
+stdout         "result": {
+stdout           "history_event_id": "<uuid:1>",
+stdout           "transaction_id": "buy",
+stdout           "updated": true
+stdout         },
+stdout         "type": "price_override"
+stdout       },
+stdout       {
+stdout         "result": {
+stdout           "history_event_id": "<uuid:2>",
+stdout           "transaction_id": "sell",
+stdout           "updated": true
+stdout         },
+stdout         "type": "exclude"
+stdout       }
+stdout     ],
+stdout     "profile_id": "profile",
+stdout     "proposed_operations": [
+stdout       {
+stdout         "fiat_rate": "45000",
+stdout         "reason": "Verified exchange rate",
+stdout         "transaction_id": "buy",
+stdout         "type": "price_override"
+stdout       },
+stdout       {
+stdout         "reason": "Duplicate",
+stdout         "transaction_id": "sell",
+stdout         "type": "exclude"
+stdout       }
+stdout     ],
+stdout     "result_input_version": 2,
+stdout     "schema_version": 1,
+stdout     "status": "verified",
+stdout     "transaction_ids": [
+stdout       "buy",
+stdout       "sell"
+stdout     ],
+stdout     "verification": {
+stdout       "entries_count": 2,
+stdout       "journal_digest": "e05ae518162830705943c2ea89a949adec5c3bf779d7132e50c6864122029499",
+stdout       "processed_at": "<now>",
+stdout       "quarantine_count": 2,
+stdout       "quarantines": [
+stdout         {
+stdout           "reason": "missing_spot_price",
+stdout           "transaction_id": "in"
+stdout         },
+stdout         {
+stdout           "reason": "missing_spot_price",
+stdout           "transaction_id": "out"
+stdout         }
+stdout       ],
+stdout       "report_ready": false,
+stdout       "tax": {
+stdout         "fiat_currency": "USD",
+stdout         "jurisdiction": null,
+stdout         "years": [],
+stdout         "years_omitted": 0
+stdout       },
+stdout       "wallet_holdings": [
+stdout         {
+stdout           "asset": "BTC",
+stdout           "cost_basis": "2.1041666666666666666666666666666",
+stdout           "quantity": "0.00005",
+stdout           "wallet_id": "sink-wallet"
+stdout         },
+stdout         {
+stdout           "asset": "BTC",
+stdout           "cost_basis": "2.9458333333333333333333333333333",
+stdout           "quantity": "0.00007",
+stdout           "wallet_id": "source-wallet"
+stdout         }
+stdout       ]
+stdout     },
+stdout     "workspace_id": "ws"
+stdout   }
+stdout }
+$ review apply --artifact-file $BASE/inputs/desktop.json --idempotency-key cli-key
+exit Some(1)
+stdout {
+stdout   "kind": "error",
+stdout   "schema_version": 1,
+stdout   "error": {
+stdout     "code": "review_idempotency_conflict",
+stdout     "message": "Idempotency key already belongs to another proposal",
+stdout     "hint": null,
+stdout     "details": null,
+stdout     "retryable": false,
+stdout     "debug": null
+stdout   }
+stdout }
+$ review apply --artifact-file $BASE/inputs/other.json --idempotency-key second
+exit Some(1)
+stdout {
+stdout   "kind": "error",
+stdout   "schema_version": 1,
+stdout   "error": {
+stdout     "code": "custody_review_plan_stale",
+stdout     "message": "Custody review plan is stale",
+stdout     "hint": null,
+stdout     "details": {
+stdout       "expected_input_version": 0,
+stdout       "current_input_version": 2
+stdout     },
+stdout     "retryable": false,
+stdout     "debug": null
+stdout   }
+stdout }
+$ review receipt --idempotency-key cli-key
+exit Some(0)
+stdout {
+stdout   "kind": "review.receipt",
+stdout   "schema_version": 1,
+stdout   "data": {
+stdout     "artifact_digest": "f15d6bd24a5953f95838c7db72f09aaf27ceb4e1d2a57e09b68c2568ecdfee0b",
+stdout     "authored_source": "cli",
+stdout     "base_input_version": 0,
+stdout     "before": {
+stdout       "entries_count": 1,
+stdout       "journal_digest": "fa6748904ac743ca81174adf6f75af6454ce5b73a61b867e1ecc5f376d5504d1",
+stdout       "quarantine_count": 4,
+stdout       "quarantines": [
+stdout         {
+stdout           "reason": "missing_spot_price",
+stdout           "transaction_id": "buy"
+stdout         },
+stdout         {
+stdout           "reason": "missing_spot_price",
+stdout           "transaction_id": "in"
+stdout         },
+stdout         {
+stdout           "reason": "missing_spot_price",
+stdout           "transaction_id": "out"
+stdout         },
+stdout         {
+stdout           "reason": "insufficient_lots",
+stdout           "transaction_id": "sell"
+stdout         }
+stdout       ],
+stdout       "report_ready": false,
+stdout       "tax": {
+stdout         "fiat_currency": "USD",
+stdout         "jurisdiction": null,
+stdout         "years": [],
+stdout         "years_omitted": 0
+stdout       },
+stdout       "wallet_holdings": [
+stdout         {
+stdout           "asset": "BTC",
+stdout           "cost_basis": "2.800000",
+stdout           "quantity": "0.00007",
+stdout           "wallet_id": "source-wallet"
+stdout         }
+stdout       ]
+stdout     },
+stdout     "created_at": "<now>",
+stdout     "delta": {
+stdout       "years": []
+stdout     },
+stdout     "id": "<uuid:0>",
+stdout     "idempotency_key": "cli-key",
+stdout     "operations": [
+stdout       {
+stdout         "result": {
+stdout           "history_event_id": "<uuid:1>",
+stdout           "transaction_id": "buy",
+stdout           "updated": true
+stdout         },
+stdout         "type": "price_override"
+stdout       },
+stdout       {
+stdout         "result": {
+stdout           "history_event_id": "<uuid:2>",
+stdout           "transaction_id": "sell",
+stdout           "updated": true
+stdout         },
+stdout         "type": "exclude"
+stdout       }
+stdout     ],
+stdout     "profile_id": "profile",
+stdout     "proposed_operations": [
+stdout       {
+stdout         "fiat_rate": "45000",
+stdout         "reason": "Verified exchange rate",
+stdout         "transaction_id": "buy",
+stdout         "type": "price_override"
+stdout       },
+stdout       {
+stdout         "reason": "Duplicate",
+stdout         "transaction_id": "sell",
+stdout         "type": "exclude"
+stdout       }
+stdout     ],
+stdout     "result_input_version": 2,
+stdout     "schema_version": 1,
+stdout     "status": "verified",
+stdout     "transaction_ids": [
+stdout       "buy",
+stdout       "sell"
+stdout     ],
+stdout     "verification": {
+stdout       "entries_count": 2,
+stdout       "journal_digest": "e05ae518162830705943c2ea89a949adec5c3bf779d7132e50c6864122029499",
+stdout       "processed_at": "<now>",
+stdout       "quarantine_count": 2,
+stdout       "quarantines": [
+stdout         {
+stdout           "reason": "missing_spot_price",
+stdout           "transaction_id": "in"
+stdout         },
+stdout         {
+stdout           "reason": "missing_spot_price",
+stdout           "transaction_id": "out"
+stdout         }
+stdout       ],
+stdout       "report_ready": false,
+stdout       "tax": {
+stdout         "fiat_currency": "USD",
+stdout         "jurisdiction": null,
+stdout         "years": [],
+stdout         "years_omitted": 0
+stdout       },
+stdout       "wallet_holdings": [
+stdout         {
+stdout           "asset": "BTC",
+stdout           "cost_basis": "2.1041666666666666666666666666666",
+stdout           "quantity": "0.00005",
+stdout           "wallet_id": "sink-wallet"
+stdout         },
+stdout         {
+stdout           "asset": "BTC",
+stdout           "cost_basis": "2.9458333333333333333333333333333",
+stdout           "quantity": "0.00007",
+stdout           "wallet_id": "source-wallet"
+stdout         }
+stdout       ]
+stdout     },
+stdout     "workspace_id": "ws"
+stdout   }
+stdout }
+$ review cases
+exit Some(0)
+stdout {
+stdout   "kind": "review.cases",
+stdout   "schema_version": 1,
+stdout   "data": {
+stdout     "schema_version": 1,
+stdout     "workspace_id": "ws",
+stdout     "profile_id": "profile",
+stdout     "input_version": 2,
+stdout     "fiat_currency": "USD",
+stdout     "freshness": {
+stdout       "status": "current",
+stdout       "is_current": true,
+stdout       "needs_processing": false,
+stdout       "reason": "journals match the active transaction count, input version and calculation semantics",
+stdout       "last_processed_at": "<now>",
+stdout       "last_processed_tx_count": 4,
+stdout       "journal_input_version": 2,
+stdout       "last_processed_input_version": 2,
+stdout       "active_transaction_count": 4
+stdout     },
+stdout     "cases": [
+stdout       {
+stdout         "transaction_id": "in",
+stdout         "direction": "inbound",
+stdout         "asset": "BTC",
+stdout         "occurred_at": "2026-01-01T00:00:00Z",
+stdout         "reason": "missing_spot_price",
+stdout         "case_id": "quarantine:in",
+stdout         "missing_evidence": [
+stdout           {
+stdout             "code": "missing_spot_price",
+stdout             "status": "unresolved"
+stdout           }
+stdout         ],
+stdout         "supported_operations": [
+stdout           "price_override"
+stdout         ],
+stdout         "waiting_count": 0
+stdout       },
+stdout       {
+stdout         "transaction_id": "out",
+stdout         "direction": "outbound",
+stdout         "asset": "BTC",
+stdout         "occurred_at": "2026-01-01T00:00:00Z",
+stdout         "reason": "missing_spot_price",
+stdout         "case_id": "quarantine:out",
+stdout         "missing_evidence": [
+stdout           {
+stdout             "code": "missing_spot_price",
+stdout             "status": "unresolved"
+stdout           }
+stdout         ],
+stdout         "supported_operations": [
+stdout           "price_override"
+stdout         ],
+stdout         "waiting_count": 0
+stdout       }
+stdout     ],
+stdout     "next_cursor": null,
+stdout     "waiting_count": 0,
+stdout     "recent_receipts": [
+stdout       {
+stdout         "id": "<uuid:0>",
+stdout         "created_at": "<now>",
+stdout         "result_input_version": 2,
+stdout         "artifact_digest": "f15d6bd24a5953f95838c7db72f09aaf27ceb4e1d2a57e09b68c2568ecdfee0b",
+stdout         "status": "verified"
+stdout       }
+stdout     ]
+stdout   }
+stdout }
+## tables after session 1
+- chain_index_clock (1, 22)
++ chain_index_clock (1, 33)
+- chain_index_dirty ("profiles", -1, 15)
++ chain_index_dirty ("profiles", -1, 33)
+- chain_index_dirty ("transactions", 3, 20)
++ chain_index_dirty ("transactions", 3, 24)
+- chain_index_dirty ("transactions", 4, 21)
++ chain_index_dirty ("transactions", 4, 27)
++ journal_account_holdings ("<uuid:3>", "ws", "profile", NULL, "treasury", "Treasury", "BTC", 12000000, 5.05, "<now>")
++ journal_custody_gap_inputs ("ws", "profile", 2, "[]", "[]", "<now>")
++ journal_entries ("74710b76-14d4-8e4c-ae79-cf4d0450f40e", "ws", "profile", "buy", "sink-wallet", NULL, "2024-02-01T00:00:00Z", "acquisition", "BTC", 5000000, 2.25, 45000.0, NULL, NULL, NULL, "2.25000", "45000", NULL, NULL, NULL, NULL, NULL, "manual_override", "exact", "custody-tax:e1684c33e1408505ec95d03f4932d72faf28c82c431d5a4f4ff9d44cb596e8dc:0:5000000:inbound", NULL, NULL, NULL, "<now>")
++ journal_entries ("ba63b121-a56a-810b-9095-822887e074ef", "ws", "profile", "gift", "source-wallet", NULL, "2023-06-01T00:00:00Z", "acquisition", "BTC", 7000000, 2.8, 40000.0, NULL, NULL, NULL, "2.800000", "40000.0", NULL, NULL, NULL, NULL, NULL, NULL, NULL, "custody-tax:7f86e83ba81dc82648afdcf3b04056f75aba93c5b0ca8336b0e483666d2ff987:0:7000000:inbound", NULL, NULL, NULL, "<now>")
++ journal_quantity_balances ("ws", "profile", "external", "unmatched_outbound_default", "BTC", 100000, "<now>")
++ journal_quantity_balances ("ws", "profile", "external_origin", "unclassified_origin", "BTC", -12099000, "<now>")
++ journal_quantity_balances ("ws", "profile", "wallet", "sink-wallet", "BTC", 5099000, "<now>")
++ journal_quantity_balances ("ws", "profile", "wallet", "source-wallet", "BTC", 6900000, "<now>")
++ journal_quantity_postings ("decision:1f56015e2f7c3a77cfa4aaac210bb016b8ee89ef96cac976a739692f971c7e1c:0:100000", "ws", "profile", "out", "1f56015e2f7c3a77cfa4aaac210bb016b8ee89ef96cac976a739692f971c7e1c", "2026-01-01T00:00:00Z", "BTC", "external", "unmatched_outbound_default", 100000, "external_presumed", "<now>")
++ journal_quantity_postings ("observed:1f56015e2f7c3a77cfa4aaac210bb016b8ee89ef96cac976a739692f971c7e1c", "ws", "profile", "out", "1f56015e2f7c3a77cfa4aaac210bb016b8ee89ef96cac976a739692f971c7e1c", "2026-01-01T00:00:00Z", "BTC", "wallet", "source-wallet", -100000, "observed", "<now>")
++ journal_quantity_postings ("observed:7f86e83ba81dc82648afdcf3b04056f75aba93c5b0ca8336b0e483666d2ff987", "ws", "profile", "gift", "7f86e83ba81dc82648afdcf3b04056f75aba93c5b0ca8336b0e483666d2ff987", "2023-06-01T00:00:00Z", "BTC", "wallet", "source-wallet", 7000000, "observed", "<now>")
++ journal_quantity_postings ("observed:8a1a0b5326cd83973bd90b83e6feeaed32205ed72b1d4e5b503be608377774a7", "ws", "profile", "in", "8a1a0b5326cd83973bd90b83e6feeaed32205ed72b1d4e5b503be608377774a7", "2026-01-01T00:00:00Z", "BTC", "wallet", "sink-wallet", 99000, "observed", "<now>")
++ journal_quantity_postings ("observed:e1684c33e1408505ec95d03f4932d72faf28c82c431d5a4f4ff9d44cb596e8dc", "ws", "profile", "buy", "e1684c33e1408505ec95d03f4932d72faf28c82c431d5a4f4ff9d44cb596e8dc", "2024-02-01T00:00:00Z", "BTC", "wallet", "sink-wallet", 5000000, "observed", "<now>")
++ journal_quantity_postings ("origin:7f86e83ba81dc82648afdcf3b04056f75aba93c5b0ca8336b0e483666d2ff987:0:7000000", "ws", "profile", "gift", "7f86e83ba81dc82648afdcf3b04056f75aba93c5b0ca8336b0e483666d2ff987", "2023-06-01T00:00:00Z", "BTC", "external_origin", "unclassified_origin", -7000000, "unclassified_origin", "<now>")
++ journal_quantity_postings ("origin:8a1a0b5326cd83973bd90b83e6feeaed32205ed72b1d4e5b503be608377774a7:0:99000", "ws", "profile", "in", "8a1a0b5326cd83973bd90b83e6feeaed32205ed72b1d4e5b503be608377774a7", "2026-01-01T00:00:00Z", "BTC", "external_origin", "unclassified_origin", -99000, "unclassified_origin", "<now>")
++ journal_quantity_postings ("origin:e1684c33e1408505ec95d03f4932d72faf28c82c431d5a4f4ff9d44cb596e8dc:0:5000000", "ws", "profile", "buy", "e1684c33e1408505ec95d03f4932d72faf28c82c431d5a4f4ff9d44cb596e8dc", "2024-02-01T00:00:00Z", "BTC", "external_origin", "unclassified_origin", -5000000, "unclassified_origin", "<now>")
++ journal_quarantines ("in", "ws", "profile", "missing_spot_price", "{\"asset\":\"BTC\",\"direction\":\"inbound\",\"required_for\":\"acquisition\",\"wallet\":\"Sink\"}", "<now>")
++ journal_quarantines ("out", "ws", "profile", "missing_spot_price", "{\"asset\":\"BTC\",\"direction\":\"outbound\",\"required_for\":\"disposal\",\"wallet\":\"Source\"}", "<now>")
++ journal_wallet_holdings ("<uuid:4>", "ws", "profile", "sink-wallet", "Sink", "treasury", "BTC", 5000000, 2.1041666666666665, "<now>")
++ journal_wallet_holdings ("<uuid:5>", "ws", "profile", "source-wallet", "Source", "treasury", "BTC", 7000000, 2.9458333333333333, "<now>")
+- profiles ("profile", "ws", "Book", "USD", "generic", 365, "FIFO", 0, 1, "global", 0, 0, 0, 0, NULL, 0, NULL, "2026-01-01T00:00:00Z", NULL)
++ profiles ("profile", "ws", "Book", "USD", "generic", 365, "FIFO", 0, 1, "global", 2, 2, 10, 10, "<now>", 4, "{\"by_reason\": {}, \"total\": 0}", "2026-01-01T00:00:00Z", NULL)
++ review_workflow_receipts ("<uuid:0>", "ws", "profile", "cli-key", "f15d6bd24a5953f95838c7db72f09aaf27ceb4e1d2a57e09b68c2568ecdfee0b", "{\"artifact_digest\":\"f15d6bd24a5953f95838c7db72f09aaf27ceb4e1d2a57e09b68c2568ecdfee0b\",\"authored_source\":\"cli\",\"base_input_version\":0,\"before\":{\"entries_count\":1,\"journal_digest\":\"fa6748904ac743ca81174adf6f75af6454ce5b73a61b867e1ecc5f376d5504d1\",\"quarantine_count\":4,\"quarantines\":[{\"reason\":\"missing_spot_price\",\"transaction_id\":\"buy\"},{\"reason\":\"missing_spot_price\",\"transaction_id\":\"in\"},{\"reason\":\"missing_spot_price\",\"transaction_id\":\"out\"},{\"reason\":\"insufficient_lots\",\"transaction_id\":\"sell\"}],\"report_ready\":false,\"tax\":{\"fiat_currency\":\"USD\",\"jurisdiction\":null,\"years\":[],\"years_omitted\":0},\"wallet_holdings\":[{\"asset\":\"BTC\",\"cost_basis\":\"2.800000\",\"quantity\":\"0.00007\",\"wallet_id\":\"source-wallet\"}]},\"created_at\":\"<now>\",\"delta\":{\"years\":[]},\"id\":\"<uuid:0>\",\"idempotency_key\":\"cli-key\",\"operations\":[{\"result\":{\"history_event_id\":\"<uuid:1>\",\"transaction_id\":\"buy\",\"updated\":true},\"type\":\"price_override\"},{\"result\":{\"history_event_id\":\"<uuid:2>\",\"transaction_id\":\"sell\",\"updated\":true},\"type\":\"exclude\"}],\"profile_id\":\"profile\",\"proposed_operations\":[{\"fiat_rate\":\"45000\",\"reason\":\"Verified exchange rate\",\"transaction_id\":\"buy\",\"type\":\"price_override\"},{\"reason\":\"Duplicate\",\"transaction_id\":\"sell\",\"type\":\"exclude\"}],\"result_input_version\":2,\"schema_version\":1,\"status\":\"verified\",\"transaction_ids\":[\"buy\",\"sell\"],\"verification\":{\"entries_count\":2,\"journal_digest\":\"e05ae518162830705943c2ea89a949adec5c3bf779d7132e50c6864122029499\",\"processed_at\":\"<now>\",\"quarantine_count\":2,\"quarantines\":[{\"reason\":\"missing_spot_price\",\"transaction_id\":\"in\"},{\"reason\":\"missing_spot_price\",\"transaction_id\":\"out\"}],\"report_ready\":false,\"tax\":{\"fiat_currency\":\"USD\",\"jurisdiction\":null,\"years\":[],\"years_omitted\":0},\"wallet_holdings\":[{\"asset\":\"BTC\",\"cost_basis\":\"2.1041666666666666666666666666666\",\"quantity\":\"0.00005\",\"wallet_id\":\"sink-wallet\"},{\"asset\":\"BTC\",\"cost_basis\":\"2.9458333333333333333333333333333\",\"quantity\":\"0.00007\",\"wallet_id\":\"source-wallet\"}]},\"workspace_id\":\"ws\"}", "<now>")
++ transaction_edit_events ("<uuid:1>", "ws", "profile", "buy", "sink-wallet", "external-buy", "2024-02-01T00:00:00Z", "cli", "Verified exchange rate", "<now>", 0, 1, 0, NULL, 0)
++ transaction_edit_events ("<uuid:2>", "ws", "profile", "sell", "sink-wallet", "external-sell", "2024-03-01T00:00:00Z", "cli", "Duplicate", "<now>", 1, 2, 0, NULL, 0)
++ transaction_edit_fields ("<uuid:10>", "<uuid:1>", "pricing_fetched_at", "null", "\"<now>\"", "{}")
++ transaction_edit_fields ("<uuid:11>", "<uuid:1>", "pricing_granularity", "null", "\"exact\"", "{}")
++ transaction_edit_fields ("<uuid:12>", "<uuid:1>", "pricing_method", "null", "\"quarantine_price_override\"", "{}")
++ transaction_edit_fields ("<uuid:13>", "<uuid:1>", "pricing_pair", "null", "\"BTC-USD\"", "{}")
++ transaction_edit_fields ("<uuid:14>", "<uuid:1>", "pricing_provider", "null", "\"manual\"", "{}")
++ transaction_edit_fields ("<uuid:15>", "<uuid:1>", "pricing_quality", "null", "\"exact\"", "{}")
++ transaction_edit_fields ("<uuid:16>", "<uuid:1>", "pricing_source_kind", "null", "\"manual_override\"", "{}")
++ transaction_edit_fields ("<uuid:17>", "<uuid:1>", "pricing_timestamp", "null", "\"2024-02-01T00:00:00Z\"", "{}")
++ transaction_edit_fields ("<uuid:18>", "<uuid:2>", "excluded", "false", "true", "{}")
++ transaction_edit_fields ("<uuid:6>", "<uuid:1>", "fiat_currency", "null", "\"USD\"", "{}")
++ transaction_edit_fields ("<uuid:7>", "<uuid:1>", "fiat_price_source", "null", "\"manual\"", "{}")
++ transaction_edit_fields ("<uuid:8>", "<uuid:1>", "fiat_rate", "null", "\"45000\"", "{}")
++ transaction_edit_fields ("<uuid:9>", "<uuid:1>", "fiat_value", "null", "\"2.25000\"", "{}")
++ transactions ("buy", "ws", "profile", "sink-wallet", "external-buy", NULL, "fingerprint-buy", "2024-02-01T00:00:00Z", NULL, "inbound", "BTC", 5000000, 0, 0, "USD", 45000.0, 2.25, "manual", "45000", "2.25000", "manual_override", "manual", "BTC-USD", "2024-02-01T00:00:00Z", "<now>", "exact", "quarantine_price_override", NULL, "exact", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, "{}", NULL, NULL, NULL, NULL, "2024-02-01T00:00:00Z")
+- transactions ("buy", "ws", "profile", "sink-wallet", "external-buy", NULL, "fingerprint-buy", "2024-02-01T00:00:00Z", NULL, "inbound", "BTC", 5000000, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, "{}", NULL, NULL, NULL, NULL, "2024-02-01T00:00:00Z")
+- transactions ("sell", "ws", "profile", "sink-wallet", "external-sell", NULL, "fingerprint-sell", "2024-03-01T00:00:00Z", NULL, "outbound", "BTC", 1000000, 0, 0, NULL, 50000.0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, "{}", NULL, NULL, NULL, NULL, "2024-03-01T00:00:00Z")
++ transactions ("sell", "ws", "profile", "sink-wallet", "external-sell", NULL, "fingerprint-sell", "2024-03-01T00:00:00Z", NULL, "outbound", "BTC", 1000000, 0, 0, NULL, 50000.0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 1, "{}", NULL, NULL, NULL, NULL, "2024-03-01T00:00:00Z")
