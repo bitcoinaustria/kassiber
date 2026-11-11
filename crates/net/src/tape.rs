@@ -11,6 +11,9 @@
 //! `replay-strict:<file>` has no fallback: a first write no unused recording
 //! began with gets a connection that delivers nothing, so a request the
 //! recording never made fails instead of reading another request's reply.
+//! Each such miss, and every byte a connection writes past what its
+//! recording wrote, is noted in `<file>.misses`, so a harness can fail a
+//! replay that asked for more than the recording answered.
 //! The route's consent and offline checks, the egress observer and the egress
 //! ledger run as they do for a real connection; an endpoint with nothing left
 //! on the tape is refused. Product builds do not compile this module, and an
@@ -46,6 +49,8 @@ struct Replays {
     by_key: HashMap<String, Vec<Option<Recorded>>>,
     /// `replay-strict:`: a first write must match a recording's.
     strict: bool,
+    /// Where a strict replay notes its misses.
+    misses: Option<std::path::PathBuf>,
 }
 
 #[derive(Clone, Default)]
@@ -53,6 +58,9 @@ pub(crate) struct Recorded {
     attempts: u32,
     failure: Option<String>,
     first_write: Option<Vec<u8>>,
+    /// Bytes the recording wrote, and (replaying) the bytes written so far.
+    recorded_written: usize,
+    replay_written: usize,
     events: VecDeque<Event>,
 }
 
@@ -93,6 +101,7 @@ fn mode() -> Option<&'static Mode> {
         };
         let mut replays = load(&std::fs::read_to_string(path).ok()?);
         replays.strict = strict;
+        replays.misses = strict.then(|| format!("{path}.misses").into());
         Some(Mode::Replay(Mutex::new(replays)))
     })
     .as_ref()
@@ -130,7 +139,9 @@ fn load(text: &str) -> Replays {
             ("re", Some(error)) => recorded
                 .events
                 .push_back(Event::ReadError((*error).to_owned())),
-            ("w", _) => {
+            ("w", count) => {
+                recorded.recorded_written +=
+                    count.and_then(|n| n.parse::<usize>().ok()).unwrap_or(0);
                 if recorded.first_write.is_none() {
                     recorded.first_write = Some(parts.get(3).map(|d| unb64(d)).unwrap_or_default());
                 }
@@ -197,8 +208,32 @@ fn bind(key: &str, first: Option<&[u8]>) -> Option<Recorded> {
     let mut replays = replays.lock().unwrap_or_else(|e| e.into_inner());
     let strict = replays.strict;
     let slots = replays.by_key.get_mut(key)?;
-    let index = pick(slots, first, strict)?;
-    slots[index].take()
+    match pick(slots, first, strict) {
+        Some(index) => slots[index].take(),
+        None => {
+            drop(replays);
+            if strict {
+                miss(
+                    key,
+                    &format!("unrecorded request: {}", b64(first.unwrap_or_default())),
+                );
+            }
+            None
+        }
+    }
+}
+
+/// Note a strict replay's miss beside its tape.
+fn miss(key: &str, what: &str) {
+    let Some(Mode::Replay(replays)) = mode() else {
+        return;
+    };
+    let replays = replays.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(path) = &replays.misses {
+        if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
+            let _ = writeln!(file, "{key}\t{what}");
+        }
+    }
 }
 
 /// The slot `bind` takes: the first unused recording whose first write was
@@ -402,9 +437,24 @@ impl Write for Stream {
         match self {
             Stream::Tcp(stream) => stream.write(bytes),
             Stream::Replay(tape) => {
-                tape.lock()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .bound(Some(bytes));
+                let mut tape = tape.lock().unwrap_or_else(|e| e.into_inner());
+                let recorded = tape.bound(Some(bytes));
+                let before = recorded.replay_written;
+                recorded.replay_written += bytes.len();
+                // A strict replay notes writing past the recording once.
+                if before <= recorded.recorded_written
+                    && recorded.replay_written > recorded.recorded_written
+                    && recorded.recorded_written > 0
+                {
+                    let key = format!(
+                        "{} bytes past the recording",
+                        recorded.replay_written - recorded.recorded_written
+                    );
+                    if matches!(mode(), Some(Mode::Replay(r)) if r.lock().unwrap_or_else(|e| e.into_inner()).strict)
+                    {
+                        miss("write", &key);
+                    }
+                }
                 Ok(bytes.len())
             }
         }

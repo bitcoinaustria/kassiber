@@ -1594,6 +1594,19 @@ pub fn replay_with(name: &str, normalize: impl Fn(usize, &mut Value)) {
         } else {
             vec![recorded_window, replay_window]
         };
+        // A strict tape notes what the replay asked that the recording never
+        // answered; asking more is a difference even when its failure is
+        // swallowed.
+        if let Some(tape) = &tape {
+            let misses = PathBuf::from(format!("{}.misses", tape.display()));
+            if let Ok(text) = fs::read_to_string(&misses) {
+                failures.push(format!(
+                    "session {index} {}: requests the recording never answered:\n{}",
+                    session["args"],
+                    clip(&Value::String(text))
+                ));
+            }
+        }
         let stdout = fixed_elapsed(&paths.back(&String::from_utf8_lossy(&out)));
         let stderr = paths.back(&String::from_utf8_lossy(&err));
         let changed = changes(&before, &after, &paths, &windows);
@@ -1788,4 +1801,38 @@ fn mask_number(text: &str, key: &str) -> String {
     }
     out.push_str(rest);
     out
+}
+
+/// A normalizer for Core Lightning syncs: a bookkeeper balance snapshot is
+/// keyed by the day the sync ran (the product's wall clock, with no test
+/// hook), so its day and the hashes derived from it are masked.
+pub fn balance_days(_: usize, outcome: &mut Value) {
+    let Some(changes) = outcome.get_mut("changes").and_then(Value::as_object_mut) else {
+        return;
+    };
+    for change in changes.values_mut() {
+        let Some(rows) = change
+            .pointer_mut("/book/tables/lightning_node_records/upsert")
+            .and_then(Value::as_array_mut)
+        else {
+            continue;
+        };
+        for row in rows {
+            let Some(cells) = row.as_array_mut() else {
+                continue;
+            };
+            if !cells.iter().any(|c| c == "balance_snapshot") {
+                continue;
+            }
+            for cell in cells {
+                let Some(text) = cell.as_str() else { continue };
+                let bytes = text.as_bytes();
+                if text.len() == 64 && hex_run(bytes, 0, 64) {
+                    *cell = json!("<day-hash>");
+                } else if text.len() == 20 && text.ends_with("T00:00:00Z") {
+                    *cell = json!("<day>");
+                }
+            }
+        }
+    }
 }

@@ -8,7 +8,7 @@
 
 mod replay;
 
-use replay::{clock_numbers, replay, replay_served, replay_with};
+use replay::{balance_days, clock_numbers, replay, replay_served, replay_with};
 
 /// `tests/test_rust_backend_kind_aliases.py::test_liquid_esplora_kind_matches_python`
 #[test]
@@ -516,13 +516,19 @@ fn test_two_descriptor_wallets_match_python_all_electrum() {
 /// `tests/test_rust_wallet_sync_lightning.py::test_core_lightning_method_failures_match_python[listinvoices]`
 #[test]
 fn test_core_lightning_method_failures_match_python_listinvoices() {
-    replay("wallet_sync_lightning/test_core_lightning_method_failures_match_python_listinvoices");
+    replay_with(
+        "wallet_sync_lightning/test_core_lightning_method_failures_match_python_listinvoices",
+        balance_days,
+    );
 }
 
 /// `tests/test_rust_wallet_sync_lightning.py::test_core_lightning_wallet_sync_matches_python[wallet]`
 #[test]
 fn test_core_lightning_wallet_sync_matches_python_wallet() {
-    replay("wallet_sync_lightning/test_core_lightning_wallet_sync_matches_python_wallet");
+    replay_with(
+        "wallet_sync_lightning/test_core_lightning_wallet_sync_matches_python_wallet",
+        balance_days,
+    );
 }
 
 /// `tests/test_rust_wallet_sync_lightning.py::test_lnd_wallet_sync_matches_python[wallet]`
