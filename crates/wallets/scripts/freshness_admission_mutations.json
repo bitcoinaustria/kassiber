@@ -5,7 +5,8 @@
     "find": "options.wallet.is_none() && !config::in_sync_all(&config, options.force_full)?",
     "replace": "false && options.wallet.is_none() && !config::in_sync_all(&config, options.force_full)?",
     "expect_failing": [
-      "tests/test_rust_freshness_admission.py::test_freshness_source_specs_match_python"
+      "tests/test_rust_freshness_admission.py::test_freshness_source_specs_match_python",
+      "test_freshness_source_specs_match_python"
     ],
     "rule": "Unscoped discovery skips retired wallets whose history is imported; explicit selection retains them."
   },
@@ -15,7 +16,8 @@
     "find": "Value::Bool(!force)",
     "replace": "Value::Bool(true)",
     "expect_failing": [
-      "tests/test_rust_freshness_admission.py::test_freshness_source_specs_match_python"
+      "tests/test_rust_freshness_admission.py::test_freshness_source_specs_match_python",
+      "test_freshness_source_specs_match_python"
     ],
     "rule": "Forced source requests replace pending work instead of silently reusing it."
   },
@@ -25,7 +27,8 @@
     "find": "&& !file {",
     "replace": "&& (file || !file) {",
     "expect_failing": [
-      "tests/test_rust_freshness_admission.py::test_freshness_source_specs_match_python"
+      "tests/test_rust_freshness_admission.py::test_freshness_source_specs_match_python",
+      "test_freshness_source_specs_match_python"
     ],
     "rule": "Configured file sources are not also discovered as on-chain jobs."
   },
@@ -35,7 +38,8 @@
     "find": "field(&wallet, \"kind\") != &s(\"coreln\")",
     "replace": "field(&wallet, \"kind\") != &s(\"not-a-kind\")",
     "expect_failing": [
-      "tests/test_rust_freshness_admission.py::test_freshness_source_specs_match_python"
+      "tests/test_rust_freshness_admission.py::test_freshness_source_specs_match_python",
+      "test_freshness_source_specs_match_python"
     ],
     "rule": "Core Lightning material does not acquire an on-chain freshness source."
   },
@@ -45,7 +49,8 @@
     "find": "if options.wallet.is_none() {",
     "replace": "if true {",
     "expect_failing": [
-      "tests/test_rust_freshness_admission.py::test_freshness_source_account_routes_order_and_wallet_scope"
+      "tests/test_rust_freshness_admission.py::test_freshness_source_account_routes_order_and_wallet_scope",
+      "test_freshness_source_account_routes_order_and_wallet_scope"
     ],
     "rule": "A wallet-specific action cannot enqueue unrelated account provenance."
   },
@@ -55,7 +60,8 @@
     "find": "force\n                || get(",
     "replace": "false\n                || get(",
     "expect_failing": [
-      "tests/test_rust_freshness_admission.py::test_freshness_source_policy_filter"
+      "tests/test_rust_freshness_admission.py::test_freshness_source_policy_filter",
+      "test_freshness_source_policy_filter"
     ],
     "rule": "An explicit forced policy filter retains all requested source specifications."
   },
@@ -65,7 +71,8 @@
     "find": "journals: !request.wallets_sync && included(request.journals, \"journals\"),",
     "replace": "journals: !request.wallets_sync && request.journals != Some(false),",
     "expect_failing": [
-      "tests/test_rust_freshness_journals.py::test_default_refresh_policy_and_coalesced_pairing[disabled-ui.freshness.run]"
+      "tests/test_rust_freshness_journals.py::test_default_refresh_policy_and_coalesced_pairing[disabled-ui.freshness.run]",
+      "test_default_refresh_policy_and_coalesced_pairing"
     ],
     "rule": "Implicit journal refresh honors the saved journal source policy."
   },
@@ -75,7 +82,8 @@
     "find": "            if let Some(error) = action.refusal((!direct).then_some(jobs.as_slice())) {",
     "replace": "            if let Some(error) = action.refusal((!direct).then_some(jobs.as_slice())).filter(|_| false) {",
     "expect_failing": [
-      "tests/test_rust_freshness_admission.py::test_freshness_admission_refuses_unsupported_whole_shapes"
+      "tests/test_rust_freshness_admission.py::test_freshness_admission_refuses_unsupported_whole_shapes",
+      "test_freshness_admission_refuses_unsupported_whole_shapes"
     ],
     "rule": "A wallet whose route the native service refuses refuses the whole invocation before mutation."
   },
@@ -85,7 +93,8 @@
     "find": ".compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)",
     "replace": ".compare_exchange(false, false, Ordering::AcqRel, Ordering::Acquire)",
     "expect_failing": [
-      "tests/test_rust_freshness_admission.py::test_freshness_admission_execution_slot_released_after_refusal_and_drop"
+      "tests/test_rust_freshness_admission.py::test_freshness_admission_execution_slot_released_after_refusal_and_drop",
+      "test_freshness_admission_execution_slot_released_after_refusal_and_drop"
     ],
     "rule": "A live plan owns the foreground slot until it is dropped."
   },
@@ -95,7 +104,8 @@
     "find": "|| capture(conn, &self.request)? != self.captured",
     "replace": "|| false && capture(conn, &self.request)? != self.captured",
     "expect_failing": [
-      "tests/test_rust_freshness_admission.py::test_freshness_admission_rechecks_scope_config_and_policy"
+      "tests/test_rust_freshness_admission.py::test_freshness_admission_rechecks_scope_config_and_policy",
+      "test_freshness_admission_rechecks_scope_config_and_policy"
     ],
     "rule": "Current source policy and profile selection are rechecked before the next phase."
   },
@@ -105,7 +115,8 @@
     "find": "action.validate(conn, &mut backend, None)?;",
     "replace": "let _ = (&action, &mut backend);",
     "expect_failing": [
-      "tests/test_rust_freshness_admission.py::test_freshness_admission_rejects_different_connection_and_backend"
+      "tests/test_rust_freshness_admission.py::test_freshness_admission_rejects_different_connection_and_backend",
+      "test_freshness_admission_rejects_different_connection_and_backend"
     ],
     "rule": "A captured native action cannot survive a selected backend change."
   },
@@ -115,7 +126,8 @@
     "find": "            // A reference matching one wallet's id and another's label runs\n",
     "replace": "            if request.wallet.is_some() && wallets.len() > 1 {\n                return Err(fallback(\"freshness_ambiguous_wallet\"));\n            }\n            // A reference matching one wallet's id and another's label runs\n",
     "expect_failing": [
-      "tests/test_rust_freshness_admission.py::test_freshness_admission_plans_every_wallet_an_id_or_label_selects"
+      "tests/test_rust_freshness_admission.py::test_freshness_admission_plans_every_wallet_an_id_or_label_selects",
+      "test_freshness_admission_plans_every_wallet_an_id_or_label_selects"
     ],
     "rule": "A reference matching one wallet's id and another's label plans both, as Python does."
   }

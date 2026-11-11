@@ -17,6 +17,12 @@ test-harness = ["kassiber-net/test-observer", "kassiber-ai/test-harness"]
 name = "freshness_fixture"
 required-features = ["test-harness"]
 
+# Replays of the freshness parity tests; they run the fixture in process.
+[[test]]
+name = "freshness"
+path = "tests/freshness/main.rs"
+required-features = ["test-harness"]
+
 [[example]]
 name = "freshness_sync_fixture"
 required-features = ["test-harness"]

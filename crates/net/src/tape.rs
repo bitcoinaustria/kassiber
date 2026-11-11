@@ -13,6 +13,19 @@
 //! on the tape is refused. Product builds do not compile this module, and an
 //! armed tape variable has no meaning there.
 //!
+//! A replay can also hold one response, as a test's loopback server once
+//! held a request to act while it was in flight:
+//! `KASSIBER_TEST_NET_TAPE_HOLD=<dir>` arms the hold when `<dir>/arm`
+//! exists. The first replayed write that contains the arm file's bytes (any
+//! write when it is empty) fires it: the hold creates `<dir>/held`, and
+//! every replayed read from then on waits until `<dir>/release` exists (at
+//! most a minute), as a server that answers nothing while it holds one
+//! request. It fires once per process.
+//!
+//! `KASSIBER_TEST_NET_TAPE_WRITES=<file>` appends every replayed write to
+//! the file, one base64 line each, so a test can count the requests a replay
+//! made: the recording's server counted the ones it received.
+//!
 //! The tape is one line per event, tab separated, payloads base64:
 //! `open id tls host port`, `attempts id n`, `fail id error`, `r id bytes`,
 //! `w id count bytes`, `re id error`, `eof id`.
@@ -21,7 +34,8 @@ use std::collections::{HashMap, VecDeque};
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Write};
 use std::net::TcpStream;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
@@ -30,6 +44,8 @@ use base64::Engine;
 use crate::{Connection, Error};
 
 const VARIABLE: &str = "KASSIBER_TEST_NET_TAPE";
+const HOLD_VARIABLE: &str = "KASSIBER_TEST_NET_TAPE_HOLD";
+const WRITES_VARIABLE: &str = "KASSIBER_TEST_NET_TAPE_WRITES";
 
 enum Mode {
     Record(Mutex<File>),
@@ -49,6 +65,8 @@ pub(crate) struct Recorded {
     failure: Option<String>,
     first_write: Option<Vec<u8>>,
     events: VecDeque<Event>,
+    /// The next read waits for the hold's release.
+    held: bool,
 }
 
 #[derive(Clone)]
@@ -59,6 +77,56 @@ enum Event {
 }
 
 static MODE: OnceLock<Option<Mode>> = OnceLock::new();
+static HOLD: OnceLock<Option<PathBuf>> = OnceLock::new();
+static HOLD_FIRED: AtomicBool = AtomicBool::new(false);
+static WRITES: OnceLock<Option<Mutex<File>>> = OnceLock::new();
+
+/// Note one replayed write for the test.
+fn log_write(bytes: &[u8]) {
+    let log = WRITES.get_or_init(|| {
+        let path = std::env::var_os(WRITES_VARIABLE)?;
+        let file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .ok()?;
+        Some(Mutex::new(file))
+    });
+    if let Some(file) = log {
+        let mut file = file.lock().unwrap_or_else(|e| e.into_inner());
+        let _ = writeln!(file, "{}", b64(bytes));
+        let _ = file.flush();
+    }
+}
+
+fn hold_dir() -> Option<&'static PathBuf> {
+    HOLD.get_or_init(|| std::env::var_os(HOLD_VARIABLE).map(PathBuf::from))
+        .as_ref()
+}
+
+/// Whether this write fires the armed hold (once per process).
+fn fires(dir: &std::path::Path, bytes: &[u8]) -> bool {
+    if HOLD_FIRED.load(Ordering::SeqCst) {
+        return false;
+    }
+    let Ok(pattern) = std::fs::read(dir.join("arm")) else {
+        return false;
+    };
+    let matches = pattern.is_empty() || bytes.windows(pattern.len()).any(|w| w == pattern);
+    if !matches || HOLD_FIRED.swap(true, Ordering::SeqCst) {
+        return false;
+    }
+    let _ = std::fs::write(dir.join("held"), b"");
+    true
+}
+
+/// Wait for the hold's release, at most a minute.
+fn wait_for_release(dir: &std::path::Path) {
+    let deadline = std::time::Instant::now() + Duration::from_secs(60);
+    while !dir.join("release").exists() && std::time::Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(5));
+    }
+}
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
 fn b64(bytes: &[u8]) -> String {
@@ -357,6 +425,14 @@ impl Read for Stream {
             Stream::Replay(tape) => {
                 let mut tape = tape.lock().unwrap_or_else(|e| e.into_inner());
                 let recorded = tape.bound(None);
+                // Once fired, the hold stops every replayed answer, as the
+                // recording's loopback chain answered nothing while it held
+                // one request.
+                if std::mem::take(&mut recorded.held) || HOLD_FIRED.load(Ordering::SeqCst) {
+                    if let Some(dir) = hold_dir() {
+                        wait_for_release(dir);
+                    }
+                }
                 loop {
                     match recorded.events.pop_front() {
                         None => return Ok(0),
@@ -384,9 +460,12 @@ impl Write for Stream {
         match self {
             Stream::Tcp(stream) => stream.write(bytes),
             Stream::Replay(tape) => {
-                tape.lock()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .bound(Some(bytes));
+                let mut tape = tape.lock().unwrap_or_else(|e| e.into_inner());
+                let recorded = tape.bound(Some(bytes));
+                log_write(bytes);
+                if hold_dir().is_some_and(|dir| fires(dir, bytes)) {
+                    recorded.held = true;
+                }
                 Ok(bytes.len())
             }
         }
@@ -474,5 +553,20 @@ mod tests {
         let second = slots[1].take().unwrap();
         assert!(matches!(decode_error(second.failure.as_deref().unwrap()),
             Error::Io(e) if e.kind() == io::ErrorKind::ConnectionRefused));
+    }
+
+    #[test]
+    fn a_hold_fires_once_on_its_pattern() {
+        let dir = std::env::temp_dir().join(format!("kassiber-tape-hold-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        assert!(!fires(&dir, b"GET /scripthash/ab"), "not armed");
+        std::fs::write(dir.join("arm"), b"/scripthash/").unwrap();
+        assert!(!fires(&dir, b"GET /blocks/tip/height"));
+        assert!(fires(&dir, b"GET /scripthash/ab/txs"));
+        assert!(dir.join("held").exists());
+        assert!(!fires(&dir, b"GET /scripthash/cd/txs"), "once per process");
+        std::fs::write(dir.join("release"), b"").unwrap();
+        wait_for_release(&dir);
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

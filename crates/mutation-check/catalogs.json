@@ -1113,9 +1113,19 @@
    "cargo": [
     "-p",
     "kassiber-wallets",
+    "-p",
+    "kassiber",
     "--features",
-    "test-harness"
-   ]
+    "kassiber-wallets/test-harness,kassiber/test-harness"
+   ],
+   "resolve_target": {
+    "tests_dir": "crates/kassiber/tests",
+    "extra": {
+     "freshness": "crates/wallets/tests/freshness/main.rs",
+     "freshness_daemon": "crates/kassiber/tests/freshness_daemon/main.rs"
+    }
+   },
+   "timeout_secs": 1200
   },
   {
    "name": "wallets-lwk",
