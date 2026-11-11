@@ -290,6 +290,60 @@ session is listed with its reason and the Rust functions only it covered, in
 `dropped.tsv` beside the recordings. A dropped session that is the only
 coverage of a tax, export or stored-data path gets fixed, not dropped.
 
+### Rust-blessed export goldens (owner sign-off required)
+
+These goldens record Rust's output where the shared cross-country export
+design changed the layout from Python: titles, sheet and file names, column
+headers, file kinds (a CSV bundle instead of one stacked CSV), PDF engine and
+report language. Their tests failed under the recording because they assert
+Python's layout. Every figure was compared with Python's output of the same
+process at the same base: each session was replayed against this checkout's
+Python reference (with the test no-egress guard) from the recorded starting
+state, and both sides' JSON stdout, CSV, XLSX values, PDF text and changed
+book rows were reduced to multisets of normalised figures (every number,
+amount, msat, rate, fiat value, gain, tax figure, count and date), layout
+aside. Book rows were compared row by row with ids, clock readings and
+artifact hashes masked; all were equal. Both recording runs of each process
+gave identical figures, so each row covers its two sessions. They need owner
+sign-off.
+
+"Figures" counts all figure tokens / distinct values, Rust then Python. A
+one-sided value is a figure the other side's layout does not print; none is a
+different value for the same quantity, except the two fixed below.
+
+| Test (process) | Artifacts | Figures compared | Result |
+| --- | --- | --- | --- |
+| `test_cli_smoke` `test_07a_export_pdf_report` (`reports export-pdf`) | stdout JSON, full report PDF, 2 book rows | 230/71 vs 206/68 | equal; Rust only: its balance chart's BTC axis ticks (0.02, 0.04, 0.06) |
+| `test_cli_smoke` `test_07ab_export_csv_and_xlsx_report` (`reports export-csv`) | stdout JSON, CSV bundle (ZIP, 10 tables and manifest) vs one stacked CSV, 2 book rows | 259/81 vs 286/121 | equal; per-section row counts equal; Rust only: `rows` 45 (bundle rows) vs Python's 74 (stacked lines); Python only: the `sat` float columns, balance-history period ends, the transactions table's fiat value and fiat fee columns |
+| `test_cli_smoke` `test_07ac_export_xlsx_self_verifying` (`reports export-xlsx`) | stdout JSON, XLSX with Verify sheet, 2 book rows | 319/89 vs 341/127 | equal; the same kinds of one-sided values as 07ab |
+| `test_cli_smoke` `test_07ad_verify_xlsx_reconciles_including_income` (`reports export-xlsx`) | stdout JSON, XLSX, 2 book rows | 212/49 vs 231/63 | equal; Rust `rows` 22 vs 51; Python only: `sat` columns, period ends |
+| `test_cli_smoke` `test_07ae_transactions_export` (`transactions export`, XLSX) | stdout JSON, XLSX | 41/32 vs 41/32 | equal multisets |
+| `test_cli_smoke` `test_07ae_transactions_export` (`transactions export`, CSV) | stdout JSON, CSV | 41/32 vs 41/32 | equal multisets |
+| `test_report_year_handoff` `test_balances_use_the_year_end_rate` (`reports export-year-handoff`) | stdout JSON, year handoff XLSX (9 sheets), 2 book rows | recorded: 445/95 vs 471/105; fixed: 466/105 vs 471/105 | **differed, fixed:** the recording's Transactions sheet held its `sats` cells as the text `Decimal('50000000')` where Python writes 50000000. Fixed in Rust (whole satoshis as counts, msat fractions as numbers); afterwards the distinct figures are equal, only the year in Python's sheet titles repeats more. Re-record both sessions |
+| `test_source_funds_cli` `test_austrian_eur_basic_source_funds_pdf_context` (`reports export-source-funds-pdf`) | stdout JSON, Austrian source-of-funds PDF (German) | 138/18 vs 146/24 | equal; Python only: its 100 % source-share figure, page numbers, digit-only fragments of wrapped txids |
+| `test_source_funds_cli` `test_report_options_precision_masking_and_section_omission` (`reports export-source-funds-pdf`) | stdout JSON, PDF in sats with the recipient masked | 97/11 vs 104/12 | equal; Python only: page count. Rust prints no recipient line at all, so the recipient stays masked |
+| `test_source_funds_cli` `test_source_funds_review_gates_snapshot_and_pdf` (`reports source-funds`) | stdout JSON, 2 book rows | 356/53 vs 356/53 | identical to Python |
+| `test_source_funds_cli` `test_source_funds_review_gates_snapshot_and_pdf` (`reports export-source-funds-pdf`) | stdout JSON, PDF | 187/25 vs 194/28 | equal; Python only: 100 % share, page numbers |
+| `test_daemon_smoke` `test_daemon_report_export_kinds_write_managed_files` (`daemon`) | NDJSON stdout (full and summary PDF exports, portfolio summary, balance history), both PDFs, 4 book rows | 490/95 vs 429/84 | equal; Rust only: chart ticks, the summary's E 1kv Kennzahl table (all 0,00), 365-day weighted holding period, the period-end cost basis 5.666,67 (Python's stdout: 5666.666666666667); Python only: chart ticks, the long-term-days sentinel 9223372036854775807. The recording has no after state (the failing test removed its directory first), so the PDFs come from a replay on this checkout's binary, whose stdout equals the recording byte for byte. Re-record both sessions |
+| `test_review_regressions` `test_austrian_e1kv_report_exports_summary_csv_pdf_and_xlsx` (`reports austrian-e1kv`) | stdout JSON | 200/38 vs 200/38 | identical to Python |
+| same (`reports austrian-tax-summary`) | stdout JSON | 200/38 vs 200/38 | identical to Python |
+| same (`--format csv reports austrian-e1kv`) | CSV | 24/17 vs 24/17 | identical content; Rust writes the file 0600, Python 0644 |
+| same (`reports export-austrian-e1kv-pdf`) | stdout JSON, E 1kv PDF (German), 2 book rows | recorded: 180/55 vs 186/46; fixed: 180/54 vs 186/46 | **differed, fixed:** the Disposals table ran 3 pt past the A4 edge, so its Kennzahl 174 read as "17". Fixed in Rust (a crowded table hyphenates its headers); afterwards Rust only: section numbers 1.1–4.5 and the year 2021 in the Alt/Neu note; Python only: its table of contents and page numbers. Re-record both sessions |
+| `test_report_cross_check` `test_edits_in_the_tool_show_as_differences` (`reports cross-check`) | stdout JSON | 150/46 vs 150/46 | identical to Python |
+| same (`--source Kraken`) | stdout JSON | 106/40 vs 106/40 | identical to Python |
+| same (`--xlsx`) | stdout JSON, XLSX | 115/44 vs 115/44 | equal multisets |
+
+Out of scope: the 11 dropped sessions of
+`test_rust_shell_parity` `test_network_configuration_and_partition_export_through_hybrid`,
+`test_rust_backup_desktop` `test_export_success_and_io_refusal_match_raw_jsonl`,
+`test_rust_write_transaction_locks` `test_sqlcipher_writes_wait_for_a_held_writer`
+and `test_rust_backup_services` (`test_export_manifest_matches_python_without_attachment_hashes`,
+`test_sqlcipher_round_trips_both_directions_preserve_every_object_and_sidecar[True]`).
+Their tests failed when an encrypted export (partition split or `backup
+export` with a passphrase descriptor) aborted with `memory allocation of
+1099511627776 bytes failed` (SIGABRT) in one recording run, not on export
+layout.
+
 ## Harnesses
 
 The regtest and demo harnesses are Python:
