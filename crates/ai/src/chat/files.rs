@@ -142,6 +142,7 @@ pub fn image_view(path: &Path) -> std::io::Result<ChatFileView> {
 }
 
 /// `shutil.which(name)`.
+#[cfg(unix)]
 fn which(name: &str) -> Option<PathBuf> {
     use std::os::unix::fs::PermissionsExt;
     let path = std::env::var_os("PATH")?;
@@ -151,6 +152,13 @@ fn which(name: &str) -> Option<PathBuf> {
             std::fs::metadata(candidate)
                 .is_ok_and(|meta| meta.is_file() && meta.permissions().mode() & 0o111 != 0)
         })
+}
+
+/// `shutil.which(name)` on Windows: the current directory first, then PATH,
+/// each with every PATHEXT suffix, as kassiber-net resolves it for Python 3.11.
+#[cfg(not(unix))]
+fn which(name: &str) -> Option<PathBuf> {
+    kassiber_net::which(name)
 }
 
 /// `subprocess.run(argv, capture_output=True, timeout=20, check=False)`:
@@ -278,6 +286,7 @@ fn pdf_page_images(path: &Path, last_page: u64) -> Vec<Value> {
 }
 
 /// `tempfile.TemporaryDirectory(prefix="kassiber-chat-pdf-")`.
+#[cfg(unix)]
 fn private_dir() -> std::io::Result<PathBuf> {
     use std::os::unix::fs::DirBuilderExt;
     let mut random = [0u8; 8];
@@ -286,6 +295,27 @@ fn private_dir() -> std::io::Result<PathBuf> {
     let path = std::env::temp_dir().join(format!("kassiber-chat-pdf-{name}"));
     std::fs::DirBuilder::new().mode(0o700).create(&path)?;
     Ok(path)
+}
+
+/// The same on Windows, where `mkdtemp` ignores the mode (the per-user temp
+/// directory is already private) and there is no `/dev/urandom`: an
+/// OS-seeded name, retried on a collision like `mkdtemp`.
+#[cfg(not(unix))]
+fn private_dir() -> std::io::Result<PathBuf> {
+    use std::hash::BuildHasher;
+    for _ in 0..100 {
+        let random = std::collections::hash_map::RandomState::new().hash_one(std::process::id());
+        let path = std::env::temp_dir().join(format!("kassiber-chat-pdf-{random:016x}"));
+        match std::fs::create_dir(&path) {
+            Ok(()) => return Ok(path),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error),
+        }
+    }
+    Err(std::io::Error::new(
+        std::io::ErrorKind::AlreadyExists,
+        "no usable temporary name",
+    ))
 }
 
 /// `_page_span(last, total)`.
