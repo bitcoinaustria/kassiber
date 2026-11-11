@@ -1135,6 +1135,13 @@ impl kassiber_setup::Sources for ReportSources {
         }
         kassiber_setup::SystemSources.now(conn)
     }
+    fn pinned_now(&self) -> Option<String> {
+        #[cfg(feature = "test-harness")]
+        if let Ok(stamp) = std::env::var("KASSIBER_RUST_TEST_REPORT_TIME") {
+            return Some(stamp);
+        }
+        None
+    }
 }
 /// Test builds may pin import identities and clocks for wire comparisons.
 fn import_identity() -> Option<kassiber_wallets::file_import::Identity> {

@@ -2413,15 +2413,15 @@ $ daemon
 > #171
 < {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [3293 bytes fnv128 9f5547171d75fb7958063dac56cccae5]
 > #172
-< <a balance history reply; its rows run to today>
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [6878 bytes fnv128 6edf3ca4b892afc732dad6ea38b20a7c]
 > #173
 < {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [3301 bytes fnv128 bd15dd4faf341c1c7f6714ae66120cd3]
 > #174
-< <a balance history reply; its rows run to today>
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [6878 bytes fnv128 6edf464dee92afc732dad6ea3cc6b306]
 > #175
 < {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [3301 bytes fnv128 bd15e66ee5341c1c7f6714ae69d1b0d5]
 > #176
-< <a balance history reply; its rows run to today>
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [2764 bytes fnv128 8a24b826876507d279ba0780215fac0e]
 > #177
 < {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [3301 bytes fnv128 bd15ef7b13341c1c7f6714ae6d8606c7]
 > #178

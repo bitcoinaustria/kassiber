@@ -67,7 +67,18 @@ impl Sandbox {
             .tempdir()
             .unwrap();
         // Disposable roots must not hold a symlink on their way.
-        let base = dir.path().canonicalize().unwrap();
+        let temp = dir.path().canonicalize().unwrap();
+        // Text tables pad to the paths they show, so every machine gets a
+        // sandbox path of one length before it reads as <SANDBOX>.
+        const BASE_LEN: usize = 160;
+        let used = temp.to_string_lossy().len() + 1;
+        assert!(
+            used < BASE_LEN,
+            "temporary directory {} is too long for a {BASE_LEN}-byte sandbox path",
+            temp.display()
+        );
+        let base = temp.join("s".repeat(BASE_LEN - used));
+        std::fs::create_dir(&base).unwrap();
         for sub in ["owners", "xdg-data", "xdg-config", "xdg-state", "state"] {
             std::fs::create_dir_all(base.join(sub)).unwrap();
         }
@@ -700,6 +711,11 @@ impl Transcript {
             .join("tests/black_box/golden")
             .join(format!("{}.txt", self.name));
         if std::env::var_os("KASSIBER_BLESS").is_some_and(|v| v == "1") {
+            // Goldens are reviewed changes, never rewritten by a CI run.
+            assert!(
+                std::env::var_os("CI").is_none(),
+                "KASSIBER_BLESS=1 is refused under CI"
+            );
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
             std::fs::write(&path, &self.text).unwrap();
             return;
@@ -1179,23 +1195,4 @@ impl Live {
         }
         assert_eq!((status.code(), stderr.as_str()), (Some(0), ""));
     }
-}
-
-/// Reply lines of a balance history read: its rows run to today, so their
-/// periods and counts move with the calendar. The line keeps only that it
-/// was such a reply.
-pub fn calendar_relative(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    for line in text.split_inclusive('\n') {
-        let reply = line.starts_with("< ");
-        if reply
-            && (line.contains("\"kind\":\"ui.reports.balance_history\"")
-                || line.contains("\\\"kind\\\":\\\"ui.reports.balance_history\\\""))
-        {
-            out.push_str("< <a balance history reply; its rows run to today>\n");
-        } else {
-            out.push_str(line);
-        }
-    }
-    out
 }

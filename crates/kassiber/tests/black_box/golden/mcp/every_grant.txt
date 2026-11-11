@@ -484,7 +484,7 @@ $ mcp serve --workspace w --profile p
 < {"jsonrpc":"2.0","id":"c85","result":{"content":[{"type":"text","text":"{\"tool\":\"maintenance_co… [3231 bytes fnv128 3f0c604c846bfccca28e078be6b08a13]
 < {"jsonrpc":"2.0","id":"c86","result":{"content":[{"type":"text","text":"book_network_review_requir… [618 bytes fnv128 d6e97c119113a666214f075198e65c7f]
 < {"jsonrpc":"2.0","id":"c87","result":{"content":[{"type":"text","text":"validation: AI tool argume… [448 bytes fnv128 8c81989f1fd0129dd9d57957678ceaca]
-< {"jsonrpc":"2.0","id":"c88","result":{"content":[{"type":"text","text":"{\"tool\":\"source_funds_s… [1143 bytes fnv128 9491d6c7108d50b45610a46180b3ed76]
+< {"jsonrpc":"2.0","id":"c88","result":{"content":[{"type":"text","text":"{\"tool\":\"source_funds_s… [1203 bytes fnv128 1c02cf29d32a531afef05b172cded2ca]
 < {"jsonrpc":"2.0","id":"c89","result":{"content":[{"type":"text","text":"validation: AI tool argume… [444 bytes fnv128 484eeedf91f5483e82a2c226c22b627a]
 < {"jsonrpc":"2.0","id":"c90","result":{"content":[{"type":"text","text":"validation: Provide exactl… [416 bytes fnv128 a4d96a17839a583afee098bdb8758d10]
 < {"jsonrpc":"2.0","id":"c91","result":{"content":[{"type":"text","text":"{\"tool\":\"source_funds_s… [1021 bytes fnv128 5eb3a68d6a4e80580d29738d250e1628]
@@ -659,7 +659,7 @@ $ mcp serve --workspace w --profile p
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:regtest:record:g" | node_id=t:"bitcoin:regtest:record:g"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:regtest:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" | node_id=t:"bitcoin:regtest:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"c" | node_id=t:"bitcoin:main:record:c"
-… [38403 bytes, 73 lines fnv128 253ed61787949879e8d483118bbd0f6d]
+… [38433 bytes, 73 lines fnv128 df4f8210921fdec0960154f70e26055d]
 # grant operator, access restricted
 $ mcp serve --workspace w --profile p
 < {"jsonrpc":"2.0","id":"init","result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},… [1345 bytes fnv128 f4470e9af02e31018f5c1499a5466aec]
@@ -762,7 +762,7 @@ $ mcp serve --workspace w --profile p
 < {"jsonrpc":"2.0","id":"c85","result":{"content":[{"type":"text","text":"{\"tool\":\"maintenance_co… [3231 bytes fnv128 3f0c604c846bfccca28e078be6b08a13]
 < {"jsonrpc":"2.0","id":"c86","result":{"content":[{"type":"text","text":"book_network_review_requir… [618 bytes fnv128 d6e97c119113a666214f075198e65c7f]
 < {"jsonrpc":"2.0","id":"c87","result":{"content":[{"type":"text","text":"validation: AI tool argume… [448 bytes fnv128 8c81989f1fd0129dd9d57957678ceaca]
-< {"jsonrpc":"2.0","id":"c88","result":{"content":[{"type":"text","text":"{\"tool\":\"source_funds_s… [1143 bytes fnv128 3c43d714849109c2044b89a995302462]
+< {"jsonrpc":"2.0","id":"c88","result":{"content":[{"type":"text","text":"{\"tool\":\"source_funds_s… [1203 bytes fnv128 58fd09b67713adaee22a52c95fe0eff2]
 < {"jsonrpc":"2.0","id":"c89","result":{"content":[{"type":"text","text":"validation: AI tool argume… [444 bytes fnv128 484eeedf91f5483e82a2c226c22b627a]
 < {"jsonrpc":"2.0","id":"c90","result":{"content":[{"type":"text","text":"validation: Provide exactl… [416 bytes fnv128 a4d96a17839a583afee098bdb8758d10]
 < {"jsonrpc":"2.0","id":"c91","result":{"content":[{"type":"text","text":"{\"tool\":\"source_funds_s… [1021 bytes fnv128 5eb3a68d6a4e80580d29738d250e1628]
@@ -913,7 +913,7 @@ $ mcp serve --workspace w --profile p
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:regtest:record:g" | node_id=t:"bitcoin:regtest:record:g"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:regtest:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" | node_id=t:"bitcoin:regtest:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"c" | node_id=t:"bitcoin:main:record:c"
-… [38403 bytes, 73 lines fnv128 27ec8fb2c534ae6db8d3c242f50e335d]
+… [38433 bytes, 73 lines fnv128 3e419ce96a0986759f9c6936c5593c8d]
 # grant accounting_decisions, access full
 $ mcp serve --workspace w --profile p
 < {"jsonrpc":"2.0","id":"init","result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},… [1387 bytes fnv128 f2c22ff542a7aa846f44840f303a25e0]
@@ -1018,7 +1018,7 @@ $ mcp serve --workspace w --profile p
 < {"jsonrpc":"2.0","id":"c87","result":{"content":[{"type":"text","text":"{\"tool\":\"maintenance_co… [3231 bytes fnv128 f35b6746edce0cd0f952f88730317f0d]
 < {"jsonrpc":"2.0","id":"c88","result":{"content":[{"type":"text","text":"book_network_review_requir… [618 bytes fnv128 e688a55f8ff9fccef7aeb23a90b9a039]
 < {"jsonrpc":"2.0","id":"c89","result":{"content":[{"type":"text","text":"validation: AI tool argume… [448 bytes fnv128 8d23ac757a4293c9336d18ba8b46e840]
-< {"jsonrpc":"2.0","id":"c90","result":{"content":[{"type":"text","text":"{\"tool\":\"source_funds_s… [1143 bytes fnv128 e62561c538dbca5c76fcfd2f9e6a2ca1]
+< {"jsonrpc":"2.0","id":"c90","result":{"content":[{"type":"text","text":"{\"tool\":\"source_funds_s… [1203 bytes fnv128 278ba83f1423ba7d005bc5e166efc21d]
 < {"jsonrpc":"2.0","id":"c91","result":{"content":[{"type":"text","text":"validation: AI tool argume… [444 bytes fnv128 0cf313947e96a0286459f96443d02abf]
 < {"jsonrpc":"2.0","id":"c92","result":{"content":[{"type":"text","text":"validation: Provide exactl… [416 bytes fnv128 8fe72e59d6ed4017c0613803e8c62b9a]
 < {"jsonrpc":"2.0","id":"c93","result":{"content":[{"type":"text","text":"validation: AI tool argume… [444 bytes fnv128 2e23673ad04733eebafc0314d9f044ed]
@@ -1238,7 +1238,7 @@ $ mcp serve --workspace w --profile p
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:regtest:record:g" | node_id=t:"bitcoin:regtest:record:g"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:regtest:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" | node_id=t:"bitcoin:regtest:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"c" | node_id=t:"bitcoin:main:record:c"
-… [39403 bytes, 75 lines fnv128 5e76d87cbcafba94a79b842ef6722efa]
+… [39433 bytes, 75 lines fnv128 7d5d37e5e8bbbd4190ae1713c755cb6a]
 # grant accounting_decisions, access restricted
 $ mcp serve --workspace w --profile p
 < {"jsonrpc":"2.0","id":"init","result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},… [1387 bytes fnv128 f2c22ff542a7aa846f44840f303a25e0]
@@ -1343,7 +1343,7 @@ $ mcp serve --workspace w --profile p
 < {"jsonrpc":"2.0","id":"c87","result":{"content":[{"type":"text","text":"{\"tool\":\"maintenance_co… [3231 bytes fnv128 f35b6746edce0cd0f952f88730317f0d]
 < {"jsonrpc":"2.0","id":"c88","result":{"content":[{"type":"text","text":"book_network_review_requir… [618 bytes fnv128 e688a55f8ff9fccef7aeb23a90b9a039]
 < {"jsonrpc":"2.0","id":"c89","result":{"content":[{"type":"text","text":"validation: AI tool argume… [448 bytes fnv128 8d23ac757a4293c9336d18ba8b46e840]
-< {"jsonrpc":"2.0","id":"c90","result":{"content":[{"type":"text","text":"{\"tool\":\"source_funds_s… [1143 bytes fnv128 4ef4d93a92717c422758ee69f2fa1eb9]
+< {"jsonrpc":"2.0","id":"c90","result":{"content":[{"type":"text","text":"{\"tool\":\"source_funds_s… [1203 bytes fnv128 a7bce097c8363c184ebf489d054563ad]
 < {"jsonrpc":"2.0","id":"c91","result":{"content":[{"type":"text","text":"validation: AI tool argume… [444 bytes fnv128 0cf313947e96a0286459f96443d02abf]
 < {"jsonrpc":"2.0","id":"c92","result":{"content":[{"type":"text","text":"validation: Provide exactl… [416 bytes fnv128 8fe72e59d6ed4017c0613803e8c62b9a]
 < {"jsonrpc":"2.0","id":"c93","result":{"content":[{"type":"text","text":"validation: AI tool argume… [444 bytes fnv128 2e23673ad04733eebafc0314d9f044ed]
@@ -1537,4 +1537,4 @@ $ mcp serve --workspace w --profile p
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:regtest:record:g" | node_id=t:"bitcoin:regtest:record:g"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:regtest:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" | node_id=t:"bitcoin:regtest:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"c" | node_id=t:"bitcoin:main:record:c"
-… [38626 bytes, 74 lines fnv128 8b0b5294400b18f3adcc85954a3bc176]
+… [38656 bytes, 74 lines fnv128 ab60a43fccbaff0d0308b8ce6ead8b66]
