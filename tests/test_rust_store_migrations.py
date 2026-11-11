@@ -10,6 +10,7 @@ import os
 import shutil
 from pathlib import Path
 import sqlite3
+from contextlib import closing
 import subprocess
 import tempfile
 from unittest.mock import patch
@@ -140,7 +141,9 @@ def decode_historical(root, fixture, encrypted, *, without_legacy_pair=False):
         # Explicit test variant: remove only the reviewed compatibility row
         # whose authored consolidation belongs to R2. Keep observations and
         # concurrent authored components exactly as the historical book had them.
-        with sqlite3.connect(database) as conn:
+        # Closed, not only committed: on SQLite without the WAL-reset fix the
+        # next open switches the book out of WAL, which a live handle blocks.
+        with closing(sqlite3.connect(database)) as conn, conn:
             assert conn.execute("SELECT COUNT(*) FROM transaction_pairs").fetchone()[0] == 1
             conn.execute("DELETE FROM transaction_pairs")
     if encrypted:
