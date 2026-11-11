@@ -24,9 +24,17 @@ inherit the variables but nothing enforces them there.
 
 from __future__ import annotations
 
+import faulthandler
 import importlib.abc
 import os
+import signal
 import sys
+
+# A test that gives up waiting on a daemon asks it for every thread's stack
+# (`_read_daemon_line` in tests/test_daemon_smoke.py), so a stall that only
+# a CI runner shows names its cause instead of "no payload within 5.0s".
+if hasattr(signal, "SIGUSR1"):
+    faulthandler.register(signal.SIGUSR1, all_threads=True)
 
 # Module-global on purpose. Without a live reference the context manager is
 # garbage-collected, its `finally` runs, and the guard silently uninstalls
