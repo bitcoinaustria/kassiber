@@ -42,7 +42,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y apt-utils dpkg-dev gnupg
       - name: Run Debian and APT integration tests
-        run: python3 -m unittest tests.test_linux_packaging -v
+        # Standard-library tests of the packaging scripts, run isolated
+        # (python3 -I) like the regtest harness; discovery puts the checkout
+        # on the import path.
+        run: python3 -I -m unittest discover -s tests -t . -p test_linux_packaging.py -v
 
   rpm:
     name: RPM and DNF lifecycle — Fedora ${{ matrix.fedora }}
@@ -78,7 +81,7 @@ jobs:
                 python3 \
                 rpm-build \
                 rpm-sign
-              python3 -m unittest tests.test_rpm_packaging -v
+              python3 -I -m unittest discover -s tests -t . -p test_rpm_packaging.py -v
             '
 
   aur:
@@ -155,4 +158,8 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           persist-credentials: false
-      - run: python3 -m unittest tests.test_linux_channel_renderers -v
+      # The AUR and Nix renderers are the release tool's render-aur and
+      # render-nix; the tests find it through KASSIBER_RELEASE_TOOL.
+      - name: Build the release tool
+        uses: ./.github/actions/release-tool
+      - run: python3 -I -m unittest discover -s tests -t . -p test_linux_channel_renderers.py -v
