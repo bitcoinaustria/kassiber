@@ -1,8 +1,12 @@
 # Removing Python
 
-**Status:** Phase 1 (inventory and plan), 2026-11-10. The owner decided on
-2026-11-10 that Kassiber is Rust only. Nothing here is done yet. Phase 2 waits
-for the [open decisions](#open-decisions).
+**Status:** Implemented on `t3code/stack-b9-remove-python`, 2026-11-11. The
+owner decided on 2026-11-10 that Kassiber is Rust only; steps 0–7 of the
+[order of operations](#order-of-operations) and its final gate are done. The
+[decisions](#open-decisions) section keeps the phase-1 options as they were
+put to the owner; the sections above describe what was built. Still open: the
+owner's sign-off on the
+[Rust-blessed export goldens](#rust-blessed-export-goldens-owner-sign-off-required).
 **Base:** `t3code/stack-b8-switch` at 28a7c03e2. B8 already ships the Rust binary
 as the CLI and the desktop sidecar. This is stage R7's "delete Python" step in
 [plan 21](21-rust-backend.md#stages).
