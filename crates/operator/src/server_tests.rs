@@ -114,11 +114,15 @@ impl NativeAuth for Signed {
 }
 
 fn broker(fake: &Arc<Fake>, native: Arc<dyn NativeAuth>) -> (BrokerServer, Closing) {
-    let service = OperatorService::new(
-        "generation",
-        Arc::clone(fake) as Arc<dyn Backend>,
-        ok_runner(),
-    );
+    broker_with(fake, native, ok_runner())
+}
+
+fn broker_with(
+    fake: &Arc<Fake>,
+    native: Arc<dyn NativeAuth>,
+    runner: Arc<dyn crate::service::Runner>,
+) -> (BrokerServer, Closing) {
+    let service = OperatorService::new("generation", Arc::clone(fake) as Arc<dyn Backend>, runner);
     let server = BrokerServer::detached(ServerParts {
         generation: "generation".into(),
         service: service.clone(),
@@ -579,7 +583,23 @@ fn test_remember_unlock_reuses_the_fresh_authentication_as_its_passphrase() {
 fn test_multiple_secret_frames_follow_serialized_label_order() {
     let tmp = tempfile::tempdir().unwrap();
     let fake = Fake::new();
-    let (server, closing) = broker(&fake, Arc::new(NativeAuthUnavailable));
+    // The worker may dispatch before the test looks, taking the secrets off
+    // the queued operation, so check what the dispatch itself carries.
+    let (dispatched, received) = std::sync::mpsc::channel();
+    let dispatched = Mutex::new(dispatched);
+    let runner = move |dispatch: &crate::service::Dispatch, _: &[u8]| {
+        let secrets: Vec<(String, Vec<u8>)> = dispatch
+            .secret_arguments
+            .iter()
+            .map(|(label, secret)| (label.clone(), secret.to_vec()))
+            .collect();
+        let _ = dispatched
+            .lock()
+            .unwrap()
+            .send((dispatch.id.clone(), secrets));
+        Ok(crate::service::OperationResult::new(0, "", ""))
+    };
+    let (server, closing) = broker_with(&fake, Arc::new(NativeAuthUnavailable), Arc::new(runner));
     unlock(&closing, &root(&tmp)).unwrap();
     let mut channel = channel();
     channel
@@ -616,18 +636,15 @@ fn test_multiple_secret_frames_follow_serialized_label_order() {
         get(&channel.0.sent[0], "admin_challenge"),
         Some(&Value::Null)
     );
-    let state = closing.state();
-    let operation = &state.operations[&text(&data(&response), "operation_id")];
-    let secrets: Vec<(&str, &[u8])> = operation
-        .secret_arguments
-        .iter()
-        .map(|(label, secret)| (label.as_str(), secret.as_slice()))
-        .collect();
+    let (operation_id, secrets) = received
+        .recv_timeout(std::time::Duration::from_secs(30))
+        .expect("the operation was dispatched");
+    assert_eq!(operation_id, text(&data(&response), "operation_id"));
     assert_eq!(
         secrets,
         [
-            ("broker-secret-a", &b"first-secret"[..]),
-            ("broker-secret-z", &b"second-secret"[..])
+            ("broker-secret-a".to_owned(), b"first-secret".to_vec()),
+            ("broker-secret-z".to_owned(), b"second-secret".to_vec())
         ]
     );
 }

@@ -168,9 +168,15 @@ impl Platform for Fake {
         self.log.borrow_mut().push(format!("spawn {}", argv[2]));
         self.launched.borrow_mut().push(argv.clone());
         if let Some(fd) = fd_after(&argv, "--output-fd") {
-            open_fd(&fd, true)
-                .write_all(&self.behaviour.output)
-                .unwrap();
+            // Written on its own thread, as a real helper writes while the
+            // broker reads: Linux shrinks a pipe to one page once a user
+            // passes `pipe-user-pages-soft`, and a 16 KiB write would then
+            // block before the broker starts reading.
+            let mut output = open_fd(&fd, true);
+            let bytes = self.behaviour.output.clone();
+            std::thread::spawn(move || {
+                let _ = output.write_all(&bytes);
+            });
         }
         if let Some(fd) = fd_after(&argv, "--secret-fd") {
             *self.secret_reader.borrow_mut() = Some(open_fd(&fd, false));
@@ -248,8 +254,9 @@ fn account() -> Result<String> {
 #[test]
 fn launch_gate_keeps_helper_alive_through_pid_validation() {
     // A real child: it signals readiness, then exits 0 only after `G`.
+    // `/dev/fd/N`, because dash (Ubuntu's `/bin/sh`) refuses `>&N` above 9.
     let script =
-        "eval \"printf R >&$2\"; s=$(eval \"dd bs=1 count=1 <&$4\" 2>/dev/null); [ \"$s\" = G ]";
+        "printf R > /dev/fd/$2; s=$(dd bs=1 count=1 < /dev/fd/$4 2>/dev/null); [ \"$s\" = G ]";
     let helper = NativeAuthHelper::new(SystemPlatform);
     let validated = std::cell::Cell::new(false);
     let mut launched = helper

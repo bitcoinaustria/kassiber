@@ -281,7 +281,8 @@ mod tests {
     }
 
     /// A stand-in child: prints its argv, cwd and broker variables, and
-    /// each inherited secret descriptor's contents.
+    /// each inherited secret descriptor's contents. It reads them through
+    /// `/dev/fd/N`: dash, Ubuntu's `/bin/sh`, refuses `<&N` above 9.
     #[cfg(unix)]
     fn script(directory: &std::path::Path) -> PathBuf {
         use std::os::unix::fs::PermissionsExt;
@@ -296,8 +297,8 @@ mod tests {
              echo \"child=$KASSIBER_OPERATOR_CHILD direct=$KASSIBER_OPERATOR_DIRECT\"\n\
              echo \"project=$KASSIBER_OPERATOR_EXPECTED_PROJECT_IDENTITY\"\n\
              echo \"database=$KASSIBER_OPERATOR_EXPECTED_DATABASE_IDENTITY\"\n\
-             echo \"lease=$(cat <&$2)\"\n\
-             while [ $# -gt 0 ]; do if [ \"$1\" = --token-fd ]; then echo \"secret=$(cat <&$2)\"; fi; shift; done\n\
+             echo \"lease=$(cat /dev/fd/$2)\"\n\
+             while [ $# -gt 0 ]; do if [ \"$1\" = --token-fd ]; then echo \"secret=$(cat /dev/fd/$2)\"; fi; shift; done\n\
              echo oops >&2\n\
              exit 3\n",
         )
@@ -436,7 +437,13 @@ mod tests {
         let book = tempfile::tempdir().unwrap();
         let launch = tempfile::tempdir().unwrap();
         let program = launch.path().join("killed.sh");
-        std::fs::write(&program, "#!/bin/sh\nkill -9 $$\n").unwrap();
+        // It takes its lease first: a child that dies before the broker
+        // has written it fails the handoff with a broken pipe instead.
+        std::fs::write(
+            &program,
+            "#!/bin/sh\ncat /dev/fd/$2 >/dev/null\nkill -9 $$\n",
+        )
+        .unwrap();
         std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o700)).unwrap();
         let fake = Fake::new();
         let runner = CliRunner::new(
