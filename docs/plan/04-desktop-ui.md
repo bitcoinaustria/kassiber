@@ -24,7 +24,7 @@ Preconditions before each shipping milestone:
    "residual risk accepted" sign-off) — required before Phase 5 ships.
 2. `rp2` published as an installable wheel artifact (see Phase 0 below) —
    required before Phase 5 ships. The current `git+https://...` pin in
-   [pyproject.toml](../../pyproject.toml) is fragile for a sidecar bundle.
+   `pyproject.toml` is fragile for a sidecar bundle.
 
 Phase 0 work is safe to start independently — it's all cleanup that benefits
 the project regardless of UI shape.
@@ -123,7 +123,7 @@ user-visible behavior. Every Phase 0 item is independently valuable.
 
 ### 0.1 Publish `rp2` as a wheel artifact
 
-[pyproject.toml](../../pyproject.toml) currently pins
+`pyproject.toml` currently pins
 `rp2 @ git+https://github.com/bitcoinaustria/rp2.git@<sha>`. This is fragile
 for any packaged build.
 
@@ -131,7 +131,7 @@ for any packaged build.
   `bitcoinaustria/rp2` repo CI.
 - Publish to GitHub Releases (or a private index) with a stable name and
   semantic version tags.
-- Update [pyproject.toml](../../pyproject.toml) to reference the published
+- Update `pyproject.toml` to reference the published
   wheel by version, with the git URL retained as a fallback for dev work
   via an extras group like `[dev-from-source]`.
 - Confirm `pip install kassiber` works against a clean Python from the
@@ -158,7 +158,7 @@ continues." Phase 1 (daemon) needs each handler to be callable with
 This is an additive refactor with the smoke suite as the pin. No CLI
 behavior changes.
 
-**Verification:** [tests/test_cli_smoke.py](../../tests/test_cli_smoke.py)
+**Verification:** `tests/test_cli_smoke.py`
 and `tests/test_review_regressions.py` pass unchanged.
 
 ### 0.3 Centralize the safe-view contract
@@ -252,7 +252,7 @@ The CLI machine path keeps emitting one envelope per process exit (no
 
 ### 1.4 Smoke + regression coverage
 
-Extend [tests/test_cli_smoke.py](../../tests/test_cli_smoke.py) with a
+Extend `tests/test_cli_smoke.py` with a
 `test_daemon_smoke.py` sibling that:
 
 - Spawns `python -m kassiber daemon`, writes one request, asserts the
@@ -746,7 +746,7 @@ These should be tracked at the project level, not silently accepted.
 - [06-austrian-tax-engine.md](06-austrian-tax-engine.md) — RP2 boundary
 - [Privacy & security](../reference/privacy-and-security.md) — local-first / network policy / secrets
 - [AGENTS.md](../../AGENTS.md) — architecture and verification
-- [pyproject.toml](../../pyproject.toml) — current dep set
+- [Cargo.toml](../../Cargo.toml) and [ui-tauri/package.json](../../ui-tauri/package.json) — current dependency sets
 - [crates/envelope](../../crates/envelope/src/lib.rs) — envelope contract (ported from Python's `kassiber/envelope.py`)
 - Tauri 2: https://v2.tauri.app/
 - Tauri capabilities: https://v2.tauri.app/security/capabilities/
