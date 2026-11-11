@@ -3,6 +3,7 @@
 //!     session-replay replay DIR --bin NAME=PATH ... [--examples DIR] [--only TEXT] [--jobs N]
 //!                           [--keep] [--report FILE [--resume]] [--coverage DIR]
 //!                           [--update]  (re-record the sessions that differ)
+//!                           [--part K/N]  (every Nth session from the Kth: one CI shard)
 //!     session-replay list DIR
 //!     session-replay pack SRC DST --sessions FILE [--keep-ciphertext FILE]
 //!     session-replay decrypt REC --allowlist FILE [--also PASSPHRASE...]
@@ -650,6 +651,7 @@ fn main() -> ExitCode {
     let mut resume = false;
     let mut report: Option<PathBuf> = None;
     let mut coverage: Option<PathBuf> = None;
+    let mut part: Option<(usize, usize)> = None;
     let mut rest = args[2..].iter();
     while let Some(arg) = rest.next() {
         match arg.as_str() {
@@ -670,6 +672,20 @@ fn main() -> ExitCode {
             "--resume" => resume = true,
             "--report" => report = rest.next().map(PathBuf::from),
             "--coverage" => coverage = rest.next().map(PathBuf::from),
+            // One of N disjoint parts that together cover the selection:
+            // the sessions at sorted positions K-1, K-1+N, K-1+2N, ...
+            "--part" => {
+                let parsed = rest.next().and_then(|v| {
+                    let (k, n) = v.split_once('/')?;
+                    let (k, n) = (k.parse::<usize>().ok()?, n.parse::<usize>().ok()?);
+                    (n >= 1 && (1..=n).contains(&k)).then_some((k, n))
+                });
+                let Some(parsed) = parsed else {
+                    eprintln!("--part K/N with 1 <= K <= N");
+                    return ExitCode::from(2);
+                };
+                part = Some(parsed);
+            }
             // Every executable in DIR, by file name (cargo examples).
             "--examples" => {
                 let Some(dir) = rest.next() else {
@@ -709,6 +725,9 @@ fn main() -> ExitCode {
                     .any(|o| name.contains(o.as_str()) || test.contains(o.as_str()))
             }
         })
+        .enumerate()
+        .filter(|(index, _)| part.is_none_or(|(k, n)| index % n == k - 1))
+        .map(|(_, file)| file)
         .collect();
     if command == "list" {
         for file in &files {
