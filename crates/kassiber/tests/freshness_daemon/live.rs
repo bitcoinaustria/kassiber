@@ -13,7 +13,8 @@ use kassiber_store::rusqlite::Connection;
 pub const ARGS: &str = r#"{"rates": false, "journals": false}"#;
 
 pub struct Live {
-    pub scratch: Scratch,
+    /// Holds the scratch directory for the session's lifetime.
+    _scratch: Scratch,
     pub case: Value,
     pub prepared: Prepared,
 }
@@ -41,7 +42,7 @@ impl Live {
         let session = calls(&case)[index].clone();
         let prepared = prepare(&golden, &scratch, index, &session);
         Self {
-            scratch,
+            _scratch: scratch,
             case,
             prepared,
         }
@@ -162,11 +163,6 @@ pub fn drain_without(daemon: &mut Daemon, request_id: &str) {
 
 pub fn same(value: &Value, json: &str) -> bool {
     crate::session::text(value) == crate::session::text(&kassiber_pytext::loads(json).unwrap())
-}
-
-/// The canonical snapshot of an encrypted book.
-pub fn snapshot_keyed(book: &Path, key: &str) -> Value {
-    crate::golden::snapshot_of(&open(book, Some(key)))
 }
 
 /// The replay sent no request the recording did not (see
