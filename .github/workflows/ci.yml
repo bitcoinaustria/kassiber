@@ -158,13 +158,13 @@ jobs:
           python3 -I -m unittest discover -s tests/tooling -t . -v
           python3 -I -m unittest discover -s tests/integration -t . -p test_product_free.py -v
 
-  session-replay:
-    name: Recorded sessions
+  session-replay-build:
+    name: Recorded sessions (build)
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
       # The binary and every example the recordings name, built without debug
-      # info so the build fits the runner's disk, as in the Rust crates job.
+      # info so the build fits the runner's disk and the artifact stays small.
       CARGO_PROFILE_DEV_DEBUG: "0"
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
@@ -178,6 +178,47 @@ jobs:
         with:
           cache-key: rust-session-replay
           save-cache: "true"
+
+      - name: Build the replayed binaries
+        run: scripts/replay-sessions.sh build
+
+      - name: Pack the replayed binaries
+        run: scripts/replay-sessions.sh pack replay-binaries.tar
+
+      - name: Upload the replayed binaries
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: replay-binaries
+          path: replay-binaries.tar
+          if-no-files-found: error
+          retention-days: 1
+
+  session-replay:
+    name: Recorded sessions (${{ matrix.part }})
+    needs: session-replay-build
+    runs-on: ubuntu-latest
+    # About 24,000 sessions take hours on one 4-core runner; each part
+    # replays every 16th session (session-replay --part K/N).
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        part: ["1/16", "2/16", "3/16", "4/16", "5/16", "6/16", "7/16", "8/16",
+               "9/16", "10/16", "11/16", "12/16", "13/16", "14/16", "15/16", "16/16"]
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Fetch pinned test data
+        shell: bash
+        run: scripts/fetch-test-data.sh
+
+      - name: Download the replayed binaries
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: replay-binaries
+
+      - name: Unpack the replayed binaries
+        run: scripts/replay-sessions.sh unpack replay-binaries.tar
 
       # The document import and chat PDF paths run Poppler, as the product
       # does; without it their tests skip and recorded sessions differ.
@@ -202,14 +243,16 @@ jobs:
       - name: Allow unprivileged user namespaces
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
-      - name: Replay the recorded product sessions
-        run: scripts/replay-sessions.sh
+      - name: Replay this part of the recorded product sessions
+        env:
+          KASSIBER_REPLAY_PREBUILT: "1"
+        run: scripts/replay-sessions.sh --part "${{ matrix.part }}"
 
       - name: Upload the replay report
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: session-replay-${{ github.run_attempt }}
+          name: session-replay-${{ strategy.job-index }}-${{ github.run_attempt }}
           path: target/session-replay-report.tsv
           if-no-files-found: warn
           retention-days: 7
