@@ -172,51 +172,137 @@ fn pack(args: &[String]) -> ExitCode {
 /// sessions of the recording used. Every passphrase tried must be on the
 /// allowlist. Each distinct ciphertext is tried once.
 fn decrypt(args: &[String]) -> ExitCode {
-    use kassiber_session_replay::encrypted::{maybe_encrypted, Allowlist};
+    use kassiber_session_replay::encrypted::{maybe_encrypted, Allowlist, Encryption};
     use kassiber_session_replay::Entry;
+    use std::collections::{BTreeSet, HashMap};
     let Some(rec) = args.first().map(PathBuf::from) else {
-        eprintln!("usage: session-replay decrypt REC --allowlist FILE");
+        eprintln!("usage: session-replay decrypt REC --allowlist FILE [--jobs N] [--also P...]");
         return ExitCode::from(2);
     };
-    let Some(allowlist) = args
-        .iter()
-        .position(|a| a == "--allowlist")
-        .and_then(|i| args.get(i + 1))
-        .map(|f| Allowlist::load(Path::new(f)))
-    else {
+    let flag = |name: &str| {
+        args.iter()
+            .position(|a| a == name)
+            .and_then(|i| args.get(i + 1))
+    };
+    let Some(allowlist) = flag("--allowlist").map(|f| Allowlist::load(Path::new(f))) else {
         eprintln!("--allowlist FILE is required");
         return ExitCode::from(2);
     };
+    let jobs: usize = flag("--jobs").and_then(|j| j.parse().ok()).unwrap_or(8);
     let blobs = Blobs::new(&rec);
     let files = sessions(&rec);
-    // The passphrases the recording already opened books with.
-    let mut candidates: Vec<String> = Vec::new();
+    // The passphrases the recording already opened books with, overall and
+    // per test module (tried first: a module keys its books one way).
+    let module = |session: &Session| {
+        session
+            .test
+            .as_deref()
+            .unwrap_or("")
+            .split("::")
+            .next()
+            .unwrap_or("")
+            .to_owned()
+    };
+    let mut global: Vec<String> = Vec::new();
+    let mut by_module: HashMap<String, Vec<String>> = HashMap::new();
+    let mut wanted: BTreeMap<String, String> = BTreeMap::new();
     for file in &files {
         let Ok(session) = read_session(file) else {
-            continue;
+            eprintln!("unreadable session {}", file.display());
+            return ExitCode::from(2);
         };
+        let name = module(&session);
         for root in &session.roots {
             for entry in root.before.iter().chain(&root.after) {
                 if let Entry::File {
-                    encryption: Some(e),
+                    blob,
+                    encryption,
+                    size,
                     ..
                 } = entry
                 {
-                    if !candidates.contains(&e.passphrase) {
-                        candidates.push(e.passphrase.clone());
+                    match encryption {
+                        Some(e) => {
+                            for list in [&mut global, by_module.entry(name.clone()).or_default()] {
+                                if !list.contains(&e.passphrase) {
+                                    list.push(e.passphrase.clone());
+                                }
+                            }
+                        }
+                        None if *size >= 4096 && *size % 1024 == 0 => {
+                            wanted.entry(blob.clone()).or_insert_with(|| name.clone());
+                        }
+                        None => {}
                     }
                 }
             }
         }
     }
-    candidates.extend(args.iter().skip_while(|a| *a != "--also").skip(1).cloned());
-    candidates.retain(|p| allowlist.allows(p));
+    for extra in args.iter().skip_while(|a| *a != "--also").skip(1) {
+        if !global.contains(extra) {
+            global.push(extra.clone());
+        }
+    }
+    global.retain(|p| allowlist.allows(p));
     let scratch = repo().join("target").join("session-replay-decrypt");
-    let mut known: BTreeMap<
-        String,
-        Option<(String, kassiber_session_replay::encrypted::Encryption)>,
-    > = BTreeMap::new();
-    let (mut opened, mut rewritten) = (0usize, 0usize);
+    let work: Vec<(String, Vec<String>)> = wanted
+        .into_iter()
+        .map(|(blob, name)| {
+            let mut order: Vec<String> = by_module
+                .get(&name)
+                .into_iter()
+                .flatten()
+                .filter(|p| allowlist.allows(p))
+                .cloned()
+                .collect();
+            let rest: Vec<String> = global
+                .iter()
+                .filter(|p| !order.contains(p))
+                .cloned()
+                .collect();
+            order.extend(rest);
+            (blob, order)
+        })
+        .collect();
+    let next = Arc::new(AtomicUsize::new(0));
+    let found = Arc::new(Mutex::new(BTreeMap::<String, (String, Encryption)>::new()));
+    let work = Arc::new(work);
+    let threads: Vec<_> = (0..jobs.max(1))
+        .map(|worker| {
+            let (next, found, work, blobs) = (
+                Arc::clone(&next),
+                Arc::clone(&found),
+                Arc::clone(&work),
+                blobs.clone(),
+            );
+            let scratch = scratch.join(format!("w{worker}"));
+            std::thread::spawn(move || {
+                while let Some((blob, order)) = work.get(next.fetch_add(1, Ordering::SeqCst)) {
+                    let Ok(bytes) = blobs.get(blob) else { continue };
+                    if !maybe_encrypted(&bytes) {
+                        continue;
+                    }
+                    if let Some((plaintext, mut encryption)) =
+                        kassiber_session_replay::encrypted::decrypt(&bytes, order, &scratch)
+                    {
+                        encryption.ciphertext = Some(blob.clone());
+                        if let Ok(plain) = blobs.put(&plaintext) {
+                            found
+                                .lock()
+                                .unwrap()
+                                .insert(blob.clone(), (plain, encryption));
+                        }
+                    }
+                }
+            })
+        })
+        .collect();
+    for thread in threads {
+        let _ = thread.join();
+    }
+    let found = found.lock().unwrap().clone();
+    let mut rewritten = 0usize;
+    let mut touched = BTreeSet::new();
     for file in &files {
         let Ok(mut session) = read_session(file) else {
             continue;
@@ -224,56 +310,51 @@ fn decrypt(args: &[String]) -> ExitCode {
         let mut changed = false;
         for root in &mut session.roots {
             for entry in root.before.iter_mut().chain(root.after.iter_mut()) {
-                let Entry::File {
+                if let Entry::File {
                     blob, encryption, ..
                 } = entry
-                else {
-                    continue;
-                };
-                if encryption.is_some() {
-                    continue;
-                }
-                let result = known.entry(blob.clone()).or_insert_with(|| {
-                    let bytes = blobs.get(blob).ok()?;
-                    if !maybe_encrypted(&bytes) {
-                        return None;
+                {
+                    if encryption.is_none() {
+                        if let Some((plain, e)) = found.get(blob.as_str()) {
+                            touched.insert(blob.clone());
+                            *blob = plain.clone();
+                            *encryption = Some(e.clone());
+                            changed = true;
+                        }
                     }
-                    let (plaintext, mut found) =
-                        kassiber_session_replay::encrypted::decrypt(&bytes, &candidates, &scratch)?;
-                    found.ciphertext = Some(blob.clone());
-                    opened += 1;
-                    Some((blobs.put(&plaintext).ok()?, found))
-                });
-                if let Some((plain, found)) = result.clone() {
-                    *blob = plain;
-                    *encryption = Some(found);
-                    changed = true;
                 }
             }
         }
         if changed {
-            let bytes = serde_json::to_vec(&session).unwrap_or_default();
-            let written = if file.to_string_lossy().ends_with(".gz") {
-                let mut encoder =
-                    flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::new(9));
-                std::io::Write::write_all(&mut encoder, &bytes)
-                    .and_then(|_| encoder.finish())
-                    .and_then(|packed| fs::write(file, packed))
-            } else {
-                fs::write(file, bytes)
-            };
-            if written.is_err() {
-                eprintln!("cannot rewrite {}", file.display());
+            if let Err(error) = write_session(file, &session) {
+                eprintln!("cannot rewrite {}: {error}", file.display());
                 return ExitCode::from(2);
             }
             rewritten += 1;
         }
     }
+    let _ = fs::remove_dir_all(&scratch);
     println!(
-        "{} passphrases tried; {opened} books opened; {rewritten} sessions rewritten",
-        candidates.len()
+        "{} passphrases tried; {} books opened; {rewritten} sessions rewritten",
+        global.len(),
+        touched.len()
     );
     ExitCode::SUCCESS
+}
+
+/// Replace a session file atomically, keeping its compression.
+fn write_session(file: &Path, session: &Session) -> Result<(), String> {
+    let bytes = serde_json::to_vec(session).map_err(|e| e.to_string())?;
+    let bytes = if file.to_string_lossy().ends_with(".gz") {
+        let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::new(9));
+        std::io::Write::write_all(&mut encoder, &bytes).map_err(|e| e.to_string())?;
+        encoder.finish().map_err(|e| e.to_string())?
+    } else {
+        bytes
+    };
+    let tmp = file.with_extension(format!("tmp{}", std::process::id()));
+    fs::write(&tmp, bytes).map_err(|e| e.to_string())?;
+    fs::rename(&tmp, file).map_err(|e| e.to_string())
 }
 
 /// Write what a replay did into its session: output, exit and the state it
