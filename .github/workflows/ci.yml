@@ -243,7 +243,7 @@ jobs:
             echo '<details><summary>Slowest tests / final output</summary>' >> "$GITHUB_STEP_SUMMARY"
             echo '' >> "$GITHUB_STEP_SUMMARY"
             echo '```text' >> "$GITHUB_STEP_SUMMARY"
-            sed -n '/slowest 50 durations/,$p' "test-results/${{ matrix.shard }}.log" | head -60 >> "$GITHUB_STEP_SUMMARY"
+            awk '/slowest 50 durations/{found=1} found && shown++ < 60' "test-results/${{ matrix.shard }}.log" >> "$GITHUB_STEP_SUMMARY"
             echo '```' >> "$GITHUB_STEP_SUMMARY"
             echo '</details>' >> "$GITHUB_STEP_SUMMARY"
           fi
@@ -387,7 +387,7 @@ jobs:
           echo "Result: **${{ job.status }}**" >> "$GITHUB_STEP_SUMMARY"
           if [ -f "test-results/tax-shadow-${{ matrix.shard }}.log" ]; then
             echo '```text' >> "$GITHUB_STEP_SUMMARY"
-            sed -n '/tax engine shadow/,$p' "test-results/tax-shadow-${{ matrix.shard }}.log" | head -30 >> "$GITHUB_STEP_SUMMARY"
+            awk '/tax engine shadow/{found=1} found && shown++ < 30' "test-results/tax-shadow-${{ matrix.shard }}.log" >> "$GITHUB_STEP_SUMMARY"
             echo '```' >> "$GITHUB_STEP_SUMMARY"
           fi
 
@@ -529,7 +529,7 @@ jobs:
           echo "Result: **${{ job.status }}**" >> "$GITHUB_STEP_SUMMARY"
           if [ -f "test-results/custody-shadow-${{ matrix.shard }}.log" ]; then
             echo '```text' >> "$GITHUB_STEP_SUMMARY"
-            sed -n '/custody engine shadow/,$p' "test-results/custody-shadow-${{ matrix.shard }}.log" | head -30 >> "$GITHUB_STEP_SUMMARY"
+            awk '/custody engine shadow/{found=1} found && shown++ < 30' "test-results/custody-shadow-${{ matrix.shard }}.log" >> "$GITHUB_STEP_SUMMARY"
             echo '```' >> "$GITHUB_STEP_SUMMARY"
           fi
 
@@ -635,7 +635,7 @@ jobs:
           echo "Result: **${{ job.status }}**" >> "$GITHUB_STEP_SUMMARY"
           if [ -f test-results/cli-smoke.log ]; then
             echo '```text' >> "$GITHUB_STEP_SUMMARY"
-            sed -n '/slowest 50 durations/,$p' test-results/cli-smoke.log | head -60 >> "$GITHUB_STEP_SUMMARY"
+            awk '/slowest 50 durations/{found=1} found && shown++ < 60' test-results/cli-smoke.log >> "$GITHUB_STEP_SUMMARY"
             echo '```' >> "$GITHUB_STEP_SUMMARY"
           fi
 
