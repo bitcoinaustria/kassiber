@@ -72,7 +72,7 @@ class DesktopPackagingTest(unittest.TestCase):
         self.assertEqual(workflow.count("scripts/build-rust-cli.sh \\"), 1)
         self.assertIn('--target "${{ matrix.triple }}"', workflow)
         self.assertIn("scripts/smoke-packaged-cli.sh", workflow)
-        self.assertIn("tests.test_packaged_cli_no_egress", workflow)
+        self.assertIn("scripts/check-packaged-cli-no-egress.sh", workflow)
         self.assertIn("scripts/package-cli-archive.sh", workflow)
         # The sidecar is the smoked CLI binary, copied, never rebuilt.
         self.assertIn(

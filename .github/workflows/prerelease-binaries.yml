@@ -13,7 +13,7 @@ on:
       - "scripts/check-linux-glibc-floor.sh"
       - "scripts/smoke-packaged-cli.sh"
       - "scripts/package-cli-archive.sh"
-      - "tests/test_packaged_cli_no_egress.py"
+      - "scripts/check-packaged-cli-no-egress.sh"
       - "ui-tauri/provider-broker/**"
       - "scripts/build-apt-repository.sh"
       - "scripts/build-rpm-repository.sh"
@@ -278,11 +278,11 @@ jobs:
       - name: Prove the packaged CLI stays offline
         if: runner.os == 'Linux'
         shell: bash
-        env:
-          KASSIBER_PACKAGED_CLI: dist/kassiber
         run: |
           set -euo pipefail
-          "$PYTHON" -m unittest -v tests.test_packaged_cli_no_egress
+          scripts/check-packaged-cli-no-egress.sh \
+            --cli dist/kassiber \
+            --scratch "$RUNNER_TEMP/kassiber-packaged-no-egress"
 
       - name: Package CLI-only release
         shell: bash

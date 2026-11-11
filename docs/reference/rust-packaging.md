@@ -27,7 +27,7 @@ test kinds, probe mode or egress observer). The script then
   and a macOS binary that links any non-system dylib.
 
 The workflow smokes that exact file (`scripts/smoke-packaged-cli.sh`), proves
-on Linux that it opens no network socket (`tests/test_packaged_cli_no_egress.py`),
+on Linux that it opens no network socket (`scripts/check-packaged-cli-no-egress.sh`),
 packages it as the CLI artifact and stages the same bytes as the desktop
 sidecar. There is no separate sidecar build and no one-dir payload.
 
@@ -143,7 +143,8 @@ Run on 2026-11-07, commit `dc9b62a48`, glibc floor overridden to the host's
   passphrase-less status refused with `interaction_required`) and status with
   `--db-passphrase-fd`, the Austrian moving-average journal and E1kv XLSX
   export, descriptor derivation.
-- `tests/test_packaged_cli_no_egress.py` passed against the packaged binary:
+- The packaged no-egress check (then `tests/test_packaged_cli_no_egress.py`,
+  now `scripts/check-packaged-cli-no-egress.sh`) passed against the packaged binary:
   launch, fresh status, status with saved `.invalid` Esplora and loopback
   Electrum backends, SQLCipher status, and a daemon answering display reads
   and then idling 8 s, under a seccomp filter that kills the process on any
@@ -241,9 +242,11 @@ OS-level no-egress check is Linux-only.
 
 - `build-cli` no longer syncs the Python environment or runs PyInstaller. It
   writes `BUILD_INFO.json` with the release tool (`kassiber-release
-  build-info`), installs uv's managed Python only for the smoke's JSON
-  assertions, checks every version copy against the backend crate, and
+  build-info`), checks every version copy against the backend crate, and
   builds, smokes and packages the Rust binary. Linux runs the no-egress check.
+  The smoke's JSON assertions use `jq`, and the no-egress check is shell plus
+  a compiled seccomp watcher and resolver shim, so neither needs Python;
+  uv's managed Python now serves only the version-copy check.
 - `build-desktop` refuses a staged `_internal/` payload, requires the broker
   and `BUILD_INFO.json` beside the sidecar, copies the broker beside the
   Windows PATH copy, and on Linux runs the glibc floor check on the shell and

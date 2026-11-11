@@ -35,12 +35,9 @@ case "$(uname -s)" in
   MINGW*|MSYS*|CYGWIN*) ;;
   *) echo "This script builds the Windows artifacts and must run in Git Bash on Windows." >&2; exit 2 ;;
 esac
-for command in cargo rustup pnpm 7z; do
+for command in cargo rustup pnpm 7z jq; do
   command -v "$command" >/dev/null 2>&1 || { echo "Missing required tool: $command" >&2; exit 2; }
 done
-python="${PYTHON:-$(command -v python || command -v python3 || true)}"
-[ -n "$python" ] || { echo "Missing required tool: python" >&2; exit 2; }
-export PYTHON="$python"
 [ ! -e "$output" ] || { echo "Output directory already exists: $output" >&2; exit 2; }
 
 run() {
