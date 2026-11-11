@@ -416,7 +416,8 @@
     "find": "        let plan = if confirm {\n            kassiber_store::retired::purge_legacy_ledger(conn)",
     "replace": "        let plan = if true {\n            kassiber_store::retired::purge_legacy_ledger(conn)",
     "expect_failing": [
-      "kassiber/black_box:test_purge_legacy_ledger_matches_python_envelope_and_book"
+      "kassiber/black_box:test_purge_legacy_ledger_matches_python_envelope_and_book",
+      "kassiber/black_box:purge_of_a_shipped_ledger_archive_matches_python_plaintext"
     ],
     "rule": "Nothing is removed without --confirm."
   },
@@ -426,7 +427,8 @@
     "find": "        tables: counted.into_iter().filter(|(_, rows)| *rows != 0).collect(),",
     "replace": "        tables: counted.into_iter().collect(),",
     "expect_failing": [
-      "kassiber/black_box:test_purge_legacy_ledger_matches_python_envelope_and_book"
+      "kassiber/black_box:test_purge_legacy_ledger_matches_python_envelope_and_book",
+      "kassiber/black_box:purge_of_a_shipped_ledger_archive_matches_python_plaintext"
     ],
     "rule": "The plan lists only tables that hold rows."
   },
@@ -436,7 +438,8 @@
     "find": "        if legacy_ledger(&kind, &name, &table, sql.as_deref()) {\n            continue;\n        }\n",
     "replace": "",
     "expect_failing": [
-      "kassiber/black_box:test_purge_legacy_ledger_matches_python_envelope_and_book"
+      "kassiber/black_box:test_purge_legacy_ledger_matches_python_envelope_and_book",
+      "kassiber/black_box:purge_of_a_shipped_ledger_archive_matches_python_plaintext"
     ],
     "rule": "A book that keeps populated ledger archives opens natively."
   },
@@ -489,5 +492,26 @@
       "kassiber/black_box:test_explicit_env_file_does_not_migrate_hidden_home_state"
     ],
     "rule": "A hidden-home root the cutover did not move is used where it is, as Python does."
+  },
+  {
+    "id": "MP-purge-keeps-triggers",
+    "file": "crates/store/src/retired.rs",
+    "find": "        conn.execute_batch(&format!(\"DROP TRIGGER IF EXISTS {}\", quote(&trigger)))",
+    "replace": "        conn.execute_batch(&format!(\"SELECT {}\", quote(&trigger)).replace('\"', \"'\"))",
+    "expect_failing": [
+      "kassiber/black_box:purge_of_a_shipped_ledger_archive_matches_python_plaintext",
+      "kassiber/black_box:purge_of_a_shipped_ledger_archive_matches_python_sqlcipher"
+    ],
+    "rule": "The purge drops every shipped ledger trigger, the ones on external_documents included, as Python does."
+  },
+  {
+    "id": "MP-purge-unshipped-trigger-admitted",
+    "file": "crates/store/src/schema_structure.rs",
+    "find": "        \"trigger\" => sql.is_some_and(|sql| {",
+    "replace": "        \"trigger\" => name == \"gl_lines_no_delete\" || sql.is_some_and(|sql| {",
+    "expect_failing": [
+      "kassiber/black_box:an_unshipped_ledger_trigger_is_refused_by_name_without_a_write"
+    ],
+    "rule": "A book holding the unshipped gl_lines_no_delete trigger is refused, never purged."
   }
 ]

@@ -488,5 +488,25 @@
       "nan_is_refused_before_anything_is_written"
     ],
     "rule": "The refusal says what the book stores and does not mention Python."
+  },
+  {
+    "id": "structure-names-unexpected-object",
+    "file": "crates/store/src/schema_structure.rs",
+    "find": "        return named(extra, vec![\"unexpected\"]);",
+    "replace": "        let _ = extra;",
+    "expect_failing": [
+      "populated_legacy_ledger_archives_pass_the_structural_check"
+    ],
+    "rule": "A structural refusal names the object the current schema lacks, not the expected object at its sorted position."
+  },
+  {
+    "id": "structure-names-missing-object",
+    "file": "crates/store/src/schema_structure.rs",
+    "find": "        return named(absent, vec![\"missing\"]);",
+    "replace": "        let _ = absent;",
+    "expect_failing": [
+      "populated_legacy_ledger_archives_pass_the_structural_check"
+    ],
+    "rule": "A structural refusal names a current object that is absent."
   }
 ]

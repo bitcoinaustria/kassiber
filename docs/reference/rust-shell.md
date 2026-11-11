@@ -210,8 +210,19 @@ it may launch a detached broker.
   regenerated from every ledger revision by
   `crates/store/scripts/gen_legacy_ledger_triggers.py`). Any other `gl_*`
   trigger, such as an `AFTER INSERT ON external_documents`, or a shipped name
-  with another body, is drift: `requires_python_migration`
+  with another body, is drift: `requires_python_migration`, whose details
+  name the drifted object (`"object": "gl_lines_no_delete", "aspects":
+  ["unexpected"]`; a current object that is gone reads `missing`)
   (`schema_structure::tests::populated_legacy_ledger_archives_pass_the_structural_check`).
+  The purge itself is proven on a book the last ledger revision wrote
+  (frozen: its own 57 tables and all 203 triggers, populated through its
+  ledger API, upgraded by Python's open; provenance in the test's header): `crates/kassiber/tests/black_box/legacy_ledger.rs` runs the
+  binary's plan and `--confirm` on it, plaintext and SQLCipher, and requires
+  Python's plan and its complete typed dump of the purged book (every schema
+  object and row with its storage class, audits included); the same book
+  with the unshipped `gl_lines_no_delete` added is refused by name with the
+  file unchanged. `tests/test_legacy_ledger.py` builds its books from the
+  same shipped objects, so it passes against Python and the binary.
 - `wallets reveal-descriptor` keeps Python's gates: the explicit leaf, the book
   unlock of this invocation (a locked SQLCipher book without a passphrase
   descriptor is refused non-interactively), the brokered admin authentication
@@ -244,7 +255,8 @@ Documented difference: Python's open path keeps every `gl_*` object of a
 populated ledger archive (it validates no schema), so it opens a book whose
 archive carries a trigger Kassiber never shipped. Rust refuses that book as
 `requires_python_migration` before reading or writing it
-(`test_unshipped_ledger_trigger_refuses_where_python_opens`). Empty archives
+(`test_unshipped_ledger_trigger_refuses_where_python_opens`,
+`legacy_ledger::an_unshipped_ledger_trigger_is_refused_by_name_without_a_write`). Empty archives
 are dropped on open by both runtimes, whatever their triggers.
 
 Documented difference: Python's `_decode_event_cursor` catches only

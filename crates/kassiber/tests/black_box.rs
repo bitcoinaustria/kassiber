@@ -28,6 +28,8 @@ mod cli_proxy;
 mod evidence_summary;
 #[path = "black_box/hidden_home.rs"]
 mod hidden_home;
+#[path = "black_box/legacy_ledger.rs"]
+mod legacy_ledger;
 #[path = "black_box/legacy_migrations.rs"]
 mod legacy_migrations;
 #[path = "black_box/maintenance_run.rs"]
