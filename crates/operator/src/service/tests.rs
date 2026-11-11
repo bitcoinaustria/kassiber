@@ -464,6 +464,15 @@ pub(crate) fn root(dir: &tempfile::TempDir) -> String {
     dir.path().to_string_lossy().into_owned()
 }
 
+/// The data root as the service canonicalizes it: on macOS the temporary
+/// directory under /var is a symlink into /private/var.
+pub(crate) fn canonical_root(dir: &tempfile::TempDir) -> String {
+    std::fs::canonicalize(dir.path())
+        .unwrap()
+        .to_string_lossy()
+        .into_owned()
+}
+
 pub(crate) fn unlock(service: &OperatorService, data_root: &str) -> Result<Value> {
     service.unlock(data_root, b"passphrase", UnlockRequest::default())
 }
@@ -776,6 +785,7 @@ fn test_lifecycle_telemetry_is_bounded_ram_only_and_public_safe() {
     assert!(records.len() <= 3);
     let rendered = format!("{records:?}");
     assert!(!rendered.contains(&root(&tmp)));
+    assert!(!rendered.contains(&canonical_root(&tmp)));
     assert!(!rendered.contains("private-value"));
     assert!(records
         .iter()
