@@ -60,7 +60,9 @@ shims, target, rec, repo, allowlist = sys.argv[1:6]
 # Tests often start children with a minimal environment; the recording
 # settings therefore live beside the shims. Paths under /mnt are the same
 # inside the recording namespace.
-config = {"record_dir": rec, "root_prefixes": ["/mnt/bt", "/mnt/tmp"], "repo": repo,
+# A few journal tests keep their books under target/r4-13 (they want a
+# disposable root inside the checkout); a replay relocates those.
+config = {"record_dir": rec, "root_prefixes": ["/mnt/bt", "/mnt/tmp", f"{repo}/target/r4-13"], "repo": repo,
           "examples_dir": f"{target}/debug/examples", "current_dir": "/mnt/current",
           "passphrase_allowlist": allowlist,
           "clock_shim": f"{target}/debug/libkassiber_clock_shim.so"}
