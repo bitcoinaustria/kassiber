@@ -48,11 +48,10 @@ case "$name" in
   *) echo "Unexpected archive name: $name" >&2; exit 2 ;;
 esac
 case "$format" in
-  tar) archive="$output_dir/$name.tar.gz" ;;
-  zip) archive="$output_dir/$name.zip" ;;
+  tar) extension=tar.gz ;;
+  zip) extension=zip ;;
   *) echo "--format must be tar or zip" >&2; exit 2 ;;
 esac
-[ ! -e "$archive" ] || { echo "Output already exists: $archive" >&2; exit 1; }
 
 exe_name="$(basename "$binary")"
 case "$exe_name" in
@@ -61,7 +60,12 @@ case "$exe_name" in
 esac
 
 mkdir -p "$output_dir"
+# Absolute before the archive path is derived: the zip branch runs 7z from
+# inside the staging directory, where a relative path would land the archive
+# in staging (removed on exit) instead of the output directory.
 output_dir="$(cd "$output_dir" && pwd)"
+archive="$output_dir/$name.$extension"
+[ ! -e "$archive" ] || { echo "Output already exists: $archive" >&2; exit 1; }
 staging="$(mktemp -d "${TMPDIR:-/tmp}/kassiber-cli-archive.XXXXXX")"
 trap 'rm -rf "$staging"' EXIT
 mkdir -p "$staging/$name/provider_broker"
