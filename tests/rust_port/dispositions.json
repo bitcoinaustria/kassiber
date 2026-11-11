@@ -1369,7 +1369,7 @@
       "EmbitDescriptorErrorTests": {"disposition": "rust-test", "flags": [], "group": "chain-sync", "reason": "calls kassiber.core.samourai directly", "reviewed": false, "tests": 2}
     },
     "tests/test_desktop_packaging.py": {
-      "DesktopPackagingTest": {"disposition": "rust-test", "flags": ["subprocess"], "group": "packaging-ci", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 10}
+      "DesktopPackagingTest": {"disposition": "rust-test", "flags": ["subprocess"], "group": "packaging-ci", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 11}
     },
     "tests/test_device_sync_removal.py": {
       "DeviceSyncRemovalTests": {"disposition": "rust-test", "flags": ["sql"], "group": "chain-sync", "reason": "calls kassiber.db directly", "reviewed": false, "tests": 3}

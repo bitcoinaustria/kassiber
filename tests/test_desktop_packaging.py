@@ -299,5 +299,63 @@ class DesktopPackagingTest(unittest.TestCase):
                     self.assertFalse(package.exists())
 
 
+    def test_cli_archive_lands_in_a_relative_output_dir_for_both_formats(self):
+        # Release CI passes `--output-dir release`. The zip branch runs 7z from
+        # inside its staging directory, so the archive path must already be
+        # absolute there; a stand-in 7z records where it was told to write.
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            binary = root / "kassiber"
+            binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            binary.chmod(0o755)
+            broker = root / "index.mjs"
+            broker.write_text("export {};\n", encoding="utf-8")
+            build_info = root / "BUILD_INFO.json"
+            build_info.write_text("{}\n", encoding="utf-8")
+            tools = root / "tools"
+            tools.mkdir()
+            seven_zip = tools / "7z"
+            seven_zip.write_text(
+                '#!/bin/sh\n[ "$1 $2" = "a -tzip" ] || exit 9\n'
+                'case "$3" in /*) ;; *) exit 8 ;; esac\n'
+                '[ -d "$4" ] || exit 7\nprintf zip > "$3"\n',
+                encoding="utf-8",
+            )
+            seven_zip.chmod(0o755)
+            env = dict(os.environ, PATH=f"{tools}{os.pathsep}{os.environ['PATH']}")
+            for archive_format, suffix in (("zip", ".zip"), ("tar", ".tar.gz")):
+                with self.subTest(archive_format=archive_format):
+                    work = root / f"work-{archive_format}"
+                    work.mkdir()
+                    completed = subprocess.run(
+                        [
+                            str(ROOT / "scripts/package-cli-archive.sh"),
+                            "--binary",
+                            str(binary),
+                            "--broker",
+                            str(broker),
+                            "--build-info",
+                            str(build_info),
+                            "--name",
+                            "kassiber-cli-test-x64",
+                            "--format",
+                            archive_format,
+                            "--output-dir",
+                            "release",
+                        ],
+                        cwd=work,
+                        env=env,
+                        capture_output=True,
+                        text=True,
+                    )
+                    self.assertEqual(completed.returncode, 0, completed.stderr)
+                    archive = work / "release" / f"kassiber-cli-test-x64{suffix}"
+                    self.assertTrue(archive.is_file())
+                    self.assertGreater(archive.stat().st_size, 0)
+                    self.assertEqual(
+                        Path(completed.stdout.strip()).resolve(), archive.resolve()
+                    )
+
+
 if __name__ == "__main__":
     unittest.main()
