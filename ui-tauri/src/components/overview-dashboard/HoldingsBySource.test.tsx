@@ -19,7 +19,7 @@ import {
   HoldingsTilesLayout,
   HoldingsTrendLayout,
 } from "./HoldingsLayouts";
-import { buildHoldingsBySource } from "./model";
+import { buildHoldingsBySource, monthEndTrend } from "./model";
 
 const UNCOVERED: FiatCompleteness = {
   state: "incomplete",
@@ -191,14 +191,43 @@ describe("holdings view settings", () => {
   });
 });
 
+describe("month-end trend", () => {
+  const now = new Date(2026, 1, 15);
+
+  it("carries each month-end balance forward across the last twelve months", () => {
+    const trend = monthEndTrend(
+      [
+        { month: "2024-05", balanceBtc: 3 },
+        { month: "2025-06", balanceBtc: 2.5 },
+        { month: "2026-01", balanceBtc: 1 },
+      ],
+      now,
+    );
+    // March 2025 through February 2026, across the year boundary.
+    expect(trend).toEqual([3, 3, 3, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 1, 1]);
+  });
+
+  it("starts at zero before the first month the wallet moved", () => {
+    expect(monthEndTrend([{ month: "2026-02", balanceBtc: 0.25 }], now, 3)).toEqual([0, 0, 0.25]);
+  });
+
+  it("has no points for a wallet that never moved", () => {
+    expect(monthEndTrend([], now)).toEqual([]);
+  });
+});
+
 describe("holdings layouts", () => {
   const connections = [
     { ...MOCK_OVERVIEW.connections[0], id: "cold", label: "Cold", kind: "xpub" as const, chain: "bitcoin", balance: 2, lastTransactionAt: "2026-01-01", transactionCount: 4,
-      balanceTrend: [{ month: "2025-12", balanceBtc: 1 }, { month: "2026-01", balanceBtc: 2 }] },
+      monthBalances: [{ month: "2025-12", balanceBtc: 1 }, { month: "2026-01", balanceBtc: 2 }] },
     { ...MOCK_OVERVIEW.connections[0], id: "liq", label: "Liquid", kind: "address" as const, chain: "liquid", balance: 1, lastTransactionAt: "2026-02-01", transactionCount: 2 },
   ];
   const props = () => ({
-    rows: buildHoldingsBySource({ ...MOCK_OVERVIEW, connections }, { ...DEFAULT_HOLDINGS_VIEW, limit: 0 }).items,
+    rows: buildHoldingsBySource(
+      { ...MOCK_OVERVIEW, connections },
+      { ...DEFAULT_HOLDINGS_VIEW, limit: 0 },
+      new Date(2026, 10, 7),
+    ).items,
     hideSensitive: false,
     hideShares: false,
     valueLabel: (btc: number) => `₿ ${btc.toFixed(3)}`,

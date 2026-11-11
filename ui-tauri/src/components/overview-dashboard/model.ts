@@ -2276,6 +2276,37 @@ export function formatPortfolioDetailLabel(value: string) {
   });
 }
 
+/** Months the Holdings trend spans, ending with the current one. */
+export const HOLDINGS_TREND_MONTHS = 12;
+
+/**
+ * A wallet's month-end bitcoin over the last twelve months, from the daemon's
+ * balances at the end of each month the wallet moved: each carries forward
+ * until the next, and before the first the wallet held nothing. Empty for a
+ * wallet that never moved.
+ */
+export function monthEndTrend(
+  points: ReadonlyArray<{ month: string; balanceBtc: number }>,
+  now: Date,
+  months = HOLDINGS_TREND_MONTHS,
+): number[] {
+  if (!points.length) return [];
+  const sorted = [...points].sort((a, b) => a.month.localeCompare(b.month));
+  const values: number[] = [];
+  let index = 0;
+  let balance = 0;
+  for (let offset = months - 1; offset >= 0; offset -= 1) {
+    const date = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+    while (index < sorted.length && sorted[index].month <= key) {
+      balance = sorted[index].balanceBtc;
+      index += 1;
+    }
+    values.push(balance);
+  }
+  return values;
+}
+
 export function percentOf(value: number, total: number) {
   if (total <= 0) return 0;
   return Math.round((value / total) * 100);
@@ -2338,6 +2369,7 @@ function holdingRail(connection: OverviewSnapshot["connections"][number]): SwapR
 export function buildHoldingsBySource(
   snapshot: OverviewSnapshot,
   view: HoldingsView = DEFAULT_HOLDINGS_VIEW,
+  now: Date = new Date(),
 ): HoldingsBySource {
   const fiatRate = activeMarketFiatRate(snapshot);
   const bookTotal = snapshot.connections.reduce(
@@ -2361,7 +2393,7 @@ export function buildHoldingsBySource(
         : undefined,
     group: holdingRail(connection) ?? "other",
     transactionCount: connection.transactionCount,
-    trend: connection.balanceTrend?.map((point) => point.balanceBtc),
+    trend: connection.monthBalances ? monthEndTrend(connection.monthBalances, now) : undefined,
   });
   const railOf = (connection: OverviewSnapshot["connections"][number]): HoldingsRail =>
     holdingRail(connection) ?? "other";

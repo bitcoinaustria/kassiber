@@ -450,8 +450,10 @@ sources (fold into one expandable line, list, or hide) and how many sources
 precede Other sources. Every row opens its wallet and shows a dot while its
 sync runs or after it fails. Shares are of all the bitcoin held, so a filtered
 row keeps its share of the book; a source never funded is not an emptied one.
-The trend line is the wallet's own month-end movements from the snapshot's
-`balanceTrend`, a shape rather than its display balance. The header leaves an
+The trend line covers the last twelve months of the wallet's own movements.
+The snapshot's `monthBalances` gives its month-end bitcoin for each month it
+moved, without reading a clock, and the desktop carries each forward; it is a
+shape rather than the display balance. The header leaves an
 incomplete cost basis to the tile and the chart, and drops the book-wide
 percentage while a network filter is on.
 

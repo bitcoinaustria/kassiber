@@ -2,7 +2,7 @@
 # scripts/fetch-test-data.sh; never edit by hand (see
 # docs/reference/testing.md#generated-test-data). <git blob id> <path>
 branch t3code/test-data
-commit be117aee71bbada5deba8b8ff74441e9c0b6c947
+commit 628867485ce01bea23cec698fd6051ba8704d539
 ab2bfbb90cc8996dcee6933efaf1a0fd9ea88f89 crates/ai/tests/data/vectors.json
 b02df587ab3b14801a923c1049f1ce4062b1188e crates/chain/fixtures/python_btcpay.json
 76906734c1ea7bd4f09690ad90894cfcadf9f333 crates/chain/fixtures/python_cln.json
@@ -352,7 +352,7 @@ fb3aa5e0b1943a3227504ca69fabac8019c1efe3 crates/wallets/tests/vectors/python_sam
 0b09407ae5d10fd1487787c660d5e766240b6a7b crates/wallets/tests/vectors/python_wallet_publication.json
 36ee13481496a2d04e4942b890724d0759741118 crates/wallets/tests/vectors/python_wasabi_codepoints.json
 37ebe3e8dd17054b2fd4b57191f14ac4000b92a2 crates/wallets/tests/vectors/python_wasabi_imports.json
-c0a5751250ab3950a8249a994d2d37fbaa9a89a7 crates/workspace/tests/data/vectors.json
+a0ab4063fb578772ca2f894444e51527f63677a2 crates/workspace/tests/data/vectors.json
 8b6f1749d5a2c0a877063c0697df0b16a73644d6 docs/reference/tax-country-ch-vectors.json
 49b68cbf489d190802d91bd41c0feaa3a3bc4e98 docs/reference/tax-country-de-vectors.json
 1074ae18a81d71a4eaee0a72c3a7c84c4f079416 docs/reference/tax-country-es-vectors.json
