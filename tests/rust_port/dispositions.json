@@ -2140,6 +2140,10 @@
     "tests/test_platform_legacy_values.py": {
       "test_empty_exact_journal_values_use_legacy_cash_values": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "journals", "reason": "calls kassiber.core.transaction_formats, kassiber.db directly", "reviewed": false, "tests": 1}
     },
+    "tests/test_portable_dump.py": {
+      "test_bare_infinity_words_become_numbers_and_quoted_text_does_not": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "journals", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 1},
+      "test_an_old_sqlite_dump_restores_the_same_values": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "journals", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 1}
+    },
     "tests/test_price_currency_mismatch.py": {
       "PriceCurrencyMismatchTest": {"disposition": "boundary-fixture", "flags": ["subprocess"], "group": "journals", "reason": "spawns `python -m kassiber` (cli) and checks its output only", "reviewed": false, "tests": 5},
       "PriceCurrencyMismatchTest::test_opening_a_processed_mismatched_book_requires_one_rebuild": {"disposition": "subprocess-scenario", "flags": ["sql", "sql-seed", "subprocess"], "group": "journals", "reason": "spawns `python -m kassiber` (cli) but seeds raw SQLite state", "reviewed": false, "tests": 1}
