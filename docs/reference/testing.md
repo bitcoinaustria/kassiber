@@ -540,7 +540,9 @@ than 2,000 rows, compare by length or count and an FNV-1a 64 digest. A test
 may mask further clock-derived numbers (`age_seconds`). A client whose
 request order varies between runs is answered by a loopback JSON-RPC server
 built from the tape (`replay_served`, `kassiber-net`'s `FakeJsonRpc`) instead
-of the byte tape.
+of the byte tape. That server binds a free port; the session's inputs name it
+in place of the recorded `127.0.0.1:<port>`, and its outputs are mapped back
+before they are compared.
 
 The replays run on strict tapes (`KASSIBER_TEST_NET_TAPE=replay-strict:`):
 a request no recording began with, a connect with no recording left, or a
