@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from functools import lru_cache
+import gzip
 import json
 import os
 from pathlib import Path
@@ -96,9 +97,12 @@ class Masker:
     artifact digests are masked too.
     """
 
-    def __init__(self, known: set[str], today: datetime, *, anonymous: bool = False):
+    def __init__(self, known: set[str], today: datetime, *, anonymous: bool = False, also: tuple = ()):
         self.known = known
         self.today = today.date()
+        # Further days whose clocks are masked too, such as the day a frozen
+        # starting book was recorded (`date` objects).
+        self.also = tuple(also)
         self.fresh: dict[str, str] = {}
         self.digests: set[str] = set()
         self.frozen = False
@@ -121,7 +125,8 @@ class Masker:
 
         def clock(match):
             day = datetime.strptime(match.group(1), "%Y-%m-%d").date()
-            return "<clock>" if abs((day - self.today).days) <= 2 else match.group(0)
+            near = any(abs((day - anchor).days) <= 2 for anchor in (self.today, *self.also))
+            return "<clock>" if near else match.group(0)
 
         def digest(match):
             token = match.group(0)
@@ -247,32 +252,36 @@ def book_identities(root: Path) -> set[str]:
     return found
 
 
-def scrub_paths(value, base: Path):
+def scrub_paths(value, base: Path | str, placeholder: str = "<base>"):
     """``value`` with the run's scratch directory written as ``<base>``.
 
     A golden is recorded under another temporary directory than the run that
     compares with it; paths below the scratch root must match all the same.
+    A string ``base`` (a loopback fixture URL, say) is replaced as it is.
     """
     prefix = str(base)
     if isinstance(value, str):
-        return value.replace(prefix, "<base>")
+        return value.replace(prefix, placeholder)
     if isinstance(value, list):
-        return [scrub_paths(item, base) for item in value]
+        return [scrub_paths(item, base, placeholder) for item in value]
     if isinstance(value, tuple):
-        return tuple(scrub_paths(item, base) for item in value)
+        return tuple(scrub_paths(item, base, placeholder) for item in value)
     if isinstance(value, dict):
-        return {key: scrub_paths(item, base) for key, item in value.items()}
+        return {key: scrub_paths(item, base, placeholder) for key, item in value.items()}
     return value
 
 
-def masked_book(root: Path, masker: Masker, *, scrub: Path | None = None) -> dict:
+def masked_book(root: Path, masker: Masker, *, scrub=None) -> dict:
     """The dump with ``masker`` applied, each table's rows re-sorted.
 
-    ``scrub`` names a scratch directory whose paths become ``<base>`` first.
+    ``scrub`` names a scratch directory whose paths become ``<base>`` first,
+    or is a function applied to each table's rows first.
     """
     masked = {}
     for table, (columns, rows) in dump(root).items():
-        if scrub is not None:
+        if callable(scrub):
+            rows = scrub(rows)
+        elif scrub is not None:
             rows = scrub_paths(rows, scrub)
         masked[table] = (columns, sorted(
             (tuple((kind, masker.value(value)) for kind, value in row) for row in rows), key=repr))
@@ -298,11 +307,16 @@ def jsonable(value):
 
 
 def load_golden(name: str):
-    return json.loads((GOLDENS / name).read_text(encoding="utf-8"))
+    """A golden from `tests/integration/goldens/`; `.gz` names are gzip-compressed."""
+    raw = (GOLDENS / name).read_bytes()
+    if name.endswith(".gz"):
+        raw = gzip.decompress(raw)
+    return json.loads(raw.decode("utf-8"))
 
 
 def write_golden(name: str, value) -> Path:
     GOLDENS.mkdir(parents=True, exist_ok=True)
     path = GOLDENS / name
-    path.write_text(json.dumps(jsonable(value), indent=1, sort_keys=True) + "\n", encoding="utf-8")
+    raw = (json.dumps(jsonable(value), indent=1, sort_keys=True) + "\n").encode("utf-8")
+    path.write_bytes(gzip.compress(raw, mtime=0) if name.endswith(".gz") else raw)
     return path

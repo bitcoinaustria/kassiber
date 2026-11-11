@@ -26,7 +26,7 @@ from tests.integration.runtime_parity import (
 )
 
 RECORD = os.environ.get("KASSIBER_RECORD_GOLDENS") == "1"
-GOLDEN = "exchange_lifecycle.json"
+GOLDEN = "exchange_lifecycle.json.gz"
 
 
 @unittest.skipUnless(cli.configured(), cli.NO_BINARY)
