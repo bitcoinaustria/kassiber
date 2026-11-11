@@ -80,8 +80,27 @@ class HarnessProductFreeTest(unittest.TestCase):
                     other_tests = stripped.startswith(("from tests", "import tests")) and not stripped.startswith(
                         ("from tests.integration", "import tests.integration", "from tests import integration")
                     )
-                    if product or other_tests or "uv run" in stripped:
+                    uv = "uv run --locked" in stripped or '"uv", "run"' in stripped
+                    if product or other_tests or uv:
                         offenders.append(f"{path.relative_to(ROOT)}:{number}: {stripped}")
+        self.assertEqual(offenders, [])
+
+    def test_harness_scripts_need_no_python_environment(self):
+        scripts = (
+            "scripts/integration-harness.sh",
+            "scripts/chain-analysis-regtest.sh",
+            "scripts/benchmark-wallet-sync.py",
+            "scripts/bootstrap-dev-env.sh",
+            "scripts/smoke-packaged-cli.sh",
+            "scripts/check-packaged-cli-no-egress.sh",
+        )
+        offenders = []
+        for name in scripts:
+            for number, line in enumerate((ROOT / name).read_text(encoding="utf-8").splitlines(), 1):
+                stripped = line.strip()
+                if any(token in stripped for token in ("uv run", "uv sync", ".venv/", "-m kassiber")) or \
+                        stripped.startswith(("import kassiber", "from kassiber")):
+                    offenders.append(f"{name}:{number}: {stripped}")
         self.assertEqual(offenders, [])
 
     def test_runs_on_the_interpreter_the_harness_requires(self):
