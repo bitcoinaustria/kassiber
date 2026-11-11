@@ -1,5 +1,9 @@
 # Rust port: audit package and Privacy Mirror
 
+> **Historical.** This page records the Python-to-Rust port. Python was removed
+> under [plan 22](../plan/22-python-removal.md); the `kassiber/` paths and Python
+> tests it cites exist only at the `archive/python-backend` tag.
+
 **Status:** native in Rust and registered (2026-11-06). This page lists every
 entry point the two Python modules serve, what the package contains, what
 is privacy-sensitive, and where the Rust port differs on purpose. Methodology

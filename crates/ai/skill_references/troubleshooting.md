@@ -98,18 +98,22 @@ reprocessed.
 
 ## Command not found
 
-If `kassiber` is missing from `PATH`, use:
+If `kassiber` is missing from `PATH`, run the binary from a Kassiber checkout:
 
 ```bash
-uv run --locked kassiber status
+cargo run --locked -p kassiber -- status
 ```
 
-or activate the local environment:
+or build it once and call it directly:
 
 ```bash
-source .venv/bin/activate
-kassiber status
+cargo build --locked -p kassiber
+target/debug/kassiber status
 ```
+
+The desktop app bundles its own `kassiber`. Settings → Desktop → Terminal
+command installs a `kassiber` launcher on `PATH`; native installers add the
+command themselves.
 
 ## Path confusion
 
@@ -184,11 +188,9 @@ If a command returns:
   restore completed but the decrypted temp restore directory could not be removed.
   Remove the path from the error details manually before sharing logs or
   leaving the machine unattended.
-- `age_unavailable` from `kassiber backup ...` — neither the `age`/`rage`
-  binary nor the `pyrage` Python module is available. Install one of them.
-- `age_passphrase_mode_unsupported` — should not happen for default backup
-  flows after V4.1; if it does, the host has `age` on `PATH` but no `pyrage`,
-  and the caller forced a binary backend. Install `pyrage`.
+- `age_unavailable` from `kassiber backup ...` — a recipient-mode backup
+  needs an `age` or `rage` binary on `PATH`, and neither was found. Install
+  one of them. Passphrase-mode backups encrypt in process and need neither.
 
 Never embed a passphrase in argv; there is no `--db-passphrase <value>` flag
 and the daemon does not accept passphrases via the request payload outside of

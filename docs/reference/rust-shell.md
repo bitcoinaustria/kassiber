@@ -1,5 +1,9 @@
 # Rust shell
 
+> **Historical.** This page records the Python-to-Rust port. Python was removed
+> under [plan 22](../plan/22-python-removal.md); the `kassiber/` paths and Python
+> tests it cites exist only at the `archive/python-backend` tag.
+
 The Rust backend's binary shell, built in stage R1 of
 [plan 21](../plan/21-rust-backend.md): the `kassiber` binary, its command
 line, the machine envelope, and the daemon's JSONL protocol. The Python

@@ -10,11 +10,6 @@ implementation T3 Code works with, as the provider kind `cli_proxy`. Choose
 key if it has one), press **Test & discover**, and its models are ready for
 chat. You configure nothing per model.
 
-Only the Rust backend supports this kind. The Python backend can still list
-such a row, but every path that would contact it (chat, model listing, the
-connection test) refuses it with `ai_provider_unsupported`, and it cannot
-create one.
-
 ## What the proxy exposes
 
 These notes come from CLIProxyAPI's source (`internal/api/server_routes.go`,
@@ -291,16 +286,14 @@ the proxy refuses it, and a new one is refused with
   refresh, and effort levels.
 - `crates/ai/tests/chat.rs` runs whole chat turns through a scripted proxy,
   with consent and `full_access`, in both formats.
-- `tests/test_rust_cli_proxy_daemon.py` runs one Rust daemon session against
-  a loopback fake: no request before Test & discover, the saved list, chats
+- The recorded `test_rust_cli_proxy_daemon` sessions
+  (`scripts/replay-sessions.sh --only test_rust_cli_proxy_daemon`) replay one
+  daemon session against a loopback fake: no request before Test & discover, the saved list, chats
   in each model's format, a consented tool call, and the refusals.
 - `crates/ai/src/providers/tests.rs` and `cli_proxy.rs` cover the store rules
   and the family table. Entries named `cli-proxy-*` in
   `crates/ai/scripts/mutations.json` pin each rule to the tests that kill
   it.
-- `tests/test_ai_cli_proxy_rust_only.py` checks that the Python backend
-  refuses the kind, and `tests/test_rust_ai_providers.py` pins the one
-  message difference (an unknown kind's refusal lists `cli_proxy`).
 - `ui-tauri/src/components/kb/aiProviderFormModel.test.ts` and
   `AiProviderForm.dom.test.tsx` cover the wizard flow, and
   `ui-tauri/src/components/ai/ModelListRow.dom.test.tsx` the prefixed models

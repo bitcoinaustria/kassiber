@@ -106,8 +106,8 @@ The workflow currently builds:
   NSIS setup `.exe`, published with short user-facing filenames. Every preview
   carries the exact binary the matching CLI-only matrix leg built and smoked,
   under its target-triple sidecar name; macOS keeps it under
-  `binaries/kassiber-cli/`, the location and signing identifier the Python
-  one-dir sidecar used. See [Rust packaging](rust-packaging.md).
+  `binaries/kassiber-cli/`, the location and signing identifier the earlier
+  Python one-dir sidecar used. See [Rust packaging](rust-packaging.md).
 
 The final verified macOS CLI archive replaces the unsigned input with
 the complete notarized `Kassiber.app` runtime and its terminal launcher. The
@@ -116,10 +116,10 @@ the GUI. Final DMG, app ZIP, and CLI archive share the same signed app payload;
 stapled-ticket metadata inside the DMG may differ.
 
 macOS is Apple Silicon only. Intel macOS builds were dropped deliberately:
-they could not ship the pinned `lwk` wheel (no macOS x86_64 wheel exists), so
-they silently downgraded Liquid observation to the compatibility route, and
-half-capable builds are worse than an explicit platform floor. Intel Mac users
-can run from source.
+the Python builds could not ship the pinned `lwk` wheel (no macOS x86_64 wheel
+existed), so they silently downgraded Liquid observation to the compatibility
+route, and half-capable builds are worse than an explicit platform floor.
+Intel Mac users can build from source.
 
 Tag pushes stage drafts marked as prereleases. A manual workflow run can select
 `release_channel=release` to stage a stable-release draft instead; finalization
@@ -127,11 +127,11 @@ must use the matching channel. The embedded `BUILD_INFO.json` reports
 the selected `prerelease` or `release` channel.
 
 Tag and publishing runs fail before building when the tag without its leading
-`v` does not exactly match the Python package version. This prevents a release
+`v` does not exactly match the product version (`crates/kassiber/Cargo.toml`). This prevents a release
 tag, Debian/RPM package metadata, Homebrew definition, and embedded build
 identity from advertising different versions.
 
-Pull requests that change the release workflow, frozen-CLI inputs, or Tauri
+Pull requests that change the release workflow, backend crate inputs, or Tauri
 packaging files run the same cross-platform CLI and desktop build matrix without
 publishing. These CI artifacts identify themselves as `dev`; tag and manual
 publishes remain `prerelease` or `release`.
@@ -187,34 +187,17 @@ compatibility observer.
 For a local Apple Silicon build without Rosetta, use the arm64-only helper:
 
 ```bash
-./scripts/build-macos-arm64-app.sh
+./scripts/build-macos-arm64-rust-app.sh
 # skip the DMG if you only want the .app:
-BUNDLES=app ./scripts/build-macos-arm64-app.sh
-# additionally install/repair the user-local shell command:
-./scripts/build-macos-arm64-app.sh --install-cli
+BUNDLES=app ./scripts/build-macos-arm64-rust-app.sh
 ```
 
-It builds the one-dir PyInstaller sidecar as
-`ui-tauri/src-tauri/binaries/kassiber-cli/kassiber-cli-aarch64-apple-darwin`,
-verifies that the executable is arm64, and runs Tauri with
-`--target aarch64-apple-darwin --bundles app,dmg`. The result is a full
-unsigned desktop app and DMG under
-`ui-tauri/src-tauri/target/aarch64-apple-darwin/release/bundle`.
-With `--install-cli`, the helper first smokes the finished app bundle's
-`Contents/Resources/bin/kassiber` launcher and then installs a managed wrapper
-through the desktop binary's same Rust implementation used by Settings. That
-single implementation chooses `~/.local/bin` or `~/bin`, refuses conflicts, and
-adds one marked PATH block to the current shell profile when needed. It never
-starts a daemon or background process; each invocation remains a normal one-shot
-CLI process. Without the flag, a local build does not modify the home directory.
-
-The helper defaults to Python 3.11 to match the GitHub Actions prerelease
-workflow; set `PYTHON_VERSION=<version>` only for intentional local debugging.
-The Tauri package version is injected from `[project].version` in
-`pyproject.toml`, so local app builds follow the Python package version instead
-of the placeholder value in `tauri.conf.json`. The local helper also sets the
-desktop display label to `dev` and injects the current Git commit, so the app
-footer reads like `Kassiber dev · abc1234`.
+It builds the production `kassiber` binary as the sidecar and runs Tauri with
+`--target aarch64-apple-darwin`; the details are under
+[Local Apple Silicon build with the Rust backend](#local-apple-silicon-build-with-the-rust-backend).
+The result is an unsigned desktop app and DMG, copied to `dist/macos-arm64/`.
+The package version comes from `crates/kassiber/Cargo.toml`, not the
+placeholder in `tauri.conf.json`.
 
 #### First launch on macOS
 
@@ -224,7 +207,7 @@ The good news for a local build: nothing downloaded it, so there is no
 `com.apple.quarantine` xattr — Gatekeeper is on its softer path.
 
 ```bash
-open ui-tauri/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Kassiber.app
+open "dist/macos-arm64/Kassiber Rust Dev.app"
 ```
 
 Expected dialogs and how to clear them:
@@ -239,8 +222,7 @@ Expected dialogs and how to clear them:
   xattr was attached (e.g. you zipped/unzipped the bundle through a tool
   that adds the flag). Strip it:
   ```bash
-  xattr -dr com.apple.quarantine \
-    ui-tauri/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Kassiber.app
+  xattr -dr com.apple.quarantine "dist/macos-arm64/Kassiber Rust Dev.app"
   ```
 
 Subsequent launches from the same path go through silently. If you rebuild
@@ -249,13 +231,14 @@ the right-click → Open dance once.
 
 For day-to-day frontend iteration, skip the .app bundle entirely and use
 `pnpm --dir ui-tauri tauri:dev` — that runs the webview + Rust supervisor +
-Python daemon with HMR, no PyInstaller step, no DMG, no Gatekeeper dialog.
+the checkout's `target/{release,debug}/kassiber` daemon with HMR, no bundle,
+no DMG, no Gatekeeper dialog.
 Use the full build script when you specifically need a real installable
 `.app` to test packaging, the bundled CLI sidecar, file associations, or
 to hand a build to someone else on Apple Silicon.
 
 Desktop artifacts are unsigned previews, but normal daemon calls use the
-bundled Rust sidecar and do not require a separate Python checkout.
+bundled Rust sidecar and do not require a source checkout.
 Settings -> Desktop -> Terminal command can install a user-local `kassiber`
 launcher without administrator privileges for direct-DMG and portable builds.
 It also maintains one marked shell-profile PATH block when needed. The launcher
@@ -296,13 +279,11 @@ command is offered.
 
 ### Local Apple Silicon build with the Rust backend
 
-While [plan 21](../plan/21-rust-backend.md) moves the backend to Rust, a local
-app with the Rust binary as its sidecar can be tested beside the Python one:
+`scripts/build-macos-arm64-rust-app.sh` builds a local app with the Rust
+binary as its sidecar:
 
 ```bash
-./scripts/build-macos-arm64-rust-app.sh
-# also build the Python-backed app from the same commit:
-./scripts/build-macos-arm64-rust-app.sh --with-python-app
+./scripts/build-macos-arm64-rust-app.sh [--no-backup]
 ```
 
 The helper builds the production `kassiber` binary (no `test-harness`
@@ -311,7 +292,7 @@ strips it with Xcode's `strip`, ad-hoc signs it under the identifier
 `kassiber-cli-aarch64-apple-darwin`, and refuses it unless it is an arm64
 Mach-O that links only macOS system libraries and reports
 `Kassiber <version> (dev, commit <12 hex>)`. It then runs the packaged-binary
-smoke CI runs. It places the binary where the Python sidecar goes,
+smoke CI runs. It places the binary at the sidecar location,
 `binaries/kassiber-cli/kassiber-cli-aarch64-apple-darwin`, with the provider
 broker beside it, so the supervisor, the bundled CLI launcher and the Touch ID
 helper's identity check find it unchanged, and re-signs it under that
@@ -320,14 +301,13 @@ bundles and only reads installed apps' build records, never executes them. The a
 (`at.bitcoinaustria.kassiber.rust-dev`) and shows the build label `dev-rust`.
 Finished apps and DMGs are copied to `dist/macos-arm64/`.
 
-Both apps use the same books. The data location does not depend on the bundle
-identifier, and ownership locks let only one desktop app hold a book at a
-time; the other reports that another desktop app owns the project. A newer
-build may upgrade a book, which an older build then refuses, so switch back
-and forth only between apps built from the same commit (`--with-python-app`).
-The helper warns when an installed Kassiber Dev or Kassiber app reports
-another commit. Requests the Rust backend does not serve yet return
-`not_implemented`.
+This app and an installed Kassiber app use the same books. The data location
+does not depend on the bundle identifier, and ownership locks let only one
+desktop app hold a book at a time; the other reports that another desktop app
+owns the project. A newer build may upgrade a book, which an older build then
+refuses, so switch back and forth only between apps built from the same
+commit. The helper warns when an installed Kassiber Dev or Kassiber app
+reports another commit.
 
 Before finishing, the helper snapshots every local book with
 `scripts/macos-kassiber-data.sh snapshot --if-changed`, unless `--no-backup` is
@@ -381,7 +361,8 @@ The release workflows run `kassiber-release` (`crates/release`), built by the
 `.github/actions/release-tool` composite action with
 `cargo build --locked --release -p kassiber-release --no-default-features`
 (no network stack or SQLCipher) and exported as `KASSIBER_RELEASE_TOOL`. Its
-subcommands replace the former Python scripts with byte-identical output:
+subcommands replaced the former Python release scripts with byte-identical
+output:
 `manifest generate|sign|verify-artifacts|verify-release|policy`,
 `render-aur`, `render-nix`, `render-homebrew`, `release-notes`, `build-info`
 and `macos sign|notarize|verify|prepare`. `crates/release/tests/tool.rs`

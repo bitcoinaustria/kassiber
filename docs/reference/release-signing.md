@@ -133,7 +133,8 @@ check is a second boundary, not a substitute for protected tag administration.
 ## User verification
 
 Obtain `kassiber-release.pub` from this repository or the Kassiber website, and
-compare its fingerprint with a second independent channel. Verification needs
+compare its fingerprint with a second independent channel. `kassiber
+verify-download` needs no external program; verifying without Kassiber needs
 OpenSSH 8.1 or newer (`ssh -V`).
 
 With Kassiber installed:
@@ -147,16 +148,15 @@ kassiber verify-download kassiber-macos-arm64.dmg \
 ```
 
 Verification is local and makes no network request. Kassiber reads bounded
-copies of the manifest, signature, and key, then hashes the key in Python and
-requires the pinned fingerprint. It writes one canonical allowed-signers entry
-for that key into a private temporary directory and runs `ssh-keygen -Y verify`
-with principal `release@kassiber`, namespace `kassiber-release`, and the
-manifest snapshot on stdin, without a shell. It accepts the signature only if
-`ssh-keygen` succeeds and reports a good signature from that exact key. It then
-requires the signed version to match the manifest filename, and only then
-compares the artifact's SHA-256 hash. A missing or too-old `ssh-keygen`, or a
-version, signature, fingerprint, or hash mismatch, is a hard failure: do not
-install or run the file.
+copies of the manifest, signature, and key, then hashes the key and requires
+the pinned fingerprint. It checks the SSHSIG signature in process
+(`crates/release/src/verify.rs`), with the same rules as `ssh-keygen -Y
+verify` given one allowed-signers entry for that key, principal
+`release@kassiber` and namespace `kassiber-release`. It accepts the signature
+only if it is a good signature from that exact key over the manifest snapshot.
+It then requires the signed version to match the manifest filename, and only
+then compares the artifact's SHA-256 hash. A version, signature, fingerprint,
+or hash mismatch is a hard failure: do not install or run the file.
 
 Without Kassiber, on macOS or Linux:
 

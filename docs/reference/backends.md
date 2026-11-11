@@ -58,8 +58,8 @@ sync backend added to an offline book becomes its default.
 Inspect the merged backend view:
 
 ```bash
-python3 -m kassiber backends list
-python3 -m kassiber backends get mempool
+kassiber backends list
+kassiber backends get mempool
 ```
 
 Those inspection commands follow Kassiber's safe-to-record contract for
@@ -72,20 +72,20 @@ it is emitted.
 Create and manage SQLite-backed backends:
 
 ```bash
-python3 -m kassiber backends create myelectrum --kind electrum --url ssl://index.bitcoin-austria.at:50002
-python3 -m kassiber backends update myelectrum --display-name "Home Fulcrum"
-python3 -m kassiber backends update myelectrum --batch-size 50 --timeout 60
-python3 -m kassiber backends update core --clear username --clear password --clear cookiefile
-python3 -m kassiber backends create core --kind bitcoinrpc --url http://127.0.0.1:8332 --cookiefile ~/.bitcoin/.cookie --wallet-prefix kassiber
-python3 -m kassiber backends set-default myelectrum
-python3 -m kassiber backends clear-default
-python3 -m kassiber backends delete myelectrum
+kassiber backends create myelectrum --kind electrum --url ssl://index.bitcoin-austria.at:50002
+kassiber backends update myelectrum --display-name "Home Fulcrum"
+kassiber backends update myelectrum --batch-size 50 --timeout 60
+kassiber backends update core --clear username --clear password --clear cookiefile
+kassiber backends create core --kind bitcoinrpc --url http://127.0.0.1:8332 --cookiefile ~/.bitcoin/.cookie --wallet-prefix kassiber
+kassiber backends set-default myelectrum
+kassiber backends clear-default
+kassiber backends delete myelectrum
 ```
 
 Point a wallet at a named backend:
 
 ```bash
-python3 -m kassiber wallets create \
+kassiber wallets create \
   --label donations \
   --kind address \
   --backend fulcrum \
@@ -237,7 +237,7 @@ Create a read-only LND backend without putting the macaroon in shell history:
 
 ```bash
 xxd -p -c 256 readonly.macaroon | \
-  python3 -m kassiber backends create lnd --kind lnd \
+  kassiber backends create lnd --kind lnd \
     --url https://127.0.0.1:8080 \
     --certificate ~/.lnd/tls.cert \
     --token-stdin
@@ -325,20 +325,20 @@ Kassiber reaches the node by running `lightning-cli` against a local
 you control (for example one that runs `lightning-cli` inside a container):
 
 ```bash
-python3 -m kassiber backends create cln \
+kassiber backends create cln \
   --kind coreln \
   --url cln://local \
   --lightning-dir ~/.lightning \
   --network bitcoin
 
-python3 -m kassiber wallets create \
+kassiber wallets create \
   --label routing-node \
   --kind coreln \
   --backend cln
 
-python3 -m kassiber wallets sync --wallet routing-node
-python3 -m kassiber reports lightning-profitability --connection routing-node
-python3 -m kassiber reports export-lightning-profitability-csv \
+kassiber wallets sync --wallet routing-node
+kassiber reports lightning-profitability --connection routing-node
+kassiber reports export-lightning-profitability-csv \
   --connection routing-node \
   --file /tmp/kassiber-lightning-profitability.csv
 ```
@@ -675,12 +675,12 @@ Use this for Electrum/Fulcrum-style servers.
 Supported backend URLs may be clearnet or `.onion`. For example:
 
 ```bash
-python3 -m kassiber backends create fulcrum-onion \
+kassiber backends create fulcrum-onion \
   --kind electrum \
   --url tcp://abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcd.onion:50001 \
   --tor-proxy 127.0.0.1:9050
 
-python3 -m kassiber backends create esplora-onion \
+kassiber backends create esplora-onion \
   --kind esplora \
   --url http://abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcd.onion/api \
   --tor-proxy 127.0.0.1:9050
@@ -725,7 +725,7 @@ wallet config.
 Example Bitcoin descriptor wallet:
 
 ```bash
-bash -c 'python3 -m kassiber wallets create \
+bash -c 'kassiber wallets create \
   --label vault \
   --kind descriptor \
   --backend mempool \
@@ -735,14 +735,14 @@ bash -c 'python3 -m kassiber wallets create \
   3< <(printf '%s\n' 'wpkh([fingerprint/84h/0h/0h]xpub.../0/*)') \
   4< <(printf '%s\n' 'wpkh([fingerprint/84h/0h/0h]xpub.../1/*)')
 
-python3 -m kassiber wallets derive --wallet vault --count 5
-python3 -m kassiber wallets sync --wallet vault
+kassiber wallets derive --wallet vault --count 5
+kassiber wallets sync --wallet vault
 ```
 
 Example Liquid descriptor wallet:
 
 ```bash
-bash -c 'python3 -m kassiber wallets create \
+bash -c 'kassiber wallets create \
   --label event-liquid \
   --kind descriptor \
   --backend liquid \

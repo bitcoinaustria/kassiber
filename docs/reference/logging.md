@@ -24,8 +24,8 @@ The guiding principle:
 
 | Buffer | Lives in | Bound | Survives |
 | --- | --- | --- | --- |
-| Daemon ring ([`kassiber/log_ring.py`](../../kassiber/log_ring.py)) | Python daemon process | 5,000 records / 4 MiB | webview reloads, UI restarts |
-| Operator ring ([`kassiber/operator/service.py`](../../kassiber/operator/service.py)) | Per-login-user broker process | 5,000 records / 4 MiB | individual CLI/agent exits only |
+| Daemon ring ([`crates/daemon/src/diagnostics.rs`](../../crates/daemon/src/diagnostics.rs)) | `kassiber daemon` process | 5,000 records / 4 MiB | webview reloads, UI restarts |
+| Operator ring ([`crates/operator/src/telemetry.rs`](../../crates/operator/src/telemetry.rs)) | Per-login-user broker process | 1,000 records | individual CLI/agent exits only |
 | Supervisor stderr tail + lifecycle ring ([`ui-tauri/src-tauri/src/supervisor.rs`](../../ui-tauri/src-tauri/src/supervisor.rs)) | Tauri (Rust) process | 16 KiB tail, 64 lifecycle records | daemon crashes and restarts |
 | Webview ring ([`ui-tauri/src/lib/appLogs.ts`](../../ui-tauri/src/lib/appLogs.ts)) | Browser/Webview JS heap | 10,000 records / 4 MiB | nothing (it is the view) |
 
@@ -35,7 +35,7 @@ is locked, which is exactly when you need it) and the
 `daemon_lifecycle_snapshot` Tauri command, and folds both into the webview
 ring with `daemon-*` / `super-*` record ids. The Logs page, exports, and
 support bundles therefore see one merged stream: daemon request logs,
-Python tracebacks, third-party library records, supervisor lifecycle
+sanitized panic messages, supervisor lifecycle
 events (spawn/exit/kill with the dying daemon's redacted stderr tail),
 webview transport records, console output, React errors, and unhandled
 promise rejections.
@@ -46,7 +46,7 @@ broker, and has no durable or desktop export path.
 
 A hard crash of the whole app loses the buffers. That is the accepted
 price of RAM-only; the supervisor preserving the daemon's stderr tail
-across daemon restarts covers the common case (the Python side died, the
+across daemon restarts covers the common case (the daemon died, the
 shell survived). Note that "RAM-only" is a policy about what Kassiber
 writes, not a physical guarantee — swap files and OS crash dumps can still
 page buffer contents to disk. Key material is protected against that by
@@ -55,7 +55,8 @@ the insert-time secret floor below, not by pretending RAM is hermetic.
 ## Egress auditor
 
 The desktop Egress screen is backed by a separate RAM-only ring in
-[`kassiber/egress_ledger.py`](../../kassiber/egress_ledger.py), exposed via
+the process-wide `kassiber-net` ledger
+([`crates/net/src/ledger.rs`](../../crates/net/src/ledger.rs)), exposed via
 `ui.egress.snapshot`. It records outbound metadata only: subsystem, host,
 port, operation, method, proxy flag, and outbound byte count. It deliberately
 drops paths, query strings, request bodies, headers, tokens, descriptors, and
@@ -79,13 +80,12 @@ itself, so it must not become a health checker or background probe.
 extended private/public keys, descriptors, Silent Payments `sp()` / `spscan` /
 `spspend` material, BDK/LWK observer blobs or opaque store values, API keys,
 bearer tokens, and passphrase assignments. These are scrubbed by
-[`kassiber/redaction.py`](../../kassiber/redaction.py) (Python),
-`kassiber_envelope::redaction` (Rust backend and desktop supervisor), and
+`kassiber_envelope::redaction` (the backend and the desktop supervisor) and
 `redactSecretFloorText` (TypeScript)
 before a record is stored, so this material never exists in any buffer and
 cannot leak through later code paths, exports, or memory dumps.
 
-The Python and webview floors also scrub `rpcpassword`, `rpcauth`, `password`,
+The backend and webview floors also scrub `rpcpassword`, `rpcauth`, `password`,
 `macaroon`, `cookie`, `secret_key` and `private_key` assignments. Their shared
 scanners handle key-based secrets before URL userinfo, including escaped and
 truncated diagnostics. Exact examples live in
@@ -95,8 +95,8 @@ checks. Nostr `nsec` private keys also pass through the key-material backstop.
 See [the scanner design and limits](#free-text-credential-scanner-and-limits)
 for encoding support, ambiguous URL text and prose-safe flag handling.
 
-The Rust backend and the desktop supervisor run the same floor as Python: see
-[the Rust mirror](#rust-mirror).
+The backend and the desktop supervisor share one Rust implementation: see
+[the Rust floor](#rust-mirror).
 
 **Operational redaction — applied at render/export time.** Amounts,
 addresses, txids, paths, URLs, labels. The Logs page renders redacted by
@@ -112,7 +112,7 @@ handed to an AI debugging session (the common workflow after a test sync
 against a real wallet) ties the log back to a real wallet on a block
 explorer. So instead of "readable in high_signal" they are always replaced
 with a pseudonym — a txid becomes `txid#<fnv>` and an amount becomes
-`amount#<salted-fnv>`. Txids stay deterministic across the Python/Rust/TS
+`amount#<salted-fnv>`. Txids stay deterministic across the Rust/TS
 boundary so transaction correlation survives. Amounts are salted per runtime so
 low-entropy values like `2500 sats` cannot be recovered by enumerating likely
 amounts against a public token; the same amount still correlates within the
@@ -129,7 +129,7 @@ The pseudonymizers live in `redactSecretFloorText`'s sibling helpers in
 [`appLogs.ts`](../../ui-tauri/src/lib/appLogs.ts) (`pseudoTxid` /
 `pseudoAmount`) and in `redact_operational_text` /
 `redact_operational_value`
-([`kassiber/redaction.py`](../../kassiber/redaction.py)). The Python copy runs
+([`kassiber_envelope::redaction`](../../crates/envelope/src/redaction.rs)). The backend copy runs
 inside `sanitize_traceback_text` (so ring tracebacks, `error.debug` and the CLI
 `--debug` envelope are covered), over structured `error.details` at the daemon
 error-envelope boundary (`redact_operational_value`, symmetric with the
@@ -144,7 +144,7 @@ boundaries (no adjacent ASCII letters, digits, underscores or hyphens). Partial
 UUID lookalikes are not exempt. The txid pass still runs first and is unchanged.
 Only the ID's own characters are shielded: a comma or decimal point followed
 by a separate amount is still redacted even when the ID ends entirely in
-digits. Python and webview regression tests share exact output vectors and a
+digits. Backend and webview regression tests share exact output vectors and a
 fixed test salt; runtime amount salts remain private and random.
 
 Prefer typed fields over free text when adding log producers: a field
@@ -160,14 +160,12 @@ message.
 
 - **Daemon requests** — every JSONL request logs start/finish/duration/
   outcome at debug level (errors at warning/error) under
-  `kassiber.daemon.request`, with the `request_id` stamped via a
-  contextvar that propagates into the sync worker pools. `ui.logs.snapshot`
+  `kassiber.daemon.request`, with the `request_id` stamped on each record,
+  including records from the sync workers. `ui.logs.snapshot`
   itself is exempt so polling does not feed the ring it reads.
-- **Python `logging`** — the daemon installs a ring handler on the root
-  logger at DEBUG, so module loggers (e.g. `kassiber.core.rates`) and
-  third-party libraries land in the ring instead of an unconfigured
-  stderr. The daemon never gains a stderr logging handler; the smoke suite
-  pins `stderr == ""` at clean shutdown.
+- **No stderr logging** — log records go only to the ring. The one stderr
+  write is a single line when a request handler panics, which the supervisor's
+  redacted stderr tail keeps.
 - **Background workers** — the freshness worker and AI chat worker stamp
   their own correlation ids; their failures are logged to the ring in
   addition to the envelopes they already emit.
@@ -184,7 +182,7 @@ message.
   selected, attempted, deferred, cancelled and failed jobs without result blobs.
 - **Operator broker** — unlock, lock, expiry, rejection, queue admission,
   dispatch, cancellation, and crash/result-unknown state enter only the
-  broker's bounded Python ring. Fields contain opaque project ids, exact
+  broker's bounded RAM ring. Fields contain opaque project ids, exact
   capability/command codes, and categorical auth methods; they omit raw argv,
   paths, endpoints, credentials, and secret frames. The ring dies with the
   broker and has no generic export or durable activity table.
@@ -195,22 +193,18 @@ message.
 
 ## Tracebacks in error envelopes
 
-Python `internal_error` envelopes carry a sanitized traceback in `error.debug`:
-paths relativized (never absolute, never containing the home directory),
-secret-floor scrubbed, length-capped. The CLI sanitizes the envelope copy
-of `--debug` tracebacks the same way while keeping the raw traceback on
-the local stderr.
-
-The [native Rust diagnostic contract](rust-shell.md#diagnostics-service-slice-r5)
+`internal_error` envelopes carry a sanitized `error.debug` string: paths
+relativized (never absolute, never containing the home directory),
+secret-floor scrubbed, length-capped (`sanitize_traceback_text`). The
+[diagnostic contract](rust-shell.md#diagnostics-service-slice-r5)
 uses an empty string when no bounded native frames are available. For
 [configuration-hygiene corrupt-marker daemon errors](rust-shell.md#corrupt-marker-daemon-diagnostics-r5-privacy-continuation),
-that string is present with or without global `--debug`, matching Python's
-field presence. Typed refusals retain null. Native stderr stays empty; Python
-tracebacks and native frame paths are never fabricated or serialized.
+that string is present with or without global `--debug`. Typed refusals
+retain null. Stack frames and their paths are never fabricated or serialized.
 
 The AI surface never sees `error.debug`. Error envelopes are not embedded
 in provider-bound content today, and `redact_tool_arguments`
-([`kassiber/ai/tools.py`](../../kassiber/ai/tools.py)) drops `debug` keys
+([`crates/ai/src/redact.rs`](../../crates/ai/src/redact.rs)) drops `debug` keys
 outright as the standing belt-and-suspenders, mirroring the Tier-3
 redaction pattern from [lightning-opsec.md](lightning-opsec.md). Log text
 shown to or read by an AI assistant must be treated as untrusted data —
@@ -221,11 +215,9 @@ bodies).
 
 Only user-initiated actions: the Logs page export (`.md`/`.log`/`.jsonl`,
 watermarked when raw), the support bundle (redaction report + failure
-context), and `kassiber diagnostics`. Packaged builds do not include RP2,
-and no product module imports it (`tests/test_tax_oracle_imports.py`). Only
-tests load it, under the tax engine's frozen parity oracle, which then removes
-RP2's import-time file log from a scratch temp directory (see
-[`tests/tax_oracle/adapter.py`](../../tests/tax_oracle/adapter.py)).
+context), and `kassiber diagnostics`. RP2, whose import writes a file log, was only a
+test oracle; nothing in the product or the tests runs it now (its outputs are
+frozen goldens).
 
 An always-on log file is a rejected design. If session recording to disk
 is ever added, it must be opt-in, visibly active, tier-redacted at write
@@ -239,7 +231,7 @@ is acceptable; exposing part of a credential is not. Ordinary prose words are
 the exception, so help text remains readable. Producers must use typed secret
 fields rather than rely on inference from arbitrary text.
 
-Python and the shipped webview run mirrored forward scanners before the remaining
+The backend and the shipped webview run mirrored forward scanners before the remaining
 key/descriptor backstops. Each scanner (URL userinfo, schemeless userinfo, XML,
 name/value pairs, command flags and key assignments) reports spans in the
 original text, over both the raw text and the decoded view. Their union is
@@ -331,8 +323,7 @@ are masked. `credentials` remains a secret alias. Colon status literals `none`,
 `expired` and `(not set)` remain readable on their own; `=` assignments are
 secret-bearing.
 
-One exception sits before the scanner, in `sanitize_traceback_text` (Python
-`log_ring.py`, Rust `kassiber_envelope::redaction`): the macOS Touch ID helper
+One exception sits before the scanner, in `sanitize_traceback_text` (`kassiber_envelope::redaction`): the macOS Touch ID helper
 reports failures as `kassiber native auth: <text>`, which reads as an
 `auth: <secret>` pair. When the whole message is that prefix followed by one
 of the helper's fixed texts (`NATIVE_AUTH_ERROR_MESSAGES`), or by one of four
@@ -378,7 +369,7 @@ contents, including ambiguous glued tails. Unclosed openers (`"`, `'`, `"""`,
 through the extended value rather than only the first token.
 
 Quoted values use escape-run counting rather than a backtracking expression.
-Ordinary JSON, enclosing JSON string layers and their Python `repr()` forms do
+Ordinary JSON, enclosing JSON string layers and their Python-style `repr()` forms do
 not have a fixed nesting cap: delimiter runs are counted directly, without
 recursive JSON decoding. Complete quoted values may span lines; truncated values
 are masked through their line, and ambiguous glued quote tails fail closed
@@ -474,9 +465,12 @@ and count checks scan forward without backtracking. Escape-run counting and the 
 passes are linear in input length; each adversarial shape is checked on its own
 to 400,000 characters. A record longer than 1,000,000 code points is replaced
 whole by `[redacted-oversized]` before any scanner runs. Six seeded generators
-each run 100,000 compositions in Python and through the webview insert path. The
-second to sixth retain the reviewers' independently authored distributions and
-Python RNG; the fourth to sixth also run further seeds. The sixth checks every
+each produced 100,000 compositions. Their cases are frozen as locked test data
+(`tests/fixtures/secret_redaction/`, fetched by `scripts/fetch-test-data.sh`),
+generated by the reviewers' original Python generators with their
+independently authored distributions and RNG; the fourth to sixth also cover
+further seeds. The webview insert path runs them; see
+[the Rust floor](#rust-mirror) for the backend. The sixth checks every
 planted name, flag, URL, provider and chat-service secret, including the
 concatenated names, split flags and chat paths it was written to find. The fifth checks
 planted secrets and numeric PIN/OTP codes inside the contract; zero-width noise
@@ -485,16 +479,18 @@ names are outside it. All six assert
 that no four-character planted secret fragment survives and that complete output
 streams have the same SHA-256 digest in both runtimes; the first four also assert
 that planted identifiers, hostnames, prose and help remain readable. The webview bare-mnemonic heuristic retains its three
-known corpus differences from Python.
+known corpus differences from the backend floor.
 
 ### Rust mirror
 
 [`crates/envelope/src/redaction/scanner.rs`](../../crates/envelope/src/redaction/scanner.rs)
-mirrors `kassiber/redaction_scanner.py` function by function, and
-[`floor.rs`](../../crates/envelope/src/redaction/floor.rs) the key, descriptor
-and token patterns and `is_sensitive_key` of `redaction.py`. Python's regular
-expressions are written out as matchers that accept exactly what `re` accepts,
-over code points, with no regex engine; a surrogate stands in as a
+is the free-text scanner, and
+[`floor.rs`](../../crates/envelope/src/redaction/floor.rs) holds the key,
+descriptor and token patterns and `is_sensitive_key`. They were ported
+function by function from the Python reference (`redaction_scanner.py` and
+`redaction.py` at the `archive/python-backend` tag), whose regular
+expressions are written out as matchers that accept exactly what Python's `re`
+accepted, over code points, with no regex engine; a surrogate stands in as a
 private-use character, as elsewhere in the envelope. Both files use only the
 standard library, so the desktop supervisor
 ([`secret_floor.rs`](../../ui-tauri/src-tauri/src/secret_floor.rs)) compiles
@@ -503,11 +499,13 @@ including the eight-level `[truncated]` depth of `redact_secret_value`.
 Every Rust caller (daemon errors and log ring, chain and wallet diagnostics,
 metadata history, provider previews) goes through these functions.
 
-`crates/envelope/tests/scanner_corpus.rs` checks Rust output byte for byte
-against Python's for every case of the shared fixture corpora, and, from
-`crates/envelope/scripts/gen_scanner_vectors.py generators`, for all six
-generators at their pinned seeds (reproducing the pinned digests), their pinned
-extra seeds and two more seeds each. `scanner_scaling.rs` times every scaling
+`crates/envelope/tests/scanner_corpus.rs` checks the output byte for byte
+against the frozen Python output for every case of the shared fixture corpora
+(`crates/envelope/tests/data/secret_floor.txt`). Its generator test,
+`generator_corpora_match_python`, is ignored by default: it reads a corpus
+directory named by `KASSIBER_REDACTION_CORPUS` that the removed Python
+generator wrote, and checks all six generators at their pinned seeds
+(reproducing the pinned digests). `scanner_scaling.rs` times every scaling
 and stress shape at 40,000 and 400,000 characters in thread CPU time (release
 build); `scanner_families.rs` names one test per rule family, which the entries
-of `crates/envelope/scripts/mutations.json` must make fail.
+of the envelope crate's mutation catalog must make fail.

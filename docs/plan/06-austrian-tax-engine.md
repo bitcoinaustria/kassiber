@@ -5,9 +5,9 @@ under [plan 20](20-kassiber-tax-engine.md) with identical results; review-gated
 E 1kv CSV/PDF/XLSX export is implemented for the current ausländisch /
 self-custody slice.
 **Current source of truth:** `docs/austrian-handoff.md`,
-`docs/reference/tax-engine.md`, `kassiber/core/engines/ledger_request.py`,
-`tax-engine/core/src/ledger/`, `kassiber/core/austrian.py`,
-`tests/test_review_regressions.py`, and TODO.md.
+`docs/reference/tax-engine.md`, `crates/custody/src/ledger_request.rs`,
+`tax-engine/core/src/ledger/`, `crates/reports/src/austrian.rs`, their tests,
+and TODO.md.
 **Legal gate:** Kassiber is not tax advice. Austrian output must be reviewed by
 a Steuerberater before filing.
 
@@ -35,7 +35,7 @@ The tax engine owns:
   selection, and the markers in journal descriptions
   (`tax-engine/core/src/ledger/`)
 
-Do not grow a second Austrian tax engine in Python.
+Do not grow a second Austrian tax engine outside the tax engine.
 
 ## Austrian Rules Kassiber Must Respect
 
@@ -57,7 +57,7 @@ Do not grow a second Austrian tax engine in Python.
 
 Custody journal processing compiles raw transaction rows plus wallet
 metadata, reviewed pairs, rates, and explicit annotations into a finalized tax
-projection; `kassiber/core/engines/ledger_request.py` sends its rows to the
+projection; the ledger request (`crates/custody/src/ledger_request.rs`) sends its rows to the
 engine as typed facts, and the engine's normalizer
 (`tax-engine/core/src/ledger/normalize.rs`) turns them into typed normalized
 events.
@@ -107,7 +107,7 @@ engine type.
 - `at_category`
 - `at_kennzahl`
 
-Presentation-layer mapping lives in `kassiber/core/austrian.py`.
+Presentation-layer mapping lives in `crates/reports/src/austrian.rs`.
 
 Valued `wages` receipts book as ordinary acquisitions with the reviewed EUR
 value as basis. Their raw kind and attachments remain provenance, while wage-tax
@@ -115,14 +115,8 @@ calculation stays outside Kassiber and no employment-income journal row or E 1kv
 Kennzahl is created.
 
 E 1kv export is built from these persisted journal rows plus profile and
-quarantine state. The first implementation lives in the report builder module:
-
-```text
-kassiber/core/reports.py
-```
-
-Split it into `kassiber/core/reports/e1kv.py` only when that removes real
-complexity.
+quarantine state, in the reports crate (`crates/reports`: `austrian.rs` and
+its CSV, PDF and XLSX writers).
 
 ## Possible Future Annotation Table
 

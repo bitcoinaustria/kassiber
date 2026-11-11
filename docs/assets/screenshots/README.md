@@ -43,5 +43,5 @@ that's `docs/assets/screenshots/<file>`; from `docs/`, it's
 - Desktop captures: use the OS screenshot tool. Crop tightly and prefer
   retina/high-DPI captures so the result is sharp on GitHub's rendering.
 - Sanitize before committing: never include real wallet labels, addresses,
-  txids, descriptors, or backend hostnames. Use the demo data root from
-  `scripts/generate-source-funds-demo-report.py` or a throwaway profile.
+  txids, descriptors, or backend hostnames. Use a throwaway profile or the
+  [regtest demo](../../reference/testing.md#developer-regtest-demo-environment).

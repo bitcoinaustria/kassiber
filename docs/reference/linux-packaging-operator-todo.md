@@ -7,8 +7,8 @@ source-only pull request.
 
 ## Required before the first channel publish
 
-- [ ] Cut a correctly versioned release. The `vX.Y.Z` tag, Python/Tauri
-  metadata, Debian/RPM metadata, and embedded `BUILD_INFO.json` must all be
+- [ ] Cut a correctly versioned release. The `vX.Y.Z` tag, the backend crate and
+  Tauri metadata, Debian/RPM metadata, and embedded `BUILD_INFO.json` must all be
   `X.Y.Z`. Do not seed a channel from an older mismatched release.
 - [ ] Create the protected GitHub environment `linux-packaging-production`,
   require named human approvers, and restrict deployments to the protected

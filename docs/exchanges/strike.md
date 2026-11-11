@@ -1,7 +1,7 @@
 # Exchange spec: Strike
 
 > **Illustrative reference**, not a fresh intake. This documents the *already
-> shipped* Strike importer (`kassiber/importers.py` `normalize_strike_record`,
+> shipped* Strike importer (`crates/wallets/src/file_import/strike.rs`,
 > `docs/reference/imports.md` "## Strike") as a worked example of a completed
 > spec. The code is the source of truth; this snapshot describes it as of
 > 2026-06. Use it as a model when filling a real spec from
@@ -67,7 +67,10 @@ sign of `Amount BTC`.
 ## 4. Sample exports
 
 - **Files / location:** none committed (real Strike exports carry personal
-  data). Behavior is pinned by fixtures in `tests/test_cli_smoke.py`.
+  data). Behavior is pinned by the frozen import vectors
+  (`crates/wallets/tests/vectors/python_strike_imports.json`, read by
+  `crates/wallets/src/file_import/tests.rs`) and the recorded CLI smoke
+  sessions that `scripts/replay-sessions.sh` replays.
 - **Row types covered:** buy, sell, send/receive, withdrawal, Lightning,
   on-chain, fiat-only skip.
 

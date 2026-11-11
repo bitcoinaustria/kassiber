@@ -43,10 +43,10 @@ words, passphrases, API keys, or backend tokens; describe them instead.
 
 ## Scope
 
-In scope: the Kassiber CLI, Python daemon, and desktop app in this
-repository — anything that leaks wallet, book, or credential material,
-weakens the at-rest encryption boundary, or lets untrusted input reach code
-execution.
+In scope: the Kassiber CLI, daemon, MCP server, operator broker, and desktop
+app in this repository — anything that leaks wallet, book, or credential
+material, weakens the at-rest encryption boundary, or lets untrusted input
+reach code execution.
 
 Out of scope (documented behavior, not bugs — see
 [Privacy & security](docs/reference/privacy-and-security.md) for the reasoning):

@@ -1,7 +1,19 @@
 # Historical database fixtures
 
 These fixtures are databases created by the Kassiber code at the named commit,
-not current databases with selected columns removed afterward.
+not current databases with selected columns removed afterward. They are
+frozen: the Python builders that made them (`build_fixture.py`,
+`build_pre_sync_fixture.py`) and the Python `open_db` that checked them were
+removed under [plan 22](../../../docs/plan/22-python-removal.md) and exist only
+at the `archive/python-backend` tag.
+
+The Rust tests read decoded copies of the database fixtures, each with the
+complete typed dump Python's `open_db` produced from it, under
+`crates/transfers/tests/data/legacy_migrations/historical-*` (locked test data;
+run `scripts/fetch-test-data.sh`). `crates/transfers/tests/legacy_migrations.rs`
+requires the product's migrating open to produce the identical dump, and
+`crates/kassiber/tests/black_box/legacy_migrations.rs` opens them through the
+binary.
 
 | Fixture | Source commit | `kassiber/db.py` SHA-256 | Decoded database SHA-256 |
 | --- | --- | --- | --- |
@@ -23,11 +35,10 @@ Each of the two custody-overhaul databases above contains:
 - two replication events and one unresolved custody conflict (device sync
   was later removed; current code drops them on open).
 
-The fixture builder is intentionally run with the historical source tree first
-on `PYTHONPATH`. It refuses to overwrite an existing output directory. After
-generation, gzip and base64 encode `kassiber.sqlite3` to obtain the committed
-text fixture. The compatibility test decodes into a temporary directory and
-lets the current `open_db` perform the real upgrade.
+The fixture builder ran with the historical source tree first on
+`PYTHONPATH` and refused to overwrite an existing output directory. After
+generation, `kassiber.sqlite3` was gzipped and base64 encoded to obtain the
+committed text fixture.
 
 The fixtures are plaintext SQLite because they test schema/data migration.
 SQLCipher encryption, passphrase rotation, and plaintext-to-encrypted migration
@@ -53,7 +64,7 @@ paths, against an archived historical Python tree. It contains no real data.
 
 `pre_sync_bae01537b.sqlite3.gz.b64` was written by main at `bae01537b`
 (PR #654, the base of the Rust port before main sync 1) with
-`build_pre_sync_fixture.py`. Source `db.py` SHA-256:
+`build_pre_sync_fixture.py` (now only at the `archive/python-backend` tag). Source `db.py` SHA-256:
 `4c44164d25de749da4abe619cffd9887251f1d277639a572e5f7778a50ed5a2e`; decoded database SHA-256:
 `fab38e9852e8f61b32390742b4e78aefe3f843634b2a814b0f20cae4493ee0a5`.
 
@@ -62,8 +73,9 @@ interest and an owned transfer, processed journals, an AI provider and two
 custody AI audit rows under #654's narrower consent CHECK. Opening it runs
 every schema change main added after #654 (the accepted coarse price, the
 provider `agent_access` column, `ai_provider_checks`, the widened consent
-CHECK) and the semantic migrations the Rust store ports. Python and Rust must
-produce the same schema, rows and migration ledger from it.
+CHECK) and the semantic migrations the Rust store ports. The Rust store must
+produce the schema, rows and migration ledger Python's `open_db` recorded from
+it.
 ## Positional CSV identities
 
 `pre_economic_csv_ids_1ec7e7da.json` is a compact projection of exact transaction

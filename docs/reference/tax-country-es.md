@@ -3,13 +3,13 @@
 **Status:** implemented in the Rust backend as a **preview** country
 (2026-11-07). No Spanish tax professional (asesor fiscal) has reviewed it;
 every Spanish report and screen carries the preview notice until one does.
-Sources were read on 2026-11-07. Python stays `generic`/`at` only and
-refuses Spanish books. Nothing here is tax advice.
+Sources were read on 2026-11-07. Nothing here is tax advice.
 
 Test vectors: [tax-country-es-vectors.json](tax-country-es-vectors.json)
-(17 cases). [`scripts/tax-country-vectors.py`](../../scripts/tax-country-vectors.py)
-recomputes them from the rules below and runs RP2's ES plugin on the same
-inputs.
+(17 cases). A Python script (`scripts/tax-country-vectors.py`) computed them
+from the rules below and ran RP2's ES plugin on the same inputs; it was
+removed with Python ([plan 22](../plan/22-python-removal.md), D6), so the
+file is now a frozen, reviewed golden.
 
 ## Summary
 
@@ -225,7 +225,7 @@ What Kassiber does today, and where (2026-11-07).
 | Strings | `crates/reports/src/report_design/strings_es.rs` | the shared report strings and Spain's layer in Spanish; another country's layer keys fall back to English and never render for a Spanish book |
 | Calendar | registry Europe/Madrid; report readers through `kassiber_reports::country::zone`, `calendar::local` and `export_range::book_zone` | export periods, the generic tax summary, the desktop review years and the dashboard's accounting years use Madrid dates; see the open items for the remaining readers |
 | Vectors | `crates/reports/tests/country_vectors/es_jp.rs` (`es_compute`) | all 17 pass through the `ledger` operation under the registry's rules and the layer above |
-| End to end | `tests/test_rust_es_tax_country.py` | a CLI-built book through journals to the Spanish PDF, XLSX and CSV, repeat PDFs byte-identical, and the review quarantines |
+| End to end | none in Rust yet | the Python black-box test (`tests/test_rust_es_tax_country.py`: a CLI-built book through journals to the Spanish PDF, XLSX and CSV, repeat PDFs byte-identical, the review quarantines) went with Python ([plan 22](../plan/22-python-removal.md)) |
 
 ### Using it
 

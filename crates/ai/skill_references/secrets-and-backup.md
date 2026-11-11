@@ -352,11 +352,12 @@ You still need it to read the database after restore.
 
 ## age backend selection
 
-Kassiber prefers the stand-alone `age` (or `rage`) binary on `PATH` for
-recipient-mode backups because they stream arbitrary archive sizes. For
-passphrase-mode flows it prefers the in-process `pyrage` library, which is
-shipped as a dependency. If `pyrage` is missing and only the binary is
-present, passphrase-mode backups will fail with a clear error.
+Recipient-mode backups use the stand-alone `age` (or `rage`) binary on
+`PATH` because it streams arbitrary archive sizes; without one they fail with
+`age_unavailable`. Passphrase-mode backups encrypt in process with the age
+library built into Kassiber and need no binary. The export result's
+`age_backend` field still names that in-process backend `pyrage`, the value
+earlier versions reported.
 
 Recovery without Kassiber: any stranded user can decrypt a `.kassiber` file
 with stock `age` + `tar` + `sqlcipher` and recover everything that was inside

@@ -79,6 +79,11 @@ or CLI provider is selected.
 
 ## Leak Table
 
+The code paths and test references in this table and the argv table below are
+the Python backend's at the time of writing; Python was removed under
+[plan 22](22-python-removal.md) and they survive at tag
+`archive/python-backend`. The Rust binary keeps the same flags and behavior.
+
 | Channel | Current code path | Current behavior | Remaining risk |
 | --- | --- | --- | --- |
 | CLI argv for AI keys | `kassiber/cli/main.py:1359`, `kassiber/cli/main.py:1378`, `kassiber/cli/main.py:2639` | `--api-key-stdin` / `--api-key-fd` are preferred; `--api-key` remains a warning-on-use shim. | Legacy argv values can still land in shell history/process listings. |

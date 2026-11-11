@@ -19,11 +19,12 @@ Agents can discover the current CLI schema with `kassiber --machine commands
 describe [path ...]`; machine mode is non-interactive and will return a typed
 error rather than waiting for a prompt.
 
-For repo-local development where `kassiber` is not on `PATH`, use:
+For repo-local development where `kassiber` is not on `PATH`, build and run
+the binary from the checkout:
 
 ```bash
-uv run --locked kassiber init
-uv run --locked kassiber status
+cargo run --locked -p kassiber -- init
+cargo run --locked -p kassiber -- status
 ```
 
 Common follow-up setup:

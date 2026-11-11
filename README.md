@@ -34,10 +34,9 @@ Do not use Kassiber as the sole basis for filings or financial decisions.
 Download desktop or CLI packages from
 [GitHub Releases](https://github.com/bitcoinaustria/kassiber/releases).
 Packaged targets are Apple Silicon macOS, Linux x86_64, and Windows x86_64.
-The desktop includes the CLI runtime; neither needs Python. Releases ship the
-Rust `kassiber` binary in place of the earlier PyInstaller bundle and open the
-same books; the Python implementation stays in the source tree as the parity
-reference until it is retired. See [installation and first launch](docs/reference/prerelease-binaries.md)
+The desktop includes the CLI runtime, the same Rust `kassiber` binary. Neither
+needs Python; books made by earlier Python-based releases open as before. See
+[installation and first launch](docs/reference/prerelease-binaries.md)
 and [release verification](docs/reference/release-signing.md).
 
 With Homebrew, choose the desktop cask or the CLI formula. Both provide the

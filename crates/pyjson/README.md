@@ -50,10 +50,14 @@ Out of scope: `skipkeys`, `check_circular`, `cls`, callables other than
 none of them. Converting a `Decimal` to a float before dumping, as
 `json_ready` does, is the caller's step.
 
-## Call variants in kassiber/
+## Call variants in the Python backend
 
-`scripts/survey_json_dumps.py` parses `kassiber/` and classifies every
-`json.dumps` and `json.dump` call by its keyword arguments. On 2026-10-26 it
+This survey records which option sets the Python backend used, so it explains
+which bytes the stored data holds. Python was removed under
+[plan 22](../../docs/plan/22-python-removal.md); the module paths below exist
+at the `archive/python-backend` tag. On 2026-10-26 a survey script
+(`scripts/survey_json_dumps.py`, also only at that tag) classified every
+`json.dumps` and `json.dump` call in `kassiber/` by its keyword arguments. It
 found 253 calls in 21 written variants, which are 14 option sets once
 explicit defaults (`ensure_ascii=True`, `sort_keys=False`) and `json.dump`
 are folded in:
@@ -93,13 +97,14 @@ outputs a port has to keep byte-identical:
 | `fingerprints.py` `make_transaction_fingerprint` | sort | transaction fingerprints |
 | `envelope.py` `emit` | `indent=2` | CLI machine output |
 
-Rerun the survey when merging `main` into the stack; a new option set needs
-vectors before Rust code relies on it.
+A new option set needs vectors before Rust code relies on it. The repository
+no longer has a CPython oracle for new cases; add them through the
+frozen-golden flow in [plan 22](../../docs/plan/22-python-removal.md#generators-become-frozen-goldens).
 
 ## Vectors
 
 `tests/data/json_vectors.txt` holds about 21,000 cases from CPython 3.11
-(`scripts/gen_json_vectors.py`, fixed seed, under 3 MB, one case per line):
+(made once by a fixed-seed generator, under 3 MB, one case per line):
 about 17,000 floats (specials, every power of two and ten with its
 neighbours, the layout boundaries, 2,500 exact ties, random bit patterns,
 and money-like decimals) and about 4,300 `json.dumps` calls: every control
@@ -111,16 +116,21 @@ for each surveyed option set, and random nested documents for all 64
 combinations of the varied options. `tests/json_vectors.rs` checks every
 line and fails when a combination has too few cases.
 
+The file is a frozen golden: it is locked test data
+(`tests/test-data.lock`, fetched by `scripts/fetch-test-data.sh`), and nothing
+in the repository regenerates it. The generator,
+`crates/pyjson/scripts/gen_json_vectors.py`, exists only at the
+`archive/python-backend` tag.
+
 ```sh
-.venv/bin/python crates/pyjson/scripts/gen_json_vectors.py
+scripts/fetch-test-data.sh
 cargo test -p kassiber-pyjson
 ```
 
-A stress run writes a larger set elsewhere:
+`KASSIBER_JSON_VECTORS` points the test at another vector file of the same
+format, for example a larger stress set made with that generator at the tag:
 
 ```sh
-.venv/bin/python crates/pyjson/scripts/gen_json_vectors.py \
-    --seed 7 --scale 20 --output /tmp/json_stress.txt
-KASSIBER_JSON_VECTORS=/tmp/json_stress.txt \
+KASSIBER_JSON_VECTORS=<path to json_stress.txt> \
     cargo test --release -p kassiber-pyjson --test json_vectors
 ```
