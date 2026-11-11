@@ -16,6 +16,7 @@ from tests.test_custody_observation_consistency import (
 )
 from tests.test_source_overlap import _descriptor_config, ADDR_A, ADDR_B
 from tests.rust_fixture_binary import checked
+from tests.rust_port.portable_dump import iterdump as portable_iterdump
 
 ROOT = Path(__file__).resolve().parents[1]
 BINARY = str(checked(os.environ.get("KASSIBER_TEST_CUSTODY_LOADER_BIN", ROOT / "target/debug/examples/custody-load"),
@@ -164,7 +165,7 @@ def test_loader_utf8_refusal_matches_product_boundaries(loose_book, column, payl
                    amount=1000, external_id="acq", raw_json="{}")
     if column != "note":
         conn.execute(f'ALTER TABLE transactions ADD COLUMN "{column}"')
-    sql = "\n".join(conn.iterdump())
+    sql = "\n".join(portable_iterdump(conn))
     mutation = f'UPDATE transactions SET "{column}"=CAST(x\'{payload.hex()}\' AS TEXT) WHERE id=\'second\''
     conn.execute(mutation)
     with pytest.raises(sqlite3.OperationalError) as caught:
@@ -212,7 +213,7 @@ def test_loader_utf8_optional_reviews_preserve_python_fallback(loose_book):
     helper._tx(conn, tx_id="included", wallet_id="wallet-a", direction="inbound",
                amount=1000, external_id="acq", raw_json="{}")
     insert(conn, "custody_gap_reviews", "review", gap_id="gap", revision=2)
-    sql = "\n".join(conn.iterdump())
+    sql = "\n".join(portable_iterdump(conn))
     mutation = "UPDATE custody_gap_reviews SET reason=CAST(x'ff00' AS TEXT)"
     conn.execute(mutation)
     expected = load_custody_snapshot(conn, _profile(conn), as_of=AS_OF)
@@ -238,7 +239,7 @@ def test_loader_preserves_numeric_revision_bindings(loose_book, value):
     from unittest.mock import patch
     with patch(__name__ + ".check", lambda _conn: None):
         test_loader_covers_every_structural_table_column_and_filter((conn, helper))
-    sql = "\n".join(conn.iterdump())
+    sql = "\n".join(portable_iterdump(conn))
     for column in ("id", "supersedes_component_id", "superseded_by_component_id"):
         sql = sql.replace(f'"{column}" TEXT', f'"{column}"')
     with sqlite3.connect(":memory:") as legacy:
@@ -281,7 +282,7 @@ def _check_projection(conn):
     from crates.journals.scripts.audit_loader_storage import expected, classify_projection
     profile = dict(_profile(conn))
     reference = expected(conn, profile, project=True)
-    request = {"sql": "\n".join(conn.iterdump()), "profile": profile,
+    request = {"sql": "\n".join(portable_iterdump(conn)), "profile": profile,
                "as_of": AS_OF, "project": True}
     response = subprocess.run([BINARY], input=json.dumps(request).encode(),
                               capture_output=True, check=True, timeout=120)
@@ -328,7 +329,7 @@ def test_loader_probe_compares_native_projection_without_snapshot_text(loose_boo
     helper._tx(conn, tx_id="buy", wallet_id="wallet-a", direction="inbound",
                amount=100000000000, external_id="acq", raw_json="{}")
     conn.execute("UPDATE transactions SET kind='buy',fiat_rate=10000")
-    request = {"sql": "\n".join(conn.iterdump()), "profile": dict(_profile(conn)),
+    request = {"sql": "\n".join(portable_iterdump(conn)), "profile": dict(_profile(conn)),
                "as_of": AS_OF, "project": True}
     response = subprocess.run([BINARY], input=json.dumps(request).encode(),
                               capture_output=True, check=True, timeout=120)
@@ -773,7 +774,7 @@ def test_loader_receipt_error_precedence(loose_book, prior):
     expected = {"family": type(caught.value).__name__, "message": str(caught.value),
                 "code": getattr(caught.value, "code", None)}
     assert expected["family"] == ("ValueError" if prior == "tax" else "TypeError" if prior == "component" else "AppError")
-    request = {"sql": "\n".join(conn.iterdump()), "profile": profile, "as_of": AS_OF}
+    request = {"sql": "\n".join(portable_iterdump(conn)), "profile": profile, "as_of": AS_OF}
     result = subprocess.run([BINARY], input=json.dumps(request).encode(), capture_output=True,
                             check=True, timeout=120)
     assert not result.stderr
@@ -857,7 +858,7 @@ def _check_refusal(conn):
         load_custody_snapshot(conn, profile, as_of=AS_OF)
     expected = {"family": type(caught.value).__name__, "message": str(caught.value),
                 "code": getattr(caught.value, "code", None)}
-    request = {"sql": "\n".join(conn.iterdump()), "profile": profile, "as_of": AS_OF}
+    request = {"sql": "\n".join(portable_iterdump(conn)), "profile": profile, "as_of": AS_OF}
     result = subprocess.run([BINARY], input=json.dumps(request).encode(), capture_output=True,
                             check=True, timeout=120)
     assert not result.stderr

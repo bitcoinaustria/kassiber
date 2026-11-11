@@ -10,7 +10,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
-from sqlite3.dump import _iterdump
+from tests.rust_port.portable_dump import iterdump as _iterdump
 
 
 ENV = "KASSIBER_TEST_CUSTODY_LOADER_BIN"

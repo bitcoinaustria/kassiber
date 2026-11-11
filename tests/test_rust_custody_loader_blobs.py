@@ -14,12 +14,13 @@ from tests.test_rust_custody_loader import (
     test_loader_covers_every_structural_table_column_and_filter as seed_structural,
 )
 from pathlib import Path
+from tests.rust_port.portable_dump import iterdump as portable_iterdump
 
 pytestmark = pytest.mark.skipif(not Path(BINARY).is_file(), reason="requires custody-load test-harness example")
 
 
 def native(conn):
-    request = {"sql": "\n".join(conn.iterdump()), "profile": dict(_profile(conn)),
+    request = {"sql": "\n".join(portable_iterdump(conn)), "profile": dict(_profile(conn)),
                "as_of": AS_OF, "project": True}
     result = subprocess.run([BINARY], input=json.dumps(request), text=True,
                             capture_output=True, check=True, timeout=120)

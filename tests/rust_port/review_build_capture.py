@@ -2,7 +2,7 @@ import itertools
 import json
 import os
 from pathlib import Path
-from sqlite3.dump import _iterdump
+from tests.rust_port.portable_dump import iterdump as _iterdump
 from unittest.mock import patch
 
 from kassiber.core import custody_journal, review_workflow
