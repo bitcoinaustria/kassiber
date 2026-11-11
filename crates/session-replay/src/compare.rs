@@ -622,7 +622,7 @@ fn json_id(object: &str) -> Option<&str> {
 }
 
 /// Durations (`*elapsed*` / `*duration*` keys or columns, and measured times:
-/// fractional `seconds`, `user`, `sys` and `*_seconds`/`*_user`/`*_sys` keys)
+/// fractional `seconds`, `user`, `sys`, `cpu`, `wall`, also with a `*_` prefix)
 /// vary run to run; they compare as present, never by value.
 pub fn mask_durations(text: &str) -> String {
     static JSON: OnceLock<Regex> = OnceLock::new();
@@ -646,7 +646,7 @@ pub fn mask_durations(text: &str) -> String {
     // Measured times are fractional; whole numbers under these keys stay.
     let measured = MEASURED.get_or_init(|| {
         Regex::new(
-            r#"(\\?"(?:[A-Za-z_]*_)?(?:seconds|user|sys)\\?"\s*:\s*)-?\d+\.\d+(?:[eE]-?\d+)?"#,
+            r#"(\\?"(?:[A-Za-z_]*_)?(?:seconds|user|sys|cpu|wall)\\?"\s*:\s*)-?\d+\.\d+(?:[eE]-?\d+)?"#,
         )
         .unwrap()
     });

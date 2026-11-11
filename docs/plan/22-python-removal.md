@@ -268,7 +268,7 @@ rewrite. Each rule below covers a value that differs between two correct runs.
 | The same at whole hours up to 72 h away, or at 7, 14, 30, 60, 90, 180 or 365 days | expiries derived from the clock, such as a 90-day dismissal. Arbitrary offsets stay literal, so a fixture dated 10 days after the run compares exactly. |
 | Never a clock reading: a number under a figure key (amount, msat, sat, price, fee, gain, loss, basis, proceeds, tax, cost, value, quantity, balance, total, fiat, income, rate) | an msat amount can look like a millisecond epoch. |
 | `just now` and `N min ago` style ages become a placeholder | relative to the clock. |
-| Durations (`*elapsed*`, `*duration*` keys or columns, `{"type":"duration_ms","value":N}` log records, fractional `seconds`/`user`/`sys` and `*_seconds`/`*_user`/`*_sys`) compare as present, not by value | they measure run time. Whole numbers under `seconds`/`user`/`sys` stay literal. |
+| Durations (`*elapsed*`, `*duration*` keys or columns, `{"type":"duration_ms","value":N}` log records, fractional `seconds`/`user`/`sys`/`cpu`/`wall` and the same with a `*_` prefix) compare as present, not by value | they measure run time. Whole numbers under those keys stay literal. |
 | JSON arrays of objects keyed by a generated id compare sorted by shape | their order follows random ids. |
 | Rows of a book table compare in shape order, with generated values collapsed for the sort | their insertion order follows random ids; every row and value is still compared. |
 | Daemon output is grouped by `request_id`, each request's records in order | concurrent requests interleave freely. |
