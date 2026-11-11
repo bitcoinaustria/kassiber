@@ -993,8 +993,34 @@ fn stdin_thresholds(chunks: &[Value], stdout: Option<&str>) -> Vec<u64> {
 }
 
 struct Lines {
-    count: Mutex<(u64, bool)>,
+    /// Lines printed, end of output, and the request ids a final
+    /// (non-progress) reply answered.
+    count: Mutex<(u64, bool, BTreeSet<String>)>,
     changed: Condvar,
+}
+
+/// The request id a final (non-progress) reply line answers.
+fn final_reply(line: &[u8]) -> Option<String> {
+    let value: Value = serde_json::from_slice(line).ok()?;
+    let kind = value.get("kind").and_then(Value::as_str).unwrap_or("");
+    if kind.ends_with(".progress") {
+        return None;
+    }
+    value
+        .get("request_id")
+        .and_then(Value::as_str)
+        .map(str::to_owned)
+}
+
+fn request_ids(text: &str) -> Vec<String> {
+    text.lines()
+        .filter_map(|l| serde_json::from_str::<Value>(l).ok())
+        .filter_map(|v| {
+            v.get("request_id")
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+        })
+        .collect()
 }
 
 fn run_process(
@@ -1039,7 +1065,7 @@ fn run_process(
     }
     let mut child = command.spawn().expect("the binary starts");
     let lines = Arc::new(Lines {
-        count: Mutex::new((0, false)),
+        count: Mutex::new((0, false, BTreeSet::new())),
         changed: Condvar::new(),
     });
     let mut stdout = child.stdout.take().unwrap();
@@ -1055,8 +1081,23 @@ fn run_process(
                 reader_lines.changed.notify_all();
                 break;
             }
+            let start = all.len();
             all.extend_from_slice(&buffer[..n]);
             state.0 += buffer[..n].iter().filter(|b| **b == b'\n').count() as u64;
+            // The lines this chunk completed: from the start of the line it
+            // continued up to its last newline.
+            let from = all[..start]
+                .iter()
+                .rposition(|b| *b == b'\n')
+                .map_or(0, |i| i + 1);
+            let to = all.iter().rposition(|b| *b == b'\n').map_or(0, |i| i + 1);
+            if to > from {
+                for line in all[from..to - 1].split(|b| *b == b'\n') {
+                    if let Some(id) = final_reply(line) {
+                        state.2.insert(id);
+                    }
+                }
+            }
             reader_lines.changed.notify_all();
         }
         all
@@ -1075,21 +1116,29 @@ fn run_process(
         .unwrap_or_else(|| vec![json!({"after_lines": 0, "close": true})]);
     let writer_lines = Arc::clone(&lines);
     let thresholds = stdin_thresholds(&chunks, session["expect"]["stdout"].as_str());
-    let forward: Vec<(u64, Option<String>)> = chunks
+    let mut previous: Vec<String> = Vec::new();
+    let forward: Vec<(u64, Vec<String>, Option<String>)> = chunks
         .iter()
         .zip(thresholds)
         .map(|(c, after)| {
-            (
-                after,
-                c.get("text").map(|t| paths.forward(t.as_str().unwrap())),
-            )
+            let text = c.get("text").map(|t| paths.forward(t.as_str().unwrap()));
+            let waits =
+                std::mem::replace(&mut previous, request_ids(text.as_deref().unwrap_or("")));
+            (after, waits, text)
         })
         .collect();
     let writer = std::thread::spawn(move || {
-        for (after, text) in forward {
+        for (after, waits, text) in forward {
+            // Wait for as much output as the recording had seen; a process
+            // that already gave its final reply to every earlier request
+            // (a shorter, diverging answer) gets the chunk at once.
             let deadline = Instant::now() + TIMEOUT;
             let mut state = writer_lines.count.lock().unwrap();
-            while state.0 < after && !state.1 && Instant::now() < deadline {
+            while state.0 < after
+                && !state.1
+                && Instant::now() < deadline
+                && (waits.is_empty() || !waits.iter().all(|id| state.2.contains(id)))
+            {
                 state = writer_lines
                     .changed
                     .wait_timeout(state, Duration::from_millis(200))

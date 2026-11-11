@@ -11,8 +11,9 @@
 //! `replay-strict:<file>` has no fallback: a first write no unused recording
 //! began with gets a connection that delivers nothing, so a request the
 //! recording never made fails instead of reading another request's reply.
-//! Each such miss, and every byte a connection writes past what its
-//! recording wrote, is noted in `<file>.misses`, so a harness can fail a
+//! Each such miss, a connect with no recording left, and every byte a
+//! connection writes past what its recording wrote, is noted in
+//! `<file>.misses`, so a harness can fail a
 //! replay that asked for more than the recording answered.
 //! The route's consent and offline checks, the egress observer and the egress
 //! ledger run as they do for a real connection; an endpoint with nothing left
@@ -178,12 +179,23 @@ pub(crate) fn replaying(host: &str, port: u16, tls: bool) -> Option<Result<Repla
             "no recorded connection left on the tape",
         ))
     };
-    let Some(slots) = replays.by_key.get_mut(&k) else {
+    let left = replays
+        .by_key
+        .get(&k)
+        .is_some_and(|slots| slots.iter().any(Option::is_some));
+    if !left {
+        let strict = replays.strict;
+        drop(replays);
+        if strict {
+            miss(&k, "connect with no recorded connection left");
+        }
         return Some(Err(refused()));
-    };
-    let Some(next) = slots.iter_mut().find(|slot| slot.is_some()) else {
-        return Some(Err(refused()));
-    };
+    }
+    let slots = replays.by_key.get_mut(&k).expect("checked above");
+    let next = slots
+        .iter_mut()
+        .find(|slot| slot.is_some())
+        .expect("checked above");
     let recorded = next.as_ref().expect("an unused slot");
     let attempts = recorded.attempts.max(1);
     if let Some(failure) = recorded.failure.clone() {
