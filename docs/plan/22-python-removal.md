@@ -290,8 +290,54 @@ numbering stays a bijection.
 
 A session that does not replay identically twice is dropped. Each dropped
 session is listed with its reason and the Rust functions only it covered, in
-`dropped.tsv` beside the recordings. A dropped session that is the only
-coverage of a tax, export or stored-data path gets fixed, not dropped.
+`tests/data/sessions/dropped.tsv` beside the recordings. A dropped session
+that is the only coverage of a tax, export or stored-data path gets fixed,
+not dropped.
+
+The recording at the base, step 3:
+- 301 modules (every comparison module, the porters' included; not the
+  regtest integration lane) ran under the recorder: 58,077 processes, none
+  refused for a passphrase. Five modules were recorded again after fixes
+  (the year handoff and E 1kv exports, the hidden-home resolver, the pairing
+  commands with a longer watchdog, the journal books under `target/r4-13`).
+- Exact-path dedupe kept 24,180 sessions; the Rust-blessed export goldens,
+  the modules recorded again and the export or stored-data sessions fixed
+  after the first pass brought the candidates to 24,346.
+- Every candidate replayed twice from the archived copy (the second time
+  after the last product merges): 24,315 replay identically. 65 changed only
+  because the legacy-migration port reworded refusals that named Python, or
+  now migrates the book it refused (`pre_432_5d232097`); they were re-recorded
+  with `--update` after review and replay identically twice.
+- The archives are 9 gzip streams, about 340 MB, on the test-data branch.
+
+Of the 119 dropped sessions that were the only coverage of an export or
+stored-data function:
+- 38 are Rust-blessed export goldens (below): 26 kept as recorded, the rest
+  recorded again after the two Rust fixes the figure check found;
+- 11 aborted in the first recording runs (the session clock froze Rust's own
+  clock then, and age's scrypt calibration asked for 1 TiB; fixed), and
+  their modules recorded again are kept;
+- 49 replay since the normalizer fixes;
+- 21 remain dropped, each a recorder limit:
+
+| Module | Sessions | Why it cannot replay |
+| --- | ---: | --- |
+| `test_rust_operator_cli`, `test_rust_mcp` privacy fence | 10 | the outcome depends on a live operator broker's lease in another process |
+| `test_daemon_smoke` | 4 | the daemon waits for, or races, a live broker owner in another process |
+| `test_rust_backup_desktop` | 3 | a concurrent owner holds the project while the session runs |
+| `test_rust_backup_services` recipient discovery | 2 | the encrypted archive's size depends on its embedded creation time |
+| `test_rust_backup_install` | 1 | a pre-restore directory with a random name the session never prints |
+| `test_rust_liquid_compatibility` | 1 | LWK asks for transactions in a different order each run (P1 serves it from a JSON-RPC fake instead) |
+
+Other recorder limits, not coverage-unique: interactive TTY sessions
+(`test_rust_document_cli`, `test_rust_chat_interrupt`: the recorder pipes
+stdin, so the product takes its non-interactive path), tests that kill or
+signal the process (`test_rust_journal_commands`' killed writers), the
+closed-terminal tests of `test_rust_freshness_graph` and
+`test_rust_journal_desktop`, and tests that inspect the process's open files
+or owner locks (`test_rust_store_interop`, the MCP privacy fence). Their
+behaviour is covered by the porters' Rust tests where they hold kills, or
+listed in `dropped.tsv`.
 
 ### Rust-blessed export goldens (owner sign-off required)
 

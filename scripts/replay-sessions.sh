@@ -12,7 +12,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 archives="tests/data/sessions"
-[ -f "$archives/sessions.tar" ] || { echo "no recordings at $archives; run scripts/fetch-test-data.sh" >&2; exit 2; }
+[ -f "$archives/sessions.tar.gz" ] || { echo "no recordings at $archives; run scripts/fetch-test-data.sh" >&2; exit 2; }
 
 cargo build --locked -p kassiber --features test-harness
 # Every example a recording names, built as the recorder built them: with

@@ -249,6 +249,23 @@ per-crate wrappers) still runs them.
 
 ## Product subprocesses and recorded sessions
 
+### Replaying the recorded sessions
+
+The parity modules' Rust processes were recorded once, where Rust and Python
+agreed ([plan 22](../plan/22-python-removal.md#session-replay)): about
+24,000 sessions in nine archives under `tests/data/sessions/`, locked test
+data. `scripts/replay-sessions.sh` builds the binary, the examples, the
+replay tool and the session clock, extracts the archives and replays every
+session against this checkout; any difference fails it, and
+`target/session-replay-report.tsv` names each session's result. Pass
+`--only TEXT` to replay the sessions whose test id or name contains TEXT.
+Replays run in a user and mount namespace at the recorded paths, so the
+host must allow unprivileged user namespaces (CI's `session-replay` job
+lifts Ubuntu's AppArmor restriction for its own runner). A reviewed,
+deliberate change re-records the sessions it changes with
+`session-replay replay DIR ... --update`, then `session-replay archive` and
+`scripts/fetch-test-data.sh --publish tests/data/sessions/*`.
+
 [Plan 21](../plan/21-rust-backend.md) verifies a Rust backend against the
 Python reference at the process boundary. Two test-only variables serve it;
 product code reads neither.

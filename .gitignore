@@ -390,6 +390,16 @@ ui-tauri/src-tauri/bin/provider_broker/
 /docs/reference/tax-country-jp-vectors.json
 /docs/reference/tax-country-us-vectors.json
 /tax-engine/core/tests/data/us_fixtures.json
+/tests/data/sessions/blobs-00.tar.gz
+/tests/data/sessions/blobs-01.tar.gz
+/tests/data/sessions/blobs-02.tar.gz
+/tests/data/sessions/blobs-03.tar.gz
+/tests/data/sessions/blobs-04.tar.gz
+/tests/data/sessions/blobs-05.tar.gz
+/tests/data/sessions/blobs-06.tar.gz
+/tests/data/sessions/blobs-07.tar.gz
+/tests/data/sessions/dropped.tsv
+/tests/data/sessions/sessions.tar.gz
 /tests/fixtures/btcpay_bark/0.13.0/invoice.4kA2cCQDoB29RhTSKEMMK1.payment-methods.accounted.json
 /tests/fixtures/btcpay_bark/0.13.0/invoice.6zTrmwy5tNVt5gzCBmCXvy.payment-methods.accounted.json
 /tests/fixtures/btcpay_bark/0.13.0/invoice.E5mxtedvENirbwt55k2V1m.payment-methods.accounted.json

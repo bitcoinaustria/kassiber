@@ -729,6 +729,42 @@ jobs:
           cargo build -p kassiber --bin kassiber --features test-harness --locked
           cargo test -p kassiber --features test-harness --locked
 
+  session-replay:
+    name: Recorded sessions
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Fetch pinned test data
+        shell: bash
+        run: scripts/fetch-test-data.sh
+
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          cache-key: rust-session-replay
+          save-cache: "true"
+
+      # A replay recreates each session's recorded paths under /mnt in a
+      # user and mount namespace (docs/plan/22-python-removal.md#session-replay).
+      # Ubuntu runners restrict unprivileged user namespaces through
+      # AppArmor; this job lifts that restriction for its own runner only.
+      - name: Allow unprivileged user namespaces
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: Replay the recorded product sessions
+        run: scripts/replay-sessions.sh
+
+      - name: Upload the replay report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: session-replay-${{ github.run_attempt }}
+          path: target/session-replay-report.tsv
+          if-no-files-found: warn
+          retention-days: 7
+
   chain-observers:
     name: Chain observers (Linux Docker)
     runs-on: ubuntu-latest
@@ -821,6 +857,7 @@ jobs:
       - frontend
       - cli-smoke
       - tax-engine
+      - session-replay
       - chain-observers
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -836,8 +873,9 @@ jobs:
           echo "- Frontend: ${{ needs.frontend.result }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- CLI smoke: ${{ needs.cli-smoke.result }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Rust crates: ${{ needs.tax-engine.result }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Recorded sessions: ${{ needs.session-replay.result }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Chain observers: ${{ needs.chain-observers.result }}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Enforce required checks
-        if: ${{ needs.preflight.result != 'success' || needs.rust-binaries.result != 'success' || needs.python-tests.result != 'success' || needs.tax-shadow.result != 'success' || needs.custody-shadow.result != 'success' || needs.frontend.result != 'success' || needs.cli-smoke.result != 'success' || needs.tax-engine.result != 'success' || needs.chain-observers.result != 'success' }}
+        if: ${{ needs.preflight.result != 'success' || needs.python-tests.result != 'success' || needs.tax-shadow.result != 'success' || needs.custody-shadow.result != 'success' || needs.frontend.result != 'success' || needs.cli-smoke.result != 'success' || needs.tax-engine.result != 'success' || needs.session-replay.result != 'success' || needs.chain-observers.result != 'success' }}
         run: exit 1
