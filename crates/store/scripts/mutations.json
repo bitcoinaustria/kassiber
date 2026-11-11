@@ -384,11 +384,109 @@
   {
     "id": "migrating-open-journal-transition",
     "file": "crates/store/src/lib.rs",
-    "find": "        if migrate {\n            configure_pragmas(&connection, encrypted)?;",
-    "replace": "        if migrate {\n            if encrypted && connection.query_row(\"PRAGMA journal_mode\", [], |r| r.get::<_, String>(0)).map_err(map_sqlite_error)? != \"delete\" {\n                return Err(Error::new(ErrorKind::DatabaseJournalModeUnavailable, \"journal mode\"));\n            }\n            configure_pragmas(&connection, encrypted)?;",
+    "find": "                stored_values::rehearse(&connection, encrypted, clock)?;\n            }\n            configure_pragmas(&connection, encrypted)?;",
+    "replace": "                stored_values::rehearse(&connection, encrypted, clock)?;\n            }\n            if encrypted && connection.query_row(\"PRAGMA journal_mode\", [], |r| r.get::<_, String>(0)).map_err(map_sqlite_error)? != \"delete\" {\n                return Err(Error::new(ErrorKind::DatabaseJournalModeUnavailable, \"journal mode\"));\n            }\n            configure_pragmas(&connection, encrypted)?;",
     "expect_failing": [
       "migrating_open_moves_an_encrypted_wal_book_to_delete"
     ],
     "rule": "A migrating open moves a book to its safe journal mode instead of refusing the transition."
+  },
+  {
+    "id": "stored-values-no-rehearsal",
+    "file": "crates/store/src/lib.rs",
+    "find": "                stored_values::rehearse(&connection, encrypted, clock)?;\n",
+    "replace": "                let _ = (encrypted, clock);\n",
+    "expect_failing": [
+      "nan_is_refused_before_anything_is_written",
+      "integers_beyond_64_bits_are_refused_before_anything_is_written",
+      "lone_surrogates_are_refused_before_anything_is_written"
+    ],
+    "rule": "A book that still needs migrating is migrated on a private copy first, so a stored value Kassiber refuses leaves the book file untouched."
+  },
+  {
+    "id": "stored-values-layout-never-pending",
+    "file": "crates/store/src/stored_values.rs",
+    "find": "    if actual != expected {\n        return Ok(true);\n    }",
+    "replace": "    if actual != expected {\n        return Ok(false);\n    }",
+    "expect_failing": [
+      "nan_is_refused_before_anything_is_written",
+      "integers_beyond_64_bits_are_refused_before_anything_is_written",
+      "lone_surrogates_are_refused_before_anything_is_written",
+      "books_without_such_values_migrate_as_before"
+    ],
+    "rule": "A book whose objects differ from the current schema by type and name needs the rehearsal."
+  },
+  {
+    "id": "stored-values-rehearsal-swallows-refusal",
+    "file": "crates/store/src/stored_values.rs",
+    "find": "        Err(error) if is_refusal(&error) => Err(error),",
+    "replace": "        Err(error) if is_refusal(&error) && error.retryable => Err(error),",
+    "expect_failing": [
+      "nan_is_refused_before_anything_is_written",
+      "integers_beyond_64_bits_are_refused_before_anything_is_written",
+      "lone_surrogates_are_refused_before_anything_is_written"
+    ],
+    "rule": "The rehearsal returns a stored-value refusal instead of leaving it to the real pass."
+  },
+  {
+    "id": "stored-values-nonfinite-integer",
+    "file": "crates/store/src/compat_backfill.rs",
+    "find": "                return Err(crate::stored_values::refusal(Shape::NonFinite));",
+    "replace": "                return Err(crate::stored_values::refusal(Shape::Other));",
+    "expect_failing": [
+      "nan_is_refused_before_anything_is_written"
+    ],
+    "rule": "NaN or infinity where a migration needs an integer is refused as a non-finite number."
+  },
+  {
+    "id": "stored-values-beyond-i64",
+    "file": "crates/store/src/compat_backfill.rs",
+    "find": "    i64::try_from(value).map_err(|_| crate::stored_values::refusal(Shape::BeyondI64))",
+    "replace": "    Ok(i64::try_from(value).unwrap_or(i64::MAX))",
+    "expect_failing": [
+      "integers_beyond_64_bits_are_refused_before_anything_is_written"
+    ],
+    "rule": "An integer beyond 64 bits in a migration input is refused, never clamped."
+  },
+  {
+    "id": "stored-values-surrogate-text",
+    "file": "crates/store/src/compat_ownership.rs",
+    "find": "        Some(Value::Str(v)) => v.as_str().ok_or_else(surrogate)?.into(),",
+    "replace": "        Some(Value::Str(v)) => v.as_str().unwrap_or_default().into(),",
+    "expect_failing": [
+      "lone_surrogates_are_refused_before_anything_is_written"
+    ],
+    "rule": "Text with an unpaired surrogate in a migration input is refused, never dropped."
+  },
+  {
+    "id": "stored-values-gate-number-shape",
+    "file": "crates/store/src/schema.rs",
+    "find": "                return Err(crate::stored_values::refusal(if floating {",
+    "replace": "                return Err(crate::stored_values::refusal(if !floating {",
+    "expect_failing": [
+      "integers_beyond_64_bits_are_refused_before_anything_is_written"
+    ],
+    "rule": "The admission gate names an integer beyond 64 bits as such."
+  },
+  {
+    "id": "stored-values-gate-classifies",
+    "file": "crates/store/src/schema.rs",
+    "find": "        .map_err(|_| crate::stored_values::refusal(crate::stored_values::json_shape(raw)))",
+    "replace": "        .map_err(|_| crate::stored_values::refusal(crate::stored_values::Shape::Other))",
+    "expect_failing": [
+      "nan_is_refused_before_anything_is_written",
+      "lone_surrogates_are_refused_before_anything_is_written"
+    ],
+    "rule": "The admission gate names NaN and unpaired surrogates in stored JSON."
+  },
+  {
+    "id": "stored-values-message",
+    "file": "crates/store/src/stored_values.rs",
+    "find": "            \"this book stores NaN or infinity where Kassiber needs an exact number\",",
+    "replace": "            \"stored migration input requires unsupported Python semantics\",",
+    "expect_failing": [
+      "nan_is_refused_before_anything_is_written"
+    ],
+    "rule": "The refusal says what the book stores and does not mention Python."
   }
 ]

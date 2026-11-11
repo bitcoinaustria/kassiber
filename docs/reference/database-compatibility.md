@@ -520,3 +520,45 @@ the binary. `crates/transfers/scripts/legacy_migration_mutations.json` (suite
 `transfers-legacy-migrations`) breaks each rule. The review-scope test's
 half-migrated book, whose rebuilt relation table lacks its foreign keys, is not
 a vector: the structural gate refuses that drift by design.
+
+## Stored values Kassiber refuses
+
+Some stored values have no exact Rust reading: NaN or infinity, integers
+beyond 64 bits, and text with an unpaired surrogate (plus collections where
+text is expected). Python's open read them with CPython semantics where a
+migration step or the admission gate converts them, and raised on several of
+them anyway (`int(nan)`, an integer SQLite cannot store). This is a deliberate
+refusal, not a gap to port (owner decision 2026-11-11): Kassiber does not open
+such a book.
+
+The refusal is `unsupported_schema_layout` with details
+`{"reason": "unsupported_stored_value", "value": ...}`, where `value` is
+`non_finite_number`, `integer_beyond_64_bits` or `lone_surrogate` when the
+site knows the shape, and a message that names it (for example "this book
+stores NaN or infinity where Kassiber needs an exact number"). No message
+mentions Python. The refusal sites are the migration conversions
+(`compat_backfill.rs`, `compat_ownership.rs`, `compat_liquid.rs`,
+`compat_custody.rs`, `compat_json.rs`) and the gate's stored JSON
+(`schema.rs`: wallet `config_json`, pending payment-hash `raw_json`, gap review
+`snapshot_json`). Values the migrations read exactly with Python's JSON rules,
+such as NaN in a field they only copy, are not refused.
+
+Nothing is written before the refusal. A book whose objects differ from the
+current schema by type and name, or that lacks a required audit, is first
+copied into memory (a SQLCipher book through an attached plaintext memory
+database, never a file) and migrated and gated there
+(`crates/store/src/stored_values.rs`); a stored-value refusal there refuses the
+open before the journal-mode change or any migration step touches the file.
+Any other outcome of that rehearsal is left to the real pass. A book whose
+names and audits are current skips the copy: its pass has no layout work, and
+the gate refuses before any change. The rehearsal draws identities from a
+counter, not SQLite's random generator, so the real pass writes the ids it
+always would.
+
+Coverage: `crates/store/src/stored_values.rs` tests open books holding each
+shape, in a migration input (the legacy gap projection's input version, an
+inline ownership policy's text) in plaintext and SQLCipher, and in the gate's
+JSON in a current and a legacy layout, and require the code, message, hint and
+details and every file beside the book byte for byte unchanged. The `store`
+mutation suite (`stored-values-*`) removes the rehearsal, never detects a
+pending layout, swallows the refusal, and blurs each shape and the message.

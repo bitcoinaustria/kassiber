@@ -17,6 +17,7 @@ mod schema_structure;
 pub mod semantics;
 pub mod state_root;
 pub mod stored_errors;
+mod stored_values;
 pub mod transaction_order;
 mod write_lock;
 pub use schema::table_names;
@@ -570,6 +571,20 @@ impl Book {
             }
         }
         if migrate {
+            let clock = sources.map_or_else(custody_hooks::MigrationClock::system, |s| {
+                custody_hooks::MigrationClock::pinned(s.1)
+            });
+            // Before the pass (and its journal-mode change) writes anything: a
+            // book that still needs migrating is migrated on a private copy
+            // first, so a stored value Kassiber refuses leaves it untouched.
+            let has_schema: bool = connection
+                .query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master)", [], |r| {
+                    r.get(0)
+                })
+                .map_err(map_sqlite_error)?;
+            if has_schema && stored_values::layout_pending(&connection)? {
+                stored_values::rehearse(&connection, encrypted, clock)?;
+            }
             configure_pragmas(&connection, encrypted)?;
             if let Some((_, timestamp)) = sources {
                 let timestamp = timestamp.to_owned();
@@ -601,9 +616,7 @@ impl Book {
                     &mut |conn| {
                         sources.map_or_else(|| random_identity(conn), |s| Ok(s.0.to_owned()))
                     },
-                    sources.map_or_else(custody_hooks::MigrationClock::system, |s| {
-                        custody_hooks::MigrationClock::pinned(s.1)
-                    }),
+                    clock,
                     &mut |_| Ok(()),
                 )?;
             }

@@ -154,20 +154,18 @@ fn parse_compat_json(raw: Option<&str>) -> Result<Value> {
             if (floating && token.parse::<f64>().is_ok_and(|n| !n.is_finite()))
                 || (!floating && token.parse::<i64>().is_err() && token.parse::<u64>().is_err())
             {
-                return Err(unsupported_json());
+                return Err(crate::stored_values::refusal(if floating {
+                    crate::stored_values::Shape::NonFinite
+                } else {
+                    crate::stored_values::Shape::BeyondI64
+                }));
             }
         } else {
             position += 1;
         }
     }
-    serde_json::from_str(raw).map_err(|_| unsupported_json())
-}
-fn unsupported_json() -> Error {
-    Error::new(
-        crate::ErrorKind::UnsupportedSchemaLayout,
-        "stored JSON holds a number this build cannot read exactly",
-    )
-    .details(json!({"reason":"unsupported_python_json"}))
+    serde_json::from_str(raw)
+        .map_err(|_| crate::stored_values::refusal(crate::stored_values::json_shape(raw)))
 }
 fn asset_code(value: &str) -> String {
     let text = value.trim_matches(python_whitespace);
@@ -338,7 +336,11 @@ fn value_text(value: &Value) -> Result<String> {
         Value::Array(v) if v.is_empty() => String::new(),
         Value::Object(v) if v.is_empty() => String::new(),
         Value::String(s) => s.clone(),
-        Value::Array(_) | Value::Object(_) => return Err(unsupported_json()),
+        Value::Array(_) | Value::Object(_) => {
+            return Err(crate::stored_values::refusal(
+                crate::stored_values::Shape::Other,
+            ))
+        }
         _ => value.to_string(),
     })
 }

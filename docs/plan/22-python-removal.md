@@ -393,6 +393,16 @@ export` with a passphrase descriptor) aborted with `memory allocation of
 1099511627776 bytes failed` (SIGABRT) in one recording run, not on export
 layout.
 
+### Pathological stored values (owner decision 2026-11-11)
+
+The legacy-migration inventory's G5 (NaN or infinity, integers beyond 64
+bits, unpaired surrogates in stored text where a migration or the gate
+converts them) is not ported. Kassiber refuses such a book as
+`unsupported_schema_layout`, reason `unsupported_stored_value`, with a message
+that names the value and does not mention Python, and writes nothing: a book
+that still needs migrating is rehearsed on an in-memory copy first. See
+[stored values Kassiber refuses](../reference/database-compatibility.md#stored-values-kassiber-refuses).
+
 ## Harnesses
 
 The regtest and demo harnesses are Python:
