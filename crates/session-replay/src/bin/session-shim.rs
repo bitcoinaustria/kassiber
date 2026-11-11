@@ -32,6 +32,7 @@ use kassiber_session_replay::{
 
 static CHILD: AtomicI32 = AtomicI32::new(0);
 static LINES: AtomicU64 = AtomicU64::new(0);
+static STDOUT_CLOSED_AFTER: AtomicU64 = AtomicU64::new(u64::MAX);
 const MAX_SIGNALS: usize = 32;
 static SIGNAL_COUNT: AtomicUsize = AtomicUsize::new(0);
 static SIGNALS: [AtomicI32; MAX_SIGNALS] = [const { AtomicI32::new(0) }; MAX_SIGNALS];
@@ -417,8 +418,17 @@ fn main() {
             if n == 0 {
                 break;
             }
+            // The reader closed our stdout: close the child's too, so it
+            // sees the closed pipe it would have seen without the shim.
+            if stdout
+                .write_all(&buffer[..n])
+                .and_then(|_| stdout.flush())
+                .is_err()
+            {
+                STDOUT_CLOSED_AFTER.store(all.len() as u64, Ordering::SeqCst);
+                break;
+            }
             all.extend_from_slice(&buffer[..n]);
-            let _ = stdout.write_all(&buffer[..n]).and_then(|_| stdout.flush());
             let lines = buffer[..n].iter().filter(|b| **b == b'\n').count() as u64;
             LINES.fetch_add(lines, Ordering::SeqCst);
         }
@@ -554,6 +564,10 @@ fn main() {
             roots,
             repo: config.repo.clone().unwrap_or_default(),
             fds,
+            stdout_closed_after: match STDOUT_CLOSED_AFTER.load(Ordering::SeqCst) {
+                u64::MAX => None,
+                n => Some(n),
+            },
             net_tape: tape.as_ref().and_then(|path| {
                 let bytes = fs::read(path).ok()?;
                 let _ = fs::remove_file(path);

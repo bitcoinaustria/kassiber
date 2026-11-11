@@ -545,11 +545,28 @@ pub fn replay(
     let mut stdout = child.stdout.take().unwrap();
     let counter = Arc::clone(&lines);
     let shared = Arc::clone(&printed);
+    let closed_after = session.stdout_closed_after;
     let out = std::thread::spawn(move || {
         let mut buffer = vec![0u8; 65536];
         while let Ok(n) = stdout.read(&mut buffer) {
             if n == 0 {
                 break;
+            }
+            // Where the recorded reader closed the pipe, this one does too:
+            // the rest was never read.
+            if let Some(limit) = closed_after {
+                let mut kept = shared.lock().unwrap();
+                let room = limit.saturating_sub(kept.len() as u64) as usize;
+                kept.extend_from_slice(&buffer[..n.min(room)]);
+                if n >= room {
+                    break;
+                }
+                drop(kept);
+                counter.fetch_add(
+                    buffer[..n].iter().filter(|b| **b == b'\n').count() as u64,
+                    Ordering::SeqCst,
+                );
+                continue;
             }
             shared.lock().unwrap().extend_from_slice(&buffer[..n]);
             counter.fetch_add(

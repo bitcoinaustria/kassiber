@@ -1,14 +1,19 @@
 //! A wall clock for recorded sessions (plan 22, session replay), preloaded
 //! into a recorded process and into its replay, never into a product build.
 //!
-//! With `KASSIBER_TEST_CLOCK_BASE_US` set, `CLOCK_REALTIME` (and
-//! `gettimeofday`, `time`) reads `base + n` microseconds, `n` counting the
-//! reads, until the process has run two seconds; after that it also advances
-//! with the real elapsed time beyond those two seconds, so a long-running
-//! process still sees time pass. A short command therefore reads the same
-//! wall-clock values when it is replayed, and so do the hashes a book keeps
-//! over them (a pair's `source_row_hash` covers its `created_at`).
-//! Monotonic clocks are untouched. Linux only.
+//! With `KASSIBER_TEST_CLOCK_BASE_US` set, `gettimeofday` and `time` read
+//! `base + n` microseconds, `n` counting the reads, until the process has
+//! run two seconds; after that they also advance with the real elapsed time
+//! beyond those two seconds, so a long-running process still sees time pass.
+//! These are the calls SQLite's clock (`strftime('now')`, every book's
+//! `created_at`) makes, so a short command writes the same times when it is
+//! replayed, and so do the hashes a book keeps over them (a pair's
+//! `source_row_hash` covers its `created_at`).
+//!
+//! `clock_gettime` stays real: Rust's `SystemTime` reads it, and code that
+//! measures work with it (age's scrypt calibration doubles its cost until a
+//! second passes) must see real time. Monotonic clocks are untouched. Linux
+//! only.
 
 use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 use std::sync::OnceLock;
@@ -74,30 +79,11 @@ fn now_us(state: &State) -> i64 {
     candidate.max(previous.saturating_add(1))
 }
 
-fn realtime(clock: libc::clockid_t) -> bool {
-    clock == libc::CLOCK_REALTIME || clock == libc::CLOCK_REALTIME_COARSE
-}
-
-/// # Safety
-/// As libc's `clock_gettime`.
-#[no_mangle]
-pub unsafe extern "C" fn clock_gettime(
-    clock: libc::clockid_t,
-    out: *mut libc::timespec,
-) -> libc::c_int {
+/// The session's wall clock, or the real one without a recorded base.
+fn wall_us() -> i64 {
     match state() {
-        Some(state) if realtime(clock) && !out.is_null() => {
-            let now = now_us(state);
-            // SAFETY: the caller passes a valid timespec.
-            unsafe {
-                (*out).tv_sec = now.div_euclid(1_000_000);
-                (*out).tv_nsec = now.rem_euclid(1_000_000) * 1000;
-            }
-            0
-        }
-        // SAFETY: forwarded unchanged.
-        Some(state) => unsafe { (state.real)(clock, out) },
-        None => unsafe { real_clock_gettime()(clock, out) },
+        Some(state) => now_us(state),
+        None => micros(real_clock_gettime(), libc::CLOCK_REALTIME),
     }
 }
 
@@ -108,35 +94,25 @@ pub unsafe extern "C" fn gettimeofday(
     out: *mut libc::timeval,
     _zone: *mut libc::c_void,
 ) -> libc::c_int {
-    let mut now = libc::timespec {
-        tv_sec: 0,
-        tv_nsec: 0,
-    };
-    // SAFETY: as clock_gettime.
-    let result = unsafe { clock_gettime(libc::CLOCK_REALTIME, &mut now) };
+    let now = wall_us();
     if !out.is_null() {
         // SAFETY: the caller passes a valid timeval.
         unsafe {
-            (*out).tv_sec = now.tv_sec;
-            (*out).tv_usec = now.tv_nsec / 1000;
+            (*out).tv_sec = now.div_euclid(1_000_000);
+            (*out).tv_usec = now.rem_euclid(1_000_000);
         }
     }
-    result
+    0
 }
 
 /// # Safety
 /// As libc's `time`.
 #[no_mangle]
 pub unsafe extern "C" fn time(out: *mut libc::time_t) -> libc::time_t {
-    let mut now = libc::timespec {
-        tv_sec: 0,
-        tv_nsec: 0,
-    };
-    // SAFETY: as clock_gettime.
-    unsafe { clock_gettime(libc::CLOCK_REALTIME, &mut now) };
+    let now = wall_us().div_euclid(1_000_000);
     if !out.is_null() {
         // SAFETY: the caller passes a valid time_t.
-        unsafe { *out = now.tv_sec };
+        unsafe { *out = now };
     }
-    now.tv_sec
+    now
 }

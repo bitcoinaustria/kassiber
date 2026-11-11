@@ -110,6 +110,10 @@ pub struct Session {
     /// descriptor number to base64 content. Test passphrases only.
     #[serde(default)]
     pub fds: BTreeMap<i32, String>,
+    /// The test closed the process's stdout after this many bytes (a
+    /// closed terminal); a replay closes its end of the pipe there too.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stdout_closed_after: Option<u64>,
 }
 
 /// Passphrases a session hands its process: inherited descriptors and the
