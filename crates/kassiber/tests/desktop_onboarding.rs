@@ -7,10 +7,9 @@
 
 mod support;
 
-use std::io::{BufRead, BufReader, Read, Write};
-use std::net::{TcpListener, TcpStream};
 use std::sync::{Arc, Condvar, Mutex};
 
+use kassiber_net::test_support::{FakeJsonRpc, FakeService, Reply};
 use kassiber_pyjson::Value;
 use support::{kind_of, list, path, text, Daemon, Desk, DESKTOP_SQL};
 
@@ -127,81 +126,43 @@ fn known_tx(txid: &str) -> Option<String> {
     })
 }
 
-/// A loopback HTTP server answering `respond(method, path, body)`.
+/// A loopback HTTP server answering `respond(method, path, body)`, on
+/// kassiber-net's service fake (one thread per connection, so a held
+/// answer does not block the others). Each request is recorded as
+/// `METHOD target body` when it arrives, before it is answered.
 struct Http {
     url: String,
     hits: Arc<Mutex<Vec<String>>>,
+    _service: FakeService,
 }
 
 type Responder = dyn Fn(&str, &str, &str) -> (u16, String) + Send + Sync;
 
 impl Http {
     fn serve(respond: Arc<Responder>) -> Self {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let url = format!("http://{}", listener.local_addr().unwrap());
         let hits = Arc::new(Mutex::new(Vec::new()));
         let recorded = hits.clone();
-        std::thread::spawn(move || {
-            for stream in listener.incoming() {
-                let Ok(stream) = stream else { return };
-                let (respond, hits) = (respond.clone(), recorded.clone());
-                std::thread::spawn(move || {
-                    let _ = handle(stream, &*respond, &hits);
-                });
-            }
-        });
-        Self { url, hits }
+        let service = FakeService::start(move |request| {
+            let body = String::from_utf8_lossy(&request.body);
+            recorded.lock().unwrap().push(
+                format!("{} {} {body}", request.method, request.target)
+                    .trim_end()
+                    .to_owned(),
+            );
+            let (status, reply) = respond(&request.method, &request.target, &body);
+            Reply::json(status, &reply)
+        })
+        .unwrap();
+        Self {
+            url: service.origin(),
+            hits,
+            _service: service,
+        }
     }
 
     fn hits(&self) -> Vec<String> {
         self.hits.lock().unwrap().clone()
     }
-}
-
-fn handle(
-    mut stream: TcpStream,
-    respond: &Responder,
-    hits: &Mutex<Vec<String>>,
-) -> std::io::Result<()> {
-    {
-        let mut reader = BufReader::new(stream.try_clone()?);
-        let mut line = String::new();
-        if reader.read_line(&mut line)? == 0 {
-            return Ok(());
-        }
-        let mut parts = line.split_whitespace();
-        let (method, target) = (
-            parts.next().unwrap_or_default().to_owned(),
-            parts.next().unwrap_or_default().to_owned(),
-        );
-        let mut length = 0;
-        loop {
-            let mut header = String::new();
-            reader.read_line(&mut header)?;
-            if header.trim().is_empty() {
-                break;
-            }
-            if let Some((name, value)) = header.split_once(':') {
-                if name.eq_ignore_ascii_case("content-length") {
-                    length = value.trim().parse().unwrap_or(0);
-                }
-            }
-        }
-        let mut body = vec![0; length];
-        reader.read_exact(&mut body)?;
-        let body = String::from_utf8_lossy(&body).into_owned();
-        hits.lock()
-            .unwrap()
-            .push(format!("{method} {target} {body}").trim_end().to_owned());
-        let (status, reply) = respond(&method, &target, &body);
-        write!(
-            stream,
-            "HTTP/1.1 {status} Fixture\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{reply}",
-            reply.len()
-        )?;
-        stream.flush()?;
-    }
-    Ok(())
 }
 
 /// Esplora `/tx/<txid>`; the held txid blocks until released.
@@ -252,49 +213,38 @@ impl Esplora {
     }
 }
 
-/// Newline JSON-RPC Electrum: version negotiation and one raw transaction.
+/// Newline JSON-RPC Electrum: version negotiation and one raw transaction,
+/// on kassiber-net's JSON-RPC fake.
 struct Electrum {
     url: String,
     calls: Arc<Mutex<Vec<String>>>,
+    _fake: FakeJsonRpc,
 }
 
 impl Electrum {
     fn new() -> Self {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let url = format!("tcp://{}", listener.local_addr().unwrap());
         let calls = Arc::new(Mutex::new(Vec::new()));
         let recorded = calls.clone();
-        std::thread::spawn(move || {
-            for stream in listener.incoming() {
-                let Ok(stream) = stream else { return };
-                let calls = recorded.clone();
-                std::thread::spawn(move || {
-                    let mut writer = stream.try_clone().unwrap();
-                    for line in BufReader::new(stream).lines() {
-                        let Ok(line) = line else { return };
-                        let request: serde_json::Value = serde_json::from_str(&line).unwrap();
-                        let method = request["method"].as_str().unwrap_or_default().to_owned();
-                        calls.lock().unwrap().push(method.clone());
-                        let mut reply = serde_json::json!({"jsonrpc": "2.0", "id": request["id"]});
-                        if method == "server.version" {
-                            reply["result"] = serde_json::json!(["Fixture 1.0", "1.4"]);
-                        } else if request["params"] == serde_json::json!([RAW_TXID]) {
-                            reply["result"] = serde_json::json!(RAW);
-                        } else {
-                            reply["error"] =
-                                serde_json::json!({"code": 2, "message": "missing transaction"});
-                        }
-                        if writeln!(writer, "{reply}")
-                            .and_then(|()| writer.flush())
-                            .is_err()
-                        {
-                            return;
-                        }
-                    }
-                });
+        let fake = FakeJsonRpc::start(0, move |line| {
+            let request: serde_json::Value = serde_json::from_str(line).unwrap();
+            let method = request["method"].as_str().unwrap_or_default().to_owned();
+            recorded.lock().unwrap().push(method.clone());
+            let mut reply = serde_json::json!({"jsonrpc": "2.0", "id": request["id"]});
+            if method == "server.version" {
+                reply["result"] = serde_json::json!(["Fixture 1.0", "1.4"]);
+            } else if request["params"] == serde_json::json!([RAW_TXID]) {
+                reply["result"] = serde_json::json!(RAW);
+            } else {
+                reply["error"] = serde_json::json!({"code": 2, "message": "missing transaction"});
             }
-        });
-        Self { url, calls }
+            reply.to_string()
+        })
+        .unwrap();
+        Self {
+            url: fake.url().to_owned(),
+            calls,
+            _fake: fake,
+        }
     }
 
     fn calls(&self) -> Vec<String> {

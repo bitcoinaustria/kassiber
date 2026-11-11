@@ -11,7 +11,6 @@
 //! their own order), and the same book.
 
 use std::io::{BufRead, BufReader, Write};
-use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
@@ -22,6 +21,7 @@ use crate::golden::{
     Scratch,
 };
 use kassiber_envelope::{get, py_str};
+use kassiber_ipc::unix::UnixStream;
 use kassiber_pyjson::{Options, Value};
 
 pub const BIN: &str = env!("CARGO_BIN_EXE_kassiber");
@@ -159,7 +159,7 @@ impl Daemon {
     /// Stop reading: the daemon's next write fails, as when a test closed
     /// the read end of its stdout.
     pub fn close_output(&self) {
-        let _ = self.output.shutdown(std::net::Shutdown::Read);
+        let _ = kassiber_net::test_support::shutdown_read(&self.output);
     }
 
     pub fn send_line(&mut self, line: &str) {
