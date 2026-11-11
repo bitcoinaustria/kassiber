@@ -119,8 +119,9 @@ import os
 def pytest_runtest_logstart(nodeid, location):
     with open(os.path.join("/mnt/current", str(os.getpid())), "w") as handle:
         handle.write(nodeid)
-    # A test that hangs under recording ends its worker, never the run.
-    faulthandler.dump_traceback_later(900, exit=True)
+    # A test that hangs under recording ends its worker, never the run
+    # (KASSIBER_SESSION_WATCHDOG seconds, default 900, for slow ones).
+    faulthandler.dump_traceback_later(int(os.environ.get("KASSIBER_SESSION_WATCHDOG", "900")), exit=True)
 
 
 def pytest_runtest_logfinish(nodeid, location):
