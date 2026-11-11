@@ -9,7 +9,9 @@ expect=absent
 if [ "${1:-}" = "--expect-tape" ]; then expect=present; shift; fi
 binary="${1:?usage: scripts/check-no-test-tape.sh [--expect-tape] BINARY}"
 [ -f "$binary" ] || { echo "no binary at $binary" >&2; exit 2; }
-for marker in KASSIBER_TEST_NET_TAPE KASSIBER_TEST_SQLITE_SEED; do
+# The tape's hold and write-log switches share its prefix; they are listed
+# so a rename cannot drop them from the check.
+for marker in KASSIBER_TEST_NET_TAPE KASSIBER_TEST_NET_TAPE_HOLD KASSIBER_TEST_NET_TAPE_WRITES KASSIBER_TEST_SQLITE_SEED; do
   if LC_ALL=C grep -aq "$marker" "$binary"; then found=present; else found=absent; fi
   if [ "$found" != "$expect" ]; then
     echo "$binary: test hook $marker is $found, expected $expect" >&2
