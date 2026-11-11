@@ -2489,6 +2489,7 @@ dependencies = [
 name = "kassiber"
 version = "0.22.78"
 dependencies = [
+ "flate2",
  "kassiber-ai",
  "kassiber-backup",
  "kassiber-chain",
@@ -3058,6 +3059,7 @@ name = "kassiber-transfers"
 version = "0.1.0"
 dependencies = [
  "bitcoin_hashes",
+ "flate2",
  "kassiber-custody",
  "kassiber-envelope",
  "kassiber-journals",

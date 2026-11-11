@@ -858,6 +858,22 @@
    ]
   },
   {
+   "name": "transfers-legacy-migrations",
+   "catalogs": [
+    "crates/transfers/scripts/legacy_migration_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber-transfers",
+    "--lib",
+    "--test",
+    "legacy_migrations"
+   ],
+   "env": {
+    "KASSIBER_TEST_NO_EGRESS": "1"
+   }
+  },
+  {
    "name": "transfers-pairing",
    "catalogs": [
     "crates/transfers/scripts/pairing_mutations.json"

@@ -1717,11 +1717,13 @@ fn to_sql_text(v: &serde_json::Value) -> Option<String> {
 }
 
 /// `supersede_component`, rebuilding effective memberships after an active change.
+/// `superseded_at` is the caller's explicit time; otherwise the clock's.
 pub(super) fn supersede(
     c: &Connection,
     scope: &Scope<'_>,
     id: &str,
     reason: &Value,
+    superseded_at: Option<&Value>,
     sources: &dyn Sources,
 ) -> Result<()> {
     let header = row(c, id)?;
@@ -1729,12 +1731,15 @@ pub(super) fn supersede(
     if state == "superseded" {
         return Ok(());
     }
-    let now = sources.now_precise(c)?;
+    let now = match superseded_at.filter(|v| truthy(v)) {
+        Some(at) => at.clone(),
+        None => s(sources.now_precise(c)?),
+    };
     let reason = optional_text(reason, "reason", false)?;
     let profile = text(&header, "profile_id");
     c.execute(
         "UPDATE custody_components SET state='superseded',superseded_at=?,change_reason=COALESCE(?,change_reason) WHERE id=? AND state!='superseded'",
-        params![now, bind(&reason, 2)?, id],
+        params![bind(&now, 1)?, bind(&reason, 2)?, id],
     )
     .map_err(error)?;
     if state == "active" {

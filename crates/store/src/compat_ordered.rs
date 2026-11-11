@@ -1,6 +1,9 @@
-//! Python open_db's ordered compatibility pass. Kept private while R3's
-//! durability gates and R2's custody matcher/consolidation remain incomplete.
+//! Python open_db's ordered compatibility pass. The custody steps it cannot
+//! evaluate itself (legacy review consolidation, the legacy pair fee review)
+//! run through `custody_hooks`; componentless dismissal recovery still
+//! refuses.
 use super::{backfills, custody, data, ensure_column, ownership, repairs};
+use crate::custody_hooks::MigrationClock;
 use crate::{map_sqlite_error, Error, ErrorKind, Result};
 use rusqlite::Connection;
 use serde_json::json;
@@ -90,13 +93,23 @@ fn componentless_recovery(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+#[cfg(test)]
 pub(crate) fn migrate(
     conn: &mut Connection,
     uuid: &mut impl FnMut(&Connection) -> Result<String>,
     observer: &mut impl FnMut(&str) -> Result<()>,
 ) -> Result<()> {
+    migrate_with_clock(conn, uuid, MigrationClock::system(), observer)
+}
+
+pub(crate) fn migrate_with_clock(
+    conn: &mut Connection,
+    uuid: &mut impl FnMut(&Connection) -> Result<String>,
+    clock: MigrationClock<'_>,
+    observer: &mut impl FnMut(&str) -> Result<()>,
+) -> Result<()> {
     super::install_base(conn)?;
-    ensure_schema_compat(conn, uuid, observer)?;
+    ensure_schema_compat(conn, uuid, clock, observer)?;
     ownership::instance_id(conn, uuid, observer)?;
     super::install_graph(conn)?;
     commit(conn)?;
@@ -106,6 +119,7 @@ pub(crate) fn migrate(
 fn ensure_schema_compat(
     conn: &mut Connection,
     uuid: &mut impl FnMut(&Connection) -> Result<String>,
+    clock: MigrationClock<'_>,
     observer: &mut impl FnMut(&str) -> Result<()>,
 ) -> Result<()> {
     backfills::inbox(conn, observer)?;
@@ -218,16 +232,7 @@ fn ensure_schema_compat(
     custody::review_relations(conn, observer)?;
     componentless_recovery(conn)?;
     repairs::immutability(conn)?;
-    let pending: bool = conn.query_row(
-        "SELECT EXISTS(SELECT 1 FROM transaction_pairs WHERE component_id IS NULL) OR EXISTS(SELECT 1 FROM direct_swap_payouts WHERE component_id IS NULL) OR EXISTS(SELECT 1 FROM custody_authored_migration_issues WHERE resolved_at IS NULL)",
-        [], |row| row.get(0),
-    ).map_err(map_sqlite_error)?;
-    if pending {
-        return Err(boundary(
-            "refresh_legacy_authored_components",
-            "legacy_authored_custody",
-        ));
-    }
+    legacy_authored_components(conn, clock, observer)?;
     repairs::commercial(conn)?;
     repairs::freshness(conn)?;
     crate::stored_errors::migrate(conn, observer)?;
@@ -238,6 +243,37 @@ fn ensure_schema_compat(
     crate::semantics::price_currency(conn, observer)?;
     transaction_page_index(conn, observer)?;
     Ok(())
+}
+
+/// `refresh_legacy_authored_components`: pending legacy reviewed pairs and
+/// direct payouts (and retried migration issues) become authored components
+/// in one immediate transaction; an error rolls the whole step back.
+fn legacy_authored_components(
+    conn: &mut Connection,
+    clock: MigrationClock<'_>,
+    observer: &mut impl FnMut(&str) -> Result<()>,
+) -> Result<()> {
+    let pending: bool = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM transaction_pairs WHERE component_id IS NULL) OR EXISTS(SELECT 1 FROM direct_swap_payouts WHERE component_id IS NULL) OR EXISTS(SELECT 1 FROM custody_authored_migration_issues WHERE resolved_at IS NULL)",
+        [], |row| row.get(0),
+    ).map_err(map_sqlite_error)?;
+    if !pending {
+        return Ok(());
+    }
+    let Some(custody) = crate::custody_hooks::installed() else {
+        return Err(crate::custody_hooks::unavailable(
+            "refresh_legacy_authored_components",
+            "legacy_authored_custody",
+        ));
+    };
+    let tx = conn
+        .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+        .map_err(map_sqlite_error)?;
+    observer("legacy_authored_components.before")?;
+    custody.refresh_legacy_authored_components(&tx, clock)?;
+    observer("legacy_authored_components.before_commit")?;
+    tx.commit().map_err(map_sqlite_error)?;
+    observer("legacy_authored_components.after_commit")
 }
 
 /// `_migrate_import_batch_sequence`: number existing batches once by
@@ -541,7 +577,9 @@ mod tests {
     }
 
     #[test]
-    fn legacy_pair_fee_candidates_are_left_for_python() {
+    fn legacy_pair_fee_candidates_need_the_custody_layer() {
+        // The store alone cannot run the component validator; without the
+        // installed custody layer it refuses before writing the audit.
         let (_root, mut book) = pre_8f_book();
         let conn = &mut book.connection;
         conn.execute_batch("INSERT INTO custody_components(id,lineage_id,workspace_id,profile_id,revision,component_type,state,conservation_mode,created_at) VALUES('c','c','ws','pf',1,'pair','active','quantity','fixed');
@@ -551,6 +589,11 @@ mod tests {
         })
         .unwrap_err();
         assert_eq!(error.kind, crate::ErrorKind::UnsupportedSchemaLayout);
+        assert_eq!(
+            error.details,
+            serde_json::json!({"migration_step":"mark_legacy_pair_fee_reviews","reason":"legacy_pair_fee_candidates"})
+        );
+        assert!(error.hint.as_deref().is_some_and(|h| !h.contains("Python")));
         let audits: i64 = conn
             .query_row("SELECT count(*) FROM schema_migration_audits WHERE id='custody-legacy-pair-fee-review-v1'", [], |r| r.get(0))
             .unwrap();

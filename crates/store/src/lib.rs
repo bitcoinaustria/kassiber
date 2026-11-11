@@ -2,6 +2,7 @@
 //! migration and encryption maintenance are explicit operations.
 mod compat;
 mod creation;
+pub mod custody_hooks;
 mod durable;
 pub mod encryption;
 pub mod layout;
@@ -135,6 +136,7 @@ pub mod test_hooks {
             ));
         }
         configure_pragmas(&conn, passphrase.is_some())?;
+        let timestamp_text = timestamp.to_owned();
         let timestamp = timestamp.to_owned();
         conn.create_scalar_function(
             "strftime",
@@ -143,7 +145,12 @@ pub mod test_hooks {
             move |_| Ok(timestamp.clone()),
         )
         .map_err(map_sqlite_error)?;
-        crate::compat::ordered::migrate(&mut conn, &mut |_| Ok(identity.to_owned()), observer)
+        crate::compat::ordered::migrate_with_clock(
+            &mut conn,
+            &mut |_| Ok(identity.to_owned()),
+            crate::custody_hooks::MigrationClock::pinned(&timestamp_text),
+            observer,
+        )
     }
     pub fn json_roundtrip(raw: &str, ascii: bool) -> Result<String> {
         let value = crate::compat::python_json::loads(raw).map_err(|_| {
@@ -590,11 +597,14 @@ impl Book {
             if empty {
                 creation::install(&mut connection, sources.map(|s| s.0), &mut |_| Ok(()))?;
             } else {
-                compat::ordered::migrate(
+                compat::ordered::migrate_with_clock(
                     &mut connection,
                     &mut |conn| {
                         sources.map_or_else(|| random_identity(conn), |s| Ok(s.0.to_owned()))
                     },
+                    sources.map_or_else(custody_hooks::MigrationClock::system, |s| {
+                        custody_hooks::MigrationClock::pinned(s.1)
+                    }),
                     &mut |_| Ok(()),
                 )?;
             }
