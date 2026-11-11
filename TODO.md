@@ -6,6 +6,22 @@ working rules and verification live in [AGENTS.md](AGENTS.md) and
 [CONTRIBUTING.md](CONTRIBUTING.md). Remove completed tasks after preserving any
 lasting contract in its owning reference. Git history retains prior checkpoints.
 
+## Python removal
+
+Since the stack's B8 layer the Rust binary has production authority, and
+[plan 22](docs/plan/22-python-removal.md) removes Python; the last Python
+commit is tagged `archive/python-backend`. In the Rust backend sections below,
+Python, census, shadow and hybrid comparisons describe how the port was
+verified: those lanes ended with the removal. Acceptance now runs on frozen
+goldens, `scripts/replay-sessions.sh` and `crates/mutation-check`. Items that
+only fixed or compared Python were removed.
+
+- [ ] Owner sign-off on the Rust-blessed export goldens listed in
+  [plan 22](docs/plan/22-python-removal.md#rust-blessed-export-goldens-owner-sign-off-required).
+- [ ] Redesign the extension model for a Rust-only backend before any step of
+  [plan 19](docs/plan/19-extensions.md) is accepted; its code tiers assume
+  Python.
+
 ## Rust backend R0
 
 Stage R0 of [plan 21](docs/plan/21-rust-backend.md#stages). The toolchain,
@@ -16,11 +32,6 @@ the feasibility spikes are in place; these remain:
 - [ ] Add test-only clock and entropy injection for whole CLI and daemon runs,
   so recorded sessions replay strictly. The custody build clock and its hash/id
   golden vectors are in place.
-- [ ] Bound what the session harness snapshots. Replay pins every file under
-  the recorded roots, including `HOME`; a home holding a toolchain made one
-  replay tokenize gigabytes, hang `test_cli_session_replay.py` for over five
-  minutes, and fill `/tmp`. Skip or cap large trees and fail with a clear
-  message instead of hanging.
 - [ ] Validate the spike conditions natively on Windows: SQLCipher packaging
   and keyring formats. macOS passed on 2026-11-07, including the Touch ID
   helper's identity check against a Developer-ID-signed Rust sidecar; see
@@ -32,17 +43,16 @@ the feasibility spikes are in place; these remain:
   TLS/HTTP/proxy adapters and bypass scanner are in
   [the Rust egress reference](docs/reference/rust-port-egress.md); service slices
   still need their own consent, envelopes and integration proof.
-- [ ] Check the Cargo cache once a push to `main` has saved it: the uv jobs'
-  binding build should drop from about 25 s cold. If the engine crate's own
-  rebuild still dominates, share the built wheel across the shards instead.
 
 ## Rust backend R2
 
 The [raw custody v1 snapshot, pure Python stages and Rust components/evidence/interpretation/gaps/quantity stages](docs/reference/custody-engine.md)
 are in place with required shadow/census comparison, CPython parser vectors,
-raw latest review rows and killed stage mutation catalogs. Python
-remains the production reference; every subsequent stage needs its own killed
-mutation entries.
+raw latest review rows and killed stage mutation catalogs. Python, the
+reference these stages were compared with, is removed
+([plan 22](docs/plan/22-python-removal.md)); frozen recordings and goldens
+stand in for it, and every subsequent stage needs its own killed mutation
+entries.
 
 - [x] Finish native component reconciliation and complete interpreter composition;
   [interpretation now participates in full-stage comparison](docs/reference/custody-engine.md#complete-interpretation-checkpoint-r2c).
@@ -61,9 +71,10 @@ mutation entries.
   every stage passes the frozen oracle, generated books and corpus comparisons.
   The [R2g request-builder checkpoint](docs/reference/custody-engine.md#rust-journal-request-builder-checkpoint-r2g-step-1)
   ports request construction; [fusion harness integration](docs/reference/custody-engine.md#fusion-harness-integration-checkpoint-r2g-step-3)
-  now compares requests and ledger responses in PyO3/census/shadow/replay.
+  compared requests and ledger responses with Python before its removal.
   Generated/retained/fresh replay campaigns pass; 2,211 inherited mutation
-  recipes still need rerunning. Post-ledger journal joins remain outstanding.
+  recipes still need rerunning with `crates/mutation-check`. Post-ledger
+  journal joins remain outstanding.
 
 ## Rust backend R3 storage
 
@@ -88,15 +99,14 @@ ordered compatibility, hidden-home cutover and legacy project migration through
 - [ ] Complete remaining R0 `store` dispositions and full historical migration
   acceptance; supported runtime integration is not full R3 acceptance.
 - [ ] Complete storage crash/backup and Windows/macOS acceptance, then wire
-  maintenance commands with Python-safe journals and credential stale guards.
+  maintenance commands with safe journals and credential stale guards.
   Include the storage-root symlink differential tests on a native Mac, where
   `$TMPDIR` really sits under `/var` -> `/private/var`
   ([storage roots and symlinks](docs/reference/rust-store.md#storage-roots-and-symlinks)).
 - [ ] Decide with the owner whether backup restore should resolve its staging
-  root. Python and Rust both refuse a restore staged under a linked `$TMPDIR`,
-  which is every standard Mac
-  (`tests/rust_port/repro_restore_staging_symlinked_tmpdir.py`). Change the
-  Python reference first, then the store's staged-source check.
+  root. The store refuses a restore staged under a linked `$TMPDIR`, which is
+  every standard Mac (Python refused it too). If it should resolve, change the
+  store's staged-source check.
 
 ## Rust backend R6 AI providers
 
@@ -123,10 +133,6 @@ adds the provider broker client for CLI agent runtimes.
   Rust-only grammar, documented in rust-shell.md).
 - [ ] Run the CLI proxy against a real CLIProxyAPI once (only loopback fakes
   so far).
-- [ ] Rerun `ProviderFormatCliTest::test_store_field_flags` and
-  `ProviderSettingsCliTest::test_enable_disable_and_default_effort_flags`
-  through the hybrid candidate on an idle disk; they timed out creating a fresh
-  book under I/O pressure (the other 6 hybrid CLI tests pass, all Rust-served).
 
 ## Rust backend R5 desktop projections
 
@@ -208,9 +214,6 @@ natively; generic `cancel` keeps Python's refusal.
   fetch only after the explicit update action, through `kassiber-net`.
 - [x] Verify release signatures in process with `ssh-key` instead of the
   `ssh-keygen` subprocess, with 106 frozen `ssh-keygen` verdicts.
-- [ ] Owner decision: keep Rust verifying without OpenSSH where Python reports
-  `ssh_keygen_unavailable`/`ssh_keygen_unsupported` (the CLI oracle asserts
-  the difference today).
 - [x] Mirror the round-5h/5i redaction scanner in `kassiber-envelope` and the
   desktop supervisor, with shared fixture vectors, all six generators, per-shape
   scaling and mutations; see
@@ -221,11 +224,10 @@ natively; generic `cancel` keeps Python's refusal.
   quarantines, value-only import totals, staged CSV writes with device/pipe
   targets, Esplora/Electrum history-anchor proofs, the freshness-count query
   and new-name automatic diagnostics reports.
-- [ ] Add a loopback release-server oracle for `update --check` so the fetch,
-  cache write and rendering are proven against Python without contacting
-  GitHub.
-- [ ] Decide whether naive timestamps in overview relative labels should follow
-  Python's local-zone interpretation.
+- [ ] Add a loopback release-server test for `update --check` that covers the
+  fetch, cache write and rendering without contacting GitHub.
+- [ ] Decide how overview relative labels read naive timestamps (Python read
+  them in the local zone).
 
 ## Rust backend R5 chain clients (partial)
 
@@ -255,7 +257,7 @@ natively; generic `cancel` keeps Python's refusal.
 ## Rust main sync 1
 
 [Main sync 1](docs/reference/rust-main-sync.md) inventories main #672 to #714
-against the Rust port and slices the gaps; Python stays the reference.
+against the Rust port and slices the gaps.
 
 - [x] S1: the Rust store opens and migrates books the current Python wrote
   (accepted coarse price, provider `agent_access`, `ai_provider_checks`, the
@@ -359,8 +361,6 @@ Rust stack; the merge also carries rounds 5 to 5d and 8.
   (1ec7e7da0, 10719a7d5) and BTCPay's string metadata identity (464f82094).
 - [x] Refuse stale prebuilt Rust test binaries by their cargo dep-info
   (`tests/rust_fixture_binary.py`).
-- [ ] Python reference bug: a list or object review operation `type` raises
-  a bare `TypeError` (`tests/rust_port/repro_review_operation_unhashable_type.py`).
 
 ## Rust baseline triage
 
@@ -371,12 +371,6 @@ The 162 unowned failures of the 50c88d800 baseline, by cause.
   identity.
 - [ ] After the cleanup branch merges, regenerate the transfer review
   vectors (cases, plans, apply, effects, inputs) on the merged tree.
-- [ ] Python reference bug: MCP analysis-index reads crash under
-  `query_only` since 470334f61
-  (`tests/rust_port/repro_mcp_analysis_index_query_only.py`); a core MCP
-  flow, so a Python fix qualifies.
-- [ ] Python reference bug: a non-finite imported amount ends as
-  `internal_error` (`tests/rust_port/repro_import_non_finite_amount_overflow.py`).
 
 ## Rust backend R5 dependency review
 
@@ -427,16 +421,14 @@ compared the Rust backend's hand-written code with plan 21's named crates.
   ([final CLI leaves](docs/reference/rust-shell.md#final-cli-leaves-r7)).
   Only `chat`, `chats` and `mcp serve`/`mcp call` stay feature-gated; a tree
   walk in `crates/kassiber/tests/binary.rs` runs every other leaf.
-- [ ] Make every live regtest lane pass with `KASSIBER_RUNTIME=rust`
-  ([runtime selection](docs/reference/testing.md#runtime-selection)). On a
-  throwaway merge of native-gaps-2 sources + chain (2026-11-08), `fast`,
-  `bitcoin-core`, `btcpay`, `lightning-business` and `boltz-liquid` pass
-  under Rust and match Python step by step in `KASSIBER_RUNTIME=shadow`
-  (`silent-payments` runs only in-process tests; demo-full syncs a Frigate
-  wallet through the CLI). `demo-full` passes under Rust on the integrated
-  r10b tip at 4817a7167 (2026-11-09). Still open: rerun the other lanes under
-  Rust on that tip, and add a Rust fast-lane CI job once the native sync gaps
-  are on main.
+- [ ] Make every live regtest lane pass on the Rust binary. On a throwaway
+  merge of native-gaps-2 sources + chain (2026-11-08), `fast`,
+  `bitcoin-core`, `btcpay`, `lightning-business` and `boltz-liquid` passed
+  under Rust and matched Python step by step (`silent-payments` runs only
+  in-process tests; demo-full syncs a Frigate wallet through the CLI).
+  `demo-full` passes under Rust on the integrated r10b tip at 4817a7167
+  (2026-11-09). Still open: rerun the other lanes on that tip, and add a
+  fast-lane CI job once the native sync gaps are on main.
 - [x] Python reference fixes found by the Liquid port (r7-7): book explicit
   Liquid outputs, publish LWK outputs in outpoint order, key the prospective
   overlay by (txid, asset), and keep each observer's tip through
@@ -545,13 +537,6 @@ compared the Rust backend's hand-written code with plan 21's named crates.
   (10719a7d5, cache schema version 2); native lookups read and write version 2.
   `test_reference_electrum_mismatched_transaction_repro_and_native_refusal`
   now pins both refusing.
-- [ ] Redact private checkpoints from Python freshness pause/resume results.
-  The disposable `test_reference_source_control_checkpoint_repro_and_native_parity`
-  repro pins the disclosure; Rust already applies the shared UI projection.
-- [ ] Return a typed Python validation error for `all:false` without a wallet
-  in wallet sync and active-book freshness. The disposable
-  `test_reference_all_false_without_wallet_repro_and_native_refusal` pins the
-  current `None.strip()` failure; native whole-invocation selection declines it.
 - [x] Integrate the separate Python tip-cache fix and match it in Rust:
   Esplora/Electrum compatibility evidence refreshes after a changed or missing
   block-identity anchor even when script statistics, status and heights match.
@@ -645,7 +630,7 @@ projections stay Python. Progress and remaining work for this slice:
 - [ ] BIP329 standard-field surrogate/platform parity with the wallet
   lifecycle work.
 - [ ] Complete the five loan tax-composition dispositions with the journal
-  slice; hybrid scenarios currently verify Python consumes Rust-authored marks.
+  slice.
 - [ ] Verify MIME inference against Windows registry overrides and native
   Windows/macOS attachment storage behavior.
 
@@ -710,8 +695,6 @@ projections stay Python. Progress and remaining work for this slice:
 - [ ] Bitpanda follow-ups: confirm the undocumented `operation_type` /
   `transaction_type` values and fee semantics against a real account, then
   widen the mapping; a CSV importer once the export's fee semantics are known.
-- [ ] Reconcile the Rust report CSV export with Python's current section
-  layout (`ui.reports.export` csv differs on the AI tools `reports` fixture).
 - [x] Port Binance supplemental autoinvest/dividend core/CLI ingestion with
   frozen Python files, SQLite/SQLCipher full-book/wire parity, commercial
   coordination, reference-bug repros and named mutation killers. See the
@@ -769,9 +752,6 @@ projections stay Python. Progress and remaining work for this slice:
   parity and mutation entries.
   Complete malformed descriptor/preflight error parity beyond the frozen cases.
   Keep unsupported commands disabled.
-- [ ] Complete wallet/import boundary and subprocess dispositions through the
-  hybrid candidate with native served-by evidence; port remaining rust-test
-  dispositions. Network sync stays in the later chain/service slice.
 
 ## Rust backend R5 reports
 
@@ -804,7 +784,7 @@ registers them; exit-tax preserves its reference no-registration boundary.
   CLI and daemon, with exact reconciliation, custody bounds, full-table parity
   and named mutation tests.
 - [ ] Finish desktop gains daemon journal-refresh parity and registration. Its
-  native core projection is verified; Python rebuilds stale journals before
+  native core projection is verified; Python rebuilt stale journals before
   serving the kind, so registration waits for the accepted native R4 producer.
   See the [partial gain checkpoint](docs/reference/rust-shell.md#gain-explanation-checkpoint-r5-fifteenth-reports-continuation-partial).
 - [x] Port cross-check reads and workbooks through native CLI/desktop services,
@@ -1035,7 +1015,7 @@ registers them; exit-tax preserves its reference no-registration boundary.
   [recovery checkpoint](docs/reference/rust-shell.md#mirror-durable-recovery-r5-partial).
 - [ ] Finish Mirror's CLI/daemon acceptance with
   non-zero served-by counts. Preserve deterministic native
-  ambiguity ordering; retain the recorded Python reference repro.
+  ambiguity ordering.
 - [x] Register native Chain Analysis overview/trace/path, synchronous entropy,
   case list/get/compare, label listing and dataset list/get/query reads through
   the CLI and daemon, retaining byte/all-table parity and zero fallback; see the
@@ -1185,12 +1165,12 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   274 loader/BLOB cases, the 24,000-book/1,030-permutation custody campaign,
   159 archived requests and permutations, and focused census/shadow. The
   remaining combined parity and mutation gates are the R10 item below.
-- [ ] Close the combined R10 gaps: the post-merge parity modules not yet rerun, the full mutation kills on the
-  integrated stack and the owner's full census/shadow/native-lane shards.
+- [ ] Close the combined R10 gaps: the full mutation kills on the integrated
+  stack, run with `crates/mutation-check`.
 - [ ] R4-10 to R4-12: pre-build repairs, rendering and joins, persistence,
   each with byte or database-dump parity.
 - [ ] Finish the [R4-10 auto-pricing checkpoint](docs/reference/r4-journal-pipeline.md#r4-10-auto-pricing-checkpoint):
-  finish census/shadow, mutation and CPU acceptance.
+  finish mutation and CPU acceptance.
   Cached pricing, source-overlap repair/warnings, and drifted legacy-pair refresh
   with profile reload have unregistered native interfaces and complete-dump
   oracles. The combined stage and split repair/price interface for R4-13 retain
@@ -1236,14 +1216,13 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   whole-pipeline measurement. Its 20k median is 0.034666 s against 0.03 s;
   default-cache books meet the target. The acceptance record preserves all
   samples and the complete cost breakdown; the shared 128 MiB cache is unchanged.
-- [ ] Reject fractional legacy msat before Python's source-overlap fingerprint
-  conversion can collapse distinct amounts. The disposable repro is
-  `python -m tests.rust_port.repro_journal_fractional_source_overlap`;
-  the native checkpoint preserves reference behavior pending that correction.
-- [ ] Fix Python's lineage-exists refusal on repeated evidence-only legacy
-  pair drift when sorted parent selection supersedes the current revision.
-  Reproduce with `uv run --locked python -m tests.rust_port.repro_journal_repeated_legacy_drift`;
-  native full-dump vectors preserve the reference refusal pending correction.
+- [ ] Reject fractional legacy msat before the source-overlap fingerprint
+  conversion can collapse distinct amounts. The native journal pipeline kept
+  Python's behavior, so the fix changes stored data and needs owner sign-off
+  and updated goldens.
+- [ ] Fix the lineage-exists refusal on repeated evidence-only legacy pair
+  drift when sorted parent selection supersedes the current revision. The
+  native full-dump vectors kept Python's refusal; update them with the fix.
 - [ ] Finish the R4-12 persistence checkpoint:
   close the CPU write-floor budget, exhaustive persistence mutations and inherited
   campaign gates before wiring production in R4-13. The unregistered service,
@@ -1370,15 +1349,15 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   cancellation and connection-owner retirement. The assistant's no-pairing
   step uses the same native service and awaits the R6 chat loop. Typed refusals
   are answered natively. The desktop journal reads, quarantine page and
-  quarantine resolution are native and registered. Finish the auto-pair, desktop and assistant campaigns,
-  census/shadow and inherited mutations.
+  quarantine resolution are native and registered. Finish the auto-pair, desktop and assistant campaigns
+  and inherited mutations.
   The third continuation integrates the requested loader/BLOB, pre-build,
   render and persistence tips, adds resumable complete-process shards, and
   repairs network-refusal metadata and merged BLOB conversion defects. Its
   seventeen frozen process books preserve every inherited record. Fresh full
   campaigns pass 25,030 generated comparisons and 318 retained-recording
   comparisons, including ordered result bytes and exact refusals. The full
-  inherited census/shadow and mutation gates remain open.
+  inherited mutation gates remain open.
   The test-only refresh coordinator now owns atomic pairing/rebuild commits,
   ordered result bytes, skipped-pairing refusals and WAL/cache restoration.
   Its 57 complete reference books cover both commits, skip-current and failure
@@ -1400,8 +1379,7 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   loopback protocols, including pairing authority, cancellation and lifecycle
   retirement. Python cancellation rounds 7/7b and interruptible native backoff
   share the same fences.
-  Python retains production authority until R4-16. Production Rust returns its
-  refusal; only development hybrid replay can use Python after proven rollback.
+  Production Rust returns its refusal.
   Lossless refusal closure, inherited campaigns and timing acceptance remain
   on the R4-13/R4-16 tracks.
 
@@ -1415,7 +1393,7 @@ records the byte-parity checkpoint, phase timings and mutation equivalences.
   adds 1,776 builder/ledger outcomes and repairs diagnostic float sums, wallet
   mapping lookup and JSON NaN holding-key identity. Complete custody/Austrian
   nonfinite coverage, successful lazy decoding, shape/refusal/UUID campaigns
-  and final acceptance remain open. Python retains production authority.
+  and final acceptance remain open.
 - [ ] R4-13 to R4-16: CLI and daemon commands, automatic pairing, the
   freshness journal job and the authority switch.
 
@@ -1435,9 +1413,6 @@ builds serve them and chat turns write through the native executor.
   `tests/test_daemon_smoke.py` pass with a Rust daemon, all 87.
 - [x] `test_ai_chat_mutating_tool_consent_preview_redacts_secrets` reads the
   consent reply and the denied result in either order, as the desktop does.
-- [ ] `tests/test_rust_mcp.py::test_only_the_granted_tools_are_reachable` can
-  exceed the server's 32 calls in flight under load; send it in windows as
-  the transcripts do.
 - [x] Give `kassiber chat` a cooperative Ctrl-C (cancel the turn, keep the
   REPL); see the
   [R6-8 checkpoint](docs/reference/rust-shell.md#mcp-server-and-cooperative-chat-ctrl-c-r6-8).
@@ -1448,8 +1423,7 @@ builds serve them and chat turns write through the native executor.
   in its own process group, as Rust does, and `tests/test_rust_chat_interrupt.py`
   runs the same terminal scenarios on both.
 - [ ] Save a tool turn's whole visible answer, not its last leg's text, as the
-  chat history message (Python and Rust alike;
-  `tests/rust_port/repro_chat_history_tool_turn_last_leg.py`).
+  chat history message.
 - [ ] Count the whole egress ledger in the privacy receipt once the daemon has
   a process-wide product ledger (`ui.egress.snapshot`).
 
@@ -1466,10 +1440,6 @@ Python fixes on `t3code/rust-pyfix-6`.
   `4years` aliases) and measure "all" to `until` when given.
 - [ ] Replace the remaining hard-coded 112-table assertions in the Rust parity
   tests with the store manifest's table list; the merged schema has 113.
-- [ ] Regenerate `crates/wallets/tests/vectors/python_wallet_publication.json`
-  for S1's `ai_provider_checks` table (its 102-round test fails on the merge).
-- [ ] Python: `wallets sync --wallet X` still crashes on X's unreadable
-  configuration (`tests/rust_port/repro_cli_wallet_sync_bad_config_explicit.py`).
 - [ ] Port main #679's AI tool-error remediation and allowlisted details;
   r7-6's port adds only the hint to the mutating executor.
 
@@ -1538,8 +1508,6 @@ AI projections remain Python.
 - [ ] Bring the review build to the R4 speed targets. On `book-2000`, native
   `review cases` and `review plan` take 1.8× and 1.6× less process CPU than
   Python, short of ≥4× end to end until the custody performance work lands.
-- [ ] Move the AI review tools and their once-only consent to Rust with R6; they
-  still call Python's `_review_workflow_payload`.
 
 Retain readiness barriers rather than reading stale journals; see the
 [review adapter handoff](docs/reference/rust-shell.md#review-integration-handoff).
@@ -1606,7 +1574,7 @@ operator leaves, brokered routing and `ui.agent_access.*` kinds and R6-8's
   order and books byte-identical journals
   ([same-time order](docs/reference/tax.md#same-time-order)).
 - [ ] Order the remaining same-time readers by the source order: the bounded
-  custody-gap worklist (`custody_gaps.py`, `ORDER BY occurred_at, created_at,
+  custody-gap worklist (`ORDER BY occurred_at, created_at,
   id` with `LIMIT`, only on books above the input-row bound), report and export
   row order among same-time journal entries (`occurred_at, created_at, id`,
   with ids derived from row ids), and the desktop's per-transaction running
@@ -1690,7 +1658,8 @@ operator leaves, brokered routing and `ui.agent_access.*` kinds and R6-8's
   below rejects.
 - [ ] Keep transfer-leg quantities exact in the transfer audit. The engine
   returns each move's sent, received, and fee amounts exactly, but the reader
-  (`kassiber/core/engines/ledger_response.py`) still passes them through
+  (Python's `ledger_response.py`, which the native journal pipeline in
+  `crates/journals` reproduces) still passes them through
   `float` before `dec()`, as the phase-3 adapter did, which loses msat above
   about 15 significant digits. Exact values change stored `quantity_exact`
   text on most books (`1.0` becomes `1`), so done when the reader keeps them
@@ -1735,18 +1704,18 @@ operator leaves, brokered routing and `ui.agent_access.*` kinds and R6-8's
 - [ ] Rename the RP2 texts of engine failures. They keep the phase-3 adapter's
   wording byte for byte: the `RP2 cross-asset input validation failed:`,
   `RP2 multi-asset tax calculation failed:`, and `RP2 tax calculation failed
-  for asset ...` wrappers (`kassiber/core/engines/errors.py`), the method
+  for asset ...` wrappers (`crates/journals/src/boundary.rs`, `native.rs`), the method
   gate's `Unsupported RP2 accounting method ...`
   (`tax-engine/core/src/ledger/run.rs`), the `RP2 configuration ...` checks
-  (`ledger_request.py`), the raw-row `TypeError` naming
+  (`crates/custody/src/ledger_request/config.rs`), the raw-row `TypeError` naming
   `GenericRP2TaxEngine`, and the `rp2_input_validation` error code. Done when
-  they name Kassiber's engine, the comparison maps old texts to new ones as a
-  listed difference while RP2 remains the oracle, and the docs and tests that
-  quote them follow. Messages the lot engine reproduces from RP2 itself (such
+  they name Kassiber's engine, the frozen goldens that quote the old texts
+  are updated as a reviewed difference, and the docs and tests that quote them
+  follow. Messages the lot engine reproduces from RP2 itself (such
   as the unpaired-marker text) stay as the RP2 fixtures pin them.
 - [ ] Relax the configuration label rules RP2's INI file imposed. The request
   builder keeps them with RP2's messages
-  (`kassiber/core/engines/ledger_request.py`): a wallet, profile, or asset
+  (`crates/custody/src/ledger_request/config.rs`): a wallet, profile, or asset
   label containing `, \n \r [ ] = : # ;` fails the whole report, even for an
   unused wallet, and a `%` the INI interpolation cannot read raises
   `InterpolationSyntaxError` (goldens `error-forbidden-character`,
@@ -1771,12 +1740,6 @@ operator leaves, brokered routing and `ui.agent_access.*` kinds and R6-8's
   table and adding them to `calculation` with the first phase-5 stale
   migration. Done when processed journals carry both versions and filed
   reports keep the versions that produced them.
-- [ ] Decide with phase 5's first change whether RP2 stays a development
-  dependency and the `tax-shadow` CI lane keeps running. Both compare the
-  engine with the frozen phase-3 oracle (`tests/tax_oracle/`). Once phase 5
-  changes results on purpose, either each change lists its differences
-  against the oracle, or the stored goldens (`ledger_fixtures.json`) carry the
-  proof alone and RP2, the oracle, and the lane retire together.
 - [ ] Add authoritative Austrian tax fixtures (plan 20 Verification 3): BMF
   worked examples and Steuerberater-reviewed scenarios, starting with plan
   16's salary → savings-wallet case. Needs reviewed sources from the owner;
@@ -1860,15 +1823,15 @@ See [tax countries](docs/reference/tax-countries.md) and
   those readers use `pricing.price_in_book_currency_sql` as the report
   fallbacks do, in both runtimes.
 
-- [ ] Cover every synthetic projection-row prefix in the projection-id guard
-  test. Plan 20 phase 4 deleted the pre-custody normalizer branches no
-  finalized row can reach from the product (they remain only in the frozen
-  oracle, `tests/tax_oracle/`), and the request builder refuses their shapes
-  (`non_synthetic_row_id`, `shared_pair_leg`). The guard
+- [ ] Cover every synthetic projection-row prefix in a Rust projection-id
+  guard test. Plan 20 phase 4 deleted the pre-custody normalizer branches no
+  finalized row can reach from the product, and the request builder
+  (`crates/custody/src/ledger_request.rs`) refuses their shapes
+  (`non_synthetic_row_id`, `shared_pair_leg`). The Python guard
   (`test_every_projected_row_id_is_synthetic_and_pairs_are_edge_disjoint`)
-  compiles one fixture, whose rows are all `custody-tax:`. Done when the
-  projection-id guard test covers every synthetic prefix in
-  `transfers._SYNTHETIC_TRANSFER_ID_PREFIXES` and the suite stays green.
+  compiled one fixture, whose rows are all `custody-tax:`, and went with
+  pytest. Done when a Rust test covers every synthetic transfer-id prefix and
+  pair edge-disjointness.
 - [ ] Keep pricing from adding quarantines. A quarantined sale or move uses
   none of its wallet's coins, so pricing an earlier purchase can let it book,
   and a later move or sale then runs short. The short spend can also be a
@@ -1931,7 +1894,7 @@ See [tax countries](docs/reference/tax-countries.md) and
   platform export, with review before reuse. Generic mapping already exists;
   this task is persistence/reuse in the next import flow.
 - [ ] Extend the assistant's plan-bound attachment import
-  (`core/attachment_import.py`) from `generic_ledger` to the dedicated file
+  (the `attachment_import` operation) from `generic_ledger` to the dedicated file
   formats, each with its own target-wallet and mode rules. Done when a known
   export attached in chat imports through its own importer, not a column map.
 - [ ] Identify any remaining rates/manual-adjustment workflow gap against the
@@ -1963,11 +1926,6 @@ See [tax countries](docs/reference/tax-countries.md) and
   invoice recovery, and audit custody. Keep it separate from normal daemon,
   AI, and diagnostics surfaces; preserve the adapter discard policy in
   [Lightning opsec](docs/reference/lightning-opsec.md).
-- [ ] Remove raw node-response disclosure from Python LND HTTP/JSON errors.
-  `crates/chain/scripts/repro_python_lnd_errors.py` reproduces response text in
-  HTTP error messages and malformed-JSON `response_preview` details using
-  synthetic responses and no sockets. Native LND report errors omit those
-  bodies; Python remains unchanged in this port checkpoint.
 
 ## Desktop and handoffs
 
@@ -2022,8 +1980,8 @@ See [tax countries](docs/reference/tax-countries.md) and
   see [MCP](docs/reference/mcp.md)), but direct executor callers still fail
   open when the runtime state is empty, and fresh human review for
   `review.apply` is enforced only by the CLI client. Network, destructive, and
-  idempotent metadata lives in `kassiber/mcp/tools.py` (`MUTATING_TOOL_HINTS`,
-  `_EGRESS_WITHOUT_FLAG`) instead of the catalog, where four mutating tools
+  idempotent metadata lives in `crates/mcp/src/tools.rs` (`MUTATING_TOOL_HINTS`,
+  `EGRESS_WITHOUT_FLAG`) instead of the catalog (`crates/ai/src/catalog.rs`), where four mutating tools
   that egress still carry `egresses=False`; move it onto `ToolEntry`, pinned
   to the egress table, and have chat and MCP share it.
 - [ ] Give brokered operations a full agent lifecycle: caller-supplied
@@ -2058,8 +2016,9 @@ See [tax countries](docs/reference/tax-countries.md) and
   their deliberate audience differences under one redaction contract.
 - [ ] Generate daemon/renderer/bridge allowlists from a common contract while
   preserving separate authority scopes. Existing drift tests remain required.
-- [ ] Derive JSON Schema and TypeScript contracts from validated Python models
-  (the proposed Pydantic v2 path), with schema drift failing CI.
+- [ ] Derive JSON Schema and TypeScript contracts from the Rust daemon types,
+  with schema drift failing CI. The earlier proposal (Pydantic v2 models) went
+  with Python.
 - [ ] Resolve the dev-bridge mutation/authentication policy: read-only by default
   with explicit mutation opt-in, or a per-launch token. The shipped transport
   is Vite HTTP middleware, not the old token-WebSocket plan. Complete the
