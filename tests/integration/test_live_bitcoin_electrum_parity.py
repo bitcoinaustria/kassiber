@@ -13,10 +13,10 @@ from decimal import Decimal
 from pathlib import Path
 from urllib import parse, request
 
-from kassiber.db import open_db
+from tests.integration.book import open_book
 
 from tests.integration.env import skip_unless_integration
-from tests import cli_runner
+from tests.integration import cli as cli_runner
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -250,7 +250,7 @@ def _sync(data_root: Path, wallet_label: str) -> dict:
 
 
 def _transaction_projection(data_root: Path) -> list[dict]:
-    conn = open_db(data_root)
+    conn = open_book(data_root, readonly=True)
     try:
         rows = conn.execute(
             """
@@ -283,7 +283,7 @@ def _transaction_projection(data_root: Path) -> list[dict]:
 
 
 def _utxo_projection(data_root: Path) -> list[dict]:
-    conn = open_db(data_root)
+    conn = open_book(data_root, readonly=True)
     try:
         rows = conn.execute(
             """

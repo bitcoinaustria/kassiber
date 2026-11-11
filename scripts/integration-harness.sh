@@ -38,19 +38,14 @@ runpy.run_module(sys.argv.pop(1), run_name="__main__", alter_sys=True)' "$ROOT" 
   fi
 }
 
-# Lanes that still run Python test modules (unittest/pytest suites that import
-# the Python product) need the uv development environment. They go with the
-# Python test suite (plan 22, D1); the demo and seeding lanes never use this.
-py_tests() {
-  if ! command -v uv >/dev/null 2>&1; then
-    echo "this lane runs Python test modules and needs uv (./scripts/bootstrap-dev-env.sh)" >&2
-    return 2
-  fi
-  uv run --locked python "$@"
+# The lanes' test modules are stdlib `unittest` suites under tests/integration/,
+# run the same way: `py_unittest tests.integration.MODULE ...`.
+py_unittest() {
+  py -m unittest "$@"
 }
 
 # Every lane starts the Rust `kassiber` binary: KASSIBER_RUST_BIN, default
-# target/release/kassiber. Product children go through tests/cli_runner.py,
+# target/release/kassiber. Product children go through tests/integration/cli.py,
 # which reads KASSIBER_TEST_CLI. A release binary has no test socket guard and
 # exits 78 when KASSIBER_TEST_NO_EGRESS is armed, so lanes that arm that
 # guard in a child need a `--features test-harness` build instead.
@@ -106,39 +101,26 @@ ensure_python_runtime() {
   exit 2
 }
 
-ensure_bdk_runtime() {
-  if py_tests - <<'PY' >/dev/null 2>&1
-import importlib.util
-import sys
-
-if importlib.util.find_spec("bdkpython") is None:
-    sys.exit(1)
-PY
-  then
-    return 0
-  fi
-  echo "The Bitcoin dependency-backed observer requires bdkpython in this interpreter." >&2
-  echo "Run ./scripts/bootstrap-dev-env.sh on a supported BDK wheel platform and rerun." >&2
-  exit 2
-}
-
 run_fast() {
   ensure_python_runtime
-  KASSIBER_NO_EGRESS=1 py_tests -m unittest \
-    tests.test_regtest_harness \
-    tests.test_lightning_business_plan \
-    tests.test_lightning_funding \
-    tests.test_regtest_source_funds_seed \
+  KASSIBER_NO_EGRESS=1 py_unittest \
+    tests.integration.test_product_free \
+    tests.integration.test_chain_observer_oracle \
+    tests.integration.test_lightning_business_plan \
+    tests.integration.test_lightning_funding \
+    tests.integration.test_regtest_source_funds_seed \
     tests.integration.test_demo_fingerprint \
     tests.integration.test_regtest_demo_realism \
     tests.integration.test_regtest_exchange_cases \
     tests.integration.test_regtest_tape_cli \
+    tests.integration.test_lot_order_determinism \
     -v
-  # These tests exercise the real HTTP adapter against a loopback-only fixture.
-  # Their socket guard blocks external destinations; the product kill switch
-  # would also block the fixture before its authentication can be tested.
-  KASSIBER_NO_EGRESS=0 KASSIBER_TEST_NO_EGRESS=1 py_tests -m unittest \
-    tests.test_regtest_exchange_api -v
+  # These tests exercise the Rust binary's HTTP adapter against a
+  # loopback-only fixture. Their socket guard blocks external destinations;
+  # the product kill switch would also block the fixture before its
+  # authentication can be tested.
+  KASSIBER_NO_EGRESS=0 KASSIBER_TEST_NO_EGRESS=1 py_unittest \
+    tests.integration.test_regtest_exchange_api -v
 }
 
 rpc_auth() {
@@ -416,11 +398,11 @@ run_with_bitcoin_core() {
 }
 
 run_bitcoin_core_smoke() {
-  py_tests -m unittest tests.integration.test_live_bitcoin_core_regtest -v
+  py_unittest tests.integration.test_live_bitcoin_core_regtest -v
 }
 
 run_bitcoin_electrum_parity_smoke() {
-  py_tests -m unittest tests.integration.test_live_bitcoin_electrum_parity -v
+  py_unittest tests.integration.test_live_bitcoin_electrum_parity -v
 }
 
 run_bitcoin_backend_suite() {
@@ -429,12 +411,12 @@ run_bitcoin_backend_suite() {
 }
 
 run_chain_observer_oracle() {
-  py_tests -m unittest tests.integration.test_live_chain_observer_oracle -v
+  py_unittest tests.integration.test_live_chain_observer_oracle -v
   if [ "${KASSIBER_CHAIN_OBSERVER_CHAIN:-all}" != "liquid" ]; then
-    py_tests -m unittest tests.integration.test_live_bdk_observer -v
+    py_unittest tests.integration.test_live_bdk_observer -v
   fi
   if [ "${KASSIBER_CHAIN_OBSERVER_CHAIN:-all}" != "bitcoin" ]; then
-    py_tests -m unittest tests.integration.test_live_lwk_observer -v
+    py_unittest tests.integration.test_live_lwk_observer -v
   fi
 }
 
@@ -448,9 +430,6 @@ run_chain_observers() {
       exit 2
       ;;
   esac
-  if [ "$selected" != "liquid" ]; then
-    ensure_bdk_runtime
-  fi
   export KASSIBER_CHAIN_OBSERVER_CHAIN="$selected"
   if [ "$selected" != "bitcoin" ]; then
     export KASSIBER_REGTEST_REQUIRE_ELEMENTS=1
@@ -571,7 +550,7 @@ wait_for_frigate() {
 run_silent_payments_smoke() {
   seed_frigate_regtest_tip
   wait_for_frigate
-  py_tests -m unittest tests.test_silent_payments -v
+  py_unittest tests.integration.test_live_silent_payments -v
 }
 
 run_demo_full() {
@@ -1248,7 +1227,7 @@ run_bitcoin_electrum() {
 }
 
 run_sync_benchmark_lane() {
-  py_tests scripts/benchmark-wallet-sync.py "$@"
+  py scripts/benchmark-wallet-sync.py "$@"
 }
 
 run_sync_benchmark() {
@@ -1450,7 +1429,7 @@ run_lightning_business() {
   export KASSIBER_LIGHTNING_BUSINESS_BACKUP_LND_MACAROON_HEX
   KASSIBER_LIGHTNING_BUSINESS_BACKUP_LND_MACAROON_HEX="$(demo_lnd_readonly_macaroon_hex)"
   ./dev/regtest/lightning-business-scenario.sh
-  py_tests -m unittest tests.integration.test_live_lightning_business_regtest -v
+  py_unittest tests.integration.test_live_lightning_business_regtest -v
 }
 
 run_btcpay_seed_smoke() (
@@ -1746,15 +1725,13 @@ run_boltz_liquid() {
   fi
 
   wait_for_boltz_liquid
-  py_tests -m unittest tests.integration.test_boltz_liquid_regtest -v
+  py_unittest tests.integration.test_boltz_liquid_regtest -v
 }
 
 run_custody_desktop() {
-  ensure_python_runtime
-  KASSIBER_NO_EGRESS=1 py_tests -m unittest \
-    tests.test_custody_gap_acceptance \
-    tests.test_connection_catalog_drift \
-    -v
+  # The gap acceptance and connection-catalog checks were pytest modules and
+  # go with the Python test suite (plan 22, D1); this lane keeps the desktop
+  # route's own tests.
   pnpm --dir ui-tauri exec vitest run \
     src/routes/CustodyGaps.test.tsx
 }

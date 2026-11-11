@@ -11,6 +11,10 @@ The repository root is one Cargo workspace: the backend crates under
 and one `target/`. `rust-toolchain.toml` pins one Rust release for every
 crate, including `ui-tauri/src-tauri`. rustup selects it inside the
 checkout; with mise, run cargo as `mise exec rust@<pinned release> -- cargo …`.
+`./scripts/bootstrap-dev-env.sh` installs that release through rustup, checks
+the C toolchain, installs the frontend's locked pnpm dependencies, and reports
+whether a `python3` 3.11 or newer is there for the regtest harness (standard
+library only); it sets up no Python environment.
 The quality gate refuses any other `rustc`, and CI and release workflows
 install the pin through `.github/actions/setup-rust`. The storage crate builds
 SQLCipher from source (with a vendored OpenSSL outside macOS), so no SQLite,
@@ -260,12 +264,12 @@ stored data and exports need the owner's sign-off.
 
 | Tier | Command | Docker | Purpose |
 | --- | --- | --- | --- |
-| FAST | `./scripts/integration-harness.sh fast` | no | Replays recorded regtest tapes through the real sync adapter, import, journal, report, and XLSX export path with `KASSIBER_NO_EGRESS=1`. Includes a baseline watch-only tape and an edge-case tape (multi-address wallet, immature vs. mature coinbase, dust, RBF-replaced conflict pair, same-wallet self-spend, mempool-pending receipt). The same tapes are also served by a strict loopback Core RPC fake to the real CLI (`tests/integration/test_regtest_tape_cli.py`), so the replay runs on the Rust binary the harness selects. |
+| FAST | `./scripts/integration-harness.sh fast` | no | Serves recorded regtest tapes (a baseline watch-only tape and an edge-case tape: multi-address wallet, immature vs. mature coinbase, dust, RBF-replaced conflict pair, same-wallet self-spend, mempool-pending receipt) from a strict loopback Core RPC fake to the Rust binary's CLI (`tests/integration/test_regtest_tape_cli.py`), through sync, journals, reports and the CSV/XLSX/PDF exports, and compares them, the exchange lifecycle and the same-time lot order with [frozen goldens](#frozen-goldens). It also checks the signed, paginated Coinbase import against a loopback fixture, the harness's own helpers, and that every harness module imports with the standard library alone (`tests/integration/test_product_free.py`). |
 | SLOW | `./scripts/integration-harness.sh bitcoin-core` | yes, unless reusing a node | Starts or reuses the regtest Compose stack (Bitcoin Core, Elements, Bitcoin Fulcrum, plus local mempool/esplora-compatible loopback endpoints), creates real wallets and transactions (including coinbase maturity and a watched receive), drives the Core RPC sync/pricing/journal/report/export smoke, and compares a real Fulcrum/Electrum address-wallet sync against Core RPC for receipt, spend, incremental, and no-op sync parity. |
-| CHAIN OBSERVERS | `./scripts/integration-harness.sh chain-observers [all\|bitcoin\|liquid]` | yes, unless reusing nodes | Extends the same disposable Compose stack with an independent Core/Elements truth oracle. It records bounded mode-0600 manifests for descriptor/address families, receive/change and gap ownership, mempool/confirmation/RBF/reorg/restart transitions, Bitcoin and Liquid UTXOs, policy/issued-asset values, and protocol endpoint heights. It also proves observer state commits and rollback/restart behavior inside a temporary SQLCipher book with no dependency sidecar store. |
+| CHAIN OBSERVERS | `./scripts/integration-harness.sh chain-observers [all\|bitcoin\|liquid]` | yes, unless reusing nodes | Extends the same disposable Compose stack with an independent Core/Elements truth oracle. It records bounded mode-0600 manifests for descriptor/address families, receive/change and gap ownership, mempool/confirmation/RBF/reorg/restart transitions, Bitcoin and Liquid UTXOs, policy/issued-asset values, and protocol endpoint heights, then holds the Rust binary's BDK and LWK observers to the nodes' own unspent outputs. |
 | DEMO | `./scripts/integration-harness.sh demo-full` | yes, unless reusing a node | Builds the checked-in `full-accounting-v1` scenario: thirteen Kassiber wallets including 8–12-address Bitcoin wallets, legacy/nested-SegWit/bech32/taproot rotation targets, a Silent Payments wallet, a mining wallet, and descriptor-backed Liquid wallets synced from real `elementsd` transactions through the local Liquid Electrum endpoint; monthly EUR-denominated receipts, payments, payroll, rent, cloud, and other expenses converted through the bundled Kraken BTC/EUR rate for each cycle; a deterministic jittered clock with quiet and doubled activity months; era-sensitive fees, rare heavy-tail receipts, 2–3 outbound payments in busy regimes, five external counterparty clusters, threshold-driven working-capital/merchant/cold-reserve transfers, near-full Bitcoin rotations with an explicit bounded legacy reserve where required, a real Liquid treasury migration with a delayed-receipt catch-up sweep, three policy-selected UTXO consolidation windows, and assertions that deprecated wallets retain at most one fee-reserve UTXO; 2021–22 pool payouts plus one solo coinbase, scheduled batched/dust/PayJoin/RBF edge cases, closed and still-open collateralized loans, ownership-derived fan-out self-transfer matching, a mempool-pending receipt, local Bitcoin/Liquid Electrum and mempool-compatible backend rows, swap/peg bridge pairs, journals, reports, and transaction exports. The persistent `demo-up` variant also starts the Core Lightning and BTCPay overlays by default, seeding merchant Lightning, BTCPay connections, paid BTCPay invoice/payment-request examples, and reviewed commercial reconciliation unless explicitly disabled. |
-| SILENT PAYMENTS | `./scripts/integration-harness.sh silent-payments` | yes | Starts the regtest Compose stack with the `silent-payments` profile, which builds/runs Sparrow Frigate against Bitcoin Core v30 and Fulcrum, waits until Frigate advertises `silent_payments: [0]` through `server.features`, then runs Kassiber's Silent Payments sync tests. Override the cold-start wait with `KASSIBER_REGTEST_FRIGATE_WAIT_SECONDS` if the local Frigate index is slow. |
-| BOLTZ | `./scripts/integration-harness.sh boltz-liquid` | yes, upstream Boltz stack | Starts or reuses Boltz's official [`BoltzExchange/regtest`](https://github.com/BoltzExchange/regtest) Docker environment, probes the local Boltz API for Liquid-capable submarine, reverse, and BTC -> L-BTC chain-swap pairs, executes a Liquid on-chain payment plus an L-BTC -> BTC Lightning submarine swap, persists the paid invoice through Kassiber's native LND adapter boundary, records the Liquid policy-asset id and Elements regtest scope, and explicitly reviews the resulting strong provider-hash candidate while the plain Liquid payment stays unpaired. An outbound submarine lockup has no owned claim witness, so provider metadata plus a native invoice is intentionally not called exact. Optional `KASSIBER_BOLTZ_V2_EVIDENCE=/path/to/evidence.json` adds real Boltz wallet/client/provider v2 chain/reverse/refund evidence rows. Exact `provider_swap_id` assertions require a unique 1:1 provider key, canonical send/receive route txids, explicit chain/network scope and Liquid consensus asset id, plus integer-msat principals covering both complete rows; incomplete evidence must stay strong/manual. |
+| SILENT PAYMENTS | `./scripts/integration-harness.sh silent-payments` | yes | Starts the regtest Compose stack with the `silent-payments` profile, which builds/runs Sparrow Frigate against Bitcoin Core v30 and Fulcrum, waits until Frigate advertises `silent_payments: [0]` through `server.features`, then runs `tests/integration/test_live_silent_payments.py`: a Frigate backend with Silent Payments, a watch-only silent-payment wallet whose sync must import a real Core transaction exactly as Core reports it, and the CLI's refusals of spending material, a plain Electrum backend and a world-readable scan file. Override the cold-start wait with `KASSIBER_REGTEST_FRIGATE_WAIT_SECONDS` if the local Frigate index is slow. |
+| BOLTZ | `./scripts/integration-harness.sh boltz-liquid` | yes, upstream Boltz stack | Starts or reuses Boltz's official [`BoltzExchange/regtest`](https://github.com/BoltzExchange/regtest) Docker environment, probes the local Boltz API for Liquid-capable submarine, reverse, and BTC -> L-BTC chain-swap pairs, executes a Liquid on-chain payment plus an L-BTC -> BTC Lightning submarine swap, imports the paid invoice through the Rust binary's own LND adapter (a real `lnd` backend and wallet sync against a loopback LND REST fake that serves exactly that invoice and requires the macaroon header), records the Liquid policy-asset id and Elements regtest scope, and explicitly reviews the resulting strong provider-hash candidate while the plain Liquid payment stays unpaired. An outbound submarine lockup has no owned claim witness, so provider metadata plus a native invoice is intentionally not called exact. Optional `KASSIBER_BOLTZ_V2_EVIDENCE=/path/to/evidence.json` adds real Boltz wallet/client/provider v2 chain/reverse/refund evidence rows. Exact `provider_swap_id` assertions require a unique 1:1 provider key, canonical send/receive route txids, explicit chain/network scope and Liquid consensus asset id, plus integer-msat principals covering both complete rows; incomplete evidence must stay strong/manual. |
 | BTCPAY | `./scripts/integration-harness.sh btcpay` | yes | Starts the standard Bitcoin regtest stack plus a BTCPay overlay (Postgres, NBXplorer, BTCPay Server) wired to the same disposable `bitcoind`, creates a first admin user, creates or reuses a test store, generates a BTC on-chain store wallet, creates and pays a realistic invoice mix from the regtest Core wallet, confirms it, syncs BTCPay wallet history into a temporary Kassiber book, syncs invoice provenance, and writes a local seed JSON containing the store id, disposable API key, invoice ids, scenarios, and payment txids. |
 | BTCPAY-BARK | `./scripts/integration-harness.sh btcpay-bark` | yes | Brings up a regtest Ark server and BTCPay with the Bark plugin in its own Compose project, drives every wallet-history row kind, records the Greenfield answers to a scratch directory, and tears the stack down. Needs the plugin package in `$KASSIBER_BARK_PLUGIN_CACHE`. |
 | LIGHTNING | `./scripts/integration-harness.sh lightning-business` | yes, Kassiber stack + CLN/LND overlay | Starts the existing regtest Compose stack plus `dev/regtest/compose.lightning.yml` with four pinned Core Lightning nodes and one LND backup merchant node. A seeded sim-ln-inspired business plan drives mainchain top-ups/withdrawals, merchant invoices, supplier payments, routed forwarding activity, LND backup receipts/outbound payments, an expired quote, and an intentionally failed oversized payment, opens private CLN merchant -> LND backup and LND backup -> CLN router channels, then verifies Kassiber through `wallets sync`, `ui.connections.node.snapshot` for both node implementations, `reports lightning-profitability`, and `export-lightning-profitability-csv`. |
@@ -285,19 +289,29 @@ export KASSIBER_REGTEST_RPC_PASSWORD=...
 
 ### Runtime selection
 
-Every lane starts the product through `tests/cli_runner.py`, on the Rust
-binary `KASSIBER_RUST_BIN` names (default `target/release/kassiber`): the
-harness exports it as `KASSIBER_TEST_CLI` and refuses to start without it.
-There is no Python runtime or shadow mode any more. The harness's own
-scenario, seeding and probe helpers are standard-library Python run with
-`python3 -I`, with no uv environment and no `import kassiber`
-([plan 22](../plan/22-python-removal.md), D2). They read the plaintext demo
-books with `sqlite3` and edit them only where a fixture must (demo rate-cache
-cleanup, Lightning backdating) through `tests/integration/book.py`; exchange
-fixture pricing goes through the daemon's `ui.transactions.metadata.update`.
-Lanes that run Python test modules (`fast`, `chain-observers`, the
-`bitcoin-core` unittest suites, `sync-benchmark`) still need the uv
-environment until the Python test suite is ported or removed.
+Every lane starts the product through `tests/integration/cli.py`, on the
+Rust binary `KASSIBER_RUST_BIN` names (default `target/release/kassiber`):
+the harness exports it as `KASSIBER_TEST_CLI` and refuses to start without
+it. There is no Python runtime or shadow mode any more. The harness, its
+scenario, seeding and probe helpers and every lane's `unittest` modules are
+standard-library Python run with `python3 -I` (3.11 or newer), with no uv,
+no virtual environment and no `import kassiber`
+([plan 22](../plan/22-python-removal.md), D2); a lane runs its modules as
+`py -m unittest tests.integration.<module>`, the harness's wrapper that puts
+the checkout on `sys.path`. By hand, the same is
+
+```bash
+python3 -I -c 'import runpy, sys; sys.path.insert(0, sys.argv.pop(1)); runpy.run_module(sys.argv.pop(1), run_name="__main__", alter_sys=True)' \
+  "$PWD" unittest tests.integration.test_regtest_tape_cli -v
+```
+
+with `KASSIBER_RUST_BIN` set. The helpers read the plaintext demo books with
+`sqlite3` and edit them only where a fixture must (demo rate-cache cleanup,
+Lightning backdating) through `tests/integration/book.py`; exchange fixture
+pricing goes through the daemon's `ui.transactions.metadata.update`.
+`tests/integration/test_product_free.py` fails on any harness module that
+imports the product, a third-party package or a test module outside
+`tests/integration/` and `dev/regtest/`.
 
 ```bash
 cargo build -p kassiber --release
@@ -309,18 +323,29 @@ and update files at `target/integration-harness/preferences/` unless they are
 already set: the product otherwise reads the account's default state root
 even with `--data-root`.
 
-With `KASSIBER_RUST_BIN` set, `tests/integration/test_regtest_tape_cli.py`
-and `tests/integration/test_regtest_exchange_cases.py` also compare the two
-runtimes step by step from one path: envelopes and every table of the
-store's schema manifest, with fresh identities and clocks masked, and
-export artifacts checked for validity only because they follow the
-[shared report design](report-design.md). The tape test runs everything
-after sync on copies of one Python-synced book, so it compares identities
-and their order strictly; the exchange lifecycle creates its rows in each
-run, so steps whose order or digests follow random row identities are
-compared identity-blind. Where Core RPC wallet sync is not native the
-parity test requires Rust's refusal (`native_fallback_required`) to leave
-the book unchanged; where it is, the two syncs and synced books must match.
+### Frozen goldens
+
+`tests/integration/test_regtest_tape_cli.py`,
+`tests/integration/test_regtest_exchange_cases.py` and
+`tests/integration/test_lot_order_determinism.py` once compared the Python
+and the Rust runtime step by step. The Python half is frozen in
+`tests/integration/goldens/` ([plan 22](../plan/22-python-removal.md), D5),
+recorded from the Python reference before its removal, and the Rust binary
+must match it: envelopes and every table of the store's schema manifest,
+with fresh identities, clocks, scratch paths and the per-run fixture URL
+masked, and export artifacts checked for validity only because they follow
+the [shared report design](report-design.md). The tape test runs everything
+after sync on a frozen Python-synced book, so it compares identities and
+their order strictly; balance history gets a fixed `--end`, since a record
+cannot follow a series that runs up to now. The exchange lifecycle creates
+its rows in each run, so steps whose order or digests follow random row
+identities are compared identity-blind. The lot-order test processes a
+frozen Python-imported book and must book Python's journals byte for byte.
+
+After a reviewed behaviour change, `KASSIBER_RECORD_GOLDENS=1` rewrites the
+goldens from the binary under test instead of comparing. Diff them and
+explain every change; tax numbers, stored data and exports need the owner's
+sign-off.
 
 ## Pull-request CI
 
@@ -409,43 +434,45 @@ wrong-key failure expectation. Capability rows state whether the pinned local
 Elements build exposes Taproot or executable ranged multisig rather than
 pretending unsupported forms ran.
 
-Every transition is also referenced from versioned observer JSON in the main
-temporary SQLCipher database. The runner injects and rolls back a failed state
-write, reopens the encrypted project, and rejects BDK/LWK-looking sidecar files.
-For Bitcoin/all selections, the lane then creates a real Core descriptor wallet,
-funds both low and gap-edge receive indices, and refreshes its public descriptor
-through Fulcrum using BDK and through the local Esplora-compatible service using
-Kassiber's explicit HTTP transport. It asserts native Electrum state and
-per-branch coverage, the HTTP `http_route_policy` compatibility reason,
-transaction/UTXO parity, SQLCipher-only persistence, process restart, and
-byte-stable immediate no-op native state.
+The oracle is standard-library Python against the nodes' RPC; the lane's
+product checks run the Rust binary. For Bitcoin/all selections, the lane
+creates a real Core descriptor wallet, funds both low and gap-edge receive
+indices, and refreshes its public descriptor through Fulcrum using BDK and
+through the local Esplora-compatible service using Kassiber's explicit HTTP
+transport. It asserts native Electrum state and per-branch coverage, the HTTP
+`http_route_policy` compatibility reason, transaction/UTXO parity, that both
+books hold exactly the unspent outputs Core reports for the same descriptors
+(after the initial sync and again after the reorg, evictions and
+resurrection), no dependency sidecar files, process restart, and byte-stable
+immediate no-op native state.
 For Liquid/all selections, the lane creates a real Elements descriptor wallet
 with private SLIP77 view material and public spending keys, then refreshes it
 through local Electrum using LWK and the Esplora-compatible service using
 Kassiber's explicit HTTP transport. It asserts opaque native `ForeignStore`
 bytes only for Electrum, the HTTP compatibility reason, restart and immediate
 no-op stability, confidential LBTC receive/spend and fee normalization,
-issued-asset history, transport parity, confirmation, block invalidation and
-unconfirmed resurrection.
+issued-asset history, transport parity, unspent outputs equal to what Elements
+reports for the same keys, confirmation, block invalidation and unconfirmed
+resurrection.
 Only loopback RPC, Electrum and HTTP targets are accepted. Routing metadata
 pins pre-connect compatibility selection for this phase, forbids runtime
 fallback, and records that `.onion` endpoints may not connect directly.
-Separately, the transport oracle drives the pinned clients themselves: BDK crosses
-plain Electrum, Esplora, insecure test TLS and SOCKS5h; LWK crosses plain
-Electrum, Esplora, explicit insecure test TLS and an authentication-enforcing
-Esplora reverse proxy. Focused routing and SSL-context tests cover custom-CA and
-explicitly insecure Esplora rows through Kassiber's compatibility HTTP transport
-because neither pinned dependency accepts a per-client trust root; the selected
-TLS policy is exercised instead of being silently ignored. Direct SDK HTTP
-probes establish the binding's capabilities; they do not authorize its use by
-Kassiber. Production Esplora routing stays on the explicit compatibility
-transport until the SDK exposes enforceable redirect and proxy controls.
+The oracle once also drove the Python product's observer store in a
+temporary SQLCipher book and the bdkpython/lwk bindings through TLS, SOCKS5h
+and authenticating forwarders; those checked the Python side and went with
+it ([plan 22](../plan/22-python-removal.md)). The Rust transports' TLS, custom
+CA, insecure and SOCKS routing are covered by the `kassiber-net` and
+`kassiber-chain` crate tests. Production Esplora routing stays on the
+explicit compatibility transport until the SDK exposes enforceable redirect
+and proxy controls.
 
 Pull requests and main-branch pushes expose a required
 `Chain observers (Linux Docker)` job in `.github/workflows/ci.yml`. It runs the
-lane when observer, descriptor, sync, persistence, dependency-lock, or regtest
-backend paths change; unrelated changes retain the same successful check name
-without starting the Docker stack.
+lane when the observer, sync, store, network or CLI crates, the Cargo
+manifests and lock, or the regtest harness change; unrelated changes retain
+the same successful check name without starting the Docker stack. It builds
+the release `kassiber` binary and runs the harness on the runner's `python3`,
+with no uv or Python environment.
 
 The Compose lane generates disposable RPC credentials per run unless you set
 them explicitly, passes only the `rpcauth` hash to bitcoind, publishes RPC on
@@ -956,8 +983,8 @@ BTCPayServer's `docker-compose up dev` + launch-profile workflow:
 cd ui-tauri && pnpm dev:demo               # dev preview on that real book
 ```
 
-Prerequisites on any machine: Docker (Desktop or engine), Python 3, `uv`, and
-`pnpm`.
+Prerequisites on any machine: Docker (Desktop or engine), the Rust toolchain,
+`python3` 3.11 or newer (standard library only, for the harness), and `pnpm`.
 From a fresh clone, install the project/runtime dependencies once:
 
 ```bash
@@ -966,9 +993,8 @@ pnpm --dir ui-tauri install --frozen-lockfile
 ```
 
 After that, the two commands above take you to a browser preview backed by the
-real Python daemon reading a multi-year regtest book. The harness checks for
-core Python dependencies and fails with a setup hint instead of silently using
-an unprepared system interpreter.
+`kassiber daemon` reading a multi-year regtest book. The harness checks for
+the Rust binary and `python3` and fails with a setup hint otherwise.
 
 What `demo-up` does:
 
@@ -1100,16 +1126,17 @@ waits for as its own child process:
 - `--noop-runs` unchanged resyncs;
 - an `--increment` sync;
 - a forced full replay;
-- after each of these, the desktop's post-sync journal step
-  (`refresh_journals_step` with automatic pairing).
+- after each of these, `journals process`, the journal step the desktop runs
+  after a user-triggered sync.
 
 The wallet uses the default route for an Electrum backend, BDK. Every backend
 in the disposable book is a loopback regtest backend, child processes run under
 the test socket guard, and the book is removed at the end. Each step emits a
 JSON line with its seconds, peak RSS and the sync counters. The book events
 also report how much of the stored `raw_json` is the per-row owned-script
-attestation. `--profile-dir` writes a cProfile file per step and adds the
-hottest functions to its line. `--smoke` checks the lane in about a minute.
+attestation. `--runtimes rust,rust` syncs two books from the same chain as a
+control and compares them table by table. `--smoke` checks the lane in about
+a minute.
 Keep the stack between runs with `KASSIBER_REGTEST_KEEP=1`, then
 `KASSIBER_REGTEST_REUSE_CORE=1` with the same `KASSIBER_REGTEST_RPC_PORT` and
 password.

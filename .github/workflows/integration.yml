@@ -3,24 +3,59 @@ name: integration
 # Opt-in real-node integration lanes for issue #312 (item 10: manual/nightly CI).
 #
 # This workflow is intentionally NOT triggered on pull_request or push, so it
-# never gates normal PR CI (that stays in ci.yml). The generated-truth demo lane
-# runs weekly because it is the broad oracle for issue #312. The harness drives
-# the Rust binary with stdlib-only Python (python3 -I, no uv). Lanes that ran
-# Python test modules left with the Python test suite.
+# never gates normal PR CI (that stays in ci.yml). The Docker-free fast replay
+# lane runs nightly; the generated-truth demo lane runs weekly because it is the
+# broad oracle for issue #312. Other Docker lanes remain manual dispatch. The
+# harness drives the Rust binary with stdlib-only Python (python3 -I, no uv).
 on:
   workflow_dispatch:
     inputs:
       lane:
         description: "Integration lane to run"
         type: choice
-        default: demo-full
+        default: bitcoin-core
         options:
+          - fast
+          - bitcoin-core
+          - bitcoin-electrum
+          - slow
           - demo-full
+          - silent-payments
+          - all
   schedule:
+    # Nightly Docker-free fast replay lane (arbitrary off-peak minute).
+    - cron: "17 3 * * *"
     # Weekly generated-truth demo oracle over disposable Bitcoin + Liquid regtest.
     - cron: "47 3 * * 0"
 
 jobs:
+  fast:
+    # The nightly schedule runs the fast lane; on manual dispatch it runs only
+    # when "fast" is chosen (the docker-lane job covers the heavier lanes).
+    if: (github.event_name == 'schedule' && github.event.schedule == '17 3 * * *') || github.event.inputs.lane == 'fast'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Fetch pinned test data
+        shell: bash
+        run: scripts/fetch-test-data.sh
+
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          cache-key: rust-workspace
+
+      # The tape replays and the loopback exchange fixture need the test
+      # network tape and socket guard, which only a test-harness build has.
+      - name: Build the test-harness kassiber binary
+        run: cargo build --locked -p kassiber --features test-harness
+
+      - name: Fast replay lane (no Docker)
+        env:
+          KASSIBER_RUST_BIN: target/debug/kassiber
+        run: ./scripts/integration-harness.sh fast
+
   scheduled-demo-full:
     # Weekly scheduled generated-truth oracle. Docker is preinstalled on
     # ubuntu-latest; the harness starts disposable Bitcoin + Liquid regtest
@@ -51,7 +86,7 @@ jobs:
     # Heavy Docker lanes are manual-only. Docker is preinstalled on ubuntu-latest;
     # the harness generates disposable regtest RPC credentials per run and sets
     # KASSIBER_INTEGRATION=1 itself.
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.lane != 'fast'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -66,9 +101,17 @@ jobs:
           cache-key: rust-workspace
 
       # The harness drives this binary; its own helpers are stdlib Python on
-      # the runner's python3.
+      # the runner's python3. "all" includes the fast lane, whose tape replays
+      # and socket guard need a test-harness build.
       - name: Build the kassiber binary
-        run: cargo build --locked --release -p kassiber
+        env:
+          LANE: ${{ github.event.inputs.lane }}
+        run: |
+          if [ "$LANE" = all ]; then
+            cargo build --locked --release -p kassiber --features test-harness
+          else
+            cargo build --locked --release -p kassiber
+          fi
 
       - name: Integration lane (${{ github.event.inputs.lane }})
         run: ./scripts/integration-harness.sh "${{ github.event.inputs.lane }}"

@@ -1,13 +1,17 @@
-"""Compare what the Python and Rust runtimes leave in a book (test code only).
+"""Compare what the Rust binary leaves in a book with a frozen record (test code only).
 
-Both runtimes run the same steps from the same starting state at the same
-path. Envelopes and every table of the store's schema manifest must then
-match once fresh identities and clocks are masked.
+The parity tests once ran the same steps on the Python and the Rust runtime
+and compared the two. The Python side is gone (docs/plan/22-python-removal.md,
+D5): its outputs were frozen into goldens under `tests/integration/goldens/`
+while it existed, and the tests now compare the Rust binary with them.
+Envelopes and every table of the store's schema manifest must match once
+fresh identities and clocks are masked. Standard library only.
 """
 from __future__ import annotations
 
 from datetime import datetime
 from functools import lru_cache
+import gzip
 import json
 import os
 from pathlib import Path
@@ -16,7 +20,10 @@ import sqlite3
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[2]
-RUST_BIN = os.environ.get("KASSIBER_RUST_BIN")
+RUST_BIN = os.environ.get("KASSIBER_RUST_BIN") or None
+GOLDENS = ROOT / "tests" / "integration" / "goldens"
+# The current book schema (crates/store; fetched with scripts/fetch-test-data.sh).
+SCHEMA_MANIFEST = ROOT / "crates" / "store" / "fixtures" / "current-schema.json"
 # Generated identities: dashed UUIDs and the bare 32-hex form (database instance ids).
 UUID = re.compile(r"\b(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32})\b")
 CLOCK = re.compile(r"(\d{4}-\d{2}-\d{2})[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?")
@@ -37,34 +44,46 @@ def rust_guard_capable(binary: str) -> bool:
     return result.returncode != 78
 
 
-def child_env(home: Path, *, python_child: bool, rust_bin: str | None = None) -> dict[str, str]:
-    """A disposable environment for one runtime's children.
+def child_env(home: Path, *, rust_bin: str | None = None) -> dict[str, str]:
+    """A disposable environment for the Rust binary's children.
 
-    Preferences, XDG roots and HOME point under ``home``, so neither runtime
-    reads the account's offline switch or app-data root. The product kill
-    switch is off because it refuses loopback for Sync; the test socket guard
-    blocks every non-loopback destination where the child can carry it: a
-    Python child through ``tests/_child_hooks``, a Rust child only when it is
-    a test-harness build.
+    Preferences, XDG roots and HOME point under ``home``, so the child reads
+    neither the account's offline switch nor its app-data root. The product
+    kill switch is off because it refuses loopback for sync; the test socket
+    guard blocks every non-loopback destination when ``rust_bin`` is a
+    test-harness build. `KASSIBER_TEST_CLI` and `KASSIBER_RUST_BIN` pass
+    through, so harness code run under this environment starts the same
+    binary (`tests/integration/cli.py`).
     """
-    from tests.test_rust_shell_parity import _environment
-
-    env = _environment(home)
-    env.pop("KASSIBER_NO_EGRESS", None)
-    env.pop("KASSIBER_TEST_CLI", None)
-    env["KASSIBER_STATE_ROOT"] = str(home / "state")
-    env["TZ"] = "UTC"
-    guarded = python_child or (rust_bin is not None and rust_guard_capable(rust_bin))
-    if python_child:
-        env["PYTHONPATH"] = os.pathsep.join([str(ROOT / "tests" / "_child_hooks"), str(ROOT)])
-    if guarded:
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith(("KASSIBER_OPERATOR_", "SATBOOKS_"))
+        and key not in {"COLUMNS", "LINES", "KASSIBER_DATA_ROOT", "KASSIBER_STATE_ROOT", "KASSIBER_NO_EGRESS"}
+    }
+    env.update(
+        {
+            "HOME": str(home),
+            "USERPROFILE": str(home),
+            "LOCALAPPDATA": str(home),
+            "XDG_DATA_HOME": str(home / "xdg-data"),
+            "XDG_CONFIG_HOME": str(home / "xdg-config"),
+            "XDG_STATE_HOME": str(home / "xdg-state"),
+            "COLUMNS": "80",
+            "LINES": "24",
+            "KASSIBER_DISABLE_UPDATE_CHECK": "1",
+            "KASSIBER_OFFLINE_PREFERENCE_FILE": str(home / "offline.json"),
+            "KASSIBER_AGENT_ACCESS_FILE": str(home / "agents.json"),
+            "KASSIBER_UPDATE_PREFERENCE_FILE": str(home / "updates.json"),
+            "KASSIBER_UPDATE_CACHE_FILE": str(home / "update-cache.json"),
+            "KASSIBER_STATE_ROOT": str(home / "state"),
+            "TZ": "UTC",
+        }
+    )
+    if rust_bin is not None and rust_guard_capable(rust_bin):
         env["KASSIBER_TEST_NO_EGRESS"] = "1"
     else:
         env.pop("KASSIBER_TEST_NO_EGRESS", None)
-    if python_child:
-        from tests.egress_guard import require_guarded_child
-
-        require_guarded_child(env)
     return env
 
 
@@ -72,15 +91,18 @@ class Masker:
     """Fresh identities and clocks become stable placeholders.
 
     Identities in ``known`` (the shared starting book) stay literal. New ones
-    are numbered in order of first appearance while reading envelopes, whose
-    order both runtimes share; after ``freeze()`` any further new identity,
-    such as a row key only the book holds, becomes ``<id>``. Clocks within two
-    days of ``today`` and recorded artifact digests are masked too.
+    are numbered in order of first appearance while reading envelopes; after
+    ``freeze()`` any further new identity, such as a row key only the book
+    holds, becomes ``<id>``. Clocks within two days of ``today`` and recorded
+    artifact digests are masked too.
     """
 
-    def __init__(self, known: set[str], today: datetime, *, anonymous: bool = False):
+    def __init__(self, known: set[str], today: datetime, *, anonymous: bool = False, also: tuple = ()):
         self.known = known
         self.today = today.date()
+        # Further days whose clocks are masked too, such as the day a frozen
+        # starting book was recorded (`date` objects).
+        self.also = tuple(also)
         self.fresh: dict[str, str] = {}
         self.digests: set[str] = set()
         self.frozen = False
@@ -103,7 +125,8 @@ class Masker:
 
         def clock(match):
             day = datetime.strptime(match.group(1), "%Y-%m-%d").date()
-            return "<clock>" if abs((day - self.today).days) <= 2 else match.group(0)
+            near = any(abs((day - anchor).days) <= 2 for anchor in (self.today, *self.also))
+            return "<clock>" if near else match.group(0)
 
         def digest(match):
             token = match.group(0)
@@ -173,18 +196,49 @@ def canonical(value):
     return value
 
 
+def schema_tables() -> tuple[str, ...]:
+    """The current book schema's tables, from the store manifest."""
+    manifest = json.loads(SCHEMA_MANIFEST.read_text(encoding="utf-8"))
+    return tuple(sorted(obj[1] for obj in manifest["objects"] if obj[0] == "table"))
+
+
+def _quote(text: str) -> str:
+    return '"' + text.replace('"', '""') + '"'
+
+
+def normalized_tables(conn: sqlite3.Connection) -> dict:
+    """Every table's columns and rows in primary-key order, then all columns.
+
+    Each value carries its SQLite storage class; floats are hex so the exact
+    binary value is compared rather than Python's numeric equality.
+    """
+    tables = {}
+    for (table,) in conn.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"):
+        columns = list(conn.execute(f"PRAGMA table_info({_quote(table)})"))
+        primary = [row[1] for row in sorted(columns, key=lambda row: row[5]) if row[5]]
+        order = list(dict.fromkeys(primary + [row[1] for row in columns]))
+        storage_classes = ",".join(f"typeof({_quote(row[1])})" for row in columns)
+        rows = conn.execute(
+            f"SELECT *,{storage_classes} FROM {_quote(table)} ORDER BY {','.join(map(_quote, order))}"
+        ).fetchall()
+        typed_rows = [
+            tuple((kind, value.hex() if kind == "real" else value)
+                  for kind, value in zip(row[len(columns):], row[:len(columns)]))
+            for row in rows
+        ]
+        tables[table] = ([row[1] for row in columns], typed_rows)
+    return tables
+
+
 def dump(root: Path) -> dict:
     """Every manifest table with typed values (floats as hex), read-only."""
-    from tests.rust_port.book_schema import TABLES
-    from tests.test_rust_store_migrations import normalized_dump
-
     conn = sqlite3.connect((root / "kassiber.sqlite3").as_uri() + "?mode=ro", uri=True)
     try:
-        _, tables = normalized_dump(conn)
+        tables = normalized_tables(conn)
     finally:
         conn.close()
     names = tuple(sorted(name for name in tables if not name.startswith("sqlite_")))
-    assert names == TABLES, names
+    assert names == schema_tables(), names
     return {name: tables[name] for name in names}
 
 
@@ -198,10 +252,37 @@ def book_identities(root: Path) -> set[str]:
     return found
 
 
-def masked_book(root: Path, masker: Masker) -> dict:
-    """The dump with ``masker`` applied, each table's rows re-sorted."""
+def scrub_paths(value, base: Path | str, placeholder: str = "<base>"):
+    """``value`` with the run's scratch directory written as ``<base>``.
+
+    A golden is recorded under another temporary directory than the run that
+    compares with it; paths below the scratch root must match all the same.
+    A string ``base`` (a loopback fixture URL, say) is replaced as it is.
+    """
+    prefix = str(base)
+    if isinstance(value, str):
+        return value.replace(prefix, placeholder)
+    if isinstance(value, list):
+        return [scrub_paths(item, base, placeholder) for item in value]
+    if isinstance(value, tuple):
+        return tuple(scrub_paths(item, base, placeholder) for item in value)
+    if isinstance(value, dict):
+        return {key: scrub_paths(item, base, placeholder) for key, item in value.items()}
+    return value
+
+
+def masked_book(root: Path, masker: Masker, *, scrub=None) -> dict:
+    """The dump with ``masker`` applied, each table's rows re-sorted.
+
+    ``scrub`` names a scratch directory whose paths become ``<base>`` first,
+    or is a function applied to each table's rows first.
+    """
     masked = {}
     for table, (columns, rows) in dump(root).items():
+        if callable(scrub):
+            rows = scrub(rows)
+        elif scrub is not None:
+            rows = scrub_paths(rows, scrub)
         masked[table] = (columns, sorted(
             (tuple((kind, masker.value(value)) for kind, value in row) for row in rows), key=repr))
     return masked
@@ -215,3 +296,27 @@ def envelope(result) -> dict:
         stderr = result.stderr if isinstance(result.stderr, str) else result.stderr.decode()
         raise AssertionError(
             f"not a JSON envelope (exit {result.returncode})\nstdout={stdout}\nstderr={stderr}") from exc
+
+
+def jsonable(value):
+    """``value`` as JSON can hold it: tuples become lists, recursively.
+
+    Goldens are JSON, so a live value is compared after the same round trip.
+    """
+    return json.loads(json.dumps(value, sort_keys=True, default=repr))
+
+
+def load_golden(name: str):
+    """A golden from `tests/integration/goldens/`; `.gz` names are gzip-compressed."""
+    raw = (GOLDENS / name).read_bytes()
+    if name.endswith(".gz"):
+        raw = gzip.decompress(raw)
+    return json.loads(raw.decode("utf-8"))
+
+
+def write_golden(name: str, value) -> Path:
+    GOLDENS.mkdir(parents=True, exist_ok=True)
+    path = GOLDENS / name
+    raw = (json.dumps(jsonable(value), indent=1, sort_keys=True) + "\n").encode("utf-8")
+    path.write_bytes(gzip.compress(raw, mtime=0) if name.endswith(".gz") else raw)
+    return path

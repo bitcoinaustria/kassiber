@@ -12,7 +12,7 @@ from typing import Any
 
 from tests.integration.book import database_path as resolve_database_path
 from tests.integration.book import open_book as open_db
-from tests import cli_runner
+from tests.integration import cli as cli_runner
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKSPACE_LABEL = (

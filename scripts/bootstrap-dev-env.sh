@@ -1,47 +1,17 @@
 #!/usr/bin/env bash
+# Check and prepare a Kassiber development checkout: the pinned Rust toolchain
+# that builds the `kassiber` binary, the frontend's pnpm dependencies, and the
+# standard-library python3 the regtest harness runs under (`python3 -I`).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
-PYTHON="${PYTHON:-python3}"
-VENV="${KASSIBER_VENV:-"$ROOT/.venv"}"
-
-if ! command -v uv >/dev/null 2>&1; then
-  cat >&2 <<'EOF'
-Kassiber development requires uv.
-
-Install it from https://docs.astral.sh/uv/getting-started/installation/ and rerun:
-  ./scripts/bootstrap-dev-env.sh
-EOF
-  exit 1
-fi
-
-if ! command -v "$PYTHON" >/dev/null 2>&1; then
-  echo "Python interpreter not found: $PYTHON" >&2
-  exit 1
-fi
-
-if command -v apt-get >/dev/null 2>&1; then
-  if ! command -v pkg-config >/dev/null 2>&1 || ! pkg-config --exists sqlcipher; then
-    cat >&2 <<'EOF'
-SQLCipher development files are required before installing Kassiber's Python deps.
-
-On Debian/Ubuntu:
-  sudo apt-get update
-  sudo apt-get install -y build-essential pkg-config libsqlcipher-dev sqlcipher
-
-Then rerun:
-  ./scripts/bootstrap-dev-env.sh
-EOF
-    exit 1
-  fi
-fi
 
 RUST_CHANNEL="$(sed -n 's/^channel *= *"\([^"]*\)".*/\1/p' "$ROOT/rust-toolchain.toml")"
 if ! command -v cargo >/dev/null 2>&1; then
   cat >&2 <<EOF
-Kassiber's tax engine is a Rust crate built during \`uv sync --locked\`, so a Rust
-toolchain is required: Rust $RUST_CHANNEL, which rust-toolchain.toml pins.
+Kassiber is a Rust workspace: Rust $RUST_CHANNEL, which rust-toolchain.toml
+pins, builds the \`kassiber\` binary and the desktop shell.
 
 Install rustup from https://rustup.rs and rerun:
   ./scripts/bootstrap-dev-env.sh
@@ -59,52 +29,51 @@ case "$(rustc --version)" in
     ;;
 esac
 
-# maturin would otherwise download an unpinned Rust toolchain on its own when
-# cargo is missing; fail with the message above instead.
-export MATURIN_NO_INSTALL_RUST=1
-UV_PROJECT_ENVIRONMENT="$VENV" uv sync --locked --python "$PYTHON"
+# SQLCipher is compiled from source with the books' store; outside macOS it
+# also compiles OpenSSL, which needs a C compiler, make and perl.
+missing=()
+for tool in cc make perl; do
+  command -v "$tool" >/dev/null 2>&1 || missing+=("$tool")
+done
+if [ "${#missing[@]}" -gt 0 ]; then
+  cat >&2 <<EOF
+The Rust build compiles SQLCipher (and OpenSSL outside macOS) and needs: ${missing[*]}
 
-"$VENV/bin/python" - <<'PY'
-import platform
-import sys
-from importlib.metadata import version
+On Debian/Ubuntu:
+  sudo apt-get update
+  sudo apt-get install -y build-essential perl
 
-import embit
-import kassiber_tax
-import sqlcipher3
+Then rerun:
+  ./scripts/bootstrap-dev-env.sh
+EOF
+  exit 1
+fi
 
-print(f"Verified embit from {embit.__file__}")
-print(f"Verified kassiber_tax {kassiber_tax.engine_version()} from {kassiber_tax.__file__}")
-bdk_supported = sys.version_info < (3, 14) and (
-    sys.platform == "darwin"
-    or (sys.platform == "linux" and platform.machine() == "x86_64")
-    or (sys.platform == "win32" and platform.machine() == "AMD64")
-)
-if bdk_supported:
-    import bdkpython
+if command -v pnpm >/dev/null 2>&1; then
+  pnpm --dir ui-tauri install --frozen-lockfile
+else
+  cat >&2 <<'EOF'
+warning: pnpm not found; the desktop frontend needs the pnpm version
+ui-tauri/package.json pins. Install it, then run:
+  pnpm --dir ui-tauri install --frozen-lockfile
+EOF
+fi
 
-    print(f"Verified bdkpython {version('bdkpython')} from {bdkpython.__file__}")
-else:
-    print("Skipped optional bdkpython verification on an unsupported wheel platform")
-lwk_supported = (
-    (sys.platform == "darwin" and platform.machine() == "arm64")
-    or (sys.platform == "linux" and platform.machine() == "x86_64")
-    or (sys.platform == "win32" and platform.machine() == "AMD64")
-)
-if lwk_supported:
-    import lwk
-
-    print(f"Verified lwk {version('lwk')} from {lwk.__file__}")
-else:
-    print("Skipped optional lwk verification on an unsupported wheel platform")
-print(f"Verified sqlcipher3 from {sqlcipher3.__file__}")
-PY
+# The regtest and demo harnesses are standard-library Python run with
+# `python3 -I` (no virtual environment, no packages).
+if command -v python3 >/dev/null 2>&1 \
+  && python3 -I -c 'import sys; sys.exit(sys.version_info < (3, 11))' >/dev/null 2>&1; then
+  harness_note="python3 $(python3 -I -c 'import platform; print(platform.python_version())') for the regtest harness"
+else
+  harness_note="no python3 3.11 or newer: only the regtest harness needs it (standard library only)"
+fi
 
 cat <<EOF
 
-Kassiber dev environment is ready.
+Kassiber dev environment is ready ($harness_note).
 
 Use:
-  export KASSIBER_PYTHON="$VENV/bin/python"
-  UV_PROJECT_ENVIRONMENT="$VENV" uv run --locked python -m pytest ...
+  scripts/fetch-test-data.sh
+  cargo build -p kassiber --locked
+  cargo test --workspace --locked
 EOF

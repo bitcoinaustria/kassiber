@@ -61,7 +61,7 @@ run() {
 
 # Preflight: name every missing tool before the long build.
 missing_required=()
-for command in cargo pnpm python3 readelf objdump tar gzip sha256sum; do
+for command in cargo pnpm jq cc readelf objdump tar gzip sha256sum; do
   command -v "$command" >/dev/null 2>&1 || missing_required+=("$command")
 done
 if [ "${#missing_required[@]}" -gt 0 ]; then
@@ -140,8 +140,8 @@ smoke_root="$(mktemp -d "${TMPDIR:-/tmp}/kassiber-linux-smoke.XXXXXX")"
 trap 'rm -rf "$smoke_root"' EXIT
 run "$ROOT/scripts/smoke-packaged-cli.sh" --cli "$binary" --scratch "$smoke_root/cli" \
   --expect-commit "$short_commit"
-run env KASSIBER_PACKAGED_CLI="$binary" TMPDIR="$smoke_root" \
-  python3 -m unittest -v tests.test_packaged_cli_no_egress
+run "$ROOT/scripts/check-packaged-cli-no-egress.sh" --cli "$binary" \
+  --scratch "$smoke_root/no-egress"
 
 name="kassiber-cli-$TARGET"
 run "$ROOT/scripts/package-cli-archive.sh" --binary "$binary" --broker "$broker" \

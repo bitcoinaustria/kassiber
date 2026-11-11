@@ -19,7 +19,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
-from tests import cli_runner
+from tests.integration import cli as cli_runner
 from tests.integration.book import MSAT_PER_BTC
 from tests.integration.book import open_book as open_db
 
@@ -146,10 +146,10 @@ def run_exchange_api_case(
          "amount": {"amount": "-0.001", "currency": "BTC"},
          "native_amount": {"amount": "149", "currency": "EUR"}},
     ]
-    def cli(*args, secret: bool = False) -> dict:
+    def cli(*args) -> dict:
         result = cli_runner.run(
             ["--data-root", str(data_root), "--machine", *args],
-            capture_output=True, text=True, check=False, secret_input=secret,
+            capture_output=True, text=True, check=False,
         )
         if result.returncode != 0:
             raise RuntimeError(f"kassiber {args[:2]} failed\nstdout={result.stdout}\nstderr={result.stderr}")
@@ -175,7 +175,6 @@ def run_exchange_api_case(
             "--notes", "Synthetic loopback protocol validation fixture. Server stops after validation; not a live exchange connection.",
             "--token-fd", cli_runner.InputFd(provider.api_key.encode()),
             "--auth-header-fd", cli_runner.InputFd(provider.api_secret.encode()),
-            secret=True,
         )
         outcomes = [cli("wallets", "sync-coinbase", *scope, "--backend", backend_name) for _ in range(2)]
         requests = list(provider.requests)

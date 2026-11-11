@@ -10,7 +10,7 @@ from decimal import Decimal
 from pathlib import Path
 from urllib import request
 
-from kassiber.db import open_db
+from tests.integration.book import open_book
 from tests.integration.env import skip_unless_integration
 from tests.integration.test_live_bitcoin_electrum_parity import (
     _electrum_url,
@@ -173,7 +173,7 @@ def _create_book(
 
 
 def _observer_snapshot(root: Path, *, native: bool = True) -> tuple[str, int, int, int]:
-    conn = open_db(root)
+    conn = open_book(root, readonly=True)
     try:
         state = conn.execute(
             "SELECT state_json FROM chain_observer_instances WHERE observer_kind = 'bdk'"
@@ -200,6 +200,28 @@ def _transport_projection(root: Path) -> list[dict]:
         # timing even when one backend first sees the transaction confirmed.
         row["occurred_at"] = "<transport-observed>"
     return rows
+
+
+def _core_unspent(core_url: str, username: str, password: str, owner: str) -> list[tuple[str, int, int]]:
+    """The owner wallet's unspent outputs as Core reports them, in msat.
+
+    Core holds the same descriptors the books watch, so it is the ground truth
+    the observers' UTXO sets must equal (this replaces the bdkpython client
+    probe the lane once ran beside the product).
+    """
+    rows = _rpc(core_url, username, password, "listunspent", [0, 9_999_999, []], wallet=owner)
+    return sorted(
+        (str(row["txid"]), int(row["vout"]), int(Decimal(str(row["amount"])) * 100_000_000_000))
+        for row in rows
+    )
+
+
+def _book_unspent(root: Path) -> list[tuple[str, int, int]]:
+    return sorted(
+        (str(row["txid"]), int(row["vout"]), int(row["amount"]))
+        for row in _utxo_projection(root)
+        if not row["spent"]
+    )
 
 
 @skip_unless_integration
@@ -295,6 +317,12 @@ class LiveBdkObserverTest(unittest.TestCase):
                     _utxo_projection(roots["electrum"]),
                     _utxo_projection(roots["mempool"]),
                 )
+                for kind, root in roots.items():
+                    self.assertEqual(
+                        _book_unspent(root),
+                        _core_unspent(core_url, username, password, owner),
+                        f"{kind}: unspent outputs differ from Core's",
+                    )
 
                 # Exercise gap expansion after initial state exists.
                 gap_txid = _rpc(
@@ -689,6 +717,13 @@ class LiveBdkObserverTest(unittest.TestCase):
                     state_after, *_ = _observer_snapshot(root, native=kind == "electrum")
                     self.assertEqual(state_after, state_before)
                     self.assertEqual(_transport_projection(root), projection_before)
+                    # After the reorg, the evictions and the resurrection,
+                    # both routes hold exactly Core's unspent outputs.
+                    self.assertEqual(
+                        _book_unspent(root),
+                        _core_unspent(core_url, username, password, owner),
+                        f"{kind}: unspent outputs differ from Core's",
+                    )
 
                 base = Path(tmp)
                 banned = list(base.rglob("*.sqlite")) + list(base.rglob("*.db-wal"))

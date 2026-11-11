@@ -35,6 +35,12 @@ With mise, run cargo through the same release, for example
 macOS, OpenSSL are compiled from source by the build, so no system SQLCipher
 or crypto library is needed; a C compiler, `make`, and `perl` are.
 
+`./scripts/bootstrap-dev-env.sh` does this in one step: it installs the pinned
+Rust release through rustup, checks the C toolchain, installs the frontend's
+locked pnpm dependencies, and reports whether `python3` 3.11 or newer is
+available for the regtest harness (standard library only). It sets up no
+Python environment.
+
 For frontend development, use the pnpm version pinned in
 [ui-tauri/package.json](ui-tauri/package.json):
 

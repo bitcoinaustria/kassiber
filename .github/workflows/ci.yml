@@ -173,6 +173,73 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+  chain-observers:
+    name: Chain observers (Linux Docker)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+
+      - name: Fetch pinned test data
+        shell: bash
+        run: scripts/fetch-test-data.sh
+
+      - name: Detect observer-sensitive changes
+        id: observer_paths
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [[ -z "$BASE_SHA" || "$BASE_SHA" =~ ^0+$ ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif git diff --quiet "$BASE_SHA"...HEAD -- \
+            .github/workflows/ci.yml \
+            crates/chain \
+            crates/wallets \
+            crates/store \
+            crates/net \
+            crates/cli \
+            crates/kassiber \
+            Cargo.toml \
+            Cargo.lock \
+            rust-toolchain.toml \
+            scripts/chain-analysis-regtest.sh \
+            dev/regtest \
+            scripts/integration-harness.sh \
+            tests/integration; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Rust
+        if: steps.observer_paths.outputs.run == 'true'
+        uses: ./.github/actions/setup-rust
+        with:
+          cache-key: rust-chain-observers
+          save-cache: "true"
+
+      # The harness drives this binary (its default, target/release/kassiber);
+      # the harness itself is standard-library python3 -I on the runner's
+      # interpreter, with no uv and no virtual environment.
+      - name: Build the kassiber binary
+        if: steps.observer_paths.outputs.run == 'true'
+        run: cargo build --locked --release -p kassiber
+
+      - name: Chain-observer node-truth oracle and live BDK/LWK observers
+        if: steps.observer_paths.outputs.run == 'true'
+        run: ./scripts/integration-harness.sh chain-observers
+
+      - name: Local chain-analysis Core oracle
+        if: steps.observer_paths.outputs.run == 'true'
+        run: ./scripts/integration-harness.sh chain-analysis
+
+      - name: No observer-sensitive changes
+        if: steps.observer_paths.outputs.run != 'true'
+        run: echo "The dependency-backed chain-observer lane is not required for this change."
+
   required:
     name: required
     if: always()
@@ -180,6 +247,7 @@ jobs:
       - frontend
       - tax-engine
       - session-replay
+      - chain-observers
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -189,7 +257,8 @@ jobs:
           echo "- Frontend: ${{ needs.frontend.result }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Rust crates: ${{ needs.tax-engine.result }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Recorded sessions: ${{ needs.session-replay.result }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Chain observers: ${{ needs.chain-observers.result }}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Enforce required checks
-        if: ${{ needs.frontend.result != 'success' || needs.tax-engine.result != 'success' || needs.session-replay.result != 'success' }}
+        if: ${{ needs.frontend.result != 'success' || needs.tax-engine.result != 'success' || needs.session-replay.result != 'success' || needs.chain-observers.result != 'success' }}
         run: exit 1

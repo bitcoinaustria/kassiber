@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any, Callable
 from urllib import error, request
 
-from tests import cli_runner
+from tests.integration import cli as cli_runner
 from tests.integration import book as product
 from tests.integration.book import (
     GENERIC_LEDGER_COLUMNS,
@@ -4957,11 +4957,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--payments", type=int, default=1)
     parser.add_argument("--transfers", type=int, default=1)
     args = parser.parse_args(argv)
-    if cli_runner.candidate_prefix() is None:
-        parser.error(
-            "set KASSIBER_TEST_CLI to the Rust kassiber binary "
-            "(scripts/integration-harness.sh does); there is no Python product to fall back to"
-        )
+    try:
+        cli_runner.prefix()
+    except cli_runner.CandidateConfigError as exc:
+        parser.error(f"{exc}; there is no Python product to fall back to")
 
     if args.tick:
         if not args.summary:
