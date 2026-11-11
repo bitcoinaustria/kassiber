@@ -2,8 +2,7 @@
 
 **Status:** implemented in the Rust backend as a **preview** country
 (2026-11-07). Not reviewed by a UK tax adviser: every UK report and screen
-carries the preview notice until one does. Python stays `generic`/`at` only
-and refuses UK books. Nothing here is tax advice.
+carries the preview notice until one does. Nothing here is tax advice.
 
 **Registry value:** the United Kingdom uses the ISO 3166-1 code `gb`
 (`tax_country = "gb"`), never `uk`. User-facing text says "United Kingdom".
@@ -12,9 +11,10 @@ storage; stored books, exports and the registry only ever hold `gb`.
 
 This document says what a UK book must compute and report. The worked cases
 are in [tax-country-gb-vectors.json](tax-country-gb-vectors.json); their
-expected values come from the reference model in
-[tax-country-reference/](tax-country-reference/) (`gb.py`). Regenerate them
-with `python3 -I docs/reference/tax-country-reference/build.py . gb`. Vectors
+expected values came from an independent Python reference model (`gb.py`),
+removed with Python ([plan 22](../plan/22-python-removal.md), D6; it remains
+at the `archive/python-backend` tag). The file is now a frozen, reviewed
+golden: change an expected value only by hand, with the reason. Vectors
 gb-01 to gb-08 replay HMRC's own worked examples and assert HMRC's published
 results to the nearest pound.
 
@@ -471,12 +471,14 @@ What the Rust backend does, and where it differs from the rules above.
 Every vector passes through the engine (`ledger` operation under the
 registry's rules) and the layer (`crates/reports/tests/tax_country_vectors.rs`
 with `country_vectors/gb_ie.rs`); gb-21 to gb-23 are refused with their
-codes. `tests/test_rust_gb_ie_tax_countries.py` builds a two-wallet book with
-the CLI (a 30-day match, a move's fee, a sale across the 5 April year end,
-mining matched by the 30-day rule), processes its journal and checks the
-journal entries, SA108 boxes, matches, pools and income in the CSV, XLSX
-and PDF exports (two PDFs of one book are byte-identical), and a gift's
-refusal. RP2 has no UK plugin, so there is no RP2 comparison.
+codes. The Python black-box test `tests/test_rust_gb_ie_tax_countries.py`
+built a two-wallet book with the CLI (a 30-day match, a move's fee, a sale
+across the 5 April year end, mining matched by the 30-day rule), processed its
+journal and checked the journal entries, SA108 boxes, matches, pools and
+income in the CSV, XLSX and PDF exports (two PDFs of one book are
+byte-identical), and a gift's refusal. It went with Python
+([plan 22](../plan/22-python-removal.md)) and has no Rust port yet.
+RP2 has no UK plugin, so there is no RP2 comparison.
 
 ### Using it
 

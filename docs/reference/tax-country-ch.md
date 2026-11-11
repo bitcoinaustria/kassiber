@@ -14,9 +14,10 @@ trader** (gewerbsmässiger Wertschriftenhandel), in which case gains become
 taxable and Kassiber's figures stop being the answer.
 
 The worked cases are in [tax-country-ch-vectors.json](tax-country-ch-vectors.json);
-their expected values come from the reference model in
-[tax-country-reference/](tax-country-reference/) (`ch.py`); regenerate with
-`python3 -I docs/reference/tax-country-reference/build.py . ch`.
+their expected values came from an independent Python reference model
+(`ch.py`), removed with Python ([plan 22](../plan/22-python-removal.md), D6;
+it remains at the `archive/python-backend` tag). The file is now a frozen,
+reviewed golden: change an expected value only by hand, with the reason.
 
 Scope: an individual resident in Switzerland holding crypto as private
 assets (Privatvermögen). Business assets, professional trading accounting,
@@ -322,7 +323,7 @@ What Kassiber does for a `ch` book, and where.
 | CH-HARDFORK | engine `refused_receipts`: a hard fork is held `acquisition_valuation_unsupported` with code `hardfork_treatment_unsupported` | ch-19 |
 | CH-PROFESSIONAL | a book whose KS 36 inputs say `professional_trader` is refused by the report with `professional_trading_unsupported` | ch-20 |
 | CH-RAIL | no rail decision required: a peg keeps the book's carrying-value default | ch-18 |
-| Report | `crates/reports/src/report_design/ch.rs`, strings `DE_CH` in `report_design/strings.rs` | `the_securities_list_states_values_sources_and_income_in_swiss_german`, `tests/test_rust_ch_tax_country.py` |
+| Report | `crates/reports/src/report_design/ch.rs`, strings `DE_CH` in `report_design/strings.rs` | `the_securities_list_states_values_sources_and_income_in_swiss_german` (the Python end-to-end test `tests/test_rust_ch_tax_country.py` went with Python and has no Rust port yet) |
 
 All 20 vectors run in `crates/reports/tests/tax_country_vectors.rs`
 through the engine under the registry's rules and `ch_tax` (the full

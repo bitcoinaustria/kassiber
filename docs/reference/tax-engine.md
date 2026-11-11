@@ -1,30 +1,28 @@
 # Tax engine
 
-Kassiber's tax engine is a Rust crate (`tax-engine/core`) called from Python
-through a PyO3 binding (`tax-engine/python`, imported as `kassiber_tax`). Native
-callers can use `ledger_typed(&LedgerRequest) -> Result<LedgerResponse,
-StagedError>` without serializing a request or response. It accepts schema 2's
-`ledger` operation and shares computation with the text entry point. It
-replaced RP2 under [plan 20](../plan/20-kassiber-tax-engine.md). This page owns
-the engine contract: the schema-2 `ledger` format journal processing uses,
-the schema-1 operations kept as the lot engine's fixture API, the Python
-layer around them, and the decimal rules both sides follow.
+Kassiber's tax engine is a Rust crate (`tax-engine/core`, `kassiber-tax-core`)
+that the journal crates call directly. Native callers use
+`ledger_typed(&LedgerRequest) -> Result<LedgerResponse, StagedError>` without
+serializing a request or response; the text entry point `ledger` accepts the
+same schema-2 documents and shares the computation. The engine replaced RP2
+under [plan 20](../plan/20-kassiber-tax-engine.md). This page owns the engine
+contract: the schema-2 `ledger` format journal processing uses, the schema-1
+operations kept as the lot engine's fixture API, the journal layer around
+them, and the decimal rules both follow.
 
-The binding is not published. Kassiber depends on `kassiber-tax==0.2.0+local`,
-and PyPI refuses local version labels, so PyPI can never supply an impostor.
-Private indexes and `--find-links` sources can still host local versions.
-`uv sync --locked` builds the binding from the workspace; a pip install needs
-`pip install ./tax-engine/python .` from the checkout, with a Rust toolchain.
-The package version and the engine crates' Cargo version (`engine_version()`)
-share the `0.2.0` release; bump them together.
+The engine is not published. Its version is the crate's Cargo version
+(`ENGINE_VERSION`, `0.2.0`). The PyO3 binding (`tax-engine/python`,
+`kassiber_tax`) through which Python journals called it was removed with
+Python ([plan 22](../plan/22-python-removal.md)).
 
 ## Ledger performance checkpoint (R4, 2026-10-30)
 
 The R4 speed pass preserves schema-2 response bytes, decimal exponents,
 list order and the first failing operation. The complete text-in/text-out
 `ledger` operation is 2.03–3.96× faster on the four synthetic bench books.
-This measures the tax engine; Python request building, response rendering,
-custody and database persistence remain outside these timings.
+This measures the tax engine; request building, response rendering,
+custody and database persistence (Python at the time) remain outside these
+timings.
 
 The baseline is `de18d9af` (the pre-optimization engine with timing spans),
 copied from the first run's `target/ledger-perf/base-src`. For the timing
@@ -139,6 +137,11 @@ above and the new constructor-order recipe are all in that kill set.
 
 ### Python boundary verification
 
+This section records the checkpoint's verification while Python journals
+still called the engine through the binding. Both were removed under
+[plan 22](../plan/22-python-removal.md); the commands below no longer run on
+this checkout.
+
 The binding was rebuilt with `MATURIN_NO_INSTALL_RUST=1`, offline Cargo and
 `mise exec rust@1.99.1 uv@latest -- uv sync --locked --python 3.11`.
 `tests/test_tax_*` passes: **1,028 passed, 160 subtests passed, one expected
@@ -232,23 +235,24 @@ the optimized engine remains at that verified source revision.
 
 ## Where the engine sits
 
-Journals run on `KassiberTaxEngine` (`kassiber/core/engines/ledger.py`). It
-takes one `FinalizedTaxProjection` per book and nothing else: raw rows are a
-`TypeError`, and a projection without rows gives an empty ledger without any
-check or engine call. For every other book it:
+Journal processing (`crates/journals`) hands the engine one finalized tax
+projection per book and nothing else; raw observations never reach it, and a
+projection without rows gives an empty ledger without any check or engine
+call. For every other book it:
 
-1. builds a schema-2 request (`ledger_request.py`), which runs the
-   configuration checks and refuses shapes a finalized projection cannot
-   have;
-2. runs the request through the engine's `ledger` operation;
-3. renders the response into `TaxEngineLedgerResult` (`ledger_response.py`).
+1. builds a schema-2 request (`crates/custody/src/ledger_request.rs`), which
+   runs the configuration checks and refuses shapes a finalized projection
+   cannot have;
+2. runs the request through the engine's `ledger` operation
+   (`crates/journals/src/engine.rs`, typed through `ledger_typed`);
+3. renders the response into journal rows (`crates/journals/src/render.rs`).
 
-Python keeps the jobs that read evidence or render Kassiber's shapes: the row
-facts of the request (normalized kind, exact pricing, privacy-hop evidence,
-conflict and pending holds, chain-order evidence, timestamps), the
-configuration checks, the reader's rendering (uuids, ids, row times, legacy
-floats, quarantine details, the Austrian Kennzahl), and persistence in
-`custody_journal.py`. The engine makes every tax decision in between:
+The journal crates keep the jobs that read evidence or render Kassiber's
+shapes: the row facts of the request (normalized kind, exact pricing,
+privacy-hop evidence, conflict and pending holds, chain-order evidence,
+timestamps), the configuration checks, the reader's rendering (uuids, ids,
+row times, legacy floats, quarantine details, the Austrian Kennzahl), and
+persistence. The engine makes every tax decision in between:
 normalization, the Austrian regime tracker, the walk order and balance
 gates, the swap-link selection, the generic rail carry, the lot engine, and
 the composition of journal entries and their descriptions.
@@ -256,14 +260,15 @@ the composition of journal entries and their descriptions.
 Plan 20's phase 4 moved the books to this path one capability at a time
 (`generic`, `generic_carry`, `at`, `at_swap`) and then deleted the phase-3
 adapter (`engines/rp2.py`), its normalizer, the Austrian regime tracker, and
-`pair_allocation.py` from the product. The adapter lives on only as the
-frozen oracle in `tests/tax_oracle/`, which runs on RP2's calculation; tests
-compare production with it ([testing](testing.md#tax-engine-backends)).
-Product code has no setting or environment variable for a backend. Journal
-entries record what computed them in their calculation metadata: `"engine":
-"kassiber_tax"` for production, `"rp2"` for the oracle on RP2. They do not
-record the engine version yet (TODO "Record the engine and country-rules
-versions").
+`pair_allocation.py` from the product. The adapter then lived on as a frozen
+oracle on RP2's calculation in the Python tests. That oracle went with Python
+([plan 22](../plan/22-python-removal.md)); the fixtures and goldens it
+produced stay as frozen files ([fixtures](#fixtures)). Product code has no
+setting or environment variable for a backend. Journal entries record what
+computed them in their calculation metadata: `"engine": "kassiber_tax"`
+(`crates/journals/src/render.rs`); `"rp2"` marked the oracle's entries. They
+do not record the engine version yet (TODO "Record the engine and
+country-rules versions").
 
 ## Decimal rules
 
@@ -278,38 +283,37 @@ versions").
   13 decimal places, so values within `5E-14` are equal. `<` is "not `>=`" and
   `<=` is "not `>`". The ledger layer's own balance mirror compares exactly,
   as the phase-3 adapter did.
-- Kassiber pins its own Python decimal context to the same precision
-  (`kassiber/__init__.py`), for every thread. Before that, the precision of
-  journal processing depended on which thread first imported RP2. Importing
-  RP2 also trapped `FloatOperation` on that thread; Kassiber's context does
-  not, so mixing floats and decimals does not raise.
-- The engine returns exact values only. The reader alone performs the
-  legacy float conversions (`float()`, `Decimal(str(float))`), JSON
-  serialization, and uuid generation, so no CPython float behavior is
-  reimplemented in Rust.
+- The rest of the backend uses the same 32-digit, round-half-even context
+  through `kassiber-pydecimal`. (The Python backend pinned its decimal
+  context to that precision for every thread, after RP2's import had made it
+  depend on the importing thread.)
+- The engine returns exact values only. The journal reader alone performs
+  the legacy float conversions, with CPython's float formatting
+  (`kassiber-pyjson`), JSON serialization, and uuid generation, so the engine
+  carries no float behavior.
 
 ## Boundary format
 
-The binding exposes one JSON-in, JSON-out function, `ledger`, and releases
-the GIL while the engine runs; a Rust panic becomes `RuntimeError`, never a
-partial result.
+The engine's text entry points (`tax-engine/core/src/api.rs`) are JSON in,
+JSON out; `ledger_typed` takes and returns the schema-2 documents as typed
+values. A failure is a response, never a partial result.
 Decimals cross the boundary in the canonical form `[-]<digits>E<exponent>`,
-for example `-12345E-3`, which Python's `Decimal()` parses back to the
-identical value. `engine_version()` returns the crate version (0.2.0).
+for example `-12345E-3`, which parses back to the identical value.
+`ENGINE_VERSION` is the crate version (0.2.0).
 
 | Function | `schema_version` | Operations | Callers |
 |---|---|---|---|
-| `ledger` | 2 | `ledger`, `prepare`, `manifest` | journal processing (`KassiberTaxEngine`) and the tests |
-| `check_entry`, `compute` | 1 | `check_entry`; `compute`, `validate`, `compute_multi` | the core's fixture tests only; the binding does not expose them ([schema 1](#schema-1-the-fixture-api)) |
+| `ledger`, `ledger_typed` | 2 | `ledger`, `prepare`, `manifest` | journal processing (`crates/journals`) and the tests |
+| `check_entry`, `compute` | 1 | `check_entry`; `compute`, `validate`, `compute_multi` | the core's fixture tests only ([schema 1](#schema-1-the-fixture-api)) |
 
 Each function checks `schema_version` exactly and answers a document of
 another version with a `RequestError`.
 
 ### The `ledger` request
 
-`kassiber/core/engines/ledger_request.py` builds the request from the profile
-and one `TaxEngineLedgerInputs`, with the standard library only;
-`tax-engine/core/src/ledger/request.rs` reads it:
+`crates/custody/src/ledger_request.rs` builds the request from the profile
+and the finalized projection; `tax-engine/core/src/ledger/request.rs` reads
+it:
 
 ```json
 {
@@ -335,7 +339,7 @@ and one `TaxEngineLedgerInputs`, with the standard library only;
 | `policy` | `country` is `{"kind": "generic", "long_term_days": N}` (capped at `sys.maxsize`), `{"kind": "at"}`, `{"kind": "us"}`, or `{"kind": "rules", ...}` for a registry country with shared engine rules ([rules countries](#rules-countries)); the [country registry](tax-countries.md) picks it. `method` is the profile's method (`fifo`, `lifo`, `hifo`, `lofo`, `moving_average`, `moving_average_at`, or the matching methods `moving_average_fifo_period` and `uk_share_matching`) when its country allows it, else `null`; `method_label` is the stored method text for the method gate's message. `require_coarse_review` is the profile's opt-in. `pool_scope` is `"wallet"` for a profile on the wallet pool scope and absent otherwise (global), so global requests keep their bytes |
 | `config` | The names the lot engine's membership checks accept: the assets, wallet labels, and profile label, sorted, stripped, and read as RP2 read its INI file |
 | `holder` | The profile label, unstripped, as entries carry it |
-| `wallets` | `{id, label}` per wallet reference, in order; account fields stay in Python |
+| `wallets` | `{id, label}` per wallet reference, in order; account fields stay with the journal reader |
 | `rows` | One typed row per projection row, in projection order (below) |
 | `intra_pairs` | The same-asset moves: the `out` and `in` row ids, how the pair was proven (`source`), and its atomic bundle (`group_id`; `null` leaves the move ungrouped) |
 | `cross_asset_pairs` | `pair_id` (raw), `out_id`, `in_id`, the legs' transaction ids and assets, `policy`, and `bitcoin_rail` (a pair between BTC and LBTC) |
@@ -347,7 +351,7 @@ A row:
 | `id`, `anchor` | The synthetic projection row id, and the `journal_transaction_id` that journals and quarantines name |
 | `asset`, `wallet_id`, `direction` | As projected; `direction` is `inbound` or `outbound` |
 | `ts` | The time as RP2 parses it, as in a [schema-1 entry](#schema-1-the-fixture-api); its `raw` text orders every string comparison |
-| `cutoff_instant` | The time as Kassiber's Austrian rules read it for the Neuvermögen cutoff (`datetime.fromisoformat`, with `Z` as UTC and a naive time taken as UTC): `{"us": ...}`, or `{"error": ...}` with the `ValueError` message Python raises |
+| `cutoff_instant` | The time as Kassiber's Austrian rules read it for the Neuvermögen cutoff (`datetime.fromisoformat`, with `Z` as UTC and a naive time taken as UTC): `{"us": ...}`, or `{"error": ...}` with the `ValueError` message CPython's parser gives |
 | `amount_msat`, `fee_msat` | Integer msat |
 | `rate`, `value` | `fiat_rate_exact` and `fiat_value_exact`, else `fiat_rate` and `fiat_value`, as canonical decimals; stored non-finite text passes through as CPython writes it; `null` when unpriced |
 | `coarse` | Priced from a coarse fallback the owner has not accepted at this exact price (`pricing_review_accepted_price`) |
@@ -484,7 +488,7 @@ order the reader keeps (`tax-engine/core/src/ledger/response.rs`):
 | `holdings` | Per asset and balance, positive balances only: `asset`, `wallet` label, `quantity`, `cost_basis` |
 | `carried_rows` | The rows the rail carry priced: `row`, and its `value` and `rate` as fixed-point text |
 
-The reader (`ledger_response.py`) adds what is not tax logic: uuid4 ids;
+The reader (`crates/journals/src/render.rs`) adds what is not tax logic: uuid4 ids;
 workspace and profile ids; wallet and account ids looked up by label; each
 entry's transaction id and time from its row; the Kennzahl of its category;
 the `calculation` metadata, whose fragments carry their rows' facts and
@@ -498,8 +502,9 @@ pairs and direct payouts pass through.
 
 A failure is
 `{"schema_version": 2, "ok": false, "error": {"stage", "asset"?, "inner": {"class", "message"}}}`.
-`kassiber/core/engines/errors.py` raises what the phase-3 adapter raised at
-that stage; a wrapper is raised from the inner error:
+The journal crates raise what the phase-3 adapter raised at that stage
+(`crates/journals/src/boundary.rs`); a wrapper is raised from the inner
+error:
 
 | `stage` | Raised |
 |---|---|
@@ -538,9 +543,8 @@ when the first pass after it succeeded.
 engine's names and tables (`manifest.rs`): its version, the kind tables,
 marker names, the Austrian cutoff, default pool, and categories, the entry
 types, and the quarantine reasons and detail kinds it emits.
-`tests/test_tax_ledger_contract.py` compares them with the copies Python still
-spells (`transaction_kinds`, `journal_markers`, `austrian`,
-`exit_tax.RECOGNIZED_ENTRY_TYPES`, `quarantine_catalog`).
+`tax-engine/core/tests/ledger_fixtures.rs` checks that the operation returns
+those tables.
 
 ## Countries and pool scopes
 
@@ -661,8 +665,8 @@ disposal takes its lots:
 RP2's own per-wallet application is not the model: its per-wallet pass can
 dispose of a lot its transfer analysis already moved to another wallet
 ([US-RP2-PER-WALLET](tax-country-us.md#identification-and-pools)). Its
-results are the oracle only on histories where its passes agree
-(`tax-engine/scripts/gen_us_fixtures.py`).
+results served as the oracle only on histories where its passes agree (the
+frozen `us_fixtures.json`).
 
 A US book on the global scope fails when it has a disposal on or after
 2025-01-01 UTC: from 2025 units are identified per wallet or account
@@ -675,13 +679,10 @@ modelled.
 `entry.rs`), one call for each RP2 call the phase-3 adapter made. Journal
 processing does not call them: the `ledger` operation runs the same lot
 engine directly. They remain the core's interface for the RP2 fixtures
-below, which pin that lot engine (`tests/api.rs`, `engine_fixtures.rs`); the
-Python binding does not expose them. `tax-engine/scripts/v1_request.py`
-builds their documents with the standard library only: the canonical decimal
-encoding, the timestamp fields as RP2 parses them, and the entry text. The
-fixture generator uses it, and so does the stage comparison
-([testing](testing.md#stage-comparison)), which records the oracle's entries
-as these documents.
+below, which pin that lot engine (`tests/api.rs`, `engine_fixtures.rs`).
+The fixtures store their documents with the canonical decimal encoding, the
+timestamp fields as RP2 parses them, and the entry text; the Python helper
+that built them (`v1_request.py`) was removed with Python.
 
 The request builder parses ISO 8601 with an optional offset only, where RP2's
 `dateutil` also took free-form text. The custody projection therefore hands
@@ -786,7 +787,7 @@ only where RP2's would.
 
 A failure is `{"ok": false, "error": {"class": ..., "message": ...}}`. The
 class is `ValueError`, `TypeError`, or `RuntimeError` for RP2's errors (which
-Python raises as `EngineValueError`, `EngineTypeError`, or
+the journal crates raise as `EngineValueError`, `EngineTypeError`, or
 `EngineRuntimeError` with that message when a `ledger` failure carries them);
 `InvalidOperation`, `DivisionByZero`, or `Overflow` for the `decimal`
 exceptions RP2's arithmetic raises (for example a comparison of values of
@@ -798,8 +799,10 @@ block the report, as a Rust panic does.
 
 ## Fixtures
 
-`tax-engine/scripts/gen_engine_fixtures.py` runs RP2 as the oracle, building
-its inputs as the phase-3 adapter built them, and writes two files under
+The fixtures are frozen goldens. A Python generator
+(`gen_engine_fixtures.py`, removed under
+[plan 22](../plan/22-python-removal.md)) ran RP2 as the oracle, building its
+inputs as the phase-3 adapter built them, and wrote two files under
 `tax-engine/core/tests/data/`:
 
 - `generic_fixtures.json`: engine requests with RP2's responses for the lot
@@ -814,14 +817,17 @@ its inputs as the phase-3 adapter built them, and writes two files under
   boundaries, and injected errors).
 
 `tax-engine/core/tests/engine_fixtures.rs` reports every differing field by
-case and path. The generator is deterministic for a seed; larger stress sets
-can be checked through `KASSIBER_ENGINE_FIXTURES` and `KASSIBER_AT_FIXTURES`.
+case and path. Larger stress sets in the same format can be checked through
+`KASSIBER_ENGINE_FIXTURES` and `KASSIBER_AT_FIXTURES`. Nothing regenerates
+the RP2 responses now: a deliberate change follows the
+[frozen-golden flow](../plan/22-python-removal.md#generators-become-frozen-goldens)
+and needs the owner's sign-off.
 `tax-engine/core/tests/ledger_text.rs` checks the engine's own rendering of
 `str(transaction)` (`ledger::text`, which the `ledger` operation uses because
 it builds its entries without a request `text`) against the RP2 text these
 fixtures store.
 
-`ledger_fixtures.json`, from `tax-engine/scripts/gen_ledger_fixtures.py`, holds
+`ledger_fixtures.json`, frozen from the removed `gen_ledger_fixtures.py`, holds
 whole-ledger goldens: finalized projections with the frozen oracle's ledger,
 the one production must give, the schema-2 request production's builder
 makes of each, and the engine's response to each request
@@ -870,10 +876,9 @@ no lot.
 ## Privacy
 
 The engine performs no I/O, network access, or logging and keeps no state
-between calls. Production does not write RP2's temporary configuration file;
-only the oracle on RP2 does, in tests.
+between calls. It never writes a configuration file; only the removed oracle
+on RP2 did, in tests.
 
-
-The shared PyO3 module also exposes the independent R2 `custody` operation.
-Its raw request and stage response are specified in [custody engine](custody-engine.md).
+The custody computation is a separate crate (`crates/custody`). Its raw
+request and stage response are specified in [custody engine](custody-engine.md).
 It does not change the `ledger` request or allow raw observations into the tax engine.

@@ -32,8 +32,8 @@ other crate asks it a question:
 | `engine` | shared tax-engine rules the country is computed with instead of its family's engine country ([rules countries](tax-engine.md#rules-countries)): fee units, swap values, gifts, refused receipts (inbound or outbound, each with the country's code), zero-cost kinds, and the below-market valuation | none | none |
 | `name_local` | the name in the country's own report language when that is neither English nor German (`España`, `日本`); only reports read it | none | none |
 
-The `generic` and `at` values are Python's (`kassiber/tax_policy.py`); a
-test in the crate pins them. The United States (`us`, preview) has `rules =
+The `generic` and `at` values are the Python backend's (`tax_policy.py`);
+a test in the crate pins them. The United States (`us`, preview) has `rules =
 UnitedStates`, USD, `MoreThanOneYear` (held more than one year by UTC
 calendar date), FIFO, HIFO, LIFO and LOFO with FIFO the default, the pool
 scopes `global` and `wallet` with `wallet` the default, `en`, UTC, the
@@ -88,8 +88,8 @@ and unlabelled income refused on receipt and lost and stolen coins on their
 way out, each with Japan's code
 ([specification](tax-country-jp.md#implementation)).
 
-Callers keep the reference's own reading of the stored value (where Python
-strips, where it lower-cases, where it compares literally) and look the
+Callers keep the Python reference's own reading of the stored value (where it
+stripped, where it lower-cased, where it compared literally) and look the
 normalized code up. An unknown code has no entry, so it is refused where
 Python refused it, with the same error. Where Python's `"at"` branch meant
 one of several things, the caller now asks the matching question: the
@@ -97,7 +97,8 @@ Vienna calendar (`timezone`), German reports (`locale`), cross-asset carry
 (`cross_asset_carry`), the holding period (`long_term`), or Austria's own
 rules (`rules == Austria`: Alt/Neu, Kennzahlen, the E 1kv, the exit tax's
 regimes). For `generic` and `at` every answer equals the old branch, so
-numbers, stored rows and exports are unchanged; the parity suites check it.
+numbers, stored rows and exports are unchanged; the parity suites checked it,
+and their frozen goldens and recorded sessions still do.
 
 ### What reads it
 
@@ -148,22 +149,15 @@ specification, its vectors and a sample book's reports; the review is
 recorded in the country's specification and the flag is removed in the same
 commit.
 
-## Python
-
-Python keeps `generic` and `at` only (`ACTIVE_TAX_COUNTRIES`). Should the
-hybrid hand it a book of a Rust-only country, every tax read and write stops
-before touching the book: profile reads and updates, journal processing and
-report reads and exports fail with `internal_error`, "Unsupported tax country
-'<code>'", and the database is unchanged.
-`tests/test_python_rust_only_countries.py` checks that for every registry
-country Python lacks.
-
 ## Adding a country
 
 1. Specify it in `docs/reference/tax-country-<code>.md` with sources and
    retrieval dates, and its vectors in `tax-country-<code>-vectors.json`
-   (schema `kassiber.tax-country-vectors/1`, written by
-   `docs/reference/tax-country-reference/build.py` from a reference model).
+   (schema `kassiber.tax-country-vectors/1`). Compute the expected values
+   independently of the engine (by hand or with a throwaway model) and have
+   them reviewed; the file is a hand-checked golden. The Python reference
+   models that wrote the first countries' files were removed with Python
+   ([plan 22](../plan/22-python-removal.md), D6).
 2. Add the registry entry with `preview: true`, regenerate the desktop copy,
    and add its names to the desktop where a screen needs its own wording.
 3. Implement whatever the engine lacks (a method, a holding-period rule, a

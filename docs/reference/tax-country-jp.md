@@ -3,16 +3,17 @@
 **Status:** implemented in the Rust backend as a **preview** country
 (2026-11-07). No Japanese tax professional (税理士) has reviewed it; every
 Japanese report and screen carries the preview notice until one does.
-Sources were read on 2026-11-07. Python stays `generic`/`at` only and
-refuses Japanese books. Nothing here is tax advice.
+Sources were read on 2026-11-07. Nothing here is tax advice.
 
 Test vectors: [tax-country-jp-vectors.json](tax-country-jp-vectors.json)
 (19 cases, same format as the
 [Spanish vectors](tax-country-es.md#test-vectors), with per-asset year
 blocks that mirror the NTA calculation sheet).
-[`scripts/tax-country-vectors.py`](../../scripts/tax-country-vectors.py)
-recomputes them. It also records RP2's JP behaviour: the country refuses,
-and its report template is evaluated separately (`rp2-jp-template`).
+A Python script (`scripts/tax-country-vectors.py`) computed them and
+recorded RP2's JP behaviour: the country refuses, and its report template
+was evaluated separately (`rp2-jp-template`). The script was removed with
+Python ([plan 22](../plan/22-python-removal.md), D6), so the file is now a
+frozen, reviewed golden.
 
 ## Summary
 
@@ -235,7 +236,7 @@ What Kassiber does today, and where (2026-11-07).
 | Font | `crates/pdf/fonts/NotoSansJP-Regular.otf` | Noto Sans JP 2.004 Regular (SIL OFL), the last glyph fallback of the sealed PDF engine; no system fonts |
 | Calendar | registry Asia/Tokyo; report readers through `kassiber_reports::country::zone`, `calendar::local` and `export_range::book_zone` (a fixed +09:00 without tzdata) | as for Spain |
 | Vectors | `crates/reports/tests/country_vectors/es_jp.rs` (`jp_compute`) | all 19 pass through the `ledger` operation under the registry's rules and the layer above; jp-14's commission is restated as netted into the price (`net_jp_commissions`) |
-| End to end | `tests/test_rust_jp_tax_country.py` | a CLI-built book through journals to the Japanese PDF, XLSX and CSV, repeat PDFs byte-identical |
+| End to end | none in Rust yet | the Python black-box test (`tests/test_rust_jp_tax_country.py`: a CLI-built book through journals to the Japanese PDF, XLSX and CSV, repeat PDFs byte-identical) went with Python ([plan 22](../plan/22-python-removal.md)) |
 
 ### Using it
 
@@ -430,11 +431,11 @@ language but ships only `en` (and a `kl` test) templates. Every vector's
 `rp2.computed` is that refusal.
 
 RP2's `tax_report_jp` template still implements the total average in
-spreadsheet formulas, the same as the NTA sheet. `scripts/tax-country-vectors.py
-rp2-jp-template` runs RP2's lot engine under a JP subclass that allows FIFO
-(the template reads transactions, not lots). It then renders the template,
-recalculates it with headless LibreOffice and stores each year's summary in
-`rp2.template`. Against the spec:
+spreadsheet formulas, the same as the NTA sheet. The removed
+`scripts/tax-country-vectors.py rp2-jp-template` ran RP2's lot engine under a
+JP subclass that allows FIFO (the template reads transactions, not lots),
+rendered the template, recalculated it with headless LibreOffice and stored
+each year's summary in `rp2.template`. Against the spec:
 
 | Rule | RP2 template | Spec | Vectors |
 | --- | --- | --- | --- |

@@ -15,13 +15,13 @@ Books carry tax defaults through the internal `profile` row:
 Current policies:
 
 - `generic` -> lot accounting in Kassiber's [tax engine](tax-engine.md)
-- `at` -> Austrian accounting in the same engine (Austrian normalization, the regime tracker, and moving-average defaults for new wallets), with Python keeping the current disposal-category / Kennzahl mapping
+- `at` -> Austrian accounting in the same engine (Austrian normalization, the regime tracker, and moving-average defaults for new wallets), with the report crate (`crates/reports`) keeping the current disposal-category / Kennzahl mapping
 
-Tax countries come from one Rust registry ([tax countries](tax-countries.md)).
-The United States (`us`) is implemented there as a Rust-only **preview**
-country ([specification](tax-country-us.md)): Python refuses its books.
-Germany, Switzerland, the United Kingdom, Spain, Ireland and Japan are
-researched as future preview countries (Rust only, not selectable yet):
+Tax countries come from one registry ([tax countries](tax-countries.md)).
+The United States (`us`) is implemented there as a **preview** country
+([specification](tax-country-us.md)). Germany, Switzerland, the United
+Kingdom, Spain, Ireland and Japan are researched as future preview countries
+(not selectable yet):
 [Germany](tax-country-de.md), [Switzerland](tax-country-ch.md),
 [United Kingdom](tax-country-gb.md), [Spain](tax-country-es.md),
 [Ireland](tax-country-ie.md) and [Japan](tax-country-jp.md), each with worked
@@ -29,21 +29,22 @@ test vectors and open questions for a tax adviser.
 
 ## Implementation boundary
 
-[custody_journal.py](../../kassiber/core/custody_journal.py) composes imported
-observations, observer authority, and authored custody evidence into canonical
-decisions, issues, lineage, and finalized tax inputs. CLI handlers call this
-service rather than assembling a second interpreter.
+Journal processing (`crates/journals`, with the pure custody computation in
+`crates/custody`) composes imported observations, observer authority, and
+authored custody evidence into canonical decisions, issues, lineage, and
+finalized tax inputs. The CLI, daemon, and AI tools call this service rather
+than assembling a second interpreter.
 
-`KassiberTaxEngine` (`kassiber/core/engines/ledger.py`) consumes a
-`FinalizedTaxProjection`. Both generic and Austrian books use it; Austrian
-books select the engine's Austrian country. Python sends the projection's rows
-as typed facts and renders the engine's journal ledger. Kassiber's
-[tax engine](tax-engine.md) owns country defaults, normalization, the Austrian
-regime tracker, the balance and quarantine gates, carry math, lot computation,
-and journal composition, and reproduces the phase-3 adapter on RP2 exactly; RP2
-remains only as the tests' parity oracle. The engine owns the
-marker/quarantine contract and the disposal categories; Python maps the
-categories into report buckets. See [the Austrian handoff](../austrian-handoff.md).
+The [tax engine](tax-engine.md) (`tax-engine/core`) consumes only the
+finalized tax projection. Both generic and Austrian books use it; Austrian
+books select the engine's Austrian country. The journal crates send the
+projection's rows as typed facts and render the engine's journal ledger. The
+engine owns country defaults, normalization, the Austrian regime tracker, the
+balance and quarantine gates, carry math, lot computation, and journal
+composition, and reproduces the phase-3 adapter on RP2 exactly; RP2's results
+survive only as frozen test fixtures. The engine owns the marker/quarantine
+contract and the disposal categories; the report crate maps the categories
+into report buckets. See [the Austrian handoff](../austrian-handoff.md).
 
 Engine calls pool each asset across the wallets of a profile, so a same-asset
 move can carry basis between owned wallets. Wallet identity is
@@ -56,7 +57,7 @@ basis, not a claim about which physical lots remain in a wallet.
 Run:
 
 ```bash
-python3 -m kassiber journals process
+kassiber journals process
 ```
 
 Important behavior:
@@ -88,7 +89,7 @@ projection's order for them (FIFO and LIFO consume lots in it; HIFO and LOFO
 fall back to it when unit costs tie), so the order must come from the data,
 never from a random row id or from when a row was inserted. Custody
 composition reads transactions in this source order
-(`kassiber/core/transaction_order.py`):
+(`crates/store/src/transaction_order.rs`):
 
 1. `occurred_at`;
 2. a confirmed chain row's block height (`raw_json` `status.block_height`);
@@ -108,17 +109,16 @@ the source order, then the row id, which only orders the slices of one anchor.
 The latest transaction rate, the fallback price reports use when no market
 quote exists, is the last row of the latest time in the same order.
 
-The Rust backend reads the same SQL and sorts the projection the same way.
-Every reader where same-time order reaches numbers follows the source order in
-both runtimes:
+Every reader where same-time order reaches numbers follows the source order
+(the Python backend read the same SQL, so books it wrote order the same way):
 
-| Reader | Python | Rust | Effect |
-| --- | --- | --- | --- |
-| Composition load | `custody_journal._transactions` | `journals/src/loader.rs` `TRANSACTIONS` | Interpreter and pairing order, the canonical row of identical duplicates, quarantine insertion order |
-| Finalized projection | `custody_tax_projection.compile_finalized_tax_projection` | `custody/src/finalized_projection/composition.rs` | FIFO, LIFO and Austrian Alt lot order; HIFO/LOFO rank ties; which lot a same-time disposal consumes |
-| Latest transaction rate | `transaction_rate_rows`, `transaction_rate_quotes_for_profile` | `loader.rs` `RATE_ROWS`, `reports/src/holdings.rs`, `summary_pdf.rs`, `exit_tax.rs` | Fallback prices in holdings, summaries and exit tax |
-| Year-end fallback | `year_handoff._year_end_rates` | `reports/src/year_handoff.rs` | Year-handoff valuation without a cached quote |
-| Dashboard price | `ui_snapshot._latest_transaction_rate` | `workspace/src/overview.rs` | Desktop portfolio value without a cached quote |
+| Reader | Code | Effect |
+| --- | --- | --- |
+| Composition load | `journals/src/loader.rs` `TRANSACTIONS` | Interpreter and pairing order, the canonical row of identical duplicates, quarantine insertion order |
+| Finalized projection | `custody/src/finalized_projection/composition.rs` | FIFO, LIFO and Austrian Alt lot order; HIFO/LOFO rank ties; which lot a same-time disposal consumes |
+| Latest transaction rate | `loader.rs` `RATE_ROWS`, `reports/src/holdings.rs`, `summary_pdf.rs`, `exit_tax.rs` | Fallback prices in holdings, summaries and exit tax |
+| Year-end fallback | `reports/src/year_handoff.rs` | Year-handoff valuation without a cached quote |
+| Dashboard price | `workspace/src/overview.rs` | Desktop portfolio value without a cached quote |
 
 The tax engine keeps the projection's order within a timestamp, and its
 HIFO/LOFO heap breaks equal (13-place) unit costs by the row's place in that
@@ -133,14 +133,12 @@ by `occurred_at, created_at, id`, as does the bounded custody-gap worklist's
 cut on books above its input bound. Neither changes an amount; TODO "Order
 the remaining same-time readers" tracks them.
 
-`tests/test_lot_order_determinism.py` checks that every id order of a book's
-lots gives one answer for FIFO, LIFO, HIFO, LOFO and Austrian Alt, that rows
-from two files order by content and that every latest-rate reader takes the
-file's last row; `tests/integration/test_lot_order_determinism.py` checks that
-Rust books byte-identical journals from the same book and records Python's
-file positions. `crates/store/scripts/lot_order_mutations.json` (run by
-`lot_order_mutation_check.py`) reverts each reader, writer, migration step
-and stamp.
+Each reader has a Rust test that pins its same-time order (for example
+`native_loader_orders_same_time_rows_by_source_position` in the journal
+loader and `holdings_rate_is_the_last_same_time_row_in_source_order` in the
+report crate). `crates/store/scripts/lot_order_mutations.json` (the `store-lot-order` suite
+of `cargo run -p kassiber-mutation-check`) reverts each reader, writer,
+migration step and stamp.
 
 Calculation semantics version 8 introduced this order. The one-shot
 `same-time-source-order-v1` migration requires version 8 of every processed
@@ -238,7 +236,7 @@ is 500 per branch and follows observed inventory floors. A wallet with deeper
 history can raise it (hard cap: 20,000):
 
 ```bash
-python3 -m kassiber wallets update --wallet treasury \
+kassiber wallets update --wallet treasury \
   --config '{"ownership_scan_to_index":1000}'
 ```
 
@@ -285,14 +283,14 @@ unpaired outbounds that are real payments or disposals.
 When that signal is missing, you can pair them manually:
 
 ```bash
-python3 -m kassiber transfers pair \
+kassiber transfers pair \
   --tx-out <OUT_TRANSACTION_ID> \
   --tx-in <IN_TRANSACTION_ID> \
   --kind manual \
   --policy carrying-value
 
-python3 -m kassiber transfers list
-python3 -m kassiber transfers unpair --pair-id <PAIR_ID>
+kassiber transfers list
+kassiber transfers unpair --pair-id <PAIR_ID>
 ```
 
 Current rules:
@@ -333,20 +331,20 @@ the complete component atomically after anchor coverage and conservation pass.
 Inspect quarantined transactions:
 
 ```bash
-python3 -m kassiber journals quarantined
-python3 -m kassiber journals quarantine show --transaction <TRANSACTION_ID>
+kassiber journals quarantined
+kassiber journals quarantine show --transaction <TRANSACTION_ID>
 ```
 
 Typed resolution paths:
 
 ```bash
-python3 -m kassiber journals quarantine resolve price-override \
+kassiber journals quarantine resolve price-override \
   --transaction <TRANSACTION_ID> --fiat-rate 50000
 
-python3 -m kassiber journals quarantine resolve exclude \
+kassiber journals quarantine resolve exclude \
   --transaction <TRANSACTION_ID>
 
-python3 -m kassiber journals quarantine clear \
+kassiber journals quarantine clear \
   --transaction <TRANSACTION_ID>
 ```
 
@@ -540,19 +538,19 @@ only held back with `pricing_review_required` when a book opts into strict revie
 
 ```bash
 # require manual review of coarse-priced events for this book (default: accept)
-python3 -m kassiber profiles set --profile main --require-coarse-review
+kassiber profiles set --profile main --require-coarse-review
 # return to accepting coarse prices
-python3 -m kassiber profiles set --profile main --no-require-coarse-review
+kassiber profiles set --profile main --no-require-coarse-review
 ```
 
 Useful commands:
 
 ```bash
-python3 -m kassiber rates pairs
-python3 -m kassiber rates sync --pair BTC-USD --days 30
-python3 -m kassiber rates set BTC-EUR 2026-01-01T00:00:00Z 95000
-python3 -m kassiber rates set BTC-EUR 2026-01-01T12:34:00Z 95000 --granularity exact
-python3 -m kassiber rates latest BTC-EUR
+kassiber rates pairs
+kassiber rates sync --pair BTC-USD --days 30
+kassiber rates set BTC-EUR 2026-01-01T00:00:00Z 95000
+kassiber rates set BTC-EUR 2026-01-01T12:34:00Z 95000 --granularity exact
+kassiber rates latest BTC-EUR
 ```
 
 Reports still use stored transaction and journal pricing rather than querying the rates cache live.
@@ -586,13 +584,13 @@ Current Austrian status:
 The E 1kv export is annual and review-oriented:
 
 ```bash
-python3 -m kassiber --machine reports austrian-e1kv --year 2024
-python3 -m kassiber --machine reports austrian-tax-summary --year 2024
-python3 -m kassiber --format csv --output e1kv-2024.csv reports austrian-e1kv --year 2024
-python3 -m kassiber reports export-austrian-e1kv-pdf --year 2024 --file e1kv-2024.pdf
-python3 -m kassiber reports export-austrian --year 2024 --file austria-2024.pdf
-python3 -m kassiber reports export-austrian-e1kv-xlsx --year 2024 --file e1kv-2024.xlsx
-python3 -m kassiber reports export-austrian-e1kv-csv --year 2024 --dir e1kv-2024-csv
+kassiber --machine reports austrian-e1kv --year 2024
+kassiber --machine reports austrian-tax-summary --year 2024
+kassiber --format csv --output e1kv-2024.csv reports austrian-e1kv --year 2024
+kassiber reports export-austrian-e1kv-pdf --year 2024 --file e1kv-2024.pdf
+kassiber reports export-austrian --year 2024 --file austria-2024.pdf
+kassiber reports export-austrian-e1kv-xlsx --year 2024 --file e1kv-2024.xlsx
+kassiber reports export-austrian-e1kv-csv --year 2024 --dir e1kv-2024-csv
 ```
 
 Kassiber currently maps crypto rows to the ausländisch / self-custody

@@ -9,10 +9,11 @@ This document says what a German book must compute and report so that an
 implementation on the Rust country registry can be written and tested without
 repeating the research. The worked cases are in
 [tax-country-de-vectors.json](tax-country-de-vectors.json); their expected
-values come from the reference model in
-[tax-country-reference/](tax-country-reference/) (`de.py`), which implements
-the rules below in plain Python and can regenerate the file:
-`python3 -I docs/reference/tax-country-reference/build.py . de`.
+values came from an independent reference model of the rules below in plain
+Python (`de.py`). That model was removed with Python
+([plan 22](../plan/22-python-removal.md), D6; it remains at the
+`archive/python-backend` tag), so the file is now a frozen, reviewed golden:
+change an expected value only by hand, with the reason.
 
 Scope: an individual resident in Germany holding Bitcoin (and, rarely, other
 tokens) as **private assets** (Privatvermögen). Business assets
@@ -449,7 +450,7 @@ What Kassiber does for a `de` book, and where.
 | DE-INC-AIRDROP, DE-HARDFORK | engine `refused_receipts`: held `acquisition_valuation_unsupported` with code `airdrop_classification_required` or `hardfork_cost_split_unsupported` | de-23, de-25; `a_refused_receipt_is_held_with_the_countrys_code_before_its_price` |
 | DE-RAIL | `rail_decision_required`: `transfers pair` of a BTC/LBTC change without `--policy` fails with `rail_policy_required`; a native transition or a reviewed rail pair without its own policy is held `rail_policy_required` | de-24 (not the engine's): `rail_pairs_need_an_explicit_policy_where_the_country_requires_one`, `a_rail_pair_without_a_decided_policy_is_held_where_the_country_requires_one` |
 | DE-FG-23, DE-FG-23-2023/2024, DE-LOSS-23, DE-FG-22-3, DE-INC-MINING | `crates/reports/src/de_tax.rs` (`years`, `section`) with `tables::DE_P23_FREIGRENZE`, `DE_P22_3_FREIGRENZE`; a year without a table is `unknown`, never the neighbouring year's | de-08 … de-12, de-15, de-16, de-22 |
-| Report | `crates/reports/src/report_design/de.rs`, strings `DE_DE` in `report_design/strings.rs` | `anlage_so_rows_carry_the_lines_and_verdicts_in_german`, `tests/test_rust_de_tax_country.py` |
+| Report | `crates/reports/src/report_design/de.rs`, strings `DE_DE` in `report_design/strings.rs` | `anlage_so_rows_carry_the_lines_and_verdicts_in_german` (the Python end-to-end test `tests/test_rust_de_tax_country.py` went with Python and has no Rust port yet) |
 
 All 26 vectors run in `crates/reports/tests/tax_country_vectors.rs`: 25
 through the engine under the registry's rules and `de_tax` (the full
