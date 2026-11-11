@@ -912,8 +912,7 @@
     "find": "            let action = action?;\n",
     "replace": "            let action = action?;\n            if let Some(error) = action.refusal(None) {\n                return Err(error.clone());\n            }\n",
     "expect_failing": [
-      "tests/test_rust_freshness_sources.py::test_wallets_without_freshness_sources_do_not_refuse_a_run[core-silent-payment]",
-      "test_wallets_without_freshness_sources_do_not_refuse_a_run_core_silent_payment"
+      "tests/test_rust_freshness_sources.py::test_wallets_without_freshness_sources_do_not_refuse_a_run[core-silent-payment]"
     ],
     "rule": "A wallet without a freshness source refuses only the direct sync it would need."
   },
