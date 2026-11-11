@@ -6,7 +6,14 @@ It is not meant to be a hand-maintained inventory of every transitive package in
 
 ## Core dependency credit
 
-Kassiber currently depends directly on [BDK Python](https://github.com/bitcoindevkit/bdk-python) for dependency-backed Bitcoin observation, [Liquid Wallet Kit](https://github.com/Blockstream/lwk) for dependency-backed Liquid observation, [embit](https://github.com/diybitcoinhardware/embit) for compatibility descriptor derivation and Liquid decoding, [XlsxWriter](https://xlsxwriter.readthedocs.io/) for styled XLSX report exports and the generic-ledger import template, [openpyxl](https://openpyxl.readthedocs.io/) for reading filled-in `.xlsx` generic-ledger imports, [ReportLab](https://www.reportlab.com/) for styled PDF report exports, and [keyring](https://github.com/jaraco/keyring) for opt-in CLI access to native OS credential stores.
+Kassiber is a Rust workspace (`crates/`, `tax-engine/core`) and a Tauri
+desktop (`ui-tauri/`). It depends directly on [BDK](https://github.com/bitcoindevkit/bdk)
+for watch-only Bitcoin observation, [Liquid Wallet Kit](https://github.com/Blockstream/lwk)
+for watch-only Liquid observation, [rust_xlsxwriter](https://github.com/jmcnamara/rust_xlsxwriter)
+for XLSX exports, [Typst](https://github.com/typst/typst) for PDF exports,
+SQLCipher through `rusqlite` for at-rest encryption, and the `keyring-core`
+store crates for opt-in native credential storage. Python, uv and the
+packages they pulled in were removed under plan 22.
 The descriptor connection screen uses local-only QR scanner libraries for
 webcam-based descriptor and BBQR import.
 The desktop shell includes Rust keyring crates for AI-provider-key native
@@ -18,16 +25,16 @@ Its minimal release notifier delegates the GitHub request to the bundled CLI
 sidecar rather than carrying a second HTTP client. The desktop and CLI
 coordinate update-check consent revocation with an owner-only advisory lock;
 the native side uses `fs2` for the cross-platform file-lock primitive.
-Kassiber's own tax engine is a Rust crate (`tax-engine/`, AGPL-3.0-only) built
-as a Python extension; the rows below list its direct Rust dependencies, and
-the root `Cargo.lock` is the transitive inventory.
+Kassiber's own tax engine is a Rust crate (`tax-engine/core`, AGPL-3.0-only);
+the rows below list the direct Rust dependencies, and the root `Cargo.lock` is
+the transitive inventory.
 The private custody fusion probe reuses this existing tax-engine crate through
 a development dependency; this adds no external package or runtime dependency.
 The native journal pre-build reuses Kassiber's transfer crate for component
 normalization, revisions, activation and evidence commitments. This internal
 dependency adds no third-party package.
 The Kassiber-maintained [RP2 fork](https://github.com/bitcoinaustria/rp2), which the engine replaced,
-is a development dependency only: tests use it as the engine's parity oracle.
+is no longer a dependency: the engine's tests read fixtures it once produced.
 Rust storage also uses the existing internal `kassiber-pydecimal` crate for
 legacy Liquid fingerprint arithmetic and native file-import amount/pricing normalization; this adds no third-party package.
 Historical report reads reuse the internal `kassiber-wallets` resolver to
@@ -76,26 +83,22 @@ third-party package or runtime requirement is added.
 | Package | Version policy | Role | License |
 | --- | --- | --- | --- |
 | `getrandom` | `0.4.3` (exact) | OS randomness for Rust credential enrollment, invalidation generations and backup preview capabilities | MIT OR Apache-2.0 |
-| `bdkpython` | `3.0.0` (exact) | Watch-only Bitcoin wallet observation through BDK's Electrum client; state is persisted as explicit versioned JSON inside Kassiber's SQLCipher database. Esplora uses Kassiber's compatibility HTTP transport (`http_route_policy`) | MIT OR Apache-2.0 |
 | `bdk_wallet` | `=3.0.0` | Native in-memory watch-only wallet state and indexing matching bdkpython; standard library and descriptor parsing alone cannot reproduce BDK's update model. No BDK storage or connector features | MIT OR Apache-2.0 |
 | `bdk_chain` | `=0.23.3` | Native graph, chain checkpoints and changeset merging matching the Python binding; fetched data comes through Kassiber's consent-bound clients | MIT OR Apache-2.0 |
 | `bdk_core` | `=0.6.3` | Exact BDK script requests, transaction updates and confirmation anchors; keeps the native observer's update contract pinned to Python | MIT OR Apache-2.0 |
 | `ahash` | `0.8.12` (transitive) | BDK's pinned graph/index hash tables require this hasher; selected by the matching SDK rather than a new application API | MIT OR Apache-2.0 |
 | `hashbrown` | `0.14.5` (transitive) | BDK's pinned chain/index implementation requires these hash tables; replacing them would fork the reference SDK | MIT OR Apache-2.0 |
 | `base64` | `0.21.7` (transitive) | BDK's pinned core serialization dependency; kept alongside existing 0.22 to preserve the matching SDK without patching it | MIT OR Apache-2.0 |
-| `lwk` | `0.18.0` (exact) | Watch-only Liquid wallet observation through LWK's Electrum client; opaque `ForeignStore` values live only inside Kassiber's SQLCipher database. Esplora uses Kassiber's compatibility HTTP transport (`http_route_policy`) | MIT (BSD-MIT wording) |
 | `lwk_wollet` | `=0.18.0` (exact, default features off) | Native watch-only Liquid wollet state, unblinding and gap discovery matching the Python `lwk` binding; its Electrum, Esplora, Waterfalls, registry and price clients are compiled out and chain data arrives through `kassiber-net` | MIT OR BSD-2-Clause |
 | `lwk_common` | `=0.18.1` (exact, default features off) | LWK's network parameters and store traits; no SQLite or network feature | MIT OR BSD-2-Clause |
 | `elements` | `0.26.2` (transitive) | LWK 0.18's second Elements dependency (`elements26`), kept alongside 0.25 to use the matching SDK unpatched | CC0-1.0 |
 | `aes-gcm-siv`, `bip39`, `fxhash`, `qr_code`, `bmp-monochrome`, `regex-lite`, `tokio-macros` | locked transitive | LWK 0.18's own store encryption, mnemonic, hashing, QR, parsing and runtime-macro dependencies; Kassiber calls none of them directly, and `tokio` has no `net` feature in this tree | MIT OR Apache-2.0 / CC0-1.0 (`bip39`) / MIT (`bmp-monochrome`, `tokio-macros`) |
-| `embit` | `>=0.8.0` | Bitcoin/Liquid descriptor parsing, script derivation, Liquid confidential outputs, PSBT transaction/UTXO parsing and supported Payjoin receiver signature commitments | MIT |
 | `bitcoin_hashes` | `0.14` (already locked) | Python-compatible UUIDv5 review identities using the existing SHA-1 primitive | CC0-1.0 |
 | `bitcoin` | `0.32` | Native watch-only BIP32 derivation, key validation, scripts and addresses; cryptography and Bitcoin encodings have no standard-library equivalent | CC0-1.0 |
 | `miniscript` | `12` | Native Bitcoin descriptor grammar, multipath expansion and script derivation; avoids a handwritten script interpreter | CC0-1.0 |
 | `elements-miniscript` / `elements` | `0.4` / locked transitive `0.25` | Liquid descriptor grammar, SLIP-77 blinding and confidential address derivation; avoids reimplementing confidential address cryptography | CC0-1.0 |
 | `secp256k1` / `secp256k1-zkp` | locked transitive | Bitcoin and Liquid public-key operations used by the descriptor libraries; no signing or broadcast API is exposed by Kassiber | CC0-1.0 |
 | `regex` | `1` | Bounded non-backtracking descriptor token and wallet-export syntax normalization; already used transitively by backend redaction | MIT OR Apache-2.0 |
-| `XlsxWriter` | `>=3.2,<4` | Styled `.xlsx` workbook export for practitioner-facing reports and the generic-ledger import template | BSD-2-Clause |
 | `rust_xlsxwriter` | `0.102.0` (exact, optional features off) | In-memory native XLSX reports, styles and cached formulas; OOXML rendering is unavailable in the standard library | MIT OR Apache-2.0 |
 | `zip` | `9.1.3` (exact, default features off, `deflate`) | Writer's ZIP container and in-memory repair of point heights/numeric XML; no archive extraction or new transport | MIT |
 | `zlib-rs` / `zopfli` | locked transitive `0.6.8` / `0.8.4` | Writer's pure Rust DEFLATE backends; no system zlib dependency | Zlib / Apache-2.0 |
@@ -103,15 +106,6 @@ third-party package or runtime requirement is added.
 | `crc32fast` / `simd-adler32` | locked transitive `1.5.3` / `0.3.10` | ZIP/compression checksums; updates required by the cached Zopfli dependency | MIT OR Apache-2.0 / MIT |
 | `typst` / `typst-layout` / `typst-pdf` | `=0.15.1` (exact, default features off) | Layout and PDF output for the shared report design (plan 21). A sealed in-memory world: embedded templates and fonts, no package resolver, system font scan, file access or network; the standard library has no layout or PDF engine | Apache-2.0 |
 | Typst's transitive crates (`krilla`, `hayro-*`, `rustybuzz`/`ttf-parser`, `icu_*`, `image`, `tiny-skia`, `wasmi`/`wasmparser` and others; 216 locked packages) | locked transitive | Text shaping, Unicode segmentation, image decoding and PDF writing inside the engine; Kassiber exposes no plugin, image-file or font-file input | mostly MIT OR Apache-2.0; also Apache-2.0, MIT, Unicode-3.0 (`icu_*`, `zerovec`, `yoke`, `litemap`), BSD-2-Clause (`arrayref`, `kamadak-exif`, `mutate_once`), BSD-3-Clause (`tiny-skia`), Zlib (`slotmap`), Apache-2.0 WITH LLVM-exception (`wasmparser`, `ar_archive_writer`), 0BSD OR CC0-1.0 (`roman-numerals-rs`), Unlicense OR MIT (`csv`, `byteorder-lite`) |
-| `openpyxl` | `>=3.1,<4` | Reads filled-in `.xlsx` files for the generic-ledger manual importer | MIT |
-| `reportlab` | `>=4.4,<5` | Styled PDF rendering for Austrian and source-of-funds report exports | BSD |
-| `sqlcipher3` | `>=0.6.2,<1` | Python binding around SQLCipher 4; wheels bundle a SQLCipher community build for at-rest database encryption | Zlib (binding) + BSD-style (SQLCipher community) |
-| `pyrage` | `>=1.3,<2` | In-process `age` implementation used by the `tar | age` backup format when no system `age`/`rage` binary is available | Apache-2.0 / MIT |
-| `keyring` | `>=25.6,<26` | Native macOS Keychain, Windows Credential Manager, and Linux Secret Service access for opt-in CLI remembered unlock | MIT |
-| `tzdata` | `>=2024.1` | Time zone data for `zoneinfo` where the OS has none, such as Windows | Apache-2.0 |
-| `rp2` | `git+https://github.com/bitcoinaustria/rp2.git@3d2e03ef27696fbd00f4516a0cb745300083e227` (dev only) | Parity oracle for Kassiber's tax engine: the frozen phase-3 adapter in `tests/tax_oracle/` runs on it, tests compare the engine with that oracle, and `tax-engine/scripts/gen_engine_fixtures.py` and `gen_ledger_fixtures.py` build fixtures from it; not shipped | Apache-2.0 |
-| `cryptography` | `>=50.0.0,<51` (dev only) | Self-signed TLS certificates for the regtest chain-observer oracle test; the application does not import it | Apache-2.0 OR BSD-3-Clause |
-| `PyYAML` | `>=6,<7` | Structured parsing for the repository-wide GitHub Actions pin-policy test | MIT |
 | `pako` | `^2.1.0` | Zlib/deflate decoding for Better Bitcoin QR descriptor import | MIT |
 | `qr-scanner` | `^1.4.2` | Local webcam QR decoding for descriptor-family connection setup | MIT |
 | `three` | `0.186.0` (exact) | Glass ribbon 3D view of a transaction graph, loaded only when that view opens; every mesh, material and light is generated locally, with no models, textures or network requests. `@types/three` supplies typings only and is not bundled | MIT |
@@ -132,7 +126,6 @@ third-party package or runtime requirement is added.
 | `tauri-plugin-window-state` | `~2.4` (Windows and Linux only) | Remembers the main window's size, position, and maximized state across launches, restoring a position only onto a connected monitor. macOS uses AppKit's frame autosave instead | Apache-2.0 OR MIT |
 | `windows-native-keyring-store` | `1.0.0` | Windows user-scope credential backend for AI provider API keys and Python-compatible CLI remembered unlock | MIT OR Apache-2.0 |
 | `zbus-secret-service-keyring-store` | `1.0.0` | Explicit Linux Secret Service backend for AI provider API keys and Python-compatible CLI remembered unlock; runtime use is isolated behind `kassiber-secrets/native-keyring`, keeping D-Bus/Tokio out of core-only builds; avoids kernel-keyutils fallback | MIT OR Apache-2.0 |
-| `pyo3` | `0.25.1` | Python binding for the tax engine (abi3, CPython 3.10 and newer); 0.24.1 or newer is required for RUSTSEC-2025-0020 | MIT OR Apache-2.0 |
 | `num-bigint` / `num-integer` / `num-traits` | `0.4` / `0.1` / `0.2` | Arbitrary-precision coefficients for the CPython-compatible decimal type (`crates/pydecimal`) the tax engine and the backend crates share, and Python's unbounded ints in `crates/pyjson` | MIT OR Apache-2.0 |
 | `serde` / `serde_json` | `1.0.228` / `1` | JSON request/response documents and storage manifests at the tax and custody Python boundary; wallet CLI config intake reuses the locked arbitrary-precision parser because the standard library has no JSON parser; persisted Python text uses `kassiber-pyjson`; custody enables arbitrary integers and correctly rounded float parsing; its CPython codec preserves raw object order; the existing `raw_value` feature retains unported local snapshot fragments during the typed migration, with no new package or lockfile dependency | MIT OR Apache-2.0 |
 | `fancy-regex` | `0.20` | Backtracking regexes (over `regex-automata`/`regex-syntax`) for redaction and partition public-watch-material projections, which need lookbehind and lookahead; local attachment filename sanitization reuses the same frozen CPython Unicode class | MIT |
@@ -161,15 +154,13 @@ third-party package or runtime requirement is added.
 | `flate2` | `1.1.9` (exact; pure Rust backend) | Inflate local Kraken and generic-ledger XLSX ZIP members without extracting files or starting a subprocess; the standard library has no DEFLATE decoder | MIT OR Apache-2.0 |
 
 | `bitcoin_hashes` | `0.14.101` | HASH160/SHA-256 for replaying legacy public HTLC witness evidence; std and existing SHA-256 code do not provide RIPEMD160. Pure hashing only; no transport or key handling | CC0-1.0 |
-| `maturin` | `1.15.0` (exact, build only) | Builds the tax engine's Python binding during `uv sync --locked`; not shipped | MIT OR Apache-2.0 |
 
 ## Notable downstream license note
 
 The September 2026 security refresh uses frontend overrides to select patched
 compatible versions for existing router, provider-broker and build-tool
 dependencies, rather than adding new frameworks. Device sync was removed on
-2026-09-30 together with its `spake2`, `zeroconf` and `qrcode` dependencies;
-`cryptography` remains only as a test dependency.
+2026-09-30 together with its `spake2`, `zeroconf` and `qrcode` dependencies.
 The package-manager lockfiles remain the authoritative transitive inventory.
 
 ### Optional document tools (not bundled)
@@ -181,9 +172,8 @@ files and upstream license terms before any future bundling. No native binary
 is copied into Kassiber, and the import fails explicitly when the tools are
 missing.
 
-RP2's `pycountry` dependency (LGPL-2.1-only) no longer ships: packaged builds
-stopped bundling RP2 when Kassiber's own tax engine replaced it. It remains
-only in development environments, through the RP2 test oracle.
+RP2's `pycountry` dependency (LGPL-2.1-only) no longer ships or installs:
+RP2 left with the Python reference (plan 22).
 
 ## Bundled source data
 
@@ -211,7 +201,7 @@ Payments protocol testing. It is not a Kassiber runtime dependency.
 | [Sparrow Frigate](https://github.com/sparrowwallet/frigate) | `dev/regtest/Dockerfile.frigate`, `dev/regtest/compose.bitcoin.yml` | Optional regtest Electrum server for BIP352 Silent Payments discovery | Apache-2.0 |
 | [pytest-xdist](https://github.com/pytest-dev/pytest-xdist) | `pyproject.toml`, `uv.lock`, `.github/workflows/ci.yml` | Runs the explicitly safe Python CI shards across isolated worker processes; socket/process-sensitive modules stay serial | MIT |
 | [serde_yaml](https://github.com/dtolnay/serde-yaml) | `crates/repo-checks/Cargo.toml` (dev only), `0.9.34`, locked transitive of Typst | Parses the GitHub Actions workflows for the repository's action pin-policy test; not linked into any shipped binary | MIT OR Apache-2.0 |
-| [esbuild](https://github.com/evanw/esbuild) | `ui-tauri/package.json`, `ui-tauri/provider-broker/` | Bundles the TypeScript chat provider broker into one Python-package data file; it is a build dependency, not a provider runtime | MIT |
+| [esbuild](https://github.com/evanw/esbuild) | `ui-tauri/package.json`, `ui-tauri/provider-broker/` | Bundles the TypeScript chat provider broker into one file (`ui-tauri/provider-broker/dist/index.mjs`); it is a build dependency, not a provider runtime | MIT |
 | [happy-dom](https://github.com/capricorn86/happy-dom), [Testing Library](https://github.com/testing-library/react-testing-library) | `ui-tauri/package.json`, `*.dom.test.tsx` | Mounted desktop-UI tests: a DOM for React effects to run in, and `renderHook`/`act` to drive them. Opt-in per file; the default suite stays static-render on Node | MIT |
 
 ## Adapted source code

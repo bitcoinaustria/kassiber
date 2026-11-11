@@ -46,7 +46,6 @@ members = [
   "crates/wallets",
   "crates/workspace",
   "tax-engine/core",
-  "tax-engine/python",
 ]
 
 [workspace.package]
