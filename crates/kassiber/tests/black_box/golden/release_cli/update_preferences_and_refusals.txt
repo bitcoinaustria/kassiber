@@ -1,0 +1,437 @@
+# format json
+$ --format json update --status
+exit 0
+--- stdout
+{
+  "kind": "update.preference",
+  "schema_version": 1,
+  "data": {
+    "enabled": false,
+    "contacts_github": false
+  }
+}
+=== preference files
+
+<no newline>
+$ --format json update --disable-checks
+exit 0
+--- stdout
+{
+  "kind": "update.preference",
+  "schema_version": 1,
+  "data": {
+    "enabled": false,
+    "contacts_github": false
+  }
+}
+=== preference files
+update-checks.json: "{\"enabled\": false, \"schema_version\": 1}\n"
+$ --format json update --status
+exit 0
+--- stdout
+{
+  "kind": "update.preference",
+  "schema_version": 1,
+  "data": {
+    "enabled": true,
+    "contacts_github": false
+  }
+}
+=== preference files
+update-checks.json: "{\"enabled\": true, \"schema_version\": 1}\n"
+$ --format json update --status
+exit 0
+--- stdout
+{
+  "kind": "update.preference",
+  "schema_version": 1,
+  "data": {
+    "enabled": false,
+    "contacts_github": false
+  }
+}
+=== preference files
+update-checks.json: "{\"enabled\": true, \"schema_version\": 1}\n"
+$ --format json update --status
+exit 0
+--- stdout
+{
+  "kind": "update.preference",
+  "schema_version": 1,
+  "data": {
+    "enabled": false,
+    "contacts_github": false
+  }
+}
+=== preference files
+update-checks.json: "{\"enabled\": true, \"schema_version\": true}"
+$ --format json update --status
+exit 0
+--- stdout
+{
+  "kind": "update.preference",
+  "schema_version": 1,
+  "data": {
+    "enabled": false,
+    "contacts_github": false
+  }
+}
+=== preference files
+update-checks.json: "{\"enabled\": \"yes\", \"schema_version\": 1}"
+$ --format json update --status
+exit 0
+--- stdout
+{
+  "kind": "update.preference",
+  "schema_version": 1,
+  "data": {
+    "enabled": false,
+    "contacts_github": false
+  }
+}
+=== preference files
+update-checks.json: "not json"
+$ --format json update --status
+exit 0
+--- stdout
+{
+  "kind": "update.preference",
+  "schema_version": 1,
+  "data": {
+    "enabled": false,
+    "contacts_github": false
+  }
+}
+=== preference files
+update-checks.json: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx… [2022 bytes fnv128 5eeacfa3e15e1bd0216e3b1f1ce6be78]
+$ --format json update
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "update_checks_disabled",
+    "message": "GitHub update checks are disabled",
+    "hint": "Enable them in Settings > Privacy or run `kassiber update --enable-checks`.",
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+=== preference files
+
+<no newline>
+$ --format json update
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "network_egress_disabled",
+    "message": "GitHub update checks are disabled: Kassiber is in offline mode",
+    "hint": "Turn off offline mode to connect.",
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+=== preference files
+offline.json: "{\"enabled\": true, \"schema_version\": 1}\n"
+update-checks.json: "{\"enabled\": true, \"schema_version\": 1}\n"
+$ --format json update --enable-checks
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "network_egress_disabled",
+    "message": "GitHub update checks are disabled: Kassiber is in offline mode",
+    "hint": "Turn off offline mode to connect.",
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+=== preference files
+offline.json: "{\"enabled\": true, \"schema_version\": 1}\n"
+update-checks.json: "{\"enabled\": true, \"schema_version\": 1}\n"
+$ --format json update
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "network_egress_disabled",
+    "message": "GitHub update checks are disabled: Kassiber is in offline mode",
+    "hint": "Turn off offline mode to connect.",
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+=== preference files
+offline.json: "broken"
+$ --format json update --status --disable-checks
+exit 2
+--- stderr
+usage: kassiber update [-h] [--enable-checks | --disable-checks | --status]
+kassiber update: error: argument --disable-checks: not allowed with argument --status
+=== preference files
+
+<no newline>
+$ --machine update --status
+exit 0
+--- stdout
+{
+  "kind": "update.preference",
+  "schema_version": 1,
+  "data": {
+    "enabled": false,
+    "contacts_github": false
+  }
+}
+=== preference files
+
+<no newline>
+# format table
+$ --format table update --status
+exit 0
+--- stdout
+field            value
+---------------  -----
+enabled          False
+contacts_github  False
+=== preference files
+
+<no newline>
+$ --format table update --disable-checks
+exit 0
+--- stdout
+field            value
+---------------  -----
+enabled          False
+contacts_github  False
+=== preference files
+update-checks.json: "{\"enabled\": false, \"schema_version\": 1}\n"
+$ --format table update --status
+exit 0
+--- stdout
+field            value
+---------------  -----
+enabled          True 
+contacts_github  False
+=== preference files
+update-checks.json: "{\"enabled\": true, \"schema_version\": 1}\n"
+$ --format table update --status
+exit 0
+--- stdout
+field            value
+---------------  -----
+enabled          False
+contacts_github  False
+=== preference files
+update-checks.json: "{\"enabled\": true, \"schema_version\": 1}\n"
+$ --format table update --status
+exit 0
+--- stdout
+field            value
+---------------  -----
+enabled          False
+contacts_github  False
+=== preference files
+update-checks.json: "{\"enabled\": true, \"schema_version\": true}"
+$ --format table update --status
+exit 0
+--- stdout
+field            value
+---------------  -----
+enabled          False
+contacts_github  False
+=== preference files
+update-checks.json: "{\"enabled\": \"yes\", \"schema_version\": 1}"
+$ --format table update --status
+exit 0
+--- stdout
+field            value
+---------------  -----
+enabled          False
+contacts_github  False
+=== preference files
+update-checks.json: "not json"
+$ --format table update --status
+exit 0
+--- stdout
+field            value
+---------------  -----
+enabled          False
+contacts_github  False
+=== preference files
+update-checks.json: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx… [2022 bytes fnv128 5eeacfa3e15e1bd0216e3b1f1ce6be78]
+$ --format table update
+exit 1
+--- stderr
+error: GitHub update checks are disabled
+hint: Enable them in Settings > Privacy or run `kassiber update --enable-checks`.
+=== preference files
+
+<no newline>
+$ --format table update
+exit 1
+--- stderr
+error: GitHub update checks are disabled: Kassiber is in offline mode
+hint: Turn off offline mode to connect.
+=== preference files
+offline.json: "{\"enabled\": true, \"schema_version\": 1}\n"
+update-checks.json: "{\"enabled\": true, \"schema_version\": 1}\n"
+$ --format table update --enable-checks
+exit 1
+--- stderr
+error: GitHub update checks are disabled: Kassiber is in offline mode
+hint: Turn off offline mode to connect.
+=== preference files
+offline.json: "{\"enabled\": true, \"schema_version\": 1}\n"
+update-checks.json: "{\"enabled\": true, \"schema_version\": 1}\n"
+$ --format table update
+exit 1
+--- stderr
+error: GitHub update checks are disabled: Kassiber is in offline mode
+hint: Turn off offline mode to connect.
+=== preference files
+offline.json: "broken"
+$ --format table update --status --disable-checks
+exit 2
+--- stderr
+usage: kassiber update [-h] [--enable-checks | --disable-checks | --status]
+kassiber update: error: argument --disable-checks: not allowed with argument --status
+=== preference files
+
+<no newline>
+$ --machine update --status
+exit 0
+--- stdout
+{
+  "kind": "update.preference",
+  "schema_version": 1,
+  "data": {
+    "enabled": false,
+    "contacts_github": false
+  }
+}
+=== preference files
+
+<no newline>
+# format plain
+$ --format plain update --status
+exit 0
+--- stdout
+enabled: False
+contacts_github: False
+=== preference files
+
+<no newline>
+$ --format plain update --disable-checks
+exit 0
+--- stdout
+enabled: False
+contacts_github: False
+=== preference files
+update-checks.json: "{\"enabled\": false, \"schema_version\": 1}\n"
+$ --format plain update --status
+exit 0
+--- stdout
+enabled: True
+contacts_github: False
+=== preference files
+update-checks.json: "{\"enabled\": true, \"schema_version\": 1}\n"
+$ --format plain update --status
+exit 0
+--- stdout
+enabled: False
+contacts_github: False
+=== preference files
+update-checks.json: "{\"enabled\": true, \"schema_version\": 1}\n"
+$ --format plain update --status
+exit 0
+--- stdout
+enabled: False
+contacts_github: False
+=== preference files
+update-checks.json: "{\"enabled\": true, \"schema_version\": true}"
+$ --format plain update --status
+exit 0
+--- stdout
+enabled: False
+contacts_github: False
+=== preference files
+update-checks.json: "{\"enabled\": \"yes\", \"schema_version\": 1}"
+$ --format plain update --status
+exit 0
+--- stdout
+enabled: False
+contacts_github: False
+=== preference files
+update-checks.json: "not json"
+$ --format plain update --status
+exit 0
+--- stdout
+enabled: False
+contacts_github: False
+=== preference files
+update-checks.json: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx… [2022 bytes fnv128 5eeacfa3e15e1bd0216e3b1f1ce6be78]
+$ --format plain update
+exit 1
+--- stderr
+error: GitHub update checks are disabled
+hint: Enable them in Settings > Privacy or run `kassiber update --enable-checks`.
+=== preference files
+
+<no newline>
+$ --format plain update
+exit 1
+--- stderr
+error: GitHub update checks are disabled: Kassiber is in offline mode
+hint: Turn off offline mode to connect.
+=== preference files
+offline.json: "{\"enabled\": true, \"schema_version\": 1}\n"
+update-checks.json: "{\"enabled\": true, \"schema_version\": 1}\n"
+$ --format plain update --enable-checks
+exit 1
+--- stderr
+error: GitHub update checks are disabled: Kassiber is in offline mode
+hint: Turn off offline mode to connect.
+=== preference files
+offline.json: "{\"enabled\": true, \"schema_version\": 1}\n"
+update-checks.json: "{\"enabled\": true, \"schema_version\": 1}\n"
+$ --format plain update
+exit 1
+--- stderr
+error: GitHub update checks are disabled: Kassiber is in offline mode
+hint: Turn off offline mode to connect.
+=== preference files
+offline.json: "broken"
+$ --format plain update --status --disable-checks
+exit 2
+--- stderr
+usage: kassiber update [-h] [--enable-checks | --disable-checks | --status]
+kassiber update: error: argument --disable-checks: not allowed with argument --status
+=== preference files
+
+<no newline>
+$ --machine update --status
+exit 0
+--- stdout
+{
+  "kind": "update.preference",
+  "schema_version": 1,
+  "data": {
+    "enabled": false,
+    "contacts_github": false
+  }
+}
+=== preference files
+
+<no newline>

@@ -1,0 +1,14 @@
+$ daemon
+> {"args":{},"kind":"ui.report.blockers","request_id":"0"}
+< {"kind":"ui.report.blockers","schema_version":1,"data":{"ready":false,"blockers":[{"id":"sync_failed","severity":"blocking","title":"Connection refresh failed","detail":"1 source refresh failure(s) must be repaired before final reports ca… [3512 bytes fnv128 47fa3a02da624b63e632b64f77d82688]
+> {"args":{},"kind":"ui.report.blockers","request_id":"1"}
+< {"kind":"ui.report.blockers","schema_version":1,"data":{"ready":false,"blockers":[{"id":"sync_failed","severity":"blocking","title":"Connection refresh failed","detail":"1 source refresh failure(s) must be repaired before final reports ca… [3512 bytes fnv128 47fa360c41624b63e632b64f7656baef]
+> {"args":null,"kind":"ui.report.blockers","request_id":"2"}
+< {"kind":"ui.report.blockers","schema_version":1,"data":{"ready":false,"blockers":[{"id":"sync_failed","severity":"blocking","title":"Connection refresh failed","detail":"1 source refresh failure(s) must be repaired before final reports ca… [3512 bytes fnv128 47fa3181ac624b63e632b64f747a101e]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the ui.report.blockers session
+- (116 tables, 109 empty)
++ freshness_jobs: id=t:"<uuid#1>" | profile_id=t:"p" | job_type=t:"onchain_wallet_history" | source_key=t:"onchain_wallet:desc" | source_type=t:"onchain_wallet" | source_label=t:"Vault on-chain history" | status=t:"error" | phase=t:"error" | priority=i:30 | payload_json=t:"{\"wallet_id\":\"desc\",\"wallet_label\":\"Vault\"}" | progress_json=t:"{\"phase\":\"discovery\",\"wallet\":\"Vault\"}" | result_json=t:"{}" | error_json=t:"{\"code\":\"app_error\",\"details\":null,\"hint\":null,\"message\":\"Backend 'fulcrum' is configured for main, but source refresh requires regtest\",\"rate_limited_until\":null,\"retryable\":false}" | attempts=i:1 | cancel_requested=i:0 | run_after=NULL | cooldown_until=NULL | created_at=t:"<now>" | started_at=t:"<now>" | finished_at=t:"<now>" | updated_at=t:"<now>"
++ freshness_source_states: profile_id=t:"p" | source_key=t:"onchain_wallet:desc" | source_type=t:"onchain_wallet" | source_label=t:"Vault on-chain history" | status=t:"blocking_reports" | state=t:"blocking_reports" | stale_reason=t:"app_error" | blocking_reports=i:1 | paused=i:0 | rate_limited_until=NULL | cooldown_reason=NULL | retry_count=i:1 | last_success_at=NULL | last_error_at=t:"<now>" | last_error_code=t:"app_error" | last_error_message=t:"Backend 'fulcrum' is configured for main, but source refresh requires regtest" | last_phase=t:"error" | progress_json=t:"{\"phase\":\"error\"}" | checkpoint_json=t:"{}" | updated_at=t:"<now>"
++ (116 tables, 107 empty)

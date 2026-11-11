@@ -1,0 +1,120 @@
+$ --machine maintenance purge-legacy-ledger
+exit 0
+--- stdout
+{
+  "kind": "maintenance.purge-legacy-ledger.plan",
+  "schema_version": 1,
+  "data": {
+    "tables": [
+      {
+        "table": "gl_books",
+        "rows": 1
+      },
+      {
+        "table": "gl_entries",
+        "rows": 2
+      },
+      {
+        "table": "gl_evidence",
+        "rows": 1
+      },
+      {
+        "table": "gl_lines",
+        "rows": 1
+      }
+    ],
+    "table_count": 5,
+    "trigger_count": 18,
+    "row_count": 5,
+    "applied": false,
+    "hint": "Back up the project first (`kassiber backup export`), then re-run with --confirm. The archived ledger data cannot be recovered afterwards."
+  }
+}
+$ --format table maintenance purge-legacy-ledger
+exit 0
+--- stdout
+field          value                                                                                                                                        
+-------------  ---------------------------------------------------------------------------------------------------------------------------------------------
+tables         [{'table': 'gl_books', 'rows': 1}, {'table': 'gl_entries', 'rows': 2}, {'table': 'gl_evidence', 'rows': 1}, {'table': 'gl_lines', 'rows': 1}]
+table_count    5                                                                                                                                            
+trigger_count  18                                                                                                                                           
+row_count      5                                                                                                                                            
+applied        False                                                                                                                                        
+hint           Back up the project first (`kassiber backup export`), then re-run with --confirm. The archived ledger data cannot be recovered afterwards.   
+$ --format plain maintenance purge-legacy-ledger
+exit 0
+--- stdout
+tables: [{"table": "gl_books", "rows": 1}, {"table": "gl_entries", "rows": 2}, {"table": "gl_evidence", "rows": 1}, {"table": "gl_lines", "rows": 1}]
+table_count: 5
+trigger_count: 18
+row_count: 5
+applied: False
+hint: Back up the project first (`kassiber backup export`), then re-run with --confirm. The archived ledger data cannot be recovered afterwards.
+$ --machine maintenance purge-legacy-ledger --confirm
+exit 0
+--- stdout
+{
+  "kind": "maintenance.purge-legacy-ledger",
+  "schema_version": 1,
+  "data": {
+    "tables": [
+      {
+        "table": "gl_books",
+        "rows": 1
+      },
+      {
+        "table": "gl_entries",
+        "rows": 2
+      },
+      {
+        "table": "gl_evidence",
+        "rows": 1
+      },
+      {
+        "table": "gl_lines",
+        "rows": 1
+      }
+    ],
+    "table_count": 5,
+    "trigger_count": 18,
+    "row_count": 5,
+    "applied": true
+  }
+}
+=== book changes after the purge
+- gl_books: profile_id=t:"p" | currency=t:"EUR" | created_at=t:"2026-01-01T00:00:00Z"
+- gl_entries: id=t:"entry-1" | profile_id=t:"p" | description=t:"Opening"
+- gl_entries: id=t:"entry-2" | profile_id=t:"p" | description=t:"Close"
+- gl_evidence: id=t:"ev-1" | profile_id=t:"p" | content=b:00 | source_document_id=t:"doc-1"
+- gl_lines: entry_id=t:"entry-1" | profile_id=t:"p" | ordinal=i:1
+- (121 tables, 101 empty)
++ (116 tables, 100 empty)
+$ --machine maintenance purge-legacy-ledger
+exit 0
+--- stdout
+{
+  "kind": "maintenance.purge-legacy-ledger.plan",
+  "schema_version": 1,
+  "data": {
+    "tables": [],
+    "table_count": 0,
+    "trigger_count": 0,
+    "row_count": 0,
+    "applied": false,
+    "hint": "Back up the project first (`kassiber backup export`), then re-run with --confirm. The archived ledger data cannot be recovered afterwards."
+  }
+}
+$ --machine maintenance purge-legacy-ledger --confirm
+exit 0
+--- stdout
+{
+  "kind": "maintenance.purge-legacy-ledger",
+  "schema_version": 1,
+  "data": {
+    "tables": [],
+    "table_count": 0,
+    "trigger_count": 0,
+    "row_count": 0,
+    "applied": true
+  }
+}

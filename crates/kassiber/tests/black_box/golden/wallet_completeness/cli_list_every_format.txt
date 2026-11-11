@@ -1,0 +1,210 @@
+$ --machine wallets list
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "internal_error",
+    "message": "Expecting value: line 1 column 1 (char 0)",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine wallets list
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "internal_error",
+    "message": "pop expected at most 1 argument, got 2",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine wallets list
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "internal_error",
+    "message": "'NoneType' object has no attribute 'pop'",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine wallets list
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "internal_error",
+    "message": "'int' object has no attribute 'pop'",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine wallets list
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "internal_error",
+    "message": "'str' object has no attribute 'pop'",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine wallets list
+exit 0
+--- stdout
+{
+  "kind": "wallets.list",
+  "schema_version": 1,
+  "data": [
+    {
+      "id": "addr",
+      "label": "Addresses",
+      "kind": "address",
+      "account": "",
+      "chain": "bitcoin",
+      "network": "main",
+      "backend": "",
+… [26057 bytes, 954 lines fnv128 570dc1abaa4d4b69eb42a2b8c1925a75]
+$ --format json wallets list
+exit 0
+--- stdout
+{
+  "kind": "wallets.list",
+  "schema_version": 1,
+  "data": [
+    {
+      "id": "addr",
+      "label": "Addresses",
+      "kind": "address",
+      "account": "",
+      "chain": "bitcoin",
+      "network": "main",
+      "backend": "",
+… [26057 bytes, 954 lines fnv128 570dc1abaa4d4b69eb42a2b8c1925a75]
+$ --format table wallets list
+exit 0
+--- stdout
+id            label            kind            account  chain    network        backend  addresses  descriptor  silent_payment  gap_limit  source_format   source_file  deprecated  created_at  completeness_class  scan_bounds                                                                                                                                                                                                                                                                                                                                                                                                  
+------------  ---------------  --------------  -------  -------  -------------  -------  ---------  ----------  --------------  ---------  --------------  -----------  ----------  ----------  ------------------  -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+addr          Addresses        address                  bitcoin  main                    bc1qa                                                                          False       2025        address-list        {'first_transaction_at': '2025-01-15T00:00:00Z', 'last_transaction_at': '2025-02-01T00:00:00Z', 'undated_transactions': 0, 'last_synced_at': '2025', 'declared_scan_start_at': None, 'declared_scan_start_height': None, 'history_before_first_transaction': 'scanned', 'deficit_assets': ['BTC'], 'warnings': ['incomplete_by_construction', 'history_starts_after_first_funding']}                         
+addr-blank    Blank addresses  address                  bitcoin  main                                                                                                   False       2025        address-list        {'first_transaction_at': None, 'last_transaction_at': None, 'undated_transactions': 0, 'last_synced_at': None, 'declared_scan_start_at': None, 'declared_scan_start_height': None, 'history_before_first_transaction': 'unknown', 'deficit_assets': [], 'warnings': ['incomplete_by_construction', 'no_transactions']}                                                                                       
+cold          Cold             address                  bitcoin  regtest                            invalid                     100                                     False       2025        address-list        {'first_transaction_at': '2025-01-02T00:00:00Z', 'last_transaction_at': '2025-02-01T00:00:00Z', 'undated_transactions': 0, 'last_synced_at': None, 'declared_scan_start_at': None, 'declared_scan_start_height': None, 'history_before_first_transaction': 'unknown', 'deficit_assets': ['BTC'], 'warnings': ['incomplete_by_construction', 'history_starts_after_first_funding']}                           
+custom        Custom           custom                                                                                                                                   False       2025        manual              {'first_transaction_at': '2025-02-01T00:00:00.000001Z', 'last_transaction_at': '2025-02-01T00:00:00.000001Z', 'undated_transactions': 0, 'last_synced_at': None, 'declared_scan_start_at': None, 'declared_scan_start_height': None, 'history_before_first_transaction': 'unknown', 'deficit_assets': [], 'warnings': []}                                                                                    
+custom-file   Custom file      custom                                                                                                      bisq            /c.csv       False       2025        file-import         {'first_transaction_at': None, 'last_transaction_at': None, 'undated_transactions': 0, 'last_synced_at': None, 'declared_scan_start_at': None, 'declared_scan_start_height': None, 'history_before_first_transaction': 'unknown', 'deficit_assets': [], 'warnings': ['no_transactions']}                                                                                                                     
+desc          Desc             descriptor               bitcoin  main                               invalid                     100                                     False       2025        descriptor-derived  {'first_transaction_at': '2025-01-01T00:00:00Z', 'last_transaction_at': '2025-01-02T00:00:00Z', 'undated_transactions': 1, 'last_synced_at': '2025-03-01T00:00:00Z', 'declared_scan_start_at': '2024-01-01', 'declared_scan_start_height': None, 'history_before_first_transaction': 'declared_start', 'deficit_assets': ['BTC'], 'warnings': ['undated_transactions', 'history_starts_after_first_funding']}
+desc-new      Desc new         descriptor               bitcoin  main                               invalid                     100                                     False       2025        descriptor-derived  {'first_transaction_at': None, 'last_transaction_at': None, 'undated_transactions': 0, 'last_synced_at': None, 'declared_scan_start_at': None, 'declared_scan_start_height': None, 'history_before_first_transaction': 'unknown', 'deficit_assets': [], 'warnings': ['never_synced', 'no_transactions']}                                                                                                     
+addr-dict     Dict addresses   address                  bitcoin  main                    bc1qb                                                                          False       2025        address-list        {'first_transaction_at': None, 'last_transaction_at': None, 'undated_transactions': 0, 'last_synced_at': None, 'declared_scan_start_at': None, 'declared_scan_start_height': None, 'history_before_first_transaction': 'unknown', 'deficit_assets': [], 'warnings': ['incomplete_by_construction', 'never_synced', 'no_transactions']}                                                                       
+empty-config  Empty config     descriptor                                                                                                                               False       2025        descriptor-derived  {'first_transaction_at': None, 'last_transaction_at': None, 'undated_transactions': 0, 'last_synced_at': None, 'declared_scan_start_at': None, 'declared_scan_start_height': None, 'history_before_first_transaction': 'unknown', 'deficit_assets': [], 'warnings': ['never_synced', 'no_transactions']}                                                                                                     
+exchange      Exchange         kraken                                                                                                                                   False       2025        exchange-export     {'first_transaction_at': '2025-02-01T00:00:00Z', 'last_transaction_at': '2025-02-01T00:00:00Z', 'undated_transactions': 0, 'last_synced_at': None, 'declared_scan_start_at': None, 'declared_scan_start_height': None, 'history_before_first_transaction': 'unknown', 'deficit_assets': ['BTC'], 'warnings': ['history_starts_after_first_funding']}                                                         
+… [19520 bytes, 32 lines fnv128 8bbbce889f8744064e7d408f085346dd]
+$ --format plain wallets list
+exit 0
+--- stdout
+id: addr
+label: Addresses
+kind: address
+account: 
+chain: bitcoin
+network: main
+backend: 
+addresses: bc1qa
+descriptor: 
+silent_payment: 
+gap_limit: 
+source_format: 
+… [16996 bytes, 539 lines fnv128 59bcdfa649d6d91850db82b53e93c278]
+$ --format csv wallets list
+exit 0
+--- stdout
+id,label,kind,account,chain,network,backend,addresses,descriptor,silent_payment,gap_limit,source_format,source_file,deprecated,created_at,completeness_class,scan_bounds
+addr,Addresses,address,,bitcoin,main,,bc1qa,,,,,,False,2025,address-list,"{""first_transaction_at"": ""2025-01-15T00:00:00Z"", ""last_transaction_at"": ""2025-02-01T00:00:00Z"", ""undated_transactions"": 0, ""last_synced_at"": ""2025"", ""declared_scan_start_at"": null, ""declared_scan_start_height"": null, ""history_before_first_transaction"": ""scanned"", ""deficit_assets"": [""BTC""], ""warnings"": [""incomplete_by_construction"", ""history_starts_after_first_funding""]}"
+addr-blank,Blank addresses,address,,bitcoin,main,,,,,,,,False,2025,address-list,"{""first_transaction_at"": null, ""last_transaction_at"": null, ""undated_transactions"": 0, ""last_synced_at"": null, ""declared_scan_start_at"": null, ""declared_scan_start_height"": null, ""history_before_first_transaction"": ""unknown"", ""deficit_assets"": [], ""warnings"": [""incomplete_by_construction"", ""no_transactions""]}"
+cold,Cold,address,,bitcoin,regtest,,,invalid,,100,,,False,2025,address-list,"{""first_transaction_at"": ""2025-01-02T00:00:00Z"", ""last_transaction_at"": ""2025-02-01T00:00:00Z"", ""undated_transactions"": 0, ""last_synced_at"": null, ""declared_scan_start_at"": null, ""declared_scan_start_height"": null, ""history_before_first_transaction"": ""unknown"", ""deficit_assets"": [""BTC""], ""warnings"": [""incomplete_by_construction"", ""history_starts_after_first_funding""]}"
+custom,Custom,custom,,,,,,,,,,,False,2025,manual,"{""first_transaction_at"": ""2025-02-01T00:00:00.000001Z"", ""last_transaction_at"": ""2025-02-01T00:00:00.000001Z"", ""undated_transactions"": 0, ""last_synced_at"": null, ""declared_scan_start_at"": null, ""declared_scan_start_height"": null, ""history_before_first_transaction"": ""unknown"", ""deficit_assets"": [], ""warnings"": []}"
+custom-file,Custom file,custom,,,,,,,,,bisq,/c.csv,False,2025,file-import,"{""first_transaction_at"": null, ""last_transaction_at"": null, ""undated_transactions"": 0, ""last_synced_at"": null, ""declared_scan_start_at"": null, ""declared_scan_start_height"": null, ""history_before_first_transaction"": ""unknown"", ""deficit_assets"": [], ""warnings"": [""no_transactions""]}"
+desc,Desc,descriptor,,bitcoin,main,,,invalid,,100,,,False,2025,descriptor-derived,"{""first_transaction_at"": ""2025-01-01T00:00:00Z"", ""last_transaction_at"": ""2025-01-02T00:00:00Z"", ""undated_transactions"": 1, ""last_synced_at"": ""2025-03-01T00:00:00Z"", ""declared_scan_start_at"": ""2024-01-01"", ""declared_scan_start_height"": null, ""history_before_first_transaction"": ""declared_start"", ""deficit_assets"": [""BTC""], ""warnings"": [""undated_transactions"", ""history_starts_after_first_funding""]}"
+desc-new,Desc new,descriptor,,bitcoin,main,,,invalid,,100,,,False,2025,descriptor-derived,"{""first_transaction_at"": null, ""last_transaction_at"": null, ""undated_transactions"": 0, ""last_synced_at"": null, ""declared_scan_start_at"": null, ""declared_scan_start_height"": null, ""history_before_first_transaction"": ""unknown"", ""deficit_assets"": [], ""warnings"": [""never_synced"", ""no_transactions""]}"
+addr-dict,Dict addresses,address,,bitcoin,main,,bc1qb,,,,,,False,2025,address-list,"{""first_transaction_at"": null, ""last_transaction_at"": null, ""undated_transactions"": 0, ""last_synced_at"": null, ""declared_scan_start_at"": null, ""declared_scan_start_height"": null, ""history_before_first_transaction"": ""unknown"", ""deficit_assets"": [], ""warnings"": [""incomplete_by_construction"", ""never_synced"", ""no_transactions""]}"
+empty-config,Empty config,descriptor,,,,,,,,,,,False,2025,descriptor-derived,"{""first_transaction_at"": null, ""last_transaction_at"": null, ""undated_transactions"": 0, ""last_synced_at"": null, ""declared_scan_start_at"": null, ""declared_scan_start_height"": null, ""history_before_first_transaction"": ""unknown"", ""deficit_assets"": [], ""warnings"": [""never_synced"", ""no_transactions""]}"
+exchange,Exchange,kraken,,,,,,,,,,,False,2025,exchange-export,"{""first_transaction_at"": ""2025-02-01T00:00:00Z"", ""last_transaction_at"": ""2025-02-01T00:00:00Z"", ""undated_transactions"": 0, ""last_synced_at"": null, ""declared_scan_start_at"": null, ""declared_scan_start_height"": null, ""history_before_first_transaction"": ""unknown"", ""deficit_assets"": [""BTC""], ""warnings"": [""history_starts_after_first_funding""]}"
+api,Kraken API,kraken,,,,kraken,,,,,,,False,2025,provider-api,"{""first_transaction_at"": ""2025-03-01T00:00:00Z"", ""last_transaction_at"": ""2025-04-01T00:00:00Z"", ""undated_transactions"": 1, ""last_synced_at"": ""2025"", ""declared_scan_start_at"": null, ""declared_scan_start_height"": null, ""history_before_first_transaction"": ""scanned"", ""deficit_assets"": [""BTC"", ""ETH""], ""warnings"": [""undated_transactions"", ""history_starts_after_first_funding""]}"
+… [12401 bytes, 31 lines fnv128 3927593b56d72c13369cb3e246124b7f]
+$ --machine wallets list --profile Other
+exit 0
+--- stdout
+{
+  "kind": "wallets.list",
+  "schema_version": 1,
+  "data": [
+    {
+      "id": "foreign",
+      "label": "Foreign",
+      "kind": "address",
+      "account": "",
+      "chain": "",
+      "network": "",
+      "backend": "",
+      "addresses": "",
+      "descriptor": "",
+      "silent_payment": "",
+      "gap_limit": "",
+      "source_format": "",
+      "source_file": "",
+      "deprecated": false,
+      "created_at": "2025",
+      "completeness_class": "address-list",
+      "scan_bounds": {
+        "first_transaction_at": "2025-03-01",
+        "last_transaction_at": "2025-03-01",
+        "undated_transactions": 0,
+        "last_synced_at": null,
+        "declared_scan_start_at": null,
+        "declared_scan_start_height": null,
+        "history_before_first_transaction": "unknown",
+        "deficit_assets": [],
+        "warnings": [
+          "incomplete_by_construction"
+        ]
+      }
+    }
+  ]
+}
+$ --machine wallets list --profile absent
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "not_found",
+    "message": "Profile 'absent' not found in the selected workspace",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}

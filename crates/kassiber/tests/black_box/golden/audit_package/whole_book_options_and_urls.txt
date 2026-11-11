@@ -1,0 +1,31 @@
+$ daemon
+> {"kind":"ui.reports.export_audit_package","request_id":"0"}
+< {"kind":"ui.reports.export_audit_package","schema_version":1,"data":{"dir":"<SANDBOX>/exports/reports/kassiber-audit-package-20260304-050607","manifest":"<SANDBOX>/exports/reports/kassiber-audit-package-20260304-050607/manifest.json","for… [4302 bytes fnv128 6b7334d46f2c671a8c384af19105a585]
+> {"args":{},"kind":"ui.reports.export_audit_package","request_id":"1"}
+< {"kind":"ui.reports.export_audit_package","schema_version":1,"data":{"dir":"<SANDBOX>/exports/reports/kassiber-audit-package-20260304-050607-2","manifest":"<SANDBOX>/exports/reports/kassiber-audit-package-20260304-050607-2/manifest.json",… [4308 bytes fnv128 53fd8eb4bb9e13f2e0537b0dfc96764b]
+> {"args":{"include_url_references":false},"kind":"ui.reports.export_audit_package","request_id":"2"}
+< {"kind":"ui.reports.export_audit_package","schema_version":1,"data":{"dir":"<SANDBOX>/exports/reports/kassiber-audit-package-20260304-050607-3","manifest":"<SANDBOX>/exports/reports/kassiber-audit-package-20260304-050607-3/manifest.json",… [1825 bytes fnv128 73ca447d13cf25df047d33d519de1efe]
+> {"args":{"include_copied_attachments":false},"kind":"ui.reports.export_audit_package","request_id":"3"}
+< {"kind":"ui.reports.export_audit_package","schema_version":1,"data":{"dir":"<SANDBOX>/exports/reports/kassiber-audit-package-20260304-050607-4","manifest":"<SANDBOX>/exports/reports/kassiber-audit-package-20260304-050607-4/manifest.json",… [3798 bytes fnv128 c80e277f8e2cbfe1367a180f5bfa3f55]
+> {"args":{"include_review_state":false},"kind":"ui.reports.export_audit_package","request_id":"4"}
+< {"kind":"ui.reports.export_audit_package","schema_version":1,"data":{"dir":"<SANDBOX>/exports/reports/kassiber-audit-package-20260304-050607-5","manifest":"<SANDBOX>/exports/reports/kassiber-audit-package-20260304-050607-5/manifest.json",… [4152 bytes fnv128 343d2c230cbb4889bc070bcd9000b07b]
+> {"args":{"include_edit_history":true,"include_journal_state":false},"kind":"ui.reports.export_audit_package","request_id":"5"}
+< {"kind":"ui.reports.export_audit_package","schema_version":1,"data":{"dir":"<SANDBOX>/exports/reports/kassiber-audit-package-20260304-050607-6","manifest":"<SANDBOX>/exports/reports/kassiber-audit-package-20260304-050607-6/manifest.json",… [4177 bytes fnv128 df249bc894b9c454bfce4ff420a31993]
+> {"args":{"include_copied_attachments":false,"include_journal_state":false,"include_review_state":false,"include_url_references":false},"kind":"ui.reports.export_audit_package","request_id":"6"}
+< {"kind":"ui.reports.export_audit_package","schema_version":1,"data":{"dir":"<SANDBOX>/exports/reports/kassiber-audit-package-20260304-050607-7","manifest":"<SANDBOX>/exports/reports/kassiber-audit-package-20260304-050607-7/manifest.json",… [1315 bytes fnv128 70ab79e8e51bddcb5a6334c81d258f8c]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== exports
+reports/ mode=755
+reports/kassiber-audit-package-20260304-050607/ mode=755
+reports/kassiber-audit-package-20260304-050607/evidence/ mode=755
+reports/kassiber-audit-package-20260304-050607/evidence/at-good-ae8379fc51f3-minutes_2024.pdf mode=640 mtime_ns=1600000001987654321 text:
+%PDF
+<no newline>
+reports/kassiber-audit-package-20260304-050607/evidence/at-src-559bdcd0cb8c-stmt.pdf mode=644 mtime_ns=1500000000000000007 text:
+%PDF
+<no newline>
+reports/kassiber-audit-package-20260304-050607/evidence/at-unhashed-c471ff4dabb3-a_b.txt mode=644 mtime_ns=1550000000000000011 text:
+Beleg €
+
+… [532577 bytes, 16184 lines fnv128 b55db267450880c3ada7fa15e4b3ec11]

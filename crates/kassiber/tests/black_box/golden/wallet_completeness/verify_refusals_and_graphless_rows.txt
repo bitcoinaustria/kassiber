@@ -1,0 +1,254 @@
+$ --machine transactions verify --transaction 
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Transaction verification requires a transaction id or txid",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine transactions verify --transaction  
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Transaction verification requires a transaction id or txid",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine transactions verify --transaction absent
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "not_found",
+    "message": "Transaction was not found in the active book",
+    "hint": null,
+    "details": {
+      "transaction": "absent"
+    },
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine transactions verify --transaction g4
+exit 0
+--- stdout
+{
+  "kind": "transactions.verify",
+  "schema_version": 1,
+  "data": {
+    "transaction_id": "g4",
+    "txid": "not-a-txid",
+    "chain": "bitcoin",
+    "network": "main",
+    "asset": "BTC",
+    "network_contacted": false,
+    "definitions": {
+      "status": "ok: every check passed; mismatch: at least one check failed; partial: no failure but some check could not run; unverifiable: no stored graph to check against.",
+      "conservation": "Sum of input values minus sum of output values against the fee the importer recorded, in msat; a source that reports no fee had it derived from the same graph, which then only proves the graph is self-consistent.",
+      "legs": "Per wallet of this book owning a graph input or output: owned outputs minus owned inputs (expected_delta_msat) against the imported row's wallet delta (inbound amount, or minus amount and fee). missing_imported_leg means no row of that wallet carries this txid.",
+      "unexplained_rows": "Rows with this txid whose wallet owns no graph leg; expected for an exchange or custodial record of the same transfer, a mismatch for a wallet this book observes on chain.",
+      "keychain": "receive or change from the owning wallet's derivation branch; unknown when the ownership evidence names no branch (address lists, unlabeled inventory)."
+    },
+    "status": "unverifiable",
+    "reasons": [
+      "graphless_import"
+    ],
+    "message": "No raw transaction graph is stored for this row, so it can only be compared with other imported rows. Refreshing the wallet from its chain source or opening the transaction graph with a reference lookup stores one.",
+    "conservation": null,
+    "legs": null,
+    "unexplained_rows": null,
+    "inputs": [],
+    "outputs": []
+  }
+}
+$ --machine transactions verify --transaction g5
+exit 0
+--- stdout
+{
+  "kind": "transactions.verify",
+  "schema_version": 1,
+  "data": {
+    "transaction_id": "g5",
+    "txid": "c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3",
+    "chain": "liquid",
+    "network": "liquidtestnet",
+    "asset": "LBTC",
+    "network_contacted": false,
+    "definitions": {
+      "status": "ok: every check passed; mismatch: at least one check failed; partial: no failure but some check could not run; unverifiable: no stored graph to check against.",
+      "conservation": "Sum of input values minus sum of output values against the fee the importer recorded, in msat; a source that reports no fee had it derived from the same graph, which then only proves the graph is self-consistent.",
+      "legs": "Per wallet of this book owning a graph input or output: owned outputs minus owned inputs (expected_delta_msat) against the imported row's wallet delta (inbound amount, or minus amount and fee). missing_imported_leg means no row of that wallet carries this txid.",
+      "unexplained_rows": "Rows with this txid whose wallet owns no graph leg; expected for an exchange or custodial record of the same transfer, a mismatch for a wallet this book observes on chain.",
+      "keychain": "receive or change from the owning wallet's derivation branch; unknown when the ownership evidence names no branch (address lists, unlabeled inventory)."
+    },
+    "status": "unverifiable",
+    "reasons": [
+      "liquid_reference_graph_not_local"
+    ],
+    "message": "No raw transaction graph is stored for this row, so it can only be compared with other imported rows. Refreshing the wallet from its chain source or opening the transaction graph with a reference lookup stores one.",
+    "conservation": null,
+    "legs": null,
+    "unexplained_rows": null,
+    "inputs": [],
+    "outputs": []
+  }
+}
+$ --machine transactions verify --transaction h
+exit 0
+--- stdout
+{
+  "kind": "transactions.verify",
+  "schema_version": 1,
+  "data": {
+    "transaction_id": "h",
+    "txid": null,
+    "chain": "bitcoin",
+    "network": "regtest",
+    "asset": "BTC",
+    "network_contacted": false,
+    "definitions": {
+      "status": "ok: every check passed; mismatch: at least one check failed; partial: no failure but some check could not run; unverifiable: no stored graph to check against.",
+      "conservation": "Sum of input values minus sum of output values against the fee the importer recorded, in msat; a source that reports no fee had it derived from the same graph, which then only proves the graph is self-consistent.",
+      "legs": "Per wallet of this book owning a graph input or output: owned outputs minus owned inputs (expected_delta_msat) against the imported row's wallet delta (inbound amount, or minus amount and fee). missing_imported_leg means no row of that wallet carries this txid.",
+      "unexplained_rows": "Rows with this txid whose wallet owns no graph leg; expected for an exchange or custodial record of the same transfer, a mismatch for a wallet this book observes on chain.",
+      "keychain": "receive or change from the owning wallet's derivation branch; unknown when the ownership evidence names no branch (address lists, unlabeled inventory)."
+    },
+    "status": "unverifiable",
+    "reasons": [
+      "graphless_import"
+    ],
+    "message": "No raw transaction graph is stored for this row, so it can only be compared with other imported rows. Refreshing the wallet from its chain source or opening the transaction graph with a reference lookup stores one.",
+    "conservation": null,
+    "legs": null,
+    "unexplained_rows": null,
+    "inputs": [],
+    "outputs": []
+  }
+}
+$ --machine transactions verify --transaction k
+exit 0
+--- stdout
+{
+  "kind": "transactions.verify",
+  "schema_version": 1,
+  "data": {
+    "transaction_id": "k",
+    "txid": null,
+    "chain": "liquid",
+    "network": "liquidtestnet",
+    "asset": "LBTC",
+    "network_contacted": false,
+    "definitions": {
+      "status": "ok: every check passed; mismatch: at least one check failed; partial: no failure but some check could not run; unverifiable: no stored graph to check against.",
+      "conservation": "Sum of input values minus sum of output values against the fee the importer recorded, in msat; a source that reports no fee had it derived from the same graph, which then only proves the graph is self-consistent.",
+      "legs": "Per wallet of this book owning a graph input or output: owned outputs minus owned inputs (expected_delta_msat) against the imported row's wallet delta (inbound amount, or minus amount and fee). missing_imported_leg means no row of that wallet carries this txid.",
+      "unexplained_rows": "Rows with this txid whose wallet owns no graph leg; expected for an exchange or custodial record of the same transfer, a mismatch for a wallet this book observes on chain.",
+      "keychain": "receive or change from the owning wallet's derivation branch; unknown when the ownership evidence names no branch (address lists, unlabeled inventory)."
+    },
+    "status": "unverifiable",
+    "reasons": [
+      "liquid_reference_graph_not_local"
+    ],
+    "message": "No raw transaction graph is stored for this row, so it can only be compared with other imported rows. Refreshing the wallet from its chain source or opening the transaction graph with a reference lookup stores one.",
+    "conservation": null,
+    "legs": null,
+    "unexplained_rows": null,
+    "inputs": [],
+    "outputs": []
+  }
+}
+$ --machine transactions verify --transaction a
+exit 0
+--- stdout
+{
+  "kind": "transactions.verify",
+  "schema_version": 1,
+  "data": {
+    "transaction_id": "a",
+    "txid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "chain": "bitcoin",
+    "network": "regtest",
+    "asset": "BTC",
+    "network_contacted": false,
+    "definitions": {
+      "status": "ok: every check passed; mismatch: at least one check failed; partial: no failure but some check could not run; unverifiable: no stored graph to check against.",
+      "conservation": "Sum of input values minus sum of output values against the fee the importer recorded, in msat; a source that reports no fee had it derived from the same graph, which then only proves the graph is self-consistent.",
+      "legs": "Per wallet of this book owning a graph input or output: owned outputs minus owned inputs (expected_delta_msat) against the imported row's wallet delta (inbound amount, or minus amount and fee). missing_imported_leg means no row of that wallet carries this txid.",
+      "unexplained_rows": "Rows with this txid whose wallet owns no graph leg; expected for an exchange or custodial record of the same transfer, a mismatch for a wallet this book observes on chain.",
+      "keychain": "receive or change from the owning wallet's derivation branch; unknown when the ownership evidence names no branch (address lists, unlabeled inventory)."
+    },
+    "status": "unverifiable",
+    "reasons": [
+      "graphless_import"
+    ],
+    "message": "No raw transaction graph is stored for this row, so it can only be compared with other imported rows. Refreshing the wallet from its chain source or opening the transaction graph with a reference lookup stores one.",
+    "conservation": null,
+    "legs": null,
+    "unexplained_rows": null,
+    "inputs": [],
+    "outputs": []
+  }
+}
+$ --machine transactions verify --transaction g1 --profile absent
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "not_found",
+    "message": "Profile 'absent' not found in the selected workspace",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine transactions verify
+exit 2
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "usage_error",
+    "message": "the following arguments are required: --transaction",
+    "hint": "Global flags such as --machine, --format, --output, --project, and --data-root go before the subcommand. Check `kassiber --machine commands describe <command path>` for the exact arguments.",
+    "details": {
+      "usage": "usage: kassiber transactions verify [-h] [--workspace WORKSPACE]\n                                    [--profile PROFILE] --transaction\n                                    TRANSACTION"
+    },
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine transactions verify --transaction g1
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "app_error",
+    "message": "No workspace selected. Create one or run `kassiber context set --workspace ...`.",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}

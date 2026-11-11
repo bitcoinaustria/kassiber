@@ -1,0 +1,522 @@
+$ --machine --data-root <SANDBOX>/analyze-root wallets analyze-file --file export.csv
+exit 0
+--- stdout
+{
+  "kind": "wallets.file_analysis",
+  "schema_version": 1,
+  "data": {
+    "source": {
+      "path": "<SANDBOX>/work/export.csv",
+      "filename": "export.csv",
+      "kind": "delimited",
+      "size_bytes": 82,
+      "delimiter": ";"
+    },
+    "route": "generic_ledger",
+    "supported": true,
+    "template": false,
+    "headers": [
+      "Datum",
+      "Richtung",
+      "Stueck",
+      "Kurs"
+    ],
+    "inferred_plan": {
+      "date": "Datum",
+      "type": null,
+      "direction": "Richtung",
+      "received": null,
+      "sent": null,
+      "amount": null,
+      "received_asset": null,
+      "sent_asset": null,
+      "asset": null,
+      "fee": null,
+      "fee_asset": null,
+      "fiat_currency": null,
+      "fiat_value": null,
+      "fiat_rate": "Kurs",
+      "note": null,
+      "txid": null,
+      "counterparty": null,
+      "payment_hash": null,
+      "payment_hash_source": null,
+      "swap_refund_funding_txid": null,
+      "swap_refund_funding_vout": null,
+      "received_header_asset": null,
+      "sent_header_asset": null,
+      "amount_header_asset": null,
+      "fee_header_asset": null
+    },
+    "inferred_confident": false,
+    "detected": [
+      {
+        "column": "Datum",
+        "field": "date"
+      },
+      {
+        "column": "Richtung",
+        "field": "direction"
+      },
+      {
+        "column": "Kurs",
+        "field": "fiat_rate"
+      }
+    ],
+    "applied_plan": null,
+    "confident": false,
+    "rows_read": 2,
+    "mapped": 0,
+    "errors": 0,
+    "problems": [],
+    "preview": [],
+    "truncated": false,
+    "row_kinds_from_amount_sign": false,
+    "amount_units_unconfirmed": false,
+    "header_is_preamble": false,
+    "next_step": {
+      "action": "supply_column_map",
+      "reason": "The columns in this file were not recognized. Map them with column_map (at least a date column and one amount column), or fill in the blank ledger template instead."
+    }
+  }
+}
+$ --machine --data-root <SANDBOX>/analyze-root wallets analyze-file --file export.csv --sample-rows 0
+exit 0
+--- stdout
+{
+  "kind": "wallets.file_analysis",
+  "schema_version": 1,
+  "data": {
+    "source": {
+      "path": "<SANDBOX>/work/export.csv",
+      "filename": "export.csv",
+      "kind": "delimited",
+      "size_bytes": 82,
+      "delimiter": ";"
+    },
+    "route": "generic_ledger",
+    "supported": true,
+    "template": false,
+    "headers": [
+      "Datum",
+      "Richtung",
+      "Stueck",
+      "Kurs"
+    ],
+    "inferred_plan": {
+      "date": "Datum",
+      "type": null,
+      "direction": "Richtung",
+      "received": null,
+      "sent": null,
+      "amount": null,
+      "received_asset": null,
+      "sent_asset": null,
+      "asset": null,
+      "fee": null,
+      "fee_asset": null,
+      "fiat_currency": null,
+      "fiat_value": null,
+      "fiat_rate": "Kurs",
+      "note": null,
+      "txid": null,
+      "counterparty": null,
+      "payment_hash": null,
+      "payment_hash_source": null,
+      "swap_refund_funding_txid": null,
+      "swap_refund_funding_vout": null,
+      "received_header_asset": null,
+      "sent_header_asset": null,
+      "amount_header_asset": null,
+      "fee_header_asset": null
+    },
+    "inferred_confident": false,
+    "detected": [
+      {
+        "column": "Datum",
+        "field": "date"
+      },
+      {
+        "column": "Richtung",
+        "field": "direction"
+      },
+      {
+        "column": "Kurs",
+        "field": "fiat_rate"
+      }
+    ],
+    "applied_plan": null,
+    "confident": false,
+    "rows_read": 2,
+    "mapped": 0,
+    "errors": 0,
+    "problems": [],
+    "preview": [],
+    "truncated": false,
+    "row_kinds_from_amount_sign": false,
+    "amount_units_unconfirmed": false,
+    "header_is_preamble": false,
+    "next_step": {
+      "action": "supply_column_map",
+      "reason": "The columns in this file were not recognized. Map them with column_map (at least a date column and one amount column), or fill in the blank ledger template instead."
+    }
+  }
+}
+$ --machine --data-root <SANDBOX>/analyze-root wallets analyze-file --file export.csv --sample-rows -4
+exit 0
+--- stdout
+{
+  "kind": "wallets.file_analysis",
+  "schema_version": 1,
+  "data": {
+    "source": {
+      "path": "<SANDBOX>/work/export.csv",
+      "filename": "export.csv",
+      "kind": "delimited",
+      "size_bytes": 82,
+      "delimiter": ";"
+    },
+    "route": "generic_ledger",
+    "supported": true,
+    "template": false,
+    "headers": [
+      "Datum",
+      "Richtung",
+      "Stueck",
+      "Kurs"
+    ],
+    "inferred_plan": {
+      "date": "Datum",
+      "type": null,
+      "direction": "Richtung",
+      "received": null,
+      "sent": null,
+      "amount": null,
+      "received_asset": null,
+      "sent_asset": null,
+      "asset": null,
+      "fee": null,
+      "fee_asset": null,
+      "fiat_currency": null,
+      "fiat_value": null,
+      "fiat_rate": "Kurs",
+      "note": null,
+      "txid": null,
+      "counterparty": null,
+      "payment_hash": null,
+      "payment_hash_source": null,
+      "swap_refund_funding_txid": null,
+      "swap_refund_funding_vout": null,
+      "received_header_asset": null,
+      "sent_header_asset": null,
+      "amount_header_asset": null,
+      "fee_header_asset": null
+    },
+    "inferred_confident": false,
+    "detected": [
+      {
+        "column": "Datum",
+        "field": "date"
+      },
+      {
+        "column": "Richtung",
+        "field": "direction"
+      },
+      {
+        "column": "Kurs",
+        "field": "fiat_rate"
+      }
+    ],
+    "applied_plan": null,
+    "confident": false,
+    "rows_read": 2,
+    "mapped": 0,
+    "errors": 0,
+    "problems": [],
+    "preview": [],
+    "truncated": false,
+    "row_kinds_from_amount_sign": false,
+    "amount_units_unconfirmed": false,
+    "header_is_preamble": false,
+    "next_step": {
+      "action": "supply_column_map",
+      "reason": "The columns in this file were not recognized. Map them with column_map (at least a date column and one amount column), or fill in the blank ledger template instead."
+    }
+  }
+}
+$ --machine --data-root <SANDBOX>/analyze-root wallets analyze-file --file export.csv --sample-rows 1000
+exit 0
+--- stdout
+{
+  "kind": "wallets.file_analysis",
+  "schema_version": 1,
+  "data": {
+    "source": {
+      "path": "<SANDBOX>/work/export.csv",
+      "filename": "export.csv",
+      "kind": "delimited",
+      "size_bytes": 82,
+      "delimiter": ";"
+    },
+    "route": "generic_ledger",
+    "supported": true,
+    "template": false,
+    "headers": [
+      "Datum",
+      "Richtung",
+      "Stueck",
+      "Kurs"
+    ],
+    "inferred_plan": {
+      "date": "Datum",
+      "type": null,
+      "direction": "Richtung",
+      "received": null,
+      "sent": null,
+      "amount": null,
+      "received_asset": null,
+      "sent_asset": null,
+      "asset": null,
+      "fee": null,
+      "fee_asset": null,
+      "fiat_currency": null,
+      "fiat_value": null,
+      "fiat_rate": "Kurs",
+      "note": null,
+      "txid": null,
+      "counterparty": null,
+      "payment_hash": null,
+      "payment_hash_source": null,
+      "swap_refund_funding_txid": null,
+      "swap_refund_funding_vout": null,
+      "received_header_asset": null,
+      "sent_header_asset": null,
+      "amount_header_asset": null,
+      "fee_header_asset": null
+    },
+    "inferred_confident": false,
+    "detected": [
+      {
+        "column": "Datum",
+        "field": "date"
+      },
+      {
+        "column": "Richtung",
+        "field": "direction"
+      },
+      {
+        "column": "Kurs",
+        "field": "fiat_rate"
+      }
+    ],
+    "applied_plan": null,
+    "confident": false,
+    "rows_read": 2,
+    "mapped": 0,
+    "errors": 0,
+    "problems": [],
+    "preview": [],
+    "truncated": false,
+    "row_kinds_from_amount_sign": false,
+    "amount_units_unconfirmed": false,
+    "header_is_preamble": false,
+    "next_step": {
+      "action": "supply_column_map",
+      "reason": "The columns in this file were not recognized. Map them with column_map (at least a date column and one amount column), or fill in the blank ledger template instead."
+    }
+  }
+}
+$ --machine --data-root <SANDBOX>/analyze-root wallets analyze-file --file export.csv --file ledger.csv --sample-rows -4
+exit 0
+--- stdout
+{
+  "kind": "wallets.file_analysis",
+  "schema_version": 1,
+  "data": {
+    "source": {
+      "path": "<SANDBOX>/work/ledger.csv",
+      "filename": "ledger.csv",
+      "kind": "delimited",
+      "size_bytes": 341,
+      "delimiter": ","
+    },
+    "route": "generic_ledger",
+… [2741 bytes, 123 lines fnv128 5364abbd98e7c9ae015f68480f9fabeb]
+$ --machine --data-root <SANDBOX>/analyze-root wallets analyze-file --file export.csv --file ledger.csv --sample-rows 2
+exit 0
+--- stdout
+{
+  "kind": "wallets.file_analysis",
+  "schema_version": 1,
+  "data": {
+    "source": {
+      "path": "<SANDBOX>/work/ledger.csv",
+      "filename": "ledger.csv",
+      "kind": "delimited",
+      "size_bytes": 341,
+      "delimiter": ","
+    },
+    "route": "generic_ledger",
+… [3326 bytes, 146 lines fnv128 020d14c74ac4118b1f258cf8a4a8f6f7]
+$ --machine --data-root <SANDBOX>/analyze-root wallets analyze-file --file export.csv --column-map {"date":"Datum","type":"Richtung","amount":"Stueck"}
+exit 0
+--- stdout
+{
+  "kind": "wallets.file_analysis",
+  "schema_version": 1,
+  "data": {
+    "source": {
+      "path": "<SANDBOX>/work/export.csv",
+      "filename": "export.csv",
+      "kind": "delimited",
+      "size_bytes": 82,
+      "delimiter": ";"
+    },
+    "route": "generic_ledger",
+… [2597 bytes, 110 lines fnv128 f8af076b6107264af3200a363d91c4e7]
+$ --machine --data-root <SANDBOX>/analyze-root wallets analyze-file --file export.csv --column-map @map.json
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "column_map contains unsupported fields",
+    "hint": "Known fields: amount, amount_header_asset, asset, counterparty, date, direction, fee, fee_asset, fee_header_asset, fiat_currency, fiat_rate, fiat_value, note, payment_hash, payment_hash_source, received, received_asset, received_header_asset, sent, sent_asset, sent_header_asset, swap_refund_funding_txid, swap_refund_funding_vout, txid, type, type_map.",
+    "details": {
+      "unsupported": [
+        "price"
+      ]
+    },
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine --data-root <SANDBOX>/analyze-root wallets analyze-file --file export.csv --column-map @missing.json
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "not_found",
+    "message": "Could not read column map file: missing.json",
+    "hint": "Pass inline JSON, or check the @path.",
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine --data-root <SANDBOX>/analyze-root wallets analyze-file --file export.csv --column-map not json
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "column map must be valid JSON",
+    "hint": "Example: '{\"date\":\"Ausfuehrung\",\"amount\":\"Stueck\"}'",
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine --data-root <SANDBOX>/analyze-root wallets analyze-file --file export.csv --column-map [1]
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "column map must be a JSON object",
+    "hint": "Known fields: amount, amount_header_asset, asset, counterparty, date, direction, fee, fee_asset, fee_header_asset, fiat_currency, fiat_rate, fiat_value, note, payment_hash, payment_hash_source, received, received_asset, received_header_asset, sent, sent_asset, sent_header_asset, swap_refund_funding_txid, swap_refund_funding_vout, txid, type, type_map.",
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine --data-root <SANDBOX>/analyze-root wallets analyze-file --file export.csv --column-map   
+exit 0
+--- stdout
+{
+  "kind": "wallets.file_analysis",
+  "schema_version": 1,
+  "data": {
+    "source": {
+      "path": "<SANDBOX>/work/export.csv",
+      "filename": "export.csv",
+      "kind": "delimited",
+      "size_bytes": 82,
+      "delimiter": ";"
+    },
+    "route": "generic_ledger",
+    "supported": true,
+    "template": false,
+    "headers": [
+      "Datum",
+      "Richtung",
+      "Stueck",
+      "Kurs"
+    ],
+    "inferred_plan": {
+      "date": "Datum",
+      "type": null,
+      "direction": "Richtung",
+      "received": null,
+      "sent": null,
+      "amount": null,
+      "received_asset": null,
+      "sent_asset": null,
+      "asset": null,
+      "fee": null,
+      "fee_asset": null,
+      "fiat_currency": null,
+      "fiat_value": null,
+      "fiat_rate": "Kurs",
+      "note": null,
+      "txid": null,
+      "counterparty": null,
+      "payment_hash": null,
+      "payment_hash_source": null,
+      "swap_refund_funding_txid": null,
+      "swap_refund_funding_vout": null,
+      "received_header_asset": null,
+      "sent_header_asset": null,
+      "amount_header_asset": null,
+      "fee_header_asset": null
+    },
+    "inferred_confident": false,
+    "detected": [
+      {
+        "column": "Datum",
+        "field": "date"
+      },
+      {
+        "column": "Richtung",
+        "field": "direction"
+      },
+      {
+        "column": "Kurs",
+        "field": "fiat_rate"
+      }
+    ],
+    "applied_plan": null,
+    "confident": false,
+    "rows_read": 2,
+    "mapped": 0,
+    "errors": 0,
+    "problems": [],
+    "preview": [],
+    "truncated": false,
+    "row_kinds_from_amount_sign": false,
+    "amount_units_unconfirmed": false,
+    "header_is_preamble": false,
+    "next_step": {
+      "action": "supply_column_map",
+      "reason": "The columns in this file were not recognized. Map them with column_map (at least a date column and one amount column), or fill in the blank ledger template instead."
+    }
+  }
+}

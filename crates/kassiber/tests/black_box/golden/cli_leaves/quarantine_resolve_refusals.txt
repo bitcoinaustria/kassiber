@@ -1,0 +1,333 @@
+$ --machine journals quarantine resolve price-override --transaction a
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Provide a fiat rate or value",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals quarantine resolve price-override --transaction a --fiat-rate abc
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "app_error",
+    "message": "Invalid decimal value: abc",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals quarantine resolve price-override --transaction a --fiat-rate -1
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Fiat rate must be positive and finite",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals quarantine resolve price-override --transaction a --fiat-rate 0
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Fiat rate must be positive and finite",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals quarantine resolve price-override --transaction a --fiat-rate 
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Fiat rate must be positive and finite",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals quarantine resolve price-override --transaction a --fiat-rate NaN
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Fiat rate must be positive and finite",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals quarantine resolve price-override --transaction a --fiat-value Infinity
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Fiat rate must be positive and finite",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals quarantine resolve price-override --transaction a --fiat-value -5
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Fiat rate must be positive and finite",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals quarantine resolve price-override --transaction a --fiat-rate 1 --fiat-value -5
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Fiat value must be nonnegative and finite",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals quarantine resolve price-override --transaction a --fiat-rate -1 --fiat-value abc
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "app_error",
+    "message": "Invalid decimal value: abc",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals quarantine resolve price-override --transaction a --fiat-rate abc --fiat-value -1
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "app_error",
+    "message": "Invalid decimal value: abc",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals quarantine resolve price-override --transaction a --fiat-rate 1 --fiat-value NaN
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Fiat value must be nonnegative and finite",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals quarantine resolve price-override --group-id root:b --fiat-rate 1
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "quarantine_group_stale",
+    "message": "This root group is not current; read the quarantine groups again",
+    "hint": null,
+    "details": {
+      "group_id": "root:b",
+      "remediation": {
+        "action": "reread_groups",
+        "tool": "ui.journals.quarantine.groups",
+        "target": {},
+        "desktop_only": false
+      }
+    },
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals quarantine resolve price-override --group-id reason:missing_spot_price --fiat-rate 1
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Only a root: group can be resolved; it acts on its root transaction",
+    "hint": null,
+    "details": {
+      "group_id": "reason:missing_spot_price"
+    },
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals quarantine resolve exclude --group-id 
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Only a root: group can be resolved; it acts on its root transaction",
+    "hint": null,
+    "details": {
+      "group_id": ""
+    },
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals quarantine resolve exclude --transaction missing
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "app_error",
+    "message": "Transaction 'missing' not found",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals quarantine resolve exclude --transaction missing --reprocess
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "app_error",
+    "message": "Transaction 'missing' not found",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals quarantine resolve exclude --transaction a --workspace missing
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "not_found",
+    "message": "Workspace 'missing' not found",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals quarantine resolve exclude --transaction a --fiat-rate 1
+exit 2
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "usage_error",
+    "message": "unrecognized arguments: --fiat-rate 1",
+    "hint": "Global flags such as --machine, --format, --output, --project, and --data-root go before the subcommand. Check `kassiber --machine commands describe <command path>` for the exact arguments.",
+    "details": {
+      "usage": "usage: kassiber [-h] [--version] [--project PROJECT] [--data-root DATA_ROOT]\n                [--env-file ENV_FILE] [--format {table,json,plain,csv}]\n                [--machine] [--non-interactive] [--output OUTPUT] [--debug]\n                [--diagnostics-out PATH|auto] [--db-passphrase-fd FD]\n                [--operator-auth-fd FD]\n                {daemon,init,status,update,offline,verify-download,operator,mcp,health,next-actions,commands,projects,chat,chats,secrets,backup,chain-analysis,review,maintenance,backends,context,workspaces,networks,profiles,accounts,wallets,transactions,attachments,metadata,journals,loans,transfers,views,imports,btcpay,documents,source-funds,reports,rates,diagnostics,ai}\n                ..."
+    },
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals quarantine resolve exclude
+exit 2
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "usage_error",
+    "message": "one of the arguments --transaction --group-id is required",
+    "hint": "Global flags such as --machine, --format, --output, --project, and --data-root go before the subcommand. Check `kassiber --machine commands describe <command path>` for the exact arguments.",
+    "details": {
+      "usage": "usage: kassiber journals quarantine resolve exclude [-h]\n                                                    [--workspace WORKSPACE]\n                                                    [--profile PROFILE]\n                                                    (--transaction TRANSACTION | --group-id GROUP_ID)\n                                                    [--reprocess]"
+    },
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals quarantine resolve exclude --transaction a --group-id root:a
+exit 2
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "usage_error",
+    "message": "argument --group-id: not allowed with argument --transaction",
+    "hint": "Global flags such as --machine, --format, --output, --project, and --data-root go before the subcommand. Check `kassiber --machine commands describe <command path>` for the exact arguments.",
+    "details": {
+      "usage": "usage: kassiber journals quarantine resolve exclude [-h]\n                                                    [--workspace WORKSPACE]\n                                                    [--profile PROFILE]\n                                                    (--transaction TRANSACTION | --group-id GROUP_ID)\n                                                    [--reprocess]"
+    },
+    "retryable": false,
+    "debug": null
+  }
+}

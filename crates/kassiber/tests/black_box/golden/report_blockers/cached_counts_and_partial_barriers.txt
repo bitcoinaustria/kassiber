@@ -1,0 +1,60 @@
+# UPDATE profiles SET ownership_review_counts_json='{"total": "2", "by_reason": []}' WHERE id='p';
+$ daemon
+> {"args":{},"kind":"ui.report.blockers","request_id":"0"}
+< {"kind":"ui.report.blockers","schema_version":1,"data":{"ready":false,"blockers":[{"id":"sync_failed","severity":"blocking","title":"Connection refresh failed","detail":"3 source refresh failure(s) must be repaired before final reports ca… [11122 bytes fnv128 1def5400cccb9d72bf211105176a7023]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+# UPDATE profiles SET ownership_review_counts_json='{"total": 1, "by_reason": {"a": null}}' WHERE id='p';
+$ daemon
+> {"args":{},"kind":"ui.report.blockers","request_id":"0"}
+< {"kind":"ui.report.blockers","schema_version":1,"data":{"ready":false,"blockers":[{"id":"sync_failed","severity":"blocking","title":"Connection refresh failed","detail":"3 source refresh failure(s) must be repaired before final reports ca… [10770 bytes fnv128 b4337c25f819ec73bfe521cde5a3c508]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+# UPDATE profiles SET ownership_review_counts_json='[1]' WHERE id='p';
+$ daemon
+> {"args":{},"kind":"ui.report.blockers","request_id":"0"}
+< {"kind":"ui.report.blockers","schema_version":1,"data":{"ready":false,"blockers":[{"id":"sync_failed","severity":"blocking","title":"Connection refresh failed","detail":"3 source refresh failure(s) must be repaired before final reports ca… [10770 bytes fnv128 b4337c25f819ec73bfe521cde5a3c508]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+# UPDATE profiles SET ownership_review_counts_json='{"total": 0}' WHERE id='p';
+$ daemon
+> {"args":{},"kind":"ui.report.blockers","request_id":"0"}
+< {"kind":"ui.report.blockers","schema_version":1,"data":{"ready":false,"blockers":[{"id":"sync_failed","severity":"blocking","title":"Connection refresh failed","detail":"3 source refresh failure(s) must be repaired before final reports ca… [10770 bytes fnv128 b4337c25f819ec73bfe521cde5a3c508]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+# UPDATE profiles SET ownership_review_counts_json='bad' WHERE id='p';
+$ daemon
+> {"args":{},"kind":"ui.report.blockers","request_id":"0"}
+< {"kind":"ui.report.blockers","schema_version":1,"data":{"ready":false,"blockers":[{"id":"sync_failed","severity":"blocking","title":"Connection refresh failed","detail":"3 source refresh failure(s) must be repaired before final reports ca… [10770 bytes fnv128 b4337c25f819ec73bfe521cde5a3c508]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+# DELETE FROM journal_quantity_issues WHERE amount_msat IS NOT NULL;
+$ daemon
+> {"args":{},"kind":"ui.report.blockers","request_id":"0"}
+< {"kind":"ui.report.blockers","schema_version":1,"data":{"ready":false,"blockers":[{"id":"sync_failed","severity":"blocking","title":"Connection refresh failed","detail":"3 source refresh failure(s) must be repaired before final reports ca… [10219 bytes fnv128 7d3c3d5d18d802799a85bfc9f58d158e]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+# DELETE FROM journal_quantity_issues WHERE issue_id <> 'q1';
+$ daemon
+> {"args":{},"kind":"ui.report.blockers","request_id":"0"}
+< {"kind":"ui.report.blockers","schema_version":1,"data":{"ready":false,"blockers":[{"id":"sync_failed","severity":"blocking","title":"Connection refresh failed","detail":"3 source refresh failure(s) must be repaired before final reports ca… [9795 bytes fnv128 d702c384ca90d963630956702911cc6d]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+# DELETE FROM freshness_source_states; DELETE FROM transaction_edit_events;
+$ daemon
+> {"args":{},"kind":"ui.report.blockers","request_id":"0"}
+< {"kind":"ui.report.blockers","schema_version":1,"data":{"ready":false,"blockers":[{"id":"custody_component_integrity","severity":"blocking","title":"Incomplete custody interpretation","detail":"1 authored active custody component(s) are i… [9398 bytes fnv128 5062d0c671cd477efb1316996ed0cf83]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+# UPDATE custody_components SET state='superseded',superseded_at='2025';
+$ daemon
+> {"args":{},"kind":"ui.report.blockers","request_id":"0"}
+< {"kind":"ui.report.blockers","schema_version":1,"data":{"ready":false,"blockers":[{"id":"silent_payment_scan_pending:sp-blocking","code":"silent_payment_scan_pending","severity":"blocking","title":"Silent Payments scan pending","detail":"… [8806 bytes fnv128 4c2380b96542b6998a01334346e31acd]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+# DELETE FROM journal_quantity_postings; DELETE FROM journal_quarantines;
+$ daemon
+> {"args":{},"kind":"ui.report.blockers","request_id":"0"}
+< {"kind":"ui.report.blockers","schema_version":1,"data":{"ready":false,"blockers":[{"id":"silent_payment_scan_pending:sp-blocking","code":"silent_payment_scan_pending","severity":"blocking","title":"Silent Payments scan pending","detail":"… [8175 bytes fnv128 426a05faba8a973c7968021e1f69f953]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}

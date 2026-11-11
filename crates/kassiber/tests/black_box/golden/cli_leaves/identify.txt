@@ -1,0 +1,893 @@
+$ --machine wallets identify --address bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "internal_error",
+    "message": "'list' object has no attribute 'get'",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine wallets identify --address bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "internal_error",
+    "message": "'NoneType' object has no attribute 'get'",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine wallets identify --address bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq
+exit 0
+--- stdout
+{
+  "kind": "wallets.identify",
+  "schema_version": 1,
+  "data": {
+    "results": [
+      {
+        "input": "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+        "type": "address",
+        "chain": "bitcoin",
+        "status": "owned",
+        "classification": "owned_address",
+        "ownership_ambiguous": false,
+        "canonical_wallet": "Watch list",
+        "canonical_wallet_id": "list",
+        "matches": [
+          {
+            "wallet": "Watch list",
+            "wallet_id": "list",
+            "wallet_kind": "address",
+            "account": "",
+            "chain": "bitcoin",
+            "network": "main",
+            "branch": "address",
+            "address_index": null,
+            "derivation_path": null,
+            "match_source": "address_list"
+          }
+        ],
+        "note": "Owned by 'Watch list' (address)."
+      }
+    ],
+    "summary": {
+      "total": 1,
+      "owned": 1,
+      "external": 0,
+      "unknown": 0,
+      "invalid": 0,
+      "unsupported": 0,
+      "wallets_scanned": 5,
+      "scan_to_index": 500,
+      "verified_on_chain": false
+    },
+    "warnings": []
+  }
+}
+$ --machine wallets identify --address bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq --txid ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff --candidate lnbc1bogus --candidate xpub-nope
+exit 0
+--- stdout
+{
+  "kind": "wallets.identify",
+  "schema_version": 1,
+  "data": {
+    "results": [
+      {
+        "input": "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+        "type": "address",
+        "chain": "bitcoin",
+        "status": "owned",
+        "classification": "owned_address",
+        "ownership_ambiguous": false,
+        "canonical_wallet": "Watch list",
+        "canonical_wallet_id": "list",
+        "matches": [
+          {
+            "wallet": "Watch list",
+            "wallet_id": "list",
+            "wallet_kind": "address",
+            "account": "",
+            "chain": "bitcoin",
+            "network": "main",
+            "branch": "address",
+            "address_index": null,
+            "derivation_path": null,
+            "match_source": "address_list"
+          }
+        ],
+        "note": "Owned by 'Watch list' (address)."
+      },
+      {
+        "input": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "type": "txid",
+        "chain": "",
+        "status": "unknown",
+        "classification": "unknown",
+        "ownership_ambiguous": false,
+        "ambiguous_legs": 0,
+        "wallets": [],
+        "owned_inputs": null,
+        "owned_outputs": null,
+        "external_outputs": null,
+        "legs": [],
+        "match_source": "none",
+        "note": "Not in this profile's synced/imported history; on-chain verification is needed for a verdict."
+      },
+      {
+        "input": "lnbc1bogus",
+        "type": "address",
+        "chain": "",
+        "status": "external",
+        "classification": "external_address",
+        "ownership_ambiguous": false,
+        "matches": [],
+        "note": "Not derived from or seen by any wallet in this profile."
+      },
+      {
+        "input": "xpub-nope",
+        "type": "address",
+        "chain": "",
+        "status": "invalid",
+        "classification": "invalid",
+        "note": "not a valid-looking address"
+      }
+    ],
+    "summary": {
+      "total": 4,
+      "owned": 1,
+      "external": 1,
+      "unknown": 1,
+      "invalid": 1,
+      "unsupported": 0,
+      "wallets_scanned": 5,
+      "scan_to_index": 500,
+      "verified_on_chain": false
+    },
+    "warnings": []
+  }
+}
+$ --machine wallets identify --address BC1QAR0SRRR7XFKVY5L643LYDNW9RE59GTZZWF5MDQ --wallet Watch list
+exit 0
+--- stdout
+{
+  "kind": "wallets.identify",
+  "schema_version": 1,
+  "data": {
+    "results": [
+      {
+        "input": "BC1QAR0SRRR7XFKVY5L643LYDNW9RE59GTZZWF5MDQ",
+        "type": "address",
+        "chain": "bitcoin",
+        "status": "owned",
+        "classification": "owned_address",
+        "ownership_ambiguous": false,
+        "canonical_wallet": "Watch list",
+        "canonical_wallet_id": "list",
+        "matches": [
+          {
+            "wallet": "Watch list",
+            "wallet_id": "list",
+            "wallet_kind": "address",
+            "account": "",
+            "chain": "bitcoin",
+            "network": "main",
+            "branch": "address",
+            "address_index": null,
+            "derivation_path": null,
+            "match_source": "address_list"
+          }
+        ],
+        "note": "Owned by 'Watch list' (address)."
+      }
+    ],
+    "summary": {
+      "total": 1,
+      "owned": 1,
+      "external": 0,
+      "unknown": 0,
+      "invalid": 0,
+      "unsupported": 0,
+      "wallets_scanned": 1,
+      "scan_to_index": 500,
+      "verified_on_chain": false
+    },
+    "warnings": []
+  }
+}
+$ --machine wallets identify --address bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq --wallet desc
+exit 0
+--- stdout
+{
+  "kind": "wallets.identify",
+  "schema_version": 1,
+  "data": {
+    "results": [
+      {
+        "input": "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+        "type": "address",
+        "chain": "bitcoin",
+        "status": "external",
+        "classification": "external_address",
+        "ownership_ambiguous": false,
+        "matches": [],
+        "note": "Not derived from or seen by any wallet in this profile."
+      }
+    ],
+    "summary": {
+      "total": 1,
+      "owned": 0,
+      "external": 1,
+      "unknown": 0,
+      "invalid": 0,
+      "unsupported": 0,
+      "wallets_scanned": 1,
+      "scan_to_index": 500,
+      "verified_on_chain": false
+    },
+    "warnings": []
+  }
+}
+$ --machine wallets identify --address bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq --wallet missing
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "not_found",
+    "message": "Wallet 'missing' not found",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine wallets identify --address bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq --wallet Twin
+exit 0
+--- stdout
+{
+  "kind": "wallets.identify",
+  "schema_version": 1,
+  "data": {
+    "results": [
+      {
+        "input": "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+        "type": "address",
+        "chain": "bitcoin",
+        "status": "external",
+        "classification": "external_address",
+        "ownership_ambiguous": false,
+        "matches": [],
+        "note": "Not derived from or seen by any wallet in this profile."
+      }
+    ],
+    "summary": {
+      "total": 1,
+      "owned": 0,
+      "external": 1,
+      "unknown": 0,
+      "invalid": 0,
+      "unsupported": 0,
+      "wallets_scanned": 1,
+      "scan_to_index": 500,
+      "verified_on_chain": false
+    },
+    "warnings": []
+  }
+}
+$ --machine wallets identify --file <SANDBOX>/candidates.txt
+exit 0
+--- stdout
+{
+  "kind": "wallets.identify",
+  "schema_version": 1,
+  "data": {
+    "results": [
+      {
+        "input": "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+        "type": "address",
+        "chain": "bitcoin",
+        "status": "owned",
+        "classification": "owned_address",
+        "ownership_ambiguous": false,
+        "canonical_wallet": "Watch list",
+        "canonical_wallet_id": "list",
+        "matches": [
+          {
+            "wallet": "Watch list",
+            "wallet_id": "list",
+            "wallet_kind": "address",
+            "account": "",
+            "chain": "bitcoin",
+            "network": "main",
+            "branch": "address",
+            "address_index": null,
+            "derivation_path": null,
+            "match_source": "address_list"
+          }
+        ],
+        "note": "Owned by 'Watch list' (address)."
+      },
+      {
+        "input": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "type": "txid",
+        "chain": "",
+        "status": "unknown",
+        "classification": "unknown",
+        "ownership_ambiguous": false,
+        "ambiguous_legs": 0,
+        "wallets": [],
+        "owned_inputs": null,
+        "owned_outputs": null,
+        "external_outputs": null,
+        "legs": [],
+        "match_source": "none",
+        "note": "Not in this profile's synced/imported history; on-chain verification is needed for a verdict."
+      },
+      {
+        "input": "bc1qnope",
+        "type": "address",
+        "chain": "bitcoin",
+        "status": "external",
+        "classification": "external_address",
+        "ownership_ambiguous": false,
+        "matches": [],
+        "note": "Not derived from or seen by any wallet in this profile."
+      }
+    ],
+    "summary": {
+      "total": 3,
+      "owned": 1,
+      "external": 1,
+      "unknown": 1,
+      "invalid": 0,
+      "unsupported": 0,
+      "wallets_scanned": 5,
+      "scan_to_index": 500,
+      "verified_on_chain": false
+    },
+    "warnings": []
+  }
+}
+$ --machine wallets identify --csv <SANDBOX>/sheet.csv
+exit 0
+--- stdout
+{
+  "kind": "wallets.identify",
+  "schema_version": 1,
+  "data": {
+    "results": [
+      {
+        "input": "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+        "type": "address",
+        "chain": "bitcoin",
+        "status": "owned",
+        "classification": "owned_address",
+        "ownership_ambiguous": false,
+        "canonical_wallet": "Watch list",
+        "canonical_wallet_id": "list",
+        "matches": [
+          {
+            "wallet": "Watch list",
+            "wallet_id": "list",
+            "wallet_kind": "address",
+            "account": "",
+            "chain": "bitcoin",
+            "network": "main",
+            "branch": "address",
+            "address_index": null,
+            "derivation_path": null,
+            "match_source": "address_list"
+          }
+        ],
+        "note": "Owned by 'Watch list' (address)."
+      },
+      {
+        "input": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "type": "txid",
+        "chain": "",
+        "status": "unknown",
+        "classification": "unknown",
+        "ownership_ambiguous": false,
+        "ambiguous_legs": 0,
+        "wallets": [],
+        "owned_inputs": null,
+        "owned_outputs": null,
+        "external_outputs": null,
+        "legs": [],
+        "match_source": "none",
+        "note": "Not in this profile's synced/imported history; on-chain verification is needed for a verdict."
+      },
+      {
+        "input": "BC1QNOPE",
+        "type": "address",
+        "chain": "bitcoin",
+        "status": "external",
+        "classification": "external_address",
+        "ownership_ambiguous": false,
+        "matches": [],
+        "note": "Not derived from or seen by any wallet in this profile."
+      }
+    ],
+    "summary": {
+      "total": 3,
+      "owned": 1,
+      "external": 1,
+      "unknown": 1,
+      "invalid": 0,
+      "unsupported": 0,
+      "wallets_scanned": 5,
+      "scan_to_index": 500,
+      "verified_on_chain": false
+    },
+    "warnings": []
+  }
+}
+$ --machine wallets identify --file <SANDBOX>/candidates.txt --csv <SANDBOX>/sheet.csv
+exit 0
+--- stdout
+{
+  "kind": "wallets.identify",
+  "schema_version": 1,
+  "data": {
+    "results": [
+      {
+        "input": "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+        "type": "address",
+        "chain": "bitcoin",
+        "status": "owned",
+        "classification": "owned_address",
+        "ownership_ambiguous": false,
+… [2561 bytes, 87 lines fnv128 3673dd5e47b0c627cc3cb7f6c2713890]
+$ --machine wallets identify --file <SANDBOX>/missing.txt
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Candidate file not found: <SANDBOX>/missing.txt",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine wallets identify --csv <SANDBOX>/missing.csv
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "CSV file not found: <SANDBOX>/missing.csv",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine wallets identify --file <SANDBOX>
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Could not read candidate file: <SANDBOX>",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine wallets identify --file <SANDBOX>/binary.txt
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Candidate file is not valid UTF-8 text",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine wallets identify --file <SANDBOX>/latin.txt
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Could not read candidate file: <SANDBOX>/latin.txt",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine wallets identify --file 
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Provide at least one --address, --txid, --candidate, --file, or --csv input to check",
+    "hint": "Example: wallets identify --address bc1q... --txid <64-hex>",
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine wallets identify --address bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq --scan-to-index 0
+exit 0
+--- stdout
+{
+  "kind": "wallets.identify",
+  "schema_version": 1,
+  "data": {
+    "results": [
+      {
+        "input": "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+        "type": "address",
+        "chain": "bitcoin",
+        "status": "owned",
+        "classification": "owned_address",
+        "ownership_ambiguous": false,
+        "canonical_wallet": "Watch list",
+        "canonical_wallet_id": "list",
+        "matches": [
+          {
+            "wallet": "Watch list",
+            "wallet_id": "list",
+            "wallet_kind": "address",
+            "account": "",
+            "chain": "bitcoin",
+            "network": "main",
+            "branch": "address",
+            "address_index": null,
+            "derivation_path": null,
+            "match_source": "address_list"
+          }
+        ],
+        "note": "Owned by 'Watch list' (address)."
+      }
+    ],
+    "summary": {
+      "total": 1,
+      "owned": 1,
+      "external": 0,
+      "unknown": 0,
+      "invalid": 0,
+      "unsupported": 0,
+      "wallets_scanned": 5,
+      "scan_to_index": 0,
+      "verified_on_chain": false
+    },
+    "warnings": []
+  }
+}
+$ --machine wallets identify --address bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq --scan-to-index -1
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "--scan-to-index must be non-negative",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine wallets identify --address bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq --scan-to-index 99999999999999999999
+exit 0
+--- stdout
+{
+  "kind": "wallets.identify",
+  "schema_version": 1,
+  "data": {
+    "results": [
+      {
+        "input": "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+        "type": "address",
+        "chain": "bitcoin",
+        "status": "owned",
+        "classification": "owned_address",
+        "ownership_ambiguous": false,
+        "canonical_wallet": "Watch list",
+        "canonical_wallet_id": "list",
+        "matches": [
+          {
+            "wallet": "Watch list",
+            "wallet_id": "list",
+            "wallet_kind": "address",
+            "account": "",
+            "chain": "bitcoin",
+            "network": "main",
+            "branch": "address",
+            "address_index": null,
+            "derivation_path": null,
+            "match_source": "address_list"
+          }
+        ],
+        "note": "Owned by 'Watch list' (address)."
+      }
+    ],
+    "summary": {
+      "total": 1,
+      "owned": 1,
+      "external": 0,
+      "unknown": 0,
+      "invalid": 0,
+      "unsupported": 0,
+      "wallets_scanned": 5,
+      "scan_to_index": 20000,
+      "verified_on_chain": false
+    },
+    "warnings": []
+  }
+}
+$ --machine wallets identify
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "Provide at least one --address, --txid, --candidate, --file, or --csv input to check",
+    "hint": "Example: wallets identify --address bc1q... --txid <64-hex>",
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine wallets identify --scan-to-index -1
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "--scan-to-index must be non-negative",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine wallets identify --address 
+exit 0
+--- stdout
+{
+  "kind": "wallets.identify",
+  "schema_version": 1,
+  "data": {
+    "results": [],
+    "summary": {
+      "total": 0,
+      "owned": 0,
+      "external": 0,
+      "unknown": 0,
+      "invalid": 0,
+      "unsupported": 0,
+      "wallets_scanned": 5,
+      "scan_to_index": 500,
+      "verified_on_chain": false
+    },
+    "warnings": []
+  }
+}
+$ --machine wallets identify --txid ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff --verify-on-chain --verify-backend core
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "validation",
+    "message": "On-chain verification needs an Esplora or Electrum backend, not 'bitcoinrpc'",
+    "hint": "Use an Esplora or Electrum backend for verification.",
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine wallets identify --txid ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff --verify-on-chain --verify-backend missing
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "app_error",
+    "message": "Backend 'missing' is not configured in <SANDBOX>/config/backends.env",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine wallets identify --address bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq --profile missing
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "not_found",
+    "message": "Profile 'missing' not found in the selected workspace",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --format table wallets identify --address bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq --txid ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff --candidate nonsense
+exit 0
+--- stdout
+input                                                             type     chain    status    classification    ownership_ambiguous  wallet      account  branch   address_index  derivation_path  owned_inputs  owned_outputs  external_outputs  match_source  note                                                                                         
+----------------------------------------------------------------  -------  -------  --------  ----------------  -------------------  ----------  -------  -------  -------------  ---------------  ------------  -------------  ----------------  ------------  ---------------------------------------------------------------------------------------------
+bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq                        address  bitcoin  owned     owned_address     False                Watch list           address                                                                                 address_list  Owned by 'Watch list' (address).                                                             
+ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff  txid              unknown   unknown           False                                                                                                                             none          Not in this profile's synced/imported history; on-chain verification is needed for a verdict.
+nonsense                                                          address           external  external_address  False                                                                                                                                           Not derived from or seen by any wallet in this profile.                                      
+$ --format plain wallets identify --address bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq --txid ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff --candidate nonsense
+exit 0
+--- stdout
+input: bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq
+type: address
+chain: bitcoin
+status: owned
+classification: owned_address
+ownership_ambiguous: False
+wallet: Watch list
+account: 
+branch: address
+address_index: 
+derivation_path: 
+owned_inputs: 
+owned_outputs: 
+external_outputs: 
+match_source: address_list
+note: Owned by 'Watch list' (address).
+
+input: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+type: txid
+chain: 
+status: unknown
+classification: unknown
+ownership_ambiguous: False
+wallet: 
+account: 
+branch: 
+address_index: 
+derivation_path: 
+owned_inputs: 
+owned_outputs: 
+external_outputs: 
+match_source: none
+note: Not in this profile's synced/imported history; on-chain verification is needed for a verdict.
+
+input: nonsense
+type: address
+chain: 
+status: external
+classification: external_address
+ownership_ambiguous: False
+wallet: 
+account: 
+branch: 
+address_index: 
+derivation_path: 
+owned_inputs: 
+owned_outputs: 
+external_outputs: 
+match_source: 
+note: Not derived from or seen by any wallet in this profile.
+$ --format csv wallets identify --address bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq --txid ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff --candidate nonsense
+exit 0
+--- stdout
+input,type,chain,status,classification,ownership_ambiguous,wallet,account,branch,address_index,derivation_path,owned_inputs,owned_outputs,external_outputs,match_source,note
+bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq,address,bitcoin,owned,owned_address,False,Watch list,,address,,,,,,address_list,Owned by 'Watch list' (address).
+ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff,txid,,unknown,unknown,False,,,,,,,,,none,Not in this profile's synced/imported history; on-chain verification is needed for a verdict.
+nonsense,address,,external,external_address,False,,,,,,,,,,Not derived from or seen by any wallet in this profile.
+$ --format json wallets identify --address bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq --txid ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff --candidate nonsense
+exit 0
+--- stdout
+{
+  "kind": "wallets.identify",
+  "schema_version": 1,
+  "data": {
+    "results": [
+      {
+        "input": "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+        "type": "address",
+        "chain": "bitcoin",
+        "status": "owned",
+        "classification": "owned_address",
+        "ownership_ambiguous": false,
+        "canonical_wallet": "Watch list",
+        "canonical_wallet_id": "list",
+        "matches": [
+          {
+            "wallet": "Watch list",
+            "wallet_id": "list",
+            "wallet_kind": "address",
+            "account": "",
+            "chain": "bitcoin",
+            "network": "main",
+            "branch": "address",
+            "address_index": null,
+            "derivation_path": null,
+            "match_source": "address_list"
+          }
+        ],
+        "note": "Owned by 'Watch list' (address)."
+      },
+      {
+        "input": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "type": "txid",
+        "chain": "",
+        "status": "unknown",
+        "classification": "unknown",
+        "ownership_ambiguous": false,
+        "ambiguous_legs": 0,
+        "wallets": [],
+        "owned_inputs": null,
+        "owned_outputs": null,
+        "external_outputs": null,
+        "legs": [],
+        "match_source": "none",
+        "note": "Not in this profile's synced/imported history; on-chain verification is needed for a verdict."
+      },
+      {
+        "input": "nonsense",
+        "type": "address",
+        "chain": "",
+        "status": "external",
+        "classification": "external_address",
+        "ownership_ambiguous": false,
+        "matches": [],
+        "note": "Not derived from or seen by any wallet in this profile."
+      }
+    ],
+    "summary": {
+      "total": 3,
+      "owned": 1,
+      "external": 1,
+      "unknown": 1,
+      "invalid": 0,
+      "unsupported": 0,
+      "wallets_scanned": 5,
+      "scan_to_index": 500,
+      "verified_on_chain": false
+    },
+    "warnings": []
+  }
+}

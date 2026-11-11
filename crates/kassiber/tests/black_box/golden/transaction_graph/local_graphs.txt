@@ -1,0 +1,31 @@
+$ daemon
+> {"args":{"transaction":"g1"},"kind":"ui.transactions.graph","request_id":"0"}
+< {"kind":"ui.transactions.graph","schema_version":1,"data":{"transaction":{"id":"g1","chain":"bitcoin","network":"main","blockHeight":800000,"externalId":"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1","txid":"a1a1a1a1a1… [3906 bytes fnv128 93ce7f9c8583d980513281332a024c95]
+> {"args":{"transaction":"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"},"kind":"ui.transactions.graph","request_id":"1"}
+< {"kind":"ui.transactions.graph","schema_version":1,"data":{"transaction":{"id":"g1","chain":"bitcoin","network":"main","blockHeight":800000,"externalId":"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1","txid":"a1a1a1a1a1… [3906 bytes fnv128 93ce841d1e83d980513281332bd8bcb6]
+> {"args":{"transaction":"b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2"},"kind":"ui.transactions.graph","request_id":"2"}
+< {"kind":"ui.transactions.graph","schema_version":1,"data":{"transaction":{"id":"g2","chain":"bitcoin","network":"main","blockHeight":null,"externalId":"b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2","txid":"b2b2b2b2b2b2… [3075 bytes fnv128 fede1c6b2cd10f9f93b070d33abcbb43]
+> {"args":{"transaction":"g3"},"kind":"ui.transactions.graph","request_id":"3"}
+< {"kind":"ui.transactions.graph","schema_version":1,"data":{"transaction":{"id":"g3","chain":"unknown","network":"unknown","blockHeight":null,"externalId":"e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5","txid":"e5e5e5e5e… [2544 bytes fnv128 96b988e788d919d4a3315e29c9c41592]
+> {"args":{"transaction":"g4"},"kind":"ui.transactions.graph","request_id":"4"}
+< {"kind":"ui.transactions.graph","schema_version":1,"data":{"transaction":{"id":"g4","chain":"bitcoin","network":"main","blockHeight":null,"externalId":"not-a-txid","txid":"not-a-txid","occurredAt":"2025-05-04T00:00:00Z","confirmedAt":null… [1217 bytes fnv128 4cab364a779fb52389aaa392779f87e8]
+> {"args":{"transaction":"g5"},"kind":"ui.transactions.graph","request_id":"5"}
+< {"kind":"ui.transactions.graph","schema_version":1,"data":{"transaction":{"id":"g5","chain":"liquid","network":"liquidtestnet","blockHeight":null,"externalId":"c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3","txid":"c3c3… [1438 bytes fnv128 59ace22be42e234ed5f9a51074cae77f]
+> {"args":{"transaction":"g6"},"kind":"ui.transactions.graph","request_id":"6"}
+< {"kind":"ui.transactions.graph","schema_version":1,"data":{"transaction":{"id":"g6","chain":"bitcoin","network":"main","blockHeight":null,"externalId":"f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6","txid":"f6f6f6f6f6f6… [2521 bytes fnv128 6b7ee10b5e846540e4dc892c2e343bab]
+> {"args":{"transaction":"h"},"kind":"ui.transactions.graph","request_id":"7"}
+< {"kind":"ui.transactions.graph","schema_version":1,"data":{"transaction":{"id":"h","chain":"bitcoin","network":"regtest","blockHeight":null,"externalId":null,"txid":null,"occurredAt":"2025-03-05T10:00:00Z","confirmedAt":"2025","direction"… [1210 bytes fnv128 4f8da683671ae1d7cd74ed5e8a4c2677]
+> {"args":{"transaction":"k"},"kind":"ui.transactions.graph","request_id":"8"}
+< {"kind":"ui.transactions.graph","schema_version":1,"data":{"transaction":{"id":"k","chain":"liquid","network":"liquidtestnet","blockHeight":null,"externalId":null,"txid":null,"occurredAt":"2025-04-10T12:20:00Z","confirmedAt":"2025","direc… [1326 bytes fnv128 9dd4e9149f8b4b4834ed650a608e1225]
+> {"args":{"transaction":"a"},"kind":"ui.transactions.graph","request_id":"9"}
+< {"kind":"ui.transactions.graph","schema_version":1,"data":{"transaction":{"id":"a","chain":"bitcoin","network":"regtest","blockHeight":null,"externalId":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","txid":"aaaaaaaaaa… [1351 bytes fnv128 124b171e4e7550e4e394f6cd2d50b3b9]
+> {"args":{"transaction":" g2 "},"kind":"ui.transactions.graph","request_id":"10"}
+< {"kind":"ui.transactions.graph","schema_version":1,"data":{"transaction":{"id":"g2","chain":"bitcoin","network":"main","blockHeight":null,"externalId":"b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2","txid":"b2b2b2b2b2b2… [3076 bytes fnv128 6e80025b7b3e395aba1ad3e6e1f28254]
+> {"args":{"allowPublicLookup":false,"transaction":"g1"},"kind":"ui.transactions.graph","request_id":"11"}
+< {"kind":"ui.transactions.graph","schema_version":1,"data":{"transaction":{"id":"g1","chain":"bitcoin","network":"main","blockHeight":800000,"externalId":"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1","txid":"a1a1a1a1a1… [3907 bytes fnv128 1248b56d7c3ca0e3e924f9f71323b187]
+> {"args":{"allow_public_lookup":"TRUE","transaction":"g4"},"kind":"ui.transactions.graph","request_id":"12"}
+< {"kind":"ui.transactions.graph","schema_version":1,"data":{"transaction":{"id":"g4","chain":"bitcoin","network":"main","blockHeight":null,"externalId":"not-a-txid","txid":"not-a-txid","occurredAt":"2025-05-04T00:00:00Z","confirmedAt":null… [1218 bytes fnv128 e8fcaceaf883e2ba64f7452d1e7c5e9d]
+> {"args":{"allowPublicLookup":true,"transaction":"g3"},"kind":"ui.transactions.graph","request_id":"13"}
+< {"kind":"ui.transactions.graph","schema_version":1,"data":{"transaction":{"id":"g3","chain":"unknown","network":"unknown","blockHeight":null,"externalId":"e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5","txid":"e5e5e5e5e… [2545 bytes fnv128 a024772fb522c8a4cdbedd6ffda95ad3]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}

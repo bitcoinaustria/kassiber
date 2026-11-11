@@ -906,11 +906,28 @@ fn snapshot(
         ("assumptions", strings(ASSUMPTIONS)),
     ]))
 }
+/// Test builds only: `KASSIBER_RUST_TEST_ENTROPY_CLOCK=frozen` runs the
+/// entropy evaluation on a clock that never advances, so a loaded machine
+/// cannot cut its time budget short and the report reads the same every
+/// run. Production always measures the wall clock.
+fn frozen_entropy_clock() -> bool {
+    #[cfg(any(test, feature = "test-harness"))]
+    {
+        std::env::var("KASSIBER_RUST_TEST_ENTROPY_CLOCK").as_deref() == Ok("frozen")
+    }
+    #[cfg(not(any(test, feature = "test-harness")))]
+    {
+        false
+    }
+}
+
 pub fn build_local(
     conn: &kassiber_store::rusqlite::Connection,
     profile: &str,
 ) -> Result<Value, AppError> {
-    super::views::with_read(conn, profile, "owner", |view| snapshot(view, false, || 0.0))
+    super::views::with_read(conn, profile, "owner", |view| {
+        snapshot(view, frozen_entropy_clock(), || 0.0)
+    })
 }
 
 fn uuid(value: &str) -> bool {
@@ -1104,7 +1121,7 @@ pub fn build_redacted(
 ) -> Result<Value, AppError> {
     super::views::with_read(conn, profile, "owner", |view| {
         let scope = view.book_scope()?;
-        let payload = snapshot(view, false, || 0.0)?;
+        let payload = snapshot(view, frozen_entropy_clock(), || 0.0)?;
         super::handles::with_process_references(conn, |refs| project_report(&payload, refs, &scope))
     })
 }

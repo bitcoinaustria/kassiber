@@ -1,0 +1,288 @@
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [640 bytes fnv128 a1bd1d8bc9199b24e9756f370d055088]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [653 bytes fnv128 8f5d6bdf0628dbb9278c168851803e69]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [661 bytes fnv128 6c934d6c9decd7413162b5efe1e51198]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [662 bytes fnv128 ab4999c3740bca13dfe12f15421495dc]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [662 bytes fnv128 2f5c62b08336fb9f319744db4f997849]
+> #4
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [662 bytes fnv128 7dca538a389931a93ac6c2eea293f7aa]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [653 bytes fnv128 3d9ccda8dce29f023aa98fac5f8946fb]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [662 bytes fnv128 c074a4e806f6d3af4ebc3becddd29ca3]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [662 bytes fnv128 64ffdbb28c376a93236019c039f05e94]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [657 bytes fnv128 eb03f352a0dbdaf9c587c98847f189db]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [664 bytes fnv128 548a783238620b648f842ae6c57df4ed]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [664 bytes fnv128 bfc6ae4e079f5707c15e680f842092fa]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [664 bytes fnv128 2ffa7a4b9990a9b7dd844cbcd7954727]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [649 bytes fnv128 f5700a0ec1d9fe075bd0ca956e3fe3c5]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [660 bytes fnv128 df2a49f01de663b1d31e1b3487ad2f2f]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [955 bytes fnv128 96a63df020f487ed3b2d3d2e83e88420]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [679 bytes fnv128 84615ef94729af200c3cd906d8769e28]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture empty
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [601 bytes fnv128 112ba25588f2abf03d962c81c09bf7c5]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [636 bytes fnv128 38b8af0a9de94cf0b0b89a535f4ab617]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [587 bytes fnv128 b5bcbc0c86a383ac0dee9947a7136041]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [873 bytes fnv128 fb1cd66f08ca193a460274e77d52b3b4]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [701 bytes fnv128 dfcf555630265f5073cbd639c017204a]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [709 bytes fnv128 de12bc246835ceeca3cf0bf40f13b34f]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [895 bytes fnv128 5976e971cd75639d26cb5570547b7554]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [750 bytes fnv128 dbd61a81da4242cf4c2cd071a20e2f60]
+> #4
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [679 bytes fnv128 eaca08adc16ca7993634adf8d0b9b59e]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+- chain_index_clock: id=i:1 | revision=i:34
+- chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:34
+- chain_index_dirty: source_table=t:"transactions" | source_key=i:3 | revision=i:26
+- journal_quarantines: transaction_id=t:"c" | workspace_id=t:"w" | profile_id=t:"p" | reason=t:"missing_fee_price" | detail_json=t:"{}" | created_at=t:"2025"
+- profiles: id=t:"p" | workspace_id=t:"w" | label=t:"Book" | fiat_currency=t:"EUR" | tax_country=t:"… [531 bytes fnv128 fc6dc2cd07900c94490b7b655f416e22]
+- transactions: id=t:"c" | workspace_id=t:"w" | profile_id=t:"p" | wallet_id=t:"exchange" | external… [1134 bytes fnv128 e8ed9bc854cda8689d13e926bb116c41]
+- (116 tables, 105 empty)
++ chain_index_clock: id=i:1 | revision=i:37
++ chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:37
++ chain_index_dirty: source_table=t:"transactions" | source_key=i:3 | revision=i:35
++ profiles: id=t:"p" | workspace_id=t:"w" | label=t:"Book" | fiat_currency=t:"EUR" | tax_country=t:"… [531 bytes fnv128 b40751319ae66ada11caf1089733f927]
++ transaction_edit_events: id=t:"<uuid#1>" | workspace_id=t:"w" | profile_id=t:"p" | transaction_id=… [445 bytes fnv128 af40849b4f8c5018bd3d37e583c4e610]
+… [4563 bytes, 15 lines fnv128 433cc846b887c3627b87dfcd2e1a798b]
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [701 bytes fnv128 4e52545937fccf793314cf062dbcde84]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [600 bytes fnv128 628895cc838efcf0efb5993a4e10dfce]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [722 bytes fnv128 70a0467c2b59abbb970ec2d8b615a065]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [705 bytes fnv128 c8d283ad876357899805376c3a9f87c4]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [602 bytes fnv128 2c46bd7690c167a1b458bd77e32c6820]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [2480 bytes fnv128 ba8483a6fa46526e9bf908d09fe6b7d5]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [2170 bytes fnv128 c3eaaa88a6df6f2521d8dd1161456580]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+- chain_index_clock: id=i:1 | revision=i:34
+- chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:34
+- chain_index_dirty: source_table=t:"transactions" | source_key=i:1 | revision=i:24
+- chain_index_dirty: source_table=t:"transactions" | source_key=i:7 | revision=i:30
+- profiles: id=t:"p" | workspace_id=t:"w" | label=t:"Book" | fiat_currency=t:"EUR" | tax_country=t:"… [531 bytes fnv128 fc6dc2cd07900c94490b7b655f416e22]
+- transaction_tags: transaction_id=t:"a" | tag_id=t:"a"
+- transaction_tags: transaction_id=t:"a" | tag_id=t:"z"
+- transactions: id=t:"a" | workspace_id=t:"w" | profile_id=t:"p" | wallet_id=t:"cold" | external_id=… [1267 bytes fnv128 8942fd4d394e9581c9ec9c0858256ee6]
+- transactions: id=t:"g" | workspace_id=t:"w" | profile_id=t:"p" | wallet_id=t:"cold" | external_id=… [1130 bytes fnv128 6a5bc293557d1b213c69cde1012eae18]
+- (116 tables, 105 empty)
++ chain_index_clock: id=i:1 | revision=i:40
++ chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:40
+… [8398 bytes, 25 lines fnv128 9136c99258cbb045b2d4ab1ace3a5d84]
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [697 bytes fnv128 21810e2e8e78f108dcfa295b878d35fe]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1434 bytes fnv128 321ed53e1667169269c2a6e6a86cbe40]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1003 bytes fnv128 9fb2ad6db0a50dd6db73a055a6ff677b]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [727 bytes fnv128 b29a4f626edfae522eaa085c18a14ef7]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture desktop
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [649 bytes fnv128 31b234b9688d7f3ef20cc6cc9ed9570e]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [592 bytes fnv128 a5348063bcf1371680de4f0e302a5282]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [635 bytes fnv128 7408e075c33c804ed44f177d2e3c0eea]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1378 bytes fnv128 675629e84da10bf1a1cc3ce7d7cd46d2]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+- chain_index_clock: id=i:1 | revision=i:27
+- chain_index_dirty: source_table=t:"journal_custody_decisions" | source_key=i:-1 | revision=i:26
+- chain_index_dirty: source_table=t:"journal_custody_economic_relations" | source_key=i:-1 | revision=i:27
+- chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:16
+- journal_account_holdings: id=t:"aa" | workspace_id=t:"ws" | profile_id=t:"p" | account_id=NULL | account_code=t:"treasury" | account_label=t:"Treasury" | asset=t:"BTC" | quantity=i:1 | cost_basis=r:1e-7 | created_at=t:"fixed"
+- journal_account_holdings: id=t:"az" | workspace_id=t:"ws" | profile_id=t:"p" | account_id=NULL | account_code=t:"treasury" | account_label=t:"Treasury" | asset=t:"BTC" | quantity=i:111111111111 | cost_basis=r:12345.67890123456 | created_at=t:"fixed"
+- journal_account_holdings: id=t:"fallback" | workspace_id=t:"ws" | profile_id=t:"p" | account_id=NULL | account_code=NULL | account_label=t:"Fallback" | asset=t:"OTHER" | quantity=i:100000000001 | cost_basis=r:9876.54321098765 | created_at=t:"fixed"
+- journal_account_holdings: id=t:"l" | workspace_id=t:"ws" | profile_id=t:"p" | account_id=NULL | account_code=t:"other" | account_label=t:"Other" | asset=t:"LBTC" | quantity=i:789001 | cost_basis=r:0.1234567891234 | created_at=t:"fixed"
+- journal_account_holdings: id=t:"negative" | workspace_id=t:"ws" | profile_id=t:"p" | account_id=NULL | account_code=NULL | account_label=t:"Fallback" | asset=t:"BTC" | quantity=i:-1 | cost_basis=r:5.0 | created_at=t:"fixed"
+- journal_account_holdings: id=t:"zero" | workspace_id=t:"ws" | profile_id=t:"p" | account_id=NULL | account_code=NULL | account_label=t:"Fallback" | asset=t:"BTC" | quantity=i:0 | cost_basis=r:5.0 | created_at=t:"fixed"
+- journal_custody_decisions: decision_id=t:"00000000000000000000000000000000000000000000000000000000… [966 bytes fnv128 181bafffd4f91b5403ae71c7bdd17f1c]
+- journal_custody_decisions: decision_id=t:"00000000000000000000000000000000000000000000000000000000… [973 bytes fnv128 83c43e1bdb8a0882a355135f5f359cd6]
+… [24520 bytes, 63 lines fnv128 5b65fc57d1534f073694d74c3e7b965b]
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [702 bytes fnv128 576167f13d6dfa4f2a188e3505a554d9]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [710 bytes fnv128 c28363e977c52425ca586e04d84a4ad8]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [3187 bytes fnv128 167beac2c30caa50c99977c08853224e]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [751 bytes fnv128 3267537ebfdb1fb24f553a93449a0da9]
+> #4
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [680 bytes fnv128 f3f833752e4f976065c3120e21fd34ed]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+- chain_index_clock: id=i:1 | revision=i:27
+- chain_index_dirty: source_table=t:"journal_custody_decisions" | source_key=i:-1 | revision=i:26
+- chain_index_dirty: source_table=t:"journal_custody_economic_relations" | source_key=i:-1 | revision=i:27
+- chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:16
+- chain_index_dirty: source_table=t:"transactions" | source_key=i:4 | revision=i:23
+- journal_account_holdings: id=t:"aa" | workspace_id=t:"ws" | profile_id=t:"p" | account_id=NULL | account_code=t:"treasury" | account_label=t:"Treasury" | asset=t:"BTC" | quantity=i:1 | cost_basis=r:1e-7 | created_at=t:"fixed"
+- journal_account_holdings: id=t:"az" | workspace_id=t:"ws" | profile_id=t:"p" | account_id=NULL | account_code=t:"treasury" | account_label=t:"Treasury" | asset=t:"BTC" | quantity=i:111111111111 | cost_basis=r:12345.67890123456 | created_at=t:"fixed"
+- journal_account_holdings: id=t:"fallback" | workspace_id=t:"ws" | profile_id=t:"p" | account_id=NULL | account_code=NULL | account_label=t:"Fallback" | asset=t:"OTHER" | quantity=i:100000000001 | cost_basis=r:9876.54321098765 | created_at=t:"fixed"
+- journal_account_holdings: id=t:"l" | workspace_id=t:"ws" | profile_id=t:"p" | account_id=NULL | account_code=t:"other" | account_label=t:"Other" | asset=t:"LBTC" | quantity=i:789001 | cost_basis=r:0.1234567891234 | created_at=t:"fixed"
+- journal_account_holdings: id=t:"negative" | workspace_id=t:"ws" | profile_id=t:"p" | account_id=NULL | account_code=NULL | account_label=t:"Fallback" | asset=t:"BTC" | quantity=i:-1 | cost_basis=r:5.0 | created_at=t:"fixed"
+- journal_account_holdings: id=t:"zero" | workspace_id=t:"ws" | profile_id=t:"p" | account_id=NULL | account_code=NULL | account_label=t:"Fallback" | asset=t:"BTC" | quantity=i:0 | cost_basis=r:5.0 | created_at=t:"fixed"
+- journal_custody_decisions: decision_id=t:"00000000000000000000000000000000000000000000000000000000… [966 bytes fnv128 181bafffd4f91b5403ae71c7bdd17f1c]
+… [26154 bytes, 65 lines fnv128 7b5346977e544610220cdcab1887370d]
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [702 bytes fnv128 91d6f21f4f701f5d66d594d3b5f71d13]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [601 bytes fnv128 d0ac30657b5f8638f0caad0aba9747e3]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [723 bytes fnv128 737c00b2529f68b3c5bb05c3391302c0]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [706 bytes fnv128 be4d587cf6ce2ccf51cf39b132df8c03]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [603 bytes fnv128 9609a0c0fc45beec88bdcf0d74a4bc2d]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [2387 bytes fnv128 3ae394022fa88a628dd4f6ae00ac4eb4]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [2199 bytes fnv128 5614b01025979e26734f960bec16629b]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+- chain_index_clock: id=i:1 | revision=i:27
+- chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:16
+- chain_index_dirty: source_table=t:"transactions" | source_key=i:1 | revision=i:20
+- chain_index_dirty: source_table=t:"transactions" | source_key=i:2 | revision=i:21
+- profiles: id=t:"p" | workspace_id=t:"ws" | label=t:"Book" | fiat_currency=t:"EUR" | tax_country=t:… [558 bytes fnv128 7c5f21536e61a5bb8dc4568530e62371]
+- transaction_tags: transaction_id=t:"in" | tag_id=t:"tag1"
+- transaction_tags: transaction_id=t:"in" | tag_id=t:"tag2"
+- transactions: id=t:"in" | workspace_id=t:"ws" | profile_id=t:"p" | wallet_id=t:"cold" | external_i… [1163 bytes fnv128 820371228759605579c6cf01a8dfdac0]
+- transactions: id=t:"out" | workspace_id=t:"ws" | profile_id=t:"p" | wallet_id=t:"cold" | external_… [1121 bytes fnv128 235fee0078531b1039352288be82900e]
+- (116 tables, 99 empty)
++ chain_index_clock: id=i:1 | revision=i:33
++ chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:33
+… [8166 bytes, 25 lines fnv128 2d82d2f252a1e99651b5b6607a7e0b79]
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [698 bytes fnv128 c5fd3fa3470fc2fd878f565db70e45f5]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1435 bytes fnv128 d0c18acca8801dc70635aa9f341c4761]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [1004 bytes fnv128 4db6b18ab3a7e889db43692cc25a5a60]
+> #3
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [728 bytes fnv128 8ceb42278dd6ebbbe7ca69aabc3be798]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)
+# fixture reports
+$ daemon
+> #0
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [650 bytes fnv128 c9663062be803e42a068d482ca5a4235]
+> #1
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [593 bytes fnv128 a6afc8911b727b89c31d74323609dd0f]
+> #2
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [636 bytes fnv128 2678b8a2812e8cdf8a90f2e0ede92501]
+> <shutdown>
+< {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
+=== book changes after the writes
+(unchanged)

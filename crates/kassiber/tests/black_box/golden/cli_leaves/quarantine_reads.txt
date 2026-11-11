@@ -1,0 +1,506 @@
+$ --machine journals quarantined
+exit 0
+--- stdout
+{
+  "kind": "journals.quarantined",
+  "schema_version": 1,
+  "data": [
+    {
+      "transaction_id": "t",
+      "external_id": "ext-t",
+      "occurred_at": "2024-04-01T00:00:00Z",
+      "confirmed_at": null,
+      "wallet": "Wallet",
+      "asset": "BTC",
+      "amount": 0.2,
+… [4219 bytes, 181 lines fnv128 5d7f825668ac86226317fe48ff87825f]
+$ --machine journals quarantine show --transaction a
+exit 0
+--- stdout
+{
+  "kind": "journals.quarantine.show",
+  "schema_version": 1,
+  "data": {
+    "transaction_id": "a",
+    "external_id": "ext-a",
+    "wallet": "Wallet",
+    "occurred_at": "2024-01-01T00:00:00Z",
+    "confirmed_at": null,
+    "direction": "inbound",
+    "asset": "BTC",
+    "amount": 1.0,
+    "amount_msat": 100000000000,
+    "fee": 0.0,
+    "fee_msat": 0,
+    "fiat_rate": 10000.0,
+    "fiat_value": null,
+    "fiat_rate_exact": "10000",
+    "fiat_value_exact": null,
+    "pricing": {
+      "source_kind": "manual",
+      "provider": "reviewed-receipt",
+      "pair": null,
+      "timestamp": null,
+      "granularity": null,
+      "method": null,
+      "quality": "exact"
+    },
+    "excluded": false,
+    "reason": "missing_spot_price",
+    "detail": {},
+    "quarantined_at": "2024-05-01T00:00:00Z",
+    "category": "missing_price",
+    "blocks_reports": false,
+    "is_downstream": false,
+    "root": null,
+    "reasons": [
+      "missing_spot_price"
+    ],
+    "evidence": {
+      "wallet_label": "Wallet"
+    },
+    "actions": [
+      {
+        "kind": "set_price",
+        "transaction_id": "a"
+      }
+    ]
+  }
+}
+$ --machine journals quarantine show --transaction b
+exit 0
+--- stdout
+{
+  "kind": "journals.quarantine.show",
+  "schema_version": 1,
+  "data": {
+    "transaction_id": "b",
+    "external_id": "ext-b",
+    "wallet": "Wallet",
+    "occurred_at": "2024-02-01T00:00:00Z",
+    "confirmed_at": null,
+    "direction": "inbound",
+    "asset": "BTC",
+    "amount": 1.0,
+    "amount_msat": 100000000000,
+    "fee": 0.0,
+    "fee_msat": 0,
+    "fiat_rate": 20000.0,
+    "fiat_value": null,
+    "fiat_rate_exact": "20000",
+    "fiat_value_exact": null,
+    "pricing": {
+      "source_kind": "manual",
+      "provider": "reviewed-receipt",
+      "pair": null,
+      "timestamp": null,
+      "granularity": null,
+      "method": null,
+      "quality": "exact"
+    },
+    "excluded": false,
+    "reason": "transfer_pair_dependency_blocked",
+    "detail": {
+      "blocked_by_transaction_ids": [
+        "a"
+      ]
+    },
+    "quarantined_at": "2024-05-01T00:00:00Z",
+    "category": "downstream",
+    "blocks_reports": false,
+    "is_downstream": true,
+    "root": {
+      "transaction_id": "a",
+      "reason": "missing_spot_price",
+      "occurred_at": "2024-01-01T00:00:00Z",
+      "wallet": "Wallet",
+      "external_id": "ext-a"
+    },
+    "reasons": [
+      "transfer_pair_dependency_blocked"
+    ],
+    "evidence": {
+      "wallet_label": "Wallet",
+      "counterpart_transaction_ids": [
+        "a"
+      ]
+    },
+    "actions": [
+      {
+        "kind": "resolve_root",
+        "transaction_id": "a"
+      }
+    ]
+  }
+}
+$ --machine journals quarantine show --transaction s
+exit 0
+--- stdout
+{
+  "kind": "journals.quarantine.show",
+  "schema_version": 1,
+  "data": {
+    "transaction_id": "s",
+    "external_id": "ext-s",
+    "wallet": "Wallet",
+    "occurred_at": "2024-03-01T00:00:00Z",
+    "confirmed_at": null,
+    "direction": "outbound",
+    "asset": "BTC",
+    "amount": 1.5,
+    "amount_msat": 150000000000,
+    "fee": 1e-05,
+    "fee_msat": 1000000,
+    "fiat_rate": 30000.0,
+    "fiat_value": null,
+    "fiat_rate_exact": "30000",
+    "fiat_value_exact": null,
+    "pricing": {
+      "source_kind": "manual",
+      "provider": "reviewed-receipt",
+      "pair": null,
+      "timestamp": null,
+      "granularity": null,
+      "method": null,
+      "quality": "exact"
+    },
+    "excluded": false,
+    "reason": "custody_basis_barrier",
+    "detail": {
+      "root_transaction_ids": [
+        "a",
+        "missing"
+      ]
+    },
+    "quarantined_at": "2024-05-01T00:00:00Z",
+    "category": "downstream",
+    "blocks_reports": false,
+    "is_downstream": true,
+    "root": {
+      "transaction_id": "a",
+      "reason": "missing_spot_price",
+      "occurred_at": "2024-01-01T00:00:00Z",
+      "wallet": "Wallet",
+      "external_id": "ext-a"
+    },
+    "reasons": [
+      "custody_basis_barrier"
+    ],
+    "evidence": {
+      "wallet_label": "Wallet"
+    },
+    "actions": [
+      {
+        "kind": "resolve_root",
+        "transaction_id": "a"
+      }
+    ]
+  }
+}
+$ --machine journals quarantine show --transaction i
+exit 0
+--- stdout
+{
+  "kind": "journals.quarantine.show",
+  "schema_version": 1,
+  "data": {
+    "transaction_id": "i",
+    "external_id": "ext-i",
+    "wallet": "Wallet",
+    "occurred_at": "2024-03-02T00:00:00Z",
+    "confirmed_at": null,
+    "direction": "inbound",
+    "asset": "BTC",
+    "amount": 0.01,
+    "amount_msat": 1000000000,
+    "fee": 0.0,
+    "fee_msat": 0,
+    "fiat_rate": 30000.0,
+    "fiat_value": null,
+    "fiat_rate_exact": "30000",
+    "fiat_value_exact": null,
+    "pricing": {
+      "source_kind": "manual",
+      "provider": "reviewed-receipt",
+      "pair": null,
+      "timestamp": null,
+      "granularity": null,
+      "method": null,
+      "quality": "exact"
+    },
+    "excluded": false,
+    "reason": "basis_provenance_incomplete",
+    "detail": {},
+    "quarantined_at": "2024-05-01T00:00:00Z",
+    "category": "downstream",
+    "blocks_reports": false,
+    "is_downstream": true,
+    "root": null,
+    "reasons": [
+      "basis_provenance_incomplete"
+    ],
+    "evidence": {
+      "wallet_label": "Wallet"
+    },
+    "actions": []
+  }
+}
+$ --machine journals quarantine show --transaction t
+exit 0
+--- stdout
+{
+  "kind": "journals.quarantine.show",
+  "schema_version": 1,
+  "data": {
+    "transaction_id": "t",
+    "external_id": "ext-t",
+    "wallet": "Wallet",
+    "occurred_at": "2024-04-01T00:00:00Z",
+    "confirmed_at": null,
+    "direction": "outbound",
+    "asset": "BTC",
+    "amount": 0.2,
+    "amount_msat": 20000000000,
+    "fee": 0.0,
+    "fee_msat": 0,
+    "fiat_rate": 31000.5,
+    "fiat_value": null,
+    "fiat_rate_exact": "31000.5",
+    "fiat_value_exact": null,
+    "pricing": {
+      "source_kind": "manual",
+      "provider": "reviewed-receipt",
+      "pair": null,
+      "timestamp": null,
+      "granularity": null,
+      "method": null,
+      "quality": "exact"
+    },
+    "excluded": false,
+    "reason": "insufficient_lots",
+    "detail": {
+      "asset": "BTC"
+    },
+    "quarantined_at": "2024-05-01T00:00:00Z",
+    "category": "missing_acquisition_history",
+    "blocks_reports": false,
+    "is_downstream": false,
+    "root": null,
+    "reasons": [
+      "insufficient_lots"
+    ],
+    "evidence": {
+      "wallet_label": "Wallet"
+    },
+    "actions": [
+      {
+        "kind": "import_history",
+        "wallet_id": "wallet",
+        "wallet_label": "Wallet"
+      },
+      {
+        "kind": "connect_wallet"
+      }
+    ]
+  }
+}
+$ --machine journals quarantine show --transaction ext-a
+exit 0
+--- stdout
+{
+  "kind": "journals.quarantine.show",
+  "schema_version": 1,
+  "data": {
+    "transaction_id": "a",
+    "external_id": "ext-a",
+    "wallet": "Wallet",
+    "occurred_at": "2024-01-01T00:00:00Z",
+    "confirmed_at": null,
+    "direction": "inbound",
+    "asset": "BTC",
+    "amount": 1.0,
+    "amount_msat": 100000000000,
+    "fee": 0.0,
+    "fee_msat": 0,
+    "fiat_rate": 10000.0,
+    "fiat_value": null,
+    "fiat_rate_exact": "10000",
+    "fiat_value_exact": null,
+    "pricing": {
+      "source_kind": "manual",
+      "provider": "reviewed-receipt",
+      "pair": null,
+      "timestamp": null,
+      "granularity": null,
+      "method": null,
+      "quality": "exact"
+    },
+    "excluded": false,
+    "reason": "missing_spot_price",
+    "detail": {},
+    "quarantined_at": "2024-05-01T00:00:00Z",
+    "category": "missing_price",
+    "blocks_reports": false,
+    "is_downstream": false,
+    "root": null,
+    "reasons": [
+      "missing_spot_price"
+    ],
+    "evidence": {
+      "wallet_label": "Wallet"
+    },
+    "actions": [
+      {
+        "kind": "set_price",
+        "transaction_id": "a"
+      }
+    ]
+  }
+}
+$ --machine journals quarantine show --transaction missing
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "app_error",
+    "message": "Transaction 'missing' not found",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals quarantine show --transaction 
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "app_error",
+    "message": "Transaction '' not found",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --machine journals quarantined --profile missing
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "not_found",
+    "message": "Profile 'missing' not found in the selected workspace",
+    "hint": null,
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}
+$ --format table journals quarantined
+exit 0
+--- stdout
+transaction_id  external_id  occurred_at           confirmed_at  wallet  asset  amount  amount_msat   fee      fee_msat  reason                            detail                                      category                     blocks_reports  is_downstream  root                                                                                                                                        reasons                               evidence                                                          actions                                                                                                  
+--------------  -----------  --------------------  ------------  ------  -----  ------  ------------  -------  --------  --------------------------------  ------------------------------------------  ---------------------------  --------------  -------------  ------------------------------------------------------------------------------------------------------------------------------------------  ------------------------------------  ----------------------------------------------------------------  ---------------------------------------------------------------------------------------------------------
+t               ext-t        2024-04-01T00:00:00Z                Wallet  BTC    0.2     20000000000   0        0         insufficient_lots                 {'asset': 'BTC'}                            missing_acquisition_history  False           False                                                                                                                                                      ['insufficient_lots']                 {'wallet_label': 'Wallet'}                                        [{'kind': 'import_history', 'wallet_id': 'wallet', 'wallet_label': 'Wallet'}, {'kind': 'connect_wallet'}]
+i               ext-i        2024-03-02T00:00:00Z                Wallet  BTC    0.01    1000000000    0        0         basis_provenance_incomplete       {}                                          downstream                   False           True                                                                                                                                                       ['basis_provenance_incomplete']       {'wallet_label': 'Wallet'}                                        []                                                                                                       
+s               ext-s        2024-03-01T00:00:00Z                Wallet  BTC    1.5     150000000000  0.00001  1000000   custody_basis_barrier             {'root_transaction_ids': ['a', 'missing']}  downstream                   False           True           {'transaction_id': 'a', 'reason': 'missing_spot_price', 'occurred_at': '2024-01-01T00:00:00Z', 'wallet': 'Wallet', 'external_id': 'ext-a'}  ['custody_basis_barrier']             {'wallet_label': 'Wallet'}                                        [{'kind': 'resolve_root', 'transaction_id': 'a'}]                                                        
+b               ext-b        2024-02-01T00:00:00Z                Wallet  BTC    1       100000000000  0        0         transfer_pair_dependency_blocked  {'blocked_by_transaction_ids': ['a']}       downstream                   False           True           {'transaction_id': 'a', 'reason': 'missing_spot_price', 'occurred_at': '2024-01-01T00:00:00Z', 'wallet': 'Wallet', 'external_id': 'ext-a'}  ['transfer_pair_dependency_blocked']  {'wallet_label': 'Wallet', 'counterpart_transaction_ids': ['a']}  [{'kind': 'resolve_root', 'transaction_id': 'a'}]                                                        
+a               ext-a        2024-01-01T00:00:00Z                Wallet  BTC    1       100000000000  0        0         missing_spot_price                {}                                          missing_price                False           False                                                                                                                                                      ['missing_spot_price']                {'wallet_label': 'Wallet'}                                        [{'kind': 'set_price', 'transaction_id': 'a'}]                                                           
+… [4263 bytes, 7 lines fnv128 264663e3519589c903e91c3e6e9c7699]
+$ --format table journals quarantine show --transaction b
+exit 0
+--- stdout
+field             value                                                                                                                                              
+----------------  ---------------------------------------------------------------------------------------------------------------------------------------------------
+transaction_id    b                                                                                                                                                  
+external_id       ext-b                                                                                                                                              
+wallet            Wallet                                                                                                                                             
+occurred_at       2024-02-01T00:00:00Z                                                                                                                               
+confirmed_at                                                                                                                                                         
+direction         inbound                                                                                                                                            
+asset             BTC                                                                                                                                                
+amount            1                                                                                                                                                  
+amount_msat       100000000000                                                                                                                                       
+fee               0                                                                                                                                                  
+… [4814 bytes, 29 lines fnv128 5792bebbe8afa5003df037fad59c1c40]
+$ --format plain journals quarantined
+exit 0
+--- stdout
+transaction_id: t
+external_id: ext-t
+occurred_at: 2024-04-01T00:00:00Z
+confirmed_at: 
+wallet: Wallet
+asset: BTC
+amount: 0.2
+amount_msat: 20000000000
+fee: 0
+fee_msat: 0
+reason: insufficient_lots
+detail: {"asset": "BTC"}
+… [2516 bytes, 99 lines fnv128 44e03779b8f57b7144f947fc17d98dad]
+$ --format plain journals quarantine show --transaction b
+exit 0
+--- stdout
+transaction_id: b
+external_id: ext-b
+wallet: Wallet
+occurred_at: 2024-02-01T00:00:00Z
+confirmed_at: 
+direction: inbound
+asset: BTC
+amount: 1
+amount_msat: 100000000000
+fee: 0
+fee_msat: 0
+fiat_rate: 20000
+fiat_value: 
+fiat_rate_exact: 20000
+fiat_value_exact: 
+pricing: {"source_kind": "manual", "provider": "reviewed-receipt", "pair": null, "timestamp": null, "granularity": null, "method": null, "quality": "exact"}
+excluded: False
+reason: transfer_pair_dependency_blocked
+detail: {"blocked_by_transaction_ids": ["a"]}
+quarantined_at: 2024-05-01T00:00:00Z
+category: downstream
+blocks_reports: False
+is_downstream: True
+root: {"transaction_id": "a", "reason": "missing_spot_price", "occurred_at": "2024-01-01T00:00:00Z", "wallet": "Wallet", "external_id": "ext-a"}
+reasons: ["transfer_pair_dependency_blocked"]
+evidence: {"wallet_label": "Wallet", "counterpart_transaction_ids": ["a"]}
+actions: [{"kind": "resolve_root", "transaction_id": "a"}]
+$ --format csv journals quarantined
+exit 0
+--- stdout
+transaction_id,external_id,occurred_at,confirmed_at,wallet,asset,amount,amount_msat,fee,fee_msat,reason,detail,category,blocks_reports,is_downstream,root,reasons,evidence,actions
+t,ext-t,2024-04-01T00:00:00Z,,Wallet,BTC,0.2,20000000000,0,0,insufficient_lots,"{""asset"": ""BTC""}",missing_acquisition_history,False,False,,"[""insufficient_lots""]","{""wallet_label"": ""Wallet""}","[{""kind"": ""import_history"", ""wallet_id"": ""wallet"", ""wallet_label"": ""Wallet""}, {""kind"": ""connect_wallet""}]"
+i,ext-i,2024-03-02T00:00:00Z,,Wallet,BTC,0.01,1000000000,0,0,basis_provenance_incomplete,{},downstream,False,True,,"[""basis_provenance_incomplete""]","{""wallet_label"": ""Wallet""}",[]
+s,ext-s,2024-03-01T00:00:00Z,,Wallet,BTC,1.5,150000000000,0.00001,1000000,custody_basis_barrier,"{""root_transaction_ids"": [""a"", ""missing""]}",downstream,False,True,"{""transaction_id"": ""a"", ""reason"": ""missing_spot_price"", ""occurred_at"": ""2024-01-01T00:00:00Z"", ""wallet"": ""Wallet"", ""external_id"": ""ext-a""}","[""custody_basis_barrier""]","{""wallet_label"": ""Wallet""}","[{""kind"": ""resolve_root"", ""transaction_id"": ""a""}]"
+b,ext-b,2024-02-01T00:00:00Z,,Wallet,BTC,1,100000000000,0,0,transfer_pair_dependency_blocked,"{""blocked_by_transaction_ids"": [""a""]}",downstream,False,True,"{""transaction_id"": ""a"", ""reason"": ""missing_spot_price"", ""occurred_at"": ""2024-01-01T00:00:00Z"", ""wallet"": ""Wallet"", ""external_id"": ""ext-a""}","[""transfer_pair_dependency_blocked""]","{""wallet_label"": ""Wallet"", ""counterpart_transaction_ids"": [""a""]}","[{""kind"": ""resolve_root"", ""transaction_id"": ""a""}]"
+a,ext-a,2024-01-01T00:00:00Z,,Wallet,BTC,1,100000000000,0,0,missing_spot_price,{},missing_price,False,False,,"[""missing_spot_price""]","{""wallet_label"": ""Wallet""}","[{""kind"": ""set_price"", ""transaction_id"": ""a""}]"
+$ --format csv journals quarantine show --transaction b
+exit 0
+--- stdout
+transaction_id,external_id,wallet,occurred_at,confirmed_at,direction,asset,amount,amount_msat,fee,fee_msat,fiat_rate,fiat_value,fiat_rate_exact,fiat_value_exact,pricing,excluded,reason,detail,quarantined_at,category,blocks_reports,is_downstream,root,reasons,evidence,actions
+b,ext-b,Wallet,2024-02-01T00:00:00Z,,inbound,BTC,1,100000000000,0,0,20000,,20000,,"{""source_kind"": ""manual"", ""provider"": ""reviewed-receipt"", ""pair"": null, ""timestamp"": null, ""granularity"": null, ""method"": null, ""quality"": ""exact""}",False,transfer_pair_dependency_blocked,"{""blocked_by_transaction_ids"": [""a""]}",2024-05-01T00:00:00Z,downstream,False,True,"{""transaction_id"": ""a"", ""reason"": ""missing_spot_price"", ""occurred_at"": ""2024-01-01T00:00:00Z"", ""wallet"": ""Wallet"", ""external_id"": ""ext-a""}","[""transfer_pair_dependency_blocked""]","{""wallet_label"": ""Wallet"", ""counterpart_transaction_ids"": [""a""]}","[{""kind"": ""resolve_root"", ""transaction_id"": ""a""}]"
+$ --machine journals quarantine show --transaction t
+exit 1
+--- stdout
+{
+  "kind": "error",
+  "schema_version": 1,
+  "error": {
+    "code": "not_found",
+    "message": "Transaction 't' has no active quarantine",
+    "hint": "Only transactions flagged during `journals process` appear here.",
+    "details": null,
+    "retryable": false,
+    "debug": null
+  }
+}

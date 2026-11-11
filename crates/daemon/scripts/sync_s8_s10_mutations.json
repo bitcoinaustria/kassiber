@@ -6,7 +6,8 @@
     "find": "    if kind == \"address\" {\n        return \"address-list\";",
     "replace": "    if kind == \"address\" {\n        return \"file-import\";",
     "expect_failing": [
-      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_classes_and_scan_bounds_match_wire_bytes"
+      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_classes_and_scan_bounds_match_wire_bytes",
+      "kassiber/black_box:test_classes_and_scan_bounds_match_wire_bytes"
     ]
   },
   {
@@ -16,7 +17,8 @@
     "find": "if LIGHTNING_NODE_KINDS.contains(&kind) && backend {",
     "replace": "if LIGHTNING_NODE_KINDS.contains(&kind) {",
     "expect_failing": [
-      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_classes_and_scan_bounds_match_wire_bytes"
+      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_classes_and_scan_bounds_match_wire_bytes",
+      "kassiber/black_box:test_classes_and_scan_bounds_match_wire_bytes"
     ]
   },
   {
@@ -26,7 +28,8 @@
     "find": "if EXCHANGE_API_KINDS.contains(&kind) && backend && !has_file {",
     "replace": "if EXCHANGE_API_KINDS.contains(&kind) && backend {",
     "expect_failing": [
-      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_classes_and_scan_bounds_match_wire_bytes"
+      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_classes_and_scan_bounds_match_wire_bytes",
+      "kassiber/black_box:test_classes_and_scan_bounds_match_wire_bytes"
     ]
   },
   {
@@ -36,7 +39,8 @@
     "find": ".is_none_or(|f| f == \"generic_ledger\")",
     "replace": ".is_none_or(|f| f == \"generic-ledger\")",
     "expect_failing": [
-      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_classes_and_scan_bounds_match_wire_bytes"
+      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_classes_and_scan_bounds_match_wire_bytes",
+      "kassiber/black_box:test_classes_and_scan_bounds_match_wire_bytes"
     ]
   },
   {
@@ -46,7 +50,8 @@
     "find": ".is_some_and(|source| kassiber_pytext::lower(kassiber_pytext::strip(&source)) == \"btcpay\")",
     "replace": ".is_some_and(|source| source == \"btcpay\")",
     "expect_failing": [
-      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_classes_and_scan_bounds_match_wire_bytes"
+      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_classes_and_scan_bounds_match_wire_bytes",
+      "kassiber/black_box:test_classes_and_scan_bounds_match_wire_bytes"
     ]
   },
   {
@@ -56,7 +61,8 @@
     "find": "if live && last_synced_at.is_none() {",
     "replace": "if last_synced_at.is_none() {",
     "expect_failing": [
-      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_classes_and_scan_bounds_match_wire_bytes"
+      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_classes_and_scan_bounds_match_wire_bytes",
+      "kassiber/black_box:test_classes_and_scan_bounds_match_wire_bytes"
     ]
   },
   {
@@ -66,7 +72,8 @@
     "find": "!(klass == \"address-list\" && !has_addresses(",
     "replace": "!(klass == \"address-list\" && has_addresses(",
     "expect_failing": [
-      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_classes_and_scan_bounds_match_wire_bytes"
+      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_classes_and_scan_bounds_match_wire_bytes",
+      "kassiber/black_box:test_classes_and_scan_bounds_match_wire_bytes"
     ]
   },
   {
@@ -76,7 +83,8 @@
     "find": "if kind == \"silent-payment\" && !parse_bool(field(config, \"sp_full_history\"))? {",
     "replace": "if kind == \"silent-payment\" {",
     "expect_failing": [
-      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_classes_and_scan_bounds_match_wire_bytes"
+      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_classes_and_scan_bounds_match_wire_bytes",
+      "kassiber/black_box:test_classes_and_scan_bounds_match_wire_bytes"
     ]
   },
   {
@@ -86,7 +94,8 @@
     "find": "height @ Value::Int(_) => height.clone(),",
     "replace": "height @ (Value::Int(_) | Value::Float(_)) => height.clone(),",
     "expect_failing": [
-      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_classes_and_scan_bounds_match_wire_bytes"
+      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_classes_and_scan_bounds_match_wire_bytes",
+      "kassiber/black_box:test_classes_and_scan_bounds_match_wire_bytes"
     ]
   },
   {
@@ -96,7 +105,8 @@
     "find": ".filter(|at| !row::blank(at) && **at != Value::from(UNKNOWN_OCCURRED_AT))",
     "replace": ".filter(|at| !row::blank(at))",
     "expect_failing": [
-      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_classes_and_scan_bounds_match_wire_bytes"
+      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_classes_and_scan_bounds_match_wire_bytes",
+      "kassiber/black_box:test_classes_and_scan_bounds_match_wire_bytes"
     ]
   },
   {
@@ -106,7 +116,8 @@
     "find": "        warnings.push(\"history_starts_after_first_funding\");\n",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_classes_and_scan_bounds_match_wire_bytes"
+      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_classes_and_scan_bounds_match_wire_bytes",
+      "kassiber/black_box:test_classes_and_scan_bounds_match_wire_bytes"
     ]
   },
   {
@@ -116,7 +127,8 @@
     "find": "} else if declared_at != Value::Null || declared_height != Value::Null {",
     "replace": "} else if declared_height != Value::Null {",
     "expect_failing": [
-      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_classes_and_scan_bounds_match_wire_bytes"
+      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_classes_and_scan_bounds_match_wire_bytes",
+      "kassiber/black_box:test_classes_and_scan_bounds_match_wire_bytes"
     ]
   },
   {
@@ -126,7 +138,8 @@
     "find": "CASE WHEN confirmed_at IS NULL THEN raw_json END AS raw_json",
     "replace": "raw_json",
     "expect_failing": [
-      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_classes_and_scan_bounds_match_wire_bytes"
+      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_classes_and_scan_bounds_match_wire_bytes",
+      "kassiber/black_box:test_classes_and_scan_bounds_match_wire_bytes"
     ]
   },
   {
@@ -136,7 +149,8 @@
     "find": "            (\"completeness_class\", completeness_class),\n",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_classes_and_scan_bounds_match_wire_bytes"
+      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_classes_and_scan_bounds_match_wire_bytes",
+      "kassiber/black_box:test_classes_and_scan_bounds_match_wire_bytes"
     ]
   },
   {
@@ -146,7 +160,8 @@
     "find": "\"list\" => Operation::ListWithCompleteness { profile_id },",
     "replace": "\"list\" => Operation::List { profile_id },",
     "expect_failing": [
-      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_cli_list_matches_every_format"
+      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_cli_list_matches_every_format",
+      "kassiber/black_box:test_cli_list_matches_every_format"
     ]
   },
   {
@@ -156,7 +171,8 @@
     "find": "if let Some(failure) = config_failure(raw.as_deref()) {",
     "replace": "if let Some(failure) = None::<AppError> {",
     "expect_failing": [
-      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_cli_list_matches_every_format"
+      "tests/test_rust_wallet_completeness.py::RustWalletCompletenessTest::test_cli_list_matches_every_format",
+      "kassiber/black_box:test_cli_list_matches_every_format"
     ]
   },
   {
@@ -166,7 +182,8 @@
     "find": "} else if Some(expected) != recorded {",
     "replace": "} else if false {",
     "expect_failing": [
-      "tests/test_rust_wallet_completeness.py::RustTransactionVerifyTest::test_stored_graphs_match_bytes"
+      "tests/test_rust_wallet_completeness.py::RustTransactionVerifyTest::test_stored_graphs_match_bytes",
+      "kassiber/black_box:test_stored_graphs_match_bytes"
     ]
   },
   {
@@ -176,7 +193,8 @@
     "find": "(\"mismatch\", Some(\"missing_imported_leg\"))",
     "replace": "(\"ok\", None)",
     "expect_failing": [
-      "tests/test_rust_wallet_completeness.py::RustTransactionVerifyTest::test_stored_graphs_match_bytes"
+      "tests/test_rust_wallet_completeness.py::RustTransactionVerifyTest::test_stored_graphs_match_bytes",
+      "kassiber/black_box:test_stored_graphs_match_bytes"
     ]
   },
   {
@@ -186,7 +204,8 @@
     "find": "} else if active.len() > 1 {",
     "replace": "} else if false {",
     "expect_failing": [
-      "tests/test_rust_wallet_completeness.py::RustTransactionVerifyTest::test_stored_graphs_match_bytes"
+      "tests/test_rust_wallet_completeness.py::RustTransactionVerifyTest::test_stored_graphs_match_bytes",
+      "kassiber/black_box:test_stored_graphs_match_bytes"
     ]
   },
   {
@@ -196,7 +215,8 @@
     "find": "(\"excluded\", Some(\"imported_leg_excluded\"))",
     "replace": "(\"mismatch\", Some(\"imported_leg_excluded\"))",
     "expect_failing": [
-      "tests/test_rust_wallet_completeness.py::RustTransactionVerifyTest::test_stored_graphs_match_bytes"
+      "tests/test_rust_wallet_completeness.py::RustTransactionVerifyTest::test_stored_graphs_match_bytes",
+      "kassiber/black_box:test_stored_graphs_match_bytes"
     ]
   },
   {
@@ -206,7 +226,8 @@
     "find": "} else if observed {",
     "replace": "} else if false {",
     "expect_failing": [
-      "tests/test_rust_wallet_completeness.py::RustTransactionVerifyTest::test_stored_graphs_match_bytes"
+      "tests/test_rust_wallet_completeness.py::RustTransactionVerifyTest::test_stored_graphs_match_bytes",
+      "kassiber/black_box:test_stored_graphs_match_bytes"
     ]
   },
   {
@@ -216,7 +237,8 @@
     "find": "if ambiguous > 0 {",
     "replace": "if false {",
     "expect_failing": [
-      "tests/test_rust_wallet_completeness.py::RustTransactionVerifyTest::test_stored_graphs_match_bytes"
+      "tests/test_rust_wallet_completeness.py::RustTransactionVerifyTest::test_stored_graphs_match_bytes",
+      "kassiber/black_box:test_stored_graphs_match_bytes"
     ]
   },
   {
@@ -226,7 +248,8 @@
     "find": "Some(role) if roles.len() == 1 => role,",
     "replace": "Some(role) => role,",
     "expect_failing": [
-      "tests/test_rust_wallet_completeness.py::RustTransactionVerifyTest::test_stored_graphs_match_bytes"
+      "tests/test_rust_wallet_completeness.py::RustTransactionVerifyTest::test_stored_graphs_match_bytes",
+      "kassiber/black_box:test_stored_graphs_match_bytes"
     ]
   },
   {
@@ -236,7 +259,8 @@
     "find": "        -(principal + fee)\n",
     "replace": "        -principal\n",
     "expect_failing": [
-      "tests/test_rust_wallet_completeness.py::RustTransactionVerifyTest::test_stored_graphs_match_bytes"
+      "tests/test_rust_wallet_completeness.py::RustTransactionVerifyTest::test_stored_graphs_match_bytes",
+      "kassiber/black_box:test_stored_graphs_match_bytes"
     ]
   },
   {
@@ -246,7 +270,8 @@
     "find": "if direction == \"outbound\" && truthy(g(row, \"amount_includes_fee\")) {",
     "replace": "if false {",
     "expect_failing": [
-      "tests/test_rust_wallet_completeness.py::RustTransactionVerifyTest::test_stored_graphs_match_bytes"
+      "tests/test_rust_wallet_completeness.py::RustTransactionVerifyTest::test_stored_graphs_match_bytes",
+      "kassiber/black_box:test_stored_graphs_match_bytes"
     ]
   },
   {
@@ -256,7 +281,8 @@
     "find": "if is_unspendable(script.as_deref()) || truthy(g(node, \"_pegoutAddress\")) {",
     "replace": "if truthy(g(node, \"_pegoutAddress\")) {",
     "expect_failing": [
-      "tests/test_rust_wallet_completeness.py::RustTransactionVerifyTest::test_stored_graphs_match_bytes"
+      "tests/test_rust_wallet_completeness.py::RustTransactionVerifyTest::test_stored_graphs_match_bytes",
+      "kassiber/black_box:test_stored_graphs_match_bytes"
     ]
   },
   {
@@ -266,7 +292,8 @@
     "find": "                .with_details(dict([(\"transaction\", s(reference.as_str()))])),\n",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_wallet_completeness.py::RustTransactionVerifyTest::test_refusals_and_graphless_rows_match_bytes"
+      "tests/test_rust_wallet_completeness.py::RustTransactionVerifyTest::test_refusals_and_graphless_rows_match_bytes",
+      "kassiber/black_box:test_refusals_and_graphless_rows_match_bytes"
     ]
   },
   {
@@ -276,7 +303,8 @@
     "find": "if operation == \"transactions.verify\" {",
     "replace": "if operation == \"transactions.verify-unrouted\" {",
     "expect_failing": [
-      "tests/test_rust_wallet_completeness.py::RustTransactionVerifyTest::test_stored_graphs_match_bytes"
+      "tests/test_rust_wallet_completeness.py::RustTransactionVerifyTest::test_stored_graphs_match_bytes",
+      "kassiber/black_box:test_stored_graphs_match_bytes"
     ]
   },
   {
@@ -286,7 +314,8 @@
     "find": "        \"all\" if history_years >= YEARLY_BUCKET_MIN_YEARS => \"year\",\n",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_transaction_dashboard.py::RustTransactionDashboardYearsTest::test_years_index_and_bucket_sizes_match_wire_bytes"
+      "tests/test_rust_transaction_dashboard.py::RustTransactionDashboardYearsTest::test_years_index_and_bucket_sizes_match_wire_bytes",
+      "kassiber/black_box:test_years_index_and_bucket_sizes_match_wire_bytes"
     ]
   },
   {
@@ -296,7 +325,8 @@
     "find": "\"4years\" | \"5years\" | \"10years\" | \"15years\" | \"all\" => \"quarter\",",
     "replace": "\"5years\" | \"10years\" | \"15years\" | \"all\" => \"quarter\",",
     "expect_failing": [
-      "tests/test_rust_transaction_dashboard.py::RustTransactionDashboardYearsTest::test_years_index_and_bucket_sizes_match_wire_bytes"
+      "tests/test_rust_transaction_dashboard.py::RustTransactionDashboardYearsTest::test_years_index_and_bucket_sizes_match_wire_bytes",
+      "kassiber/black_box:test_years_index_and_bucket_sizes_match_wire_bytes"
     ]
   },
   {
@@ -306,7 +336,8 @@
     "find": "| \"6m\" | \"1year\" | \"1years\" | \"1y\" | \"4years\" | \"4year\" | \"4y\" | \"5years\" | \"5year\"",
     "replace": "| \"6m\" | \"1year\" | \"1years\" | \"1y\" | \"5years\" | \"5year\"",
     "expect_failing": [
-      "tests/test_rust_transaction_dashboard.py::RustTransactionDashboardYearsTest::test_years_index_and_bucket_sizes_match_wire_bytes"
+      "tests/test_rust_transaction_dashboard.py::RustTransactionDashboardYearsTest::test_years_index_and_bucket_sizes_match_wire_bytes",
+      "kassiber/black_box:test_years_index_and_bucket_sizes_match_wire_bytes"
     ]
   },
   {
@@ -316,7 +347,8 @@
     "find": "    if found.is_empty() {\n        return Ok(\"1year\".into());",
     "replace": "    if found.is_empty() {\n        return Ok(\"ytd\".into());",
     "expect_failing": [
-      "tests/test_rust_transaction_dashboard.py::RustTransactionDashboardTest::test_auto_period_selection_matches_wire_bytes"
+      "tests/test_rust_transaction_dashboard.py::RustTransactionDashboardTest::test_auto_period_selection_matches_wire_bytes",
+      "kassiber/black_box:test_auto_period_selection_matches_wire_bytes"
     ]
   },
   {
@@ -326,7 +358,8 @@
     "find": "dated_bind.push(SqlValue::Text(\"1970-01-01T00:00:00Z\".into()));",
     "replace": "dated_bind.push(SqlValue::Text(\"\".into()));",
     "expect_failing": [
-      "tests/test_rust_transaction_dashboard.py::RustTransactionDashboardYearsTest::test_years_index_and_bucket_sizes_match_wire_bytes"
+      "tests/test_rust_transaction_dashboard.py::RustTransactionDashboardYearsTest::test_years_index_and_bucket_sizes_match_wire_bytes",
+      "kassiber/black_box:test_years_index_and_bucket_sizes_match_wire_bytes"
     ]
   },
   {
@@ -336,7 +369,8 @@
     "find": "        Ok(local - offset)\n",
     "replace": "        Ok(local)\n",
     "expect_failing": [
-      "tests/test_rust_transaction_dashboard.py::RustTransactionDashboardYearsTest::test_years_index_and_bucket_sizes_match_wire_bytes"
+      "tests/test_rust_transaction_dashboard.py::RustTransactionDashboardYearsTest::test_years_index_and_bucket_sizes_match_wire_bytes",
+      "kassiber/black_box:test_years_index_and_bucket_sizes_match_wire_bytes"
     ]
   },
   {
@@ -346,7 +380,8 @@
     "find": "(\"until\", s(utc_text(end - 1))),",
     "replace": "(\"until\", s(utc_text(end))),",
     "expect_failing": [
-      "tests/test_rust_transaction_dashboard.py::RustTransactionDashboardYearsTest::test_years_index_and_bucket_sizes_match_wire_bytes"
+      "tests/test_rust_transaction_dashboard.py::RustTransactionDashboardYearsTest::test_years_index_and_bucket_sizes_match_wire_bytes",
+      "kassiber/black_box:test_years_index_and_bucket_sizes_match_wire_bytes"
     ]
   },
   {
@@ -356,7 +391,8 @@
     "find": "        (\"bucketSize\", s(size)),\n",
     "replace": "",
     "expect_failing": [
-      "tests/test_rust_transaction_dashboard.py::RustTransactionDashboardYearsTest::test_years_index_and_bucket_sizes_match_wire_bytes"
+      "tests/test_rust_transaction_dashboard.py::RustTransactionDashboardYearsTest::test_years_index_and_bucket_sizes_match_wire_bytes",
+      "kassiber/black_box:test_years_index_and_bucket_sizes_match_wire_bytes"
     ]
   },
   {

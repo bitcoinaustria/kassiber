@@ -1,0 +1,48 @@
+$ --machine wallets identify --address bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq --verify-on-chain --verify-backend esp
+exit 0
+--- stdout
+{
+  "kind": "wallets.identify",
+  "schema_version": 1,
+  "data": {
+    "results": [
+      {
+        "input": "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+        "type": "address",
+        "chain": "bitcoin",
+        "status": "owned",
+        "classification": "owned_address",
+        "ownership_ambiguous": false,
+        "canonical_wallet": "Watch list",
+        "canonical_wallet_id": "list",
+        "matches": [
+          {
+            "wallet": "Watch list",
+            "wallet_id": "list",
+            "wallet_kind": "address",
+            "account": "",
+            "chain": "bitcoin",
+            "network": "main",
+            "branch": "address",
+            "address_index": null,
+            "derivation_path": null,
+            "match_source": "address_list"
+          }
+        ],
+        "note": "Owned by 'Watch list' (address)."
+      }
+    ],
+    "summary": {
+      "total": 1,
+      "owned": 1,
+      "external": 0,
+      "unknown": 0,
+      "invalid": 0,
+      "unsupported": 0,
+      "wallets_scanned": 5,
+      "scan_to_index": 500,
+      "verified_on_chain": true
+    },
+    "warnings": []
+  }
+}

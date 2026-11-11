@@ -955,6 +955,67 @@ mod tests {
         }
     }
 
+    /// Journals stale since two metadata edits, read without a rebuild (as
+    /// review previews read them): the barrier names the edits and carries
+    /// their history. Replaces the stale-journals half of
+    /// `tests/test_rust_report_blockers.py`, whose barrier book the daemon
+    /// cannot leave stale (its rebuild refuses the mixed-network book).
+    #[test]
+    fn stale_journals_block_reports_with_their_edit_history() {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!(
+            "kassiber-stale-blockers-{}-{nanos}",
+            std::process::id()
+        ));
+        let book = kassiber_store::Book::create(&dir, None).unwrap();
+        let conn = book.connection();
+        conn.execute_batch(include_str!("../../transactions/tests/data/desktop.sql"))
+            .unwrap();
+        conn.execute_batch(
+            "UPDATE profiles SET last_processed_at='2025',last_processed_tx_count=7,
+              journal_input_version=4,last_processed_input_version=2,
+              journal_semantics_version=10,required_journal_semantics_version=0 WHERE id='p';
+             INSERT INTO transaction_edit_events(id,workspace_id,profile_id,transaction_id,source,
+              changed_at,journal_input_version_after) VALUES
+              ('e1','w','p','a','desktop','2025-06-01T00:00:00Z',3),
+              ('e2','w','p','b','ai','2025-06-02T00:00:00Z',4),
+              ('e0','w','p','b','ai','2025-05-02T00:00:00Z',1);
+             INSERT INTO transaction_edit_fields(event_id,field) VALUES('e1','note'),
+              ('e1','fiat_rate'),('e2','taxable');",
+        )
+        .unwrap();
+        let (context, active) = kassiber_workspace::readiness::scope(conn, None).unwrap();
+        let health =
+            kassiber_workspace::readiness::health(conn, &context, active.as_ref()).unwrap();
+        let coverage =
+            kassiber_rates::coverage(conn, &dict([("limit", Value::Int(10.into()))])).unwrap();
+        let payload = snapshot(conn, health, coverage).unwrap();
+        let blockers = match get(&payload, "blockers") {
+            Some(Value::List(items)) => items.clone(),
+            _ => Vec::new(),
+        };
+        let stale = blockers
+            .iter()
+            .find(|b| py_str(&val(b, "id")) == "journals_stale")
+            .unwrap_or_else(|| panic!("no journals_stale in {:?}", ids(&payload)));
+        assert_eq!(py_str(&val(stale, "severity")), "blocking");
+        assert!(
+            py_str(&val(stale, "detail")).ends_with("; 2 metadata edit(s) changed report inputs."),
+            "{}",
+            py_str(&val(stale, "detail"))
+        );
+        assert_eq!(py_str(&val(stale, "activity_kind")), "ui.activity.history");
+        assert_eq!(
+            int(&val(&val(stale, "edit_history"), "edit_count")).unwrap(),
+            2.into()
+        );
+        drop(book);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn sync_failure_leads_existing_blockers() {
         // A refresh that failed before any job ran (an AppError or a busy slot)

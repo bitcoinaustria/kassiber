@@ -207,7 +207,14 @@ pub struct Reply {
     pub chunk_size: Option<usize>,
     /// Keep the connection open after the body until the provider drops.
     pub hold: bool,
+    /// Build the reply from the body of the request it answers, as the
+    /// Python suites' `_Computed` replies did (a provider's next leg after a
+    /// tool round, from what that round returned).
+    pub computed: Option<Computed>,
 }
+
+/// A reply built from the request body it answers.
+pub type Computed = Arc<dyn Fn(&[u8]) -> Reply + Send + Sync>;
 
 impl Reply {
     pub fn json(status: u16, body: &str) -> Self {
@@ -233,6 +240,15 @@ impl Reply {
             body: body.to_vec(),
             chunk_size: None,
             hold: false,
+            computed: None,
+        }
+    }
+
+    /// A reply `build` makes from the request body it answers.
+    pub fn computed(build: impl Fn(&[u8]) -> Reply + Send + Sync + 'static) -> Self {
+        Self {
+            computed: Some(Arc::new(build)),
+            ..Self::raw(200, "text/event-stream", b"")
         }
     }
 
@@ -382,7 +398,7 @@ fn serve(mut stream: std::net::TcpStream, script: &Mutex<Script>, stop: &AtomicB
         script.requests.push(Received {
             method: method.clone(),
             path: path.clone(),
-            body,
+            body: body.clone(),
             authorization: header("authorization"),
             accept: header("accept"),
         });
@@ -393,6 +409,10 @@ fn serve(mut stream: std::net::TcpStream, script: &Mutex<Script>, stop: &AtomicB
             .and_then(|(_, queue)| (!queue.is_empty()).then(|| queue.remove(0)))
     }
     .unwrap_or_else(|| Reply::json(404, r#"{"detail": "Not Found"}"#));
+    let reply = match &reply.computed {
+        Some(build) => build(&body),
+        None => reply,
+    };
     write_reply(&mut stream, &reply, stop);
 }
 
