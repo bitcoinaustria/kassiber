@@ -21,6 +21,16 @@ only fixed or compared Python were removed.
 - [ ] Redesign the extension model for a Rust-only backend before any step of
   [plan 19](docs/plan/19-extensions.md) is accepted; its code tiers assume
   Python.
+- [ ] Rename the `requires_python_migration` error code: no Python migration
+  exists any more, but the code is a public contract (desktop, AI references,
+  recorded sessions), so the rename needs its callers updated together.
+- [ ] `freshness_job_failed` reports `error_class` `builtins.EngineValueError`
+  where Python reported `kassiber.core.engines.errors.EngineValueError`; pick
+  a Rust-native class naming and document it.
+- [ ] Decide whether these Python-only comparisons need a Rust replacement or
+  can stay retired: the Austrian Neu cutoff copies comparison, the
+  tax-country end-to-end modules, the Bitpanda importer tests and the AI tool
+  schema budget test.
 
 ## Rust backend R0
 
