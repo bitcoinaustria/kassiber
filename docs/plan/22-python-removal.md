@@ -142,6 +142,26 @@ The new flow for a deliberate change:
    and rewrites the lock; the lock bump goes in the same PR as the code.
    Then rerun the touched crates' mutation catalogs.
 
+Goldens that recorded product sessions follow the same flow with Rust
+tools, never the Python capture tools that made them:
+- **The recorded parity sessions** (`tests/data/sessions/*.tar`) come from
+  the session recorder. The recorder needs the pytest suite, so after
+  Python they are re-made by replaying: `scripts/replay-sessions.sh` names
+  every session that differs, and a deliberate change re-records those by
+  running the same argv, environment and starting state against the new
+  binary (`session-replay` keeps all three). Review the diffs, archive with
+  `session-replay archive`, publish, bump the lock.
+- **The porters' recorded goldens** (P2's freshness sessions and tapes,
+  P3's CLI sessions and books, P1's routing replays) are rewritten by their
+  own Rust tests under `KASSIBER_GOLDEN_WRITE=1`. P4's black-box
+  transcripts are rewritten under `KASSIBER_BLESS=1`. Both switches are
+  refused under CI. A golden that needs new network traffic is re-taped
+  against a regtest stack with `KASSIBER_TEST_NET_TAPE=record:<file>`.
+- In every case, review the diff, publish to the data branch, and bump the
+  lock in the same PR. The P2 capture tools in
+  `~/.cache/kassiber-verify/port-p2/` and `tests/rust_port/freeze_session_books.py`
+  go with Python.
+
 ## Tests
 
 The pytest classification comes from the test-debloat agent when it reports.
