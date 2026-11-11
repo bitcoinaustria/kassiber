@@ -340,6 +340,20 @@ or owner locks (`test_rust_store_interop`, the MCP privacy fence). Their
 behaviour is covered by the porters' Rust tests where they hold kills, or
 listed in `dropped.tsv`.
 
+Two sessions were repaired by hand after full replays showed them to depend on
+the replaying machine, each without changing what the process reads:
+- `test_rust_store_interop` `test_passphrase_fd_matches_python[]`: the store
+  probe takes a descriptor number from a stdin request, not from argv, so the
+  recorder never captured descriptor 14 and the replay child inherited
+  whatever that number was. The session now hands it the recorded content,
+  an empty pipe.
+- `test_rust_mcp` `test_only_the_granted_tools_are_reachable` (the
+  376-call session): the test pipelined every call at once, so a loaded
+  machine tripped the server's 32-call in-flight limit. Its stdin is now
+  written in chunks of 8 calls, each after all but 16 earlier calls were
+  answered (`after_lines`), the condition the recording ran under. No other
+  MCP session pipelines more than 32 calls.
+
 ### Rust-blessed export goldens (owner sign-off required)
 
 These goldens record Rust's output where the shared cross-country export
