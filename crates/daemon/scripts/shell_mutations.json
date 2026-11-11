@@ -404,7 +404,7 @@
   },
   {
     "id": "release-prerelease-zero",
-    "file": "crates/release/src/update.rs",
+    "file": "crates/release/src/version.rs",
     "find": ".any(|p| p.bytes().all(|b| b.is_ascii_digit()) && p.len() > 1 && p.starts_with('0'))",
     "replace": ".any(|p| p.bytes().all(|b| b.is_ascii_digit()) && p.len() > 2 && p.starts_with('0'))",
     "expect_failing": [
@@ -415,7 +415,7 @@
   },
   {
     "id": "release-numeric-order",
-    "file": "crates/release/src/update.rs",
+    "file": "crates/release/src/version.rs",
     "find": "    left.len().cmp(&right.len()).then_with(|| left.cmp(right))",
     "replace": "    left.cmp(right)",
     "expect_failing": [
