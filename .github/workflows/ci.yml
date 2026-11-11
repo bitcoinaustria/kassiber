@@ -18,6 +18,11 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
+      # The redaction corpora the Vitest suites read are locked test data.
+      - name: Fetch pinned test data
+        shell: bash
+        run: scripts/fetch-test-data.sh
+
       - name: Install pnpm
         uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
         with:
