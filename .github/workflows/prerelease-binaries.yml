@@ -5,7 +5,6 @@ on:
     paths:
       - ".github/workflows/prerelease-binaries.yml"
       - ".github/workflows/finalize-signed-release.yml"
-      - "pyproject.toml"
       # Embedded into the Rust binary with include_str!.
       - "crates/ai/skill_references/**"
       - "kassiber/data/**"
@@ -190,25 +189,24 @@ jobs:
         run: |
           set -euo pipefail
           # The backend crate carries the product version. Every other copy
-          # must agree (tests/test_dependency_drift.py checks the same set in
-          # CI, but needs the Python package this job no longer builds).
+          # must agree.
           version="$(sed -n 's/^version *= *"\([^"]*\)".*/\1/p' crates/kassiber/Cargo.toml | head -n 1)"
-          "$PYTHON" - "$version" <<'PY'
-          import json, re, sys
-          from pathlib import Path
-          expected = sys.argv[1]
-          def table_version(path):
-              return re.search(r'(?m)^version\s*=\s*"([^"]+)"', Path(path).read_text(encoding="utf-8")).group(1)
-          found = {
-              "pyproject.toml": table_version("pyproject.toml"),
-              "ui-tauri/src-tauri/Cargo.toml": table_version("ui-tauri/src-tauri/Cargo.toml"),
-              "ui-tauri/package.json": json.loads(Path("ui-tauri/package.json").read_text(encoding="utf-8"))["version"],
-              "ui-tauri/src-tauri/tauri.conf.json": json.loads(Path("ui-tauri/src-tauri/tauri.conf.json").read_text(encoding="utf-8"))["version"],
+          table_version() {
+            sed -n 's/^version *= *"\([^"]*\)".*/\1/p' "$1" | head -n 1
           }
-          wrong = {path: value for path, value in found.items() if value != expected}
-          if not expected or wrong:
-              sys.exit(f"crates/kassiber is {expected!r}, but these disagree: {wrong}")
-          PY
+          wrong=""
+          for copy in \
+              "ui-tauri/src-tauri/Cargo.toml=$(table_version ui-tauri/src-tauri/Cargo.toml)" \
+              "ui-tauri/package.json=$(jq -r .version ui-tauri/package.json)" \
+              "ui-tauri/src-tauri/tauri.conf.json=$(jq -r .version ui-tauri/src-tauri/tauri.conf.json)"; do
+            if [ "${copy#*=}" != "$version" ]; then
+              wrong="$wrong ${copy}"
+            fi
+          done
+          if [ -z "$version" ] || [ -n "$wrong" ]; then
+            echo "crates/kassiber is '$version', but these disagree:$wrong" >&2
+            exit 1
+          fi
           release_tag=""
           if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF_TYPE" = "tag" ]; then
             release_tag="$GITHUB_REF_NAME"
