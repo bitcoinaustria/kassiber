@@ -367,8 +367,8 @@ that each fetch the locked test data first:
    the `kassiber-repo-checks` tests inside the workspace run.
 2. `Recorded sessions` replays the recordings (see
    [above](#replaying-the-recorded-sessions)): one job builds the binaries
-   (`scripts/replay-sessions.sh build`, then `pack`) and 16 parts each unpack
-   them and replay every 16th session (`--part K/N`), uploading their
+   (`scripts/replay-sessions.sh build`, then `pack`) and 32 parts each unpack
+   them and replay every 32nd session (`--part K/N`), uploading their
    `target/session-replay-report.tsv` even after failure. The Rust crates
    job and the replay parts install
    Poppler (`poppler-utils`), so the PDF import and chat paths run instead of
