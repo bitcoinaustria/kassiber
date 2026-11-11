@@ -691,11 +691,31 @@ jobs:
       - name: Run egress observer tests
         run: cargo test -p kassiber-net --features test-observer --locked
 
+      # The shell harness's parity tests (legacy_privacy_transport,
+      # privacy_reports, psbt_privacy) compare against the Python reference
+      # through `.venv/bin/python`; the steps above need no Python.
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Sync dependencies
+        run: uv sync --locked
+
       # The binary's harness build adds the observer, the in-memory store, and
       # the daemon's protocol test kinds; the supervisor-rule tests need it.
       - name: Lint and test the Rust shell harness
         run: |
           cargo clippy -p kassiber -p kassiber-daemon -p kassiber-runtime --all-targets --features kassiber/test-harness --locked -- -D warnings
+          # `cargo build` writes target/debug/kassiber.d; `cargo test` alone
+          # does not, and the Python reference refuses a binary without it.
+          cargo build -p kassiber --bin kassiber --features test-harness --locked
           cargo test -p kassiber --features test-harness --locked
 
   chain-observers:
