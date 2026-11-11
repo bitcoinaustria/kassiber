@@ -83,6 +83,18 @@ def binary() -> str:
     return prefix()[0]
 
 
+def configured() -> bool:
+    """Whether a binary is named, for `unittest.skipUnless` outside the harness."""
+    try:
+        prefix()
+    except CandidateConfigError:
+        return False
+    return True
+
+
+NO_BINARY = f"set {CLI_ENV} or {BIN_ENV} to the Rust kassiber binary"
+
+
 def argv(args: Iterable[str | os.PathLike[str] | InputFd]) -> list[str]:
     """The full command line for `args`, for messages and inspection."""
     return [*prefix(), *("<fd>" if isinstance(arg, InputFd) else os.fspath(arg) for arg in args)]
