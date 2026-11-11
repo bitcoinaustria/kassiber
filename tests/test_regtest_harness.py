@@ -28,11 +28,6 @@ from kassiber.db import open_db
 
 from tests.integration.env import EgressBlocked, no_egress_guard
 from tests.integration import regtest_demo
-from tests.integration.chain_observer_oracle import (
-    BITCOIN_TRANSITIONS,
-    LIQUID_TRANSITIONS,
-    TruthManifest,
-)
 from tests.integration.tapes import BitcoinRpcTape, RecordedTape, TapeMiss
 
 
@@ -154,89 +149,6 @@ def _create_replay_book(conn, data_root: Path, *, core_wallet: str, addresses: l
 
 
 class RegtestHarnessTest(unittest.TestCase):
-    def test_chain_observer_truth_manifest_is_bounded_and_ordered(self):
-        bitcoin = TruthManifest("bitcoin", "regtest", "unit")
-        for name in BITCOIN_TRANSITIONS:
-            bitcoin.capture(
-                name,
-                tip={"height": 1, "hash": "11" * 32},
-                transactions=(),
-                utxos=(),
-                ownership=(),
-                highest_used={"receive": 0, "change": 0},
-            )
-        bitcoin.validate()
-
-        liquid = TruthManifest("liquid", "elementsregtest", "unit")
-        for name in LIQUID_TRANSITIONS:
-            liquid.capture(
-                name,
-                tip={"height": 1, "hash": "22" * 32},
-                transactions=(),
-                utxos=(),
-                ownership=(),
-                highest_used={"receive": 0, "change": 0},
-            )
-        liquid.validate()
-
-        broken = TruthManifest("bitcoin", "regtest", "unit")
-        broken.capture(
-            "noop",
-            tip={"height": 1, "hash": "33" * 32},
-            transactions=(),
-            utxos=(),
-            ownership=(),
-            highest_used={},
-        )
-        with self.assertRaisesRegex(AssertionError, "transition order"):
-            broken.validate()
-
-    def test_chain_observer_lane_is_shared_and_chain_selectable(self):
-        harness = (ROOT / "scripts" / "integration-harness.sh").read_text(encoding="utf-8")
-
-        self.assertIn("chain-observers", harness)
-        self.assertIn("KASSIBER_CHAIN_OBSERVER_CHAIN", harness)
-        self.assertIn("run_with_bitcoin_core run_chain_observer_oracle", harness)
-        self.assertIn("tests.integration.test_live_chain_observer_oracle", harness)
-        self.assertIn("tests.integration.test_live_lwk_observer", harness)
-        self.assertNotIn("compose.chain-observers", harness)
-
-        oracle = (ROOT / "tests" / "integration" / "chain_observer_oracle.py").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("deadline = time.monotonic() + 180", oracle)
-        self.assertIn("transport tips have not caught up", oracle)
-
-    def test_bdk_runtime_probe_is_limited_to_bitcoin_observer_lane(self):
-        harness = (ROOT / "scripts" / "integration-harness.sh").read_text(encoding="utf-8")
-        base_probe = harness[
-            harness.index("ensure_python_runtime()") : harness.index("ensure_bdk_runtime()")
-        ]
-        bdk_probe = harness[
-            harness.index("ensure_bdk_runtime()") : harness.index("run_fast()")
-        ]
-        observer_lane = harness[
-            harness.index("run_chain_observers()") : harness.index("probe_frigate()")
-        ]
-
-        self.assertNotIn("bdkpython", base_probe)
-        self.assertIn("bdkpython", bdk_probe)
-        self.assertIn('if [ "$selected" != "liquid" ]; then', observer_lane)
-        self.assertIn("ensure_bdk_runtime", observer_lane)
-
-    def test_chain_observer_ci_job_is_path_aware_and_required(self):
-        workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("chain-observers:", workflow)
-        self.assertIn("name: Chain observers (Linux Docker)", workflow)
-        self.assertIn("Detect observer-sensitive changes", workflow)
-        self.assertIn("kassiber/core/chain_observer", workflow)
-        self.assertIn("kassiber/core/sync_backends.py", workflow)
-        self.assertIn("kassiber/wallet_descriptors.py", workflow)
-        self.assertIn("dev/regtest", workflow)
-        self.assertIn("./scripts/integration-harness.sh chain-observers", workflow)
-
     def test_default_compose_lane_removes_stale_keep_state_before_start(self):
         harness = (ROOT / "scripts" / "integration-harness.sh").read_text(encoding="utf-8")
         cleanup = "docker_compose_regtest down -v --remove-orphans"

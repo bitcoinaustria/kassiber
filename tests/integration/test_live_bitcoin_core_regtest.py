@@ -9,10 +9,10 @@ import uuid
 from pathlib import Path
 from urllib import request
 
-from kassiber.core.sync_backends import sanitize_wallet_segment
+from tests.integration.book import sanitize_wallet_segment
 
 from tests.integration.env import skip_unless_integration
-from tests import cli_runner
+from tests.integration import cli as cli_runner
 
 
 ROOT = Path(__file__).resolve().parents[2]

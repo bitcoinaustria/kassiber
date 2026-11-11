@@ -105,6 +105,7 @@ run_fast() {
   ensure_python_runtime
   KASSIBER_NO_EGRESS=1 py_unittest \
     tests.integration.test_product_free \
+    tests.integration.test_chain_observer_oracle \
     tests.integration.test_lightning_business_plan \
     tests.integration.test_lightning_funding \
     tests.integration.test_regtest_source_funds_seed \

@@ -8,7 +8,7 @@ import uuid
 from decimal import Decimal
 from pathlib import Path
 
-from kassiber.db import open_db
+from tests.integration.book import open_book
 from tests.integration import regtest_demo
 from tests.integration.env import skip_unless_integration
 from tests.integration.test_live_bdk_observer import _wait_for_electrum_height, _wait_for_esplora
@@ -53,7 +53,7 @@ def _create_book(root: Path, kind: str, endpoint: str, descriptor: str) -> None:
 
 
 def _state_hash(root: Path) -> tuple[str, int, int]:
-    conn = open_db(root)
+    conn = open_book(root, readonly=True)
     try:
         state = conn.execute(
             "SELECT state_json FROM chain_observer_instances WHERE observer_kind='lwk'"
@@ -119,7 +119,7 @@ class LiveLwkObserverTest(unittest.TestCase):
                         self.assertEqual(coverage, 2)
                     else:
                         self.assertEqual(result["observer_compatibility_reason"], "http_route_policy")
-                        conn = open_db(root)
+                        conn = open_book(root, readonly=True)
                         try:
                             self.assertEqual(conn.execute("SELECT COUNT(*) FROM chain_observer_instances").fetchone()[0], 0)
                         finally:
@@ -190,6 +190,19 @@ class LiveLwkObserverTest(unittest.TestCase):
                 for root in roots.values():
                     _sync(root, "LWK watch")
                 self.assertIsNotNone(next(row for row in _semantic_transactions(roots["electrum"]) if row["external_id"] == asset_tx)["confirmed_at"])
+                # Elements holds the same keys, so its unblinded unspent
+                # outputs are the ground truth for both routes.
+                core_unspent = sorted(
+                    (str(row["txid"]), int(row["vout"]), int(Decimal(str(row["amount"])) * 100_000_000_000))
+                    for row in _rpc(url, user, password, "listunspent", [0, 9_999_999, []], wallet=owner)
+                )
+                for kind, root in roots.items():
+                    book_unspent = sorted(
+                        (str(row["txid"]), int(row["vout"]), int(row["amount"]))
+                        for row in _utxo_projection(root)
+                        if not row["spent"]
+                    )
+                    self.assertEqual(book_unspent, core_unspent, f"{kind}: unspent outputs differ from Elements'")
 
                 _rpc(url, user, password, "invalidateblock", [block])
                 _wait_for_electrum_height(electrum, height - 1)
