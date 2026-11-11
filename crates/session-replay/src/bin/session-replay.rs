@@ -2,6 +2,7 @@
 //!
 //!     session-replay replay DIR --bin NAME=PATH ... [--examples DIR] [--only TEXT] [--jobs N]
 //!                           [--keep] [--report FILE [--resume]] [--coverage DIR]
+//!                           [--update]  (re-record the sessions that differ)
 //!     session-replay list DIR
 //!     session-replay pack SRC DST --sessions FILE [--keep-ciphertext FILE]
 //!     session-replay decrypt REC --allowlist FILE [--also PASSPHRASE...]
@@ -275,6 +276,50 @@ fn decrypt(args: &[String]) -> ExitCode {
     ExitCode::SUCCESS
 }
 
+/// Write what a replay did into its session: output, exit and the state it
+/// left (blobs copied into the recording's store).
+fn rerecord(
+    file: &Path,
+    blobs: &Blobs,
+    replayed: &kassiber_session_replay::replay::Replayed,
+) -> Result<(), String> {
+    use kassiber_session_replay::Entry;
+    let mut session = read_session(file)?;
+    let scan = Blobs::new(&replayed.store);
+    let copy = |hash: &str| -> Result<String, String> {
+        let bytes = scan.get(hash).map_err(|e| e.to_string())?;
+        blobs.put(&bytes).map_err(|e| e.to_string())
+    };
+    session.stdout = blobs.put(&replayed.stdout).map_err(|e| e.to_string())?;
+    session.stderr = blobs.put(&replayed.stderr).map_err(|e| e.to_string())?;
+    session.exit = replayed.exit.clone();
+    for (root, after) in session.roots.iter_mut().zip(&replayed.after) {
+        let mut after = after.clone();
+        for entry in &mut after {
+            if let Entry::File {
+                blob, encryption, ..
+            } = entry
+            {
+                *blob = copy(blob)?;
+                if let Some(e) = encryption {
+                    if let Some(ciphertext) = &e.ciphertext {
+                        e.ciphertext = Some(copy(ciphertext)?);
+                    }
+                }
+            }
+        }
+        root.after = after;
+    }
+    let bytes = serde_json::to_vec(&session).map_err(|e| e.to_string())?;
+    if file.to_string_lossy().ends_with(".gz") {
+        let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::new(9));
+        std::io::Write::write_all(&mut encoder, &bytes).map_err(|e| e.to_string())?;
+        fs::write(file, encoder.finish().map_err(|e| e.to_string())?).map_err(|e| e.to_string())
+    } else {
+        fs::write(file, bytes).map_err(|e| e.to_string())
+    }
+}
+
 /// The shard a pack file goes to: `sessions.tar` for the sessions, and
 /// `blobs-<first hex digit>.tar` for the blobs, so the test-data lock pins
 /// 17 files whatever the number of recordings.
@@ -426,6 +471,7 @@ fn main() -> ExitCode {
     let mut only = Vec::new();
     let mut jobs = 4usize;
     let mut keep = false;
+    let mut update = false;
     let mut resume = false;
     let mut report: Option<PathBuf> = None;
     let mut coverage: Option<PathBuf> = None;
@@ -442,6 +488,9 @@ fn main() -> ExitCode {
             "--only" => only.extend(rest.next().cloned()),
             "--jobs" => jobs = rest.next().and_then(|v| v.parse().ok()).unwrap_or(4),
             "--keep" => keep = true,
+            // Re-record each session that differs from what this run did:
+            // only after the difference is reviewed as intended.
+            "--update" => update = true,
             // Skip the sessions the --report file already lists, and append.
             "--resume" => resume = true,
             "--report" => report = rest.next().map(PathBuf::from),
@@ -585,7 +634,14 @@ fn main() -> ExitCode {
                     );
                 }
                 let problems = match result {
-                    Ok(outcome) => outcome.differences,
+                    Ok(outcome) => {
+                        if update && !outcome.differences.is_empty() {
+                            if let Err(error) = rerecord(file, &blobs, &outcome.replayed) {
+                                eprintln!("could not re-record {name}: {error}");
+                            }
+                        }
+                        outcome.differences
+                    }
                     Err(error) => vec![format!("could not replay: {error}")],
                 };
                 if !keep && scratch.starts_with(&scratch_root) {

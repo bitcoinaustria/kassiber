@@ -59,6 +59,18 @@ pub const RECORDING_LOOKBACK_US: i64 = 600_000_000;
 
 pub struct Outcome {
     pub differences: Vec<String>,
+    /// What this run printed and left, for re-recording a session after a
+    /// reviewed change (`session-replay replay --update`). Output is in the
+    /// recorded paths; `after` blobs live in `store`.
+    pub replayed: Replayed,
+}
+
+pub struct Replayed {
+    pub stdout: Vec<u8>,
+    pub stderr: Vec<u8>,
+    pub exit: crate::Exit,
+    pub after: Vec<Vec<Entry>>,
+    pub store: PathBuf,
 }
 
 /// Path substitutions, longest first: recorded text to replay text.
@@ -710,6 +722,7 @@ pub fn replay(
     }
     let scan_blobs = Blobs::new(&scratch.join("after-store"));
     let passphrases = session_passphrases(session, blobs);
+    let mut all_after = Vec::new();
     for (index, root) in session.roots.iter().enumerate() {
         let new = disk_path(scratch, index, &root.path, namespaced);
         let mut after = if new.exists() {
@@ -728,6 +741,7 @@ pub fn replay(
         fs::create_dir_all(&dump_dir).map_err(|e| e.to_string())?;
         let recorded = artifacts(&dump_dir, &root.after, blobs, &mut left, None);
         let replayed = artifacts(&dump_dir, &after, &scan_blobs, &mut right, Some(&paths));
+        all_after.push(after.clone());
         for name in recorded
             .keys()
             .chain(replayed.keys())
@@ -750,7 +764,19 @@ pub fn replay(
             }
         }
     }
-    Ok(Outcome { differences })
+    Ok(Outcome {
+        differences,
+        replayed: Replayed {
+            stdout: paths.back(&String::from_utf8_lossy(&stdout)).into_bytes(),
+            stderr: paths.back(&String::from_utf8_lossy(&stderr)).into_bytes(),
+            exit: crate::Exit {
+                code: status.code(),
+                signal,
+            },
+            after: all_after,
+            store: scratch.join("after-store"),
+        },
+    })
 }
 
 /// Rewrite recorded paths inside a restored state: text files by

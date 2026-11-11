@@ -147,9 +147,10 @@ tools, never the Python capture tools that made them:
 - **The recorded parity sessions** (`tests/data/sessions/*.tar`) come from
   the session recorder. The recorder needs the pytest suite, so after
   Python they are re-made by replaying: `scripts/replay-sessions.sh` names
-  every session that differs, and a deliberate change re-records those by
-  running the same argv, environment and starting state against the new
-  binary (`session-replay` keeps all three). Review the diffs, archive with
+  every session that differs, and after review a deliberate change
+  re-records those with `session-replay replay --update`, which writes the
+  new run's output, exit and state into each differing session (same argv,
+  environment and starting state). Review the diffs, archive with
   `session-replay archive`, publish, bump the lock.
 - **The porters' recorded goldens** (P2's freshness sessions and tapes,
   P3's CLI sessions and books, P1's routing replays) are rewritten by their
