@@ -117,6 +117,11 @@ def _answer(text: str) -> Reply:
     return responses_stream([message_item(text)], text=text)
 
 
+# Reading a PDF's text layer needs Poppler, as in tests/test_chat_files.py; CI
+# installs it in every lane (.github/workflows/ci.yml).
+POPPLER = all(shutil.which(tool) for tool in ("pdfinfo", "pdftotext", "pdftoppm"))
+
+
 @unittest.skipUnless(RUST_BIN and os.name == "posix", "set KASSIBER_RUST_BIN to a test-harness build")
 class RustAiChatParityTest(unittest.TestCase):
     maxDiff = None
@@ -494,6 +499,7 @@ class RustAiChatParityTest(unittest.TestCase):
         )
         self.assertEqual(self.requests, [])
 
+    @unittest.skipUnless(POPPLER, "Poppler is not installed")
     def test_chat_files_reach_the_model(self):
         """#693/#697: a CSV, a PDF with a text layer, a small image and an
         expired grant. The on-device provider sees the note, the PDF's text

@@ -284,6 +284,9 @@ class PythonShardContractTest(unittest.TestCase):
             steps = job["steps"]
             names = [step.get("name") for step in steps]
             self.assertNotIn("continue-on-error", str(steps))
+            # The PDF tests need Poppler; a lane without it would skip them.
+            poppler = next(step["run"] for step in steps if step.get("name") == "Install Poppler")
+            self.assertIn("poppler-utils", poppler)
             unpack = names.index("Unpack the Rust test binaries")
             self.assertLess(names.index("Download the Rust test binaries"), unpack)
             self.assertLess(names.index("Set up Rust"), unpack)

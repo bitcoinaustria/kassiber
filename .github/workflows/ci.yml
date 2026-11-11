@@ -194,6 +194,13 @@ jobs:
       - name: Sync dependencies
         run: uv sync --locked
 
+      # The chat and document tests read PDFs through Poppler, as the product
+      # does; without it they would skip.
+      - name: Install Poppler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends poppler-utils
+
       # Some parity tests build a small example with `cargo build --offline`;
       # the lane no longer builds anything that would download the crates.
       - name: Fetch Rust crates
@@ -324,6 +331,13 @@ jobs:
       - name: Sync dependencies
         run: uv sync --locked
 
+      # The chat and document tests read PDFs through Poppler, as the product
+      # does; without it they would skip.
+      - name: Install Poppler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends poppler-utils
+
       # Some parity tests build a small example with `cargo build --offline`;
       # the lane no longer builds anything that would download the crates.
       - name: Fetch Rust crates
@@ -449,6 +463,13 @@ jobs:
 
       - name: Sync dependencies
         run: uv sync --locked
+
+      # The chat and document tests read PDFs through Poppler, as the product
+      # does; without it they would skip.
+      - name: Install Poppler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends poppler-utils
 
       # Some parity tests build a small example with `cargo build --offline`;
       # the lane no longer builds anything that would download the crates.
