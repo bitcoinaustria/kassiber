@@ -363,8 +363,11 @@ unless `--timezone` names another, and the result reports the resolved
 `range`. Transactions without a known date are left out of a period and
 counted in `warnings`; an undated quarantine still blocks a platform export.
 Without them every transaction is exported. The `csv` format is one header
-row and the rows, with exact decimal text: `amount_btc` and `fee_btc` beside
-integer `amount_msat` and `fee_msat`, fiat values at their stored precision.
+row and the rows, with exact decimal text: `amount_btc` and `fee_btc` (eight
+places, more only for sub-satoshi amounts) beside integer `amount_msat` and
+`fee_msat`, fiat values at their stored precision. The last column, `status`,
+is `draft` on every row of a draft list (basis and gain withheld) and `final`
+otherwise.
 `cointracking-csv` and `blockpit-csv` write another tool's import format
 instead of Kassiber's columns; see
 [moving to CoinTracking or Blockpit](../../../docs/reference/imports.md#moving-to-cointracking-or-blockpit).

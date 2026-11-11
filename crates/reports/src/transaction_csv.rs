@@ -251,8 +251,11 @@ pub(super) fn report_rows_current(
                     .unwrap_or(Value::Null)
             };
             for (key, v) in [
-                ("amount_exact", exact(Some(&amount_btc))),
-                ("fee_exact", exact(Some(&fee_btc))),
+                (
+                    "amount_exact",
+                    s(crate::report_design::btc_text(&amount_btc)),
+                ),
+                ("fee_exact", s(crate::report_design::btc_text(&fee_btc))),
                 ("fiat_price_exact", exact(price.as_ref())),
                 ("fiat_value_exact", exact(cash.as_ref())),
                 ("fmv_exact", exact(fmv.as_ref())),

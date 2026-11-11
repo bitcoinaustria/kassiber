@@ -184,6 +184,20 @@ fn display_rounding_and_csv_text_come_from_one_exact_value() {
     assert_eq!(Cell::Fiat(value("-0.001")).display(en), "0.00");
     assert_eq!(Cell::Btc(value("1.6473E-7")).display(de), "0,00000016");
     assert_eq!(Cell::Btc(value("1.6473E-7")).csv(), "0.00000016473");
+    // CSV BTC text: eight places, more only for sub-satoshi digits.
+    for (raw, csv) in [
+        ("0.05", "0.05000000"),
+        ("0.05000000000", "0.05000000"),
+        ("12", "12.00000000"),
+        ("-0.00000001", "-0.00000001"),
+        ("0.000000015", "0.000000015"),
+        ("0.00000000001", "0.00000000001"),
+        ("0", "0.00000000"),
+        ("0E-11", "0.00000000"),
+    ] {
+        assert_eq!(Cell::Btc(value(raw)).csv(), csv, "{raw}");
+        assert_eq!(report_design::btc_text(&value(raw)), csv, "{raw}");
+    }
     assert_eq!(Cell::Percent(value("59.25")).display(en), "59.2%");
     assert_eq!(Cell::Date("2025-03-15".into()).display(de), "15.03.2025");
     assert_eq!(Cell::Date("2025-03".into()).display(de), "März 2025");

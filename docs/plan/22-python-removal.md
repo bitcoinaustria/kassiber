@@ -393,6 +393,25 @@ export` with a passphrase descriptor) aborted with `memory allocation of
 1099511627776 bytes failed` (SIGABRT) in one recording run, not on export
 layout.
 
+#### Re-blessed for the 2026-11-11 export decisions
+
+Two owner decisions change export bytes: the transactions CSV ends with a
+`status` column (`draft` or `final` on every row), and every design CSV writes
+BTC with eight places, more only for sub-satoshi msat (`0.05000000` instead
+of `0.05000000000` or `0.05`); see [report design](../reference/report-design.md#csv).
+Goldens were re-blessed through the Rust path only and each diff reviewed:
+
+| Golden | How | What changed |
+| --- | --- | --- |
+| `crates/kassiber/tests/black_box/golden/ai_tools/mutating_tools.txt` | `KASSIBER_BLESS=1` | fixture `reports`, `ui.reports.export_csv` (full report bundle): the tool result's `bytes` and `report_snapshot.content_sha256`, the saved `filed_report_snapshots` row's content hash and the digest of that write block. All follow from the bundle's BTC cells; with the old cell text the golden passes unchanged |
+
+No report vector under `crates/reports/tests/data` changed: the artifact
+vectors compare the transactions CSV to Python's file by value (the new
+`status` column is checked against Python's draft section title instead), and
+no test-data golden holds design CSV text. The recorded sessions under
+`tests/data/sessions` that export a transactions, capital-gains or bundle CSV
+will differ in those bytes and need re-recording.
+
 ### Pathological stored values (owner decision 2026-11-11)
 
 The legacy-migration inventory's G5 (NaN or infinity, integers beyond 64

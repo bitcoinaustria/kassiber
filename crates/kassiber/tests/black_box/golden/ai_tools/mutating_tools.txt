@@ -2161,7 +2161,7 @@ $ daemon
 > #1
 < {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [2545 bytes fnv128 90484dc375c77f617e629411f7695319]
 > #2
-< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [2947 bytes fnv128 fce95e8adc2b118baf65390b0224920c]
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [2947 bytes fnv128 94ff5ac40e1dd1813515f8003d8f54b2]
 > #3
 < {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [3141 bytes fnv128 4ba83100c95461accb041379324cf811]
 > #4
@@ -2195,13 +2195,13 @@ $ daemon
 + filed_report_chain_captures: snapshot_id=t:"<uuid#35>" | profile_id=t:"p" | source_snapshot_id=NULL | captured_at=t:"2026-03-04T05:06:07Z"
 + filed_report_chain_captures: snapshot_id=t:"<uuid#36>" | profile_id=t:"p" | source_snapshot_id=NULL | captured_at=t:"2026-03-04T05:06:07Z"
 + filed_report_chain_captures: snapshot_id=t:"<uuid#37>" | profile_id=t:"p" | source_snapshot_id=NULL | captured_at=t:"2026-03-04T05:06:07Z"
-+ filed_report_snapshots: id=t:"<uuid#34>" | workspace_id=t:"ws" | profile_id=t:"p" | report_kind=t:… [798 bytes fnv128 4fe7723f47fb5eba5d0b1f7622e5959c]
++ filed_report_snapshots: id=t:"<uuid#34>" | workspace_id=t:"ws" | profile_id=t:"p" | report_kind=t:… [798 bytes fnv128 2ee87b0d6fce5aa910cb31df55bb8a21]
 + filed_report_snapshots: id=t:"<uuid#37>" | workspace_id=t:"ws" | profile_id=t:"p" | report_kind=t:… [774 bytes fnv128 600a1027cb7da7d1c351e7667c048e1e]
 + filed_report_snapshots: id=t:"<uuid#33>" | workspace_id=t:"ws" | profile_id=t:"p" | report_kind=t:… [798 bytes fnv128 417d21c6a597f6b6880969867eb29d13]
 + filed_report_snapshots: id=t:"<uuid#35>" | workspace_id=t:"ws" | profile_id=t:"p" | report_kind=t:… [799 bytes fnv128 80be9f231f73f8ef88460f54e06d2001]
 + filed_report_snapshots: id=t:"<uuid#36>" | workspace_id=t:"ws" | profile_id=t:"p" | report_kind=t:… [745 bytes fnv128 e548e29e6199528806556ee83b6b6e46]
 + (116 tables, 97 empty)
-… [4674 bytes, 12 lines fnv128 250cb414cf4ab6113dec29639bf6e8ad]
+… [4674 bytes, 12 lines fnv128 984efb3e55649e22141a1c717574bc74]
 # fixture reports
 $ daemon
 > #0

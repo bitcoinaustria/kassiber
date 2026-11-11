@@ -82,7 +82,7 @@ pub(super) fn prepare(conn: &Connection, profile: &Value, args: &Value) -> Resul
                 artifact_csv::cell(value(row, "transaction_id")),
                 text(row, "entry_type"),
                 text(row, "asset"),
-                report_design::plain(&btc(quantity)?),
+                report_design::btc_text(&btc(quantity)?),
                 quantity.to_string(),
                 amount(row, "proceeds")?,
                 amount(row, "cost_basis")?,
@@ -142,6 +142,33 @@ mod tests {
                 row.contains(",BTC,0.00100000001,100000001,12.34,10.000000010000000001,2.33999999,EUR,Split z"),
                 "{country}: {row}"
             );
+        }
+    }
+
+    /// `quantity_btc`: eight places for whole satoshis and zero, the
+    /// sub-satoshi digits only when the msat amount has them.
+    #[test]
+    fn quantity_btc_has_eight_places_unless_sub_satoshi() {
+        let root = tempfile::tempdir().unwrap();
+        let book = kassiber_store::Book::create(&root.path().join("data"), None).unwrap();
+        let conn = book.connection();
+        conn.execute_batch(include_str!("../tests/data/book.sql"))
+            .unwrap();
+        conn.execute_batch(
+            "UPDATE journal_entries SET quantity=-5000000000 WHERE id='a';
+             UPDATE journal_entries SET quantity=0 WHERE id='first';",
+        )
+        .unwrap();
+        let (_, profile) = kassiber_setup::references::scope(conn, &dict::<&str>([])).unwrap();
+        let prepared = prepare(conn, &profile, &dict::<&str>([])).unwrap();
+        let csv = String::from_utf8(prepared.files[0].bytes.clone()).unwrap();
+        for (description, cells) in [
+            ("Split a", ",BTC,0.05000000,5000000000,"),
+            ("Earlier creation", ",BTC,0.00000000,0,"),
+            ("Split z", ",BTC,0.00100000001,100000001,"),
+        ] {
+            let row = csv.lines().find(|l| l.contains(description)).unwrap();
+            assert!(row.contains(cells), "{description}: {row}");
         }
     }
 }

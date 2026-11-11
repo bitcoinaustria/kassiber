@@ -70,8 +70,17 @@ fn same_rows(actual: &str, expected: &str, name: &str) {
     let new_header = new.next().unwrap();
     let new_rows: Vec<Vec<String>> = new.collect();
     assert_eq!(new_rows.len(), old_rows.len(), "{name}: rows");
+    // The design's own column: whether the file is a draft list, which
+    // Python said only in its section title.
+    assert_eq!(new_header.last().map(String::as_str), Some("status"));
+    let draft = old.iter().any(|r| {
+        r.first()
+            .is_some_and(|c| c.starts_with("Transactions (draft"))
+    });
     for (new, old) in new_rows.iter().zip(&old_rows) {
-        for (column, value) in new_header.iter().zip(new) {
+        let status = if draft { "draft" } else { "final" };
+        assert_eq!(new.last().map(String::as_str), Some(status), "{name}");
+        for (column, value) in new_header.iter().zip(&new[..new.len() - 1]) {
             let source = column.trim_end_matches("_btc");
             let index = old_header.iter().position(|h| h == source).unwrap();
             let before = &old[index];
