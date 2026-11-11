@@ -52,10 +52,14 @@ fn golden_path(name: &str) -> PathBuf {
         .join(format!("{name}.json"))
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct Paths {
     tmp: String,
     repo: String,
+    /// A served session's loopback address as recorded and as bound for
+    /// this replay (`127.0.0.1:<port>` both), so its fake takes any free
+    /// port: inputs carry the bound address, outputs the recorded one.
+    address: Option<(String, String)>,
 }
 
 thread_local! {
@@ -68,17 +72,46 @@ impl Paths {
         if self.tmp.is_empty() {
             return text.to_owned();
         }
-        text.replace("{tmp}", &self.tmp)
-            .replace("{repo}", &self.repo)
+        let text = text
+            .replace("{tmp}", &self.tmp)
+            .replace("{repo}", &self.repo);
+        match &self.address {
+            Some((recorded, bound)) => replace_address(&text, recorded, bound),
+            None => text,
+        }
     }
 
     fn back(&self, text: &str) -> String {
         if self.tmp.is_empty() {
             return text.to_owned();
         }
-        text.replace(&self.tmp, "{tmp}")
-            .replace(&self.repo, "{repo}")
+        let text = text
+            .replace(&self.tmp, "{tmp}")
+            .replace(&self.repo, "{repo}");
+        match &self.address {
+            Some((recorded, bound)) => replace_address(&text, bound, recorded),
+            None => text,
+        }
     }
+}
+
+/// `text` with each `from` address (`host:port`) that no further digit
+/// extends replaced by `to`.
+fn replace_address(text: &str, from: &str, to: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(at) = rest.find(from) {
+        let end = at + from.len();
+        out.push_str(&rest[..at]);
+        if rest[end..].starts_with(|c: char| c.is_ascii_digit()) {
+            out.push_str(from);
+        } else {
+            out.push_str(to);
+        }
+        rest = &rest[end..];
+    }
+    out.push_str(rest);
+    out
 }
 
 fn fnv64(bytes: &[u8]) -> String {
@@ -890,16 +923,26 @@ fn tape_lines(tape: &Value) -> String {
 
 /// Newline-delimited JSON-RPC answers by request (method and params), from a
 /// tape that kept every write, served by `kassiber-net`'s loopback fake on
-/// the recorded port.
-fn jsonrpc_server(tape: &Value) -> kassiber_net::test_support::FakeJsonRpc {
+/// a free port. Returns the fake and the address it stands for, the
+/// recorded `127.0.0.1:<port>` the session's inputs and outputs name; a
+/// fixed port could already be taken on the machine running the test.
+fn jsonrpc_server(tape: &Value) -> (kassiber_net::test_support::FakeJsonRpc, String) {
     let text = tape_lines(tape);
     let mut writes: BTreeMap<String, Vec<u8>> = BTreeMap::new();
     let mut reads: BTreeMap<String, Vec<u8>> = BTreeMap::new();
-    let mut port = 0u16;
+    let mut recorded: Option<String> = None;
     for line in text.lines() {
         let parts: Vec<&str> = line.split('\t').collect();
         match parts[0] {
-            "open" => port = parts[4].parse().unwrap(),
+            "open" => {
+                let host = String::from_utf8(b64decode(parts[3])).unwrap();
+                let address = format!("{host}:{}", parts[4]);
+                assert!(
+                    recorded.as_ref().is_none_or(|a| *a == address),
+                    "a served tape names one address: {recorded:?} and {address}"
+                );
+                recorded = Some(address);
+            }
             "w" => writes
                 .entry(parts[1].to_owned())
                 .or_default()
@@ -935,7 +978,12 @@ fn jsonrpc_server(tape: &Value) -> kassiber_net::test_support::FakeJsonRpc {
             }
         }
     }
-    kassiber_net::test_support::FakeJsonRpc::start(port, move |line| {
+    let recorded = recorded.expect("a served tape opens a connection");
+    assert!(
+        recorded.starts_with("127.0.0.1:"),
+        "a served tape is loopback: {recorded}"
+    );
+    let fake = kassiber_net::test_support::FakeJsonRpc::start(0, move |line| {
         let request: Value = serde_json::from_str(line).unwrap_or(Value::Null);
         let key = format!("{}{}", request["method"], request["params"]);
         let mut reply = answers.get(&key).cloned().unwrap_or_else(
@@ -944,7 +992,8 @@ fn jsonrpc_server(tape: &Value) -> kassiber_net::test_support::FakeJsonRpc {
         reply["id"] = request["id"].clone();
         reply.to_string()
     })
-    .unwrap_or_else(|e| panic!("the recorded port {port} is taken: {e}"))
+    .expect("bind a loopback port");
+    (fake, recorded)
 }
 
 // ---------------------------------------------------------------- process
@@ -1028,6 +1077,7 @@ fn run_process(
     paths: &Paths,
     tape: Option<&Path>,
     fallback: &Path,
+    pinned: &[(&str, &str)],
 ) -> (Option<i32>, Vec<u8>, Vec<u8>) {
     let args: Vec<String> = session["args"]
         .as_array()
@@ -1057,6 +1107,7 @@ fn run_process(
     for (key, value) in session["env"].as_object().unwrap() {
         command.env(key, paths.forward(value.as_str().unwrap()));
     }
+    command.envs(pinned.iter().copied());
     if let Some(tape) = tape {
         command.env(
             "KASSIBER_TEST_NET_TAPE",
@@ -1550,6 +1601,14 @@ pub fn replay_served(name: &str) {
 /// As `replay`, with `normalize(index, &mut outcome-json)` applied to both
 /// the recorded and the replayed outcome of each session before comparing.
 pub fn replay_with(name: &str, normalize: impl Fn(usize, &mut Value)) {
+    replay_pinned(name, &[], normalize)
+}
+
+/// As `replay_with`, with test-build clock seams (`KASSIBER_RUST_TEST_*`
+/// variables a product build never reads) set in every session's
+/// environment, pinned to what the recording read, so clock-derived output
+/// compares exactly instead of masked.
+pub fn replay_pinned(name: &str, pinned: &[(&str, &str)], normalize: impl Fn(usize, &mut Value)) {
     let path = golden_path(name);
     let mut golden: Value = serde_json::from_str(
         &fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display())),
@@ -1564,16 +1623,12 @@ pub fn replay_with(name: &str, normalize: impl Fn(usize, &mut Value)) {
     fs::create_dir_all(tmp.join("systmp")).unwrap();
     let fallback = base_path.join("fallback");
     fs::create_dir_all(&fallback).unwrap();
-    let paths = Paths {
+    let mut paths = Paths {
         tmp: tmp.to_string_lossy().into_owned(),
         repo: repo().to_string_lossy().into_owned(),
+        address: None,
     };
-    PATHS.with(|p| {
-        *p.borrow_mut() = Paths {
-            tmp: paths.tmp.clone(),
-            repo: paths.repo.clone(),
-        }
-    });
+    PATHS.with(|p| *p.borrow_mut() = paths.clone());
     let sessions = golden["sessions"].as_array().unwrap().clone();
     // Every data root a session names holds books; other SQLite files (the
     // Python reference's book) were never part of the Rust sessions.
@@ -1598,6 +1653,13 @@ pub fn replay_with(name: &str, normalize: impl Fn(usize, &mut Value)) {
     let (mut expected_canon, mut actual_canon) = (Canon::new(), Canon::new());
     let mut failures = Vec::new();
     for (index, session) in sessions.iter().enumerate() {
+        let served = SERVED.with(|s| s.get());
+        let server = session.get("tape").filter(|_| served).map(jsonrpc_server);
+        paths.address = server.as_ref().map(|(fake, recorded)| {
+            let bound = fake.url().strip_prefix("tcp://").unwrap().to_owned();
+            (recorded.clone(), bound)
+        });
+        PATHS.with(|p| *p.borrow_mut() = paths.clone());
         for op in session
             .get("setup")
             .and_then(Value::as_array)
@@ -1616,15 +1678,13 @@ pub fn replay_with(name: &str, normalize: impl Fn(usize, &mut Value)) {
         for root in &roots {
             snapshot(root, &books, &mut before);
         }
-        let served = SERVED.with(|s| s.get());
-        let _server = session.get("tape").filter(|_| served).map(jsonrpc_server);
         let tape = session.get("tape").filter(|_| !served).map(|tape| {
             let file = base_path.join(format!("tape-{index}"));
             fs::write(&file, tape_lines(tape)).unwrap();
             file
         });
         let started = now_us();
-        let (exit, out, err) = run_process(session, &paths, tape.as_deref(), &fallback);
+        let (exit, out, err) = run_process(session, &paths, tape.as_deref(), &fallback, pinned);
         let ended = now_us();
         let _ = fs::write(base_path.join(format!("session-{index}.out")), &out);
         let _ = fs::write(base_path.join(format!("session-{index}.err")), &err);
@@ -1850,38 +1910,4 @@ fn mask_number(text: &str, key: &str) -> String {
     }
     out.push_str(rest);
     out
-}
-
-/// A normalizer for Core Lightning syncs: a bookkeeper balance snapshot is
-/// keyed by the day the sync ran (the product's wall clock, with no test
-/// hook), so its day and the hashes derived from it are masked.
-pub fn balance_days(_: usize, outcome: &mut Value) {
-    let Some(changes) = outcome.get_mut("changes").and_then(Value::as_object_mut) else {
-        return;
-    };
-    for change in changes.values_mut() {
-        let Some(rows) = change
-            .pointer_mut("/book/tables/lightning_node_records/upsert")
-            .and_then(Value::as_array_mut)
-        else {
-            continue;
-        };
-        for row in rows {
-            let Some(cells) = row.as_array_mut() else {
-                continue;
-            };
-            if !cells.iter().any(|c| c == "balance_snapshot") {
-                continue;
-            }
-            for cell in cells {
-                let Some(text) = cell.as_str() else { continue };
-                let bytes = text.as_bytes();
-                if text.len() == 64 && hex_run(bytes, 0, 64) {
-                    *cell = json!("<day-hash>");
-                } else if text.len() == 20 && text.ends_with("T00:00:00Z") {
-                    *cell = json!("<day>");
-                }
-            }
-        }
-    }
 }

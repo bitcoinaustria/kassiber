@@ -26,14 +26,11 @@ crates/backup/src/encryption.rs|run|let status = std::process::Command::new(path
 crates/backup/src/desktop_tests.rs|incoming_authentication_is_quiet_and_ignores_active_operator_binding|let child = std::process::Command::new(std::env::current_exe().unwrap())
 crates/journals/tests/crash.rs|killed_writes_recover_complete_stale_books_on_sqlite_and_sqlcipher|let mut command = Command::new(std::env::current_exe().unwrap());
 crates/diagnostics/build.rs|main|std::process::Command::new(std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into()))
-crates/kassiber/tests/privacy_reports.rs|reference|let output = Command::new(python)
 crates/wallets/src/file_import/document/pdf.rs|run|let mut child = Command::new(program)
 # AI chat PDF previews: `pdfinfo`/`pdftotext`/`pdftoppm` resolved by `which`, as Python's
 # `shutil.which` + `subprocess.run(..., timeout=20)`; no network, local file arguments only.
 crates/ai/src/chat/files.rs|run|let mut child = Command::new(program)
 crates/kassiber/src/real_store/journals/hybrid.rs|replay|Command::new(std::env::var_os("KASSIBER_RUST_TEST_JOURNAL_PYTHON").ok_or_else(failed)?)
-crates/kassiber/tests/psbt_privacy.rs|reference|let output = std::process::Command::new(python)
-crates/kassiber/tests/legacy_privacy_transport.rs|reference|let result = Command::new(python)
 # R6 child launches (docs/reference/r6-ai-operator-port.md, section 4): the one
 # std launch behind kassiber-ipc's explicit-inheritance builder, and its tests.
 crates/ipc/src/process.rs|spawn|let mut child = std::process::Command::new(&command.program);
@@ -69,6 +66,40 @@ crates/mutation-check/src/runner.rs|run_command|let _ = Command::new("kill").arg
 crates/mutation-check/src/runner.rs|cargo|let mut command = Command::new("cargo");
 crates/mutation-check/src/runner.rs|commands_time_out|let mut command = Command::new("sleep");
 crates/session-replay/src/bin/session-shim.rs|main|let mut command = Command::new(real);
-crates/session-replay/src/replay.rs|replay|let mut command = Command::new("unshare");
+crates/session-replay/src/replay.rs|replay|let mut command = Command::new(&unshare);
 crates/session-replay/src/replay.rs|replay|let mut command = Command::new(binary);
 crates/session-replay/src/replay.rs|replay|let _ = Command::new("kill")
+# Coverage for replays: `llvm-profdata merge` (or $LLVM_PROFDATA) folds a
+# session's raw counters into one profile; local files only.
+crates/session-replay/src/bin/session-replay.rs|merge_profile|let _ = std::process::Command::new(tool)
+# Black-box tests that run the product binary they were built with
+# (CARGO_BIN_EXE_kassiber) on a disposable data root, never the account's,
+# under the test no-egress guard (loopback fakes only) or a replayed tape. The desk's `sh`
+# wrapper only opens the passphrase file as fd 3 and execs the binary.
+crates/kassiber/tests/support/mod.rs|command|let mut command = Command::new(env!("CARGO_BIN_EXE_kassiber"));
+crates/kassiber/tests/support/mod.rs|command|command = Command::new("sh");
+crates/kassiber/tests/support/mod.rs|raw_command|let mut command = Command::new(env!("CARGO_BIN_EXE_kassiber"));
+crates/kassiber/tests/black_box/support.rs|command|let mut command = Command::new(env!("CARGO_BIN_EXE_kassiber"));
+crates/kassiber/tests/privacy_transport/mod.rs|run|let mut command = Command::new(env!("CARGO_BIN_EXE_kassiber"));
+crates/kassiber/tests/freshness_daemon/session.rs|start|let mut command = Command::new(BIN);
+# The document CLI's review prompt needs a terminal: `script(1)` gives the
+# binary one (its stdout and stderr go to files), `kill -INT` interrupts it
+# at the prompt as a user's Ctrl-C would, and `pdfinfo`/`pdftoppm -v` only
+# probe whether Poppler is installed before the PDF case.
+crates/kassiber/tests/document_cli.rs|interactive|let mut script = Command::new("script");
+crates/kassiber/tests/document_cli.rs|interactive|let status = Command::new("kill")
+crates/kassiber/tests/document_cli.rs|document_cli_pdf_options_and_full_book_parity|Command::new(tool)
+# Test binaries that re-run themselves (current_exe) as an isolated child:
+# the analysis crash-recovery fixture and the taped freshness replays.
+crates/wallets/tests/analysis_recovery.rs|command|let mut command = Command::new(fixture());
+crates/wallets/tests/freshness/main.rs|run_taped|let mut command = Command::new(std::env::current_exe().unwrap());
+# The release tool (kassiber-release, built without the update feature, never
+# shipped in the product): its macOS steps run Apple's /usr/bin tools
+# (codesign, ditto, hdiutil, otool, install_name_tool, security, spctl,
+# syspolicy_check, xcrun notarytool/stapler) and `gh` for the release
+# handoff, through one launcher, as the Python release scripts did; `publish
+# sign` asks the agent-only `ssh-keygen -Y sign -U` over stdin and stdout.
+# Release operators run these explicitly; tests use the launcher's fake.
+crates/release/src/bin/kassiber-release/macos.rs|capture|let output = Command::new(&args[0])
+crates/release/src/publish.rs|sign|let spawned = Command::new(&keygen)
+crates/release/tests/tool.rs|release_tool_matches_the_python_scripts|let mut command = Command::new(env!("CARGO_BIN_EXE_kassiber-release"));

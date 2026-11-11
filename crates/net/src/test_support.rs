@@ -266,6 +266,17 @@ impl Drop for FakeJsonRpc {
     }
 }
 
+/// Shuts the read half of a local stream socket (an AF_UNIX pair, no
+/// address): the peer's next write fails as a write to a closed pipe would,
+/// even while a reader thread still holds a clone of this end. For tests
+/// that hand a child one end of `kassiber_ipc::unix::UnixStream::pair()` as
+/// its stdout and later stop reading under it. `Shutdown` lives in
+/// `std::net`, which only this crate may name.
+#[cfg(unix)]
+pub fn shutdown_read(stream: &std::os::unix::net::UnixStream) -> std::io::Result<()> {
+    stream.shutdown(std::net::Shutdown::Read)
+}
+
 /// One scripted answer of a [`ScriptedProvider`].
 #[derive(Clone)]
 pub struct Reply {

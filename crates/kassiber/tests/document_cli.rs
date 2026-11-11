@@ -8,13 +8,13 @@
 
 mod support;
 
-use std::io::{BufRead, BufReader, Read, Write};
-use std::net::TcpListener;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use kassiber_net::test_support::{FakeService, Reply};
 use support::Desk;
 
 const PROMPT: &str = "Enter comma-separated row numbers to import, or press Enter to cancel: ";
@@ -64,68 +64,44 @@ fn row(changes: &[(&str, &str)]) -> String {
     format!("{{{}}}", members.join(", "))
 }
 
-/// The local OCR provider (tests/test_rust_document_cli.py::Handler).
+/// The local OCR provider (tests/test_rust_document_cli.py::Handler), on
+/// kassiber-net's loopback service fake. Each request is recorded as
+/// `METHOD target body` before it is answered.
 struct Ocr {
     port: u16,
     rows: Arc<Mutex<Vec<String>>>,
     hits: Arc<Mutex<Vec<String>>>,
+    _service: FakeService,
 }
 
 impl Ocr {
     fn new() -> Self {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let port = listener.local_addr().unwrap().port();
         let rows = Arc::new(Mutex::new(vec![row(&[])]));
         let hits = Arc::new(Mutex::new(Vec::new()));
         let (served, recorded) = (rows.clone(), hits.clone());
-        std::thread::spawn(move || {
-            for stream in listener.incoming() {
-                let Ok(mut stream) = stream else { return };
-                let (rows, hits) = (served.clone(), recorded.clone());
-                std::thread::spawn(move || {
-                    let mut reader = BufReader::new(stream.try_clone().unwrap());
-                    let mut line = String::new();
-                    if reader.read_line(&mut line).unwrap_or(0) == 0 {
-                        return;
-                    }
-                    let mut parts = line.split_whitespace();
-                    let method = parts.next().unwrap_or_default().to_owned();
-                    let target = parts.next().unwrap_or_default().to_owned();
-                    let mut length = 0;
-                    loop {
-                        let mut header = String::new();
-                        reader.read_line(&mut header).unwrap();
-                        if header.trim().is_empty() {
-                            break;
-                        }
-                        if let Some((name, value)) = header.split_once(':') {
-                            if name.eq_ignore_ascii_case("content-length") {
-                                length = value.trim().parse().unwrap_or(0);
-                            }
-                        }
-                    }
-                    let mut body = vec![0; length];
-                    reader.read_exact(&mut body).unwrap();
-                    hits.lock().unwrap().push(format!(
-                        "{method} {target} {}",
-                        String::from_utf8_lossy(&body)
-                    ));
-                    let reply = if method == "GET" {
-                        r#"{"data": [{"id": "glm-ocr"}]}"#.to_owned()
-                    } else {
-                        let text = format!(r#"{{"rows": [{}]}}"#, rows.lock().unwrap().join(", "));
-                        serde_json::json!({"output": [{"type": "message", "content": [{"type": "output_text", "text": text}]}]})
-                            .to_string()
-                    };
-                    let _ = write!(
-                        stream,
-                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{reply}",
-                        reply.len()
-                    );
-                });
-            }
-        });
-        Self { port, rows, hits }
+        let service = FakeService::start(move |request| {
+            recorded.lock().unwrap().push(format!(
+                "{} {} {}",
+                request.method,
+                request.target,
+                String::from_utf8_lossy(&request.body)
+            ));
+            let reply = if request.method == "GET" {
+                r#"{"data": [{"id": "glm-ocr"}]}"#.to_owned()
+            } else {
+                let text = format!(r#"{{"rows": [{}]}}"#, served.lock().unwrap().join(", "));
+                serde_json::json!({"output": [{"type": "message", "content": [{"type": "output_text", "text": text}]}]})
+                    .to_string()
+            };
+            Reply::json(200, &reply)
+        })
+        .unwrap();
+        Self {
+            port: service.port(),
+            rows,
+            hits,
+            _service: service,
+        }
     }
 }
 

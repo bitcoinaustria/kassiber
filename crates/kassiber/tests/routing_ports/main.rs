@@ -8,7 +8,15 @@
 
 mod replay;
 
-use replay::{balance_days, clock_numbers, replay, replay_served, replay_with};
+use replay::{clock_numbers, replay, replay_pinned, replay_served, replay_with};
+
+/// A Core Lightning sync stamps its bookkeeper balance snapshots with its
+/// day, which keys the rows and their hashes. The goldens were recorded on
+/// 2026-11-10; the test-build seam pins that day so they compare exactly.
+const CLN_SNAPSHOT_DAY: &[(&str, &str)] = &[(
+    "KASSIBER_RUST_TEST_CLN_SNAPSHOT_TIME",
+    "2026-11-10T00:00:00Z",
+)];
 
 /// `tests/test_rust_backend_kind_aliases.py::test_liquid_esplora_kind_matches_python`
 #[test]
@@ -516,18 +524,20 @@ fn test_two_descriptor_wallets_match_python_all_electrum() {
 /// `tests/test_rust_wallet_sync_lightning.py::test_core_lightning_method_failures_match_python[listinvoices]`
 #[test]
 fn test_core_lightning_method_failures_match_python_listinvoices() {
-    replay_with(
+    replay_pinned(
         "wallet_sync_lightning/test_core_lightning_method_failures_match_python_listinvoices",
-        balance_days,
+        CLN_SNAPSHOT_DAY,
+        |_, _| {},
     );
 }
 
 /// `tests/test_rust_wallet_sync_lightning.py::test_core_lightning_wallet_sync_matches_python[wallet]`
 #[test]
 fn test_core_lightning_wallet_sync_matches_python_wallet() {
-    replay_with(
+    replay_pinned(
         "wallet_sync_lightning/test_core_lightning_wallet_sync_matches_python_wallet",
-        balance_days,
+        CLN_SNAPSHOT_DAY,
+        |_, _| {},
     );
 }
 

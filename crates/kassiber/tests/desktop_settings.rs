@@ -210,6 +210,42 @@ fn settings_maintenance_profile_flags_commit_before_policy_validation() {
     desk.check();
 }
 
+/// A Core Lightning wallet holding chain material but no node backend has
+/// no freshness source (Python plans no job for node kinds), while its
+/// direct sync refuses natively (an unsupported chain). A freshness run
+/// refuses only for a sync it would run, so a run of that book still
+/// completes, with nothing to do; syncing the wallet itself refuses.
+#[test]
+fn freshness_run_beside_a_sourceless_wallet_refusing_natively_completes() {
+    let desk = Desk::with_seed(
+        "freshness_run_beside_a_sourceless_wallet_refusing_natively_completes",
+        Some(
+            "INSERT INTO workspaces(id,label,created_at) VALUES('w','Main','2025');\
+             INSERT INTO profiles(id,workspace_id,label,fiat_currency,tax_country,created_at) \
+             VALUES('p','w','Book','EUR','at','2025');\
+             INSERT INTO settings(key,value) VALUES('context_workspace','w'),('context_profile','p');\
+             INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) \
+             VALUES('node','w','p','Node','coreln',\
+             '{\"chain\": \"lightning\", \"descriptor\": \"wpkh(bad)\"}','2025');",
+        ),
+    );
+    let before = desk.tables();
+    let run = desk.ask("ui.freshness.run", r#"{"rates": false, "journals": false}"#);
+    assert_eq!(kind_of(&run), "ui.freshness.run", "{run:?}");
+    assert_eq!(
+        list(&run, &["data", "completed"]),
+        &[] as &[Value],
+        "{run:?}"
+    );
+    let direct = desk.ask("ui.wallets.sync", r#"{"wallet": "Node"}"#);
+    assert_eq!(
+        path(&direct, &["error", "code"]).and_then(text),
+        Some("native_fallback_required"),
+        "{direct:?}"
+    );
+    assert_eq!(desk.tables(), before);
+}
+
 // --- ui.backends.list (tests/test_rust_desktop_backends.py) ---
 
 const BACKENDS: &[&str] = &[
