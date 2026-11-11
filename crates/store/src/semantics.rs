@@ -280,12 +280,6 @@ pub(crate) fn partial_payout(
     observer(&format!("{PARTIAL_PAYOUT}.after_commit"))
 }
 
-/// `mark_legacy_pair_fee_reviews`, for books without a candidate pair.
-///
-/// Python decides each candidate with the custody component validator, which
-/// the store does not carry. A book holding an active quantity component with
-/// a `reviewed_residual:network_fee` fee leg and no audit is refused for
-/// Python to migrate; any other book records the zero-count audit exactly.
 /// `_migrate_same_time_order_semantics`: require the source-order version of
 /// every processed book, once, keeping its input markers.
 pub(crate) fn same_time_order(
@@ -404,31 +398,42 @@ pub(crate) fn legacy_pair_fee(
         return Ok(());
     }
     // Python's candidate query in custody_authored_migration.py.
-    let candidates: bool = tx
-        .query_row(
-            "SELECT EXISTS(SELECT 1 FROM custody_components component
+    let candidates: Vec<(String, String)> = tx
+        .prepare(
+            "SELECT DISTINCT component.id, component.profile_id
+             FROM custody_components component
              JOIN custody_component_legs fee ON fee.component_id = component.id
              WHERE component.state = 'active'
                AND component.conservation_mode = 'quantity'
-               AND fee.role = 'fee' AND fee.notes = 'reviewed_residual:network_fee')",
-            [],
-            |r| r.get(0),
+               AND fee.role = 'fee' AND fee.notes = 'reviewed_residual:network_fee'",
         )
+        .and_then(|mut statement| {
+            statement
+                .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+                .collect::<rusqlite::Result<_>>()
+        })
         .map_err(map_sqlite_error)?;
-    if candidates {
-        return Err(Error::new(
-            ErrorKind::UnsupportedSchemaLayout,
-            "legacy pair fee review requires the custody component validator; migrate this book with Python",
-        )
-        .hint("Open this book with the Python build of Kassiber to migrate it first, then retry the Rust binary.")
-        .details(serde_json::json!({
-            "migration_step": "mark_legacy_pair_fee_reviews",
-            "reason": "legacy_pair_fee_candidates",
-        })));
+    // Only components whose validation reports the blocker count; a
+    // fee-inclusive source that already equals the debit is not affected.
+    let mut affected = 0usize;
+    let mut profiles = BTreeSet::new();
+    if !candidates.is_empty() {
+        let Some(custody) = crate::custody_hooks::installed() else {
+            return Err(crate::custody_hooks::unavailable(
+                "mark_legacy_pair_fee_reviews",
+                "legacy_pair_fee_candidates",
+            ));
+        };
+        for (component, profile) in &candidates {
+            if custody.requires_legacy_pair_fee_review(&tx, component)? {
+                affected += 1;
+                profiles.insert(profile.clone());
+            }
+        }
     }
     let impact = python_value(&serde_json::json!({
         "schema_version": 1, "migration": LEGACY_PAIR_FEE,
-        "affected_component_count": 0, "affected_profile_count": 0,
+        "affected_component_count": affected, "affected_profile_count": profiles.len(),
         "required_journal_semantics_version": LEGACY_PAIR_FEE_REQUIRED,
         "explanation": "Legacy pair fee allocations require review; authored economics and retained journals are unchanged.",
     }));
@@ -437,6 +442,13 @@ pub(crate) fn legacy_pair_fee(
     observer(&format!("{LEGACY_PAIR_FEE}.before_audit"))?;
     // Python stamps now_iso(): whole seconds with a Z suffix.
     tx.execute("INSERT INTO schema_migration_audits(id,migration_name,schema_version,impact_json,created_at) VALUES(?1,?1,1,?2,strftime('%Y-%m-%dT%H:%M:%SZ','now'))", [LEGACY_PAIR_FEE, &impact]).map_err(map_sqlite_error)?;
+    for profile in &profiles {
+        tx.execute(
+            &format!("UPDATE profiles SET last_processed_at=NULL,last_processed_tx_count=0,journal_input_version=journal_input_version+1,ownership_review_counts_json=NULL,required_journal_semantics_version=MAX(required_journal_semantics_version,{LEGACY_PAIR_FEE_REQUIRED}) WHERE id=?"),
+            [profile],
+        )
+        .map_err(map_sqlite_error)?;
+    }
     observer(&format!("{LEGACY_PAIR_FEE}.before_commit"))?;
     tx.commit().map_err(map_sqlite_error)?;
     observer(&format!("{LEGACY_PAIR_FEE}.after_commit"))

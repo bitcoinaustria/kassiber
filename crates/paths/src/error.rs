@@ -153,7 +153,7 @@ impl Error {
     pub fn migration(reason: &'static str) -> Self {
         Self::new(
             ErrorKind::RequiresPythonMigration,
-            "this book requires Python initialization or migration",
+            "this book's storage layout is not supported by this Kassiber build",
         )
         .details(json!({"reason": reason}))
     }

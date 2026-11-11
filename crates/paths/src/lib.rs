@@ -248,6 +248,9 @@ impl Context {
                 "--project and --data-root cannot be used together",
             ).hint("Use --project for a catalog project or --data-root for an explicit project data directory, not both."));
         }
+        // A hidden-home root (`~/.kassiber`) the cutover left in place (it is
+        // a symlink, holds one, lives on another file system or its proof
+        // is invalid) stays the state root, as in Python.
         let global = self.default_state_root()?;
         // Explicit data roots bypass default-state-root migration entirely.
         // Without one, a hidden-home root the cutover left in place (or that
@@ -356,7 +359,7 @@ impl Context {
         {
             return Err(Error::new(
                 ErrorKind::NotInitialized,
-                "runtime layout requires Python initialization",
+                "runtime layout is not initialized",
             ));
         }
         Ok(RuntimePaths {
@@ -826,8 +829,8 @@ mod tests {
         fs::create_dir_all(temp.path().join(".kassiber/run")).unwrap();
         assert_eq!(c.default_state_root().unwrap(), c.native_state_root());
         fs::write(temp.path().join(".kassiber/unknown"), "").unwrap();
-        // Hidden-home state stays where it is: resolution reads the legacy
-        // root in place (it has no project yet) and never moves it.
+        // A hidden-home root the cutover left in place stays the state root,
+        // as in Python: it resolves there (here, to an uninitialized layout).
         assert_eq!(
             c.default_state_root().unwrap(),
             temp.path().join(".kassiber")
@@ -835,6 +838,12 @@ mod tests {
         assert_eq!(
             c.resolve(&ResolveOptions::default()).unwrap_err().kind,
             ErrorKind::NotInitialized
+        );
+        fs::create_dir_all(temp.path().join(".kassiber/data")).unwrap();
+        fs::write(temp.path().join(".kassiber/data/kassiber.sqlite3"), "").unwrap();
+        assert_eq!(
+            c.resolve(&ResolveOptions::default()).unwrap_err().details,
+            serde_json::json!({"reason": "legacy_project_layout"})
         );
         assert!(!c.native_state_root().exists());
         fs::write(temp.path().join(LEGACY_DB_FILENAME), "").unwrap();

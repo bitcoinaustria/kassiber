@@ -77,10 +77,11 @@ The real binary now wires supported creation/open/unlock, compatible ownership,
 ordered compatibility, hidden-home cutover and legacy project migration through
 `init`, `status` and the daemon. Complete acceptance remains below.
 
-- [ ] After R2's matcher port, port authored pair/payout consolidation,
-  revisions/issues and componentless dismissal recovery; require complete
-  original-fixture parity and unchanged Python reopen. Python must migrate
-  affected books until then; the Rust binary refuses those layouts.
+- [x] Port authored pair/payout consolidation, revisions/issues, the legacy
+  pair fee review and componentless dismissal recovery into the store's
+  migrating open (installed custody layer); every frozen Python migration,
+  both original fixtures included, matches exactly in plaintext and SQLCipher
+  ([legacy custody migrations](docs/reference/database-compatibility.md#legacy-custody-migrations-in-the-rust-store)).
 - [x] Port private legacy flat-book/project migration with exact logical database
   dumps, file bytes/modes and cross-runtime crash recovery; keep the Python fix
   independently applicable. Explicit network partition export belongs to R5.

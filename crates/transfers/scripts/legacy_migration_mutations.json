@@ -1,0 +1,174 @@
+[
+ {
+  "id": "legacy-pair-fee-counts-only-affected",
+  "file": "crates/store/src/semantics.rs",
+  "find": "            if custody.requires_legacy_pair_fee_review(&tx, component)? {",
+  "replace": "            if custody.requires_legacy_pair_fee_review(&tx, component)? || true {",
+  "expect_failing": [
+   "rust_migration_matches_frozen_python_dumps_plaintext"
+  ],
+  "rule": "mark_legacy_pair_fee_reviews counts and invalidates only candidates whose validation reports legacy_pair_fee_allocation_review_required, not every reviewed_residual:network_fee candidate."
+ },
+ {
+  "id": "legacy-pair-fee-invalidates-affected-books",
+  "file": "crates/store/src/semantics.rs",
+  "find": "    for profile in &profiles {",
+  "replace": "    for profile in profiles.iter().take(0) {",
+  "expect_failing": [
+   "rust_migration_matches_frozen_python_dumps_plaintext",
+   "interrupted_pair_fee_review_keeps_journals_and_audit_together"
+  ],
+  "rule": "Affected books lose their processing markers, gain an input version and require semantics version 7 together with the audit."
+ },
+ {
+  "id": "legacy-pair-fee-validator-code",
+  "file": "crates/transfers/src/legacy_migration.rs",
+  "find": "== \"legacy_pair_fee_allocation_review_required\"",
+  "replace": "== \"legacy_pair_fee_allocation_review_needed\"",
+  "expect_failing": [
+   "rust_migration_matches_frozen_python_dumps_plaintext"
+  ],
+  "rule": "The decision reads the component validator's legacy_pair_fee_allocation_review_required issue."
+ },
+ {
+  "id": "legacy-refresh-deleted-rows",
+  "file": "crates/transfers/src/legacy_migration.rs",
+  "find": "        migrate_deleted_rows(c, sources)?;\n",
+  "replace": "",
+  "expect_failing": [
+   "rust_migration_matches_frozen_python_dumps_plaintext"
+  ],
+  "rule": "Deleted legacy reviews become authored, activated and immediately superseded components before pairs and payouts migrate."
+ },
+ {
+  "id": "legacy-refresh-payouts",
+  "file": "crates/transfers/src/legacy_migration.rs",
+  "find": "        migrate_payouts(c, sources)?;\n",
+  "replace": "",
+  "expect_failing": [
+   "rust_migration_matches_frozen_python_dumps_plaintext"
+  ],
+  "rule": "Active legacy direct payouts become activated conversion components."
+ },
+ {
+  "id": "legacy-refresh-deleted-at",
+  "file": "crates/transfers/src/legacy_migration.rs",
+  "find": "                    Some(&value(&row, \"deleted_at\")),",
+  "replace": "                    None,",
+  "expect_failing": [
+   "rust_migration_matches_frozen_python_dumps_plaintext"
+  ],
+  "rule": "A deleted review's component is superseded at the row's deletion time, not the migration clock."
+ },
+ {
+  "id": "legacy-payout-physical-source",
+  "file": "crates/transfers/src/legacy_migration.rs",
+  "find": "    let physical_source = if reviewed > zero {",
+  "replace": "    let physical_source = if reviewed != zero {",
+  "expect_failing": [
+   "rust_migration_matches_frozen_python_dumps_plaintext"
+  ],
+  "rule": "A payout's physical source quantity is max(0, reviewed source)."
+ },
+ {
+  "id": "legacy-payout-canonical-float",
+  "file": "crates/transfers/src/legacy_migration.rs",
+  "find": "        Value::Float(f) => Ok(s(format_g17(*f))),",
+  "replace": "        Value::Float(f) => Ok(s(f.to_string())),",
+  "expect_failing": [
+   "rust_migration_matches_frozen_python_dumps_plaintext"
+  ],
+  "rule": "A stored REAL payout value hashes and is retained as format(value, '.17g')."
+ },
+ {
+  "id": "legacy-format-g17-fixed-range",
+  "file": "crates/transfers/src/legacy_migration.rs",
+  "find": "    if (-4..17).contains(&exponent) {",
+  "replace": "    if (-4..16).contains(&exponent) {",
+  "expect_failing": [
+   "format_g17_matches_cpython"
+  ],
+  "rule": "format(value, '.17g') writes fixed notation for decimal exponents -4 to 16."
+ },
+ {
+  "id": "legacy-issue-table",
+  "file": "crates/transfers/src/legacy_refresh.rs",
+  "find": "        let table = text(row, \"legacy_table\");",
+  "replace": "        let table = String::from(\"transaction_pairs\");",
+  "expect_failing": [
+   "rust_migration_matches_frozen_python_dumps_plaintext"
+  ],
+  "rule": "Migration issues record the legacy table of the failed row (pairs or payouts)."
+ },
+ {
+  "id": "legacy-timestamp-rfc2822",
+  "file": "crates/transfers/src/legacy_migration.rs",
+  "find": "            Err(error) => rfc2822(&raw).ok_or(Error::App(error)),",
+  "replace": "            Err(error) => Err(Error::App(error)),",
+  "expect_failing": [
+   "rust_migration_matches_frozen_python_dumps_plaintext",
+   "legacy_timestamps_canonicalize_like_python"
+  ],
+  "rule": "parse_legacy_timestamp accepts RFC 2822 payout times when ISO parsing fails."
+ },
+ {
+  "id": "legacy-payout-term-time",
+  "file": "crates/transfers/src/legacy_migration.rs",
+  "find": "        (\"payout_occurred_at\", payout_occurred_at(row)?),",
+  "replace": "        (\"payout_occurred_at\", value(row, \"payout_occurred_at\")),",
+  "expect_failing": [
+   "rust_migration_matches_frozen_python_dumps_plaintext"
+  ],
+  "rule": "The payout term stores the canonical UTC payout time."
+ },
+ {
+  "id": "component-terms-payout-rate",
+  "file": "crates/transfers/src/component_rows.rs",
+  "find": "                kassiber_pydecimal::finite_price(&rate.to_string())\n                    .map_err(|e| AppError::new(\"validation\", e.message(\"payout_fiat_rate\")))?;",
+  "replace": "                let _ = kassiber_pydecimal::finite_price(&rate.to_string());",
+  "expect_failing": [
+   "rust_migration_matches_frozen_python_dumps_plaintext"
+  ],
+  "rule": "normalize_economic_terms refuses a payout value whose value per reviewed BTC is outside the supported price range."
+ },
+ {
+  "id": "legacy-probe-admits-migrated-books",
+  "file": "crates/store/src/semantic-probes.sql",
+  "find": "SELECT EXISTS(SELECT 1 FROM transaction_pairs p JOIN transactions o ON o.id=p.out_transaction_id JOIN wallets ow ON ow.id=o.wallet_id JOIN transactions i ON i.id=p.in_transaction_id JOIN wallets iw ON iw.id=i.wallet_id WHERE p.component_id IS NULL AND NOT EXISTS(SELECT 1 FROM custody_authored_migration_issues m WHERE m.legacy_table='transaction_pairs' AND m.legacy_source_id=p.id AND m.resolved_at IS NULL)) OR EXISTS(SELECT 1 FROM direct_swap_payouts p JOIN transactions o ON o.id=p.out_transaction_id JOIN wallets ow ON ow.id=o.wallet_id WHERE p.component_id IS NULL AND NOT EXISTS(SELECT 1 FROM custody_authored_migration_issues m WHERE m.legacy_table='direct_swap_payouts' AND m.legacy_source_id=p.id AND m.resolved_at IS NULL));",
+  "replace": "SELECT EXISTS(SELECT 1 FROM transaction_pairs WHERE component_id IS NULL) OR EXISTS(SELECT 1 FROM direct_swap_payouts WHERE component_id IS NULL) OR EXISTS(SELECT 1 FROM custody_authored_migration_issues WHERE resolved_at IS NULL);",
+  "expect_failing": [
+   "rust_migration_matches_frozen_python_dumps_plaintext"
+  ],
+  "rule": "Admission accepts legacy rows held by an unresolved migration issue, as Python opens them."
+ },
+ {
+  "id": "legacy-refresh-commits-atomically",
+  "file": "crates/store/src/compat_ordered.rs",
+  "find": "    observer(\"legacy_authored_components.before_commit\")?;\n    tx.commit().map_err(map_sqlite_error)?;",
+  "replace": "    tx.commit().map_err(map_sqlite_error)?;\n    observer(\"legacy_authored_components.before_commit\")?;",
+  "expect_failing": [
+   "interrupted_consolidation_leaves_no_partial_component_and_resumes"
+  ],
+  "rule": "The consolidation commits as one transaction: an interruption leaves none of its writes."
+ },
+ {
+  "id": "componentless-recovery-backfills",
+  "file": "crates/transfers/src/legacy_migration.rs",
+  "find": "            backfill_review_relations(c, &review, candidate)?;\n",
+  "replace": "",
+  "expect_failing": [
+   "rust_migration_matches_frozen_python_dumps_plaintext"
+  ],
+  "rule": "An exactly matched componentless dismissal gains its boundary relations and completeness header."
+ },
+ {
+  "id": "componentless-recovery-needs-fingerprint",
+  "file": "crates/transfers/src/legacy_migration.rs",
+  "find": "                py_str(&value(&review, \"candidate_fingerprint\")),",
+  "replace": "                exact.keys().find(|(g, _)| *g == py_str(&value(&review, \"gap_id\"))).map(|(_, f)| f.clone()).unwrap_or_default(),",
+  "expect_failing": [
+   "rust_migration_matches_frozen_python_dumps_plaintext"
+  ],
+  "rule": "Recovery requires the full candidate fingerprint, not only the gap id; a changed candidate stays unscoped."
+ }
+]

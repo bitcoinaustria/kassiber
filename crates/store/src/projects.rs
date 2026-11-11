@@ -35,7 +35,7 @@ fn copy_in_use() -> Error {
         "legacy project migration requires a closed, checkpointed source database",
     )
     .retryable(true)
-    .hint("Close other Kassiber processes and open then close this book with the Python build before retrying.")
+    .hint("Close other Kassiber processes, open this book once with --data-root set to its current data folder (which checkpoints it), then retry.")
 }
 fn require_no_sidecar(database: &Path) -> Result<()> {
     for suffix in ["-wal", "-journal"] {

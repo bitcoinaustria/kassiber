@@ -380,5 +380,15 @@
       "compat::liquid::tests::rewritten_liquid_observation_is_restored_to_its_committed_graph"
     ],
     "rule": "A Liquid graph still awaiting restoration requires the migrating open."
+  },
+  {
+    "id": "migrating-open-journal-transition",
+    "file": "crates/store/src/lib.rs",
+    "find": "        if migrate {\n            configure_pragmas(&connection, encrypted)?;",
+    "replace": "        if migrate {\n            if encrypted && connection.query_row(\"PRAGMA journal_mode\", [], |r| r.get::<_, String>(0)).map_err(map_sqlite_error)? != \"delete\" {\n                return Err(Error::new(ErrorKind::DatabaseJournalModeUnavailable, \"journal mode\"));\n            }\n            configure_pragmas(&connection, encrypted)?;",
+    "expect_failing": [
+      "migrating_open_moves_an_encrypted_wal_book_to_delete"
+    ],
+    "rule": "A migrating open moves a book to its safe journal mode instead of refusing the transition."
   }
 ]

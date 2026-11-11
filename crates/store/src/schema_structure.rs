@@ -311,7 +311,7 @@ pub(crate) fn verify(conn: &Connection, manifest: &Value) -> Result<()> {
         if ephemeral_gap(&actual, &reference) {
             return Err(Error::new(
                 crate::ErrorKind::DatabaseBusy,
-                "schema objects may be temporarily absent during a Python open",
+                "schema objects may be temporarily absent while another process opens this book",
             )
             .retryable(true)
             .details(json!({"reason":"schema_install_in_progress"})));

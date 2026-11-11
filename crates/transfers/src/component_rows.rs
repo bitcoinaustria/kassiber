@@ -708,8 +708,40 @@ pub(super) fn economic_terms(
         }
         let price = field(raw, "payout_fiat_value_exact");
         if !matches!(price, Value::Null) && price != &s("") {
-            kassiber_pydecimal::finite_price(&py_str(price))
+            let value = kassiber_pydecimal::finite_price(&py_str(price))
                 .map_err(|e| AppError::new("validation", e.message("payout_fiat_value_exact")))?;
+            // The value per BTC of both reviewed quantities must be a
+            // supported price as well (`payout_value / msat_to_btc(q)` at
+            // the process context, precision 32).
+            for (key, leg) in [
+                ("reviewed_source_amount_msat", source),
+                ("payout_amount_msat", target),
+            ] {
+                let quantity = match signed(field(raw, key), key)? {
+                    Value::Null => field(leg, "amount_msat").clone(),
+                    quantity => quantity,
+                };
+                let Value::Int(quantity) = quantity else {
+                    continue;
+                };
+                if quantity <= BigInt::default() {
+                    continue;
+                }
+                let context = &kassiber_pydecimal::Context::RP2;
+                let rate = quantity
+                    .to_string()
+                    .parse::<kassiber_pydecimal::Decimal>()
+                    .and_then(|q| {
+                        q.div(
+                            &kassiber_pydecimal::Decimal::from(100_000_000_000_i64),
+                            context,
+                        )
+                    })
+                    .and_then(|btc| value.div(&btc, context))
+                    .map_err(|e| internal(e.to_string()))?;
+                kassiber_pydecimal::finite_price(&rate.to_string())
+                    .map_err(|e| AppError::new("validation", e.message("payout_fiat_rate")))?;
+            }
         }
         let id = match optional_text(field(raw, "id"), "id", false)? {
             Value::Null => s(sources.uuid(c)?),
@@ -1685,11 +1717,13 @@ fn to_sql_text(v: &serde_json::Value) -> Option<String> {
 }
 
 /// `supersede_component`, rebuilding effective memberships after an active change.
+/// `superseded_at` is the caller's explicit time; otherwise the clock's.
 pub(super) fn supersede(
     c: &Connection,
     scope: &Scope<'_>,
     id: &str,
     reason: &Value,
+    superseded_at: Option<&Value>,
     sources: &dyn Sources,
 ) -> Result<()> {
     let header = row(c, id)?;
@@ -1697,12 +1731,15 @@ pub(super) fn supersede(
     if state == "superseded" {
         return Ok(());
     }
-    let now = sources.now_precise(c)?;
+    let now = match superseded_at.filter(|v| truthy(v)) {
+        Some(at) => at.clone(),
+        None => s(sources.now_precise(c)?),
+    };
     let reason = optional_text(reason, "reason", false)?;
     let profile = text(&header, "profile_id");
     c.execute(
         "UPDATE custody_components SET state='superseded',superseded_at=?,change_reason=COALESCE(?,change_reason) WHERE id=? AND state!='superseded'",
-        params![now, bind(&reason, 2)?, id],
+        params![bind(&now, 1)?, bind(&reason, 2)?, id],
     )
     .map_err(error)?;
     if state == "active" {

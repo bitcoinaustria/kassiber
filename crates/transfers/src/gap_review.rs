@@ -899,6 +899,7 @@ fn apply(c: &Connection, scope: &Scope<'_>, plan: &Value, sources: &dyn Sources)
             scope,
             &id,
             &fallback(reason, "guided_bridge_reopened"),
+            None,
             sources,
         )?;
         cr::get_component(c, scope, &id, false)?

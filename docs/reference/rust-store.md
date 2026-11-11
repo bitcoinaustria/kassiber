@@ -6,8 +6,10 @@ SQLCipher fd unlock, bound remembered unlock, TTY fallback, compatible ownership
 default state-root cutover and legacy project migration. It never invokes Python.
 The test-only Cargo probes are not installed or included in release artifacts.
 
-R3 is still incomplete: authored consolidation/matcher migrations return
-`unsupported_schema_layout` with a hint to migrate using the Python build.
+The ordered pass runs the custody migrations it cannot evaluate itself
+(legacy review consolidation, the legacy pair fee review, componentless
+dismissal recovery) through the custody layer the binary installs; see
+[legacy custody migrations](database-compatibility.md#legacy-custody-migrations-in-the-rust-store).
 The supported ordered pass and legacy project migration are now selected
 explicitly by shell bootstrap; `Book::open` retains admission-only behavior.
 TODO.md ("Rust backend R3 storage") tracks the remaining durability and native
@@ -40,10 +42,12 @@ platform gates. The [shell reference](rust-shell.md) records the binary contract
   lease's project in every long-lived open, including locked-state retries.
 - `Book::open_migrating(data_root, options, require_existing_schema)` is the
   production shell's explicit open/create/compatibility API. It verifies supplied
-  file/database bindings before writes, refuses a journal-mode change, runs the
-  ordered pass, then applies the structural/semantic gate. New/empty schemas use
-  the transactional creation transcript; existing schemas never replay it.
-  Unsupported authored consolidation returns a Python-build migration hint.
+  file/database bindings before writes, moves the book to its safe journal
+  mode, runs the ordered pass, then applies the structural/semantic gate.
+  New/empty schemas use the transactional creation transcript; existing
+  schemas never replay it. The pass's custody steps need the installed custody
+  layer (`kassiber_store::custody_hooks`); without it a book needing one is
+  refused before the step writes.
 - `Context::resolve_for_bootstrap` uses the same resolver without demanding an
   already-published layout. Shell bootstrap calls `projects::ensure_default`
   followed by `layout::initialize_layout`; after unlock it calls
@@ -144,14 +148,15 @@ locations, the `data` basename rule, and `satbooks.sqlite3` fallback remain.
 Resolution never creates directories, selects a project persistently, updates
 last-opened/encrypted metadata, writes settings, or migrates roots. An absent
 catalog/default project or incomplete runtime directory/settings layout yields
-typed `not_initialized`. A hidden-home (`~/.kassiber`) root the cutover did
-not move (it declined, or the caller skipped it: `--env-file`, `backup
-import`) is used where it is, as Python's `default_state_root` does. A
-project-layout migration or a conflicting migration proof yields
-`requires_python_migration`. An explicit data root never migrates and wins
-over the default root's catalog: that catalog only names the explicit root's
-project, and one the reader refuses names nothing instead of blocking the
-command. Those are read-only resolver barriers. Explicit shell bootstrap now uses the creation, ordered-pass
+typed `not_initialized`. A hidden-home root (`~/.kassiber`) the cutover left
+in place (a symlink, a link inside it, another file system, an invalid proof)
+or that the caller skipped (`--env-file`, `backup import`) stays the state
+root, as in Python's `default_state_root`. A project-layout migration or a
+conflicting migration proof yields `requires_python_migration`. An explicit
+data root never migrates and wins over the default root's catalog: that
+catalog only names the explicit root's project, and one the reader refuses
+names nothing instead of blocking the command. Those are read-only resolver
+barriers. Explicit shell bootstrap now uses the creation, ordered-pass
 and project APIs above; it never treats an existing rejected book as fresh.
 
 Catalog and settings readers accept the Python schema-1 object shape and
@@ -441,15 +446,13 @@ internal to the store; production selects the supported ordered pass while
 `test_hooks::migrate` / probe operation `migrate` expose deterministic test
 sources. Both support keyed SQLCipher and separate initial/valuation
 semantic-marker stages.
-It refuses a required journal-mode transition before writes; `Book::open`
-still does not migrate, while `Book::open_migrating` explicitly runs this pass.
-Authored consolidation and componentless dismissal
-recovery remain fail-closed R2 dependencies. Both original fixtures match
-Python exactly up to the consolidation refusal. Variants removing only their
-legacy pair match the full first-pass dump and unchanged Python reopen in
-plaintext and SQLCipher. Python's custody relation view now follows the
-leg-role rebuild, and Rust follows that corrected order exactly. This fixture
-acceptance leaves the full historical migration and durability gates open.
+The deterministic test migration refuses a required journal-mode transition
+before writes; product opens make it. `Book::open` still does not migrate,
+while `Book::open_migrating` explicitly runs this pass. Authored consolidation,
+the legacy pair fee review and componentless dismissal recovery run through
+the installed custody layer; both original fixtures migrate to the exact rows
+Python wrote, plaintext and SQLCipher. Python's custody relation view follows
+the leg-role rebuild, and Rust follows that order exactly.
 
 The private compatibility work now covers the preflight column repair, base
 DDL, all five legacy REAL-to-msat table rebuilds and the graph projection
@@ -459,7 +462,7 @@ the Rust conditions remain handwritten. The two legacy starting points built
 by `test_msat_migration.py` compare every schema object and table value, then
 prove idempotency and a no-change Python reopen. Fault-injection entry points
 remain behind `test-hooks`; the production ordered
-pass now selects the supported steps and preserves its explicit R2 refusals.
+pass runs every step, the custody ones through the installed custody layer.
 
 Private schema-repair steps additionally cover attachment/provenance and child
 foreign-key rebuilds, legacy pair/recipient uniqueness, custody projection
