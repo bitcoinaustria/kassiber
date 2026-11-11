@@ -336,6 +336,18 @@ pub(crate) fn stamp_network(records: Vec<Value>, network: &Value) -> Result<Vec<
         .collect()
 }
 
+/// The time a Core Lightning balance snapshot is stamped with: its day keys
+/// the snapshot rows and their hashes. Test builds may pin it with
+/// `KASSIBER_RUST_TEST_CLN_SNAPSHOT_TIME`, so a replay asserts the day and
+/// hashes it recorded; product builds always use the sync's completion time.
+fn snapshot_time(completed_at: &str) -> String {
+    #[cfg(feature = "test-harness")]
+    if let Ok(pinned) = std::env::var("KASSIBER_RUST_TEST_CLN_SNAPSHOT_TIME") {
+        return pinned;
+    }
+    completed_at.to_owned()
+}
+
 /// `sync_core_lightning_wallet(..., commit=False)` inside the wallet's savepoint.
 pub(crate) fn sync_core_lightning(
     conn: &Connection,
@@ -390,7 +402,7 @@ pub(crate) fn sync_core_lightning(
     consent.revoke();
     let snapshot = snapshot?;
     let completed_at = clock.now();
-    let records = cln_wallet_records(&snapshot, &completed_at)?;
+    let records = cln_wallet_records(&snapshot, &snapshot_time(&completed_at))?;
     let node_id = Value::Str(snapshot.node_id.clone());
     let (mut inserted, mut updated) = (0, 0);
     let mut counts: Vec<(String, i64)> = Vec::new();

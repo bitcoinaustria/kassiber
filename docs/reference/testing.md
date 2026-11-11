@@ -537,12 +537,16 @@ values after each session, so later sessions and orderings by id see the
 recorded state; ISO timestamps inside the run's window compare as `<now>`;
 wall-clock `elapsed_ms` is 0. Values over 16 KiB, and table changes of more
 than 2,000 rows, compare by length or count and an FNV-1a 64 digest. A test
-may mask further clock-derived numbers (`age_seconds`). A client whose
-request order varies between runs is answered by a loopback JSON-RPC server
-built from the tape (`replay_served`, `kassiber-net`'s `FakeJsonRpc`) instead
-of the byte tape. That server binds a free port; the session's inputs name it
-in place of the recorded `127.0.0.1:<port>`, and its outputs are mapped back
-before they are compared.
+may mask further clock-derived numbers (`age_seconds`). Output keyed by the
+calendar day is pinned instead: `replay_pinned` sets a test-build clock seam
+to the recorded day (`KASSIBER_RUST_TEST_CLN_SNAPSHOT_TIME` for Core
+Lightning balance snapshots), which product builds never read, so the day
+and the hashes over it compare exactly. A client whose request order varies
+between runs is answered by a loopback JSON-RPC server built from the tape
+(`replay_served`, `kassiber-net`'s `FakeJsonRpc`) instead of the byte tape.
+That server binds a free port; the session's inputs name it in place of the
+recorded `127.0.0.1:<port>`, and its outputs are mapped back before they are
+compared.
 
 The replays run on strict tapes (`KASSIBER_TEST_NET_TAPE=replay-strict:`):
 a request no recording began with, a connect with no recording left, or a

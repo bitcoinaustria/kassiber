@@ -2,7 +2,8 @@
 # A product binary carries no test network tape (crates/net/src/tape.rs) and
 # no test SQLite seed (kassiber_store::seed_test_prng). Both exist only in
 # test builds (kassiber-net's test-observer, kassiber-store's test-hooks, and
-# the Privacy Mirror's frozen entropy clock under test-harness);
+# the Privacy Mirror's frozen entropy clock and the Core Lightning
+# snapshot clock under test-harness);
 # their variable names are the markers. Pass the binary; `--expect-tape` inverts the check for
 # a test-harness build, so the marker search itself is proven to work.
 set -euo pipefail
@@ -12,7 +13,7 @@ binary="${1:?usage: scripts/check-no-test-tape.sh [--expect-tape] BINARY}"
 [ -f "$binary" ] || { echo "no binary at $binary" >&2; exit 2; }
 # The tape's hold and write-log switches share its prefix; they are listed
 # so a rename cannot drop them from the check.
-for marker in KASSIBER_TEST_NET_TAPE KASSIBER_TEST_NET_TAPE_HOLD KASSIBER_TEST_NET_TAPE_WRITES KASSIBER_TEST_SQLITE_SEED KASSIBER_RUST_TEST_ENTROPY_CLOCK; do
+for marker in KASSIBER_TEST_NET_TAPE KASSIBER_TEST_NET_TAPE_HOLD KASSIBER_TEST_NET_TAPE_WRITES KASSIBER_TEST_SQLITE_SEED KASSIBER_RUST_TEST_ENTROPY_CLOCK KASSIBER_RUST_TEST_CLN_SNAPSHOT_TIME; do
   if LC_ALL=C grep -aq "$marker" "$binary"; then found=present; else found=absent; fi
   if [ "$found" != "$expect" ]; then
     echo "$binary: test hook $marker is $found, expected $expect" >&2

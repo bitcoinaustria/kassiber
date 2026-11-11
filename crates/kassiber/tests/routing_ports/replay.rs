@@ -1077,6 +1077,7 @@ fn run_process(
     paths: &Paths,
     tape: Option<&Path>,
     fallback: &Path,
+    pinned: &[(&str, &str)],
 ) -> (Option<i32>, Vec<u8>, Vec<u8>) {
     let args: Vec<String> = session["args"]
         .as_array()
@@ -1106,6 +1107,7 @@ fn run_process(
     for (key, value) in session["env"].as_object().unwrap() {
         command.env(key, paths.forward(value.as_str().unwrap()));
     }
+    command.envs(pinned.iter().copied());
     if let Some(tape) = tape {
         command.env(
             "KASSIBER_TEST_NET_TAPE",
@@ -1599,6 +1601,14 @@ pub fn replay_served(name: &str) {
 /// As `replay`, with `normalize(index, &mut outcome-json)` applied to both
 /// the recorded and the replayed outcome of each session before comparing.
 pub fn replay_with(name: &str, normalize: impl Fn(usize, &mut Value)) {
+    replay_pinned(name, &[], normalize)
+}
+
+/// As `replay_with`, with test-build clock seams (`KASSIBER_RUST_TEST_*`
+/// variables a product build never reads) set in every session's
+/// environment, pinned to what the recording read, so clock-derived output
+/// compares exactly instead of masked.
+pub fn replay_pinned(name: &str, pinned: &[(&str, &str)], normalize: impl Fn(usize, &mut Value)) {
     let path = golden_path(name);
     let mut golden: Value = serde_json::from_str(
         &fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display())),
@@ -1674,7 +1684,7 @@ pub fn replay_with(name: &str, normalize: impl Fn(usize, &mut Value)) {
             file
         });
         let started = now_us();
-        let (exit, out, err) = run_process(session, &paths, tape.as_deref(), &fallback);
+        let (exit, out, err) = run_process(session, &paths, tape.as_deref(), &fallback, pinned);
         let ended = now_us();
         let _ = fs::write(base_path.join(format!("session-{index}.out")), &out);
         let _ = fs::write(base_path.join(format!("session-{index}.err")), &err);
@@ -1900,38 +1910,4 @@ fn mask_number(text: &str, key: &str) -> String {
     }
     out.push_str(rest);
     out
-}
-
-/// A normalizer for Core Lightning syncs: a bookkeeper balance snapshot is
-/// keyed by the day the sync ran (the product's wall clock, with no test
-/// hook), so its day and the hashes derived from it are masked.
-pub fn balance_days(_: usize, outcome: &mut Value) {
-    let Some(changes) = outcome.get_mut("changes").and_then(Value::as_object_mut) else {
-        return;
-    };
-    for change in changes.values_mut() {
-        let Some(rows) = change
-            .pointer_mut("/book/tables/lightning_node_records/upsert")
-            .and_then(Value::as_array_mut)
-        else {
-            continue;
-        };
-        for row in rows {
-            let Some(cells) = row.as_array_mut() else {
-                continue;
-            };
-            if !cells.iter().any(|c| c == "balance_snapshot") {
-                continue;
-            }
-            for cell in cells {
-                let Some(text) = cell.as_str() else { continue };
-                let bytes = text.as_bytes();
-                if text.len() == 64 && hex_run(bytes, 0, 64) {
-                    *cell = json!("<day-hash>");
-                } else if text.len() == 20 && text.ends_with("T00:00:00Z") {
-                    *cell = json!("<day>");
-                }
-            }
-        }
-    }
 }
