@@ -99,7 +99,10 @@ fn generated_component_snapshots_and_permutations_match_the_frozen_stage() {
         }
     }
     assert!(counts.contains_key("effective:\"active\""), "{counts:?}");
-    let cases: Vec<&String> = counts.keys().filter(|k| k.starts_with("component:")).collect();
+    let cases: Vec<&String> = counts
+        .keys()
+        .filter(|k| k.starts_with("component:"))
+        .collect();
     let per_case = 2000 / cases.len();
     assert!(cases.iter().all(|c| counts[*c] >= per_case), "{counts:?}");
     for code in [
@@ -118,6 +121,9 @@ fn generated_component_snapshots_and_permutations_match_the_frozen_stage() {
         "component_native_support_contradicted",
         "allocation_chronology_mismatch",
     ] {
-        assert!(counts.contains_key(&format!("issue:{code}")), "{code}: {counts:?}");
+        assert!(
+            counts.contains_key(&format!("issue:{code}")),
+            "{code}: {counts:?}"
+        );
     }
 }

@@ -326,7 +326,11 @@ impl Blobs {
                 // Recorded pages are compressed; extracted ones are not.
                 let page = self.path(&hex(digest));
                 let compressed = page.with_extension("gz");
-                files.push(if compressed.exists() { compressed } else { page });
+                files.push(if compressed.exists() {
+                    compressed
+                } else {
+                    page
+                });
             }
             return Ok(files);
         }

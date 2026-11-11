@@ -246,10 +246,11 @@ mod tests {
         // that spawn fails as Io. Retry it briefly; any other outcome stands.
         for _ in 0..20 {
             let consent = Consent::explicit_trigger(&request);
-            let result = gate
-                .authorize(request.clone(), Some(consent))
-                .unwrap()
-                .cln(ClnMethod::GetInfo, deadline, limit);
+            let result = gate.authorize(request.clone(), Some(consent)).unwrap().cln(
+                ClnMethod::GetInfo,
+                deadline,
+                limit,
+            );
             if !matches!(result, Err(ClnProcessError::Io)) {
                 return result;
             }

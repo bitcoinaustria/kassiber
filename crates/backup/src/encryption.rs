@@ -66,9 +66,7 @@ pub(crate) fn backend(passphrase: bool) -> Result<Backend> {
         "age_unavailable",
         "recipient-mode backups require an age or rage binary",
     )
-    .with_hint(
-        "Install `age` or `rage` on PATH, or use a passphrase-mode backup.",
-    ))
+    .with_hint("Install `age` or `rage` on PATH, or use a passphrase-mode backup."))
 }
 
 fn run(path: &Path, args: &[String], source: &Path, destination: &File) -> Result<()> {
