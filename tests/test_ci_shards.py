@@ -94,6 +94,7 @@ class PythonShardContractTest(unittest.TestCase):
             "frontend",
             "cli-smoke",
             "tax-engine",
+            "session-replay",
             "required",
         }
         optional_jobs = {"chain-observers"} & set(jobs)
@@ -101,9 +102,9 @@ class PythonShardContractTest(unittest.TestCase):
             set(jobs),
             base_jobs | optional_jobs,
         )
-        for job in ("python-tests", "tax-shadow", "custody-shadow"):
-            self.assertEqual(jobs[job]["needs"], ["preflight", "rust-binaries"], job)
-        for job in ("rust-binaries", "frontend", "cli-smoke", "tax-engine", *sorted(optional_jobs)):
+        self.assertEqual(jobs["python-tests"]["needs"], "preflight")
+        self.assertEqual(jobs["tax-shadow"]["needs"], "preflight")
+        for job in ("frontend", "cli-smoke", "tax-engine", "session-replay", *sorted(optional_jobs)):
             self.assertNotIn("needs", jobs[job])
         preflight_steps = {step.get("name") for step in jobs["preflight"]["steps"]}
         self.assertFalse(
@@ -119,7 +120,7 @@ class PythonShardContractTest(unittest.TestCase):
         required_needs = set(jobs["required"]["needs"])
         self.assertEqual(
             required_needs,
-            {"preflight", "rust-binaries", "python-tests", "tax-shadow", "custody-shadow", "frontend", "cli-smoke", "tax-engine"}
+            {"preflight", "python-tests", "tax-shadow", "custody-shadow", "frontend", "cli-smoke", "tax-engine", "session-replay"}
             | optional_jobs,
         )
 
