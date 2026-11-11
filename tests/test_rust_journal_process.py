@@ -54,7 +54,9 @@ def scalar_exact(a, b):
 def test_native_prepared_pipeline_matches_live_payload_progress_and_complete_dump(prepared_book_root, cipher, country, mode):
     tmp_path = prepared_book_root
     # The native probe explicitly accepts disposable books under target/ only.
-    assert tmp_path.resolve().is_relative_to((ROOT / 'target').resolve())
+    # Disposable roots: under target/, or the session recorder's namespace
+    # (crates/session-replay/record-sessions.sh binds a scratch directory at /mnt).
+    assert tmp_path.resolve().is_relative_to((ROOT / 'target').resolve()) or tmp_path.resolve().is_relative_to('/mnt/bt')
     key = 'synthetic-r4-13-only' if cipher else None
     conn = _book(tmp_path / 'python', country=country, passphrase=key)
     try:
