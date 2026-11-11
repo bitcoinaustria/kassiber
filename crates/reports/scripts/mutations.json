@@ -2064,8 +2064,8 @@
   {
     "id": "history-range-end",
     "file": "crates/reports/src/history.rs",
-    "find": "let range_end = end.unwrap_or_else(time::now);",
-    "replace": "let range_end = end.map(|n| n - DAY).unwrap_or_else(time::now);",
+    "find": "let range_end = end.unwrap_or_else(now);",
+    "replace": "let range_end = end.map(|n| n - DAY).unwrap_or_else(now);",
     "expect_failing": [
       "history_period_vectors"
     ],
