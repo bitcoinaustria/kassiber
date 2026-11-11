@@ -768,7 +768,7 @@ jobs:
   chain-observers:
     name: Chain observers (Linux Docker)
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
@@ -788,52 +788,39 @@ jobs:
             echo "run=true" >> "$GITHUB_OUTPUT"
           elif git diff --quiet "$BASE_SHA"...HEAD -- \
             .github/workflows/ci.yml \
-            kassiber/core/chain_observer \
-            kassiber/core/chain_analysis \
-            'kassiber/core/chain_analysis_*.py' \
-            'kassiber/chain_analysis_*_schema.py' \
+            crates/chain \
+            crates/wallets \
+            crates/store \
+            crates/net \
+            crates/cli \
+            crates/kassiber \
+            Cargo.toml \
+            Cargo.lock \
+            rust-toolchain.toml \
             scripts/chain-analysis-regtest.sh \
-            kassiber/core/esplora_history.py \
-            kassiber/core/sync.py \
-            kassiber/core/sync_backends.py \
-            kassiber/proxy.py \
-            kassiber/wallet_descriptors.py \
-            kassiber/wallet_security.py \
-            kassiber/db.py \
             dev/regtest \
             scripts/integration-harness.sh \
-            tests/integration \
-            pyproject.toml \
-            uv.lock; then
+            tests/integration; then
             echo "run=false" >> "$GITHUB_OUTPUT"
           else
             echo "run=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Set up Python
-        if: steps.observer_paths.outputs.run == 'true'
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
-        with:
-          python-version: '3.11'
-
-      - name: Install uv
-        if: steps.observer_paths.outputs.run == 'true'
-        uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081
-        with:
-          enable-cache: true
-          cache-dependency-glob: uv.lock
-
       - name: Set up Rust
         if: steps.observer_paths.outputs.run == 'true'
         uses: ./.github/actions/setup-rust
         with:
-          cache-key: python-binding
+          cache-key: rust-chain-observers
+          save-cache: "true"
 
-      - name: Sync dependencies
+      # The harness drives this binary (its default, target/release/kassiber);
+      # the harness itself is standard-library python3 -I on the runner's
+      # interpreter, with no uv and no virtual environment.
+      - name: Build the kassiber binary
         if: steps.observer_paths.outputs.run == 'true'
-        run: uv sync --locked
+        run: cargo build --locked --release -p kassiber
 
-      - name: Dependency-backed chain-observer oracle
+      - name: Chain-observer node-truth oracle and live BDK/LWK observers
         if: steps.observer_paths.outputs.run == 'true'
         run: ./scripts/integration-harness.sh chain-observers
 
