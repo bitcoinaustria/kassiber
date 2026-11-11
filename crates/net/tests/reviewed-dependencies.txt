@@ -122,6 +122,13 @@ kassiber-xlsx
 rust_xlsxwriter
 zip deflate
 
+# The release tool's macOS steps (kassiber-release, built without the update
+# feature): parsing the property lists Apple's tools print and writing the
+# app entitlements. Already locked through typst's syntect; default features
+# off (no serde), in-memory parsing and serialization only, no transport.
+# Its zip (deflate), tar and flate2 (rust_backend) edges are reviewed above.
+plist
+
 # R6 local IPC: AF_UNIX sockets and named pipes only (the chokepoint scanner
 # admits their forms in crates/ipc alone); the operator protocol and client.
 kassiber-ipc
