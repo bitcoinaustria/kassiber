@@ -2,53 +2,66 @@
   "schema_version": 1,
   "modules": {
     "tests/integration/test_boltz_liquid_regtest.py": {
-      "BoltzLiquidRegtestTest": {"disposition": "rust-test", "flags": [], "group": "chain-sync", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 5},
-      "BoltzLiquidRegtestTest::test_accounting_builder_covers_executed_swap_and_payment_only": {"disposition": "subprocess-scenario", "flags": ["sql", "subprocess"], "group": "chain-sync", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.core.lightning, kassiber.core.imports", "reviewed": false, "tests": 1},
-      "BoltzLiquidRegtestTest::test_accounting_builder_pairs_real_boltz_v2_evidence": {"disposition": "subprocess-scenario", "flags": ["sql", "subprocess"], "group": "chain-sync", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.core.lightning, kassiber.core.imports", "reviewed": false, "tests": 1},
-      "BoltzLiquidRegtestTest::test_live_boltz_liquid_execution_covers_swap_and_payment_accounting": {"disposition": "subprocess-scenario", "flags": ["sql", "subprocess"], "group": "chain-sync", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.core.lightning, kassiber.core.imports", "reviewed": false, "tests": 1}
+      "BoltzLiquidRegtestTest": {"disposition": "rust-test", "flags": ["sql", "subprocess"], "group": "chain-sync", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 8}
+    },
+    "tests/integration/test_chain_observer_oracle.py": {
+      "ChainObserverOracleTest": {"disposition": "rust-test", "flags": [], "group": "chain-sync", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 3}
     },
     "tests/integration/test_demo_fingerprint.py": {
       "DemoFingerprintTests": {"disposition": "rust-test", "flags": [], "group": "chain-sync", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 1}
     },
+    "tests/integration/test_lightning_business_plan.py": {
+      "LightningBusinessPlanTest": {"disposition": "rust-test", "flags": ["subprocess"], "group": "chain-sync", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 4}
+    },
+    "tests/integration/test_lightning_funding.py": {
+      "LightningFundingTest": {"disposition": "rust-test", "flags": ["subprocess"], "group": "chain-sync", "reason": "runs helper processes without the product entry", "reviewed": false, "tests": 6}
+    },
     "tests/integration/test_live_bdk_observer.py": {
-      "LiveBdkObserverTest": {"disposition": "subprocess-scenario", "flags": ["sql", "subprocess"], "group": "chain-sync", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.db", "reviewed": false, "tests": 1}
+      "LiveBdkObserverTest": {"disposition": "rust-test", "flags": ["sql", "subprocess"], "group": "chain-sync", "reason": "runs helper processes without the product entry", "reviewed": false, "tests": 1}
     },
     "tests/integration/test_live_bitcoin_core_regtest.py": {
-      "LiveBitcoinCoreRegtestTest": {"disposition": "subprocess-scenario", "flags": ["subprocess"], "group": "chain-sync", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.core.sync_backends", "reviewed": false, "tests": 1}
+      "LiveBitcoinCoreRegtestTest": {"disposition": "rust-test", "flags": ["subprocess"], "group": "chain-sync", "reason": "runs helper processes without the product entry", "reviewed": false, "tests": 1}
     },
     "tests/integration/test_live_bitcoin_electrum_parity.py": {
       "LiveBitcoinElectrumParityTest": {"disposition": "oracle", "flags": ["sql", "subprocess"], "group": "chain-sync", "reason": "pins reference results or compares implementations", "reviewed": false, "tests": 1}
     },
     "tests/integration/test_live_chain_analysis.py": {
-      "LiveChainAnalysisTest": {"disposition": "rust-test", "flags": ["mock", "sql", "sql-seed"], "group": "chain-sync", "reason": "calls kassiber.core.chain_analysis, kassiber.core.book_network directly", "reviewed": false, "tests": 7}
+      "LiveChainAnalysisTest": {"disposition": "rust-test", "flags": ["sql", "sql-seed", "subprocess"], "group": "chain-sync", "reason": "runs helper processes without the product entry", "reviewed": false, "tests": 7}
     },
     "tests/integration/test_live_chain_observer_oracle.py": {
-      "LiveChainObserverOracleTest": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "chain-sync", "reason": "calls kassiber.core.chain_observer, kassiber.db directly", "reviewed": false, "tests": 1}
+      "LiveChainObserverOracleTest": {"disposition": "rust-test", "flags": [], "group": "chain-sync", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 1}
     },
     "tests/integration/test_live_lightning_business_regtest.py": {
-      "LiveLightningBusinessRegtest": {"disposition": "boundary-fixture", "flags": ["sql", "subprocess"], "group": "chain-sync", "reason": "spawns `python -m kassiber` (cli/daemon) and checks its output only", "reviewed": false, "tests": 1}
+      "LiveLightningBusinessRegtest": {"disposition": "rust-test", "flags": ["sql", "subprocess"], "group": "chain-sync", "reason": "runs helper processes without the product entry", "reviewed": false, "tests": 1}
     },
     "tests/integration/test_live_lwk_observer.py": {
-      "LiveLwkObserverTest": {"disposition": "subprocess-scenario", "flags": ["sql", "subprocess"], "group": "chain-sync", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.db", "reviewed": false, "tests": 1}
+      "LiveLwkObserverTest": {"disposition": "rust-test", "flags": ["sql", "subprocess"], "group": "chain-sync", "reason": "runs helper processes without the product entry", "reviewed": false, "tests": 1}
+    },
+    "tests/integration/test_live_silent_payments.py": {
+      "LiveSilentPaymentsTest": {"disposition": "rust-test", "flags": ["sql", "subprocess"], "group": "chain-sync", "reason": "runs helper processes without the product entry", "reviewed": false, "tests": 1}
     },
     "tests/integration/test_lot_order_determinism.py": {
-      "LotOrderDeterminismTest": {"disposition": "boundary-fixture", "flags": ["sql", "subprocess"], "group": "journals", "reason": "spawns `python -m kassiber` (cli) and checks its output only", "reviewed": false, "tests": 2}
+      "LotOrderDeterminismTest": {"disposition": "rust-test", "flags": ["sql", "subprocess"], "group": "journals", "reason": "runs helper processes without the product entry", "reviewed": false, "tests": 2}
+    },
+    "tests/integration/test_product_free.py": {
+      "HarnessProductFreeTest": {"disposition": "rust-test", "flags": ["subprocess"], "group": "journals", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 4}
     },
     "tests/integration/test_regtest_demo_realism.py": {
-      "RegtestDemoRealismTests": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "chain-sync", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 13},
-      "RegtestDemoRealismTests::test_native_operations_cannot_gain_authored_transfer_pairs": {"disposition": "boundary-fixture", "flags": ["subprocess"], "group": "chain-sync", "reason": "spawns `python -m kassiber` (cli) and checks its output only", "reviewed": false, "tests": 1}
+      "RegtestDemoRealismTests": {"disposition": "rust-test", "flags": ["sql", "sql-seed", "subprocess"], "group": "chain-sync", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 14}
+    },
+    "tests/integration/test_regtest_exchange_api.py": {
+      "RegtestExchangeApiTest": {"disposition": "rust-test", "flags": ["sql", "subprocess"], "group": "chain-sync", "reason": "runs helper processes without the product entry", "reviewed": false, "tests": 3}
     },
     "tests/integration/test_regtest_exchange_cases.py": {
-      "RegtestExchangeCasesTest": {"disposition": "boundary-fixture", "flags": ["sql", "subprocess"], "group": "chain-sync", "reason": "spawns `python -m kassiber` (cli/daemon) and checks its output only", "reviewed": false, "tests": 1},
-      "RegtestExchangeCasesTest::test_export_pages_preserve_execution_cost_and_distinct_account_fee": {"disposition": "rust-test", "flags": [], "group": "chain-sync", "reason": "calls kassiber.importers directly", "reviewed": false, "tests": 1},
-      "RegtestExchangeRuntimeParityTest": {"disposition": "boundary-fixture", "flags": ["sql", "subprocess"], "group": "chain-sync", "reason": "spawns `python -m kassiber` (cli/daemon) and checks its output only", "reviewed": false, "tests": 1}
+      "RegtestExchangeCasesTest": {"disposition": "rust-test", "flags": ["sql", "subprocess"], "group": "chain-sync", "reason": "runs helper processes without the product entry", "reviewed": false, "tests": 2},
+      "RegtestExchangeGoldenTest": {"disposition": "rust-test", "flags": ["sql", "subprocess"], "group": "chain-sync", "reason": "runs helper processes without the product entry", "reviewed": false, "tests": 1}
+    },
+    "tests/integration/test_regtest_source_funds_seed.py": {
+      "RegtestSourceFundsFixtureTest": {"disposition": "rust-test", "flags": ["subprocess"], "group": "source-funds", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 4}
     },
     "tests/integration/test_regtest_tape_cli.py": {
-      "RegtestTapeCliTest": {"disposition": "boundary-fixture", "flags": ["sql", "tapes", "subprocess"], "group": "chain-sync", "reason": "spawns `python -m kassiber` (cli) and checks its output only", "reviewed": false, "tests": 3},
-      "RegtestTapeRuntimeParityTest": {"disposition": "boundary-fixture", "flags": ["sql", "tapes", "subprocess"], "group": "chain-sync", "reason": "spawns `python -m kassiber` (cli) and checks its output only", "reviewed": false, "tests": 2}
-    },
-    "tests/integration/test_runtime_shadow.py": {
-      "RuntimeShadowTest": {"disposition": "boundary-fixture", "flags": ["sql", "subprocess"], "group": "journals", "reason": "spawns `python -m kassiber` (cli/daemon) and checks its output only", "reviewed": false, "tests": 1}
+      "RegtestTapeCliTest": {"disposition": "rust-test", "flags": ["sql", "tapes", "subprocess"], "group": "chain-sync", "reason": "runs helper processes without the product entry", "reviewed": false, "tests": 3},
+      "RegtestTapeGoldenTest": {"disposition": "rust-test", "flags": ["sql", "tapes", "subprocess"], "group": "chain-sync", "reason": "runs helper processes without the product entry", "reviewed": false, "tests": 2}
     },
     "tests/rust_port/test_contracts.py": {
       "test_wire_and_source_contracts_match_the_reviewed_snapshots": {"disposition": "oracle", "flags": ["subprocess"], "group": "packaging-ci", "reason": "pins generated Python boundary/source contracts for the Rust replacement", "reviewed": true, "tests": 1},
@@ -1412,7 +1425,6 @@
     "tests/test_egress_guard.py": {
       "test_runner_refuses_a_fixture_that_drops_the_guard": {"disposition": "oracle", "flags": ["mock"], "group": "cli-shell", "reason": "pins that every Python test child, through cli_runner, runtime_parity.child_env or a bare python -m tests.<module>, runs under the no-egress guard or fails before running", "reviewed": true, "tests": 1},
       "test_runner_refuses_interpreter_options_that_skip_the_hook": {"disposition": "oracle", "flags": ["mock", "subprocess"], "group": "cli-shell", "reason": "pins that every Python test child, through cli_runner, runtime_parity.child_env or a bare python -m tests.<module>, runs under the no-egress guard or fails before running", "reviewed": true, "tests": 1},
-      "test_runtime_parity_env_is_guarded_until_a_caller_replaces_its_path": {"disposition": "oracle", "flags": ["mock", "subprocess"], "group": "cli-shell", "reason": "pins that every Python test child, through cli_runner, runtime_parity.child_env or a bare python -m tests.<module>, runs under the no-egress guard or fails before running", "reviewed": true, "tests": 1},
       "test_guarded_and_unarmed_children_are_admitted": {"disposition": "oracle", "flags": [], "group": "cli-shell", "reason": "pins that every Python test child, through cli_runner, runtime_parity.child_env or a bare python -m tests.<module>, runs under the no-egress guard or fails before running", "reviewed": true, "tests": 1},
       "test_reference_child_without_the_hook_exits_before_running": {"disposition": "oracle", "flags": ["subprocess"], "group": "cli-shell", "reason": "pins that every Python test child, through cli_runner, runtime_parity.child_env or a bare python -m tests.<module>, runs under the no-egress guard or fails before running", "reviewed": true, "tests": 1},
       "test_the_2026_11_08_fixture_now_fails_instead_of_running_unguarded": {"disposition": "oracle", "flags": ["subprocess"], "group": "cli-shell", "reason": "pins that every Python test child, through cli_runner, runtime_parity.child_env or a bare python -m tests.<module>, runs under the no-egress guard or fails before running", "reviewed": true, "tests": 1}
@@ -1787,9 +1799,6 @@
     "tests/test_legacy_ledger.py": {
       "LegacyLedgerTest": {"disposition": "subprocess-scenario", "flags": ["sql", "sql-seed", "subprocess"], "group": "journals", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.db", "reviewed": false, "tests": 6}
     },
-    "tests/test_lightning_business_plan.py": {
-      "LightningBusinessPlanTest": {"disposition": "rust-test", "flags": ["subprocess"], "group": "chain-sync", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 4}
-    },
     "tests/test_lightning_business_regtest_helpers.py": {
       "LightningBusinessRegtestHelperTests": {"disposition": "rust-test", "flags": ["subprocess"], "group": "chain-sync", "reason": "runs helper processes without the product entry", "reviewed": false, "tests": 1}
     },
@@ -1797,9 +1806,6 @@
       "AssignHistoricalDatesTests": {"disposition": "rust-test", "flags": [], "group": "chain-sync", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 9},
       "RebucketForwardDayTests": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "chain-sync", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 2},
       "BackdateProfileScopeTests": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "chain-sync", "reason": "calls kassiber.db directly", "reviewed": false, "tests": 3}
-    },
-    "tests/test_lightning_funding.py": {
-      "LightningFundingTest": {"disposition": "rust-test", "flags": ["subprocess"], "group": "chain-sync", "reason": "runs helper processes without the product entry", "reviewed": false, "tests": 6}
     },
     "tests/test_lightning_reference_fixes.py": {
       "test_nonfinite_daemon_window_uses_malformed_window_default": {"disposition": "rust-test", "flags": [], "group": "chain-sync", "reason": "calls kassiber.daemon directly", "reviewed": false, "tests": 1},
@@ -2110,9 +2116,6 @@
       "PendingOnchainTests": {"disposition": "rust-test", "flags": [], "group": "transactions", "reason": "calls kassiber.core.ownership_transfers directly", "reviewed": false, "tests": 5},
       "LiquidOwnershipDeriverTests": {"disposition": "rust-test", "flags": [], "group": "transactions", "reason": "calls kassiber.core.ownership, kassiber.core.ownership_transfers directly", "reviewed": false, "tests": 5}
     },
-    "tests/test_packaged_cli_no_egress.py": {
-      "PackagedCliNoEgressTest": {"disposition": "boundary-fixture", "flags": ["subprocess"], "group": "network-egress", "reason": "runs the packaged production binary named by KASSIBER_PACKAGED_CLI under a seccomp socket filter and a resolver shim; launch, status and daemon idle must open no socket", "reviewed": true, "tests": 6}
-    },
     "tests/test_pair_residual_fee.py": {
       "test_pair_allocates_separate_observed_fee_once": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "journals", "reason": "calls kassiber.core.custody_evidence, kassiber.cli.handlers directly", "reviewed": false, "tests": 1},
       "test_swap_refund_separates_observed_fee_from_reviewed_principal_fee": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "journals", "reason": "calls kassiber.core.custody_evidence, kassiber.cli.handlers directly", "reviewed": false, "tests": 1}
@@ -2304,17 +2307,8 @@
     "tests/test_regtest_backend_stack.py": {
       "RegtestBackendStackTest": {"disposition": "rust-test", "flags": ["mock"], "group": "packaging-ci", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 11}
     },
-    "tests/test_regtest_exchange_api.py": {
-      "RegtestExchangeApiTest": {"disposition": "rust-test", "flags": [], "group": "chain-sync", "reason": "calls kassiber.core.exchange_imports directly", "reviewed": false, "tests": 2},
-      "RegtestExchangeApiTest::test_real_signed_paginated_import_and_refresh_preserve_source_ledger": {"disposition": "subprocess-scenario", "flags": ["sql", "subprocess"], "group": "chain-sync", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.core.accounts, kassiber.db", "reviewed": false, "tests": 1}
-    },
     "tests/test_regtest_harness.py": {
-      "RegtestHarnessTest": {"disposition": "rust-test", "flags": ["mock", "mock-internal", "sql", "tapes"], "group": "chain-sync", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 34},
-      "RegtestHarnessTest::test_full_accounting_demo_ownership_proof_requires_derived_routes_before_manual_pairs": {"disposition": "subprocess-scenario", "flags": ["sql", "sql-seed", "subprocess"], "group": "chain-sync", "reason": "spawns `python -m kassiber` (cli/daemon) but seeds raw SQLite state", "reviewed": false, "tests": 1},
-      "RegtestHarnessTest::test_full_accounting_demo_accepts_exact_recorded_fanout_proof": {"disposition": "subprocess-scenario", "flags": ["sql", "sql-seed", "subprocess"], "group": "chain-sync", "reason": "spawns `python -m kassiber` (cli/daemon) but seeds raw SQLite state", "reviewed": false, "tests": 1}
-    },
-    "tests/test_regtest_source_funds_seed.py": {
-      "RegtestSourceFundsFixtureTest": {"disposition": "rust-test", "flags": ["subprocess"], "group": "source-funds", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 4}
+      "RegtestHarnessTest": {"disposition": "rust-test", "flags": ["mock", "mock-internal", "sql", "sql-seed", "tapes", "subprocess"], "group": "chain-sync", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 32}
     },
     "tests/test_release_notes.py": {
       "test_selects_exact_version_preserving_body": {"disposition": "rust-test", "flags": [], "group": "packaging-ci", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 1},

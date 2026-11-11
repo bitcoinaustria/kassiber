@@ -816,13 +816,6 @@ REVIEWS["tests/test_rust_write_transaction_locks.py"] = {"*": {
     "reason": "holds the writer from a second connection and requires the Rust binary's CLI and daemon writes (document import, wallet create, metadata, journals, review apply, setup, import and rollback, backup) to wait and succeed on SQLite and SQLCipher books; the previous binary failed the document import and wallet create with database_busy",
 }}
 
-REVIEWS["tests/test_packaged_cli_no_egress.py"] = {
-    "PackagedCliNoEgressTest": {
-        "disposition": "boundary-fixture", "group": "network-egress",
-        "reason": "runs the packaged production binary named by KASSIBER_PACKAGED_CLI under a seccomp socket filter and a resolver shim; launch, status and daemon idle must open no socket",
-    },
-}
-
 REVIEWS["tests/test_python_rust_only_countries.py"] = {"*": {
     "disposition": "python-only", "group": "journals",
     "reason": "pins that the Python reference refuses a book of a Rust-only tax country (read from the registry's desktop copy) with a typed error and leaves the book unchanged; retires with Python",

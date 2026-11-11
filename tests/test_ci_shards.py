@@ -201,8 +201,6 @@ class PythonShardContractTest(unittest.TestCase):
         workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
         jobs = workflow["jobs"]
         uv_jobs = ["preflight", "python-tests", "tax-shadow", "cli-smoke"]
-        if "chain-observers" in jobs:
-            uv_jobs.append("chain-observers")
         for job_name in uv_jobs:
             uv_steps = [
                 step
@@ -230,6 +228,15 @@ class PythonShardContractTest(unittest.TestCase):
         self.assertEqual(
             savers, {"python-binding": ["preflight"], "rust-workspace": ["tax-engine"]}
         )
+        # The chain-observer lane drives the Rust binary with stdlib Python:
+        # no uv, and a Cargo cache of its own.
+        if "chain-observers" in jobs:
+            steps = jobs["chain-observers"]["steps"]
+            self.assertFalse(
+                [step for step in steps if str(step.get("uses") or "").startswith("astral-sh/setup-uv@")]
+            )
+            setup = next(step for step in steps if step.get("uses") == "./.github/actions/setup-rust")
+            self.assertEqual(setup["with"]["cache-key"], "rust-chain-observers")
         setup_node = next(
             step
             for step in jobs["frontend"]["steps"]
