@@ -1,5 +1,6 @@
 //! Run one recorded session against the current binary and compare.
 
+use sha2::Digest;
 use std::collections::{BTreeMap, HashSet};
 use std::fs;
 use std::io::{Read, Write};
@@ -113,6 +114,23 @@ fn local_offset_us() -> i64 {
 }
 
 /// A state tree as comparable artifacts: path to canonical text.
+/// The members of a ZIP archive (XLSX and ZIP exports), in archive order;
+/// `None` for anything else.
+fn zip_members(bytes: &[u8]) -> Option<Vec<(String, Vec<u8>)>> {
+    if !bytes.starts_with(b"PK\x03\x04") {
+        return None;
+    }
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes)).ok()?;
+    let mut members = Vec::with_capacity(archive.len());
+    for index in 0..archive.len() {
+        let mut member = archive.by_index(index).ok()?;
+        let mut body = Vec::new();
+        std::io::Read::read_to_end(&mut member, &mut body).ok()?;
+        members.push((member.name().ok()?.to_string(), body));
+    }
+    Some(members)
+}
+
 fn artifacts(
     root: &Path,
     entries: &[Entry],
@@ -171,6 +189,24 @@ fn artifacts(
                     }
                 } else if let Ok(text) = std::str::from_utf8(&bytes) {
                     canon.rewrite(&back(paths, text), true)
+                } else if let Some(members) = zip_members(&bytes) {
+                    // An XLSX or ZIP export: each member compares as text
+                    // (with the usual rules, so its creation time is a clock
+                    // reading) or, if binary, by its bytes.
+                    members
+                        .into_iter()
+                        .map(|(name, body)| match String::from_utf8(body) {
+                            Ok(text) => format!(
+                                "member {name}\n{}",
+                                canon.rewrite(&back(paths, &text), true)
+                            ),
+                            Err(error) => format!(
+                                "member {name}: binary {}",
+                                crate::hex(&sha2::Sha256::digest(error.as_bytes()))
+                            ),
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n")
                 } else {
                     // Binary content (an encrypted book, an archive): its size.
                     format!("binary {} bytes", bytes.len())

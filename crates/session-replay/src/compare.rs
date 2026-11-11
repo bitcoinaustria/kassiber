@@ -47,20 +47,21 @@ fn uuid5() -> &'static Regex {
     })
 }
 
-/// The CLI chat's random request ids: `chat-`, `chat-consent-`,
+/// The CLI chat's and the MCP server's random request ids: `chat-`, `chat-consent-`, `mcp-`,
 /// `chat-provider-list-` and the like, then 32 random hex digits.
 fn chat_request() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r"\bchat-(?:[a-z]+-)*([0-9a-f]{32})\b").unwrap())
+    RE.get_or_init(|| Regex::new(r"\b(?:chat|mcp)-(?:[a-z]+-)*([0-9a-f]{32})\b").unwrap())
 }
 
 /// Random url-safe tokens: 256-bit ones under a `token` or `*_token` key (a
-/// document import's `document_token`), 128-bit ones under `upload_id`.
+/// document import's `document_token`), 128-bit ones under `upload_id`, and
+/// analysis `snapshot_id`s, which hash the index's random instance id.
 fn url_token() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
         Regex::new(
-            r#"(?:\b|_)token\\?"\s*:\s*\\?"([A-Za-z0-9_-]{43})\\?"|\bupload_id\\?"\s*:\s*\\?"([A-Za-z0-9_-]{22})\\?""#,
+            r#"(?:\b|_)token\\?"\s*:\s*\\?"([A-Za-z0-9_-]{43})\\?"|\bupload_id\\?"\s*:\s*\\?"([A-Za-z0-9_-]{22})\\?"|\bsnapshot_id\\?"\s*:\s*\\?"([0-9a-f]{64}|[0-9a-f]{40})\\?"|\bsnapshot_id=text "([0-9a-f]{64}|[0-9a-f]{40})""#,
         )
         .unwrap()
     })
@@ -270,7 +271,12 @@ pub fn generated_spans(
         .captures_iter(text)
         .chain(url_token().captures_iter(text))
     {
-        let token = caps.get(1).or_else(|| caps.get(2)).unwrap();
+        let token = caps
+            .get(1)
+            .or_else(|| caps.get(2))
+            .or_else(|| caps.get(3))
+            .or_else(|| caps.get(4))
+            .unwrap();
         take_identity(token.start(), token.end(), &mut spans);
     }
     for path in root_path().find_iter(text) {

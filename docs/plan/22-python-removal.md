@@ -261,7 +261,7 @@ rewrite. Each rule below covers a value that differs between two correct runs.
 | --- | --- |
 | uuid4 and `uuid4().hex` values become `<gen:N>`, numbered by first appearance | random by construction. The numbering is a bijection: equal values share a number and different values get different ones, so a row pointing at the wrong id still differs. |
 | uuid5 values become `<gen:N>` unless an input names them or both runs printed them | a uuid5 over a random uuid4 differs between runs. A uuid5 over inputs only is printed identically by both runs, so it stays literal. |
-| `chat-…-<32 hex>` request ids, 43-character url-safe `token`/`*_token` values and 22-character `upload_id`s become `<gen:N>` | random request ids, document tokens and upload ids. Ids the test echoes back on stdin are translated to the replay's own. |
+| `chat-…-<32 hex>` and `mcp-<32 hex>` request ids, 43-character url-safe `token`/`*_token` values, 22-character `upload_id`s and analysis `snapshot_id`s become `<gen:N>` | random request ids, document tokens and upload ids; a snapshot id hashes the analysis index's random instance id. Ids the test echoes back on stdin are translated to the replay's own. |
 | The random part of a temporary name inside the session's roots (`kassiber-chat-uploads-XjMTS7Hk`, `tmpzxLZfBnQ`) becomes `<gen:N>` | `mkdtemp`-style suffixes: six to eight characters mixing letters and digits or cases. Names an input gave stay literal. |
 | Values that came in through argv, the environment, stdin or the starting state are pinned | they are inputs and must stay literal. Stdin ids the process printed first are echoes, not inputs. |
 | Clock readings inside the run's window (±5 s, the recording's window plus 10 minutes of lookback) become `<time>` | wall-clock reads. ISO, compact (`20261110T120000Z`) and epoch forms. |
@@ -274,6 +274,7 @@ rewrite. Each rule below covers a value that differs between two correct runs.
 | Daemon output is grouped by `request_id`, each request's records in order | concurrent requests interleave freely. |
 | A book is dumped after applying its WAL; `-wal`, `-shm`, `-journal` and lock files are not compared | the WAL state is in the dump; ownership locks name the live process. |
 | Artifact file names are compared by shape | they embed generated ids or times. |
+| XLSX and ZIP artifacts compare member by member: XML members as text under these rules, binary members by hash | an export's `docProps` records its creation time; every cell still compares. |
 
 No rule touches amounts, msat values, prices, tax figures, the dates of tax
 events, or any stored column other than random ids and clock readings.

@@ -19,6 +19,8 @@ flate2 = { version = "=1.1.9", default-features = false, features = ["rust_backe
 libc = "0.2"
 # Recordings travel on the test-data branch as a few deterministic tars.
 tar = "0.4"
+# XLSX and ZIP exports compare member by member (already in the workspace).
+zip = { version = "=9.1.3", default-features = false, features = ["deflate"] }
 regex = "1"
 rusqlite = { version = "=0.40.1", features = ["bundled-sqlcipher", "backup"] }
 # The product's own SQLCipher keying and encryption for recorded books.
