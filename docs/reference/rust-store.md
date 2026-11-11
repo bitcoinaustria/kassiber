@@ -144,11 +144,14 @@ locations, the `data` basename rule, and `satbooks.sqlite3` fallback remain.
 Resolution never creates directories, selects a project persistently, updates
 last-opened/encrypted metadata, writes settings, or migrates roots. An absent
 catalog/default project or incomplete runtime directory/settings layout yields
-typed `not_initialized`. A legacy default
-root that would require cutover, a project-layout migration, or a conflicting
-migration proof yields `requires_python_migration`. Explicit data-root
-selection remains available without default migration. Those are read-only
-resolver barriers. Explicit shell bootstrap now uses the creation, ordered-pass
+typed `not_initialized`. A hidden-home (`~/.kassiber`) root the cutover did
+not move (it declined, or the caller skipped it: `--env-file`, `backup
+import`) is used where it is, as Python's `default_state_root` does. A
+project-layout migration or a conflicting migration proof yields
+`requires_python_migration`. An explicit data root never migrates and wins
+over the default root's catalog: that catalog only names the explicit root's
+project, and one the reader refuses names nothing instead of blocking the
+command. Those are read-only resolver barriers. Explicit shell bootstrap now uses the creation, ordered-pass
 and project APIs above; it never treats an existing rejected book as fresh.
 
 Catalog and settings readers accept the Python schema-1 object shape and

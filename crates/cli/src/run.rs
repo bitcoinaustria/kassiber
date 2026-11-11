@@ -422,10 +422,12 @@ pub fn run(
     .then(|| store.journal_replay_guard(&globals.selection))
     .flatten();
     // _maybe_migrate_default_state_root, before broker routing and
-    // bootstrap. `commands describe` never migrates (nor bootstraps).
+    // bootstrap. `commands describe` never migrates (nor bootstraps), and
+    // neither does `backup import`, which restores into the root it finds.
     let migrate = globals.selection.data_root.is_none()
         && globals.selection.env_file.is_none()
         && !matches!(path.first(), Some(&"commands") | Some(&"verify-download"))
+        && path[..] != ["backup", "import"]
         && !(path.first() == Some(&"operator")
             && matches!(
                 path.get(1),

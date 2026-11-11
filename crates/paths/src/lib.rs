@@ -250,18 +250,24 @@ impl Context {
         }
         let global = self.default_state_root()?;
         // Explicit data roots bypass default-state-root migration entirely.
+        // Without one, a hidden-home root the cutover left in place (or that
+        // a caller such as `--env-file` never offered to it) is used where it
+        // is, as Python's default_state_root does; resolution never moves it.
         if options.data_root.is_none() {
             let native = self.native_state_root();
             let legacy = self.home.join(".kassiber");
-            if global == legacy && !native.exists() {
-                return Err(Error::migration("legacy_state_root"));
-            }
             if native.join(MIGRATION_MARKER).exists() && movable_state(&legacy)? {
                 return Err(Error::migration("state_root_conflict"));
             }
         }
-        let catalog = load_catalog(&global.join("config/projects.json"), self)?;
+        let catalog_path = global.join("config/projects.json");
         let project = if let Some(data) = &options.data_root {
+            // The explicit root is the selection; the default root's catalog
+            // only names it (Python's project_metadata_for_data_root). A
+            // catalog Python would read as empty, or one Rust refuses to
+            // trust, names nothing: it neither blocks nor redirects the
+            // explicit root, and nothing is written back to it.
+            let catalog = load_catalog(&catalog_path, self).unwrap_or_default();
             let target = canonicalize_allow_missing(&self.effective_data_root(data)?)?;
             catalog
                 .projects
@@ -271,6 +277,7 @@ impl Context {
                 })
                 .cloned()
         } else {
+            let catalog = load_catalog(&catalog_path, self)?;
             if catalog.projects.is_empty() {
                 if options.project.is_some() {
                     return Err(Error::new(
@@ -819,9 +826,15 @@ mod tests {
         fs::create_dir_all(temp.path().join(".kassiber/run")).unwrap();
         assert_eq!(c.default_state_root().unwrap(), c.native_state_root());
         fs::write(temp.path().join(".kassiber/unknown"), "").unwrap();
+        // Hidden-home state stays where it is: resolution reads the legacy
+        // root in place (it has no project yet) and never moves it.
+        assert_eq!(
+            c.default_state_root().unwrap(),
+            temp.path().join(".kassiber")
+        );
         assert_eq!(
             c.resolve(&ResolveOptions::default()).unwrap_err().kind,
-            ErrorKind::RequiresPythonMigration
+            ErrorKind::NotInitialized
         );
         assert!(!c.native_state_root().exists());
         fs::write(temp.path().join(LEGACY_DB_FILENAME), "").unwrap();

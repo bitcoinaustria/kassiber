@@ -26,6 +26,8 @@ mod audit_package;
 mod cli_proxy;
 #[path = "black_box/evidence_summary.rs"]
 mod evidence_summary;
+#[path = "black_box/hidden_home.rs"]
+mod hidden_home;
 #[path = "black_box/maintenance_run.rs"]
 mod maintenance_run;
 #[path = "black_box/mcp.rs"]
