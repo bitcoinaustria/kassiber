@@ -1180,3 +1180,22 @@ impl Live {
         assert_eq!((status.code(), stderr.as_str()), (Some(0), ""));
     }
 }
+
+/// Reply lines of a balance history read: its rows run to today, so their
+/// periods and counts move with the calendar. The line keeps only that it
+/// was such a reply.
+pub fn calendar_relative(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for line in text.split_inclusive('\n') {
+        let reply = line.starts_with("< ");
+        if reply
+            && (line.contains("\"kind\":\"ui.reports.balance_history\"")
+                || line.contains("\\\"kind\\\":\\\"ui.reports.balance_history\\\""))
+        {
+            out.push_str("< <a balance history reply; its rows run to today>\n");
+        } else {
+            out.push_str(line);
+        }
+    }
+    out
+}

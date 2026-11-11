@@ -7,7 +7,7 @@
 
 use serde_json::{json, Value};
 
-use crate::support::{number_hex, Live, Sandbox, Transcript};
+use crate::support::{calendar_relative, number_hex, Live, Sandbox, Transcript};
 
 pub const CLOCK: &str = "2026-03-04T05:06:07Z";
 const DESKTOP: &str = include_str!("../../../transactions/tests/data/desktop.sql");
@@ -70,6 +70,7 @@ pub fn transcript(name: &str) -> Transcript {
     t.compact();
     // Dismissal expiries count from the wall clock.
     t.future_is_generated();
+    t.mask(calendar_relative);
     t
 }
 

@@ -10,7 +10,7 @@ use std::process::Stdio;
 
 use serde_json::Value;
 
-use crate::support::{number_hex, Sandbox, Transcript};
+use crate::support::{calendar_relative, number_hex, Sandbox, Transcript};
 
 const DESKTOP: &str = include_str!("../../../transactions/tests/data/desktop.sql");
 
@@ -70,6 +70,7 @@ fn test_every_grant_lists_and_runs_what_it_covers() {
     let cases: Vec<Value> = serde_json::from_str(include_str!("ai/mcp_every_grant.json")).unwrap();
     let mut t = Transcript::new("mcp/every_grant");
     t.compact();
+    t.mask(calendar_relative);
     t.mask(|text| {
         let text = number_hex(text, "ca-ref:", 64);
         let text = number_hex(&text, "snapshot_id\":\"", 64);
