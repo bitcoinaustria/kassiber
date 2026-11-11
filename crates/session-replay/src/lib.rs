@@ -323,7 +323,10 @@ impl Blobs {
         if list.exists() {
             let mut files = vec![list.clone()];
             for digest in Self::read_compressed(&list)?.chunks(32) {
-                files.push(self.path(&hex(digest)).with_extension("gz"));
+                // Recorded pages are compressed; extracted ones are not.
+                let page = self.path(&hex(digest));
+                let compressed = page.with_extension("gz");
+                files.push(if compressed.exists() { compressed } else { page });
             }
             return Ok(files);
         }
