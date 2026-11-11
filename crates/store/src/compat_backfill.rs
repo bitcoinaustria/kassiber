@@ -11,7 +11,7 @@ use rusqlite::{params, Connection, OptionalExtension};
 fn unsupported() -> Error {
     Error::new(
         ErrorKind::UnsupportedSchemaLayout,
-        "stored migration input requires unsupported Python semantics",
+        "stored migration input holds a value this build cannot convert exactly",
     )
 }
 fn object(raw: Option<&str>) -> Result<Vec<(Key, Value)>> {

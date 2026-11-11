@@ -343,7 +343,7 @@ pub(crate) fn dumps(value: &Value, ascii: bool, compact: bool) -> crate::Result<
     .map_err(|_| {
         crate::Error::new(
             crate::ErrorKind::UnsupportedSchemaLayout,
-            "stored JSON cannot be encoded with Python's rules",
+            "stored JSON cannot be re-encoded exactly",
         )
     })
 }

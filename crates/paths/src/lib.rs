@@ -349,7 +349,7 @@ impl Context {
         {
             return Err(Error::new(
                 ErrorKind::NotInitialized,
-                "runtime layout requires Python initialization",
+                "runtime layout is not initialized",
             ));
         }
         Ok(RuntimePaths {

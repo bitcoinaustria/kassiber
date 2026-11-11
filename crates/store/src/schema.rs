@@ -165,7 +165,7 @@ fn parse_compat_json(raw: Option<&str>) -> Result<Value> {
 fn unsupported_json() -> Error {
     Error::new(
         crate::ErrorKind::UnsupportedSchemaLayout,
-        "stored JSON requires Python-compatible parsing before Rust admission",
+        "stored JSON holds a number this build cannot read exactly",
     )
     .details(json!({"reason":"unsupported_python_json"}))
 }

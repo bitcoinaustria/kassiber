@@ -8,7 +8,7 @@ use std::collections::BTreeSet;
 pub(super) fn unsupported() -> Error {
     Error::new(
         ErrorKind::UnsupportedSchemaLayout,
-        "stored migration input requires unsupported Python semantics",
+        "stored migration input holds a value this build cannot convert exactly",
     )
 }
 pub(super) fn json(raw: Option<&str>) -> Result<Value> {
