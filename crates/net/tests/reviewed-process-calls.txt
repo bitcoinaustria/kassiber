@@ -74,6 +74,9 @@ crates/session-replay/src/replay.rs|replay|let _ = Command::new("kill")
 # Coverage for replays: `llvm-profdata merge` (or $LLVM_PROFDATA) folds a
 # session's raw counters into one profile; local files only.
 crates/session-replay/src/bin/session-replay.rs|merge_profile|let _ = std::process::Command::new(tool)
+# A replay's last step inside its namespace: exec the replayed binary with
+# its recorded argv[0] (unshare cannot set it).
+crates/session-replay/src/bin/session-replay.rs|exec_as|let error = std::process::Command::new(program)
 # Black-box tests that run the product binary they were built with
 # (CARGO_BIN_EXE_kassiber) on a disposable data root, never the account's,
 # under the test no-egress guard (loopback fakes only) or a replayed tape. The desk's `sh`

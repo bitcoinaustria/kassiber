@@ -440,6 +440,27 @@ fn gzip_tar(path: &Path, entries: &[(String, Vec<u8>)]) -> Result<(), String> {
 }
 
 /// `archive PACK OUT`: a pack directory as the archives above.
+#[cfg(unix)]
+fn exec_as(args: &[String]) -> ExitCode {
+    use std::os::unix::process::CommandExt;
+    let (Some(argv0), Some(program)) = (args.first(), args.get(1)) else {
+        eprintln!("usage: session-replay exec-as ARGV0 PROGRAM [ARGS...]");
+        return ExitCode::from(2);
+    };
+    let error = std::process::Command::new(program)
+        .arg0(argv0)
+        .args(&args[2..])
+        .exec();
+    eprintln!("exec {program}: {error}");
+    ExitCode::from(127)
+}
+
+#[cfg(not(unix))]
+fn exec_as(_: &[String]) -> ExitCode {
+    eprintln!("exec-as needs a Unix host");
+    ExitCode::from(2)
+}
+
 fn archive(args: &[String]) -> ExitCode {
     use kassiber_session_replay::Entry;
     let (Some(src), Some(out)) = (args.first(), args.get(1)) else {
@@ -638,6 +659,11 @@ fn main() -> ExitCode {
     }
     if command == "pack" {
         return pack(&args[1..]);
+    }
+    // `exec-as ARGV0 PROGRAM ARGS...`: run PROGRAM with that argv[0] (the
+    // replay's last step inside the namespace, where unshare cannot).
+    if command == "exec-as" {
+        return exec_as(&args[1..]);
     }
     let Some(dir) = args.get(1).map(PathBuf::from) else {
         eprintln!("usage: session-replay {command} DIR ...");

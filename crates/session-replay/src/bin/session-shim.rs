@@ -565,6 +565,7 @@ fn main() {
             repo: config.repo.clone().unwrap_or_default(),
             fds,
             rerecorded_us: Vec::new(),
+            argv0: Some(real.clone()),
             stdout_closed_after: match STDOUT_CLOSED_AFTER.load(Ordering::SeqCst) {
                 u64::MAX => None,
                 n => Some(n),

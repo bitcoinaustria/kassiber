@@ -119,6 +119,11 @@ pub struct Session {
     /// recording's own window, which still covers the frozen SQLite clock.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub rerecorded_us: Vec<(i64, i64)>,
+    /// The process's `argv[0]`: the path the recording started the binary
+    /// at. Test builds seed SQLite's PRNG from every argument, this one
+    /// included, so a replay from another checkout must pass the same.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub argv0: Option<String>,
 }
 
 /// Passphrases a session hands its process: inherited descriptors and the

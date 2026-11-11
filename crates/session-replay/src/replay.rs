@@ -462,12 +462,22 @@ pub fn replay(
             .arg(uid.to_string())
             .arg(gid.to_string())
             .arg(tool("mount")?)
-            .arg(&unshare)
-            .arg(binary);
+            .arg(&unshare);
+        // unshare cannot set argv[0]; `session-replay exec-as` does.
+        if let Some(argv0) = &session.argv0 {
+            let tool = std::env::current_exe().map_err(|e| e.to_string())?;
+            command.arg(tool).arg("exec-as").arg(argv0);
+        }
+        command.arg(binary);
         command
     } else {
         let mut command = Command::new(binary);
         command.current_dir(&cwd);
+        #[cfg(unix)]
+        if let Some(argv0) = &session.argv0 {
+            use std::os::unix::process::CommandExt;
+            command.arg0(argv0);
+        }
         command
     };
     command.args(session.argv.iter().map(|a| paths.forward(a)));
