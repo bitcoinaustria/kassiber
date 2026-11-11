@@ -2,7 +2,7 @@
 product (docs/plan/22-python-removal.md, decision D2).
 
 The harnesses run with `python3 -I` and drive the Rust `kassiber` binary
-through `tests/cli_runner.py`. What they used to borrow from the Python
+through `tests/integration/cli.py`. What they used to borrow from the Python
 package lives here: plain `sqlite3` reads and fixture writes on the
 plaintext demo books, one daemon request, and copies of a few pure helpers.
 Each copy names the product code it mirrors; none of them decides anything
@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 from urllib import parse
 
-from tests import cli_runner
+from tests.integration import cli as cli_runner
 
 DB_FILENAME = "kassiber.sqlite3"
 LEGACY_DB_FILENAME = "satbooks.sqlite3"

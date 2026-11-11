@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 from urllib import error, request
 
-from tests import cli_runner
+from tests.integration import cli as cli_runner
 
 DEFAULT_API_URL = "http://127.0.0.1:9001"
 ROOT = Path(__file__).resolve().parents[2]
