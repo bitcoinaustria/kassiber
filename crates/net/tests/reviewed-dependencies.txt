@@ -87,7 +87,7 @@ miniscript
 elements-miniscript
 regex
 kassiber-setup
-kassiber-transactions
+kassiber-transactions test-harness
 kassiber-transfers test-harness
 kassiber-imports
 kassiber-wallets test-harness

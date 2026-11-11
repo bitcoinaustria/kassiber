@@ -33,6 +33,7 @@ test-harness = [
   "kassiber-secrets/test-hooks",
   "kassiber-backup/test-hooks",
   "kassiber-operator/test-harness",
+  "kassiber-transactions/test-harness",
 ]
 
 [dependencies]
