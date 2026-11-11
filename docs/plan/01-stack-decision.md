@@ -1,11 +1,13 @@
 # ADR: Desktop UI Stack
 
 **Status:** Accepted.
-**Decision:** Tauri 2 + React 19 + TypeScript + shadcn/ui, with the Python
-core running as a long-lived sidecar daemon over stdin/stdout JSONL.
+**Decision:** Tauri 2 + React 19 + TypeScript + shadcn/ui, with the backend
+running as a long-lived sidecar daemon over stdin/stdout JSONL. The backend
+was Python when this ADR was written; since plans 21 and 22 it is the Rust
+`kassiber` binary (see the amendments below).
 **Date:** 2026-04-25.
-**Current source of truth:** `pyproject.toml`, the `ui-tauri/` workspace once
-it lands, `kassiber/daemon.py` once it lands,
+**Current source of truth:** the `ui-tauri/` workspace, the daemon crate
+(`crates/daemon`), the [daemon contract](../reference/daemon.md),
 [04-desktop-ui.md](04-desktop-ui.md), and `TODO.md`.
 
 ## Decision
@@ -19,13 +21,12 @@ Adopt the following stack:
 - **Charts:** shadcn/ui chart blocks (Recharts under the hood); reach for another lib only if a screen genuinely outgrows what shadcn charts cover
 - **Forms:** React Hook Form + Zod
 - **Routing:** TanStack Router
-- **Server state:** TanStack Query against the Python daemon
+- **Server state:** TanStack Query against the daemon
 - **Local UI state:** Zustand
 - **IPC transport:** stdin/stdout JSONL with monotonic `request_id`
-- **Python bundling:** current prerelease bundles use a one-file PyInstaller
-  CLI sidecar packaged as a Tauri resource; production packaging may still
-  switch to `python-build-standalone` if the runtime tree is easier to sign,
-  debug, or update.
+- **Sidecar bundling:** the Rust `kassiber` binary, packaged as a Tauri
+  resource ([Rust packaging](../reference/rust-packaging.md)). Until plan 21's
+  cutover this was a one-file PyInstaller CLI.
 - **Packaging:** Tauri bundler — `.dmg`/`.app` (macOS), `.msi`/`.exe`
   (Windows), `.deb`/`.AppImage` (Linux)
 - **Update model:** minimal release notification, never automatic download or
@@ -39,10 +40,11 @@ Adopt the following stack:
   a Sparrow-style detached OpenSSH signature from the pinned release key. The complete disclosure lives in
   [Privacy & security](../reference/privacy-and-security.md).
 
-Rust scope stays small: process supervision, stdin/stdout framing, OS path
-resolution, and Tauri command bindings. **No** tax, accounting, or storage
-logic moves to Rust. `kassiber.core` and `rp2` remain authoritative in
-Python.
+The shell's Rust scope stays small: process supervision, stdin/stdout
+framing, OS path resolution, and Tauri command bindings. Tax, accounting, and
+storage logic stays out of the shell. As first written, this paragraph kept
+that logic in Python (`kassiber.core` and `rp2`); the amendments below moved
+it to the Rust backend crates, which the shell still does not contain.
 
 **Amended 2026-10-01:** [plan 20](20-kassiber-tax-engine.md) replaces RP2 with
 a Kassiber-owned tax engine written in Rust, called from Python. Since that
@@ -52,8 +54,13 @@ the daemon stay in Python until a later plan.
 
 **Amended 2026-10-26:** [plan 21](21-rust-backend.md) moves the whole backend
 to Rust: the sidecar becomes a Rust binary with the same CLI, daemon protocol,
-and data, and Python is retired at its cutover stage. Until then the Python
-sidecar described here remains what ships.
+and data, and Python is retired at its cutover stage.
+
+**Amended 2026-11-10:** [plan 22](22-python-removal.md) removes Python from
+the repository. The sidecar is the Rust `kassiber` binary; there is no Python
+interpreter, PyInstaller bundle, or PyO3 binding. The last Python commit is
+tagged `archive/python-backend`. The Python sidecar, `python-build-standalone`,
+and Pydantic mentions below are the original rationale, kept as history.
 
 ## Why
 
@@ -89,9 +96,9 @@ sidecar described here remains what ships.
 │                                                │ stdin/stdout │
 │                                                ▼ JSONL        │
 │                                  ┌──────────────────────────┐ │
-│                                  │ Python sidecar           │ │
-│                                  │  python-build-standalone │ │
-│                                  │  + kassiber + tax engine │ │
+│                                  │ kassiber sidecar (Rust)  │ │
+│                                  │  CLI + daemon + tax      │ │
+│                                  │  engine, one binary      │ │
 │                                  │  long-lived daemon       │ │
 │                                  └─────────────┬────────────┘ │
 └────────────────────────────────────────────────┼─────────────┘
@@ -99,29 +106,28 @@ sidecar described here remains what ships.
                                 <state-root>/ (SQLite, attachments)
 ```
 
-The webview never speaks to the Python child directly. Every call routes
+The webview never speaks to the sidecar child directly. Every call routes
 through Rust Tauri commands, allowing future auth, rate-limit, or audit
 layers without changing the frontend contract.
 
 ## Tradeoffs accepted
 
-- **Three languages.** Rust (small supervisor surface), TypeScript
-  (frontend), Python (existing core). Mitigated by keeping Rust scope tight
-  and TypeScript the only genuinely new surface.
+- **Three languages** (as accepted in 2026-04). Rust (small supervisor
+  surface), TypeScript (frontend), Python (existing core). Since plan 22 it
+  is two: Rust for the shell and the backend, TypeScript for the frontend.
 - **IPC overhead per call.** Negligible at human-interaction frequency.
 - **Sidecar packaging** is more work than a single-language path, paid
-  mostly in CI. PyInstaller gives the prerelease path a self-contained CLI
-  quickly; `python-build-standalone` remains the production alternative if the
-  one-file sidecar becomes hard to sign, debug, or patch.
+  mostly in CI. The sidecar was a PyInstaller CLI until plan 21's cutover; it
+  is now the Rust binary, built per target in CI.
 - **WebKitGTK quirks on Linux.** Each major Linux distro ships its own
   WebKitGTK. Test on Ubuntu LTS; budget a CSS-fixup pass per release.
 - **Bundle size.** Larger than a pure-native build. Acceptable for desktop
   accounting; measure per release, do not promise final numbers.
 - **AGPL subprocess linkage.** Widely treated as arms-length aggregation;
   obtain a written legal opinion before public release.
-- **Bundled Python is a CVE surface.** Versions don't auto-update with OS
-  Python patches. Documented refresh cadence: rebuild releases when CPython
-  or any shipped wheel issues a security advisory above a defined severity
+- **Bundled dependencies are a CVE surface.** They don't update with the
+  OS. Rebuild releases when a shipped crate (or, before plan 22, CPython or a
+  shipped wheel) issues a security advisory above a defined severity
   threshold.
 
 ## Alternatives considered
