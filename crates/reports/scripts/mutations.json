@@ -3837,7 +3837,7 @@
     "find": "t.excluded=0 ORDER BY t.occurred_at",
     "replace": "1=1 ORDER BY t.occurred_at",
     "expect_failing": [
-      "full_report_csv_artifact_vectors"
+      "standalone_transactions_csv_artifact_vectors"
     ],
     "rule": "Excluded observations never enter the transaction sheet."
   },
@@ -3847,7 +3847,7 @@
     "find": "ORDER BY t.occurred_at,t.created_at,t.id",
     "replace": "ORDER BY t.occurred_at DESC,t.created_at DESC,t.id DESC",
     "expect_failing": [
-      "full_report_csv_artifact_vectors"
+      "standalone_transactions_csv_artifact_vectors"
     ],
     "rule": "Transaction rows use occurred, created, id order."
   },
@@ -3857,7 +3857,7 @@
     "find": "text(r, \"wallet_id\") == wallet",
     "replace": "true",
     "expect_failing": [
-      "full_report_csv_artifact_vectors"
+      "standalone_transactions_csv_artifact_vectors"
     ],
     "rule": "The transaction sheet obeys the wallet scope."
   },
@@ -3867,7 +3867,7 @@
     "find": "je.entry_type IN ('disposal','income')",
     "replace": "je.entry_type IN ('fee','disposal','income')",
     "expect_failing": [
-      "full_report_csv_artifact_vectors"
+      "standalone_transactions_csv_artifact_vectors"
     ],
     "rule": "Transaction realized basis excludes fee journal entries."
   },
@@ -3877,7 +3877,7 @@
     "find": "COALESCE(t.taxability_override,1)!=0",
     "replace": "1=1",
     "expect_failing": [
-      "full_report_csv_artifact_vectors"
+      "standalone_transactions_csv_artifact_vectors"
     ],
     "rule": "Non-taxable transactions have no realized basis or gain."
   },
@@ -3887,7 +3887,7 @@
     "find": "COALESCE(je.at_category,'')!='neu_swap'",
     "replace": "1=1",
     "expect_failing": [
-      "full_report_csv_artifact_vectors"
+      "standalone_transactions_csv_artifact_vectors"
     ],
     "rule": "Carrying swaps do not enter realized transaction figures."
   },
@@ -3897,7 +3897,7 @@
     "find": "ORDER BY tg.code",
     "replace": "ORDER BY tg.code DESC",
     "expect_failing": [
-      "full_report_csv_artifact_vectors"
+      "standalone_transactions_csv_artifact_vectors"
     ],
     "rule": "Tags are comma-joined in code order."
   },
@@ -3907,7 +3907,7 @@
     "find": "ORDER BY a.created_at",
     "replace": "ORDER BY a.created_at DESC",
     "expect_failing": [
-      "full_report_csv_artifact_vectors"
+      "standalone_transactions_csv_artifact_vectors"
     ],
     "rule": "Attachment labels retain creation order."
   },
@@ -3917,7 +3917,7 @@
     "find": "optional(&row, \"fiat_rate_exact\", \"fiat_rate\")?",
     "replace": "optional(&row, \"fiat_rate\", \"fiat_rate_exact\")?",
     "expect_failing": [
-      "full_report_csv_artifact_vectors"
+      "standalone_transactions_csv_artifact_vectors"
     ],
     "rule": "An exact recorded execution price precedes the float column."
   },
@@ -3927,7 +3927,7 @@
     "find": "optional(&row, \"fiat_value_exact\", \"fiat_value\")?",
     "replace": "optional(&row, \"fiat_value\", \"fiat_value_exact\")?",
     "expect_failing": [
-      "full_report_csv_artifact_vectors"
+      "standalone_transactions_csv_artifact_vectors"
     ],
     "rule": "An exact recorded cash leg precedes the float column."
   },
@@ -3937,7 +3937,7 @@
     "find": "amount_btc.mul(p, &DECIMAL)",
     "replace": "fee_btc.mul(p, &DECIMAL)",
     "expect_failing": [
-      "full_report_csv_artifact_vectors"
+      "standalone_transactions_csv_artifact_vectors"
     ],
     "rule": "FMV prices the principal rather than the fee-adjusted cash leg."
   },
@@ -3947,7 +3947,7 @@
     "find": "fee_btc.mul(p, &DECIMAL)",
     "replace": "amount_btc.mul(p, &DECIMAL)",
     "expect_failing": [
-      "full_report_csv_artifact_vectors"
+      "standalone_transactions_csv_artifact_vectors"
     ],
     "rule": "The fiat fee prices the separately recorded crypto fee."
   },
@@ -3957,7 +3957,7 @@
     "find": "} else if fee != 0 {",
     "replace": "} else if false {",
     "expect_failing": [
-      "full_report_csv_artifact_vectors"
+      "standalone_transactions_csv_artifact_vectors"
     ],
     "rule": "A zero-principal transaction may derive its price from the recorded fee value."
   },
@@ -3967,7 +3967,7 @@
     "find": "int(r, \"quantity_msat\") == int(out, \"quantity_msat\")",
     "replace": "int(r, \"quantity_msat\") != int(out, \"quantity_msat\")",
     "expect_failing": [
-      "full_report_csv_artifact_vectors"
+      "standalone_transactions_csv_artifact_vectors"
     ],
     "rule": "Booked transfer labels match exact quantities before fee-bearing amounts."
   },
@@ -3977,7 +3977,7 @@
     "find": "(delta >= 0).then_some((delta, i))",
     "replace": "(delta < 0).then_some((delta, i))",
     "expect_failing": [
-      "full_report_csv_artifact_vectors"
+      "standalone_transactions_csv_artifact_vectors"
     ],
     "rule": "Fee-bearing transfer labels only use inbound principal at or below the debit."
   },
@@ -3987,7 +3987,7 @@
     "find": "if int(journal, count) > 0 {",
     "replace": "if true {",
     "expect_failing": [
-      "full_report_csv_artifact_vectors"
+      "standalone_transactions_csv_artifact_vectors"
     ],
     "rule": "Missing realized figures stay blank, distinct from real zeroes."
   },
@@ -4655,7 +4655,7 @@
     "id": "standalone-no-marker",
     "file": "crates/reports/src/standalone_csv.rs",
     "find": "        completion: None,",
-    "replace": "        completion: Some(crate::export_completion::Completion { kind: \"transactions.csv\".into(), year: None, scope: Value::Null }),",
+    "replace": "        completion: Some(crate::export_completion::Completion { kind: \"transactions.csv\".into(), year: None, end_year: None, scope: Value::Null }),",
     "expect_failing": [
       "transaction_csv_export_registers_nothing"
     ],
