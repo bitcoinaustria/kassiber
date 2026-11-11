@@ -114,7 +114,8 @@ binary "#{appdir}/Kassiber.app/Contents/Resources/bin/kassiber",
 The generated formula selects the matching CLI archive per platform and
 architecture. On macOS it preserves the sealed app under `libexec` with
 `skip_clean "libexec/Kassiber.app"` and `preserve_rpath`: Homebrew must not
-clean bundled Python metadata or rewrite library install names after signing.
+clean files inside the sealed app or rewrite library install names after
+signing.
 The release helper prepares and checks compatible Mach-O linkage before the
 app is sealed, and verifies that invariant again on the sealed artifacts.
 Linux continues to use `bin.install "kassiber"` directly.

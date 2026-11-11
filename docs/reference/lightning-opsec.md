@@ -5,8 +5,8 @@ Kassiber's job is local-first Bitcoin accounting and tax reporting; the
 node's API surface contains everything from preimages to route hop pubkey
 lists that the routine tax/report computation does not need and that
 carries meaningful privacy cost if the local database leaks. This
-document is the discard policy adapters under
-[`kassiber/core/lightning/`](../../kassiber/core/lightning/) must apply
+document is the discard policy the LND and Core Lightning clients under
+[`crates/chain/src/lightning/`](../../crates/chain/src/lightning.rs) must apply
 *before* they fill the `NodeSnapshot` shapes that cross the daemon
 boundary.
 
@@ -48,8 +48,7 @@ bundles.
   diagnostics bundles, or a child process's argv or environment.
   `lightning-cli` takes a commando rune only in argv, which every local
   user can read, so Core Lightning commando connections are refused before
-  any process starts (Python `call_core_lightning`, Rust
-  `ClnReportClient::new`); see
+  any process starts (`ClnReportClient::new`); see
   [Core Lightning read-only sync](backends.md#core-lightning-read-only-sync).
 
 ### Evidence vault (future opt-in)
@@ -157,41 +156,32 @@ The same data has different sensitivity depending on where it ends up:
   (operator pubkey, peer pubkeys, funding outpoints, payment memos)
   before serializing.
 
-## Scaffold enforcement
+## Type enforcement
 
-The shapes in [`kassiber/core/lightning/types.py`](../../kassiber/core/lightning/types.py)
+The shapes in [`crates/chain/src/lightning/snapshot.rs`](../../crates/chain/src/lightning/snapshot.rs)
 encode the policy where they can:
 
-- `NodeChannel.peer_pubkey: str | None` — adapters must pick whether to
-  surface the pubkey, with the default for private channels being
-  `None`. `NodeChannel.__post_init__` raises `ValueError` if
-  `is_private=True` is combined with a non-`None` `peer_pubkey`, so
-  adapters that forget the policy fail at construction time, not at
-  wire serialization time.
-- `NodeChannel.short_channel_id` and `NodeChannel.funding_outpoint`
-  pass through a format-only validator on construction. The validator
-  does not verify the block height or the txid exists; it rejects free
+- `NodeChannel.peer_pubkey` holds the node's value for public channels only;
+  the clients set it to null for a private channel.
+- `NodeChannel.short_channel_id` and `NodeChannel.funding_outpoint` pass a
+  format-only validator when the client builds the channel
+  (`validate_short_id`, `validate_outpoint` in `lightning.rs`). The validator
+  does not verify the block height or that the txid exists; it rejects free
   text, JSON blobs, pubkeys, and similar smuggling attempts.
-- `NodeForward` carries short channel ids and peer **aliases** only —
-  no peer pubkeys. This is deliberate; do not add a `peer_pubkey`
-  field for forwards. `failure_reason` is a categorical
-  `NodeForwardFailureReason` Literal so adapters cannot dump raw node
-  error strings (which may include `failure_source_pubkey`, payment
-  hashes, or route-hint JSON) through a field that otherwise looks
-  free-text.
-- `NodeSnapshot` has no fields for preimages, payment_secrets, or
-  bolt11 strings. There is nowhere for an adapter to "accidentally"
-  forward them; they must be discarded at the adapter boundary.
-- The `LightningAdapter` Protocol exposes a safe
-  `LightningCapabilities` declaration plus `fetch_node_snapshot()` —
-  there is no `pay()`, `close()`, `withdraw()`, or `open()` surface, by
-  construction. Capabilities are coarse booleans (`node_snapshot`,
-  `routing_profitability`, `channel_balances`, `channel_lifecycle`,
-  `forward_events`, `invoice_activity`, `payment_activity`,
-  `onchain_balance`) and must not contain endpoint URLs, peer ids,
-  channel ids, descriptors, tokens, or wallet config. Callers must check
-  the capability before dispatching a feature; unsupported features fail
-  with `lightning_capability_unsupported`.
+- `NodeForward` carries short channel ids and peer **aliases** only — no
+  peer pubkeys. This is deliberate; do not add a peer pubkey field for
+  forwards. Its `status` is a fixed categorical string, so raw node error
+  strings (which may include `failure_source_pubkey`, payment hashes, or
+  route-hint JSON) have no field to pass through.
+- `NodeSnapshot` has no fields for preimages, payment_secrets, or bolt11
+  strings. There is nowhere for a client to "accidentally" forward them; they
+  must be discarded at the client boundary.
+- The clients expose reads only — there is no pay, close, withdraw, or open
+  surface, by construction. The capability block the daemon returns holds
+  coarse booleans (`nodeSnapshot`, `routingProfitability`, `channelBalances`,
+  `channelLifecycle`, `forwardEvents`, `invoiceActivity`, `paymentActivity`,
+  `onchainBalance`) and must not contain endpoint URLs, peer ids, channel ids,
+  descriptors, tokens, or wallet config.
 
 ### Profitability exports
 
@@ -227,10 +217,10 @@ leaves the window unavailable instead of assigning it to a guessed period.
 
 ### AI tool surface redaction
 
-The daemon's AI dispatch path swaps the full payload helpers
-(`snapshot_to_dict` / `LightningProfitabilityReport.to_envelope_payload`)
-for redacted variants (`snapshot_to_dict_for_ai` /
-`to_ai_envelope_payload`). The AI payload drops the operator's own
+The daemon's AI dispatch path swaps the full payload (`NodeSnapshot::to_dict`
+and the full profitability report) for the redacted variants
+(`NodeSnapshot::to_ai_dict` and the AI projection of
+`ui.reports.lightning_profitability` in `crates/ai/src/projections.rs`). The AI payload drops the operator's own
 `pubkey`, every channel's `peerPubkey` / `peerAlias` / `shortChannelId`
 / `fundingOutpoint`, every forward's peer aliases and short channel
 ids, and the per-channel covers-open-cost rows. The desktop / CLI
@@ -252,13 +242,13 @@ forward events, routes or failure strings. Private peer ids are used only
 inside the request to resolve aliases; a missing alias becomes `private peer`.
 Closed channels still participate in the reference's alias lookup but never
 become report rows. All raw response parsing stays inside the client, with no
-persistence or raw-body error previews. Native node-snapshot, AI and backend
-test routes remain deferred; this report projection is not a general snapshot
-adapter. The [service checkpoint](rust-shell.md#lightning-report-service-verification-r5-completion)
-records report-route parity, privacy differences and the remaining deferrals.
+persistence or raw-body error previews. The node snapshot and the Lightning
+backend test use the same clients. The
+[service checkpoint](rust-shell.md#lightning-report-service-verification-r5-completion)
+records the port's report-route parity and privacy differences.
 
 The `ClnReportClient` serves the same actions with the same report-only result.
-It curates CLN resource rows before reshaping, validates ancillary fields that Python's
+It curates CLN resource rows before reshaping, validates ancillary fields that a
 full snapshot can refuse, and drops unused invoice/payment/account payloads.
 It preserves the reference's optional-resource behavior, except that consent,
 offline and overall request-budget refusals propagate. No node observations

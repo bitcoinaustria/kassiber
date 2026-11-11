@@ -148,8 +148,8 @@ Preview locally with `target/release/kassiber-release release-notes --version v<
    fingerprint, Developer ID signatures, tickets, Gatekeeper assessment and
    matching app contents across all three macOS distributions before
    publication. Homebrew gets the final hashes.
-   The macOS formula keeps the app intact under `libexec`, disabling Python
-   metadata cleanup for that subtree and preserving `@rpath` library IDs.
+   The macOS formula keeps the app intact under `libexec`, disabling Homebrew's
+   cleanup for that subtree and preserving `@rpath` library IDs.
    The sealed-artifact checks reject linkage that would still require rewriting.
 
 ## Failure and retry
@@ -186,7 +186,7 @@ builds remain workflow artifacts and cannot use this path. Use an official succe
 `prerelease-binaries.yml` build-only run (`publish_release=false`), verify its
 repository, workflow, source commit and run attempt, and download that run's
 `kassiber-desktop-macos-arm64-preview` artifact. Read the version from the pinned
-commit's `pyproject.toml`; the signing helper also checks the embedded build
+commit's `crates/kassiber/Cargo.toml`; the signing helper also checks the embedded build
 commit/version and app bundle version.
 
 Create an **unpublished draft** whose identifier is
@@ -259,5 +259,4 @@ matching, OS distribution policy and native executable launch are automated
 gates, not a claim that this hardware test already passed.
 
 References: [Apple custom notarization](https://developer.apple.com/documentation/security/customizing-the-notarization-workflow),
-[PyInstaller macOS signing](https://pyinstaller.org/en/stable/feature-notes.html#macos-binary-code-signing),
 [GitHub workflow security](https://docs.github.com/en/actions/reference/security/secure-use).

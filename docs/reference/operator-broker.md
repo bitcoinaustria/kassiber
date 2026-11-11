@@ -28,8 +28,8 @@ The broker preserves these boundaries:
 
 Same-user malware, a compromised same-user agent, root/admin, debugger access,
 kernel compromise, swap capture, and a compromised OS are outside this
-boundary. Python strings, subprocess buffers, SQLCipher bindings, and Rust
-strings cannot provide a truthful deterministic-zeroization guarantee. Kassiber
+boundary. Subprocess buffers, SQLCipher buffers, and Rust strings cannot
+provide a truthful deterministic-zeroization guarantee. Kassiber
 minimizes copies, avoids serialization and logging, closes descriptors and
 connections promptly, and drops references on lock or process exit; it does
 not claim that a managed runtime erased every historical memory copy.
@@ -378,8 +378,8 @@ one operation and does not upgrade the lease.
 
 `mcp call` is `read` as a command, but one command line can run any external
 agent tool, so admission classifies it by the tool's own capability (the
-registry entry of the daemon kind it executes, as `kassiber/mcp/tools.py`
-derives it), raised to any `--grant` the call claims; a claimed grant lets a
+registry entry of the daemon kind it executes, as `call_capability` in
+`crates/mcp/src/tools.rs` derives it), raised to any `--grant` the call claims; a claimed grant lets a
 read refresh journals, so the lease must cover it too. The worker then runs
 the call with no more than that. No agent tool is ever admin-class.
 
@@ -456,9 +456,9 @@ The submitting client also sends its working directory and whether its own
 `KASSIBER_NO_EGRESS` kill switch is set. The admitted operation binds both,
 including in the replay fingerprint, so a reused operation id must repeat the
 same caller context. The broker and its children are launched from the
-directory the running `kassiber` package was imported from (never a client's
-directory), so a source install's `python -m kassiber` import path cannot be
-shadowed by an agent's repository before the lease pipe is read. It changes into the caller's directory before dispatch, so
+directory of the running `kassiber` executable (never a client's directory),
+so an agent's repository cannot shadow anything the child loads before the
+lease pipe is read. It changes into the caller's directory before dispatch, so
 relative `--output`, `--file`, and proposal paths mean what they meant to the
 caller; a vanished directory fails the operation rather than falling back.
 The caller's egress kill switch can only tighten the child's environment.
@@ -471,10 +471,10 @@ credential-store-only or staged-backup handler can run.
 The worker child inherits duplicate broker-owner handles. If the broker dies,
 the OS therefore keeps broker ownership exclusion in force until the orphan
 child exits; a replacement broker cannot overlap it, while the desktop may
-continue through its separate role lock. Source installs
-re-exec Python modules, while frozen one-file sidecars use hidden internal
-entry modes rather than treating the bundled executable as a Python
-interpreter. POSIX uses duplicated `flock` file descriptions; Windows opens
+continue through its separate role lock. The broker and its workers re-exec
+the same `kassiber` executable: the broker through the hidden
+`--operator-broker-server` entry mode, workers with the queued command's argv
+and `KASSIBER_OPERATOR_CHILD` set. POSIX uses duplicated `flock` file descriptions; Windows opens
 compatibility files with read/write sharing so the two new roles can coexist,
 while role files allow read-only probes but reject a competing writer. This
 also conflicts bidirectionally with older share-mode-zero owners. Inherited

@@ -273,11 +273,11 @@ APIs, such as OpenRouter's Responses API.
 
 The implementation keeps those invariants in one client. Prepared tool-loop
 context is an explicit typed input and cannot be combined with the legacy
-message input accidentally. HTTP transport remains in `kassiber.ai.client`.
+message input accidentally. HTTP transport lives in
+[`crates/ai/src/transport`](../../crates/ai/src/transport/mod.rs).
 Fixed external CLI locators route through the bundled Node/TypeScript broker in
-`ui-tauri/provider-broker`; Python supervises that JSONL process through
-`kassiber.ai.broker_client`. Shared delta/request contracts remain isolated in
-`kassiber.ai.contracts`.
+`ui-tauri/provider-broker`; the backend supervises that JSONL process through
+[`crates/ai/src/broker`](../../crates/ai/src/broker/mod.rs).
 
 ### Building the broker from a source checkout
 
@@ -359,7 +359,7 @@ machine):
 - `auto` approves a tool marked `reversible` that does not egress, and asks
   for everything else. A reversible tool's change can be taken back with
   another AI tool whose arguments the result carries; the classification lives
-  in `REVERSIBLE_TOOLS` in `kassiber/ai/tools.py` and a test pins it.
+  in `REVERSIBLE_TOOLS` in `crates/ai/src/catalog.rs` and a test pins it.
   Network access (sync, rate fetches, maintenance that may refresh,
   chain-analysis acquisition), deletes without a restore, rollbacks, exports,
   policy changes and batch writes always ask.
@@ -399,7 +399,7 @@ Kassiber's own capability-scoped schemas do cross into these providers, through
 their native typed-tool protocols: Codex `dynamicTools`, and an ephemeral MCP
 server for Claude, OpenCode, and Copilot. Only the schemas and already-redacted results
 traverse that bridge, over a unix socket inside a private 0700 directory; the
-Python daemon stays the authority for capability selection, argument
+Kassiber daemon stays the authority for capability selection, argument
 validation, consent, execution, and the privacy receipt. Provider-native coding
 tools remain disabled throughout. Because these providers route to their own
 models, that is the point at which accounting data can leave the device —
@@ -1077,7 +1077,7 @@ pnpm --dir ui-tauri run dev:bridge
 ```
 
 Then open `http://127.0.0.1:5173`. In bridge mode, the browser talks to the
-same local Python daemon protocol through Vite: normal calls use
+same local daemon protocol through Vite: normal calls use
 `/__kassiber__/daemon`, and `ai.chat` streams NDJSON records from
 `/__kassiber__/daemon/stream`. This is a development-only convenience for
 testing real local AI, tool cards, cancellation, and consent from an ordinary
@@ -1193,8 +1193,12 @@ parent process. The passphrase is consumed by the local daemon only; it is not
 embedded in prompts or tool output.
 
 Test the assistant/tool path through the CLI, not only through the desktop GUI:
-`tests/test_cli_chat.py` pins the daemon-backed chat loop, consent behavior,
-locked-database handling, timeout controls, and the tool profiles.
+`crates/ai/tests/chat.rs` pins the chat turn's record order, consent,
+cancellation and persistence against a scripted loopback provider, and
+`crates/kassiber/tests/black_box/ai_chat.rs` runs whole `ai.chat` streams
+through the daemon. The recorded `test_cli_chat` sessions
+(`scripts/replay-sessions.sh --only test_cli_chat`) replay the CLI chat loop,
+consent, locked-database handling, timeouts and tool profiles.
 
 Tool-profile selection is described under [Tool use](#tool-use).
 Live backend checks should also be CLI-first, with explicit user-approved
@@ -1342,7 +1346,7 @@ deltas.
 Pressing **Stop** in the desktop UI, choosing cancel at a terminal consent
 prompt, or interrupting `kassiber chat` sends `ai.chat.cancel` with
 `args.target_request_id = <active ai.chat request_id>`. Cancellation is
-best-effort and cooperative: Kassiber stops forwarding deltas once the Python
+best-effort and cooperative: Kassiber stops forwarding deltas once the chat
 worker returns between provider chunks, then emits the terminal `ai.chat`
 envelope with `finish_reason: "cancelled"`. For metered remote providers, any
 tokens already generated or in flight may still be billed.
@@ -1502,8 +1506,7 @@ with up to four area names. The daemon adds those schemas, under the same
 (which authorizes calls and feeds the privacy receipt) and the next round's
 tool list. CLI agents behind the broker fix their catalog when a turn starts
 and abort on unknown tools, so they never get `load_tools`; their next
-question is routed again. `full` has nothing to load. Per-area schema budgets
-in `tests/test_ai_tool_areas.py` keep areas from growing unnoticed.
+question is routed again. `full` has nothing to load.
 
 Tax figures come from the core, never from the model's recall of tax law:
 
@@ -1521,7 +1524,7 @@ Tax figures come from the core, never from the model's recall of tax law:
   calculation view.
 - For an Austrian EUR book, `ui.reports.tax_summary` adds `indicative_tax` for
   the requested year, or the latest year. It is 27.5% of KZ 172 + KZ 174 −
-  KZ 176 as reported, from `kassiber/core/tax_estimate.py`, and is zero when
+  KZ 176 as reported, from `crates/reports/src/tax_estimate.rs`, and is zero when
   that base is negative. Any report blocker withholds the figure
   (`status: "withheld"`, `estimated_tax_eur_cents: null`). A year before 2022
   has no crypto Kennzahlen: `status: "not_applicable"` with no rate, basis or
@@ -1538,8 +1541,9 @@ Tax figures come from the core, never from the model's recall of tax law:
   than withhold it here, so the assistant's projection of that read drops it.
 
 The authoritative tool names, schemas, effects, and daemon mappings live in
-[TOOL_CATALOG and get_tool](../../kassiber/ai/tools.py), with capability selection
-in `select_tool_capabilities` in the same module. These are distinct from
+[`TOOL_CATALOG`](../../crates/ai/src/catalog.rs) (embedded from
+`crates/ai/src/data/catalog.json`), with capability selection in
+`select_tool_capabilities` in [`crates/ai/src/select.rs`](../../crates/ai/src/select.rs). These are distinct from
 CLI `commands describe` and the renderer allowlist. Do not reconstruct a tool
 schema or assume that a daemon kind is available to the model.
 
@@ -1549,7 +1553,7 @@ when available, a typed entity id, bounded filters, explicit capability
 hints, or page `metrics`. Sensitive keys and oversized filters are rejected.
 `metrics` are bare counts the page is showing, keyed by the allowlist
 `SCREEN_CONTEXT_METRIC_DEFINITIONS` in
-[ui_snapshot](../../kassiber/core/ui_snapshot.py); the daemon rejects other
+[`crates/ai/src/chat/args.rs`](../../crates/ai/src/chat/args.rs); the daemon rejects other
 names and non-count values. Metrics travel with the `metrics_scope` the page's
 snapshot was computed on (workspace, profile, journal input version, whether
 reviewed pairs were counted as one item, and the id of the one wallet the
@@ -1920,17 +1924,13 @@ evidence. `ui_source_funds_assemble`, `ui_source_funds_cases_save`, and the
 virtual `ui_source_funds_export` complete that workflow; export results sent to
 the model include the filename/format but not the managed local path.
 
-The partial Rust R5 shell now provides the shared source-funds save and daemon
-inspection services, including fingerprint revalidation under writer admission.
-The owner has assigned the AI execution loop, consent and once-only admission
-to Python under R6. AI source admission and case saving call
-`_ui_source_funds_payload_from_conn` directly inside `_run_scoped_ai_mutation`;
-they do not call the native CLI or daemon transport. Python retains advertised
-schemas, consent, duplicate-call suppression, frozen book/input binding and
-redaction. Direct native CLI/daemon services preserve service validation and
-review fingerprints. Native CLI/daemon save verification does not establish
-native AI tool acceptance; see
-the [case-save checkpoint](rust-shell.md#source-funds-case-save-checkpoint-r5-partial).
+AI source admission and case saving run in the mutating executor
+([`crates/ai/src/mutate.rs`](../../crates/ai/src/mutate.rs)). A call needs a
+consent bound to its call id, reaches the same source-funds service the
+desktop and CLI use after the frozen book check, and its result is redacted
+before it leaves the executor. The service revalidates review fingerprints
+under writer admission. The port record is the
+[case-save checkpoint](rust-shell.md#source-funds-case-save-checkpoint-r5-partial).
 
 Transaction review writes (`ui_transactions_metadata_update`,
 `ui_transactions_history_revert`, `ui_attachments_copy`) preserve the
@@ -2056,7 +2056,7 @@ The model chooses only what to show: a `source`, a `measure`, the source's
 filters and an optional `title` of at most 80 characters (control characters
 removed). It never supplies numbers, markup or code. The daemon reads every
 figure from the same local reads the app's pages and report tools use, and
-[`kassiber/core/chat_visuals.py`](../../kassiber/core/chat_visuals.py) turns them
+[`crates/ai/src/visuals.rs`](../../crates/ai/src/visuals.rs) turns them
 into a typed specification, long-format `rows` and source-specific extras:
 
 | `source` | Read | Visual | Filters |
@@ -2152,10 +2152,8 @@ transport and provider protections against the
 ## Related files
 
 - [Kassiber CLI skill](../../skills/kassiber/SKILL.md)
-- [`../../kassiber/ai/client.py`](../../kassiber/ai/client.py)
-- [`../../kassiber/ai/broker_client.py`](../../kassiber/ai/broker_client.py)
+- [`../../crates/ai/`](../../crates/ai/) (catalog, selection, transport, broker client, chat)
 - [`../../ui-tauri/provider-broker/`](../../ui-tauri/provider-broker/)
-- [`../../kassiber/ai/contracts.py`](../../kassiber/ai/contracts.py)
 - [`../plan/08-external-document-reconciliation.md`](../plan/08-external-document-reconciliation.md)
 - [Privacy & security](privacy-and-security.md)
 - [CLI proxy providers](ai-cli-proxy.md)

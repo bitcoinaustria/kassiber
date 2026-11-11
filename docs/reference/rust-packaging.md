@@ -1,8 +1,9 @@
 # Rust Packaging
 
-[Plan 21](../plan/21-rust-backend.md) stage 7 replaces the PyInstaller sidecar
-with the Rust `kassiber` binary in every release artifact. This reference is
-the inventory of those artifacts, what changes for each, how the Linux set was
+[Plan 21](../plan/21-rust-backend.md) stage 7 replaced the PyInstaller sidecar
+with the Rust `kassiber` binary in every release artifact; Python itself was
+removed under [plan 22](../plan/22-python-removal.md). This reference is
+the inventory of those artifacts, what changed for each, how the Linux set was
 verified, and what still needs a native macOS or Windows run. The release flow
 itself (drafts, manifest signing, notarization, channels) is unchanged and
 lives in [prerelease binaries](prerelease-binaries.md),
@@ -16,7 +17,7 @@ Every leg of `.github/workflows/prerelease-binaries.yml` runs
 -p kassiber --bin kassiber` without the `test-harness` feature (no fake store,
 test kinds, probe mode or egress observer). The script then
 
-- refuses a crate version that differs from `pyproject.toml`, and a
+- takes the product version from `crates/kassiber/Cargo.toml` and refuses a
   `--version` other than `Kassiber <version> (<channel>, commit <12 hex>)`;
 - strips symbols (Linux and Windows through Cargo; macOS with Xcode's `strip`,
   see below);
@@ -26,16 +27,18 @@ test kinds, probe mode or egress observer). The script then
   anything besides glibc and `libgcc_s` (`scripts/check-linux-glibc-floor.sh`),
   and a macOS binary that links any non-system dylib.
 
-The workflow smokes that exact file (`scripts/smoke-packaged-cli.sh`), proves
-on Linux that it opens no network socket (`tests/test_packaged_cli_no_egress.py`),
+The workflow smokes that exact file (`scripts/smoke-packaged-cli.sh`, which
+uses a stdlib `python3` only for its JSON assertions), proves on Linux that it
+opens no network socket (`tests/test_packaged_cli_no_egress.py`, stdlib
+`unittest`),
 packages it as the CLI artifact and stages the same bytes as the desktop
 sidecar. There is no separate sidecar build and no one-dir payload.
 
 The production binary serves the assistant's chat (`ai.chat`, its controls
 and history), the `chat`/`chats` leaves and the tool-running `mcp serve`/`mcp
 call` leaves; the `native-chat` and `native-mcp` gates are gone
-([native chat](rust-native-chat.md)). Desktop kinds the Rust backend does not
-serve yet answer `not_implemented`.
+([native chat](rust-native-chat.md)). Desktop kinds the backend does not
+serve answer `not_implemented`.
 
 ## Files beside the executable
 
@@ -52,15 +55,16 @@ things are not compiled in:
 | --- | --- | --- |
 | `provider_broker/index.mjs` | `<executable dir>/provider_broker/` | `kassiber_ai::broker::bundled_script()` resolves the real executable path and looks there. Without it, CLI-backed AI providers report the broker as unavailable. It still needs Node.js 20+ on the host, as before. |
 | `BUILD_INFO.json` | beside the executable in archives and sidecar directories | Readable build provenance; `kassiber-release macos sign` refuses to sign an app without one. The binary itself carries channel and commit from compile time. |
-| Host CA bundle | the system store | `rustls-native-certs`, with `SSL_CERT_FILE` authoritative and WebPKI roots as the fallback, matching the frozen Python bootstrap ([Linux packaging](linux-packaging.md#frozen-tls-trust)). |
+| Host CA bundle | the system store | `rustls-native-certs`, with `SSL_CERT_FILE` authoritative and WebPKI roots as the fallback ([Linux packaging](linux-packaging.md#frozen-tls-trust)). |
 
 ## Artifact inventory
 
-Sizes are bytes. "Python" is the published v0.22.78 asset. "Rust" is the local
+Sizes are bytes. "Python" is the published v0.22.78 asset, the last with the
+PyInstaller sidecar. "Rust" is the local
 Linux build below (host glibc 2.44, so functional evidence only; the release
 floor build runs on Ubuntu 22.04 in CI).
 
-| Artifact | Python sidecar (today) | Rust | Python size | Rust size |
+| Artifact | Python sidecar (v0.22.78) | Rust | Python size | Rust size |
 | --- | --- | --- | ---: | ---: |
 | `kassiber-cli-linux-x64.tar.gz` | one-file PyInstaller `kassiber` + `BUILD_INFO.json` | `kassiber` + `BUILD_INFO.json` + `provider_broker/index.mjs` | 89,237,493 | 49,102,562 |
 | `kassiber-cli-linux-x64.deb` | one-file binary at `/usr/bin/kassiber`; `Depends: libc6 (>= 2.35), zlib1g` | `/usr/lib/kassiber-cli/{kassiber,provider_broker/index.mjs}`, `/usr/bin/kassiber` symlink; `Depends: libc6 (>= 2.35), libgcc-s1` | 86,678,852 | needs dpkg-deb |
@@ -189,7 +193,7 @@ verifies it before publishing ([release signing](release-signing.md)).
 
 ## macOS arm64 (needs a native run)
 
-The sidecar keeps the Python sidecar's file name, location and signing
+The sidecar keeps the earlier Python sidecar's file name, location and signing
 identifier: `Contents/Resources/binaries/kassiber-cli/kassiber-cli-aarch64-apple-darwin`,
 identifier `kassiber-cli-aarch64-apple-darwin`, Bitcoin Austria's team. The
 Touch ID helper's code requirement pins exactly that identifier and team, and
@@ -224,7 +228,8 @@ signed Rust sidecar, and Keychain continuity for items the Python sidecar wrote.
 ## Windows x86_64 (needs a native run)
 
 `scripts/build-windows-x64-rust-app.sh` mirrors the CI Windows legs in Git
-Bash (MSVC build tools, rustup, Node 22, pnpm 10.33.0, Python 3.11, 7-Zip):
+Bash (MSVC build tools, rustup, Node 22, pnpm 10.33.0, a `python3` for the
+smoke's JSON assertions, 7-Zip):
 
 ```bash
 ./scripts/build-windows-x64-rust-app.sh
@@ -239,16 +244,14 @@ OS-level no-egress check is Linux-only.
 
 ## CI changes
 
-- `build-cli` no longer syncs the Python environment or runs PyInstaller. It
-  writes `BUILD_INFO.json` with the release tool (`kassiber-release
-  build-info`), installs uv's managed Python only for the smoke's JSON
-  assertions, checks every version copy against the backend crate, and
-  builds, smokes and packages the Rust binary. Linux runs the no-egress check.
+- `build-cli` writes `BUILD_INFO.json` with the release tool
+  (`kassiber-release build-info`), checks every version copy against the
+  backend crate, and builds, smokes and packages the Rust binary. Python runs
+  only for the smoke's JSON assertions and the Linux no-egress check; nothing
+  Python ships.
 - `build-desktop` refuses a staged `_internal/` payload, requires the broker
   and `BUILD_INFO.json` beside the sidecar, copies the broker beside the
   Windows PATH copy, and on Linux runs the glibc floor check on the shell and
   on the sidecar inside both the deb and the AppImage.
 - Path filters follow the Rust inputs (`crates/**`, embedded data, skill
-  references, the provider broker and the new scripts) instead of the frozen
-  Python CLI inputs.
-- The test-suite xdist mode in CI is unchanged.
+  references, the provider broker and the build scripts).

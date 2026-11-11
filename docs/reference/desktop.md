@@ -1,7 +1,7 @@
 # Desktop Reference
 
-Kassiber's desktop shell uses Tauri 2 + React + TypeScript with the Python
-core running as a long-lived sidecar daemon over JSONL. See
+Kassiber's desktop shell uses Tauri 2 + React + TypeScript with the Rust
+`kassiber` binary running as a long-lived sidecar daemon over JSONL. See
 [../plan/01-stack-decision.md](../plan/01-stack-decision.md) for the stack
 decision and [../plan/04-desktop-ui.md](../plan/04-desktop-ui.md) for the
 implementation plan.
@@ -16,7 +16,7 @@ contract the shell consumes through the daemon.
 The desktop UI is bilingual — English and Austrian German (informal `du`) — via
 i18next. The active language lives in the UI store's `lang` (the single source
 of truth) and is switchable from Settings → Appearance or the header overflow
-menu; first run defaults to English. The CLI and Python daemon stay English and
+menu; first run defaults to English. The CLI and daemon stay English and
 machine-deterministic (the UI translates their stable codes). For how
 translations are organized and the workflow for keeping English/German in sync,
 see [i18n.md](i18n.md); for the Austrian-German terminology (Bitcoin jargon kept
@@ -120,23 +120,15 @@ Release desktop packages bundle the Rust `kassiber` binary as a
 `kassiber-cli-<target triple>` sidecar, with the AI provider broker beside it
 ([Rust packaging](rust-packaging.md)). macOS keeps it at
 `binaries/kassiber-cli/kassiber-cli-aarch64-apple-darwin`, the location and
-signing identifier of the former Python one-dir sidecar, which the Touch ID
+signing identifier of the earlier one-dir sidecar, which the Touch ID
 helper's identity check and existing Keychain items rely on; Linux and Windows
 ship it flat under `binaries/`. A single native executable has no one-file
 extraction and no per-launch dylib re-validation.
 
-`scripts/build-macos-arm64-app.sh` still builds the Python-backed
-"Kassiber Dev" app with a PyInstaller one-dir sidecar against uv's managed
-CPython, for side-by-side comparison until Python retires. Its one-dir layout
-is a cold-start fix: a one-file sidecar unpacks ~170 MB into a fresh temp
-directory on every launch, and macOS re-validates every bundled dylib's
-signature each time because that cache is keyed by inode (6s before the daemon
-answered, against 0.19s from a stable path).
-
 At runtime the supervisor prefers `KASSIBER_BIN` when it is explicitly set,
 then the bundled sidecar from the app resources (one-dir candidate first), then,
 in debug builds only, the checkout build above. A missing binary is a
-`daemon_binary_missing` error, never a Python fallback. The same `KASSIBER_BIN`
+`daemon_binary_missing` error. The same `KASSIBER_BIN`
 override applies to installed-app CLI forwarding.
 
 On macOS the window uses an overlay title bar, and the shell draws the row the

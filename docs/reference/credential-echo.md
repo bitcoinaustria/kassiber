@@ -12,9 +12,9 @@ result or the book. See [privacy and security](privacy-and-security.md) and
 
 ## The scrub
 
-`kassiber/redaction.py` and the Rust crate `kassiber-credentials` implement
-the same scrub, byte for byte (`crates/credentials/tests/data/vectors.json`
-holds the Python outputs the Rust tests reproduce):
+The crate `kassiber-credentials` implements the scrub. Its tests reproduce,
+byte for byte, the outputs of the Python reference it was ported from, frozen
+in `crates/credentials/tests/data/vectors.json`:
 
 - **What is withheld.** Each credential the caller sent, as sent,
   percent-encoded (`quote` and `quote_plus`), JSON-escaped (with and without
@@ -33,18 +33,21 @@ holds the Python outputs the Rust tests reproduce):
 - **When.** Before the text is cut short (an error keeps 200 characters, an
   AI body preview 512, CLN stderr the last 800), so a cut cannot keep a
   credential's prefix, and before pattern redaction and operational
-  pseudonymization. Where a caller still holds the backend when an error
-  leaves it (the BTCPay store sync), it scrubs the whole error again with
-  `withhold_error_credentials`.
+  pseudonymization. The BTCPay client also scrubs every string key and
+  leaf of a decoded error body (eight levels deep) before the error leaves it
+  (`crates/chain/src/btcpay/client.rs`).
 
 ## Inventory
 
-"Before" is the Python reference before this change (round 8 already covered
-exchange keys). Each echo path has a regression test that fails on the old
-code; "Tests" names them (`test_credential_echo.py` in process, with a
-loopback server that repeats every credential the request carried, and
-`test_credential_echo_cli.py` through the command line, so the same checks run
-against the Rust binary through `KASSIBER_TEST_CLI`).
+"Before" is the Python reference before the echo fix (round 8 already covered
+exchange keys). "Tests" names the regression tests that failed on the old
+code: `test_credential_echo.py` ran in process against a loopback server that
+repeats every credential the request carried, and `test_credential_echo_cli.py`
+ran the same checks through the command line. Both went with Python
+([plan 22](../plan/22-python-removal.md)). The command-line cases are recorded
+sessions that `scripts/replay-sessions.sh --only test_credential_echo_cli`
+replays against the binary; the crate tests named under
+[per integration](#per-integration) pin the rules one at a time.
 
 | Integration | Credentials sent | Error paths | Where the text landed | Before | Now | Tests |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -55,7 +58,7 @@ against the Rust binary through `KASSIBER_TEST_CLI`).
 | Esplora (HTTP) | bearer token or auth header; key-like URL query values; proxy userinfo | non-2xx body | envelope, ring, diagnostics, AI tool result, freshness job | pattern redaction only (a bare token passed) | every credential the request carried withheld | `ChainBackendCredentialEchoTest`, CLI `test_esplora_wallet_sync` |
 | Bitcoin Core RPC | `user:password` (Basic) or cookie; proxy userinfo | untyped non-2xx body; rescan failure text; typed 400/404/500 RPC errors | as Esplora | untyped body and rescan text echoed; typed errors already kept no server text | withheld; typed errors still keep none | `ChainBackendCredentialEchoTest` (incl. cookie, typed errors, rescan), CLI `test_bitcoin_core_wallet_sync` |
 | Electrum | none reaches the server (proxy userinfo goes to the SOCKS proxy only) | `Electrum call … failed`, non-JSON preview, unparseable socket URL | envelope, ring, diagnostics | could not echo a credential; a socket URL that did not parse was quoted with its userinfo (and urllib's port error quoted part of it) | backend credentials withheld as a backstop; URL shown redacted | `ChainBackendCredentialEchoTest` |
-| BDK / LWK native observers | none: a backend with a token, auth header or proxy keeps the Python transport | n/a | n/a | cannot echo | cannot echo | `NoEchoPathTest.test_credentialed_esplora_backends_never_reach_the_bdk_observer` |
+| BDK / LWK native observers | none: a backend with a token, auth header or proxy keeps the compatibility HTTP transport | n/a | n/a | cannot echo | cannot echo | `NoEchoPathTest.test_credentialed_esplora_backends_never_reach_the_bdk_observer` |
 | Chain-analysis acquisition | Esplora/Core credentials | categorical errors only | envelope | cannot echo (no server prose kept) | cannot echo | `NoEchoPathTest.test_chain_acquisition_errors_are_categorical` |
 | OpenAI-compatible AI providers (chat, models, connection test, document extraction) | API key; base-URL userinfo or key query | HTTP body preview; error object in a 200 answer or stream (`body`, `provider_code`); network reason | envelope, ring, diagnostics; `ai_provider_checks.error_json` keeps code and fixed message only | only `sk-` keys recognized; others echoed, and lowercased into `provider_code` | withheld before the cut and before lowercasing | `AiProviderCredentialEchoTest`, CLI `test_ai_provider_test` |
 | AI broker (Claude Code, Codex CLIs) | none: the CLI holds its own credential | n/a | n/a | cannot echo | cannot echo | — (Kassiber holds no credential to withhold) |
@@ -63,60 +66,53 @@ against the Rust binary through `KASSIBER_TEST_CLI`).
 | Proxy and Tor settings | SOCKS5 or HTTP proxy `user:password` | SOCKS replies (binary codes, no text); HTTP proxy 407/502 bodies; malformed proxy setting; unparseable port | envelope, ring, diagnostics | malformed setting quoted verbatim; urllib's port error quoted part of the userinfo | setting shown redacted; parse errors withheld | `ProxyCredentialEchoTest` |
 | Update check (GitHub) | none | categorical error | envelope | cannot echo | cannot echo | `NoEchoPathTest.test_update_check_errors_keep_no_response_text_and_send_no_credential` |
 
-## Rust backend
+## Per integration
 
-The Rust backend uses the same `kassiber-credentials` scrub with the same
-credential lists per integration:
+Every integration uses the `kassiber-credentials` scrub with the credential
+lists above:
 
 - **AI providers** (chat, streams, model lists, connection tests, document
   extraction): API key and base-URL credentials withheld from body previews,
   error objects (before lowercasing the code) and network reasons.
-  `test_rust_credential_echo.py` compares `ai providers test` with Python byte
-  for byte; `provider_errors_never_repeat_the_api_key` and the transport
-  error unit tests pin it in the crate.
+  `provider_errors_never_repeat_the_api_key` and the transport error unit
+  tests pin it in `kassiber-ai`; the recorded `test_rust_credential_echo`
+  sessions replay `ai providers test` byte for byte.
 - **Esplora and Bitcoin Core HTTP** (`kassiber-chain`): every credential the
   request carried withheld from a backend error body before the cut. Core's
-  typed RPC errors keep no server text, as in Python.
+  typed RPC errors keep no server text.
 - **BTCPay store-list check**: the decoded error body is withheld.
 - **Electrum**: backend credentials withheld from error messages.
-- **LND, Core Lightning, rate providers**: the Rust clients keep no server
-  text in their errors (no body, no `stderr`), so they cannot echo; their
-  messages are shorter than Python's.
-- **Exchange syncs, BTCPay and Lightning wallet syncs**: still served by
-  Python (the hybrid CLI hands them off), so the Python scrub applies.
+- **LND, Core Lightning, rate providers**: the clients keep no server text in
+  their errors (no body, no `stderr`), so they cannot echo; their messages are
+  shorter than the Python reference's.
+- **Exchange syncs** (`crates/wallets/src/file_import/exchange_api`): the
+  HTTP client withholds the API key and secret, and Kraken's error items are
+  scrubbed one by one (`kraken_errors_keep_permission_codes_and_withhold_credentials`).
 - **Core Lightning commando** (round 7): `lightning-cli` takes a rune only in
-  argv, readable by every local user, so the native report client refuses a
-  commando configuration as Python does, before any request, attempt or
-  process; `ClnConfig` no longer carries a peer or rune.
-  `cln_report_commando_configuration_is_refused_inert_and_secret_free` and
-  `test_cln_commando_configurations_are_refused_like_python_without_launch`
-  pin it; mutation entries `chain-cln-report-commando-{refused,peer,token,url}`
-  and `chain-cln-report-argv-secret-free` are killed by those tests and the
+  argv, readable by every local user, so the report client refuses a
+  commando configuration before any request, attempt or process; `ClnConfig` no longer carries a peer or rune.
+  `cln_report_commando_configuration_is_refused_inert_and_secret_free`
+  pins it; mutation entries `chain-cln-report-commando-{refused,peer,token,url}`
+  and `chain-cln-report-argv-secret-free` are killed by that test and the
   argv pins.
 - **BTCPay read-only keys** (round 7): a missing permission scoped to the
   route's store (`btcpay.store.canmodifystoresettings:<storeId>`) degrades
-  label enrichment like the bare form; another store's scope still fails.
-  Label enrichment is served by Python through the hybrid CLI, which
-  `test_btcpay_read_only_key_cli.py` exercises against the Rust binary.
+  label enrichment like the bare form; another store's scope still fails
+  (`crates/wallets/src/sync/btcpay.rs`).
 - **Stored error text**: the store's migrating open runs the same
   `stored-error-credentials-v1` migration.
 
-`test_credential_echo_cli.py` runs through the Rust binary with
-`KASSIBER_TEST_CLI='["python", "tests/rust_port/hybrid_cli.py",
-"--hybrid-rust-bin=<kassiber>"]'`.
-
 ## Existing books
 
-Opening a book runs `stored-error-credentials-v1` once (Python
-`_migrate_stored_error_credentials`, Rust `kassiber_store::stored_errors`, same
-rows, bytes and audit). It withholds every credential the book holds (backend
+Opening a book runs `stored-error-credentials-v1` once
+(`kassiber_store::stored_errors`, ported from the Python reference's
+`_migrate_stored_error_credentials` with the same rows, bytes and audit). It withholds every credential the book holds (backend
 tokens, auth headers, RPC and proxy passwords, AI provider keys) from
 `freshness_jobs.error_json`, `freshness_source_states.last_error_message`,
 `btcpay_store_sync_states.last_error_message`, `lightning_node_syncs.error_json`
 and `ai_provider_checks.error_json`. JSON columns are scrubbed decoded and
 rewritten compactly with sorted keys; the audit records how many values
-changed. Tests: `StoredErrorMigrationTest`, the store's `stored_errors` unit
-tests and `test_stored_error_credential_scrub_matches_python`.
+changed. Tests: the store's `stored_errors` unit tests.
 
 The migration can only recognize credentials the book still holds. A
 credential that was deleted, rotated, or set only in a `backends.env` file

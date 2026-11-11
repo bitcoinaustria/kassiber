@@ -1,8 +1,9 @@
 # Daemon Reference
 
-Kassiber's desktop shell talks to the Python core through a local JSONL
-daemon. The daemon is started by the Tauri supervisor, reads one JSON object
-per line from stdin, and writes one JSON envelope per line to stdout.
+Kassiber's desktop shell talks to the Rust backend through a local JSONL
+daemon (`kassiber daemon`, from `crates/daemon` in the `kassiber` binary). The
+daemon is started by the Tauri supervisor, reads one JSON object per line from
+stdin, and writes one JSON envelope per line to stdout.
 
 Start it directly for development:
 
@@ -21,12 +22,11 @@ builds start the bundled sidecar ([Rust packaging](rust-packaging.md)).
 Debug builds of the shell (`pnpm tauri:dev`) then fall back to the checkout's
 `target/release/kassiber`, then `target/debug/kassiber`;
 `KASSIBER_REPO_ROOT=/path/to/checkout` points them at a different checkout.
-With none of these the supervisor refuses with `daemon_binary_missing`; there
-is no Python fallback.
+With none of these the supervisor refuses with `daemon_binary_missing`.
 
 The first record is `daemon.ready`. Its `data` includes `version` and
 `supported_kinds`; read that payload for the running daemon's capability list.
-The declaration is [SUPPORTED_KINDS in daemon.py](../../kassiber/daemon.py).
+The declaration is [`supported_kinds()` in crates/daemon](../../crates/daemon/src/lib.rs).
 Renderer authority is a separate subset under the [desktop invoke contract](#desktop-invoke-contract).
 
 
@@ -377,8 +377,7 @@ its `ai.test_connection` result adds `models_saved` and `probe.api_format`,
 with `probe.reason` `model_not_listed`, `not_a_chat_model` or `unknown_family`
 for a model it did not ask. `ai.chat` on it fails before any request with
 `ai_cli_proxy_models_unchecked`, `ai_cli_proxy_model_unknown` or
-`ai_cli_proxy_format_unknown`. The Python backend refuses such a row on every
-contacting path with `ai_provider_unsupported`.
+`ai_cli_proxy_format_unknown`.
 
 `ui.profiles.switch` accepts `{"profile_id":"..."}` and updates the active
 book set / book (`context_workspace` / `context_profile` internally) after the
@@ -550,7 +549,7 @@ mode.
 No desktop screen starts this flow since the Transactions page's photo/PDF
 dialog was removed; the picker, staging, and kinds below remain for the next
 entry point. The desktop first uses the privileged native picker to invoke
-`internal.document_import.stage`. That kind is supported by the Python daemon
+`internal.document_import.stage`. That kind is supported by the daemon
 but intentionally absent from the Tauri and Vite renderer allowlists. It keeps
 the canonical source path in a bounded, expiring, process-local daemon session
 and returns only an opaque `document_token` plus safe filename/type metadata.
@@ -653,7 +652,7 @@ only ever reference its name.
 
 `ui.connections.btcpay.discover` accepts the same saved-backend or inline
 credential shape, inspects the server with read-only Greenfield requests, and
-returns the shared setup plan from `core/btcpay_setup.py`: `server` (version,
+returns the shared setup plan: `server` (version,
 sync state, transport), `api_key` (scope, risk, excess permissions; never the
 key), `stores` with per-store capabilities and missing permissions,
 `payment_methods` with rail, settlement hint, `ledger_group`, detected network,
@@ -764,14 +763,14 @@ For a new desktop-invoked kind, keep these declarations in lockstep:
 
 | Layer | Declaration | Source |
 | --- | --- | --- |
-| Python handler support | `SUPPORTED_KINDS` | [daemon.py](../../kassiber/daemon.py) |
+| Daemon handler support | `supported_kinds()` | [crates/daemon/src/lib.rs](../../crates/daemon/src/lib.rs) |
 | Tauri renderer invocation | `ALLOWED_DAEMON_KINDS` | [lib.rs](../../ui-tauri/src-tauri/src/lib.rs) |
 | Browser bridge invocation | `ALLOWED_BRIDGE_KINDS` | [vite.config.ts](../../ui-tauri/vite.config.ts) |
 | Streaming support, when needed | `STREAMING_DAEMON_KINDS` / `STREAM_CAPABLE_BRIDGE_KINDS` | The same Rust / Vite files |
 
 The Tauri and bridge lists must be equal and a subset of daemon support.
 Missing entries fail as `kind_not_allowed` in Tauri or HTTP 403 in the bridge.
-[test_connection_catalog_drift.py](../../tests/test_connection_catalog_drift.py)
+[desktop_boundaries.rs](../../crates/daemon/tests/desktop_boundaries.rs)
 checks those relationships and actual React transport call sites.
 
 These are privilege boundaries. AI runtime kinds have their own
@@ -837,7 +836,7 @@ background freshness worker's `ui.freshness.progress`,
 `ui.freshness.background`, and `ui.freshness.worker` records) use a dedicated
 event envelope class: a top-level `event: true` marker and never a
 `request_id`. They are built with `build_event_envelope` in
-[`kassiber/envelope.py`](../../kassiber/envelope.py).
+[`crates/envelope`](../../crates/envelope/src/lib.rs).
 
 ```json
 {"kind":"ui.freshness.background","schema_version":1,"data":{},"event":true}
@@ -909,21 +908,13 @@ retries, pauses, resumes, and cancels jobs, but it never performs network sync
 itself. Persistent state lives in SQLite under `freshness_jobs` and
 `freshness_source_states`.
 
-The Rust daemon registers the supported Bitcoin variants of
+The daemon serves the supported Bitcoin variants of
 `ui.wallets.sync`, `ui.freshness.run` and `ui.workspace.freshness.run`, including
-their default local journal refresh. Successful native executions require a
-nonempty UTF-8 string request ID and a fully supported source selection.
-Enabled unported rate sources, unsupported wallet/backend shapes and wallet
-sync's separate direct-sync cases remain on Python in the test hybrid candidate.
-A direct native unsupported invocation refuses before consent. Production
-builds return native journal refusals without starting Python. Only the
-development hybrid launcher enables individual journal replay, after exact
-durable-file comparison proves rollback. A committed stale-first rebuild
-prevents replay. Python retains production authority until R4-16.
-The guarded candidate selector only reads an already opened book; it neither
-opens nor migrates a database, changes queue state nor contacts a backend.
+their default local journal refresh. Successful executions require a
+nonempty UTF-8 string request ID and a fully supported source selection. An unsupported source, wallet or backend shape
+refuses before consent.
 
-The native request runner owns a separate connection, streams product progress,
+The request runner owns a separate connection, streams product progress,
 services `ui.freshness.cancel`, `.pause`, `.resume` and offline changes while
 fetching, and joins before book switching, locking or shutdown. Private
 successful-job graph grants enter a bounded mailbox only after the terminal
@@ -1039,23 +1030,21 @@ Automatic background and report-read syncs keep their journal policy. A queued
 journal job reused by a later request keeps automatic pairing if either
 request asked for it.
 
-The native daemon also serves `ui.journals.snapshot`, `ui.journals.events.list`,
+The daemon also serves `ui.journals.snapshot`, `ui.journals.events.list`,
 `ui.journals.transfers.list`, `ui.journals.quarantine` and
-`ui.journals.quarantine.resolve` from the open book, with Python's payloads.
+`ui.journals.quarantine.resolve` from the open book.
 The resolution applies one audited metadata change and may rebuild journals;
 the reads never write.
 
-The native `ui.journals.process` route shares the freshness execution slot and
+The `ui.journals.process` route shares the freshness execution slot and
 journal service. It runs directly without adding queue or source-state rows,
 and grants no wallet, rate or graph transport authority. Its worker binds the
 captured active book, checks cancellation and selection at journal phases and
 before commit, and joins before locking, switching books or shutdown. The
 terminal response is flushed before its deferred checkpoint completes. It
 accepts no processing arguments; the shared `expected_scope` guard remains
-available. Development candidate selection requires a nonempty UTF-8 string
-request ID. The assistant's internal mutation runs the same service without
-automatic pairing; Python's consent-bound dispatcher keeps serving it until
-R6 ports the chat loop.
+available. The assistant's internal mutation runs the same service without
+automatic pairing.
 
 `ui.workspace.freshness.run` is the explicit book-set refresh path. It requires
 `args.workspace_id`, loops through every profile in that workspace, recovers
@@ -1115,8 +1104,9 @@ For SQLCipher databases, the daemon keeps the verified database passphrase only
 as unlocked-session state so the background worker can open its own connection.
 That reference is not persisted or logged, is cleared on lock, passphrase
 rotation, and shutdown paths, and the worker drops its one-shot handoff after
-opening the connection. This is a practical local-daemon boundary, not Python
-memory zeroization.
+opening the connection. The daemon's copy is zeroed when dropped; this is a
+practical local-daemon boundary, not a guarantee that no other copy remains in
+process memory.
 
 First sync progress phases are `discovery`, `backend_fetch`, `decode_enrich`,
 `import`, `rate_coverage`, `journal_refresh`, `done`, and `error`. The streaming
@@ -1124,8 +1114,7 @@ First sync progress phases are `discovery`, `backend_fetch`, `decode_enrich`,
 phase plus source identifiers. When several wallets sync at once, each wallet's
 prefetch records (`discovery`, `backend_fetch`, `decode_enrich` without a
 `job_id`) keep their own order, but their interleaving between wallets is not
-fixed: Python prefetches on a thread pool, and Rust runs the same steps in job
-order. The per-job records that follow arrive one job at a time.
+fixed. The per-job records that follow arrive one job at a time.
 
 `ui.wallets.identify_onchain` (Reconcile's "Verify on chain") prepares the whole
 reconciliation on the main thread, then looks up the transactions local history
@@ -1154,40 +1143,30 @@ freshness work.
 ## Lightning node kinds
 
 `ui.connections.node.snapshot` and `ui.reports.lightning_profitability`
-route through the shared
-[`kassiber.core.lightning`](../../kassiber/core/lightning/) scaffold. Each
+route through the book service in
+[`crates/kassiber/src/real_store/lightning.rs`](../../crates/kassiber/src/real_store/lightning.rs),
+which calls the LND and Core Lightning clients in
+[`crates/chain/src/lightning`](../../crates/chain/src/lightning.rs). Each
 request takes `args.connection` (a wallet id or label that resolves to a
 Lightning-kind wallet) and optional `args.window_days` (default 30, max 365).
-The daemon resolves the wallet, looks up the registered
-[`LightningAdapter`](../../kassiber/core/lightning/adapter.py) for the wallet
-kind (`lnd`, `coreln`, `nwc`), and dispatches the read. LND and Core Lightning
-ship adapters ([`lnd.py`](../../kassiber/core/lightning/lnd.py) and
-[`cln.py`](../../kassiber/core/lightning/cln.py)) that the daemon imports at
-startup; NWC remains declared but unavailable. Without a registered adapter the daemon
-returns an `lightning_adapter_unavailable` error envelope so the desktop can
-surface the unavailable-adapter state without inventing data.
+The daemon resolves the wallet and dispatches the read for its kind. `lnd` and
+`coreln` are registered; `nwc` is a Lightning kind without an adapter. Any
+unregistered kind returns a `lightning_adapter_unavailable` error envelope so
+the desktop can surface the unavailable-adapter state without inventing data.
 
-Lightning adapters also declare explicit safe capability metadata through
-`LightningCapabilities` (`node_snapshot`, `routing_profitability`,
-`channel_balances`, `channel_lifecycle`, `forward_events`,
-`invoice_activity`, `payment_activity`, `onchain_balance`). The daemon checks
-`node_snapshot` before `ui.connections.node.snapshot` and checks both
-`node_snapshot` and `routing_profitability` before
-`ui.reports.lightning_profitability`. A registered adapter that lacks the
-requested feature returns a deterministic `lightning_capability_unsupported`
-error with safe details (`kind`, requested `capability`, and supported
-capability names). Capability blocks exposed to the desktop use camelCase
-booleans such as `nodeSnapshot` and `routingProfitability`; they never include
+The registered kinds report every capability (`nodeSnapshot`,
+`routingProfitability`, `channelBalances`, `channelLifecycle`, `forwardEvents`,
+`invoiceActivity`, `paymentActivity`, `onchainBalance`). Capability blocks
+exposed to the desktop use these camelCase booleans; they never include
 peer pubkeys, channel funding outpoints, short channel ids, descriptors,
 backend URLs/tokens, raw wallet config, or other identity graph data.
 
-The native R5 backend now serves `ui.reports.lightning_profitability` through
-its shared book service, with the same aliases, scoped lookup, window coercion
-and capability projection. Only that explicit request grants node acquisition;
-book open, status and configuration reads remain inert. Scope/config changes
-between resources refuse before another read or publication. This registration
-adds no AI tool or node-snapshot/backend-test implementation. Native transport
-errors retain the documented raw-response redactions. See the
+Only these explicit requests grant node acquisition; book open, status and
+configuration reads remain inert. Scope/config changes between resources
+refuse before another read or publication. Transport errors retain the
+documented raw-response redactions. The AI tool of the same name returns the
+redacted variant described in [Lightning discard policy](lightning-opsec.md).
+The port record is the
 [Lightning product checkpoint](rust-shell.md#lightning-profitability-product-wiring-r5).
 
 ## Encrypted database
