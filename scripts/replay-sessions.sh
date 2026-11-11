@@ -28,7 +28,15 @@ cargo build --locked --examples \
   -p kassiber-journals -p kassiber-operator -p kassiber-reports -p kassiber-secrets \
   -p kassiber-store -p kassiber-tax-core -p kassiber-transfers -p kassiber-wallets \
   --features kassiber/test-harness,kassiber-ai/test-harness,kassiber-backup/test-hooks,kassiber-chain/test-harness,kassiber-journals/test-harness,kassiber-operator/test-harness,kassiber-reports/test-harness,kassiber-secrets/test-hooks,kassiber-secrets/native-keyring,kassiber-store/test-hooks,kassiber-transfers/test-harness,kassiber-wallets/test-harness
-cargo build --locked -p kassiber-session-replay --bins -p kassiber-clock-shim
+cargo build --locked -p kassiber-session-replay --bins
+# Its own command: --bins would apply to the shim too, and its cdylib (the
+# clock a replay preloads) would never be built.
+cargo build --locked -p kassiber-clock-shim
+local target
+target="$(cd target && pwd -P)"
+for built in kassiber session-replay libkassiber_clock_shim.so; do
+  [ -f "$target/debug/$built" ] || { echo "build left no target/debug/$built" >&2; exit 1; }
+done
 }
 
 case "${1:-}" in
