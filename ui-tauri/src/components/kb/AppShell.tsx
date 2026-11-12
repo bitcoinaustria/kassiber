@@ -102,6 +102,7 @@ import type {
   NotificationCommand,
   ThemePreference,
 } from "@/store/ui";
+import { clearFeedback } from "@/lib/feedback";
 import { BOOK_REFRESH_PROGRESS_ID } from "@/lib/syncProgress";
 import {
   DAEMON_AUTH_REQUIRED_EVENT,
@@ -210,6 +211,7 @@ import {
   isDevLockedRoute,
 } from "./devMode";
 import { notificationProgressValue } from "./notificationDisplay";
+import { FeedbackToaster } from "./FeedbackToaster";
 import {
   NotificationCenter,
   type SystemNotificationItem,
@@ -1745,6 +1747,11 @@ export function AppShell() {
     };
   }, [addNotification, daemonEnabled, queryClient, t]);
 
+  // Toasts never show over the lock screen, and nothing queued survives it.
+  React.useEffect(() => {
+    if (!shellUnlocked) clearFeedback();
+  }, [shellUnlocked]);
+
   React.useEffect(() => {
     if (!("__TAURI_INTERNALS__" in window)) return;
     let disposed = false;
@@ -1914,6 +1921,7 @@ export function AppShell() {
                     progress={shellProgress}
                     announce={!showSyncCard}
                   />
+                  <FeedbackToaster />
                   {showSyncCard ? (
                     <FirstSyncCard
                       progress={syncCardProgress}

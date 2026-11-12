@@ -230,7 +230,8 @@
     "empty": {
       "all": "Keine Benachrichtigungen.",
       "needsAction": "Nichts braucht deine Aufmerksamkeit."
-    }
+    },
+    "withheld": "Ausgeblendet, solange Beträge verborgen sind."
   },
   "currencyToggle": {
     "bitcoin": "Bitcoin",
@@ -453,5 +454,9 @@
   },
   "screen": {
     "refreshing": "Wird aktualisiert"
+  },
+  "feedback": {
+    "region": "Meldungen ({hotkey})",
+    "dismiss": "Schließen"
   }
 }

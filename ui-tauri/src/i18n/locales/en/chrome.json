@@ -230,7 +230,8 @@
     "empty": {
       "all": "No notifications.",
       "needsAction": "Nothing needs your action."
-    }
+    },
+    "withheld": "Hidden while amounts are hidden."
   },
   "currencyToggle": {
     "bitcoin": "bitcoin",
@@ -453,5 +454,9 @@
   },
   "screen": {
     "refreshing": "Refreshing"
+  },
+  "feedback": {
+    "region": "Messages ({hotkey})",
+    "dismiss": "Dismiss"
   }
 }
