@@ -8,6 +8,7 @@ import {
   activeMarketFiatCurrency,
   activeMarketFiatRate,
   autoFitDomain,
+  balanceRangeChange,
   brushedActivityMarkers,
   buildHoldingsBySource,
   bucketActivityMarkers,
@@ -17,6 +18,8 @@ import {
   formatMarketRateSource,
   formatMarketRateValue,
   formatRelativeMarketRateTime,
+  formatSignedMsatBtc,
+  formatSignedMsatSats,
   getDataForPeriod,
   initialGroupActivityDotsFromUrl,
   initialTimePeriodFromUrl,
@@ -1111,5 +1114,54 @@ describe("chart scale helpers", () => {
     ] as never[];
     expect(lastTreasuryLineValue(points, "lineBalanceBtc")).toBe(2);
     expect(lastTreasuryLineValue([], "lineBalanceBtc")).toBeNull();
+  });
+});
+
+describe("balanceRangeChange", () => {
+  const points = (...balances: number[]) =>
+    balances.map((balanceBtc) => ({ balanceBtc }));
+
+  it("measures the first-to-last change of the range in exact msat", () => {
+    const change = balanceRangeChange(points(1.5, 9, 1.65));
+    expect(change).toEqual({
+      startMsat: 150_000_000_000n,
+      endMsat: 165_000_000_000n,
+      deltaMsat: 15_000_000_000n,
+      percent: expect.any(Number),
+    });
+    expect(change?.percent).toBeCloseTo(10, 10);
+    expect(formatSignedMsatBtc(change!.deltaMsat)).toBe("+ ₿ 0.15000000");
+  });
+
+  it("keeps a one-sat move exact where float subtraction would not", () => {
+    // 0.3 - 0.1 is 0.19999999999999998 in floating point.
+    const change = balanceRangeChange(points(0.1, 0.30000001));
+    expect(change?.deltaMsat).toBe(20_000_001_000n);
+    expect(formatSignedMsatBtc(change!.deltaMsat)).toBe("+ ₿ 0.20000001");
+  });
+
+  it("reports a decrease with a negative delta and percent", () => {
+    const change = balanceRangeChange(points(2, 1.5));
+    expect(change?.deltaMsat).toBe(-50_000_000_000n);
+    expect(change?.percent).toBeCloseTo(-25, 10);
+    expect(formatSignedMsatBtc(change!.deltaMsat)).toBe("− ₿ 0.50000000");
+  });
+
+  it("gives no percent when the range opens at a zero balance", () => {
+    const change = balanceRangeChange(points(0, 0.25));
+    expect(change?.deltaMsat).toBe(25_000_000_000n);
+    expect(change?.percent).toBeNull();
+  });
+
+  it("needs two points to describe a change", () => {
+    expect(balanceRangeChange(points())).toBeNull();
+    expect(balanceRangeChange(points(1))).toBeNull();
+    expect(balanceRangeChange(points(1, Number.NaN))).toBeNull();
+  });
+
+  it("shows sub-sat msat instead of rounding it away", () => {
+    expect(formatSignedMsatBtc(1_234n)).toBe("+ ₿ 0.00000001234");
+    expect(formatSignedMsatSats(-1_234n)).toMatch(/^− 1 sats 234 msat$/);
+    expect(formatSignedMsatSats(150_000_000n)).toMatch(/^\+ 150.000 sats$/);
   });
 });

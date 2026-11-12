@@ -1,6 +1,7 @@
 import {
   LineChart,
   Maximize2,
+  Plus,
   RefreshCw,
   X,
 } from "lucide-react";
@@ -49,6 +50,7 @@ import {
   autoFitDomain,
   basisIncompleteHintKey,
   basisIncompleteRange,
+  balanceRangeChange,
   brushedActivityMarkers,
   blurClass,
   bucketActivityMarkers,
@@ -61,6 +63,8 @@ import {
   formatFiatPrice,
   formatPowerLawTick,
   formatRelativeMarketRateTime,
+  formatSignedMsatBtc,
+  formatSignedMsatSats,
   formatTreasuryDetailDate,
   formatTreasuryTick,
   fullTreasuryBrushRange,
@@ -127,6 +131,7 @@ export const BtcActivityChart = ({
   onOpenTransactionDetail,
   onRefresh,
   isRefreshing = false,
+  onAddConnection,
   fiatSeriesEnabled = true,
 }: {
   snapshot: OverviewSnapshot;
@@ -135,6 +140,7 @@ export const BtcActivityChart = ({
   onOpenTransactionDetail?: (transactionId: string) => void;
   onRefresh?: () => void;
   isRefreshing?: boolean;
+  onAddConnection?: () => void;
   fiatSeriesEnabled?: boolean;
 }) => {
   const { t } = useTranslation(["overview", "common"]);
@@ -789,6 +795,11 @@ export const BtcActivityChart = ({
     const balancePoints = selectedChartDisplayData.filter(
       (point) => !point.isActivityEvent,
     );
+    // The change across the window on screen (period and brush), from the
+    // balance line itself; activity markers carry post-event balances.
+    const rangeChange = balanceRangeChange(
+      balancePoints.length >= 2 ? balancePoints : selectedChartDisplayData,
+    );
     const selectedPoint = expanded
       ? (selectedChartDisplayData.find(
           (point) => point.date === expandedPointDate,
@@ -907,6 +918,35 @@ export const BtcActivityChart = ({
                     {formatBtc(netBtc, { precision: 4, sign: true })}
                   </span>
                 </span>
+                {rangeChange ? (
+                  <span
+                    title={
+                      hideSensitive
+                        ? undefined
+                        : formatSignedMsatSats(rangeChange.deltaMsat)
+                    }
+                  >
+                    {t("treasury.rangeChange")}{" "}
+                    <span
+                      className={cn(
+                        "font-semibold tabular-nums",
+                        rangeChange.deltaMsat > 0n
+                          ? "text-emerald-600 dark:text-emerald-400"
+                          : rangeChange.deltaMsat < 0n
+                            ? "text-[var(--kb-accent)]"
+                            : "text-foreground",
+                        blurClass(hideSensitive),
+                      )}
+                    >
+                      {formatSignedMsatBtc(rangeChange.deltaMsat)}
+                      {rangeChange.percent !== null
+                        ? ` (${t("treasury.rangeChangePercent", {
+                            percent: `${rangeChange.percent >= 0 ? "+" : "−"}${Math.abs(rangeChange.percent).toFixed(2)}`,
+                          })})`
+                        : null}
+                    </span>
+                  </span>
+                ) : null}
                 <span>
                   {t("treasury.events", {
                     count: visibleActivityMarkers.length,
@@ -1569,22 +1609,35 @@ export const BtcActivityChart = ({
                 {t("treasury.empty.body")}
               </p>
             </div>
-            {onRefresh ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-8 gap-2"
-                onClick={onRefresh}
-                disabled={isRefreshing}
-              >
-                <RefreshCw
-                  className={cn("size-4", isRefreshing && "animate-spin")}
-                  aria-hidden="true"
-                />
-                {isRefreshing ? t("welcome.refreshing") : t("welcome.refresh")}
-              </Button>
-            ) : null}
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              {onAddConnection ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-8 gap-2"
+                  onClick={onAddConnection}
+                >
+                  <Plus className="size-4" aria-hidden="true" />
+                  {t("welcome.addConnection")}
+                </Button>
+              ) : null}
+              {onRefresh ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-2"
+                  onClick={onRefresh}
+                  disabled={isRefreshing}
+                >
+                  <RefreshCw
+                    className={cn("size-4", isRefreshing && "animate-spin")}
+                    aria-hidden="true"
+                  />
+                  {isRefreshing ? t("welcome.refreshing") : t("welcome.refresh")}
+                </Button>
+              ) : null}
+            </div>
           </div>
         )}
       </div>

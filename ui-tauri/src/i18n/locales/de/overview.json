@@ -269,6 +269,8 @@
     "events_one": "{{count}} Ereignis",
     "events_other": "{{count}} Ereignisse",
     "net": "netto",
+    "rangeChange": "Veränderung im Zeitraum",
+    "rangeChangePercent": "{{percent}} %",
     "in": "ein",
     "out": "aus",
     "swap": "Swap",
