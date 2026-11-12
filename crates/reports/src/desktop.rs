@@ -49,7 +49,20 @@ pub fn holdings(rows: Vec<Value>) -> Value {
             }
         }
     }
-    for bucket in totals.values_mut() {
+    for (asset, bucket) in totals.iter_mut() {
+        // Sats name Bitcoin units only; another asset's rows carry no msat
+        // (plan 23), so its totals leave both empty too.
+        if !kassiber_store::assets::is_bitcoin(asset) {
+            if let Value::Dict(fields) = bucket {
+                for (key, value) in fields.iter_mut() {
+                    if *key == kassiber_pyjson::Key::from("quantity_msat") {
+                        *value = Value::Null;
+                    }
+                }
+                fields.push(("quantity_sat".into(), Value::Null));
+            }
+            continue;
+        }
         let sat = number(bucket, "quantity_msat") / 1000.0;
         if let Value::Dict(fields) = bucket {
             fields.push(("quantity_sat".into(), Value::Float(sat)));
