@@ -420,10 +420,11 @@ impl<'a, B: FnMut(&Connection, &str) -> Result<Json>> Native<'a, B> {
 
     /// Run `fetch` (the job's own or its widened repair) under the batch's
     /// checks. Between requests they fence cancellation, consent, the job,
-    /// the book, the wallet row and its backend; all cheap reads. The full
-    /// `Fetch::revalidate` rebuilds the observer plan (key derivation and a
-    /// BDK wallet), so it runs once before publication in `run`, not here:
-    /// the transport calls this per request and per record.
+    /// the book, the wallet row, its backend and the book's network scope;
+    /// all cheap reads. The full `Fetch::revalidate` rebuilds the observer
+    /// plan (key derivation and a BDK wallet), so it runs once before
+    /// publication in `run`, not here: the transport calls this per request
+    /// and per record.
     #[allow(clippy::too_many_arguments)]
     fn run_fetch(
         &mut self,
@@ -467,6 +468,7 @@ impl<'a, B: FnMut(&Connection, &str) -> Result<Json>> Native<'a, B> {
                     "Wallet sync backend changed",
                 ));
             }
+            fetch.check_network(conn, &or_text(field(&selected.wallet, "kind")))?;
             self.proof.permitted(conn, &selected.profile)
         };
         let control = Checked {

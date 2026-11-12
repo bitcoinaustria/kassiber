@@ -571,6 +571,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     })
 
     chain = Chain(rpc, electrum_url, args.addresses)
+    # A daemon job reports failure inside a successful envelope, so a
+    # failed stage still times; the run as a whole must not pass.
+    failed: list[str] = []
     scratch = Path(tempfile.mkdtemp(prefix="kassiber-sync-bench-"))
     try:
         started = time.perf_counter()
@@ -597,13 +600,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         def stage(name: str, *extra: str, journal: bool = False) -> None:
             for book in books:
                 if journal:
-                    _run_stage(book, name, book.journal)
+                    result = _run_stage(book, name, book.journal)
                 elif args.sync_path == "daemon":
-                    _run_stage(book, name, lambda _s, book=book: book.daemon_sync(
+                    result = _run_stage(book, name, lambda _s, book=book: book.daemon_sync(
                         force_full="--force-full" in extra))
                 else:
-                    _run_stage(book, name, lambda _s, book=book: book.cli(
+                    result = _run_stage(book, name, lambda _s, book=book: book.cli(
                         "wallets", "sync", "--wallet", WALLET_LABEL, *extra))
+                if not result["ok"]:
+                    failed.append(f"{book.label}:{name}")
 
         def stats() -> None:
             for book in books:
@@ -629,8 +634,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     finally:
         chain.close()
         shutil.rmtree(scratch, ignore_errors=True)
-    _emit({"event": "benchmark_complete", "schema_version": SCHEMA_VERSION, "ok": True})
-    return 0
+    _emit({"event": "benchmark_complete", "schema_version": SCHEMA_VERSION, "ok": not failed,
+           "failed_stages": failed})
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

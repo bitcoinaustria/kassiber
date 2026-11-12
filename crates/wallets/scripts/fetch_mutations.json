@@ -421,6 +421,16 @@
     "rule": "Revalidation keeps the route the ownership index chose."
   },
   {
+    "id": "fetch-network-check-compares-scope",
+    "file": "crates/wallets/src/fetch.rs",
+    "find": "if current != self.scope.environment_id {",
+    "replace": "if false {",
+    "expect_failing": [
+      "fetch_network_check_refuses_a_book_bound_after_preparation"
+    ],
+    "rule": "The per-request network check refuses a book bound after preparation."
+  },
+  {
     "id": "fetch-electrum-records",
     "file": "crates/wallets/src/fetch.rs",
     "find": "            records.extend(electrum::records(\n                &acquired, &tracked, backend, deadline, cancel,\n            )?);",
