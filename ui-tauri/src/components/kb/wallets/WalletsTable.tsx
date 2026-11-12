@@ -1,4 +1,4 @@
-import { useMemo, useState, type KeyboardEvent } from "react";
+import { useMemo, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ArrowDown,
@@ -25,6 +25,7 @@ import {
 } from "@/lib/connectionDisplay";
 import type { Currency } from "@/lib/currency";
 import { formatCount } from "@/lib/localeFormat";
+import { useRememberedTableSort } from "@/store/useRememberedTableSort";
 import { cn } from "@/lib/utils";
 import type { Connection, OverviewSnapshot } from "@/mocks/seed";
 
@@ -58,6 +59,16 @@ const collator = new Intl.Collator(undefined, {
   sensitivity: "base",
   numeric: true,
 });
+
+const WALLETS_TABLE_SORT_KEYS: readonly WalletsTableSortKey[] = [
+  "label",
+  "kind",
+  "transactions",
+  "last",
+  "taxFree",
+  "balance",
+];
+const DEFAULT_WALLETS_TABLE_SORT = { key: "kind", direction: "asc" } as const;
 
 /** First click on a column starts in the most useful direction. */
 const defaultSortDir: Record<WalletsTableSortKey, SortDir> = {
@@ -146,8 +157,13 @@ export function WalletsTable({
   totalBtc,
   totalCount,
 }: WalletsTableProps) {
-  const [sortKey, setSortKey] = useState<WalletsTableSortKey | null>("kind");
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [sort, setSort] = useRememberedTableSort(
+    "wallets",
+    WALLETS_TABLE_SORT_KEYS,
+    DEFAULT_WALLETS_TABLE_SORT,
+  );
+  const sortKey = sort?.key ?? null;
+  const sortDir: SortDir = sort?.direction ?? "asc";
   const showTaxFreeColumn = taxFreeBalanceIsCurrent(taxFreeBalance);
   const taxFreeWalletIds = useMemo(
     () => {
@@ -172,12 +188,11 @@ export function WalletsTable({
   }, [connections, sortKey, sortDir, taxFreeWalletIds]);
 
   const onSort = (key: WalletsTableSortKey) => {
-    if (key === sortKey) {
-      setSortDir((dir) => (dir === "asc" ? "desc" : "asc"));
-    } else {
-      setSortKey(key);
-      setSortDir(defaultSortDir[key]);
-    }
+    setSort(
+      key === sortKey
+        ? { key, direction: sortDir === "asc" ? "desc" : "asc" }
+        : { key, direction: defaultSortDir[key] },
+    );
   };
 
   return (

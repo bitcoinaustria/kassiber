@@ -11,6 +11,12 @@ import type { SettingsSectionId } from "@/components/kb/settingsSections";
 import type { AppUpdateCheck } from "@/lib/appUpdate";
 import { normalizePeriodParam, type PeriodKey } from "@/lib/period";
 import type { AiPermissionMode, AiToolProfile } from "@/daemon/stream";
+import {
+  normalizeTableSorts,
+  type TableSort,
+  type TableSortId,
+  type TableSorts,
+} from "./tableSort";
 
 // The supported language set lives in `@/i18n/config` so adding a language is
 // a one-place change; the store type follows it.
@@ -375,6 +381,8 @@ export interface UiState {
    * this map supplies the book-scoped default across navigation and app restarts.
    */
   bookChartPeriods: Record<string, BookChartPeriod>;
+  /** Remembered column sort per table (see `store/tableSort.ts`). */
+  tableSorts: TableSorts;
   /**
    * Book keys whose in-progress first-sync card the user collapsed via
    * "Continue in background". Ephemeral (not persisted): re-opening from the
@@ -464,6 +472,7 @@ export interface UiState {
     bookKey: string,
     period: BookChartPeriod,
   ) => void;
+  setTableSort: (table: TableSortId, sort: TableSort | null) => void;
   setSourceFundsDraft: (profileKey: string, draft: SourceFundsDraft) => void;
   clearSourceFundsDraft: (profileKey: string) => void;
   setDeferredConnectionSetup: (intent: DeferredConnectionSetup | null) => void;
@@ -627,6 +636,7 @@ export function uiStatePartialForStorage(state: UiState) {
     notifications: stripNotificationProgress(state.notifications),
     firstSyncDone: state.firstSyncDone,
     bookChartPeriods: state.bookChartPeriods,
+    tableSorts: state.tableSorts,
     sourceFundsDrafts: state.sourceFundsDrafts,
   };
 }
@@ -727,6 +737,7 @@ export const useUiStore = create<UiState>()(
       activeMaintenanceProgress: null,
       firstSyncDone: {},
       bookChartPeriods: {},
+      tableSorts: {},
       firstSyncCardDismissed: {},
       sourceFundsDrafts: {},
       setLang: (lang) => set({ lang }),
@@ -1002,6 +1013,19 @@ export const useUiStore = create<UiState>()(
                 },
               },
         ),
+      setTableSort: (table, sort) =>
+        set((state) => {
+          const current = state.tableSorts[table];
+          const same =
+            current === sort ||
+            (current != null &&
+              sort != null &&
+              current.key === sort.key &&
+              current.direction === sort.direction);
+          return same
+            ? state
+            : { tableSorts: { ...state.tableSorts, [table]: sort } };
+        }),
       setSourceFundsDraft: (profileKey, draft) =>
         set((state) => {
           const existing = state.sourceFundsDrafts[profileKey] ?? {};
@@ -1121,6 +1145,8 @@ export const useUiStore = create<UiState>()(
           ),
           sourceFundsDrafts:
             restored.sourceFundsDrafts ?? current.sourceFundsDrafts,
+          // Added without a version bump: `merge` fills it for older blobs.
+          tableSorts: normalizeTableSorts(restored.tableSorts),
         };
       },
     },

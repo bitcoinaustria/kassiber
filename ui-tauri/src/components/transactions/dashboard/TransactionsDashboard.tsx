@@ -12,6 +12,7 @@ import { useCurrency } from "@/lib/currency";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import type { TransactionsList } from "@/mocks/transactions";
 import { bookIdentityKey, useUiStore } from "@/store/ui";
+import { useRememberedTableSort } from "@/store/useRememberedTableSort";
 import { TransactionsExportDialog } from "./TransactionsExportDialog";
 import { useAssistantColumnClaim } from "@/components/kb/assistant-panel/useAssistantColumnClaim";
 import { TransactionsTable } from "./TransactionsTable";
@@ -42,10 +43,21 @@ import {
   type BreakdownSelection,
   type TransactionFilterState,
   type TransactionScopeParams,
+  type TransactionTableFilterState,
   transactionPeriodDateWindow,
   type TransactionDashboardSnapshot,
 } from "./model";
 
+
+const TRANSACTION_TABLE_SORT_KEYS = ["date", "amount"] as const;
+
+/** The URL's sort if it names one, else the remembered sort. */
+function withRememberedSort(
+  table: TransactionTableFilterState,
+  remembered: TransactionTableFilterState["sort"],
+): TransactionTableFilterState {
+  return table.sort ? table : { ...table, sort: remembered };
+}
 
 const TransactionsDashboard = ({
   className,
@@ -90,6 +102,17 @@ const TransactionsDashboard = ({
   );
   const initialPeriod =
     scopeParams.period ?? initialPeriodFromUrl(storedBookChartPeriod ?? "auto");
+  // The column sort is remembered across visits and books; a sort in the URL
+  // (a shared or reloaded view) wins over it.
+  const [rememberedSort, setRememberedSort] = useRememberedTableSort(
+    "transactions",
+    TRANSACTION_TABLE_SORT_KEYS,
+    null,
+  );
+  const rememberedSortRef = React.useRef(rememberedSort);
+  React.useLayoutEffect(() => {
+    rememberedSortRef.current = rememberedSort;
+  });
   const [filterState, patchFilterState] = React.useReducer(
     (state: TransactionFilterState, patch: Partial<TransactionFilterState>) => ({
       ...state,
@@ -101,7 +124,7 @@ const TransactionsDashboard = ({
       quickFilter: scopeParams.quick,
       breakdownSelection: scopeParams.breakdownSelection,
       transactionIds: scopeParams.transactionIds,
-      table: scopeParams.table,
+      table: withRememberedSort(scopeParams.table, rememberedSort),
     },
   );
   const {
@@ -299,7 +322,7 @@ const TransactionsDashboard = ({
       quickFilter: scopeParams.quick,
       breakdownSelection: scopeParams.breakdownSelection,
       transactionIds: scopeParams.transactionIds,
-      table: scopeParams.table,
+      table: withRememberedSort(scopeParams.table, rememberedSortRef.current),
     });
   }, [scopeParams]);
   React.useEffect(() => {
@@ -314,9 +337,17 @@ const TransactionsDashboard = ({
       quickFilter: null,
       breakdownSelection: null,
       transactionIds: [],
-      table: { ...DEFAULT_TRANSACTION_TABLE_FILTER_STATE },
+      table: {
+        ...DEFAULT_TRANSACTION_TABLE_FILTER_STATE,
+        sort: rememberedSortRef.current,
+      },
     });
   }, [bookKey, scopeParams.period, storedBookChartPeriod]);
+
+  // Remember the sort the table shows, including "Clear all" back to none.
+  React.useEffect(() => {
+    setRememberedSort(tableFilterState.sort);
+  }, [setRememberedSort, tableFilterState.sort]);
 
   React.useEffect(() => {
     if (!bookKey) return;
