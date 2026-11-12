@@ -1,0 +1,263 @@
+[
+  {
+    "id": "calendar-eu-summer-time",
+    "file": "crates/tax-countries/src/calendar.rs",
+    "find": "self.standard + if summer { 3600 } else { 0 }",
+    "replace": "self.standard",
+    "expect_failing": [
+      "offsets_match_zoneinfo",
+      "local_dates_follow_the_zone"
+    ],
+    "rule": "A European zone is one hour ahead of its standard offset in summer."
+  },
+  {
+    "id": "calendar-summer-ends-in-october",
+    "file": "crates/tax-countries/src/calendar.rs",
+    "find": "us < last_sunday_one_utc(year, 10)",
+    "replace": "us < last_sunday_one_utc(year, 11)",
+    "expect_failing": [
+      "offsets_match_zoneinfo"
+    ],
+    "rule": "EU summer time ends at 01:00 UTC on the last Sunday of October."
+  },
+  {
+    "id": "calendar-starts-1996",
+    "file": "crates/tax-countries/src/calendar.rs",
+    "find": "if us < self.since_us {",
+    "replace": "if false {",
+    "expect_failing": [
+      "local_dates_follow_the_zone"
+    ],
+    "rule": "A zone has no calendar before its rule starts, so no offset is guessed."
+  },
+  {
+    "id": "calendar-months-clamp",
+    "file": "crates/tax-countries/src/calendar.rs",
+    "find": "day: self.day.min(month_length(year, month)),",
+    "replace": "day: self.day,",
+    "expect_failing": [
+      "months_clamp_to_the_months_end"
+    ],
+    "rule": "Adding months lands on the month's last day when it is shorter (31 August + 6 months is 28 February)."
+  },
+  {
+    "id": "calendar-anniversary-within-the-year",
+    "file": "crates/tax-countries/src/calendar.rs",
+    "find": "disposed > acquired.anniversary(1)",
+    "replace": "disposed >= acquired.anniversary(1)",
+    "expect_failing": [
+      "more_than_one_year_counts_calendar_dates"
+    ],
+    "rule": "A disposal on the anniversary is not held more than one year."
+  },
+  {
+    "id": "engine-rules-fee-units-named",
+    "file": "crates/tax-countries/src/lib.rs",
+    "find": "        if self.fee_units != FeeUnits::Basis {",
+    "replace": "        if false {",
+    "expect_failing": [
+      "engine_rules_name_only_what_they_change"
+    ],
+    "rule": "A country's engine rules name its fee-unit rule when it is not the generic one."
+  },
+  {
+    "id": "engine-rules-swap-values-named",
+    "file": "crates/tax-countries/src/lib.rs",
+    "find": "        if self.swap_values != SwapValues::Own {",
+    "replace": "        if false {",
+    "expect_failing": [
+      "engine_rules_name_only_what_they_change"
+    ],
+    "rule": "A country's engine rules name its swap values when they are not each leg's own."
+  },
+  {
+    "id": "engine-rules-gifts-named",
+    "file": "crates/tax-countries/src/lib.rs",
+    "find": "            if on {",
+    "replace": "            if false {",
+    "expect_failing": [
+      "engine_rules_name_only_what_they_change"
+    ],
+    "rule": "A country's engine rules name each gift rule it changes."
+  },
+  {
+    "id": "tax-year-starts-on-its-day",
+    "file": "crates/tax-countries/src/years.rs",
+    "find": "    if (local.month, local.day) >= (u32::from(start.0), u32::from(start.1)) {",
+    "replace": "    if (local.month, local.day) > (u32::from(start.0), u32::from(start.1)) {",
+    "expect_failing": [
+      "tax_years_follow_their_start_day"
+    ],
+    "rule": "A tax year includes its first day."
+  },
+  {
+    "id": "tax-year-label-split",
+    "file": "crates/tax-countries/src/years.rs",
+    "find": "        format!(\"{year}-{:02}\", (year + 1).rem_euclid(100))",
+    "replace": "        year.to_string()",
+    "expect_failing": [
+      "tax_years_follow_their_start_day"
+    ],
+    "rule": "A tax year that does not start on 1 January is labelled with both years (2024-25)."
+  },
+  {
+    "id": "schedule-step-by-date",
+    "file": "crates/tax-countries/src/years.rs",
+    "find": "            .find(|(from, _)| date(from) <= local)",
+    "replace": "            .find(|(from, _)| date(from) < local)",
+    "expect_failing": [
+      "schedules_answer_by_local_date_and_fail_closed"
+    ],
+    "rule": "A table's value applies from its step's date on."
+  },
+  {
+    "id": "schedule-unknown-after-known",
+    "file": "crates/tax-countries/src/years.rs",
+    "find": "            Step::Value(_) if self.known_until.is_some_and(|until| local > date(until)) => {",
+    "replace": "            Step::Value(_) if false => {",
+    "expect_failing": [
+      "schedules_answer_by_local_date_and_fail_closed"
+    ],
+    "rule": "A date after a table's known range is unknown, not the last value."
+  },
+  {
+    "id": "schedule-refusal",
+    "file": "crates/tax-countries/src/years.rs",
+    "find": "            Step::Refused(code) => Lookup::Refused(code),",
+    "replace": "            Step::Refused(_) => Lookup::Unknown,",
+    "expect_failing": [
+      "schedules_answer_by_local_date_and_fail_closed"
+    ],
+    "rule": "A refused date names the country's code."
+  },
+  {
+    "id": "schedule-split-dates",
+    "file": "crates/tax-countries/src/years.rs",
+    "find": "            .filter(|from| *from > first && *from <= last)",
+    "replace": "            .filter(|from| *from >= first && *from <= last)",
+    "expect_failing": [
+      "schedules_answer_by_local_date_and_fail_closed"
+    ],
+    "rule": "A change on a tax year's first day does not split it."
+  },
+  {
+    "id": "germany-fee-units-before-sale",
+    "file": "crates/tax-countries/src/lib.rs",
+    "find": "        fee_units: FeeUnits::DisposalBeforeSale,\n        // Rn. 58 and 59.",
+    "replace": "        fee_units: FeeUnits::Disposal,\n        // Rn. 58 and 59.",
+    "expect_failing": [
+      "germany_is_a_preview_eur_country_with_wallet_fifo_and_its_tables"
+    ],
+    "rule": "German fee units are disposals taken before the sale, their value Werbungskosten (DE-FEE-NETWORK)."
+  },
+  {
+    "id": "germany-rail-decision",
+    "file": "crates/tax-countries/src/lib.rs",
+    "find": "    // Whether L-BTC is the same Wirtschaftsgut as BTC is not settled.\n    rail_decision_required: true,",
+    "replace": "    // Whether L-BTC is the same Wirtschaftsgut as BTC is not settled.\n    rail_decision_required: false,",
+    "expect_failing": [
+      "germany_is_a_preview_eur_country_with_wallet_fifo_and_its_tables"
+    ],
+    "rule": "A German book decides each BTC/LBTC rail change itself (DE-RAIL)."
+  },
+  {
+    "id": "united-kingdom-rail-decision",
+    "file": "crates/tax-countries/src/lib.rs",
+    "find": "    // (tax-country-gb.md, Bitcoin rails), or it is held.\n    rail_decision_required: true,",
+    "replace": "    // (tax-country-gb.md, Bitcoin rails), or it is held.\n    rail_decision_required: false,",
+    "expect_failing": [
+      "ireland_and_the_united_kingdom_follow_their_specifications"
+    ],
+    "rule": "A UK book decides each BTC/LBTC rail pair itself (tax-country-gb.md, Bitcoin rails)."
+  },
+  {
+    "id": "germany-wallet-pool",
+    "file": "crates/tax-countries/src/lib.rs",
+    "find": "    pool_scopes: &[\"wallet\"],\n    default_pool_scope: \"wallet\",\n    locale: Locale::DeDe,",
+    "replace": "    pool_scopes: &[\"global\", \"wallet\"],\n    default_pool_scope: \"wallet\",\n    locale: Locale::DeDe,",
+    "expect_failing": [
+      "germany_is_a_preview_eur_country_with_wallet_fifo_and_its_tables"
+    ],
+    "rule": "Germany's order of use is per wallet only (DE-POOL-WALLET)."
+  },
+  {
+    "id": "germany-airdrop-refused",
+    "file": "crates/tax-countries/src/lib.rs",
+    "find": "code: \"airdrop_classification_required\",\n                detail: \"An airdrop is § 22 Nr. 3",
+    "replace": "code: \"airdrop_income\",\n                detail: \"An airdrop is § 22 Nr. 3",
+    "expect_failing": [
+      "germany_is_a_preview_eur_country_with_wallet_fifo_and_its_tables"
+    ],
+    "rule": "An unclassified airdrop is refused with Germany's code (DE-INC-AIRDROP)."
+  },
+  {
+    "id": "germany-berlin-calendar",
+    "file": "crates/tax-countries/src/lib.rs",
+    "find": "    locale: Locale::DeDe,\n    timezone: BERLIN,",
+    "replace": "    locale: Locale::DeDe,\n    timezone: VIENNA,",
+    "expect_failing": [
+      "germany_is_a_preview_eur_country_with_wallet_fifo_and_its_tables"
+    ],
+    "rule": "German holding periods and years are counted in Berlin dates (DE-TZ)."
+  },
+  {
+    "id": "switzerland-chf",
+    "file": "crates/tax-countries/src/lib.rs",
+    "find": "    fiat: Fiat::Fixed(\"CHF\"),",
+    "replace": "    fiat: Fiat::Fixed(\"EUR\"),",
+    "expect_failing": [
+      "switzerland_is_a_preview_chf_country_with_informational_gains"
+    ],
+    "rule": "Swiss books are in CHF."
+  },
+  {
+    "id": "switzerland-hardfork-code",
+    "file": "crates/tax-countries/src/lib.rs",
+    "find": "            code: \"hardfork_treatment_unsupported\",",
+    "replace": "            code: \"hardfork_income\",",
+    "expect_failing": [
+      "switzerland_is_a_preview_chf_country_with_informational_gains"
+    ],
+    "rule": "A hard fork is refused with Switzerland's code (CH-HARDFORK)."
+  },
+  {
+    "id": "switzerland-global-pool",
+    "file": "crates/tax-countries/src/lib.rs",
+    "find": "    pool_scopes: &[\"global\"],\n    default_pool_scope: \"global\",\n    locale: Locale::DeCh,",
+    "replace": "    pool_scopes: &[\"global\", \"wallet\"],\n    default_pool_scope: \"global\",\n    locale: Locale::DeCh,",
+    "expect_failing": [
+      "switzerland_is_a_preview_chf_country_with_informational_gains"
+    ],
+    "rule": "Switzerland's informational gains use one global pool."
+  },
+  {
+    "id": "registry-spain-market-value",
+    "file": "crates/tax-countries/src/lib.rs",
+    "find": "        // A price below normal market value is replaced by it (art. 35.2).\n        below_market: BelowMarket::MarketValue,",
+    "replace": "        below_market: BelowMarket::Price,",
+    "expect_failing": [
+      "spain_is_a_preview_eur_country_with_global_fifo"
+    ],
+    "rule": "Spain books a sale below market value at market value."
+  },
+  {
+    "id": "registry-japan-seventy-percent",
+    "file": "crates/tax-countries/src/lib.rs",
+    "find": "        // Below 70 % of market value, 70 % of it is revenue (FAQ 2-10).\n        below_market: BelowMarket::SeventyPercent,",
+    "replace": "        below_market: BelowMarket::Price,",
+    "expect_failing": [
+      "japan_is_a_preview_jpy_country_with_its_averages"
+    ],
+    "rule": "Japan books a sale below 70 % of market value at 70 % of it."
+  },
+  {
+    "id": "registry-japan-fork-zero-cost",
+    "file": "crates/tax-countries/src/lib.rs",
+    "find": "        // A fork's coins cost nothing and are no income (FAQ 1-6).\n        zero_cost_kinds: HARD_FORK_KINDS,",
+    "replace": "        zero_cost_kinds: &[],",
+    "expect_failing": [
+      "japan_is_a_preview_jpy_country_with_its_averages"
+    ],
+    "rule": "Japan books a fork's coins at zero cost without income (FAQ 1-6)."
+  }
+]

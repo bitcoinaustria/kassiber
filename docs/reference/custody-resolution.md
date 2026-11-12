@@ -24,6 +24,12 @@ in sorted `blocked_by_transaction_ids`. An explicit root can itself connect
 another root to a dependent; propagation continues through it until no origin
 set grows. Unconnected blockers are excluded.
 
+When an explicit blocker holds a connected selected custody path, every
+dependent quarantine names the complete set of explicit roots in that path
+in sorted `blocked_by_transaction_ids`. An explicit root can itself connect
+another root to a dependent; propagation continues through it until no origin
+set grows. Unconnected blockers are excluded.
+
 An export's transaction hash can identify an event, but graph-shaped imported
 JSON cannot impersonate a native observer, and a supporting import cannot erase
 one either: enrichment updates prices and still-empty metadata columns while an
@@ -118,7 +124,12 @@ books as a transfer fee. Nothing is stored beyond the journal's own decision,
 so the next rebuild re-derives it from the rows. Dismissing the pair (`transfers
 dismiss --tx-out <withdrawal> --tx-in <receipt>`, or `ui.transfers.dismiss`)
 undoes it like a native HTLC transition: the rows return to today's hold until
-the dismissal expires or is deleted.
+the dismissal expires or is deleted. On the desktop, the move's card in the
+custody lineage offers "Undo automatic pairing": after a confirmation it sends
+that dismissal for the longest allowed expiry (3650 days), and until the page
+is left the undone pairing can be restored there, which deletes the dismissal
+(`ui.transfers.dismissals.delete`). Later, `transfers dismissals delete` or
+the assistant restores it.
 
 | Source | Withdrawal txid | Amount and fee convention |
 | --- | --- | --- |
@@ -326,17 +337,6 @@ of coarse-price acceptance targets after an earlier repair; any failure rolls ba
 them. Applying a pair, unpair, dismissal or undismissal through the CLI,
 desktop or AI also refreshes the shared transfer-candidate count used by Review.
 Supported operations:
-Supported batch operations are exact price overrides, explicitly justified
-exclusions, pair-review removal (`unpair`), legacy fee-pair revision
-(`repair_legacy_pair`), confirmation that held ID-less import rows are distinct
-trades (`confirm_distinct_import_rows`, see
-[identity compatibility](database-compatibility.md#id-less-csv-identity-compatibility)),
-typed custody components, and local
-inbound `kind_override` declarations. The CLI accepts the existing component
-create/revise/state actions. AI batches create components; conversion components
-remain drafts until separately reviewed. Missing-wallet gap investigation keeps
-its existing local-provider-only tools (`ui.custody.review.plan/apply`) and is
-not smuggled into the general batch interface.
 
 | Type | Fields | Core service |
 | --- | --- | --- |
@@ -349,13 +349,17 @@ not smuggled into the general batch interface.
 | `custody_gap` | `action` (`create`, `dismiss`, `revise`, `reopen`, `classify_residual` with `classification`), `gap_id`, `reason` | `custody review` |
 | `kind_override` | `transaction_id`, `kind` (inbound kind or null), optional `valuation_mode`, `reason` | acquisition review (below) |
 | `accept_coarse_prices` | `reason`, optional `transaction_ids` (1 to 5000) | coarse-price acceptance (below) |
+| `repair_legacy_pair` | `pair_id`, `expected_fingerprint`, `reason` | legacy fee-pair revision (below) |
+| `confirm_distinct_import_rows` | `transaction_id`, `expected_fingerprint`, `reason` | held ID-less import rows confirmed as distinct trades, see [identity compatibility](database-compatibility.md#id-less-csv-identity-compatibility) |
 
 When a component's interpretation was wrong, supersede it and create the
 corrected component on the same anchors in one batch, or revise it. A
 permanent dismissal is not available in a batch; it stays an explicit
 `transfers dismiss --expires-in-days 0`.
 
-The AI may batch every type when its provider has full agent access. A
+The AI may batch every type except `repair_legacy_pair` and
+`confirm_distinct_import_rows`, which stay local CLI reviews and are refused
+with `interaction_required`, when its provider has full agent access. A
 restricted provider keeps price overrides, exclusions, unpairs and component
 creation, and is refused anything else with `agent_access_restricted`. The AI
 never activates a conversion component or attests its review: creating or
@@ -567,6 +571,15 @@ node activity through sync, journal, report and XLSX export; the independent
 chain-observer lane compares Bitcoin/Liquid adapters against local node truth.
 These fixtures prove the specified cases, not the completeness of any user's
 private book.
+
+Exact exchange withdrawals are pinned on both engines by the same 26 Strike
+and River books: `crates/custody/scripts/gen_exchange_txid_vectors.py` freezes
+Python's finalized projection, `crates/custody/tests/exchange_txid.rs`
+compares the Rust engine with it, and
+`tests/test_rust_exchange_txid_vectors.py` replays it in Python. The Docker
+`demo-full` exchange book asserts the automatic `exchange_txid_exact` move;
+its fast CSV replay, whose imported rows prove no owned output, still reviews
+the withdrawal.
 
 The remaining architecture boundary is explicit fee timing for multi-date HTLC
 routes with a shortfall. A native link proves the movement but does not justify

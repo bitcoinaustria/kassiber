@@ -1,7 +1,10 @@
 # Tax engine
 
 Kassiber's tax engine is a Rust crate (`tax-engine/core`) called from Python
-through a PyO3 binding (`tax-engine/python`, imported as `kassiber_tax`). It
+through a PyO3 binding (`tax-engine/python`, imported as `kassiber_tax`). Native
+callers can use `ledger_typed(&LedgerRequest) -> Result<LedgerResponse,
+StagedError>` without serializing a request or response. It accepts schema 2's
+`ledger` operation and shares computation with the text entry point. It
 replaced RP2 under [plan 20](../plan/20-kassiber-tax-engine.md). This page owns
 the engine contract: the schema-2 `ledger` format journal processing uses,
 the schema-1 operations kept as the lot engine's fixture API, the Python
@@ -14,6 +17,218 @@ Private indexes and `--find-links` sources can still host local versions.
 `pip install ./tax-engine/python .` from the checkout, with a Rust toolchain.
 The package version and the engine crates' Cargo version (`engine_version()`)
 share the `0.2.0` release; bump them together.
+
+## Ledger performance checkpoint (R4, 2026-10-30)
+
+The R4 speed pass preserves schema-2 response bytes, decimal exponents,
+list order and the first failing operation. The complete text-in/text-out
+`ledger` operation is 2.03–3.96× faster on the four synthetic bench books.
+This measures the tax engine; Python request building, response rendering,
+custody and database persistence remain outside these timings.
+
+The baseline is `de18d9af` (the pre-optimization engine with timing spans),
+copied from the first run's `target/ledger-perf/base-src`. For the timing
+build its only local change is the benchmark's main-thread CPU counter. The
+optimized engine is `de836bd2`. Both examples were rebuilt offline with
+Rust 1.99.1 in release mode with `--features timing`, then run back to back
+against the same captured Python request and expected response. The machine
+is Linux x86_64, with 48 logical CPUs. Each invocation runs one request and
+requires byte equality with the captured response. Five rounds alternate
+`before, after` and `after, before`; each table uses the fastest complete run of its version,
+with all phase values taken from that run. The 1-minute load was 9.02–9.59,
+so the owner's above-8 rule (alternating, best of five) applies.
+
+| Complete `ledger`, seconds | Before | After | Speedup |
+| --- | ---: | ---: | ---: |
+| Generic 2,000 | 0.067 | 0.033 | 2.03× |
+| Multi-wallet 2,000 | 0.170 | 0.054 | 3.15× |
+| Generic 20,000 | 0.721 | 0.299 | 2.41× |
+| Multi-wallet 20,000 | 1.737 | 0.439 | 3.96× |
+
+Phases below are **before → after**, seconds. `0.000` means less than
+0.5 ms. A reused settled carry pass needs no separate final prepare,
+validation or computation; `reused` marks those spans. Rail carry includes
+its own prepare and compute passes. Uninstrumented request-head scanning,
+allocation and destruction explain the difference from the total.
+
+| Phase | Generic 2k | Multi-wallet 2k | Generic 20k | Multi-wallet 20k |
+| --- | ---: | ---: | ---: | ---: |
+| Typed request parse | 0.005 → 0.005 | 0.005 → 0.005 | 0.046 → 0.044 | 0.046 → 0.044 |
+| Book references | 0.001 → 0.001 | 0.001 → 0.001 | 0.007 → 0.007 | 0.007 → 0.005 |
+| Rail carry | 0.000 → 0.000 | 0.099 → 0.032 | 0.000 → 0.000 | 0.984 → 0.267 |
+| Carried request and references | 0.000 → 0.000 | 0.001 → 0.002 | 0.006 → 0.000 | 0.010 → 0.011 |
+| Final prepare pass | 0.017 → 0.011 | 0.017 → 0.000 | 0.175 → 0.099 | 0.175 → 0.000 |
+| Lot inputs | 0.002 → 0.000 | 0.001 → reused | 0.030 → 0.000 | 0.022 → reused |
+| Validation | 0.006 → 0.000 | 0.006 → reused | 0.059 → 0.001 | 0.058 → reused |
+| Final computation | 0.020 → 0.004 | 0.024 → reused | 0.222 → 0.045 | 0.239 → reused |
+| Composition | 0.007 → 0.007 | 0.007 → 0.009 | 0.081 → 0.066 | 0.090 → 0.068 |
+| Response serialization | 0.005 → 0.003 | 0.006 → 0.003 | 0.057 → 0.017 | 0.063 → 0.019 |
+
+The recorded run time / 1-minute load at invocation start, in round order:
+
+| Book / version | Round 1 | Round 2 | Round 3 | Round 4 | Round 5 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Generic 2k before | .073 / 9.59 | .076 / 9.59 | .073 / 9.59 | .068 / 9.59 | .067 / 9.59 |
+| Generic 2k after | .035 / 9.59 | .034 / 9.59 | .033 / 9.59 | .034 / 9.59 | .033 / 9.59 |
+| Multi-wallet 2k before | .170 / 9.59 | .174 / 9.59 | .181 / 9.59 | .177 / 9.59 | .179 / 9.59 |
+| Multi-wallet 2k after | .054 / 9.59 | .062 / 9.59 | .054 / 9.59 | .056 / 9.59 | .056 / 9.59 |
+| Generic 20k before | .721 / 9.59 | .741 / 9.59 | .722 / 9.59 | .739 / 9.30 | .738 / 9.30 |
+| Generic 20k after | .307 / 9.59 | .310 / 9.59 | .299 / 9.30 | .303 / 9.30 | .302 / 9.30 |
+| Multi-wallet 20k before | 1.758 / 9.30 | 1.737 / 9.20 | 1.755 / 9.20 | 1.779 / 9.02 | 1.764 / 9.02 |
+| Multi-wallet 20k after | .451 / 9.30 | .441 / 9.20 | .449 / 9.20 | .439 / 9.20 | .466 / 9.02 |
+
+All 40 responses match the captured Python responses byte for byte. The
+2× multi-wallet 20k acceptance target is met, so no further profiling pass
+is required by that criterion. Main-thread CPU values from `ledger-bench`
+exclude worker threads and must not be interpreted as total CPU savings.
+
+### What changed
+
+- `41ec8223`, `31ac8516`, `0537479d`, `de836bd2`: coefficients that fit
+  `u128` use fixed-width arithmetic, with 256-bit intermediates and the
+  existing `BigUint` fallback. Rounding, exponent limits, signed zero and
+  exceptional results retain their exact rules. Differential tests compare
+  the fast and fallback paths. `Decimal` remains 40 bytes.
+- `06edc4cb`: reuse a generic rail carry's settled prepare and computation
+  when its pricing and excluded rows equal the final pass's inputs.
+- `2ac6c521`, `c93a6b19`, `3a39f611`, `2d92bb27`, `7ef06f2e`, `03c343a0`:
+  keep constructed entries, borrow them across the lot engine, avoid
+  redundant books and derived copies, render text into one buffer, and
+  parse a valid request once. Malformed requests retain their earlier
+  diagnostic path.
+- `6dee1a9f`, `16c79421`, `0c664267`, `0d1deebb`, `5bfbcaa2`: prepare and
+  compute independent assets, construct entries, derive fragment values,
+  compose independent rows and serialize contiguous response chunks
+  concurrently. Results, errors and deferred panics are consumed in the
+  original order. Each map uses at most eight scoped workers and joins
+  them before returning; Austrian linked-asset computation retains its
+  ordered runner.
+
+The remaining largest spans at multi-wallet 20k are rail carry (267 ms),
+composition (68 ms), parsing (44 ms) and serialization (19 ms). Within the
+carry, preparation totals 138 ms and lot computation 57 ms; these are nested
+spans, not additional time. Fixed-point carry still may run several passes.
+On generic 20k, final preparation (99 ms), composition (66 ms), computation
+(45 ms) and parsing (44 ms) dominate. The separately planned typed R4 fusion
+can remove request parsing; settling carry in one pass remains a distinct
+accounting change.
+
+### Mutation equivalence record
+
+The speed pass retains every original tax recipe and adds
+`walk-last-constructor-failure-wins`, which reverses the consumed constructor
+outcomes to prove that the earliest constructor failure wins across chunks.
+Nine existing recipes move to equivalent mutations:
+
+| Recipe | Equivalent mutation after the refactor |
+| --- | --- |
+| `walk-entries-in-insertion-order` | Chain moves before outs instead of outs before moves. |
+| `walk-infinite-values-checked-first` | Raise for an infinite argument before the deferred constructor validates its other arguments. |
+| `compose-unit-cost-multiplies` | Multiply basis by quantity instead of dividing in the extracted acquisition helper. |
+| `run-method-gate-without-computation` | Remove the empty parsed-assets guard, formerly the empty input-list guard. |
+| `run-compute-failure-names-no-asset` | Drop the failing parsed asset's name, formerly the input asset's name. |
+| `carry-stops-after-a-pass` | Stop when pricing or blocks changed, at the new continue branch. |
+| `run-carry-pricing-unread` | Ignore carried pricing and disable settled-output reuse so it cannot mask the ignored pricing. |
+| `run-carry-blocks-unread` | Give the final pass an empty exclusion set at its new borrowed-book/settled-pass call. |
+| `run-carried-rows-unreported` | Omit carried rows from the response at its borrowed-book call. |
+
+The complete catalog kills all **187/187** mutations (150 Rust, 37 Python),
+after all 121 distinct unmutated test selections pass. No recipe is removed,
+no mutant survives and no mutated build fails. The nine re-anchored recipes
+above and the new constructor-order recipe are all in that kill set.
+
+### Python boundary verification
+
+The binding was rebuilt with `MATURIN_NO_INSTALL_RUST=1`, offline Cargo and
+`mise exec rust@1.99.1 uv@latest -- uv sync --locked --python 3.11`.
+`tests/test_tax_*` passes: **1,028 passed, 160 subtests passed, one expected
+skip** (the release binding has no panic-injection hook). This includes
+golden regeneration/certification, the live frozen-oracle comparison and
+the seeded prepare-stage comparisons. The rebuilt `kassiber_tax.ledger`
+also matches all four captured response texts.
+
+The full nine-lane shadow overlay observes **968 production calls compared
+with the frozen RP2 oracle**, with no unlisted differences and zero LD-5
+refusals. The test results include three custody comparison failures in
+`reports-contracts`; the complete overlay is therefore not green.
+
+| Shadow lane | Tests passed | Subtests passed | Skipped | Failed | Calls compared |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| core-accounting | 545 | 231 | 0 | 0 | 343 |
+| wallets-sync | 134 | 25 | 0 | 0 | 21 |
+| daemon-cli | 307 | 66 | 0 | 0 | 184 |
+| security-replication | 16 | 0 | 0 | 0 | 0 |
+| reports-contracts | 1,801 | 146 | 1 | 3 | 332 |
+| serial-network | 157 | 41 | 0 | 0 | 1 |
+| serial-daemon | 205 | 42 | 0 | 0 | 19 |
+| serial-regressions | 192 | 16 | 0 | 0 | 55 |
+| serial-integration | 27 | 4 | 10 | 0 | 13 |
+
+The requested `KASSIBER_TEST_TAX_ENGINE=census` runs also find no missing
+shadow-overlay modules or calls outside tests. Census records production
+routes; the shadow runs above perform the oracle comparisons.
+
+| Census lane | Tests passed | Subtests passed | Skipped | Failed | Calls / modules |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| core-accounting | 1,875 | 426 | 24 | 0 | 343 / 14 |
+| reports-contracts | 2,368 | 2,820 | 1 | 3 | 332 / 32 |
+
+The three failures are identical in shadow and census:
+
+- `tests/test_custody_gap_port.py::test_every_gap_generator_matches_and_counts_both_engines`, fanout parameter.
+- `tests/test_custody_interpretation_stage.py::test_every_generator_matches_and_counts_both_engines`, fanout parameter.
+- `tests/test_custody_interpretation_stage.py::test_full_stage_vectors_wrappers_and_refusals`.
+
+The fanout comparisons stop Python at interpretation or gaps but request
+Rust's full finalization. Seed 24 (`nan_value`) therefore gets Rust's
+`validation` refusal. Python's full projection also refuses that price.
+The four non-finite fanout cases return exactly the same Rust responses
+before and after the speed pass. The wrapper test additionally reaches an
+existing Rust finalization discrepancy: `migration_1_0` through
+`migration_1_6`, whose stored transaction-id array includes null, boolean,
+numeric, structured and surrogate values, return `ValueError` on both
+baseline and tip while Python's full projection succeeds. This discrepancy
+is retained and needs separate custody work; it is not a tax parity result.
+
+The local reproduction, `target/ledger-perf/repro-custody-stage.py --full`,
+checks those 11 refusals against a rebuilt baseline custody probe. With
+`finalized=False`, **2,094 fanout histories/permutations and all 106 wrapper
+vectors match** at their declared stage boundaries. No Python reference,
+harness or product code is changed. These three failures still prevent a
+fully green reports gate.
+
+There is an existing harness path assumption: four `SessionEndTest` tests
+expect a diagnostic containing `in /...`, but `tests/conftest.py` deliberately
+reports a test module inside the repository as a relative path. Reproduce
+without changing Python by setting `TMPDIR` to an existing absolute
+directory under this checkout's `target/`, then running:
+
+```sh
+mise exec rust@1.99.1 uv@latest -- uv run --locked python -m pytest \
+  tests/test_tax_shadow_harness.py::SessionEndTest -q
+```
+
+The initial direct run therefore has four path-text assertion failures and
+1,024 passes; the ledger comparisons themselves agree. The clean runs above
+used an unchanged disposable source copy under `target/ledger-perf/verify-src`
+and `TMPDIR` under `target/ledger-perf/tmp`, outside the tested source root.
+They imported the rebuilt binding from this checkout's Python 3.11 environment;
+all 1,034 relevant copied source, test, script and dependency files were
+checked byte for byte against the checkout. The mutation and verification
+build trees were removed after their summaries were saved.
+
+Local evidence remains under `target/ledger-perf/`: `measurements.json` and
+`measurements.jsonl` contain every timing, phase and load; `gates/` contains
+the test logs and summaries; `custody-repro-summary.json` and its input files
+record the baseline refusals. `repro-shadow-temp.sh` preserves the separate
+temporary-path harness reproduction.
+
+The final classification update leaves `tests/rust_port/dispositions.json`
+unchanged, and `scripts/python_test_shards.py run preflight --ci` passes
+**57/57** tests. The earlier checkpoint at `de836bd2` already passed fmt,
+both clippy runs, 871 workspace tests and the custody corpus/bench hash
+comparisons. This completion commit changes the report and backlog docs;
+the optimized engine remains at that verified source revision.
 
 ## Where the engine sits
 
@@ -55,6 +270,8 @@ versions").
 - Every engine value is a decimal with a sign, an integer coefficient, and an
   exponent, following Python's `decimal` module (General Decimal Arithmetic).
   Exponents are part of the result: `3.0E+2` and `300` are different outputs.
+  The type is the `kassiber-pydecimal` crate (`crates/pydecimal`), which the
+  backend crates share; generated CPython and RP2Decimal vectors check it.
 - Arithmetic uses 32 significant digits with round-half-even. Exact results
   keep their ideal exponent; inexact ones are rounded to 32 digits.
 - Comparisons follow RP2: `a` and `b` compare by rounding `a - b` half-even to
@@ -115,7 +332,7 @@ and one `TaxEngineLedgerInputs`, with the standard library only;
 
 | Field | Meaning |
 |---|---|
-| `policy` | `country` is `{"kind": "generic", "long_term_days": N}` (capped at `sys.maxsize`) or `{"kind": "at"}`. `method` is the profile's method (`fifo`, `lifo`, `hifo`, `lofo`, `moving_average`, or `moving_average_at`) when its policy allows it, else `null`; `method_label` is the stored method text for the method gate's message. `require_coarse_review` is the profile's opt-in |
+| `policy` | `country` is `{"kind": "generic", "long_term_days": N}` (capped at `sys.maxsize`), `{"kind": "at"}`, `{"kind": "us"}`, or `{"kind": "rules", ...}` for a registry country with shared engine rules ([rules countries](#rules-countries)); the [country registry](tax-countries.md) picks it. `method` is the profile's method (`fifo`, `lifo`, `hifo`, `lofo`, `moving_average`, `moving_average_at`, or the matching methods `moving_average_fifo_period` and `uk_share_matching`) when its country allows it, else `null`; `method_label` is the stored method text for the method gate's message. `require_coarse_review` is the profile's opt-in. `pool_scope` is `"wallet"` for a profile on the wallet pool scope and absent otherwise (global), so global requests keep their bytes |
 | `config` | The names the lot engine's membership checks accept: the assets, wallet labels, and profile label, sorted, stripped, and read as RP2 read its INI file |
 | `holder` | The profile label, unstripped, as entries carry it |
 | `wallets` | `{id, label}` per wallet reference, in order; account fields stay in Python |
@@ -173,7 +390,8 @@ through branches no finalized row reaches.
 
 `ledger` (`tax-engine/core/src/ledger/run.rs`) runs the phase-3 adapter's
 pipeline in its order, with the rows grouped by asset in first-appearance
-order:
+order. Independent pure work may run concurrently, but its results and
+failures are consumed in that order:
 
 1. **Generic rail carry** (generic books, `ledger/carry.rs`). A
    carrying-value pair between BTC and LBTC whose legs are rows prices both
@@ -188,8 +406,10 @@ order:
    `source_basis_unavailable`, and its rows (a direct payout's target-asset
    disposal too) leave every later pass. A priced row's value and rate are
    `format(x.normalize(), "f")` of the basis and of the basis per unit of its
-   amount, read back as exact pricing.
-2. **First prepare pass**, one asset after another: normalize
+   amount, read back as exact pricing. When a pass settles and its pricing
+   and excluded rows match the final pass's inputs, that pass's stages and
+   computed outputs are reused for the final run.
+2. **First prepare pass**, with results consumed in asset order: normalize
    (`ledger/normalize.rs`, with the Austrian regime tracker in
    `ledger/regimes.rs`), then the walk (`ledger/order.rs`, `walk.rs`,
    `describe.rs`). The walk orders the asset's events and moves (acquisitions,
@@ -321,6 +541,133 @@ types, and the quarantine reasons and detail kinds it emits.
 `tests/test_tax_ledger_contract.py` compares them with the copies Python still
 spells (`transaction_kinds`, `journal_markers`, `austrian`,
 `exit_tax.RECOGNIZED_ENTRY_TYPES`, `quarantine_catalog`).
+
+## Countries and pool scopes
+
+The lot engine's country decides the holding period (`Country::is_long_term`):
+the generic country counts whole elapsed days against `long_term_days`
+(RP2's rule); Austria is never long-term; the United States is long-term
+when held more than one year by UTC calendar date: the disposal's date is
+after the acquisition's anniversary, 29 February's anniversary being 28
+February (`calendar::held_more_than_one_year` in the registry crate, IRS
+Publications 544 and 550). RP2's US plugin counts days instead;
+`tests/us_fixtures.rs` checks every other value against it and these
+anniversary-window terms against the IRS rule
+([US specification](tax-country-us.md#holding-period)).
+
+### Rules countries
+
+A registry country with shared engine rules (`engine` in its
+[registry entry](tax-countries.md#the-registry)) is computed as
+`{"kind": "rules", ...}`, in schema 1 and 2 alike. Each field is one shared
+feature; the registry builds them from the entry
+(`Country::engine_country` in `crates/tax-countries`), the custody request
+builder sends them (`crates/custody/src/ledger_request/config.rs`) and the
+country vector runner uses the same answer, and generic, Austrian and US
+books never send this kind, so their requests and results are unchanged.
+
+| Field | Meaning |
+|---|---|
+| `timezone` | The registry's IANA zone. Its local dates count the holding period. Only the registry's calendars exist (`crates/tax-countries/src/calendar.rs`: UTC, and from 1996 the EU-rule zones Europe/Berlin, Dublin, London, Madrid, Vienna and Zurich, and Asia/Tokyo; checked against zoneinfo); another zone is a `RequestError`, and an instant before 1996 in a non-UTC zone a `ValueError` naming the row, never a guessed offset |
+| `holding` | `never` (every gain short-term) or `more_than_one_year`: long-term once the local disposal date is after the local acquisition date's anniversary, 29 February's anniversary being 28 February. The United States is this rule in UTC; Germany's § 23 period is its negation (taxable while not long-term) |
+| `tax_year_start` | The tax year's first day, `MM-DD` in the zone (`01-01` when absent). A rules country's `yearly` totals and ledger `tax_summary` count the tax year in its zone, named by the year of its first day (the United Kingdom's 2024-25 is 2024); other countries keep the year in the timestamp's own offset |
+| `pool_scope` | The only pool scope the country allows (`wallet` for Germany, `global` for the United Kingdom, Spain, Ireland and Japan), from a registry entry with a single `pool_scopes` value; absent when it allows both. A computation on the other scope fails (`ValueError`, stage `compute`) instead of taking the wrong pool's lots |
+| `fee_units` | What fee units paid in the asset are. `basis` (absent; the generic rule): their basis leaves without a gain, as a fee or transfer fee whose proceeds are its basis, and a sale's fee units are part of the sale. `disposal`: fee and transfer-fee entries realize their gain at the fee's value (the event's spot), a sale's fee units stay part of the sale (one row at the sale's price), and the tax summary keeps its `fee` and `move` rows. `disposal_before_sale`: as `disposal`, and the walk books a sale's fee units as a fee-only spend just before the sale, so every method takes them first; the sale then carries the fee's value as `fiat_fee` with no fee units, and each of its fragments deducts its share by quantity as `expenses` (in `gain_losses`, `yearly`, and the ledger's fragments, realized entries and summary rows, present only then) |
+| `swap_values` | The values of a taxable cross-asset exchange: a cross-asset pair that is not a carrying-value one, whose legs are an outbound and an inbound row, each in no other such pair. `own` (absent; the generic rule): each leg at its own value. `received_given`: the given leg's proceeds are the received leg's value, the received leg's cost the given leg's. `received`: both are the received leg's value. `higher`: both are the higher value. Each value is the leg's own (its stored value, else amount × price); when one is missing (or infinite), every mode but `own` uses the other's for both, pricing an unpriced leg at it per unit, so the leg is not quarantined `missing_spot_price`. Normalize applies it (`Normalizer::swap_value`); a leg's fee units keep its own price |
+| `gifts_given`, `donations_given` | An outbound row whose kind contains `gift` (`donat`): `quarantine` (absent; the generic `non_sale_disposal_kind`) or `market_value`, a disposal (`GIFT`, `DONATE`) at the row's value, which no longer taints later disposals. Lost, stolen and other dispositions stay quarantined. A booked gift's fee units stay part of it, whatever `fee_units` says about sales |
+| `gifts_received` | An inbound row whose kind contains `gift`: `acquisition` (absent; at its value) or `quarantine`, refused as `acquisition_valuation_unsupported` (detail `valuation_mode: donor_basis`) because the donor's date and cost carry over, and tainting later disposals (`basis_provenance_incomplete`) |
+| `gift_losses` | `deductible` (absent) or `not_deductible`: a booked gift's or donation's realized entry with a loss carries `loss_deductible: false` (absent on every other entry); the loss is still computed |
+| `refused_receipts` | Kinds the country does not book until a reviewer settles them, each `{"kinds": [...], "code": "...", "detail": "..."}` (absent when none): a row of a listed kind (compared exactly with the normalized kind) is held in normalize, before its price is asked for, as `acquisition_valuation_unsupported` with the country's `code` and `detail` in the quarantine detail, and taints the asset's later disposals. Germany refuses `airdrop` (`airdrop_classification_required`) and hard forks (`hardfork_cost_split_unsupported`), Switzerland hard forks (`hardfork_treatment_unsupported`). A rule with `"direction": "outbound"` (absent: inbound, so inbound rules keep their bytes) reads outbound rows instead: a row whose kind contains one of its kinds as a token (`lost` matches `lost_keys`) is held the same way as `non_sale_disposal_kind`, the reason the generic rules give such rows, so each kind must be a non-sale disposal token (another is a `RequestError`). Spain refuses lost, stolen and donated coins this way, Japan lost and stolen coins |
+| `zero_cost_kinds` | Inbound kinds booked as a plain acquisition (`BUY`) at zero price and basis, with no income, whatever the row's price (Japan's hard forks); the constructor accepts the zero only for these (absent when none) |
+| `below_market` | `price` (absent), `market_value` (a sale or payment whose row carries `market_value` above its value books at the market value; Spain) or `seventy_percent` (one below 70 % of `market_value` books at 70 % of it, exactly 70 % is not below; Japan). Swap legs and gifts keep their own values. The realized entry records `valuation` (`market_value`, `seventy_percent`) |
+
+A ledger row may also carry `market_value` (the market value of its units
+apart from its own value); it is absent and left out unless a rules
+country's caller sends it, and today only the vector runner does. A sale's
+fiat commission is part of its value, as for every country: a Kassiber
+transaction has one fiat value.
+
+### Matching methods
+
+A lot method answers one disposal's "which lot next". A country method
+that needs the whole asset (the United Kingdom's same-day, 30-day and
+section 104 matching; Japan's total and moving averages) implements the
+`Matching` hook (`src/matching.rs`) instead: `compute_parsed` hands it the
+prepared asset, the country (its zone and calendar) and the pool scope
+before any lot method runs, and derives every output from the fragments
+it returns, each naming a lot (whose acquisition dates its holding period)
+and optionally a per-unit basis replacing the lot's. The Austrian swap
+runner refuses a matching method.
+
+`moving_average_fifo_period` (Germany, BMF 6 March 2025 Rn. 61-62) is the
+first: the wallet pass takes each wallet's portions FIFO, so their dates
+decide the holding period, at the wallet's moving average cost per unit
+(acquisitions add their cost, disposals take the average out, a move
+carries its source's average to its destination, an emptied wallet keeps no
+cost). Its holdings are each wallet's units at that cost. It needs the
+wallet scope and fails on the global one.
+
+`uk_share_matching` (the United Kingdom, TCGA92 s105, s106A, s104;
+`src/share_matching.rs`) groups each token's taxable events by local day in
+the rules' zone: a day's disposals are one disposal, matched first with the
+same day's acquisitions at their average cost, then with acquisitions in the
+30 days after (earlier disposal days first, earlier acquisition days first
+within the window), then with the section 104 pool at its average cost,
+which every acquisition's unmatched remainder joins on its day. Each match
+becomes fragments of the day's events in event order, naming the
+acquisition day's lots (or the pool's, in the order they joined it) with the
+match's cost per unit; a 30-day match names a lot acquired after its
+disposal, which no lot method does, so the method checks its fragments
+without the event-after-lot rule. The open positions carry the pool's
+average cost, so holdings read the pool. A day the pool cannot cover fails
+(`ValueError`, RP2's lots-exhausted message with the day); the method needs
+a rules country (its calendar) and the global scope.
+
+Japan's `jp_total_average` and `jp_moving_average` (`JpAverage`) average
+over every wallet (the wallet scope fails): the total average prices each
+disposal of a tax year in the rules' zone at `(opening value + the year's
+acquisitions) × quantity ÷ (opening quantity + the year's quantity)` and
+carries the closing value unrounded; the moving average revises the unit
+cost at each acquisition and leaves the book value after a disposal at
+`ROUNDUP(unit × quantity left, 0)`, the cost being the drop. Fragments take
+FIFO portions of the lots and carry their share of the disposal's cost as
+`cost_override` (the last portion the remainder); open positions are each
+lot at the closing unit cost, so holdings are the closing value.
+
+`tests/country_rules.rs` pins each feature on small books, through schema 1
+and the `ledger` operation. A schema-1 caller under `disposal_before_sale`
+splits its sales itself: a sale that still carries fee units has no
+expenses.
+
+`pool_scope` (`global` by default, in schema 1 too) chooses where a
+disposal takes its lots:
+
+- **global**: every lot of the asset (RP2's universal application), as
+  before.
+- **wallet** (`src/wallets.rs`): only the disposing wallet's lots. It is
+  country-neutral: the United States' per-wallet identification and
+  Germany's per-wallet order of use are the same pass. One pass
+  over every entry by instant (acquisitions, then moves, then disposals at
+  one instant) keeps each wallet's portions of the lots; a move's fee
+  leaves the source first by the method, then its principal, which arrives
+  as portions of the same lots with their basis and acquisition time.
+  Fragments name the original lot, so open positions, sold percentages and
+  composition read them unchanged, and the asset's output adds
+  `wallet_holdings` (each wallet's remaining quantity and own basis), which
+  composition books as holdings instead of an allocation at the average.
+  Only the lot methods have a wallet form; a moving average, an unpriced
+  move fee and a wallet that lacks the units fail.
+
+RP2's own per-wallet application is not the model: its per-wallet pass can
+dispose of a lot its transfer analysis already moved to another wallet
+([US-RP2-PER-WALLET](tax-country-us.md#identification-and-pools)). Its
+results are the oracle only on histories where its passes agree
+(`tax-engine/scripts/gen_us_fixtures.py`).
+
+A US book on the global scope fails when it has a disposal on or after
+2025-01-01 UTC: from 2025 units are identified per wallet or account
+(Treas. Reg. § 1.1012-1(j)), and the Rev. Proc. 2024-28 transition is not
+modelled.
 
 ## Schema 1: the fixture API
 
@@ -525,3 +872,8 @@ no lot.
 The engine performs no I/O, network access, or logging and keeps no state
 between calls. Production does not write RP2's temporary configuration file;
 only the oracle on RP2 does, in tests.
+
+
+The shared PyO3 module also exposes the independent R2 `custody` operation.
+Its raw request and stage response are specified in [custody engine](custody-engine.md).
+It does not change the `ledger` request or allow raw observations into the tax engine.

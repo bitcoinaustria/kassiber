@@ -11,13 +11,9 @@ use crate::model::TsInput;
 const US_PER_SECOND: i64 = 1_000_000;
 const US_PER_DAY: i64 = 86_400 * US_PER_SECOND;
 
-/// A proleptic Gregorian calendar date.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct CivilDate {
-    pub year: i32,
-    pub month: u32,
-    pub day: u32,
-}
+/// A proleptic Gregorian calendar date: the registry's, whose calendars
+/// count the countries' holding periods.
+pub use kassiber_tax_countries::calendar::Date as CivilDate;
 
 /// RP2's `MIN_DATE`: earlier entries are invisible to every iteration.
 pub const MIN_VISIBLE_DATE: CivilDate = CivilDate {
@@ -25,64 +21,6 @@ pub const MIN_VISIBLE_DATE: CivilDate = CivilDate {
     month: 1,
     day: 1,
 };
-
-impl CivilDate {
-    /// Parses `date.isoformat()` output (`YYYY-MM-DD`).
-    pub fn parse(text: &str) -> Option<Self> {
-        let bytes = text.as_bytes();
-        if bytes.len() != 10 || bytes[4] != b'-' || bytes[7] != b'-' {
-            return None;
-        }
-        let number = |range: std::ops::Range<usize>| -> Option<u32> {
-            let part = text.get(range)?;
-            if !part.bytes().all(|b| b.is_ascii_digit()) {
-                return None;
-            }
-            part.parse().ok()
-        };
-        let year = i32::try_from(number(0..4)?).ok()?;
-        let month = number(5..7)?;
-        let day = number(8..10)?;
-        if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
-            return None;
-        }
-        let date = CivilDate { year, month, day };
-        // Out-of-range days (February 30) do not survive the round trip.
-        (CivilDate::from_days(date.to_days()) == date).then_some(date)
-    }
-
-    /// Days since 1970-01-01 (negative before).
-    pub fn to_days(self) -> i64 {
-        let year = i64::from(self.year) - i64::from(self.month <= 2);
-        let era = year.div_euclid(400);
-        let year_of_era = year - era * 400;
-        let month = i64::from(self.month);
-        let day_of_year = (153 * (if month > 2 { month - 3 } else { month + 9 }) + 2) / 5
-            + i64::from(self.day)
-            - 1;
-        let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
-        era * 146_097 + day_of_era - 719_468
-    }
-
-    /// The date `days` after 1970-01-01.
-    pub fn from_days(days: i64) -> Self {
-        let z = days + 719_468;
-        let era = z.div_euclid(146_097);
-        let day_of_era = z - era * 146_097;
-        let year_of_era =
-            (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
-        let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
-        let mp = (5 * day_of_year + 2) / 153;
-        let day = day_of_year - (153 * mp + 2) / 5 + 1;
-        let month = if mp < 10 { mp + 3 } else { mp - 9 };
-        let year = year_of_era + era * 400 + i64::from(month <= 2);
-        CivilDate {
-            year: year as i32,
-            month: month as u32,
-            day: day as u32,
-        }
-    }
-}
 
 /// A parsed, timezone-aware timestamp.
 #[derive(Clone, Debug)]
@@ -175,6 +113,11 @@ impl Timestamp {
     }
 }
 
+/// The UTC calendar date of an instant.
+pub fn utc_date(us: i64) -> CivilDate {
+    CivilDate::from_days(us.div_euclid(US_PER_DAY))
+}
+
 /// Whole elapsed days from `earlier` to `later`, floored like
 /// `timedelta.days`.
 pub fn elapsed_days(later: &Timestamp, earlier: &Timestamp) -> i128 {
@@ -184,6 +127,17 @@ pub fn elapsed_days(later: &Timestamp, earlier: &Timestamp) -> i128 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn date(text: &str) -> CivilDate {
+        CivilDate::parse(text).unwrap()
+    }
+
+    #[test]
+    fn utc_dates_floor_the_instant() {
+        assert_eq!(utc_date(-1), date("1969-12-31"));
+        assert_eq!(utc_date(0), date("1970-01-01"));
+        assert_eq!(utc_date(US_PER_DAY), date("1970-01-02"));
+    }
 
     #[test]
     fn civil_dates_round_trip() {

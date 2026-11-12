@@ -54,6 +54,7 @@ use serde_json::{Map, Value};
 use crate::decimal::{Decimal, DecimalError};
 use crate::error::{EngineResult, ErrorClass};
 use crate::manifest::{DetailKind, QuarantineReason, REGIME_BASIS_ELECTION};
+use crate::model::SwapValues;
 use crate::num;
 
 use super::regimes::{self, Tracked};
@@ -565,6 +566,24 @@ impl<'b, 'a> Normalizer<'b, 'a> {
             );
             return Ok(());
         }
+        if let Some(refused) = self.book.refused_receipt(row.direction, &row.kind) {
+            // Before pricing: the country refuses the kind whatever its
+            // value, and the hold taints the asset's later disposals.
+            let mut fields = base();
+            fields.insert(String::from("kind"), Value::from(row.kind.as_str()));
+            fields.insert(String::from("code"), Value::from(refused.code.as_str()));
+            fields.insert(String::from("detail"), Value::from(refused.detail.as_str()));
+            self.quarantine(
+                index,
+                match row.direction {
+                    Direction::Inbound => QuarantineReason::AcquisitionValuationUnsupported,
+                    Direction::Outbound => QuarantineReason::NonSaleDisposalKind,
+                },
+                DetailKind::Plain,
+                fields,
+            );
+            return Ok(());
+        }
         let (quantity, required_for) = match row.direction {
             Direction::Inbound => (&amount, "acquisition"),
             Direction::Outbound => {
@@ -577,7 +596,25 @@ impl<'b, 'a> Normalizer<'b, 'a> {
                 (quantity, "disposal")
             }
         };
-        let Some(spot) = spot_price(row, quantity)? else {
+        // A zero-cost acquisition has no price by rule, whatever the row
+        // records.
+        let zero_cost = self.book.kinds.zero_cost(row.direction, &row.kind);
+        let mut spot = if zero_cost {
+            Some(Fiat::Finite(num::zero()))
+        } else {
+            spot_price(row, quantity)?
+        };
+        let swapped = match self.book.swap_partners.get(&index) {
+            Some(&(partner, given)) => {
+                self.swap_value(row, &amount, spot.as_ref(), partner, given)?
+            }
+            None => None,
+        };
+        if let (Some(value), None) = (&swapped, &spot) {
+            // An unpriced leg takes the other leg's value, per unit.
+            spot = Some(Fiat::Finite(num::div(value, &amount)?));
+        }
+        let Some(spot) = spot else {
             let mut fields = base();
             fields.insert(String::from("required_for"), Value::from(required_for));
             self.quarantine(
@@ -588,7 +625,11 @@ impl<'b, 'a> Normalizer<'b, 'a> {
             );
             return Ok(());
         };
-        let fiat_value = fiat_value(row, &amount, &spot)?;
+        let fiat_value = match swapped {
+            Some(value) => Fiat::Finite(value),
+            None if zero_cost => Fiat::Finite(num::zero()),
+            None => fiat_value(row, &amount, &spot)?,
+        };
         let (at_regime, at_regime_basis, at_swap_link) = if self.austrian {
             let (regime, basis) = self.event_regime(index)?;
             // `if linked:`, so an empty link is none.
@@ -612,6 +653,50 @@ impl<'b, 'a> Normalizer<'b, 'a> {
         });
         self.out.ordered_items.push(Item::Event(index));
         Ok(())
+    }
+
+    /// The value a leg of a taxable cross-asset exchange books at under the
+    /// country's swap values (`docs/reference/tax-engine.md#rules-countries`):
+    /// the proceeds of the given leg, or the cost of the received one. Each
+    /// value is the leg's own market value, read as `event` reads it; one
+    /// that is missing or not finite leaves the other in its place, and
+    /// with neither the leg keeps its own (unpriced) treatment.
+    fn swap_value(
+        &self,
+        row: &Row,
+        amount: &Decimal,
+        spot: Option<&Fiat>,
+        partner: usize,
+        given: bool,
+    ) -> EngineResult<Option<Decimal>> {
+        let finite = |value: Fiat| match value {
+            Fiat::Finite(value) => Some(value),
+            Fiat::Infinity => None,
+        };
+        let own = match spot {
+            Some(Fiat::Infinity) => return Ok(None),
+            Some(spot) => finite(fiat_value(row, amount, spot)?),
+            None => None,
+        };
+        let partner_row = &self.rows[partner];
+        let partner_amount = btc(partner_row.amount_msat.into())?;
+        let other = match spot_price(partner_row, &partner_amount)? {
+            Some(spot) => finite(fiat_value(partner_row, &partner_amount, &spot)?),
+            None => None,
+        };
+        let (received, given_value) = if given { (other, own) } else { (own, other) };
+        Ok(match self.book.country.swap_values() {
+            SwapValues::Own => None,
+            // The given leg's proceeds are what was received; the received
+            // leg's cost is what was given.
+            SwapValues::ReceivedGiven if given => received.or(given_value),
+            SwapValues::ReceivedGiven => given_value.or(received),
+            SwapValues::Received => received.or(given_value),
+            SwapValues::Higher => match (received, given_value) {
+                (Some(a), Some(b)) => Some(if a >= b { a } else { b }),
+                (a, b) => a.or(b),
+            },
+        })
     }
 
     /// An Austrian event's regime and why it has it (`:2503-2528`): an

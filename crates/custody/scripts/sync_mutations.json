@@ -1,0 +1,78 @@
+[
+ {
+  "id": "custody-conflict-issue-remediation",
+  "file": "crates/custody/src/components/remediation.rs",
+  "find": "        \"remediation\": remediation,\n",
+  "replace": "",
+  "expect_failing": [
+   "components_membership_conflict",
+   "components_lineage_conflict",
+   "components_membership_empty_anchor",
+   "components_component_order",
+   "components_lineage_ties"
+  ],
+  "rule": "A materialized membership conflict carries the shared remediation."
+ },
+ {
+  "id": "custody-remediation-component-ids",
+  "file": "crates/custody/src/components/remediation.rs",
+  "find": "        match conflict.get(\"component_id\").filter(|v| truth(v)) {",
+  "replace": "        match conflict.get(\"component_id\").filter(|_| false) {",
+  "expect_failing": [
+   "components_membership_conflict",
+   "components_lineage_conflict",
+   "components_membership_empty_anchor",
+   "components_component_order",
+   "components_lineage_ties"
+  ],
+  "rule": "The remediation targets the conflicting components by full id."
+ },
+ {
+  "id": "custody-remediation-transaction-ids",
+  "file": "crates/custody/src/components/remediation.rs",
+  "find": "        if let Some(id) = conflict.get(\"transaction_id\").filter(|v| truth(v)) {",
+  "replace": "        if let Some(id) = conflict.get(\"transaction_id\").filter(|_| false) {",
+  "expect_failing": [
+   "components_membership_conflict",
+   "components_lineage_conflict",
+   "components_membership_empty_anchor",
+   "components_component_order",
+   "components_lineage_ties"
+  ],
+  "rule": "The remediation targets the anchored transactions by full id."
+ },
+ {
+  "id": "custody-remediation-several-components",
+  "file": "crates/custody/src/components/remediation.rs",
+  "find": "    if component_ids.len() > 1 {",
+  "replace": "    if component_ids.len() > 2 {",
+  "expect_failing": [
+   "components_lineage_ties"
+  ],
+  "rule": "Several conflicting components add the supersede-all-but-one advice."
+ },
+ {
+  "id": "custody-remediation-first-component",
+  "file": "crates/custody/src/components/remediation.rs",
+  "find": "    let first = component_ids.iter().next().cloned();",
+  "replace": "    let first = component_ids.iter().last().cloned();",
+  "expect_failing": [
+   "components_lineage_ties"
+  ],
+  "rule": "The arguments hint names the first conflicting component in sorted order."
+ },
+ {
+  "id": "custody-remediation-action",
+  "file": "crates/custody/src/components/remediation.rs",
+  "find": "        \"revise_conflicting_component\",",
+  "replace": "        \"revise_component\",",
+  "expect_failing": [
+   "components_membership_conflict",
+   "components_lineage_conflict",
+   "components_membership_empty_anchor",
+   "components_component_order",
+   "components_lineage_ties"
+  ],
+  "rule": "The membership remediation action is revise_conflicting_component."
+ }
+]

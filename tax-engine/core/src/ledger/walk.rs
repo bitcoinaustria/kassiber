@@ -41,36 +41,45 @@
 
 use std::collections::{HashMap, HashSet};
 use std::iter;
+use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 
 use serde_json::{json, Map, Value};
 
 use crate::decimal::{Decimal, DecimalError};
-use crate::entry::Entry;
+use crate::engine::Gifts;
+use crate::entry::{Entry, TransactionType};
 use crate::error::{EngineError, EngineResult};
 use crate::manifest::{
     inbound_transaction_type, kind_has_token, type_name, DetailKind, QuarantineReason,
     AT_ZERO_COST_KINDS, INBOUND_KIND_TYPES, INCOME_LIKE_KIND_TOKENS, NON_SALE_DISPOSAL_KIND_TOKENS,
 };
-use crate::model::{ConfigSpec, Dec, EntryInput, EntryKind};
+use crate::model::{BelowMarket, ConfigSpec, CountryFacts, Dec, EntryInput, EntryKind, FeeUnits};
 use crate::num;
+use crate::par;
 
 use super::describe::{self, EventNotes, TransferLeg, TransferNotes};
 use super::normalize::{Event, Item, Normalized, Quarantine, Transfer};
 use super::order::walk_order;
 use super::request::{Country, Direction, IntraPair, Regime, Row};
 use super::response::{AuditOut, Fiat};
-use super::run::{AssetRows, Book};
+use super::run::{AssetRows, Book, KindRules};
 use super::text::entry_text;
 
-/// An entry the walk built: the lot engine's input, with its text, the
-/// constructed entry (its stored and derived values, which composition
-/// reads; it keeps no text), and the row whose time the entry has (an
-/// event's row, a move's out leg).
+/// An entry the walk built: the lot engine's input, with its text, and
+/// the row whose time the entry has (an event's row, a move's out leg).
 #[derive(Clone, Debug)]
 pub(crate) struct BuiltEntry {
     pub input: EntryInput,
-    pub entry: Entry,
     pub row: usize,
+}
+
+/// The entries the walk built, in order: their inputs, and the constructed
+/// entries (their stored and derived values, which composition reads, and
+/// the same text), which the lot engine computes on as built.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct BuiltEntries {
+    pub built: Vec<BuiltEntry>,
+    pub entries: Vec<Entry>,
 }
 
 /// One asset, walked (the adapter's `_RP2PreparedInput`).
@@ -78,7 +87,7 @@ pub(crate) struct BuiltEntry {
 pub(crate) struct Walked {
     /// The inbound, then the outbound, then the move entries, each in walk
     /// order; `None` when the asset has no inbound entry.
-    pub entries: Option<Vec<BuiltEntry>>,
+    pub entries: Option<BuiltEntries>,
     /// The gates' quarantines, in walk order. Normalize's are not repeated.
     pub quarantines: Vec<Quarantine>,
     /// One row per booked move, in walk order.
@@ -205,6 +214,7 @@ fn entry_input(
         crypto_received: None,
         ts: row.ts.input(),
         text: String::new(),
+        country: CountryFacts::default(),
     }
 }
 
@@ -213,7 +223,12 @@ fn entry_input(
 /// an inbound kind that looks like unlisted income, on an Austrian book an
 /// airdrop or hard fork, and an outbound disposition that is not a sale.
 /// An event's time is compared whatever it is, empty or not.
-fn lot_contamination(rows: &[Row], normalized: &Normalized, austrian: bool) -> Option<String> {
+fn lot_contamination(
+    rows: &[Row],
+    normalized: &Normalized,
+    austrian: bool,
+    gifts: Gifts,
+) -> Option<String> {
     let mut earliest = normalized.earliest_lot_contamination_at.clone();
     for event in &normalized.events {
         let row = &rows[event.row];
@@ -222,8 +237,11 @@ fn lot_contamination(rows: &[Row], normalized: &Normalized, austrian: bool) -> O
             Direction::Inbound => {
                 (!is_listed_kind(kind) && kind_has_token(kind, &INCOME_LIKE_KIND_TOKENS))
                     || (austrian && AT_ZERO_COST_KINDS.contains(&kind))
+                    || gifts.refuses_inbound(kind)
             }
-            Direction::Outbound => kind_has_token(kind, &NON_SALE_DISPOSAL_KIND_TOKENS),
+            Direction::Outbound => {
+                kind_has_token(kind, &NON_SALE_DISPOSAL_KIND_TOKENS) && !gifts.books_outbound(kind)
+            }
         };
         let time = row.ts.raw();
         if contaminates && earliest.as_deref().is_none_or(|since| time < since) {
@@ -231,6 +249,24 @@ fn lot_contamination(rows: &[Row], normalized: &Normalized, austrian: bool) -> O
         }
     }
     earliest
+}
+
+/// The value a sale or payment of `value` books at under the country's
+/// below-market rule when its units were worth `market`, and why; `None`
+/// keeps its value.
+fn below_market(
+    rule: BelowMarket,
+    value: &Decimal,
+    market: &Decimal,
+) -> EngineResult<Option<(Decimal, &'static str)>> {
+    Ok(match rule {
+        BelowMarket::Price => None,
+        BelowMarket::MarketValue => (market > value).then(|| (market.clone(), "market_value")),
+        BelowMarket::SeventyPercent => {
+            let floor = num::mul(market, &Decimal::from_canonical("7E-1")?)?;
+            (*value < floor).then_some((floor, "seventy_percent"))
+        }
+    })
 }
 
 /// Whether the kind table lists `kind`.
@@ -243,6 +279,15 @@ struct Walker<'w, 'a> {
     pairs: &'a [IntraPair],
     asset: &'a str,
     austrian: bool,
+    /// What the country's fee units are.
+    fee_units: FeeUnits,
+    /// What the country's gifts and donations are.
+    gifts: Gifts,
+    /// What the country decides by kind, and its below-market valuation.
+    kinds: KindRules,
+    /// The legs of taxable cross-asset exchanges, which their swap values
+    /// price instead of the below-market rule.
+    swap_rows: HashSet<usize>,
     /// The profile label, unstripped, as the adapter passes it.
     holder: Option<&'a str>,
     config: &'w ConfigSpec,
@@ -253,9 +298,11 @@ struct Walker<'w, 'a> {
     first_drop_at: Option<String>,
     /// The next entry's row number (`row_index`).
     row_index: i64,
-    ins: Vec<BuiltEntry>,
-    outs: Vec<BuiltEntry>,
-    moves: Vec<BuiltEntry>,
+    /// The constructor calls the walk made, in order.
+    calls: Vec<Call>,
+    ins: Vec<(BuiltEntry, Entry)>,
+    outs: Vec<(BuiltEntry, Entry)>,
+    moves: Vec<(BuiltEntry, Entry)>,
     quarantines: Vec<Quarantine>,
     audit: Vec<AuditOut>,
 }
@@ -273,12 +320,21 @@ impl<'w, 'a> Walker<'w, 'a> {
             pairs: &book.request.intra_pairs,
             asset: part.asset,
             austrian,
+            fee_units: book.country.fee_units(),
+            gifts: book.country.gifts(),
+            kinds: book.kinds.clone(),
+            swap_rows: if book.kinds.below_market.is_price() {
+                HashSet::new()
+            } else {
+                book.swap_partners.keys().copied().collect()
+            },
             holder: book.request.holder.as_deref(),
             config,
             accounts: Accounts::default(),
             priced: num::zero(),
-            first_drop_at: lot_contamination(book.rows, normalized, austrian),
+            first_drop_at: lot_contamination(book.rows, normalized, austrian, book.country.gifts()),
             row_index: 1,
+            calls: Vec::new(),
             ins: Vec::new(),
             outs: Vec::new(),
             moves: Vec::new(),
@@ -288,6 +344,58 @@ impl<'w, 'a> Walker<'w, 'a> {
     }
 
     fn run(mut self, normalized: &'w Normalized) -> EngineResult<Walked> {
+        // A failure of the walk, or a panic, comes after every constructor
+        // call it made, so the first of those that fails is raised first.
+        let visited = catch_unwind(AssertUnwindSafe(|| self.visit(normalized)));
+        let config = self.config;
+        let constructed = par::map(&self.calls, 128, |call| construct(call, config));
+        let mut built = Vec::with_capacity(constructed.len());
+        for outcome in constructed {
+            built.push(par::unwrap(outcome)?);
+        }
+        match visited {
+            Ok(visited) => visited?,
+            Err(panic) => resume_unwind(panic),
+        }
+        for (call, (entry, text)) in std::mem::take(&mut self.calls).into_iter().zip(built) {
+            let mut input = call.input;
+            input.text = text;
+            let kind = entry.kind;
+            let built = (
+                BuiltEntry {
+                    input,
+                    row: call.row,
+                },
+                entry,
+            );
+            match kind {
+                EntryKind::In => self.ins.push(built),
+                EntryKind::Out => self.outs.push(built),
+                EntryKind::Intra => self.moves.push(built),
+            }
+        }
+        let entries = (!self.ins.is_empty()).then(|| {
+            let count = self.ins.len() + self.outs.len() + self.moves.len();
+            let mut entries = BuiltEntries {
+                built: Vec::with_capacity(count),
+                entries: Vec::with_capacity(count),
+            };
+            for (built, entry) in self.ins.into_iter().chain(self.outs).chain(self.moves) {
+                entries.built.push(built);
+                entries.entries.push(entry);
+            }
+            entries
+        });
+        Ok(Walked {
+            entries,
+            quarantines: self.quarantines,
+            audit: self.audit,
+        })
+    }
+
+    /// Visits the items in walk order: the gates, the balance mirror, and
+    /// the constructor calls.
+    fn visit(&mut self, normalized: &'w Normalized) -> EngineResult<()> {
         let order = walk_order(self.rows, normalized);
         let events: HashMap<usize, &Event> = normalized
             .events
@@ -322,17 +430,7 @@ impl<'w, 'a> Walker<'w, 'a> {
                 }
             }
         }
-        let entries = (!self.ins.is_empty()).then(|| {
-            let mut entries = self.ins;
-            entries.append(&mut self.outs);
-            entries.append(&mut self.moves);
-            entries
-        });
-        Ok(Walked {
-            entries,
-            quarantines: self.quarantines,
-            audit: self.audit,
-        })
+        Ok(())
     }
 
     fn quarantine(&mut self, row: usize, reason: QuarantineReason, detail: Map<String, Value>) {
@@ -617,6 +715,26 @@ impl<'w, 'a> Walker<'w, 'a> {
             );
             return Ok(());
         }
+        if self.gifts.refuses_inbound(kind) {
+            let fields = detail([
+                ("wallet", label_value(wallet)),
+                ("asset", Value::from(self.asset)),
+                ("kind", Value::from(kind)),
+                ("valuation_mode", Value::from("donor_basis")),
+                (
+                    "detail",
+                    Value::from(
+                        "A received gift keeps the donor's acquisition date and cost, which the book does not record.",
+                    ),
+                ),
+            ]);
+            self.quarantine(
+                event.row,
+                QuarantineReason::AcquisitionValuationUnsupported,
+                fields,
+            );
+            return Ok(());
+        }
         if !is_listed_kind(kind) && kind_has_token(kind, &INCOME_LIKE_KIND_TOKENS) {
             let fields = detail([
                 ("wallet", label_value(wallet)),
@@ -631,7 +749,14 @@ impl<'w, 'a> Walker<'w, 'a> {
         let (spot, spot_infinite) = argument(&event.spot_price)?;
         let (value, value_infinite) = argument(&event.fiat_value)?;
         let mut input = entry_input(EntryKind::In, self.row_index, &row.id, self.asset, row);
-        input.transaction_type = Some(type_name(inbound_transaction_type(kind)));
+        // A zero-cost kind is a plain acquisition at zero, not income.
+        let zero_cost = self.kinds.zero_cost(Direction::Inbound, kind);
+        input.transaction_type = Some(type_name(if zero_cost {
+            TransactionType::Buy
+        } else {
+            inbound_transaction_type(kind)
+        }));
+        input.country.zero_cost = zero_cost;
         input.notes = self.event_notes(event);
         input.exchange = event.wallet_label.clone();
         input.holder = self.holder.map(str::to_owned);
@@ -655,7 +780,8 @@ impl<'w, 'a> Walker<'w, 'a> {
         }
         let kind = row.kind.as_str();
         let wallet = event.wallet_label.as_deref();
-        if kind_has_token(kind, &NON_SALE_DISPOSAL_KIND_TOKENS) {
+        let given = self.gifts.books_outbound(kind);
+        if kind_has_token(kind, &NON_SALE_DISPOSAL_KIND_TOKENS) && !given {
             // Availability stays: the lot engine keeps the lot, and the
             // event taints the lot state instead.
             let fields = detail([
@@ -721,18 +847,60 @@ impl<'w, 'a> Walker<'w, 'a> {
             }
             Fiat::Infinity => (infinity_stand_in()?, true),
         };
+        // A country whose fee units are a disposal of their own books them
+        // as a fee-only spend just before the sale, so every method takes
+        // them first; the sale keeps their value as its expense.
+        // A gift or donation the country books is a disposal at its value.
+        let disposal = if !given {
+            "SELL"
+        } else if kind_has_token(kind, &["gift"]) {
+            "GIFT"
+        } else {
+            "DONATE"
+        };
+        let split = sell
+            && !given
+            && event.fee.is_positive()
+            && self.fee_units == FeeUnits::DisposalBeforeSale;
+        if split {
+            let mut input = entry_input(EntryKind::Out, self.row_index, &row.id, self.asset, row);
+            input.transaction_type = Some(String::from("FEE"));
+            input.notes = self.event_notes(event);
+            input.exchange = event.wallet_label.clone();
+            input.holder = self.holder.map(str::to_owned);
+            input.spot_price = Some(Dec(spot.clone()));
+            input.crypto_out_no_fee = Some(Dec(num::zero()));
+            input.crypto_fee = Some(Dec(event.fee.clone()));
+            input.fiat_fee = Some(Dec(fiat_fee.clone()));
+            self.build(input, event.row, spot_infinite || fee_infinite)?;
+            self.row_index += 1;
+        }
         let mut input = entry_input(EntryKind::Out, self.row_index, &row.id, self.asset, row);
-        input.transaction_type = Some(String::from(if sell { "SELL" } else { "FEE" }));
+        input.transaction_type = Some(String::from(if sell { disposal } else { "FEE" }));
         input.notes = self.event_notes(event);
         input.exchange = event.wallet_label.clone();
         input.holder = self.holder.map(str::to_owned);
         input.spot_price = Some(Dec(spot));
         input.crypto_out_no_fee = Some(Dec(event.amount.clone()));
-        input.crypto_fee = Some(Dec(event.fee.clone()));
+        input.crypto_fee = Some(Dec(if split {
+            num::zero()
+        } else {
+            event.fee.clone()
+        }));
         let mut value_infinite = false;
         if sell {
-            let (value, infinite) = argument(&event.fiat_value)?;
+            let (mut value, infinite) = argument(&event.fiat_value)?;
             value_infinite = infinite;
+            if !given && !infinite && !self.swap_rows.contains(&event.row) {
+                if let Some(market) = &row.market_value {
+                    if let Some((floor, valuation)) =
+                        below_market(self.kinds.below_market, &value, &market.0)?
+                    {
+                        value = floor;
+                        input.country.valuation = Some(valuation);
+                    }
+                }
+            }
             input.fiat_out_no_fee = Some(Dec(value));
         }
         input.fiat_fee = Some(Dec(fiat_fee));
@@ -747,26 +915,41 @@ impl<'w, 'a> Walker<'w, 'a> {
         Ok(())
     }
 
-    /// Runs the constructor on `input` with the book's names and keeps the
-    /// entry with its text. An argument that stands in for `Infinity` always
-    /// fails the constructor; one that did not would be a defect.
-    fn build(&mut self, mut input: EntryInput, row: usize, infinite: bool) -> EngineResult<()> {
-        let entry = Entry::from_input(&input, Some(self.config))?;
-        if infinite {
-            return Err(EngineError::runtime(
-                "Internal error: an entry was built from an infinite value",
-            ));
-        }
-        input.text = entry_text(&entry)?;
-        let kind = entry.kind;
-        let built = BuiltEntry { input, entry, row };
-        match kind {
-            EntryKind::In => self.ins.push(built),
-            EntryKind::Out => self.outs.push(built),
-            EntryKind::Intra => self.moves.push(built),
-        }
+    /// Calls the constructor on `input` for the entry of `row`. The calls
+    /// run once the walk ends ([`construct`]), in order of their failures.
+    fn build(&mut self, input: EntryInput, row: usize, infinite: bool) -> EngineResult<()> {
+        self.calls.push(Call {
+            input,
+            row,
+            infinite,
+        });
         Ok(())
     }
+}
+
+/// A constructor call: the entry's input, the row whose time it has, and
+/// whether an argument stands in for `Infinity`.
+struct Call {
+    input: EntryInput,
+    row: usize,
+    infinite: bool,
+}
+
+/// Runs the constructor of `call` with the book's names, and renders the
+/// entry's text, which the entry keeps too. An argument that stands in for
+/// `Infinity` always fails the constructor; one that did not would be a
+/// defect.
+fn construct(call: &Call, config: &ConfigSpec) -> EngineResult<(Entry, String)> {
+    let mut entry = Entry::from_input(&call.input, Some(config))?;
+    if call.infinite {
+        return Err(EngineError::runtime(
+            "Internal error: an entry was built from an infinite value",
+        ));
+    }
+    let text = entry_text(&entry)?;
+    // The lot engine's constructor would store the text it is given.
+    entry.text.clone_from(&text);
+    Ok((entry, text))
 }
 
 /// A move's atomic group, when it has one (`if transfer.group_id:`).
@@ -959,6 +1142,7 @@ mod tests {
             .entries
             .as_ref()
             .expect("entries")
+            .built
             .iter()
             .map(|entry| {
                 let input = &entry.input;
@@ -1070,7 +1254,7 @@ mod tests {
                 ),
             ]
         );
-        let built = walked.entries.as_ref().unwrap();
+        let built = &walked.entries.as_ref().unwrap().built;
         let buy = &built[0].input;
         assert_eq!(
             (
@@ -1188,7 +1372,7 @@ mod tests {
             vec![pair("move-out", "move-in", Some("g"))],
         );
         let walked = walk_book(&request).unwrap();
-        let moved = &walked.entries.as_ref().unwrap()[1].input;
+        let moved = &walked.entries.as_ref().unwrap().built[1].input;
         assert_eq!(canonical(&moved.spot_price).as_deref(), Some("0E0"));
         assert!(walked.audit[0].spot_price.is_none());
     }
@@ -1705,7 +1889,7 @@ mod tests {
         // The tracker gives the move its fee's regime and its flows: Neu
         // only, all of it carried but the fee.
         let walked = walk_book(&request).unwrap();
-        let moved = &walked.entries.as_ref().unwrap()[1].input;
+        let moved = &walked.entries.as_ref().unwrap().built[1].input;
         assert_eq!(
             moved.notes.as_deref(),
             Some("at_regime=neu at_pool=default move-out")

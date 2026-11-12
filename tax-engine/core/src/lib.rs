@@ -11,7 +11,8 @@
 //! averages), `heap` (CPython's `heapq`), and `outputs` (`ComputedData`'s
 //! derived views). Austrian rules live in `austria` (markers, regimes,
 //! classification) and `swaps` (swap-pair validation and the multi-asset
-//! runner).
+//! runner). `matching` hosts the country methods that compute an asset as a
+//! whole; `share_matching` is the United Kingdom's.
 //!
 //! [`mod@ledger`] is the schema-2 layer that takes the finalized custody
 //! projection (plan 20 phase 4); its `ledger` function is the only one the
@@ -32,13 +33,20 @@ pub mod error;
 mod heap;
 pub mod ledger;
 pub mod manifest;
+mod matching;
 mod methods;
 pub mod model;
 mod num;
 mod outputs;
+mod par;
 mod pool;
+mod share_matching;
 mod swaps;
 pub mod time;
+#[doc(hidden)]
+pub mod timing;
+mod wallets;
 
-pub use api::{check_entry, compute, ledger};
+pub use api::{check_entry, compute, ledger, ledger_typed};
 pub use engine::Country;
+pub use par::sequential;

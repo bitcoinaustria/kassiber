@@ -259,13 +259,13 @@ class BindingRoundTripTest(unittest.TestCase):
     def test_engine_version_is_reported(self):
         self.assertRegex(kassiber_tax.engine_version(), r"^\d+\.\d+\.\d+")
 
-    def test_the_binding_exposes_only_the_ledger_function(self):
+    def test_the_binding_exposes_ledger_and_custody_operations(self):
         # The schema-1 operations stay in the core for the lot engine's
         # fixtures; Python has no caller for them.
         functions = sorted(
             name for name in dir(kassiber_tax) if not name.startswith("_") and callable(getattr(kassiber_tax, name))
         )
-        self.assertEqual(functions, ["engine_version", "ledger"])
+        self.assertEqual(functions, ["custody", "engine_version", "ledger"])
 
     def test_canonical_decimals_round_trip_beyond_the_int_conversion_limit(self):
         # Python caps int <-> str conversion at 4300 digits; the boundary form

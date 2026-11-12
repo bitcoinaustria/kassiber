@@ -38,8 +38,9 @@ use crate::decimal::Decimal;
 use crate::entry::{Detail, Entry, TransactionType};
 use crate::error::{EngineError, EngineResult};
 use crate::manifest::{EntryType, NON_REPORTABLE_CATEGORY_OVERRIDES};
-use crate::model::{AssetOutput, Dec, EntryKind, GainLossOut};
+use crate::model::{AssetOutput, Dec, EntryKind, GainLossOut, GiftLosses};
 use crate::num;
+use crate::par;
 
 use super::request::{Country, Row};
 use super::response::{
@@ -47,7 +48,7 @@ use super::response::{
     RealizedOut, SummaryOut, TransferLegOut,
 };
 use super::run::Book;
-use super::walk::BuiltEntry;
+use super::walk::BuiltEntries;
 
 /// One asset's journal entries, holdings, and tax-summary rows.
 #[derive(Clone, Debug, Default)]
@@ -60,7 +61,7 @@ pub(crate) struct Composed {
 /// One computed asset: the walk's entries, the lot engine's results, and
 /// the asset's audit rows, which start at `first_audit` in the response.
 pub(crate) struct ComputedAsset<'c> {
-    pub entries: &'c [BuiltEntry],
+    pub entries: &'c BuiltEntries,
     pub output: &'c AssetOutput,
     pub audit: &'c [AuditOut],
     pub first_audit: usize,
@@ -80,6 +81,9 @@ pub(crate) fn compose(book: &Book, asset: &ComputedAsset) -> EngineResult<Compos
         tax_summary: composer.tax_summary(),
     })
 }
+
+/// Items per worker when composition runs concurrently.
+const PARALLEL_CHUNK: usize = 256;
 
 fn internal(message: &str) -> EngineError {
     EngineError::runtime(format!("Internal error: {message}"))
@@ -139,14 +143,27 @@ struct Realized {
     cost_basis: Decimal,
     proceeds: Decimal,
     gain_loss: Decimal,
+    /// The fragments' expenses, when any has them.
+    expenses: Option<Decimal>,
+    /// The event is a gift or donation.
+    gift: bool,
+    /// Why the event's value is not its price.
+    valuation: Option<&'static str>,
     fragments: Vec<FragmentOut>,
+}
+
+/// An entry the walk built, and the row whose time it has.
+#[derive(Clone, Copy)]
+struct Built<'c> {
+    entry: &'c Entry,
+    row: usize,
 }
 
 struct Composer<'c, 'a> {
     book: &'c Book<'a>,
     asset: &'c ComputedAsset<'c>,
     /// The walk's entries by row number (unique within an asset).
-    by_number: HashMap<i64, &'c BuiltEntry>,
+    by_number: HashMap<i64, Built<'c>>,
     /// Each visible lot's effective basis, by row number.
     basis: HashMap<i64, &'c Decimal>,
 }
@@ -155,8 +172,16 @@ impl<'c, 'a> Composer<'c, 'a> {
     fn new(book: &'c Book<'a>, asset: &'c ComputedAsset<'c>) -> Self {
         let by_number = asset
             .entries
+            .entries
             .iter()
-            .map(|built| (built.entry.row, built))
+            .zip(&asset.entries.built)
+            .map(|(entry, built)| {
+                let built = Built {
+                    entry,
+                    row: built.row,
+                };
+                (entry.row, built)
+            })
             .collect();
         let output = asset.output;
         let basis = output
@@ -173,14 +198,14 @@ impl<'c, 'a> Composer<'c, 'a> {
         }
     }
 
-    fn entry(&self, number: i64, kind: EntryKind) -> EngineResult<&'c BuiltEntry> {
+    fn entry(&self, number: i64, kind: EntryKind) -> EngineResult<Built<'c>> {
         match self.by_number.get(&number) {
-            Some(built) if built.entry.kind == kind => Ok(built),
+            Some(&built) if built.entry.kind == kind => Ok(built),
             _ => Err(internal("the lot engine returned an unknown entry")),
         }
     }
 
-    fn row_id(&self, built: &BuiltEntry) -> String {
+    fn row_id(&self, built: Built) -> String {
         self.book.rows[built.row].id.clone()
     }
 
@@ -208,71 +233,100 @@ impl<'c, 'a> Composer<'c, 'a> {
         })
     }
 
+    /// An entry's `crypto_fee` and `fiat_fee`, as `check_entry` derives
+    /// them: every kind stores both.
+    fn fees(entry: &Entry) -> (&Decimal, &Decimal) {
+        match &entry.detail {
+            Detail::In {
+                crypto_fee,
+                fiat_fee,
+                ..
+            }
+            | Detail::Out {
+                crypto_fee,
+                fiat_fee,
+                ..
+            }
+            | Detail::Intra {
+                crypto_fee,
+                fiat_fee,
+                ..
+            } => (crypto_fee, fiat_fee),
+        }
+    }
+
     fn crypto_in(lot: &Entry) -> EngineResult<&Decimal> {
         lot.crypto_in()
             .ok_or_else(|| internal("a lot is not an acquisition"))
     }
 
-    /// An acquisition per visible lot, in lot order.
+    /// An acquisition per visible lot, in lot order. Each is its lot's own,
+    /// so they are composed concurrently and taken in lot order, up to the
+    /// first failure.
     fn acquisitions(&self) -> EngineResult<Vec<EntryOut>> {
         let output = self.asset.output;
-        let mut entries = Vec::with_capacity(output.in_transactions.len());
-        for (number, basis) in output
+        let lots: Vec<(i64, &Dec)> = output
             .in_transactions
             .iter()
+            .copied()
             .zip(&output.in_fiat_in_with_fee)
-        {
-            let built = self.entry(*number, EntryKind::In)?;
-            let lot = &built.entry;
-            let quantity = Self::crypto_in(lot)?;
-            let unit_cost = num::div(&basis.0, quantity)?;
-            entries.push(EntryOut::Acquisition(AcquisitionOut {
-                entry_type: EntryType::Acquisition,
-                row: self.row_id(built),
-                wallet: wallet_label(lot).to_owned(),
-                asset: lot.asset.clone(),
-                quantity: Dec(quantity.clone()),
-                fiat_value: basis.clone(),
-                unit_cost: Dec(unit_cost),
-                description: description(lot)?,
-            }));
-        }
-        Ok(entries)
+            .collect();
+        par::map(&lots, PARALLEL_CHUNK, |&(number, basis)| {
+            self.acquisition(number, basis)
+        })
+        .into_iter()
+        .map(par::unwrap)
+        .collect()
+    }
+
+    /// The acquisition of the lot `number`, at its effective basis.
+    fn acquisition(&self, number: i64, basis: &Dec) -> EngineResult<EntryOut> {
+        let built = self.entry(number, EntryKind::In)?;
+        let lot = built.entry;
+        let quantity = Self::crypto_in(lot)?;
+        let unit_cost = num::div(&basis.0, quantity)?;
+        Ok(EntryOut::Acquisition(AcquisitionOut {
+            entry_type: EntryType::Acquisition,
+            row: self.row_id(built),
+            wallet: wallet_label(lot).to_owned(),
+            asset: lot.asset.clone(),
+            quantity: Dec(quantity.clone()),
+            fiat_value: basis.clone(),
+            unit_cost: Dec(unit_cost),
+            description: description(lot)?,
+        }))
     }
 
     /// The fragment's values and the facts of its event and lot.
-    fn fragment(
-        &self,
-        gain_loss: &GainLossOut,
-        event: &'c BuiltEntry,
-    ) -> EngineResult<FragmentOut> {
-        let derived = event.entry.derived();
+    fn fragment(&self, gain_loss: &GainLossOut, event: Built<'c>) -> EngineResult<FragmentOut> {
         let lot = match gain_loss.lot {
             None => None,
             Some(number) => {
                 let built = self.entry(number, EntryKind::In)?;
-                let lot = built.entry.derived();
+                let (crypto_fee, fiat_fee) = Self::fees(built.entry);
                 Some(FragmentLot {
                     row: self.row_id(built),
-                    spot_price: lot.spot_price,
-                    fiat_fee: lot.fiat_fee,
-                    crypto_fee: lot.crypto_fee,
-                    basis: Dec(self.lot_basis(&built.entry)?.clone()),
-                    crypto_in: Dec(Self::crypto_in(&built.entry)?.clone()),
+                    spot_price: Dec(built.entry.spot_price.clone()),
+                    fiat_fee: Dec(fiat_fee.clone()),
+                    crypto_fee: Dec(crypto_fee.clone()),
+                    basis: Dec(self.lot_basis(built.entry)?.clone()),
+                    crypto_in: Dec(Self::crypto_in(built.entry)?.clone()),
                 })
             }
         };
+        let (crypto_fee, fiat_fee) = Self::fees(event.entry);
         Ok(FragmentOut {
             crypto_amount: gain_loss.crypto_amount.clone(),
             cost_basis: gain_loss.fiat_cost_basis.clone(),
             proceeds: gain_loss.proceeds.clone(),
             gain_loss: gain_loss.fiat_gain.clone(),
             unit_basis_override: gain_loss.unit_cost_basis_override.clone(),
+            expenses: gain_loss.expenses.clone(),
             event: FragmentEvent {
                 row: self.row_id(event),
-                spot_price: derived.spot_price,
-                fiat_fee: derived.fiat_fee,
-                crypto_fee: derived.crypto_fee,
+                spot_price: Dec(event.entry.spot_price.clone()),
+                fiat_fee: Dec(fiat_fee.clone()),
+                crypto_fee: Dec(crypto_fee.clone()),
             },
             lot,
         })
@@ -292,9 +346,17 @@ impl<'c, 'a> Composer<'c, 'a> {
         // book category, in the order they first appear.
         let mut groups: Vec<Realized> = Vec::new();
         let mut positions = HashMap::new();
-        for gain_loss in &self.asset.output.gain_losses {
+        // Each fragment depends only on its own gain/loss row, so the
+        // fragments are built concurrently and each is taken where the loop
+        // builds it.
+        let gain_losses = &self.asset.output.gain_losses;
+        let fragments = par::map(gain_losses, PARALLEL_CHUNK, |gain_loss| {
             let event = self.entry(gain_loss.event.row, gain_loss.event.kind)?;
-            let entry = &event.entry;
+            self.fragment(gain_loss, event)
+        });
+        for (gain_loss, fragment) in gain_losses.iter().zip(fragments) {
+            let event = self.entry(gain_loss.event.row, gain_loss.event.kind)?;
+            let entry = event.entry;
             let kind = entry.transaction_type;
             let booked_move = audited.contains(entry.unique_id.as_str());
             let entry_type = if kind.is_earn() {
@@ -345,30 +407,45 @@ impl<'c, 'a> Composer<'c, 'a> {
                         cost_basis: num::zero(),
                         proceeds: num::zero(),
                         gain_loss: num::zero(),
+                        expenses: None,
+                        gift: matches!(kind, TransactionType::Gift | TransactionType::Donate),
+                        valuation: entry.country.valuation,
                         fragments: Vec::new(),
                     });
                     groups.len() - 1
                 }
             };
-            let fragment = self.fragment(gain_loss, event)?;
+            let fragment = par::unwrap(fragment)?;
             let group = &mut groups[position];
             group.fragments.push(fragment);
             group.quantity = num::add(&group.quantity, &gain_loss.crypto_amount.0)?;
             group.cost_basis = num::add(&group.cost_basis, &gain_loss.fiat_cost_basis.0)?;
             group.proceeds = num::add(&group.proceeds, &gain_loss.proceeds.0)?;
             group.gain_loss = num::add(&group.gain_loss, &gain_loss.fiat_gain.0)?;
+            if let Some(expenses) = &gain_loss.expenses {
+                let sum = group.expenses.take().unwrap_or_else(num::zero);
+                group.expenses = Some(num::add(&sum, &expenses.0)?);
+            }
         }
         groups
             .into_iter()
             .map(|group| {
                 // Fees reduce the balance and its basis but realize nothing,
-                // and report no category.
-                let fee = matches!(group.entry_type, EntryType::Fee | EntryType::TransferFee);
+                // and report no category, unless the country disposes of
+                // fee units at their value.
+                let fee = matches!(group.entry_type, EntryType::Fee | EntryType::TransferFee)
+                    && !self.book.country.fee_units().realize();
                 let (proceeds, gain_loss, at_category) = if fee {
                     (group.cost_basis.clone(), num::zero(), None)
                 } else {
                     (group.proceeds, group.gain_loss, group.at_category)
                 };
+                // A country may count no loss on a gift: the loss is reported
+                // and marked.
+                let loss_deductible = (group.gift
+                    && self.book.country.gifts().losses == GiftLosses::NotDeductible
+                    && gain_loss < num::zero())
+                .then_some(false);
                 let quantity = if group.entry_type == EntryType::Income {
                     group.quantity
                 } else {
@@ -402,6 +479,9 @@ impl<'c, 'a> Composer<'c, 'a> {
                     },
                     at_category,
                     capital_gains_type: if group.long_term { "long" } else { "short" },
+                    expenses: group.expenses.map(Dec),
+                    loss_deductible,
+                    valuation: group.valuation,
                     fragments: group.fragments,
                 }))
             })
@@ -423,6 +503,17 @@ impl<'c, 'a> Composer<'c, 'a> {
     /// basis (`_accumulate_asset_holdings`).
     fn holdings(&self) -> EngineResult<Vec<HoldingOut>> {
         let output = self.asset.output;
+        if let Some(wallets) = &output.wallet_holdings {
+            // The wallet pool scope knows each wallet's own lots: their basis,
+            // not an allocation at the asset's average.
+            return Ok(self.labelled(wallets.iter().map(|wallet| {
+                (
+                    wallet.exchange.as_str(),
+                    wallet.quantity.0.clone(),
+                    wallet.cost_basis.0.clone(),
+                )
+            })));
+        }
         let one = Decimal::from(1u8);
         let mut total_quantity = num::zero();
         let mut total_cost_basis = num::zero();
@@ -431,7 +522,7 @@ impl<'c, 'a> Composer<'c, 'a> {
             if remaining <= num::zero() {
                 continue;
             }
-            let lot = &self.entry(position.row, EntryKind::In)?.entry;
+            let lot = self.entry(position.row, EntryKind::In)?.entry;
             let quantity = num::mul(Self::crypto_in(lot)?, &remaining)?;
             total_quantity = num::add(&total_quantity, &quantity)?;
             let cost_basis = num::mul(&position.fiat_in_with_fee.0, &remaining)?;
@@ -470,14 +561,41 @@ impl<'c, 'a> Composer<'c, 'a> {
         Ok(holdings)
     }
 
+    /// Holdings of labelled wallets with a positive quantity, in the given
+    /// order.
+    fn labelled<'w>(
+        &self,
+        wallets: impl Iterator<Item = (&'w str, Decimal, Decimal)>,
+    ) -> Vec<HoldingOut> {
+        let labels: HashSet<&str> = self
+            .book
+            .request
+            .wallets
+            .iter()
+            .filter_map(|wallet| wallet.label.as_deref())
+            .filter(|label| !label.is_empty())
+            .collect();
+        wallets
+            .filter(|(wallet, quantity, _)| labels.contains(wallet) && *quantity > num::zero())
+            .map(|(wallet, quantity, cost_basis)| HoldingOut {
+                asset: self.asset.output.asset.clone(),
+                wallet: wallet.to_owned(),
+                quantity: Dec(quantity),
+                cost_basis: Dec(cost_basis),
+            })
+            .collect()
+    }
+
     /// The yearly totals without fees and moves, by year, type, and holding
-    /// period (`_build_tax_summary_rows`).
+    /// period (`_build_tax_summary_rows`). A country that disposes of fee
+    /// units at their value keeps its fee and move rows.
     fn tax_summary(&self) -> Vec<SummaryOut> {
         let output = self.asset.output;
+        let fees = self.book.country.fee_units().realize();
         let mut rows: Vec<SummaryOut> = output
             .yearly
             .iter()
-            .filter(|yearly| !matches!(yearly.transaction_type, "fee" | "move"))
+            .filter(|yearly| fees || !matches!(yearly.transaction_type, "fee" | "move"))
             .map(|yearly| SummaryOut {
                 year: yearly.year,
                 asset: output.asset.clone(),
@@ -487,6 +605,7 @@ impl<'c, 'a> Composer<'c, 'a> {
                 proceeds: yearly.fiat_amount.clone(),
                 cost_basis: yearly.fiat_cost_basis.clone(),
                 gain_loss: yearly.fiat_gain_loss.clone(),
+                expenses: yearly.expenses.clone(),
             })
             .collect();
         rows.sort_by_key(|row| (row.year, row.transaction_type, row.long_term));
@@ -498,7 +617,8 @@ impl<'c, 'a> Composer<'c, 'a> {
 mod tests {
     use serde_json::{json, Value};
 
-    use crate::ledger::request::LedgerRequest;
+    use crate::ledger::request::{LedgerRequest, Wallet};
+    use crate::ledger::response::Stage;
     use crate::ledger::run::ledger;
     use crate::time::CivilDate;
 
@@ -645,6 +765,110 @@ mod tests {
             Ok(response) => serde_json::to_value(response).expect("serializes"),
             Err(error) => json!({"error": serde_json::to_value(error).expect("serializes")}),
         }
+    }
+
+    #[test]
+    fn long_lists_are_written_as_serde_writes_them() {
+        // Enough buys, sales, unpriced sales and moves that every long list
+        // is written in chunks.
+        let day = |offset: i64| {
+            let date =
+                CivilDate::from_days(CivilDate::parse("2020-01-01").unwrap().to_days() + offset);
+            format!("{:04}-{:02}-{:02}", date.year, date.month, date.day)
+        };
+        let mut rows = Vec::new();
+        let mut pairs = Vec::new();
+        for i in 0..1_200 {
+            let date = day(i);
+            rows.push(row(
+                &format!("buy{i}"),
+                "A",
+                "inbound",
+                &date,
+                300_000_000,
+                json!({}),
+            ));
+            rows.push(row(
+                &format!("sell{i}"),
+                "A",
+                "outbound",
+                &date,
+                100_000_000,
+                json!({}),
+            ));
+            rows.push(row(
+                &format!("unpriced{i}"),
+                "A",
+                "outbound",
+                &date,
+                1_000,
+                json!({"rate": null}),
+            ));
+            let id = format!("m{i}");
+            let [out, inbound] = legs(&id, "A", "B", &date, 50_000_000, json!({}));
+            rows.extend([out, inbound]);
+            pairs.push(pair(&id));
+        }
+        let response = ledger(&request(json!("fifo"), "FIFO", rows, pairs)).expect("a ledger");
+        assert!(
+            response.entries.len() >= 2_048,
+            "{}",
+            response.entries.len()
+        );
+        assert!(
+            response.quarantines.len() >= 1_024,
+            "{}",
+            response.quarantines.len()
+        );
+        assert!(
+            response.intra_audit.len() >= 1_024,
+            "{}",
+            response.intra_audit.len()
+        );
+        assert_eq!(
+            response.to_json().expect("serializes"),
+            serde_json::to_string(&response).expect("serializes")
+        );
+    }
+
+    #[test]
+    fn the_first_failing_constructor_in_walk_order_fails_the_pass() {
+        // Hundreds of entries, so the constructors run in several chunks;
+        // two of them name wallets the book's names do not list.
+        let day = |offset: i64| {
+            let date =
+                CivilDate::from_days(CivilDate::parse("2020-01-01").unwrap().to_days() + offset);
+            format!("{:04}-{:02}-{:02}", date.year, date.month, date.day)
+        };
+        let mut rows = Vec::new();
+        for i in 0..600 {
+            let wallet = match i {
+                250 => "X",
+                450 => "Y",
+                _ => "A",
+            };
+            rows.push(row(
+                &format!("buy{i}"),
+                wallet,
+                "inbound",
+                &day(i),
+                100_000_000,
+                json!({}),
+            ));
+        }
+        let mut book = request(json!("fifo"), "FIFO", rows, Vec::new());
+        for (id, label) in [("X", "Unlisted one"), ("Y", "Unlisted two")] {
+            book.wallets.push(Wallet {
+                id: id.to_owned(),
+                label: Some(label.to_owned()),
+            });
+        }
+        let error = ledger(&book).expect_err("an unlisted wallet");
+        assert_eq!(error.stage, Stage::Prepare);
+        assert_eq!(
+            error.inner.message,
+            "Parameter 'exchange' value is not known: Unlisted one"
+        );
     }
 
     /// A FIFO book over two years: a long-held lot, a purchase at a value,
@@ -1051,6 +1275,61 @@ mod tests {
                 "23989E-4",
                 "80630000000000000000000000000000E-27"
             ])]
+        );
+    }
+
+    #[test]
+    fn wallet_scope_holdings_carry_each_wallets_own_lots() {
+        // A US book on the wallet scope: two buys in Cold at different
+        // prices, the first one moved to Hot. Each wallet's holding is its
+        // own lot's basis, not the average (40000 and 50000 per BTC).
+        let mut rows = vec![
+            row(
+                "b1",
+                "A",
+                "inbound",
+                "2025-01-02",
+                100_000_000_000,
+                json!({}),
+            ),
+            row(
+                "b2",
+                "A",
+                "inbound",
+                "2025-01-03",
+                100_000_000_000,
+                json!({"rate": "50000E0"}),
+            ),
+        ];
+        rows.extend(legs(
+            "m1",
+            "A",
+            "B",
+            "2025-02-01",
+            100_000_000_000,
+            json!({}),
+        ));
+        let mut request = book_request(
+            json!({"kind": "us"}),
+            json!("fifo"),
+            "FIFO",
+            rows,
+            vec![pair("m1")],
+        );
+        request.policy.pool_scope = crate::model::PoolScope::Wallet;
+        let response = run(&request);
+        let holdings: Vec<Value> = response["holdings"]
+            .as_array()
+            .unwrap_or_else(|| panic!("{response}"))
+            .iter()
+            .map(|h| json!([h["wallet"], h["quantity"], h["cost_basis"]]))
+            .collect();
+        assert_eq!(
+            holdings,
+            [
+                json!(["Cold", "1E0", "50000E0"]),
+                json!(["Hot", "1E0", "40000E0"])
+            ]
         );
     }
 

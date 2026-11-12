@@ -3,12 +3,12 @@
 
 use crate::cursor::Fragment;
 use crate::decimal::Decimal;
+use crate::engine::Country;
 use crate::entry::{Detail, Entry, TransactionType};
 use crate::error::{EngineError, EngineResult};
 use crate::methods::LotView;
-use crate::model::{BalanceOut, Dec, EventRef, GainLossOut, OpenPositionOut, YearlyOut};
+use crate::model::{BalanceOut, Dec, EventRef, FeeUnits, GainLossOut, OpenPositionOut, YearlyOut};
 use crate::num::{add, div, equal_within, lt13, mul, sub, zero, BALANCE_EXPONENT};
-use crate::time::elapsed_days;
 
 /// A fragment's derived fiat values (RP2 computes them on access).
 #[derive(Clone, Debug)]
@@ -17,6 +17,9 @@ pub(crate) struct FragmentValues {
     pub proceeds: Decimal,
     pub fiat_gain: Decimal,
     pub long_term: bool,
+    /// The sale's fee value deducted from the gain, when its fee units are
+    /// a disposal of their own.
+    pub expenses: Option<Decimal>,
 }
 
 /// `GainLoss`'s properties, each one 32-digit step in RP2's order:
@@ -27,7 +30,7 @@ pub(crate) fn fragment_values(
     fragment: &Fragment,
     entries: &[Entry],
     lots: &[LotView],
-    long_term_days: i64,
+    country: Country,
 ) -> EngineResult<FragmentValues> {
     let event = &entries[fragment.event];
     let amount = &fragment.crypto_amount;
@@ -39,20 +42,44 @@ pub(crate) fn fragment_values(
         None => (zero(), false),
         Some(lot) => {
             let view = &lots[lot];
-            let basis = match &fragment.unit_cost_basis_override {
-                Some(unit) => mul(unit, amount)?,
-                None => div(&mul(&view.fiat_in_with_fee, amount)?, &view.crypto_in)?,
+            let basis = match (&fragment.cost_override, &fragment.unit_cost_basis_override) {
+                (Some(cost), _) => cost.clone(),
+                (None, Some(unit)) => mul(unit, amount)?,
+                (None, None) => div(&mul(&view.fiat_in_with_fee, amount)?, &view.crypto_in)?,
             };
-            let days = elapsed_days(&event.ts, &entries[view.entry].ts);
-            (basis, days >= i128::from(long_term_days))
+            (
+                basis,
+                country.is_long_term(&event.ts, &entries[view.entry].ts)?,
+            )
         }
     };
+    // A sale whose fee units the walk split off carries their value as its
+    // fee, deducted from each fragment by quantity.
+    let expenses = match &event.detail {
+        Detail::Out {
+            fiat_fee,
+            crypto_fee,
+            ..
+        } if country.fee_units() == FeeUnits::DisposalBeforeSale
+            && event.transaction_type == TransactionType::Sell
+            && crypto_fee.is_zero()
+            && !fiat_fee.is_zero() =>
+        {
+            Some(div(&mul(fiat_fee, amount)?, event.crypto_balance_change())?)
+        }
+        _ => None,
+    };
     let fiat_gain = sub(&proceeds, &fiat_cost_basis)?;
+    let fiat_gain = match &expenses {
+        Some(expenses) => sub(&fiat_gain, expenses)?,
+        None => fiat_gain,
+    };
     Ok(FragmentValues {
         fiat_cost_basis,
         proceeds,
         fiat_gain,
         long_term,
+        expenses,
     })
 }
 
@@ -76,6 +103,7 @@ pub(crate) fn gain_loss_out(
         fiat_gain: Dec(values.fiat_gain.clone()),
         unit_cost_basis_override: fragment.unit_cost_basis_override.clone().map(Dec),
         long_term: values.long_term,
+        expenses: values.expenses.clone().map(Dec),
         // Filled by the Austrian classification hook.
         at_category: None,
         at_category_error: None,
@@ -90,21 +118,23 @@ struct YearlySums {
     fiat_amount: Decimal,
     fiat_cost_basis: Decimal,
     fiat_gain_loss: Decimal,
+    expenses: Option<Decimal>,
 }
 
 /// `yearly_gain_loss_list`: running sums per (event year in its own
-/// offset, type, long-term) in fragment order, each starting from `0`, in
+/// offset, or a rules country's tax year, type, long-term) in fragment order, each starting from `0`, in
 /// RP2's order (descending by `"<asset> <year> <LONG|SHORT> <type>"`).
 pub(crate) fn yearly(
     asset: &str,
     fragments: &[Fragment],
     values: &[FragmentValues],
     entries: &[Entry],
+    country: Country,
 ) -> EngineResult<Vec<YearlyOut>> {
     let mut sums: Vec<YearlySums> = Vec::new();
     for (fragment, value) in fragments.iter().zip(values) {
         let event = &entries[fragment.event];
-        let year = event.ts.year();
+        let year = country.tax_year(&event.ts)?;
         let kind = event.transaction_type;
         let position = sums.iter().position(|s| {
             s.year == year && s.transaction_type == kind && s.long_term == value.long_term
@@ -120,6 +150,7 @@ pub(crate) fn yearly(
                     fiat_amount: zero(),
                     fiat_cost_basis: zero(),
                     fiat_gain_loss: zero(),
+                    expenses: None,
                 });
                 let last = sums.len() - 1;
                 &mut sums[last]
@@ -129,6 +160,10 @@ pub(crate) fn yearly(
         slot.fiat_amount = add(&slot.fiat_amount, &value.proceeds)?;
         slot.fiat_cost_basis = add(&slot.fiat_cost_basis, &value.fiat_cost_basis)?;
         slot.fiat_gain_loss = add(&slot.fiat_gain_loss, &value.fiat_gain)?;
+        if let Some(expenses) = &value.expenses {
+            let sum = slot.expenses.take().unwrap_or_else(zero);
+            slot.expenses = Some(add(&sum, expenses)?);
+        }
     }
     let sort_key = |s: &YearlySums| {
         format!(
@@ -149,6 +184,7 @@ pub(crate) fn yearly(
             fiat_amount: Dec(s.fiat_amount),
             fiat_cost_basis: Dec(s.fiat_cost_basis),
             fiat_gain_loss: Dec(s.fiat_gain_loss),
+            expenses: s.expenses.map(Dec),
         })
         .collect())
 }

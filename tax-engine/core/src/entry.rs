@@ -9,7 +9,7 @@ use std::fmt;
 
 use crate::decimal::Decimal;
 use crate::error::{EngineError, EngineResult};
-use crate::model::{ConfigSpec, Dec, DerivedEntry, EntryInput, EntryKind};
+use crate::model::{ConfigSpec, CountryFacts, Dec, DerivedEntry, EntryInput, EntryKind};
 use crate::num::{add, eq13, equal_within, gt13, lt13, mul, sub, truthy, zero, FIAT_EXPONENT};
 use crate::time::Timestamp;
 
@@ -148,6 +148,8 @@ pub struct Entry {
     /// `str(transaction)`, for messages.
     pub text: String,
     pub detail: Detail,
+    /// What a rules country's walk adds (the defaults elsewhere).
+    pub country: CountryFacts,
 }
 
 fn type_error_none(name: &str, expected: &str) -> EngineError {
@@ -267,6 +269,7 @@ impl Entry {
             spot_price: base.spot_price,
             text: input.text.clone(),
             detail,
+            country: input.country.clone(),
         }
     }
 
@@ -298,7 +301,10 @@ impl Entry {
         };
         let prefix = message_prefix(&input.asset, input.kind, &base.ts, input.row);
         let spot = &base.spot_price;
-        if eq13(spot, &zero())? {
+        // A zero-cost acquisition (a rules country's walk only) has a zero
+        // price and basis by rule.
+        let zero_cost = input.country.zero_cost;
+        if eq13(spot, &zero())? && !zero_cost {
             return Err(EngineError::value(format!(
                 "{prefix}: parameter 'spot_price' cannot be 0"
             )));
@@ -314,11 +320,11 @@ impl Entry {
         }
         let fiat_in_no_fee = match &input.fiat_in_no_fee {
             None => mul(&crypto_in, spot)?,
-            some => positive_decimal("fiat_in_no_fee", some, true)?,
+            some => positive_decimal("fiat_in_no_fee", some, !zero_cost)?,
         };
         let fiat_in_with_fee = match &input.fiat_in_with_fee {
             None => add(&fiat_in_no_fee, &fiat_fee)?,
-            some => positive_decimal("fiat_in_with_fee", some, true)?,
+            some => positive_decimal("fiat_in_with_fee", some, !zero_cost)?,
         };
         let kind_ok = matches!(
             base.transaction_type,

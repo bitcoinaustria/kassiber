@@ -31,6 +31,7 @@ use crate::decimal::Decimal;
 use crate::error::{EngineError, ErrorClass};
 use crate::manifest::{DetailKind, EntryType, Manifest, QuarantineReason};
 use crate::model::{Dec, EntryInput, EntryKind};
+use crate::par;
 
 use super::request::{Regime, Ts, SCHEMA_VERSION};
 
@@ -145,7 +146,8 @@ pub struct ManifestResponse {
     pub manifest: Manifest,
 }
 
-/// The response to a successful `ledger` request.
+/// The response to a successful `ledger` request. [`LedgerResponse::to_json`]
+/// writes its fields in this order.
 #[derive(Clone, Debug, Serialize)]
 pub struct LedgerResponse {
     pub schema_version: u32,
@@ -162,6 +164,61 @@ pub struct LedgerResponse {
     pub tax_summary: Vec<SummaryOut>,
     pub holdings: Vec<HoldingOut>,
     pub carried_rows: Vec<CarriedRow>,
+}
+
+/// Lists at least this long are written in concurrent chunks.
+const PARALLEL_ITEMS: usize = 1_024;
+
+impl LedgerResponse {
+    /// `serde_json::to_string(self)`: the same text, with each long list
+    /// written in contiguous chunks on scoped threads and joined in order.
+    /// The first chunk that fails holds the first item that fails.
+    pub fn to_json(&self) -> serde_json::Result<String> {
+        let mut out = String::with_capacity(1_024);
+        out.push_str("{\"schema_version\":");
+        out.push_str(&serde_json::to_string(&self.schema_version)?);
+        out.push_str(",\"ok\":");
+        out.push_str(&serde_json::to_string(&self.ok)?);
+        out.push_str(",\"engine_version\":");
+        out.push_str(&serde_json::to_string(&self.engine_version)?);
+        out.push_str(",\"entries\":");
+        list_json(&mut out, &self.entries)?;
+        out.push_str(",\"quarantines\":");
+        list_json(&mut out, &self.quarantines)?;
+        out.push_str(",\"intra_audit\":");
+        list_json(&mut out, &self.intra_audit)?;
+        out.push_str(",\"tax_summary\":");
+        list_json(&mut out, &self.tax_summary)?;
+        out.push_str(",\"holdings\":");
+        list_json(&mut out, &self.holdings)?;
+        out.push_str(",\"carried_rows\":");
+        list_json(&mut out, &self.carried_rows)?;
+        out.push('}');
+        Ok(out)
+    }
+}
+
+/// Appends `serde_json::to_string(items)`: a compact list is its items,
+/// each as written alone, joined by commas.
+fn list_json<T: Serialize + Sync>(out: &mut String, items: &[T]) -> serde_json::Result<()> {
+    let parts = par::chunks(items, PARALLEL_ITEMS / 8, |chunk| {
+        serde_json::to_string(chunk)
+    });
+    if let [Ok(Ok(text))] = parts.as_slice() {
+        out.push_str(text);
+        return Ok(());
+    }
+    out.push('[');
+    for (index, part) in parts.into_iter().enumerate() {
+        let text = par::unwrap(part)?;
+        if index > 0 {
+            out.push(',');
+        }
+        // A chunk is never empty: strip its own brackets.
+        out.push_str(&text[1..text.len() - 1]);
+    }
+    out.push(']');
+    Ok(())
 }
 
 /// One journal entry.
@@ -206,6 +263,18 @@ pub struct RealizedOut {
     pub at_category: Option<String>,
     /// `long` or `short`.
     pub capital_gains_type: &'static str,
+    /// The fragments' expenses, deducted from `gain_loss`; only for a
+    /// country whose rules give them.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expenses: Option<Dec>,
+    /// `false` for a gift's loss that the country does not count; absent
+    /// otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub loss_deductible: Option<bool>,
+    /// Why a sale's proceeds are not its price (a rules country's
+    /// `below_market`: `market_value`, `seventy_percent`); absent otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub valuation: Option<&'static str>,
     pub fragments: Vec<FragmentOut>,
 }
 
@@ -224,6 +293,10 @@ pub struct FragmentOut {
     pub proceeds: Dec,
     pub gain_loss: Dec,
     pub unit_basis_override: Option<Dec>,
+    /// Costs deducted from the gain (a sale's split-off fee value); only
+    /// for a country whose rules give them.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expenses: Option<Dec>,
     pub event: FragmentEvent,
     /// `null` for an earn receipt.
     pub lot: Option<FragmentLot>,
@@ -306,7 +379,8 @@ pub struct AuditOut {
 /// One tax-summary row.
 #[derive(Clone, Debug, Serialize)]
 pub struct SummaryOut {
-    /// The event's year in its own offset.
+    /// The event's year in its own offset; a rules country's tax year in
+    /// its zone, named by its first day's year.
     pub year: i32,
     pub asset: String,
     pub transaction_type: &'static str,
@@ -315,6 +389,10 @@ pub struct SummaryOut {
     pub proceeds: Dec,
     pub cost_basis: Dec,
     pub gain_loss: Dec,
+    /// Expenses deducted from `gain_loss`; only for a country whose rules
+    /// give them.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expenses: Option<Dec>,
 }
 
 /// One positive balance, in balance order.

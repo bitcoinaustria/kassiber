@@ -14,14 +14,21 @@ publish.workspace = true
 name = "kassiber_tax_core"
 
 [dependencies]
-# Arbitrary-precision coefficients for the CPython-compatible decimal type.
-# num-integer and num-traits are num-bigint's own dependencies; the decimal
-# module uses their traits directly.
-num-bigint = "0.4"
-num-integer = "0.1"
-num-traits = "0.2"
+# The CPython-compatible decimal type, shared with the backend crates.
+kassiber-pydecimal = { path = "../../crates/pydecimal" }
+# The registry's calendars: a country's local dates count its holding
+# periods. The engine reads no country code from it.
+kassiber-tax-countries = { path = "../../crates/tax-countries" }
 # The JSON boundary: request and response documents (schema_version 1).
 # Cargo.lock holds serde at 1.0.228 because serde_derive 1.0.229 moved to
 # syn 3, a second copy next to pyo3's syn 2.
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+
+[features]
+# Opt-in `Instant` spans for performance work; never enabled by the binding.
+timing = []
+
+[[example]]
+name = "ledger-bench"
+required-features = ["timing"]

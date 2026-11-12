@@ -1,8 +1,9 @@
 //! Python binding for Kassiber's tax engine.
 //!
-//! The only entry point takes and returns JSON text, so the boundary stays
-//! narrow and versioned (`docs/reference/tax-engine.md`). It is the schema-2
-//! `ledger` function; the core's schema-1 operations (`check_entry`,
+//! Entry points take and return JSON text, so boundaries stay narrow and
+//! versioned. `ledger` is schema 2 (`docs/reference/tax-engine.md`); `custody`
+//! is the raw-fact schema 1 (`docs/reference/custody-engine.md`). The core's
+//! schema-1 operations (`check_entry`,
 //! `compute`) stay its lot-engine fixture API and are not exposed here. The
 //! engine runs with the GIL released. A Rust panic is converted into
 //! `RuntimeError` instead of crossing into Python as a partial result.
@@ -47,9 +48,37 @@ fn ledger(py: Python<'_>, request: &str) -> PyResult<String> {
     run(py, request, kassiber_tax_core::ledger)
 }
 
+/// Runs the versioned raw-fact custody operation independently of `ledger`.
+/// `loaded` reads the snapshot in the database loader's record encoding
+/// (SQLite BLOBs as the codec's byte tag) and runs the loaded path, for books
+/// the strict v1 adapter cannot carry.
+#[pyfunction(signature = (request, *, finalized=true, loaded=false))]
+fn custody(py: Python<'_>, request: &str, finalized: bool, loaded: bool) -> PyResult<String> {
+    fn decisions(request: &str) -> String {
+        kassiber_custody::custody_with_fusion(request, false, kassiber_tax_core::ledger)
+    }
+    fn fusion(request: &str) -> String {
+        kassiber_custody::custody_with_fusion(request, true, kassiber_tax_core::ledger)
+    }
+    fn loaded_decisions(request: &str) -> String {
+        kassiber_custody::custody_loaded_with_fusion(request, false, kassiber_tax_core::ledger)
+    }
+    fn loaded_fusion(request: &str) -> String {
+        kassiber_custody::custody_loaded_with_fusion(request, true, kassiber_tax_core::ledger)
+    }
+    let call = match (loaded, finalized) {
+        (false, false) => decisions,
+        (false, true) => fusion,
+        (true, false) => loaded_decisions,
+        (true, true) => loaded_fusion,
+    };
+    run(py, request, call)
+}
+
 #[pymodule]
 fn kassiber_tax(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(engine_version, m)?)?;
     m.add_function(wrap_pyfunction!(ledger, m)?)?;
+    m.add_function(wrap_pyfunction!(custody, m)?)?;
     Ok(())
 }
