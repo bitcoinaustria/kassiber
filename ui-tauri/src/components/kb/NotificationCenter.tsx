@@ -235,6 +235,15 @@ export function NotificationCenter({
     if (next) markSeen();
   };
 
+  // An activated OS notification asks for the list (see useOsNotifications).
+  const openRequested = useNotificationStore((s) => s.centerOpenRequested);
+  React.useEffect(() => {
+    if (!openRequested) return;
+    useNotificationStore.getState().clearOpenCenterRequest();
+    setOpen(true);
+    markSeen();
+  }, [markSeen, openRequested]);
+
   // Resolve again at click time, against the book open *now*: the list may
   // have been rendered before a book switch.
   const runEntryAction = (

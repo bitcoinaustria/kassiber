@@ -1,4 +1,5 @@
 import { useLocalWatchNotifications } from "@/hooks/useLocalWatchNotifications";
+import { useOsNotifications } from "@/hooks/useOsNotifications";
 import {
   useIsFetching,
   useIsMutating,
@@ -113,6 +114,12 @@ import {
   safeMessage,
   sourceConditionsFromSnapshot,
 } from "@/lib/notificationConditions";
+import {
+  backgroundRunHasNewObservations,
+  evidenceWatchCandidate,
+  newActivityCandidate,
+  offerOsNotification,
+} from "@/lib/osNotifications";
 import type { FreshnessSourceState } from "@/lib/syncResults";
 import { BOOK_REFRESH_PROGRESS_ID } from "@/lib/syncProgress";
 import {
@@ -1706,6 +1713,11 @@ export function AppShell() {
           if (value && typeof value === "object" && "event" in value && value.event === true && "kind" in value && value.kind === "ui.chain_analysis.watches.changed" && !("request_id" in value)) {
             void queryClient.invalidateQueries({ queryKey: ["daemon"] });
             addNotification({ title: t("chainAnalysis:watch.notificationTitle"), body: t("chainAnalysis:watch.notificationBody"), tone: "info", dedupeKey: "local-evidence-watches", target: "/chain-analysis" });
+            // The push is the news; the inbox poll that recovers missed
+            // wake-ups after a lock or restart is not offered to the OS.
+            void offerOsNotification(
+              evidenceWatchCandidate(bookIdentityKey(useUiStore.getState().identity)),
+            );
             return;
           }
           const freshness = parseDaemonFreshnessEvent(event.payload);
@@ -1732,6 +1744,9 @@ export function AppShell() {
             conditionKey("freshness.worker-error", { book }),
           );
           applyFreshnessRun(freshness.data, book);
+          if (backgroundRunHasNewObservations(freshness.data)) {
+            void offerOsNotification(newActivityCandidate(book));
+          }
         }),
       )
       .then((nextUnlisten) => {
@@ -1795,6 +1810,7 @@ export function AppShell() {
   useClaimWindowTitlebar(identity !== null);
   const nav = useShellNavOpen();
   useSettingsModalNavigation(shellUnlocked);
+  useOsNotifications(shellUnlocked);
   // Locking hides the page; Settings does not wait over the lock screen.
   React.useEffect(() => {
     if (!shellUnlocked) closeSettings();

@@ -55,6 +55,10 @@ export function installGlobalErrorCapture(options?: {
     });
   };
   onUnhandledRejection = (event) => {
+    if (isNotificationPluginProbe(event.reason)) {
+      event.preventDefault();
+      return;
+    }
     capture({
       level: "error",
       module: "window",
@@ -79,6 +83,20 @@ export function installGlobalErrorCapture(options?: {
     passthroughWarn(...args);
     captureConsole("warning", args);
   };
+}
+
+/**
+ * `tauri-plugin-notification`'s init script asks once at load whether
+ * notifications are permitted, through a plugin command the renderer is
+ * deliberately not granted (OS notifications go through Rust only; see
+ * `src-tauri/src/os_notifications.rs`). That expected refusal is not an app
+ * error. Matched on the ACL's exact message for that one command.
+ */
+export function isNotificationPluginProbe(reason: unknown): boolean {
+  return (
+    typeof reason === "string" &&
+    reason.startsWith("notification.is_permission_granted not allowed")
+  );
 }
 
 export function uninstallGlobalErrorCapture(): void {
