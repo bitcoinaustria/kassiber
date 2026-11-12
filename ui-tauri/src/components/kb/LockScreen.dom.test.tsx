@@ -370,10 +370,10 @@ describe("LockScreen", () => {
     expect(toggle.getAttribute("aria-pressed")).toBe("true");
   });
 
-  it("goes back to setup from the footer", () => {
+  it("leaves for other books from the footer", () => {
     const props = renderLock();
 
-    fireEvent.click(screen.getByRole("button", { name: "Back to setup" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open other books" }));
 
     expect(props.onReset).toHaveBeenCalledTimes(1);
   });

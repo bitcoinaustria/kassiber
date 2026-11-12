@@ -149,7 +149,8 @@ in-app toolbar there with no inset and no drag region. Screens outside the shell
 the same outline: the title bar row on the chrome and an inset page panel.
 Inside it the lock screen centres the wordmark over the welcome screen's type
 (title and lead, no eyebrow) and a passphrase field exactly the wordmark's width,
-with Back to setup set apart at the foot of the panel.
+with Open other books set apart at the foot of the panel. That action only
+clears the UI session and returns to the start screen; it deletes no books.
 While the native Touch ID prompt is open, the form gives way to a single
 waiting status and Touch ID guidance. Cancelling or failing that prompt restores
 the passphrase field and keyboard focus.

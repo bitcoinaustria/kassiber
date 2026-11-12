@@ -1081,7 +1081,8 @@ in UI unit tests; there is no interactive mock transport.
 The bridge treats `KASSIBER_DEV_DATA_ROOT` as the preview's launch book, and
 Open Regtest Demo opens it in place rather than as an imported folder. Books
 opened through the dev folder picker restart the daemon on that folder, and
-leaving them (Back to setup, Reset Welcome state, cancelling an import) restarts
+leaving them (Open other books on the lock screen, Back to setup, Reset Welcome
+state, cancelling an import) restarts
 it on the launch book again. Only a bridge started without
 `KASSIBER_DEV_DATA_ROOT` falls back to the implicit default root, which on a
 developer machine is the real book, so point exploratory previews at a

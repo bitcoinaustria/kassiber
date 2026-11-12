@@ -319,7 +319,8 @@ export function LockScreen({
       lead={touchIdSubmitting ? t("lock.touchIdLead") : t(`lock.lead.${reason}`)}
       footer={
         <LockFooter
-          label={t("lock.backToSetup")}
+          // Only the UI session is cleared; no books are touched.
+          label={t("lock.openOtherBooks")}
           disabled={submitting}
           onClick={onReset}
         />

@@ -259,7 +259,7 @@
     "unlocking": "Unlocking...",
     "unlock": "Unlock",
     "openBooks": "Open books",
-    "backToSetup": "Back to setup",
+    "openOtherBooks": "Open other books",
     "passphraseEmpty": "Enter the passphrase first.",
     "passphraseFailed": "That passphrase did not unlock these books.",
     "unlockFailed": "Kassiber could not unlock these books. Try again.",
