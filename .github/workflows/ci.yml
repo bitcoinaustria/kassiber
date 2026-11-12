@@ -224,6 +224,16 @@ jobs:
       - name: Unpack the replayed binaries
         run: scripts/replay-sessions.sh unpack replay-binaries.tar
 
+      # Debug builds of age read its message catalogue (rust-embed) from the
+      # crate's registry source at run time; without it the first age error
+      # message panics. The pinned toolchain fetches the same registry path
+      # the build job compiled against.
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
+
+      - name: Fetch Rust crates
+        run: cargo fetch --locked
+
       # The document import and chat PDF paths run Poppler, as the product
       # does; without it their tests skip and recorded sessions differ.
       - name: Install Poppler
