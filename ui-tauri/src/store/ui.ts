@@ -180,31 +180,35 @@ export type AssistantDockPosition = "left" | "center" | "right";
  */
 export type AssistantClosedBarMode = "composer" | "launcher" | "hidden";
 
-export const ASSISTANT_PANEL_DEFAULT_WIDTH = 380;
-export const ASSISTANT_PANEL_MIN_WIDTH = 320;
-export const ASSISTANT_PANEL_MAX_WIDTH = 640;
+/**
+ * The right panel's one width, whichever tab is in front: switching tabs
+ * must not resize the panel, the page beside it, or fold the side nav. The
+ * minimum is the narrowest a transaction's details (and its graph) fit.
+ */
+export const SIDE_PANEL_DEFAULT_WIDTH = 600;
+export const SIDE_PANEL_MIN_WIDTH = 480;
+export const SIDE_PANEL_MAX_WIDTH = 1680;
 
-/** The right panel's width while a transaction's details are in front. */
-export const DETAIL_PANEL_DEFAULT_WIDTH = 760;
-export const DETAIL_PANEL_MIN_WIDTH = 480;
-export const DETAIL_PANEL_MAX_WIDTH = 1680;
-
-export function normalizeDetailPanelWidth(value: unknown): number {
+export function normalizeSidePanelWidth(value: unknown): number {
   if (typeof value !== "number" || !Number.isFinite(value)) {
-    return DETAIL_PANEL_DEFAULT_WIDTH;
+    return SIDE_PANEL_DEFAULT_WIDTH;
   }
   return Math.round(
-    Math.min(DETAIL_PANEL_MAX_WIDTH, Math.max(DETAIL_PANEL_MIN_WIDTH, value)),
+    Math.min(SIDE_PANEL_MAX_WIDTH, Math.max(SIDE_PANEL_MIN_WIDTH, value)),
   );
 }
 
-export function normalizeAssistantPanelWidth(value: unknown): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return ASSISTANT_PANEL_DEFAULT_WIDTH;
-  }
-  return Math.round(
-    Math.min(ASSISTANT_PANEL_MAX_WIDTH, Math.max(ASSISTANT_PANEL_MIN_WIDTH, value)),
+/**
+ * Before one width, the panel remembered one for the assistant and one for
+ * a transaction's details. Keep the wider: it is the one the user dragged
+ * out for the content that needed room.
+ */
+export function restoredSidePanelWidth(restored: Record<string, unknown>): unknown {
+  if (restored.sidePanelWidth !== undefined) return restored.sidePanelWidth;
+  const legacy = [restored.detailPanelWidth, restored.assistantPanelWidth].filter(
+    (value): value is number => typeof value === "number" && Number.isFinite(value),
   );
+  return legacy.length > 0 ? Math.max(...legacy) : undefined;
 }
 
 /** Permission mode a new chat starts in until the user picks another. */
@@ -308,8 +312,6 @@ export interface UiState {
    * open too (`rightPanelOpen`); hiding the panel keeps the tab.
    */
   assistantPanelOpen: boolean;
-  /** Panel width in CSS px while the assistant is in front, clamped to the min/max above. */
-  assistantPanelWidth: number;
   /** Permission mode a new chat starts in (Settings → AI). */
   assistantDefaultPermissionMode: AiPermissionMode;
   /**
@@ -332,8 +334,8 @@ export interface UiState {
   rightPanelOpen: boolean;
   /** The open right panel takes the whole page column. Ephemeral. */
   rightPanelMaximized: boolean;
-  /** Panel width in CSS px while a transaction's details are in front. */
-  detailPanelWidth: number;
+  /** The right panel's width in CSS px, the same for every tab. */
+  sidePanelWidth: number;
   /**
    * Bumped to ask the open panel to focus its composer (keyboard shortcut,
    * launcher, "Ask about this"). Ephemeral — never persisted.
@@ -426,9 +428,8 @@ export interface UiState {
   /** The title-bar toggle: shows or hides the panel, keeping its tabs. */
   toggleRightPanel: () => void;
   setRightPanelMaximized: (maximized: boolean) => void;
-  setDetailPanelWidth: (width: number) => void;
+  setSidePanelWidth: (width: number) => void;
   setAssistantColumnClaimed: (claimed: boolean) => void;
-  setAssistantPanelWidth: (width: number) => void;
   setSettingsSection: (section: SettingsSectionId | null) => void;
   setAssistantDefaultPermissionMode: (mode: AiPermissionMode) => void;
   rememberAssistantChatPermissionMode: (
@@ -617,9 +618,8 @@ export function uiStatePartialForStorage(state: UiState) {
     assistantDockPosition: state.assistantDockPosition,
     assistantClosedBar: state.assistantClosedBar,
     assistantPanelOpen: state.assistantPanelOpen,
-    assistantPanelWidth: state.assistantPanelWidth,
     rightPanelOpen: state.rightPanelOpen,
-    detailPanelWidth: state.detailPanelWidth,
+    sidePanelWidth: state.sidePanelWidth,
     assistantDefaultPermissionMode: state.assistantDefaultPermissionMode,
     assistantChatPermissionModes: state.assistantChatPermissionModes,
     assistantProviderToolProfiles: state.assistantProviderToolProfiles,
@@ -712,10 +712,9 @@ export const useUiStore = create<UiState>()(
       assistantDockPosition: "right",
       assistantClosedBar: "composer",
       assistantPanelOpen: false,
-      assistantPanelWidth: ASSISTANT_PANEL_DEFAULT_WIDTH,
       rightPanelOpen: false,
       rightPanelMaximized: false,
-      detailPanelWidth: DETAIL_PANEL_DEFAULT_WIDTH,
+      sidePanelWidth: SIDE_PANEL_DEFAULT_WIDTH,
       assistantDefaultPermissionMode: DEFAULT_ASSISTANT_PERMISSION_MODE,
       assistantChatPermissionModes: {},
       assistantProviderToolProfiles: {},
@@ -862,12 +861,10 @@ export const useUiStore = create<UiState>()(
                 { rightPanelOpen: true },
         ),
       setRightPanelMaximized: (rightPanelMaximized) => set({ rightPanelMaximized }),
-      setDetailPanelWidth: (width) =>
-        set({ detailPanelWidth: normalizeDetailPanelWidth(width) }),
+      setSidePanelWidth: (width) =>
+        set({ sidePanelWidth: normalizeSidePanelWidth(width) }),
       setAssistantColumnClaimed: (assistantColumnClaimed) =>
         set({ assistantColumnClaimed }),
-      setAssistantPanelWidth: (width) =>
-        set({ assistantPanelWidth: normalizeAssistantPanelWidth(width) }),
       setSettingsSection: (settingsSection) => set({ settingsSection }),
       setAssistantDefaultPermissionMode: (assistantDefaultPermissionMode) =>
         set({ assistantDefaultPermissionMode }),
@@ -1088,9 +1085,6 @@ export const useUiStore = create<UiState>()(
             normalizeAssistantClosedBar(restored.assistantClosedBar) ??
             current.assistantClosedBar,
           assistantPanelOpen: restored.assistantPanelOpen === true,
-          assistantPanelWidth: normalizeAssistantPanelWidth(
-            restored.assistantPanelWidth ?? current.assistantPanelWidth,
-          ),
           // Saved before the panel held more than the assistant: it was open
           // exactly when the assistant was.
           rightPanelOpen:
@@ -1098,8 +1092,9 @@ export const useUiStore = create<UiState>()(
               ? restored.rightPanelOpen
               : restored.assistantPanelOpen === true,
           rightPanelMaximized: false,
-          detailPanelWidth: normalizeDetailPanelWidth(
-            restored.detailPanelWidth ?? current.detailPanelWidth,
+          sidePanelWidth: normalizeSidePanelWidth(
+            restoredSidePanelWidth(restored as Record<string, unknown>) ??
+              current.sidePanelWidth,
           ),
           assistantDefaultPermissionMode:
             normalizeAssistantPermissionMode(

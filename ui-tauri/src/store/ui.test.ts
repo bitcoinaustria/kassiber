@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   ASSISTANT_CHAT_PERMISSION_MODES_LIMIT,
-  ASSISTANT_PANEL_DEFAULT_WIDTH,
-  ASSISTANT_PANEL_MAX_WIDTH,
-  ASSISTANT_PANEL_MIN_WIDTH,
+  SIDE_PANEL_DEFAULT_WIDTH,
+  SIDE_PANEL_MAX_WIDTH,
+  SIDE_PANEL_MIN_WIDTH,
   DEFAULT_APP_SCALE,
   DEFAULT_ASSISTANT_TOOL_PROFILE,
   DEFAULT_THEME,
@@ -16,7 +16,8 @@ import {
   migrateUiState,
   normalizeAssistantChatPermissionModes,
   normalizeAssistantModelFavorites,
-  normalizeAssistantPanelWidth,
+  normalizeSidePanelWidth,
+  restoredSidePanelWidth,
   normalizeAssistantPermissionMode,
   normalizeAssistantProviderToolProfiles,
   uiStatePartialForStorage,
@@ -264,18 +265,30 @@ describe("assistant panel preferences", () => {
 
   it("persists the panel state and clamps a stored width", () => {
     useUiStore.getState().setAssistantPanelOpen(true);
-    useUiStore.getState().setAssistantPanelWidth(10_000);
+    useUiStore.getState().setSidePanelWidth(10_000);
     const stored = uiStatePartialForStorage(useUiStore.getState());
     expect(stored).toMatchObject({
       assistantPanelOpen: true,
-      assistantPanelWidth: ASSISTANT_PANEL_MAX_WIDTH,
+      sidePanelWidth: SIDE_PANEL_MAX_WIDTH,
     });
     // The focus request is a transient signal, not a preference.
     expect(stored).not.toHaveProperty("assistantPanelFocusRequest");
-    expect(normalizeAssistantPanelWidth(12)).toBe(ASSISTANT_PANEL_MIN_WIDTH);
-    expect(normalizeAssistantPanelWidth("wide")).toBe(ASSISTANT_PANEL_DEFAULT_WIDTH);
+    expect(normalizeSidePanelWidth(12)).toBe(SIDE_PANEL_MIN_WIDTH);
+    expect(normalizeSidePanelWidth("wide")).toBe(SIDE_PANEL_DEFAULT_WIDTH);
     useUiStore.getState().setAssistantPanelOpen(false);
-    useUiStore.getState().setAssistantPanelWidth(ASSISTANT_PANEL_DEFAULT_WIDTH);
+    useUiStore.getState().setSidePanelWidth(SIDE_PANEL_DEFAULT_WIDTH);
+  });
+
+  it("restores one panel width from the two widths it used to remember", () => {
+    // The wider of the old assistant and details widths carries over.
+    expect(restoredSidePanelWidth({ assistantPanelWidth: 596, detailPanelWidth: 903 })).toBe(903);
+    expect(restoredSidePanelWidth({ assistantPanelWidth: 620 })).toBe(620);
+    expect(restoredSidePanelWidth({ detailPanelWidth: "wide" })).toBeUndefined();
+    // A saved shared width wins over the old ones.
+    expect(
+      restoredSidePanelWidth({ sidePanelWidth: 700, detailPanelWidth: 903 }),
+    ).toBe(700);
+    expect(restoredSidePanelWidth({})).toBeUndefined();
   });
 
   it("focuses the composer when the toggle opens the panel", () => {

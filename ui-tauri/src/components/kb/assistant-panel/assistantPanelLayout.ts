@@ -1,34 +1,25 @@
 import * as React from "react";
 
 import {
-  ASSISTANT_PANEL_DEFAULT_WIDTH,
-  ASSISTANT_PANEL_MAX_WIDTH,
-  ASSISTANT_PANEL_MIN_WIDTH,
-  DETAIL_PANEL_DEFAULT_WIDTH,
-  DETAIL_PANEL_MAX_WIDTH,
-  DETAIL_PANEL_MIN_WIDTH,
+  SIDE_PANEL_DEFAULT_WIDTH,
+  SIDE_PANEL_MAX_WIDTH,
+  SIDE_PANEL_MIN_WIDTH,
 } from "@/store/ui";
 
 /** Toggle shortcut; `mod` is Cmd on macOS and Ctrl elsewhere. */
 export const ASSISTANT_PANEL_SHORTCUT = ["mod", "i"] as const;
 
-/** A panel tab's remembered width range. */
+/** The panel's remembered width range. */
 export interface PanelWidthBounds {
   min: number;
   max: number;
   default: number;
 }
 
-export const ASSISTANT_PANEL_BOUNDS: PanelWidthBounds = {
-  min: ASSISTANT_PANEL_MIN_WIDTH,
-  max: ASSISTANT_PANEL_MAX_WIDTH,
-  default: ASSISTANT_PANEL_DEFAULT_WIDTH,
-};
-
-export const DETAIL_PANEL_BOUNDS: PanelWidthBounds = {
-  min: DETAIL_PANEL_MIN_WIDTH,
-  max: DETAIL_PANEL_MAX_WIDTH,
-  default: DETAIL_PANEL_DEFAULT_WIDTH,
+export const SIDE_PANEL_BOUNDS: PanelWidthBounds = {
+  min: SIDE_PANEL_MIN_WIDTH,
+  max: SIDE_PANEL_MAX_WIDTH,
+  default: SIDE_PANEL_DEFAULT_WIDTH,
 };
 
 /**

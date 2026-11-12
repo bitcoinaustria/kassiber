@@ -55,11 +55,10 @@ import { useUiStore } from "@/store/ui";
 
 import { AssistantPanelActions, AssistantPanelBody } from "./AssistantPanel";
 import {
-  ASSISTANT_PANEL_BOUNDS,
   ASSISTANT_PANEL_SHORTCUT,
-  DETAIL_PANEL_BOUNDS,
   RIGHT_PANEL_MIN_PAGE_WIDTH,
   RIGHT_PANEL_SHEET_MARGIN,
+  SIDE_PANEL_BOUNDS,
   clampPanelWidth,
   draggedPanelWidth,
   focusAssistantComposer,
@@ -364,7 +363,6 @@ function DockedPanel({
   const maximized = useUiStore((s) => s.rightPanelMaximized);
   const asideRef = React.useRef<HTMLElement>(null);
   const resize = usePanelResize({
-    activeTab,
     reserve: RIGHT_PANEL_MIN_PAGE_WIDTH,
     containerWidth: () => asideRef.current?.parentElement?.clientWidth || null,
     measure: () => asideRef.current?.getBoundingClientRect().width ?? 0,
@@ -451,7 +449,6 @@ function RightPanelSheet({
   const contentRef = React.useRef<HTMLDivElement>(null);
   useViewportWidth();
   const resize = usePanelResize({
-    activeTab,
     reserve: RIGHT_PANEL_SHEET_MARGIN,
     containerWidth: viewportWidth,
     measure: () => contentRef.current?.getBoundingClientRect().width ?? 0,
@@ -527,31 +524,24 @@ function RightPanelSheet({
 }
 
 /**
- * The left-edge separator and the width it sets: the details' remembered
- * width while they are in front, the assistant's otherwise.
+ * The left-edge separator and the width it sets: one remembered width for
+ * every tab, so switching tabs never resizes the panel or the page.
  */
 function usePanelResize({
-  activeTab,
   reserve,
   containerWidth,
   measure,
   enabled,
 }: {
-  activeTab: RightPanelTab | null;
   reserve: number;
   containerWidth: () => number | null;
   measure: () => number;
   enabled: boolean;
 }) {
   const { t } = useTranslation("assistant");
-  const details = activeTab?.startsWith("detail:") ?? false;
-  const bounds = details ? DETAIL_PANEL_BOUNDS : ASSISTANT_PANEL_BOUNDS;
-  const assistantWidth = useUiStore((s) => s.assistantPanelWidth);
-  const detailWidth = useUiStore((s) => s.detailPanelWidth);
-  const setAssistantWidth = useUiStore((s) => s.setAssistantPanelWidth);
-  const setDetailWidth = useUiStore((s) => s.setDetailPanelWidth);
-  const storedWidth = details ? detailWidth : assistantWidth;
-  const setStoredWidth = details ? setDetailWidth : setAssistantWidth;
+  const bounds = SIDE_PANEL_BOUNDS;
+  const storedWidth = useUiStore((s) => s.sidePanelWidth);
+  const setStoredWidth = useUiStore((s) => s.setSidePanelWidth);
   const [dragWidth, setDragWidth] = React.useState<number | null>(null);
   const dragRef = React.useRef<{ startX: number; startWidth: number } | null>(null);
   const width = dragWidth ?? storedWidth;
@@ -578,15 +568,15 @@ function usePanelResize({
     setDragWidth(null);
   };
 
-  // A drag can end without a pointer-up: the panel closes, maximizes, or
-  // another tab comes forward, and the handle goes with it. Drop that drag
-  // rather than leaving the page stuck with the resize cursor.
+  // A drag can end without a pointer-up: the panel closes or maximizes, and
+  // the handle goes with it. Drop that drag rather than leaving the page
+  // stuck with the resize cursor.
   React.useEffect(() => {
     if (!dragRef.current) return;
     dragRef.current = null;
     clearDragStyles();
     setDragWidth(null);
-  }, [enabled, details]);
+  }, [enabled]);
   React.useEffect(
     () => () => {
       if (dragRef.current) {

@@ -26,7 +26,9 @@ The shell assistant opens in the right panel, laid out after T3 Code's: it
 docks beside the page, which keeps working at its width minus the panel's (at
 least 480px), and carries a tab per open thing: the assistant, the panel's own
 surfaces, and open transactions' details, which open as tabs instead of a
-second sheet. The surfaces are the review queue (the causes the journals hold
+second sheet. Every tab shares one width, dragged at the panel's left edge,
+so switching tabs resizes neither the panel nor the page and does not fold or
+unfold the side nav. The surfaces are the review queue (the causes the journals hold
 transactions for, transfers still to match, and journals waiting to be
 processed, read with the same daemon calls as the Review screen and the
 sidebar's Review badge), Changes (recent edit history as a diff, with undo, from

@@ -161,10 +161,9 @@ import { useAssistantDraftStore } from "@/store/assistantDraft";
 import { useRightPanelStore } from "@/store/rightPanel";
 import { TransactionDetailSheetFrame } from "@/components/transactions/TransactionDetailSheetFrame";
 import {
-  ASSISTANT_PANEL_DEFAULT_WIDTH,
-  ASSISTANT_PANEL_MAX_WIDTH,
-  DETAIL_PANEL_DEFAULT_WIDTH,
-  DETAIL_PANEL_MIN_WIDTH,
+  SIDE_PANEL_DEFAULT_WIDTH,
+  SIDE_PANEL_MAX_WIDTH,
+  SIDE_PANEL_MIN_WIDTH,
   useUiStore,
 } from "@/store/ui";
 import { shellModalOpen } from "../shellNavigation";
@@ -322,10 +321,9 @@ describe("AssistantLayout", () => {
     useSheet(false);
     useUiStore.setState({
       assistantPanelOpen: false,
-      assistantPanelWidth: ASSISTANT_PANEL_DEFAULT_WIDTH,
+      sidePanelWidth: SIDE_PANEL_DEFAULT_WIDTH,
       rightPanelOpen: false,
       rightPanelMaximized: false,
-      detailPanelWidth: DETAIL_PANEL_DEFAULT_WIDTH,
       assistantClosedBar: "composer",
       assistantDockPosition: "right",
       assistantColumnClaimed: false,
@@ -373,7 +371,7 @@ describe("AssistantLayout", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(pageColumn.closest("[aria-hidden='true']")).toBeNull();
     expect(shellModalOpen()).toBe(false);
-    expect(panelWidth()).toBe(`${ASSISTANT_PANEL_DEFAULT_WIDTH}px`);
+    expect(panelWidth()).toBe(`${SIDE_PANEL_DEFAULT_WIDTH}px`);
     // The composer moved into the panel; the closed bar is gone.
     expect(document.querySelector("[data-assistant-closed-bar]")).toBeNull();
     expect(storedUi()).toMatchObject({ assistantPanelOpen: true, rightPanelOpen: true });
@@ -490,7 +488,7 @@ describe("AssistantLayout", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Restore panel size" }));
     expect(pageColumn.className).not.toMatch(/\bhidden\b/);
-    expect(panelWidth()).toBe(`${ASSISTANT_PANEL_DEFAULT_WIDTH}px`);
+    expect(panelWidth()).toBe(`${SIDE_PANEL_DEFAULT_WIDTH}px`);
 
     // Hiding the panel drops the maximized state with it.
     fireEvent.click(screen.getByRole("button", { name: "Maximize panel" }));
@@ -505,31 +503,31 @@ describe("AssistantLayout", () => {
 
     fireEvent.pointerDown(handle, { button: 0, clientX: 900, pointerId: 1 });
     fireEvent.pointerMove(handle, { clientX: 800, pointerId: 1 });
-    const dragged = ASSISTANT_PANEL_DEFAULT_WIDTH + 100;
+    const dragged = SIDE_PANEL_DEFAULT_WIDTH + 100;
     expect(panelWidth()).toBe(`${dragged}px`);
     // The store only commits once the drag ends.
-    expect(useUiStore.getState().assistantPanelWidth).toBe(ASSISTANT_PANEL_DEFAULT_WIDTH);
+    expect(useUiStore.getState().sidePanelWidth).toBe(SIDE_PANEL_DEFAULT_WIDTH);
     fireEvent.pointerUp(handle, { clientX: 800, pointerId: 1 });
-    expect(useUiStore.getState().assistantPanelWidth).toBe(dragged);
-    expect(storedUi().assistantPanelWidth).toBe(dragged);
+    expect(useUiStore.getState().sidePanelWidth).toBe(dragged);
+    expect(storedUi().sidePanelWidth).toBe(dragged);
 
     fireEvent.pointerDown(handle, { button: 0, clientX: 800, pointerId: 2 });
     fireEvent.pointerMove(handle, { clientX: -2000, pointerId: 2 });
     fireEvent.pointerUp(handle, { clientX: -2000, pointerId: 2 });
-    expect(useUiStore.getState().assistantPanelWidth).toBe(ASSISTANT_PANEL_MAX_WIDTH);
+    expect(useUiStore.getState().sidePanelWidth).toBe(SIDE_PANEL_MAX_WIDTH);
 
     fireEvent.keyDown(handle, { key: "ArrowRight" });
-    expect(useUiStore.getState().assistantPanelWidth).toBe(ASSISTANT_PANEL_MAX_WIDTH - 16);
-    expect(handle.getAttribute("aria-valuenow")).toBe(String(ASSISTANT_PANEL_MAX_WIDTH - 16));
+    expect(useUiStore.getState().sidePanelWidth).toBe(SIDE_PANEL_MAX_WIDTH - 16);
+    expect(handle.getAttribute("aria-valuenow")).toBe(String(SIDE_PANEL_MAX_WIDTH - 16));
 
     // A remount (or relaunch) restores the remembered width.
     view.unmount();
     mount();
-    expect(panelWidth()).toBe(`${ASSISTANT_PANEL_MAX_WIDTH - 16}px`);
+    expect(panelWidth()).toBe(`${SIDE_PANEL_MAX_WIDTH - 16}px`);
   });
 
   it("keeps the page its minimum beside the docked panel", () => {
-    useUiStore.setState({ ...ASSISTANT_OPEN, assistantPanelWidth: ASSISTANT_PANEL_MAX_WIDTH });
+    useUiStore.setState({ ...ASSISTANT_OPEN, sidePanelWidth: 640 });
     const view = mount();
     // A 1000px row leaves 520px for the panel beside a 480px page.
     const row = panel()!.parentElement!;
@@ -543,7 +541,7 @@ describe("AssistantLayout", () => {
     expect(handle.getAttribute("aria-valuenow")).toBe("520");
     // The keyboard steps from the rendered width.
     fireEvent.keyDown(handle, { key: "ArrowRight" });
-    expect(useUiStore.getState().assistantPanelWidth).toBe(520 - 16);
+    expect(useUiStore.getState().sidePanelWidth).toBe(520 - 16);
   });
 
   it("gives the page its cursor and selection back when it closes mid-resize", () => {
@@ -560,7 +558,7 @@ describe("AssistantLayout", () => {
     expect(document.body.style.cursor).toBe("");
     expect(document.body.style.userSelect).toBe("");
     // The unfinished drag is not remembered as the new width.
-    expect(useUiStore.getState().assistantPanelWidth).toBe(ASSISTANT_PANEL_DEFAULT_WIDTH);
+    expect(useUiStore.getState().sidePanelWidth).toBe(SIDE_PANEL_DEFAULT_WIDTH);
   });
 
   it("is a sheet over the page on a narrow window: focus moves in, Escape hides it, focus returns", async () => {
@@ -574,7 +572,7 @@ describe("AssistantLayout", () => {
     expect(sheet).toBe(panel());
     expect(sheet.dataset.rightPanel).toBe("sheet");
     expect(screen.getByRole("dialog", { name: "Side panel: Assistant" })).toBe(sheet);
-    expect(sheetWidth()).toBe(`${ASSISTANT_PANEL_DEFAULT_WIDTH}px`);
+    expect(sheetWidth()).toBe(`${SIDE_PANEL_DEFAULT_WIDTH}px`);
     // The covered page is hidden from assistive tech, and focus is in the
     // panel's composer.
     expect(
@@ -602,10 +600,10 @@ describe("AssistantLayout", () => {
 
   it("reports the sheet's width it renders at when the window narrows", () => {
     useSheet(true);
-    useUiStore.setState({ ...ASSISTANT_OPEN, assistantPanelWidth: ASSISTANT_PANEL_MAX_WIDTH });
+    useUiStore.setState({ ...ASSISTANT_OPEN, sidePanelWidth: 640 });
     mount();
     const handle = screen.getByRole("separator", { name: "Resize side panel" });
-    expect(handle.getAttribute("aria-valuenow")).toBe(String(ASSISTANT_PANEL_MAX_WIDTH));
+    expect(handle.getAttribute("aria-valuenow")).toBe("640");
 
     // A 568px window leaves the page its 48px strip, so CSS caps the
     // remembered 640px at 520px; the separator follows.
@@ -637,17 +635,18 @@ describe("AssistantLayout", () => {
     expect(tabs.map((tab) => tab.textContent)).toEqual(["Assistant", "Details"]);
     expect(panel()!.dataset.activeTab).toBe(`detail:${key}`);
     expect(tabs[1].getAttribute("aria-selected")).toBe("true");
-    // The details keep their own, wider width.
-    expect(panelWidth()).toBe(`${DETAIL_PANEL_DEFAULT_WIDTH}px`);
+    // Every tab shares one width: the details do not resize the panel, the
+    // page beside it, or the side nav that folds by it.
+    expect(panelWidth()).toBe(`${SIDE_PANEL_DEFAULT_WIDTH}px`);
     expect(
       screen.getByRole("separator", { name: "Resize side panel" }).getAttribute("aria-valuemin"),
-    ).toBe(String(DETAIL_PANEL_MIN_WIDTH));
+    ).toBe(String(SIDE_PANEL_MIN_WIDTH));
 
     // The shortcut brings the assistant forward rather than hiding it.
     act(pressShortcut);
     expect(assistantInFront()).toBe(true);
     expect(useUiStore.getState().rightPanelOpen).toBe(true);
-    expect(panelWidth()).toBe(`${ASSISTANT_PANEL_DEFAULT_WIDTH}px`);
+    expect(panelWidth()).toBe(`${SIDE_PANEL_DEFAULT_WIDTH}px`);
     expect(document.activeElement).toBe(panel()!.querySelector("textarea"));
 
     // A tab's close button closes only that tab; Delete does the same.
