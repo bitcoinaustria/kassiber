@@ -44,6 +44,7 @@ export function TerminalCommandSettingsPanel({
         </p>
       ) : null}
       <SettingsRow
+        anchorId="terminalCommand"
         label={t("terminal.statusLabel")}
         description={
           status ? (

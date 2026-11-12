@@ -92,6 +92,26 @@ describe("explorerTargetForTransaction", () => {
       }),
     ).toBeNull();
   });
+
+  it("honours the user's opt-out of public explorer websites", () => {
+    const settings = {
+      bitcoinBaseUrl: "",
+      liquidBaseUrl: "",
+      publicFallbacks: true,
+      publicFallbacksAllowed: false,
+    };
+    expect(
+      explorerTargetForTransaction({ txid: "abc123", network: "bitcoin", settings }),
+    ).toBeNull();
+    // An explorer the user added is not a public fallback and still links.
+    expect(
+      explorerTargetForTransaction({
+        txid: "abc123",
+        network: "bitcoin",
+        settings: { ...settings, bitcoinBaseUrl: "http://127.0.0.1:3002" },
+      })?.url,
+    ).toBe("http://127.0.0.1:3002/tx/abc123");
+  });
 });
 
 describe("explorerTargetForAddress", () => {

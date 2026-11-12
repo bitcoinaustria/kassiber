@@ -160,7 +160,7 @@ export function BackupSettings() {
     </SettingsRow>
   );
 
-  return <SettingsGroup title={t("data.backupHeading")} footer={t("backup.scope")}>
+  return <SettingsGroup anchorId="backup" title={t("data.backupHeading")} footer={t("backup.scope")}>
     {!mode ? <>
       <SettingsRow label={t("backup.exportLabel")} description={t("backup.exportDescription")}>
         <Button type="button" variant="outline" size="sm" disabled={!isFileSaveAvailable} onClick={() => { setMode("export"); setMessage(null); }}>{t("backup.export")}</Button>

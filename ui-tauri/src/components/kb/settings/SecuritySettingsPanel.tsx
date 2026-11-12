@@ -77,6 +77,7 @@ export function SecuritySettingsPanel({
   return (
     <div className="space-y-6">
       <SettingsGroup
+        anchorId="databaseEncryption"
         title={t("security.encryptionHeading")}
         actions={
           <Button type="button" size="sm" variant="outline" onClick={onLockNow}>
@@ -106,6 +107,7 @@ export function SecuritySettingsPanel({
           </span>
         </SettingsRow>
         <SettingsRow
+          anchorId="passphrase"
           label={t("security.passphraseLabel")}
           description={
             encryptedWorkspace
@@ -127,6 +129,7 @@ export function SecuritySettingsPanel({
 
       <SettingsGroup title={t("security.appLockHeading")}>
         <SettingsRow
+          anchorId="autoLock"
           label={t("security.autoLockLabel")}
           description={t("security.autoLockDescription")}
           htmlFor="settings-auto-lock"
@@ -158,6 +161,7 @@ export function SecuritySettingsPanel({
           </SettingsRow>
         ) : null}
         <SettingsRow
+          anchorId="lockOnLaunch"
           label={t("security.requireOnLaunchLabel")}
           description={
             encryptedWorkspace
@@ -176,6 +180,7 @@ export function SecuritySettingsPanel({
           />
         </SettingsRow>
         <SettingsRow
+          anchorId="lockOnClose"
           label={t("security.lockOnCloseLabel")}
           description={t("security.lockOnCloseDescription")}
           htmlFor="settings-lock-on-close"
@@ -190,7 +195,7 @@ export function SecuritySettingsPanel({
         </SettingsRow>
       </SettingsGroup>
 
-      <SettingsGroup title={t("security.biometricHeading")}>
+      <SettingsGroup anchorId="biometricUnlock" title={t("security.biometricHeading")}>
         <SettingsRow label={t("security.biometricLabel")} description={biometricDetail}>
           <span
             className={cn(

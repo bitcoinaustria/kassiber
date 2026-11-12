@@ -6,6 +6,7 @@ import { Switch } from "@/components/ui/switch";
 import { useOfflineMode } from "@/lib/offlineMode";
 import { cn } from "@/lib/utils";
 import { PRIVACY_MODES, type PrivacyMode } from "@/store/ui";
+import { ExplorerFallbackSetting } from "./ExplorerFallbackSetting";
 import { SettingsGroup, SettingsRow, SettingsSelect } from "./SettingsControls";
 import {
   backendProtocolLabel,
@@ -206,6 +207,7 @@ export function PrivacySettingsPanel({
         }
       >
         <SettingsRow
+          anchorId="offlineMode"
           label={t("privacy.offlineLabel")}
           description={
             offlineMode.offline ? t("privacy.offlineOn") : t("privacy.offlineOff")
@@ -228,6 +230,7 @@ export function PrivacySettingsPanel({
 
       <SettingsGroup title={t("privacy.onScreenHeading")}>
         <SettingsRow
+          anchorId="privacyMode"
           label={t("privacy.modeLabel")}
           description={t(PRIVACY_MODE_DESCRIPTION[privacyMode])}
           htmlFor="settings-privacy-mode"
@@ -243,6 +246,7 @@ export function PrivacySettingsPanel({
           />
         </SettingsRow>
         <SettingsRow
+          anchorId="hideOnUnlock"
           label={t("privacy.unlockLabel")}
           description={
             hideAmountsOnUnlock ? t("privacy.unlockOn") : t("privacy.unlockOff")
@@ -256,6 +260,7 @@ export function PrivacySettingsPanel({
           />
         </SettingsRow>
         <SettingsRow
+          anchorId="clearClipboard"
           label={t("privacy.clipboardLabel")}
           description={
             clearClipboard ? t("privacy.clipboardOn") : t("privacy.clipboardOff")
@@ -275,6 +280,7 @@ export function PrivacySettingsPanel({
         footer={t("privacy.updatesTrust")}
       >
         <SettingsRow
+          anchorId="updateChecks"
           label={t("privacy.updatesLabel")}
           description={
             automaticUpdateChecks ? t("privacy.updatesOn") : t("privacy.updatesOff")
@@ -290,6 +296,7 @@ export function PrivacySettingsPanel({
       </SettingsGroup>
 
       <SettingsGroup
+        anchorId="outgoingConnections"
         title={t("privacy.leavesHeading")}
         footer={t("privacy.leavesDescription")}
       >
@@ -319,6 +326,7 @@ export function PrivacySettingsPanel({
             {t("privacy.reviewAi")}
           </Button>
         </SettingsRow>
+        <ExplorerFallbackSetting />
         <SettingsRow
           label={t("privacy.filterLabel")}
           description={

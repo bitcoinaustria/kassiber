@@ -136,6 +136,7 @@ export function ExternalAgentsSettings({ aiFeaturesEnabled }: { aiFeaturesEnable
 
   return (
     <SettingsGroup
+      anchorId="externalAgents"
       title={t("ai.agentsLabel")}
       className={cn(!aiFeaturesEnabled && "opacity-60")}
       footer={

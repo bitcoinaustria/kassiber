@@ -50,6 +50,24 @@ pub fn status_payload(version: &str, facts: &StatusFacts, config: &RuntimeConfig
     ])
 }
 
+/// What the open book occupies on disk, for the daemon's `status` with
+/// `args.storage`: the database file and its write-ahead log, in bytes, each
+/// `null` when the file is absent or unreadable. Local metadata reads only.
+/// Opt-in so the default `status` payload, which recorded sessions pin byte
+/// for byte, stays unchanged.
+pub fn storage_payload(database: &str) -> Value {
+    let size = |path: &str| {
+        std::fs::metadata(path)
+            .ok()
+            .filter(std::fs::Metadata::is_file)
+            .map_or(Value::Null, |meta| Value::from(meta.len()))
+    };
+    dict([
+        ("database_bytes", size(database)),
+        ("wal_bytes", size(&format!("{database}-wal"))),
+    ])
+}
+
 /// The daemon's `_status_payload`: a daemon started for a catalog project
 /// reports that project's id and root over the data root's metadata.
 pub fn daemon_status_payload(
@@ -68,4 +86,36 @@ pub fn daemon_status_payload(
         );
     }
     payload
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use kassiber_envelope::get;
+
+    #[test]
+    fn storage_reports_file_sizes_and_null_for_missing_files() {
+        let dir = std::env::temp_dir().join(format!(
+            "kassiber-status-storage-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let database = dir.join("kassiber.sqlite3");
+        std::fs::write(&database, vec![0u8; 4096]).unwrap();
+        let database = database.to_str().unwrap();
+
+        let payload = storage_payload(database);
+        assert_eq!(get(&payload, "database_bytes"), Some(&Value::from(4096u64)));
+        assert_eq!(get(&payload, "wal_bytes"), Some(&Value::Null));
+
+        std::fs::write(format!("{database}-wal"), vec![0u8; 32]).unwrap();
+        let payload = storage_payload(database);
+        assert_eq!(get(&payload, "wal_bytes"), Some(&Value::from(32u64)));
+
+        // A directory where the database should be is not a size.
+        let missing = storage_payload(dir.to_str().unwrap());
+        assert_eq!(get(&missing, "database_bytes"), Some(&Value::Null));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 }

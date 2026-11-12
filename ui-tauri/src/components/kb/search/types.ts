@@ -2,6 +2,7 @@ import type {
   AppRoutePath,
   SettingsMenuSection,
 } from "@/components/kb/menuIntent";
+import type { SettingsAnchorId } from "@/components/kb/settings/settingsSearch";
 
 export const SEARCH_RESULT_CATEGORIES = [
   "page",
@@ -83,6 +84,8 @@ export type SearchResultMetadata = {
   reportId?: string | null;
   reviewItemId?: string | null;
   settingSection?: SettingsMenuSection | null;
+  /** A row inside the section to scroll to (see `SETTINGS_SEARCH_ENTRIES`). */
+  settingAnchor?: SettingsAnchorId | null;
   sourceKind?: string | null;
   searchTokens?: readonly string[];
 };

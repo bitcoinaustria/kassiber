@@ -61,6 +61,11 @@ lists their full URLs. Setup itself does not contact them.
 
 **Your own server** and **Offline** do not enable these presets or
 public explorer links. Offline books can still use manual imports and reports.
+Settings → Privacy → **Open explorer links on public websites** turns the
+public explorer fallback off for any setup (on by default where the setup
+allows it): links then open only on an explorer the user added, and without
+one no explorer link is shown. The choice is a renderer preference, kept apart
+from the setup-derived fallback so a backend refresh cannot re-enable it.
 
 Every `wallets sync` against any of these sends your addresses (or
 scripthashes, or gap-limit-scanned descriptor scripts) to whoever

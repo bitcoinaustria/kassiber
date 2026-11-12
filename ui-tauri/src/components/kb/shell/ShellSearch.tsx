@@ -61,6 +61,7 @@ import {
   type SearchIconKey,
 } from "../search";
 import { settingsSectionRoute } from "../settingsSections";
+import { requestSettingsAnchor } from "@/components/kb/settings/settingsSearch";
 
 const SEARCH_ICON_BY_KEY: Record<
   SearchIconKey | string,
@@ -330,6 +331,8 @@ export function ShellSearch({
       // is now its own route, so resolve the slug to that route instead of
       // navigating to /settings and letting the redirect bounce.
       if (route.to === "/settings") {
+        // A setting-level result also scrolls to its row once the section shows.
+        requestSettingsAnchor(result.metadata?.settingAnchor ?? null);
         void navigate({ to: settingsSectionRoute(route.hash ?? null) });
         return;
       }

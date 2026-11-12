@@ -1,5 +1,12 @@
 import type { OverviewSnapshot, Tx } from "@/mocks/seed";
-import { SETTINGS_SECTIONS } from "@/components/kb/settings/SettingsNavigation";
+import {
+  SETTINGS_SECTIONS,
+  sectionMeta,
+} from "@/components/kb/settings/SettingsNavigation";
+import {
+  SETTINGS_SEARCH_ENTRIES,
+  settingsSearchKeywords,
+} from "@/components/kb/settings/settingsSearch";
 import {
   isDevOnlyRoute,
   isDevOnlySettingsSection,
@@ -597,8 +604,12 @@ function uniqueKeywords(
   return out;
 }
 
-function translatedString(t: AppTranslate, key: string): string {
-  const value = t(key);
+function translatedString(
+  t: AppTranslate,
+  key: string,
+  options?: Record<string, unknown>,
+): string {
+  const value = t(key, options);
   return typeof value === "string" ? value : "";
 }
 
@@ -707,7 +718,7 @@ function settingsResults(
   developerToolsEnabled: boolean,
 ): SearchResult[] {
   const groupPrefix = translatedString(t, "search:settings.groupPrefix");
-  return SETTINGS_SECTIONS.filter(
+  const sections: SearchResult[] = SETTINGS_SECTIONS.filter(
     (section) => developerToolsEnabled || !isDevOnlySettingsSection(section.id),
   ).map((section) => {
     const title = translatedString(t, `settings:${section.labelKey}`);
@@ -734,6 +745,53 @@ function settingsResults(
       metadata: {
         settingSection: section.slug as SettingsMenuSection,
         searchTokens: [section.id, section.slug],
+      },
+      privacyTier: "public" as const,
+    };
+  });
+  return [...sections, ...settingEntryResults(t, developerToolsEnabled, groupPrefix)];
+}
+
+/**
+ * One result per setting (`SETTINGS_SEARCH_ENTRIES`), so "clipboard" or
+ * "auto-lock" lands on the row itself. Titles are the row's own label; the
+ * subtitle names the section, which tells apart generic labels ("Backends").
+ * English keywords stay alongside the localized ones, as for sections.
+ */
+function settingEntryResults(
+  t: AppTranslate,
+  developerToolsEnabled: boolean,
+  groupPrefix: string,
+): SearchResult[] {
+  return SETTINGS_SEARCH_ENTRIES.filter(
+    (entry) => developerToolsEnabled || !isDevOnlySettingsSection(entry.section),
+  ).map((entry) => {
+    const section = sectionMeta(entry.section);
+    const title = translatedString(t, `settings:${entry.labelKey}`);
+    const sectionTitle = translatedString(t, `settings:${section.labelKey}`);
+    return {
+      id: `setting:${entry.section}:${entry.anchor}`,
+      category: "setting" as const,
+      title,
+      subtitle: `${groupPrefix} · ${sectionTitle}`,
+      keywords: uniqueKeywords(
+        [
+          title,
+          sectionTitle,
+          section.label,
+          translatedString(t, `settings:${entry.labelKey}`, { lng: "en" }),
+        ],
+        settingsSearchKeywords(t(`settings:${entry.keywordsKey}`)),
+        settingsSearchKeywords(
+          t(`settings:${entry.keywordsKey}`, { lng: "en" }),
+        ),
+      ),
+      iconKey: "settings",
+      route: { to: "/settings", hash: section.slug },
+      metadata: {
+        settingSection: section.slug as SettingsMenuSection,
+        settingAnchor: entry.anchor,
+        searchTokens: [entry.anchor],
       },
       privacyTier: "public" as const,
     };

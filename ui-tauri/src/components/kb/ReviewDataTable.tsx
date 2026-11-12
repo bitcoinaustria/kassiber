@@ -44,6 +44,7 @@ import { cn } from "@/lib/utils";
 import { formatUiNumber } from "@/lib/localeFormat";
 import { useUiStore } from "@/store/ui";
 import { maskSensitive, sensitiveClass as blurClass } from "@/lib/sensitive";
+import { useRememberedTableSort } from "@/store/useRememberedTableSort";
 
 export type ReviewTableKind = "journal-events";
 
@@ -175,6 +176,8 @@ const priorityLabelKey = {
 
 export type ReviewTone = "good" | "warning" | "alert" | "neutral";
 type SortDirection = "desc" | "asc";
+const REVIEW_TABLE_SORT_KEYS = ["date"] as const;
+const DEFAULT_REVIEW_TABLE_SORT = { key: "date", direction: "desc" } as const;
 
 export function ReviewDataTable({
   kind,
@@ -203,7 +206,12 @@ export function ReviewDataTable({
   const [statusFilter, setStatusFilter] =
     useState<ReviewTableRow["status"] | "All">("All");
   const [metricFilterId, setMetricFilterId] = useState<string | null>(null);
-  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [dateSort, setDateSort] = useRememberedTableSort(
+    "review",
+    REVIEW_TABLE_SORT_KEYS,
+    DEFAULT_REVIEW_TABLE_SORT,
+  );
+  const sortDirection: SortDirection = dateSort?.direction ?? "desc";
   const [pageIndex, setPageIndex] = useState(0);
 
   const activeRows = rows.filter((row) => row.status !== "Resolved");
@@ -486,9 +494,10 @@ export function ReviewDataTable({
                     label={t("common:field.date")}
                     direction={sortDirection}
                     onClick={() =>
-                      setSortDirection((value) =>
-                        value === "desc" ? "asc" : "desc",
-                      )
+                      setDateSort({
+                        key: "date",
+                        direction: sortDirection === "desc" ? "asc" : "desc",
+                      })
                     }
                   />
                 </TableHead>
