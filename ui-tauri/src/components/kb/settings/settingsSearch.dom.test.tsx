@@ -84,10 +84,10 @@ describe("useSettingsAnchorHighlight", () => {
   });
 
   it("unfolds a closed disclosure around its target", () => {
-    act(() => requestSettingsAnchor("analysisNetwork"));
+    act(() => requestSettingsAnchor("bookNetwork"));
     const { container } = render(
       <Section section="network-bitcoin">
-        <details data-settings-anchor="analysisNetwork">
+        <details data-settings-anchor="bookNetwork">
           <summary>Local analysis</summary>
         </details>
       </Section>,

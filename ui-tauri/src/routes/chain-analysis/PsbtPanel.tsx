@@ -9,22 +9,44 @@ import { isFilePickerAvailable, pickChainAnalysisSource, type AnalysisSourceSele
 import { DEFAULT_ANALYSIS_QUERY, formatAnalysisAmount } from "@/lib/chainAnalysis";
 import { maskSensitive, useSensitive } from "@/lib/sensitive";
 import { payjoinOptions, psbtAssistantContext, type PsbtAnalysis, type PsbtComparison } from "@/lib/chainAnalysisWorkbench";
-import { ANALYSIS_NETWORKS, type AnalysisNetwork, useUiStore } from "@/store/ui";
+import { ANALYSIS_NETWORKS, type AnalysisNetwork } from "@/store/ui";
 import { EntropyPanel } from "./EntropyPanel";
 import { CodeList, FeatureDetails, StructuredValue } from "./FeatureDetails";
 import { Fact } from "./EvidenceDetails";
 
+/**
+ * The network a PSBT inspection runs on. A bound book decides it. An unbound
+ * book uses the one environment its wallets already show, and mainnet when
+ * they show none or disagree; there is no separate device-wide default.
+ */
+export function bookEvidenceNetwork(wallets: { environments: string[] }[] | undefined): AnalysisNetwork {
+  const seen = new Set((wallets ?? []).flatMap(wallet => wallet.environments));
+  const [only] = seen;
+  return seen.size === 1 && ANALYSIS_NETWORKS.includes(only as AnalysisNetwork) ? only as AnalysisNetwork : "main";
+}
+
 export function PsbtPanel(props: { onError: (value: unknown) => void; initialNetwork?: string }) {
   const { t } = useTranslation(["settings", "common"]);
   const query = useDaemon<{ environment_id: string | null; domains: { chain: string; network: string }[] }>("ui.networks.binding");
-  if (query.isLoading) return <p>{t("common:state.loading")}</p>;
-  if (query.isError) return <Button onClick={() => void query.refetch()}>{t("common:actions.retry")}</Button>;
   const bookNetwork = query.data?.data?.domains.find(domain => domain.chain === "bitcoin")?.network;
+  // A local database read; it only runs for unbound books.
+  const inventory = useDaemon<{ wallets: { environments: string[] }[] }>(
+    "ui.networks.inventory",
+    {},
+    { enabled: query.isSuccess && !bookNetwork },
+  );
+  if (query.isLoading || (!bookNetwork && inventory.isLoading)) return <p>{t("common:state.loading")}</p>;
+  if (query.isError) return <Button onClick={() => void query.refetch()}>{t("common:actions.retry")}</Button>;
   if (bookNetwork && props.initialNetwork && props.initialNetwork !== bookNetwork) return <p role="alert">{t("bookNetwork.inspectionMismatch")}</p>;
-  return <PsbtPanelContent key={query.data?.data?.environment_id ?? "unbound"} {...props} initialNetwork={bookNetwork ?? props.initialNetwork} />;
+  return <PsbtPanelContent
+    key={query.data?.data?.environment_id ?? "unbound"}
+    {...props}
+    initialNetwork={bookNetwork ?? props.initialNetwork}
+    fallbackNetwork={bookEvidenceNetwork(inventory.data?.data?.wallets)}
+  />;
 }
 
-function PsbtPanelContent({ onError, initialNetwork }: { onError: (value: unknown) => void; initialNetwork?: string }) {
+function PsbtPanelContent({ onError, initialNetwork, fallbackNetwork }: { onError: (value: unknown) => void; initialNetwork?: string; fallbackNetwork: AnalysisNetwork }) {
   const { t } = useTranslation("chainAnalysis");
   const { t: settingsT } = useTranslation("settings");
   const hideAmounts = useSensitive();
@@ -36,7 +58,7 @@ function PsbtPanelContent({ onError, initialNetwork }: { onError: (value: unknow
   // relabel selected files, completed results, or an in-flight entropy job.
   const [network] = useState(() => ANALYSIS_NETWORKS.includes(initialNetwork as AnalysisNetwork)
     ? initialNetwork as AnalysisNetwork
-    : useUiStore.getState().analysisNetwork);
+    : fallbackNetwork);
   const [payjoin, setPayjoin] = useState(false);
   const [payment, setPayment] = useState("0");
   const [feeOutput, setFeeOutput] = useState("");

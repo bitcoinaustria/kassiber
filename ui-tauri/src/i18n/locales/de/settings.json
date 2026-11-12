@@ -928,9 +928,6 @@
     "healthJustAdded": "gerade hinzugefügt – ok"
   },
   "analysisNetwork": {
-    "title": "Lokale Analyse",
-    "label": "Standardnetzwerk für neue Untersuchungen",
-    "help": "Gilt, wenn eine importierte Datei keinen Netzwerkkontext hat. Bestehende Untersuchungen und Netzwerke der Verbindungen bleiben unverändert.",
     "effective": "Netzwerk: {{network}}"
   },
   "networkLayer": {
@@ -980,7 +977,11 @@
     "instance": "UUID der lokalen Instanz",
     "newInstance": "Neue Instanz",
     "unknown": "Netzwerk nicht aufgezeichnet",
-    "declare": "Ich ordne diese Connection der gewählten Umgebung zu. Fehlende Quellbelege bleiben unbekannt.",
+    "declareAll": {
+      "label": "Connections ohne Netzwerk-Beleg zuordnen",
+      "description_one": "{{count}} Connection zeigt kein Netzwerk. Ordne sie {{environment}} zu; fehlende Quellbelege bleiben unbekannt.",
+      "description_other": "{{count}} Connections zeigen kein Netzwerk. Ordne sie {{environment}} zu; fehlende Quellbelege bleiben unbekannt."
+    },
     "preview": "Zuordnung prüfen",
     "confirmHelp": "Diese Zuordnung ist dauerhaft. Quelldaten und frühere Berichte werden nicht umgeschrieben.",
     "bind": "Buchnetzwerk bestätigen",
@@ -1072,7 +1073,6 @@
       "bundledRates": "Stundenpreise, eingebaute Kurse, offline",
       "bookNetwork": "Mainnet, Testnet, Signet, Regtest, Umgebung",
       "bitcoinBackends": "Electrum, Fulcrum, Esplora, Bitcoin Core, Node, Server, Indexer",
-      "analysisNetwork": "Offline-Analyse, Chain-Analyse, Netzwerk-Standard",
       "lightningNodes": "LND, Core Lightning, CLN, Node, Kanäle",
       "liquidBackends": "L-BTC, Elements, Esplora, Sidechain, Server",
       "offlineMode": "kein Netzwerk, Flugmodus, trennen, Verbindungen sperren",

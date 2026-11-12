@@ -24,11 +24,15 @@ export function BookNetworkSettings({ children }: { children?: ReactNode } = {})
   const bind = useDaemonMutation("ui.networks.bind");
   const [environment, setEnvironment] = useState("main");
   const [instance, setInstance] = useState("");
-  const [declared, setDeclared] = useState<string[]>([]);
+  // One choice for every connection without network evidence, not a switch
+  // per row: the declaration means the same thing for each of them.
+  const [declareAll, setDeclareAll] = useState(false);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [error, setError] = useState<string | null>(null);
   const inventory = needsInventory && query.data?.data?.binding.state === "unbound" && query.data.data.profile_id === binding?.profile_id
     ? query.data.data : undefined;
+  const undeclared = inventory?.wallets.filter(wallet => wallet.requires_declaration) ?? [];
+  const declared = declareAll ? undeclared.map(wallet => wallet.wallet_id) : [];
   const recipe = { environment, chain_instance_id: environment === "regtest" ? instance : null, declared_wallet_ids: declared };
   const current = plan && inventory && plan.profile_id === inventory.profile_id && plan.inventory_digest === inventory.inventory_digest && JSON.stringify({ environment: plan.environment, chain_instance_id: plan.chain_instance_id, declared_wallet_ids: [...plan.declared_wallet_ids].sort() }) === JSON.stringify({ ...recipe, declared_wallet_ids: [...declared].sort() });
   const bound = binding?.state === "bound";
@@ -75,17 +79,21 @@ export function BookNetworkSettings({ children }: { children?: ReactNode } = {})
           <Input id="book-network-instance" className="h-8 w-72 font-mono text-xs" value={instance} onChange={event => setInstance(event.target.value)} />
           <Button type="button" variant="outline" size="sm" onClick={() => setInstance(crypto.randomUUID())}>{t("bookNetwork.newInstance")}</Button>
         </SettingsRow>}
+        {undeclared.length > 0 && <SettingsRow
+          label={t("bookNetwork.declareAll.label")}
+          description={t("bookNetwork.declareAll.description", {
+            count: undeclared.length,
+            environment: t(`bookNetwork.environments.${environment as Environment}`),
+          })}
+          htmlFor="book-network-declare-all"
+        >
+          <Switch id="book-network-declare-all" checked={declareAll} onCheckedChange={checked => setDeclareAll(checked === true)} />
+        </SettingsRow>}
         {inventory.wallets.map(wallet => <SettingsRow
           key={wallet.wallet_id}
           label={wallet.label}
-          htmlFor={wallet.requires_declaration ? `book-network-declare-${wallet.wallet_id}` : undefined}
-          description={<>
-            <span className="block">{wallet.environments.join(", ") || t("bookNetwork.unknown")}</span>
-            {wallet.requires_declaration && <span className="block">{t("bookNetwork.declare")}</span>}
-          </>}
-        >
-          {wallet.requires_declaration && <Switch id={`book-network-declare-${wallet.wallet_id}`} checked={declared.includes(wallet.wallet_id)} onCheckedChange={checked => setDeclared(values => checked ? [...values, wallet.wallet_id] : values.filter(id => id !== wallet.wallet_id))} />}
-        </SettingsRow>)}
+          description={wallet.environments.join(", ") || t("bookNetwork.unknown")}
+        >{null}</SettingsRow>)}
         {current && plan && plan.blockers.map((blocker, index) => <p className="px-4 py-3 text-sm text-destructive" key={index}>{t(`bookNetwork.blockers.${blocker.code as "already_bound" | "contradictory_evidence" | "different_environment" | "different_instance" | "scope_declaration_required" | "reference_domain_mismatch"}`)} {inventory.wallets.find(wallet => wallet.wallet_id === blocker.wallet_id)?.label}</p>)}
         {current && plan?.can_apply && <p className="px-4 py-3 text-sm text-amber-700 dark:text-amber-300">{t("bookNetwork.confirmHelp")}</p>}
         <div className="flex flex-wrap justify-end gap-2 px-4 py-3">

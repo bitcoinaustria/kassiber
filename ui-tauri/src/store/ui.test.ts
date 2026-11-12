@@ -212,18 +212,7 @@ describe("UI persistence", () => {
   });
 });
 
-describe("offline analysis network preference", () => {
-  it("persists the chosen network without changing data mode or connections", () => {
-    const state = useUiStore.getState();
-    const dataMode = state.dataMode;
-    const identity = state.identity;
-    state.setAnalysisNetwork("regtest");
-    expect(uiStatePartialForStorage(useUiStore.getState()).analysisNetwork).toBe("regtest");
-    expect(useUiStore.getState().dataMode).toBe(dataMode);
-    expect(useUiStore.getState().identity).toBe(identity);
-    state.setAnalysisNetwork("main");
-  });
-
+describe("analysis network values", () => {
   it("rejects unknown restored networks and preserves explicit valid contexts", () => {
     for (const network of ["main", "test", "signet", "regtest"]) {
       expect(normalizeAnalysisNetwork(network)).toBe(network);

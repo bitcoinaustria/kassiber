@@ -1,15 +1,12 @@
 import { BookNetworkSettings } from "./BookNetworkSettings";
 
 import { useTranslation } from "react-i18next";
-import { ANALYSIS_NETWORKS, type AnalysisNetwork, useUiStore } from "@/store/ui";
 
 import { Button } from "@/components/ui/button";
 import { isCoreLightningCommandoBackend } from "@/lib/lightning";
 import {
-  SettingsDisclosure,
   SettingsGroup,
   SettingsRow,
-  SettingsSelect,
 } from "./SettingsControls";
 import type { SettingsAnchorId } from "./settingsSearch";
 import {
@@ -67,7 +64,7 @@ export function NetworkLayerSettingsPanel({
           : t("networkLayer.noPublicLinks");
   return (
     <div className="space-y-6">
-      {layer === "bitcoin" ? <BookNetworkSettings><AnalysisNetworkSettings /></BookNetworkSettings> : null}
+      {layer === "bitcoin" ? <BookNetworkSettings /> : null}
 
       <SettingsGroup
         anchorId={LAYER_SEARCH_ANCHOR[layer]}
@@ -177,28 +174,5 @@ export function BackendLayerRow({
         {t("common:actions.edit")}
       </Button>
     </SettingsRow>
-  );
-}
-
-/** Offline defaults never alter connection networks or authorize requests. */
-function AnalysisNetworkSettings() {
-  const { t } = useTranslation("settings");
-  const network = useUiStore((state) => state.analysisNetwork);
-  const setNetwork = useUiStore((state) => state.setAnalysisNetwork);
-  return (
-    <SettingsDisclosure anchorId="analysisNetwork" title={t("analysisNetwork.title")}>
-      <SettingsRow
-        label={t("analysisNetwork.label")}
-        description={t("analysisNetwork.help")}
-        htmlFor="analysis-network"
-      >
-        <SettingsSelect<AnalysisNetwork>
-          value={network}
-          onValueChange={setNetwork}
-          options={ANALYSIS_NETWORKS.map((value) => ({ value, label: value }))}
-          triggerProps={{ id: "analysis-network" }}
-        />
-      </SettingsRow>
-    </SettingsDisclosure>
   );
 }

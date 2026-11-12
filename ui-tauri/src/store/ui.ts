@@ -294,7 +294,6 @@ export interface UiState {
   currency: Currency;
   dataMode: DataMode;
   /** Default for new offline inspections; never overrides observed network identity. */
-  analysisNetwork: AnalysisNetwork;
   theme: ThemePreference;
   appScale: number;
   /**
@@ -419,7 +418,6 @@ export interface UiState {
   setLang: (lang: Lang) => void;
   setCurrency: (currency: Currency) => void;
   setDataMode: (dataMode: DataMode) => void;
-  setAnalysisNetwork: (network: AnalysisNetwork) => void;
   setTheme: (theme: ThemePreference) => void;
   setAppScale: (appScale: number) => void;
   increaseAppScale: () => void;
@@ -661,7 +659,6 @@ export function uiStatePartialForStorage(state: UiState) {
     lang: state.lang,
     currency: state.currency,
     dataMode: normalizeStoredDataMode(state.dataMode, state.identity),
-    analysisNetwork: normalizeAnalysisNetwork(state.analysisNetwork),
     theme: state.theme,
     privacyMode: state.privacyMode,
     hideAmountsOnUnlock: state.hideAmountsOnUnlock,
@@ -764,7 +761,6 @@ export const useUiStore = create<UiState>()(
       lang: "en",
       currency: "btc",
       dataMode: "real",
-      analysisNetwork: "main",
       theme: DEFAULT_THEME,
       appScale: DEFAULT_APP_SCALE,
       privacyMode: "normal",
@@ -814,7 +810,6 @@ export const useUiStore = create<UiState>()(
         set((state) => ({
           dataMode: normalizeStoredDataMode(dataMode, state.identity),
         })),
-      setAnalysisNetwork: (network) => set({ analysisNetwork: normalizeAnalysisNetwork(network) }),
       setTheme: (theme) => set({ theme }),
       setAppScale: (appScale) =>
         set({ appScale: normalizeAppScale(appScale) }),
@@ -1158,7 +1153,6 @@ export const useUiStore = create<UiState>()(
           ...current,
           ...restored,
           dataMode,
-          analysisNetwork: normalizeAnalysisNetwork(restored.analysisNetwork ?? current.analysisNetwork),
           appScale: normalizeAppScale(restored.appScale ?? current.appScale),
           clearClipboard: restored.clearClipboard ?? current.clearClipboard,
           ...restoredPrivacy(restored, current),

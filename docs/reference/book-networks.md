@@ -18,7 +18,8 @@ confirmed transactions, native observer evidence, or tax evidence.
 observations and native observer/policy/output inventories. `networks plan`
 previews a binding; `networks bind --plan-id …` recomputes the same recipe against
 a consistent database snapshot. Any intervening source change invalidates the
-preview. Unknown wallet scope requires an explicit `--declare-wallet ID`.
+preview. Unknown wallet scope requires an explicit `--declare-wallet ID`; the desktop
+offers one switch that declares every connection without network evidence.
 Contradictory or mixed histories cannot be overridden by a declaration.
 
 For regtest, `--chain-instance-id UUID` identifies the user's particular local

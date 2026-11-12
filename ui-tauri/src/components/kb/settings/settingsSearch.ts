@@ -45,7 +45,6 @@ export const SETTINGS_SEARCH_ENTRIES = [
 
   entry("network-bitcoin", "bookNetwork", "bookNetwork.title"),
   entry("network-bitcoin", "bitcoinBackends", "networkLayer.bitcoin.heading"),
-  entry("network-bitcoin", "analysisNetwork", "analysisNetwork.title"),
   entry("network-lightning", "lightningNodes", "networkLayer.lightning.heading"),
   entry("network-liquid", "liquidBackends", "networkLayer.liquid.heading"),
 

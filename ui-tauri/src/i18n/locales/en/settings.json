@@ -928,9 +928,6 @@
     "healthJustAdded": "just added - ok"
   },
   "analysisNetwork": {
-    "title": "Local analysis",
-    "label": "Default network for new inspections",
-    "help": "Used when an imported file has no network context. Existing inspections and connection networks stay unchanged.",
     "effective": "Network: {{network}}"
   },
   "networkLayer": {
@@ -980,7 +977,11 @@
     "instance": "Local instance UUID",
     "newInstance": "New instance",
     "unknown": "Network not recorded",
-    "declare": "I assign this connection to the selected environment. Missing source evidence remains unknown.",
+    "declareAll": {
+      "label": "Assign connections without network evidence",
+      "description_one": "{{count}} connection shows no network. Assign it to {{environment}}; its missing source evidence stays unknown.",
+      "description_other": "{{count}} connections show no network. Assign them to {{environment}}; their missing source evidence stays unknown."
+    },
     "preview": "Review binding",
     "confirmHelp": "This binding is permanent. Source records and past reports will not be rewritten.",
     "bind": "Confirm book network",
@@ -1072,7 +1073,6 @@
       "bundledRates": "hourly prices, built-in rates, offline",
       "bookNetwork": "mainnet, testnet, signet, regtest, environment",
       "bitcoinBackends": "Electrum, Fulcrum, Esplora, Bitcoin Core, node, server, indexer",
-      "analysisNetwork": "offline analysis, chain analysis, network default",
       "lightningNodes": "LND, Core Lightning, CLN, node, channels",
       "liquidBackends": "L-BTC, Elements, Esplora, sidechain, server",
       "offlineMode": "no network, airplane mode, disconnect, block connections",

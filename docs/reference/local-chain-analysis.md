@@ -40,9 +40,12 @@ canonical deep links retain their exact subview. The inspector appears only
 for a selection. **Tools** opens PSBT inspection, attribution datasets, saved
 investigations, explicit evidence acquisition and exports.
 
-Settings → Bitcoin → Local analysis stores the default PSBT network. An explicit
-handoff network takes precedence, and each inspection pins its network at mount;
-changing the default never relabels existing results. The graph's chain/network
+A PSBT inspection runs on the book's network. A bound book decides it; an
+unbound book uses the one environment its connections already show, and
+mainnet when they show none or disagree. There is no separate device-wide
+default. An explicit handoff network takes precedence on an unbound book, and
+each inspection pins its network at mount, so later changes never relabel
+existing results. The graph's chain/network
 filters remain query scope, not permission to access any backend.
 
 Transaction details keep their Mempool-style input/output diagram. They also

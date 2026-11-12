@@ -2,17 +2,18 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import "@/i18n";
 import { DaemonScopeContext } from "@/daemon/client";
-import { useUiStore } from "@/store/ui";
-import { PsbtPanel } from "./PsbtPanel";
+import { bookEvidenceNetwork, PsbtPanel } from "./PsbtPanel";
 
-const mock = vi.hoisted(() => ({ invoke: vi.fn(), pick: vi.fn(), binding: { environment_id: null as string | null, domains: [] as {chain:string;network:string}[] }, effects: [] as Array<() => void | (() => void)> }));
+const mock = vi.hoisted(() => ({ invoke: vi.fn(), pick: vi.fn(), binding: { environment_id: null as string | null, domains: [] as {chain:string;network:string}[] }, wallets: [] as { environments: string[] }[], effects: [] as Array<() => void | (() => void)> }));
 vi.mock("react", async original => ({
   ...await original<typeof import("react")>(),
   useEffect: (effect: () => void | (() => void)) => { mock.effects.push(effect); },
 }));
 vi.mock("@/daemon/client", async original => ({
   ...await original<typeof import("@/daemon/client")>(),
-  useDaemon: () => ({ data: { data: mock.binding } }),
+  useDaemon: (kind: string) => kind === "ui.networks.inventory"
+    ? ({ data: { data: { wallets: mock.wallets } } })
+    : ({ data: { data: mock.binding } }),
   useDaemonMutation: () => ({ mutateAsync: mock.invoke, isPending: false }),
 }));
 vi.mock("@/lib/filePicker", async original => ({
@@ -23,7 +24,7 @@ vi.mock("@/lib/filePicker", async original => ({
 function render(initialNetwork?: string) {
   return renderToStaticMarkup(<DaemonScopeContext.Provider value={{ expectedScope: { workspace_id: "w", profile_id: "p" }, daemonSession: 1, isCurrent: () => true }}><PsbtPanel initialNetwork={initialNetwork} onError={() => {}} /></DaemonScopeContext.Provider>);
 }
-beforeEach(() => { mock.binding = {environment_id:null, domains:[]}; useUiStore.setState({ analysisNetwork: "signet" }); mock.invoke.mockReset(); mock.pick.mockReset(); mock.effects.length = 0; });
+beforeEach(() => { mock.binding = {environment_id:null, domains:[]}; mock.wallets = []; mock.invoke.mockReset(); mock.pick.mockReset(); mock.effects.length = 0; });
 
 describe("PSBT workbench entry", () => {
   it.each(["main", "test", "signet", "regtest"])("preserves the explicit %s network without starting work", async network => {
@@ -41,8 +42,9 @@ describe("PSBT workbench entry", () => {
     expect(html).toContain('disabled="">Inspect original</button>');
     expect(html).toContain('disabled="">Compare proposals</button>');
   });
-  it.each([undefined, "unsupported-network", "https://example.invalid"])("uses the local default for unsupported network %s", network => {
-    expect(render(network)).toContain("Network: signet");
+  it.each([undefined, "unsupported-network", "https://example.invalid"])("uses the book's wallet evidence for unsupported network %s", network => {
+    mock.wallets = [{ environments: ["regtest"] }, { environments: [] }];
+    expect(render(network)).toContain("Network: regtest");
     expect(mock.invoke).not.toHaveBeenCalled();
   });
 });
@@ -58,4 +60,14 @@ it("rejects a handoff from another network instead of reinterpreting it", () => 
   expect(html).not.toContain("Inspect original");
   expect(html).toContain("role=\"alert\"");
   expect(mock.invoke).not.toHaveBeenCalled();
+});
+
+describe("unbound book evidence", () => {
+  it("uses the one environment the wallets show, else mainnet", () => {
+    expect(bookEvidenceNetwork([{ environments: ["signet"] }, { environments: ["signet"] }])).toBe("signet");
+    expect(bookEvidenceNetwork([{ environments: ["regtest"] }, { environments: ["main"] }])).toBe("main");
+    expect(bookEvidenceNetwork([{ environments: [] }])).toBe("main");
+    expect(bookEvidenceNetwork(undefined)).toBe("main");
+    expect(bookEvidenceNetwork([{ environments: ["liquid-weird"] }])).toBe("main");
+  });
 });
