@@ -1589,13 +1589,39 @@ def require_ai_provider_enabled(provider: dict) -> None:
     )
 
 
+RUST_ONLY_AI_PROVIDER_KINDS = ("cli_proxy",)
+
+
+def require_ai_provider_kind_supported(provider: dict | None) -> None:
+    """Refuse a provider kind only the Rust backend implements.
+
+    A CLI proxy (``kind = "cli_proxy"``, docs/reference/ai-cli-proxy.md)
+    speaks each model in its own format from a saved model list. This
+    backend has neither, so it must not reach such a row as if it were an
+    ordinary OpenAI-compatible endpoint.
+    """
+    kind = (provider or {}).get("kind")
+    if kind not in RUST_ONLY_AI_PROVIDER_KINDS:
+        return
+    name = str_or_none((provider or {}).get("name")) or "<unknown>"
+    raise AppError(
+        f"AI provider '{name}' is a CLI proxy, which only the Rust backend supports",
+        code="ai_provider_unsupported",
+        hint="Open this book with the Rust backend, or choose another provider.",
+        details={"provider": name, "kind": kind},
+        retryable=False,
+    )
+
+
 def require_ai_provider_contactable(provider: dict) -> None:
     """Gate every path that contacts a provider: chat, model listing, checks.
 
-    A switched-off provider is refused first, then an off-device provider the
-    user never acknowledged. CLI, daemon and import paths share this one gate
-    so none of them can reach a provider the others would refuse.
+    A kind this backend does not implement is refused first, then a
+    switched-off provider, then an off-device provider the user never
+    acknowledged. CLI, daemon and import paths share this one gate so none
+    of them can reach a provider the others would refuse.
     """
+    require_ai_provider_kind_supported(provider)
     require_ai_provider_enabled(provider)
     require_ai_provider_acknowledged(provider)
 

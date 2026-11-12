@@ -91,6 +91,84 @@ def relativize_path(path: str) -> str:
     return norm
 
 
+# The macOS Touch ID helper (`ui-tauri/src-tauri/src/lib.rs`,
+# `secret_store.rs`) reports failures as `kassiber native auth: <text>`, which
+# the credential scanner reads as an `auth: <secret>` pair, so every helper
+# error used to reach the user as `[redacted]`. Exactly these fixed texts, as
+# the whole message, pass unchanged; anything else after `auth:` is still
+# redacted. Rust's `redaction::sanitize_traceback_text` keeps the same list.
+NATIVE_AUTH_ERROR_PREFIX = "kassiber native auth: "
+NATIVE_AUTH_ERROR_MESSAGES = frozenset((
+    "missing native auth action",
+    "missing native auth account",
+    "unsupported native auth action",
+    "native auth output must be an inherited pipe",
+    "native auth secret exceeds 16 KiB",
+    "native auth launch gate requires inherited pipes",
+    "native auth launch gate received an invalid release",
+    "missing --ready-fd",
+    "missing --go-fd",
+    "missing --output-fd",
+    "missing --secret-fd",
+    "invalid --ready-fd",
+    "invalid --go-fd",
+    "invalid --output-fd",
+    "invalid --secret-fd",
+    "Touch ID is unavailable on this platform",
+    "native-auth helper is not inside a signed app bundle",
+    "native-auth helper does not support this macOS architecture",
+    "native-auth helper parent is not the bundled Kassiber sidecar",
+    "native-auth helper and broker signatures do not match",
+    "native-auth helper parent has an unexpected signing identifier",
+    "native-auth sidecar signing identifier is invalid",
+    "native-auth helper has an invalid TeamIdentifier",
+    "could not inspect native-auth parent process",
+    "native-auth code signature verification failed",
+    "native-auth code signature inspection failed",
+    "native-auth code signature has no Identifier",
+    "native-auth helper requires a production TeamIdentifier",
+    "database passphrase must not be empty",
+    "Touch ID operator account is invalid.",
+    "Touch ID operator unlock is only available in the macOS desktop app.",
+    "This build cannot access the protected Keychain item; reopen a production-entitled build to manage it.",
+    "No saved desktop biometric passphrase was found.",
+    "LocalAuthentication is unavailable on this Mac",
+    "Touch ID is not available or not enrolled for this Mac user.",
+    "The credential remained in the native store after deletion.",
+    "secret_ref_missing",
+    "secret_store_locked_or_denied",
+))
+# Texts that end in an OSStatus: `<head><signed 32-bit integer><tail>`.
+NATIVE_AUTH_ERROR_STATUS_TEMPLATES = (
+    ("macOS protected Keychain rejected the operation (", ")."),
+    ("could not resolve the running native-auth parent code (", ")"),
+    ("could not compile the native-auth sidecar requirement (", ")"),
+    ("running native-auth parent did not match the bundled sidecar requirement (", ")"),
+)
+
+
+def _is_status_code(text: str) -> bool:
+    digits = text[1:] if text.startswith("-") else text
+    return 1 <= len(digits) <= 10 and all("0" <= ch <= "9" for ch in digits)
+
+
+def is_known_native_auth_error(text: str) -> bool:
+    """Whether `text` is, in full, one of the Touch ID helper's fixed errors."""
+
+    if not text.startswith(NATIVE_AUTH_ERROR_PREFIX):
+        return False
+    message = text[len(NATIVE_AUTH_ERROR_PREFIX):]
+    if message in NATIVE_AUTH_ERROR_MESSAGES:
+        return True
+    return any(
+        message.startswith(head)
+        and message.endswith(tail)
+        and len(message) > len(head) + len(tail)
+        and _is_status_code(message[len(head):len(message) - len(tail)])
+        for head, tail in NATIVE_AUTH_ERROR_STATUS_TEMPLATES
+    )
+
+
 def sanitize_traceback_text(text: str) -> str:
     """Relativize paths, redact secrets + operational ids, and cap traceback text.
 
@@ -98,7 +176,10 @@ def sanitize_traceback_text(text: str) -> str:
     field, the `internal_error` envelope's `error.debug`, and the CLI `--debug`
     envelope copy), so beyond path/secret scrubbing they also pseudonymize
     txids/amounts that backend exception messages routinely interpolate.
+    A known Touch ID helper error (`is_known_native_auth_error`) passes as is.
     """
+    if is_known_native_auth_error(text):
+        return text
     text = _PATH_SEGMENT_RE.sub(lambda m: relativize_path(m.group(0)), text)
     text = redact_secret_text(text)
     text = redact_operational_text(text)
