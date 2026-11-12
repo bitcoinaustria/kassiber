@@ -142,6 +142,13 @@ function conditionActionLabel(
     case "connection.sync-failed":
     case "btcpay.provenance-incomplete":
       return t("notifications.action.openWallet");
+    case "touch-id.off":
+      return t("notifications.condition.touchIdOff.action");
+    case "unlock.credential-remains":
+    case "backup.restore-warning":
+      return t("notifications.action.openSecurity");
+    case "backup.restore-failed":
+      return t("notifications.condition.backupRestoreFailed.action");
   }
 }
 

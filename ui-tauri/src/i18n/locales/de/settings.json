@@ -180,14 +180,11 @@
     "notifyBody": "Ein eigenes Desktop-Passwort wurde für die Touch-ID-Entsperrung in der macOS-Keychain gespeichert."
   },
   "touchId": {
-    "removeFailedTitle": "Touch-ID-Passwort wurde nicht entfernt",
     "removeFailedBody": "Die macOS-Keychain hat das gespeicherte Passwort nicht entfernt.",
-    "disabledTitle": "Touch-ID-Entsperrung wurde deaktiviert",
     "disabledBody": "Das Datenbank-Passwort wurde geändert, aber die macOS-Keychain hat das aktualisierte Desktop-Passwort für Touch ID nicht akzeptiert.",
     "forgetAllTitle": "Gespeicherte Entsperrmethoden entfernt",
     "forgetAllBody": "Desktop-Touch-ID und die gemerkte CLI-Entsperrung wurden für diese Bücher entfernt.",
     "forgetAllConfirm": "Alle gespeicherten Entsperrmethoden für diese Bücher entfernen? Beim nächsten Mal ist das Datenbank-Passwort erforderlich.",
-    "forgetAllPartialTitle": "Einige Entsperrmethoden sind noch gespeichert",
     "forgetAllCredentialWarning": "Der OS-Zugangsspeicher hat nicht bestätigt, dass alle gespeicherten Einträge entfernt wurden."
   },
   "resetWelcome": {
@@ -1052,8 +1049,6 @@
     "replace": "Container ersetzen und sperren",
     "cancel": "Abbrechen",
     "secretWarning": "Einige Anbieter-Zugangsdaten können nicht wiederhergestellt werden. Gib sie nach dem Entsperren in den Einstellungen erneut ein.",
-    "restored": "Backup wiederhergestellt. Entsperre mit der Datenbank-Passphrase des Backups.",
-    "unlockWarning": "Wiederherstellung abgeschlossen, aber die Entsperreinstellungen konnten nicht zurückgesetzt werden. Verwende die Datenbank-Passphrase des Backups und prüfe gespeicherte Entsperreinstellungen.",
     "failed": "Backup-Aktion fehlgeschlagen",
     "desktopOnly": "Für den Backup-Export brauchst du den nativen Speicherdialog der Desktop-App."
   },

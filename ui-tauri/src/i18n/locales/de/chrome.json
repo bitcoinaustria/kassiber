@@ -284,6 +284,24 @@
       "btcpayProvenance": {
         "title": "Einige BTCPay-Rechnungen fehlen",
         "body": "Zahlungen dieser Stores fehlen die Rechnungsdetails, bis ein Sync sie lädt."
+      },
+      "touchIdOff": {
+        "title": "Touch-ID-Entsperrung ist aus",
+        "body": "Kassiber fragt nach dem Datenbank-Passwort, bis Touch ID wieder aktiviert ist.",
+        "action": "Touch ID aktivieren"
+      },
+      "unlockCredentialRemains": {
+        "title": "Eine gespeicherte Entsperrmethode ist noch vorhanden",
+        "body": "Der OS-Zugangsspeicher hat das Entfernen nicht bestätigt; sie kann diese Bücher eventuell noch entsperren."
+      },
+      "backupRestoreFailed": {
+        "title": "Backup-Wiederherstellung nicht abgeschlossen",
+        "body": "Deine Bücher entsprechen eventuell nicht dem Backup. Die Details zeigen, was passiert ist und wo die Sicherungskopie von vor der Wiederherstellung liegt.",
+        "action": "Backups öffnen"
+      },
+      "backupRestoreWarning": {
+        "title": "Gespeicherte Entsperrmethoden prüfen",
+        "body": "Die Wiederherstellung ist abgeschlossen, aber gespeicherte Entsperrmethoden konnten nicht zurückgesetzt werden. Sie passen eventuell nicht zu den wiederhergestellten Büchern."
       }
     },
     "result": {
@@ -319,6 +337,9 @@
         "rescanTitle": "Wallet-Rescan abgeschlossen",
         "imported_one": "{{count}} neue Transaktion",
         "imported_other": "{{count}} neue Transaktionen"
+      },
+      "backupRestored": {
+        "title": "Backup wiederhergestellt"
       }
     },
     "job": {
@@ -330,7 +351,8 @@
     },
     "action": {
       "openWallet": "Wallet öffnen",
-      "openTransaction": "Transaktion öffnen"
+      "openTransaction": "Transaktion öffnen",
+      "openSecurity": "Sicherheit öffnen"
     }
   },
   "currencyToggle": {
@@ -361,7 +383,6 @@
     "dark": "Dunkel"
   },
   "lock": {
-    "touchIdNotSavedTitle": "Touch-ID-Entsperrung wurde nicht gespeichert",
     "touchIdNotSavedReason": "Touch-ID-Entsperrung ist nicht eingerichtet: {{reason}}",
     "touchIdNotSavedKeychain": "macOS Keychain hat die gespeicherte Passphrase nicht gemeldet.",
     "touchIdNotAcceptedKeychain": "macOS Keychain hat die gespeicherte Passphrase nicht akzeptiert.",

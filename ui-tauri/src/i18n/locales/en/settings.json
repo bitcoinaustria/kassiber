@@ -180,14 +180,11 @@
     "notifyBody": "A desktop-only passphrase was saved in macOS Keychain for Touch ID unlock."
   },
   "touchId": {
-    "removeFailedTitle": "Touch ID passphrase was not removed",
     "removeFailedBody": "macOS Keychain did not remove the saved passphrase.",
-    "disabledTitle": "Touch ID unlock was disabled",
     "disabledBody": "The database passphrase changed, but macOS Keychain did not accept the updated desktop Touch ID passphrase.",
     "forgetAllTitle": "Saved unlock methods removed",
     "forgetAllBody": "Desktop Touch ID and CLI remembered unlock were removed for these books.",
     "forgetAllConfirm": "Remove every saved unlock method for these books? You will need the database passphrase next time.",
-    "forgetAllPartialTitle": "Some saved unlock methods remain",
     "forgetAllCredentialWarning": "The OS credential store did not confirm that every saved entry was removed."
   },
   "resetWelcome": {
@@ -1052,8 +1049,6 @@
     "replace": "Replace container and lock",
     "cancel": "Cancel",
     "secretWarning": "Some provider credentials cannot be restored. Re-enter them in Settings after unlocking.",
-    "restored": "Backup restored. Unlock with the database passphrase from the backup.",
-    "unlockWarning": "Restore completed, but unlock settings could not be reset. Use the backup database passphrase and review remembered unlock settings.",
     "failed": "Backup action failed",
     "desktopOnly": "Backup export requires the desktop app’s native save dialog."
   },

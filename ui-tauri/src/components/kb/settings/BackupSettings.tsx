@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { getTransport } from "@/daemon/transport";
 import { isFilePickerAvailable, isFileSaveAvailable, pickFile, saveFile } from "@/lib/filePicker";
+import { safeMessage } from "@/lib/notificationConditions";
+import { conditionKey, useNotificationStore } from "@/store/notifications";
 import { useUiStore } from "@/store/ui";
 import { SettingsGroup, SettingsRow } from "./SettingsControls";
 
@@ -17,6 +19,9 @@ interface BackupPreview {
   replaces: string[];
   unavailable_secrets: boolean;
 }
+
+/** A restore replaces the books themselves, so its outcome is app-wide. */
+const APP_SCOPE = { book: null };
 
 const backupErrorKeys = {
   invalid_backup: "backup.errors.invalid",
@@ -123,7 +128,23 @@ export function BackupSettings() {
         token.current = null;
         if (!current()) return;
         reset();
-        useUiStore.getState().addNotification({ title: t("backup.restored"), body: result.warning ? t("backup.unlockWarning") : t("backup.recoverySaved", { path: result.pre_restore_backup ?? "" }), tone: result.warning ? "warning" : "success" });
+        // The app locks next: toasts would not survive it, so the outcome
+        // waits in the center, which shows it after unlock.
+        const notifications = useNotificationStore.getState();
+        notifications.resolveCondition(conditionKey("backup.restore-failed", APP_SCOPE));
+        if (result.warning) {
+          notifications.raiseCondition({
+            code: "backup.restore-warning", scope: APP_SCOPE, severity: "warning", priority: "attention",
+            action: { type: "navigate", to: "/settings/security", anchor: "biometricUnlock" },
+            details: [{ message: safeMessage(result.warning) }],
+          });
+        }
+        notifications.addResult({
+          code: "backup.restored", scope: APP_SCOPE, severity: result.warning ? "warning" : "info",
+          details: result.pre_restore_backup
+            ? [{ message: t("backup.recoverySaved", { path: result.pre_restore_backup }) }]
+            : undefined,
+        });
         useUiStore.getState().bumpDaemonSession();
         window.dispatchEvent(new CustomEvent("kassiber:lock-app"));
       }
@@ -135,9 +156,15 @@ export function BackupSettings() {
         if (failure instanceof BackupError && failure.locked) {
           token.current = null;
           reset();
-          useUiStore.getState().addNotification({
-            title: t("backup.failed"), tone: "error",
-            body: failure.recoveryPath ? `${text} ${t("backup.recoverySaved", { path: failure.recoveryPath })}` : text,
+          // The database closed: the condition outlasts the lock, and its
+          // action opens Backups once the user is back in.
+          useNotificationStore.getState().raiseCondition({
+            code: "backup.restore-failed", scope: APP_SCOPE, severity: "error", priority: "attention",
+            action: { type: "navigate", to: "/settings/data", anchor: "backup" },
+            details: [
+              { message: text },
+              ...(failure.recoveryPath ? [{ message: t("backup.recoverySaved", { path: failure.recoveryPath }) }] : []),
+            ],
           });
           useUiStore.getState().bumpDaemonSession();
           window.dispatchEvent(new CustomEvent("kassiber:lock-app"));

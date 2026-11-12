@@ -284,6 +284,24 @@
       "btcpayProvenance": {
         "title": "Some BTCPay invoices are missing",
         "body": "Payments from these stores lack their invoice details until a sync loads them."
+      },
+      "touchIdOff": {
+        "title": "Touch ID unlock is off",
+        "body": "Kassiber asks for the database passphrase until Touch ID is enabled again.",
+        "action": "Enable Touch ID"
+      },
+      "unlockCredentialRemains": {
+        "title": "A saved unlock method remains",
+        "body": "The OS credential store did not confirm the removal, so it may still unlock these books."
+      },
+      "backupRestoreFailed": {
+        "title": "Backup restore did not finish",
+        "body": "Your books may not match the backup. The details say what happened and where the recovery copy from before the restore is.",
+        "action": "Open backups"
+      },
+      "backupRestoreWarning": {
+        "title": "Review saved unlock methods",
+        "body": "The restore finished, but saved unlock methods could not be reset. They may not match the restored books."
       }
     },
     "result": {
@@ -319,6 +337,9 @@
         "rescanTitle": "Wallet rescanned",
         "imported_one": "{{count}} new transaction",
         "imported_other": "{{count}} new transactions"
+      },
+      "backupRestored": {
+        "title": "Backup restored"
       }
     },
     "job": {
@@ -330,7 +351,8 @@
     },
     "action": {
       "openWallet": "Open wallet",
-      "openTransaction": "Open transaction"
+      "openTransaction": "Open transaction",
+      "openSecurity": "Open security settings"
     }
   },
   "currencyToggle": {
@@ -361,7 +383,6 @@
     "dark": "Dark"
   },
   "lock": {
-    "touchIdNotSavedTitle": "Touch ID unlock was not saved",
     "touchIdNotSavedReason": "Touch ID unlock is not set up: {{reason}}",
     "touchIdNotSavedKeychain": "macOS Keychain did not report the saved passphrase.",
     "touchIdNotAcceptedKeychain": "macOS Keychain did not accept the saved passphrase.",

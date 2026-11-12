@@ -140,6 +140,30 @@ export function projectConditionGroup(
         body: t("notifications.condition.btcpayProvenance.body"),
         details,
       };
+    case "touch-id.off":
+      return {
+        title: t("notifications.condition.touchIdOff.title"),
+        body: t("notifications.condition.touchIdOff.body"),
+        details,
+      };
+    case "unlock.credential-remains":
+      return {
+        title: t("notifications.condition.unlockCredentialRemains.title"),
+        body: t("notifications.condition.unlockCredentialRemains.body"),
+        details,
+      };
+    case "backup.restore-failed":
+      return {
+        title: t("notifications.condition.backupRestoreFailed.title"),
+        body: t("notifications.condition.backupRestoreFailed.body"),
+        details,
+      };
+    case "backup.restore-warning":
+      return {
+        title: t("notifications.condition.backupRestoreWarning.title"),
+        body: t("notifications.condition.backupRestoreWarning.body"),
+        details,
+      };
   }
 }
 
@@ -220,6 +244,8 @@ export function projectResult(
             : undefined,
         details,
       };
+    case "backup.restored":
+      return { title: t("notifications.result.backupRestored.title"), details };
   }
 }
 

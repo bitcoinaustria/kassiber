@@ -224,6 +224,7 @@ import {
 import { notificationProgressValue } from "./notificationDisplay";
 import { FeedbackToaster } from "./FeedbackToaster";
 import { NotificationCenter } from "./NotificationCenter";
+import { recordTouchIdOff, resolveTouchIdOff } from "@/lib/unlockNotifications";
 import { planHeaderRefresh } from "./headerRefresh";
 
 const BUG_REPORT_URL =
@@ -999,28 +1000,24 @@ export function AppShell() {
                 setTouchIdStatus(status);
                 if (!status.configured) {
                   setAppLockPolicy({ touchIdUnlock: false });
-                  addNotification({
-                    title: t("lock.touchIdNotSavedTitle"),
-                    body: status.reason
+                  recordTouchIdOff(
+                    status.reason
                       ? t("lock.touchIdNotSavedReason", { reason: status.reason })
                       : t("lock.touchIdNotSavedKeychain"),
-                    tone: "warning",
-                  });
+                  );
                   return;
                 }
+                resolveTouchIdOff();
                 if (options?.rememberWithTouchId === true) {
                   setAppLockPolicy({ touchIdUnlock: true });
                 }
               })
               .catch((error: unknown) => {
-                addNotification({
-                  title: t("lock.touchIdNotSavedTitle"),
-                  body:
-                    error instanceof Error
-                      ? error.message
-                      : t("lock.touchIdNotAcceptedKeychain"),
-                  tone: "warning",
-                });
+                recordTouchIdOff(
+                  error instanceof Error
+                    ? error.message
+                    : t("lock.touchIdNotAcceptedKeychain"),
+                );
                 void refreshTouchIdStatus();
               });
           }

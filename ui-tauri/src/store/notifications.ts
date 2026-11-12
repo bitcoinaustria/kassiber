@@ -45,6 +45,10 @@ export const CONDITION_CODES = [
   "journals.process-failed",
   "connection.sync-failed",
   "btcpay.provenance-incomplete",
+  "touch-id.off",
+  "unlock.credential-remains",
+  "backup.restore-failed",
+  "backup.restore-warning",
 ] as const;
 export type ConditionCode = (typeof CONDITION_CODES)[number];
 
@@ -54,6 +58,7 @@ export const RESULT_CODES = [
   "book-refresh.problems",
   "journals.processed",
   "connection.synced",
+  "backup.restored",
 ] as const;
 export type ResultCode = (typeof RESULT_CODES)[number];
 
@@ -471,6 +476,10 @@ const CODE_ORDER: Record<ConditionCode, number> = {
   "freshness.worker-error": 6,
   "connection.sync-failed": 7,
   "btcpay.provenance-incomplete": 8,
+  "backup.restore-failed": 9,
+  "backup.restore-warning": 10,
+  "unlock.credential-remains": 11,
+  "touch-id.off": 12,
 };
 
 function compareConditions(a: ConditionEntry, b: ConditionEntry): number {
