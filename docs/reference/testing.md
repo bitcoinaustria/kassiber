@@ -267,6 +267,7 @@ exists.
 | SILENT PAYMENTS | `./scripts/integration-harness.sh silent-payments` | yes | Starts the regtest Compose stack with the `silent-payments` profile, which builds/runs Sparrow Frigate against Bitcoin Core v30 and Fulcrum, waits until Frigate advertises `silent_payments: [0]` through `server.features`, then runs Kassiber's Silent Payments sync tests. Override the cold-start wait with `KASSIBER_REGTEST_FRIGATE_WAIT_SECONDS` if the local Frigate index is slow. |
 | BOLTZ | `./scripts/integration-harness.sh boltz-liquid` | yes, upstream Boltz stack | Starts or reuses Boltz's official [`BoltzExchange/regtest`](https://github.com/BoltzExchange/regtest) Docker environment, probes the local Boltz API for Liquid-capable submarine, reverse, and BTC -> L-BTC chain-swap pairs, executes a Liquid on-chain payment plus an L-BTC -> BTC Lightning submarine swap, persists the paid invoice through Kassiber's native LND adapter boundary, records the Liquid policy-asset id and Elements regtest scope, and explicitly reviews the resulting strong provider-hash candidate while the plain Liquid payment stays unpaired. An outbound submarine lockup has no owned claim witness, so provider metadata plus a native invoice is intentionally not called exact. Optional `KASSIBER_BOLTZ_V2_EVIDENCE=/path/to/evidence.json` adds real Boltz wallet/client/provider v2 chain/reverse/refund evidence rows. Exact `provider_swap_id` assertions require a unique 1:1 provider key, canonical send/receive route txids, explicit chain/network scope and Liquid consensus asset id, plus integer-msat principals covering both complete rows; incomplete evidence must stay strong/manual. |
 | BTCPAY | `./scripts/integration-harness.sh btcpay` | yes | Starts the standard Bitcoin regtest stack plus a BTCPay overlay (Postgres, NBXplorer, BTCPay Server) wired to the same disposable `bitcoind`, creates a first admin user, creates or reuses a test store, generates a BTC on-chain store wallet, creates and pays a realistic invoice mix from the regtest Core wallet, confirms it, syncs BTCPay wallet history into a temporary Kassiber book, syncs invoice provenance, and writes a local seed JSON containing the store id, disposable API key, invoice ids, scenarios, and payment txids. |
+| BTCPAY-BARK | `./scripts/integration-harness.sh btcpay-bark` | yes | Brings up a regtest Ark server and BTCPay with the Bark plugin in its own Compose project, drives every wallet-history row kind, records the Greenfield answers to a scratch directory, and tears the stack down. Needs the plugin package in `$KASSIBER_BARK_PLUGIN_CACHE`. |
 | LIGHTNING | `./scripts/integration-harness.sh lightning-business` | yes, Kassiber stack + CLN/LND overlay | Starts the existing regtest Compose stack plus `dev/regtest/compose.lightning.yml` with four pinned Core Lightning nodes and one LND backup merchant node. A seeded sim-ln-inspired business plan drives mainchain top-ups/withdrawals, merchant invoices, supplier payments, routed forwarding activity, LND backup receipts/outbound payments, an expired quote, and an intentionally failed oversized payment, opens private CLN merchant -> LND backup and LND backup -> CLN router channels, then verifies Kassiber through `wallets sync`, `ui.connections.node.snapshot` for both node implementations, `reports lightning-profitability`, and `export-lightning-profitability-csv`. |
 
 The slow lane is opt-in with `KASSIBER_INTEGRATION=1`; normal unit gates do not
@@ -492,6 +493,28 @@ published stable `btcpayserver/btcpayserver:2.3.9` tag because Docker Hub does
 not publish a `latest` tag. Override images with `KASSIBER_REGTEST_BTCPAY_IMAGE`,
 `KASSIBER_REGTEST_BTCPAY_NBXPLORER_IMAGE`, and
 `KASSIBER_REGTEST_BTCPAY_POSTGRES_IMAGE`.
+
+`dev/regtest/btcpay_permission_probe.py` checks Kassiber's key presets against
+one BTCPay version (`up --btcpay 2.4.7`, `probe`, `down`) in its own Compose
+project and ports: the server's permission tree, which wallet endpoints each
+permission set can read, and what the browser authorize page grants. BTCPay
+2.4 needs NBXplorer 2.6; the probe picks it.
+
+`./scripts/integration-harness.sh btcpay-bark` runs the Bark (Ark) plugin
+against a regtest Ark server (`dev/regtest/btcpay_bark_stack.py`,
+`compose.bark.yml`): bitcoind, an Esplora electrs, captaind with its Core
+Lightning, an external Core Lightning node, a counterparty `bark` wallet and
+BTCPay 2.4.7 with the plugin mounted, on an internal Docker network with no
+internet access. It drives every row kind the plugin's wallet history
+produces (receives, board, Ark and Lightning sends, payouts, refresh,
+offboards, on-chain sends, an emergency exit) and records the Greenfield
+answers. It needs at least 40 GB of available memory and the plugin package
+from the BTCPay plugin builder in
+`$KASSIBER_BARK_PLUGIN_CACHE/<version>/BTCPayServer.Plugins.Bark.btcpay`
+(nothing in the lane downloads it), and takes about 15 minutes.
+`tests/fixtures/btcpay_bark/` holds the recordings for plugin 0.13.0, the
+pre-0.10 plugin 0.9.6 and that store after upgrading; `tests/test_btcpay_bark.py`
+replays them and checks that the booked balance equals the plugin's own.
 
 The seed helper (`python -m dev.regtest.btcpay_seed`) uses the Greenfield API to
 create a disposable admin user, store, BTC on-chain payment method, and scoped

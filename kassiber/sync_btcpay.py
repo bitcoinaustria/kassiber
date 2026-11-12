@@ -6,8 +6,9 @@ through ``kassiber.btcpay.client.GreenfieldClient``:
 - ``fetch_btcpay_records``: confirmed on-chain wallet history
   (``/payment-methods/{id}/wallet/transactions``), normalised into the same
   shape as the BTCPay CSV importer so comments become notes and labels
-  become tags. BTCPay gates this endpoint behind the store *modify*
-  permission.
+  become tags. BTCPay 2.4 serves it to ``canviewwallet``, 2.3 to the store
+  *modify* permission. ``BTC-ARK`` reads the Bark plugin's whole wallet at the
+  same path (``kassiber.btcpay.bark``).
 - ``fetch_btcpay_invoice_provenance``: invoices with their payments, for
   commercial provenance. Needs only read permissions.
 - ``fetch_btcpay_payouts``: refunds, pull-payment claims, and store payouts.
@@ -30,6 +31,7 @@ from typing import Any, Mapping
 from urllib import parse as urlparse
 
 from .backends import backend_value
+from .btcpay import bark as btcpay_bark
 from .btcpay.client import GreenfieldClient, GreenfieldHttpError, greenfield_app_error
 from .btcpay.discovery import InspectionResult, inspect_btcpay_connection
 from .btcpay.origins import classify_invoice_origin, payment_request_id_for
@@ -38,6 +40,7 @@ from .btcpay.payment_methods import (
     canonical_payment_method_id,
     classify_payment_method,
     is_wallet_history_payment_method,
+    require_settlement_payment_method,
     require_wallet_history_payment_method,
     split_payment_method_id,
 )
@@ -56,10 +59,11 @@ INCREMENTAL_UNCHANGED_PAGE_WINDOW = 5
 INCREMENTAL_DEEP_AUDIT_PAGES = 1
 
 WALLET_HISTORY_PERMISSION_HINT = (
-    "Greenfield wallet endpoints currently require the "
-    "`btcpay.store.canmodifystoresettings` permission. Keep this store as "
-    "invoice provenance with a read-only key, or map it to a watch-only wallet "
-    "you already track."
+    "Greenfield wallet endpoints require the read-only "
+    "`btcpay.store.canviewwallet` permission on BTCPay Server 2.4 and later, "
+    "or `btcpay.store.canmodifystoresettings` on 2.3 and earlier. Keep this "
+    "store as invoice provenance with a read-only key, or map it to a "
+    "watch-only wallet you already track."
 )
 INVOICE_PERMISSION_HINT = "Grant the API key the BTCPay 'View invoices' permission."
 STORE_PERMISSION_HINT = "Grant the API key 'View your stores' (btcpay.store.canviewstoresettings)."
@@ -127,7 +131,8 @@ def _wallet_page_fetcher(client, store_id, payment_method_id, page_size, api_sta
         try:
             page = client.get_url(client.url(_wallet_transactions_path(store_id, payment_method_id, legacy), query))
         except GreenfieldHttpError as exc:
-            if exc.status == 404 and not legacy and not exc.error_code:
+            bark = payment_method_id == btcpay_bark.BARK_PAYMENT_METHOD_ID
+            if exc.status == 404 and not legacy and not exc.error_code and not bark:
                 # BTCPay 1.x keeps wallet endpoints under /payment-methods/onchain/{code}.
                 try:
                     page = client.get_url(
@@ -170,18 +175,28 @@ def fetch_btcpay_records(
     api_state = {"legacy_wallet_paths": bool(previous_pagination.get("legacy_wallet_paths"))}
     fetch_page = _wallet_page_fetcher(client, store_id, payment_method_id, page_size, api_state)
 
+    bark = payment_method_id == btcpay_bark.BARK_PAYMENT_METHOD_ID
     records, next_pages, page_metadata = _fetch_incremental_pages(
         fetch_page=fetch_page,
         page_size=page_size,
         previous_pages=previous_pages,
         previous_pagination=previous_pagination,
-        fingerprint_fn=_page_fingerprint,
-        stable_ids_fn=_page_stable_ids,
-        normalize_page=lambda page: [
-            _to_record(tx, payment_method_id)
-            for tx in page
-            if _is_confirmed_transaction(tx)
-        ],
+        fingerprint_fn=_bark_page_fingerprint if bark else _page_fingerprint,
+        stable_ids_fn=_bark_page_stable_ids if bark else _page_stable_ids,
+        normalize_page=(
+            (lambda page: [
+                record
+                for tx in page
+                if _is_confirmed_transaction(tx)
+                for record in btcpay_bark.bark_records(tx, store_id=store_id)
+            ])
+            if bark
+            else (lambda page: [
+                _to_record(tx, payment_method_id)
+                for tx in page
+                if _is_confirmed_transaction(tx)
+            ])
+        ),
         max_pages_message=f"BTCPay sync exceeded {MAX_PAGES} pages; aborting for safety",
     )
     pagination = dict(page_metadata["pagination"])
@@ -354,6 +369,30 @@ def probe_btcpay_wallet(
     fetch_page = _wallet_page_fetcher(client, store_id, payment_method_id, 1, {})
     page = fetch_page(0, 1)
     return {"checked": True, "rows_seen": len(page)}
+
+
+def bark_wallet_history_status(backend, store_id, opener=None):
+    """``None`` when the store's Bark plugin serves wallet history to this key.
+
+    Otherwise why not: ``not_served`` (a plugin before 0.10, or Bark not set
+    up for the store), ``missing_permission`` or ``unavailable``.
+    """
+
+    _require_store(store_id)
+    client = _client(backend, opener)
+    try:
+        _, error = client.get_optional_json(
+            f"/api/v1/stores/{urlparse.quote(store_id, safe='')}/payment-methods/{btcpay_bark.BARK_PAYMENT_METHOD_ID}/wallet",
+            tolerate=(403, 404),
+        )
+    except AppError as exc:
+        # barkd unreachable (BTCPay answers 503 until it is back).
+        if exc.retryable:
+            return "unavailable"
+        raise
+    if error is None:
+        return None
+    return "missing_permission" if error.status == 403 else "not_served"
 
 
 def probe_btcpay_instance(backend, opener=None):
@@ -653,6 +692,36 @@ def _page_fingerprint_rows(page):
 def _page_fingerprint(page):
     return hashlib.sha256(
         json.dumps(_page_fingerprint_rows(page), sort_keys=True).encode("utf-8")
+    ).hexdigest()
+
+
+def _bark_page_stable_ids(page):
+    return sorted(btcpay_bark.row_id(tx) for tx in page)
+
+
+def _bark_page_fingerprint(page):
+    # Bark rows can share a transaction hash; the row id is their identity,
+    # and kind, fee and the payment keys decide how a row books.
+    rows = []
+    for tx in page:
+        rows.append(
+            {
+                "id": btcpay_bark.row_id(tx),
+                "kind": tx.get("kind"),
+                "timestamp": tx.get("timestamp"),
+                "amount": tx.get("amount"),
+                "fee": tx.get("fee"),
+                "confirmations": tx.get("confirmations"),
+                "status": tx.get("status"),
+                "comment": tx.get("comment"),
+                "outpoint": tx.get("outpoint"),
+                "paymentHash": tx.get("paymentHash"),
+                "transactionHash": tx.get("transactionHash"),
+                "labels": tx.get("labels"),
+            }
+        )
+    return hashlib.sha256(
+        json.dumps(sorted(rows, key=lambda row: row["id"]), sort_keys=True).encode("utf-8")
     ).hexdigest()
 
 
@@ -1010,6 +1079,7 @@ __all__ = [
     "DEFAULT_PAGE_SIZE",
     "DEFAULT_PAYMENT_METHOD_ID",
     "WALLET_HISTORY_PAYMENT_METHOD_IDS",
+    "bark_wallet_history_status",
     "discover_btcpay_wallet_sources",
     "fetch_btcpay_invoice_provenance",
     "fetch_btcpay_payouts",
@@ -1018,5 +1088,6 @@ __all__ = [
     "is_wallet_history_payment_method",
     "probe_btcpay_instance",
     "probe_btcpay_wallet",
+    "require_settlement_payment_method",
     "require_wallet_history_payment_method",
 ]

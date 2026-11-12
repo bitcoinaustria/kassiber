@@ -2743,7 +2743,7 @@ def apply_btcpay_metadata(
     tags_added = 0
     tags_created = 0
     for record in records:
-        txid = record.get("txid")
+        txid = str(record.get("txid") or record.get("id") or "")
         if not txid:
             continue
         tx = conn.execute(

@@ -30,7 +30,7 @@ describe("BtcpaySetupPanel", () => {
     expect(html).toContain("Connect BTCPay Server");
     expect(html).toContain("label-field");
     expect(html).toContain("Read-only plus BTCPay wallet history");
-    expect(html).toContain("btcpay.store.canviewstoresettings");
+    expect(html).toContain("btcpay.store.canviewstoresettings, btcpay.store.canviewwallet");
     expect(html).toContain('aria-checked="true"');
     expect(html).toContain("Open BTCPay to create this key");
     expect(html).toContain("Enter the server URL first.");

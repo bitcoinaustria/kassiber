@@ -385,8 +385,17 @@ BTCPay). Each saved `btcpay` backend is one server URL plus one API key.
 
 | Preset | Permission | What Kassiber can do |
 | --- | --- | --- |
-| `read_only` | `btcpay.store.canviewstoresettings` | Stores, enabled payment methods, invoices and payments, payment requests, refunds and payouts, and the on-chain address preview used to recognise which wallet a store pays into. Enough for Lightning and plugin payment ledgers and for stores whose wallet you already track. The key cannot change the store. |
-| `wallet_history` | `btcpay.store.canmodifystoresettings` | Everything above plus each store's on-chain wallet as BTCPay records it, with labels, comments, and payout fees. BTCPay exposes wallet history only under this permission, which can also change the store, including where it receives payments. |
+| `read_only` | `btcpay.store.canviewstoresettings`, `btcpay.store.canviewwallet` | Stores, enabled payment methods, invoices and payments, payment requests, refunds and payouts, and the on-chain address preview used to recognise which wallet a store pays into. On BTCPay Server 2.4 and later also each store's on-chain wallet history. Enough for Lightning and plugin payment ledgers and for stores whose wallet you already track. The key cannot change the store. |
+| `wallet_history` | `btcpay.store.canmodifystoresettings` | For BTCPay Server 2.3 and earlier: everything above plus each store's on-chain wallet as BTCPay records it, with labels, comments, and payout fees. These versions expose wallet history only under this permission, which can also change the store, including where it receives payments. |
+
+BTCPay Server 2.4 moved the wallet address preview and wallet history from
+`canviewstoresettings` and `canmodifystoresettings` to the read-only
+`btcpay.store.canviewwallet` ("View wallets"). A key from the old read-only
+preset gets `preview_error: missing_permission` and no detected network on
+2.4; recreate it with the read-only preset. Earlier servers drop the unknown
+`canviewwallet` from the authorize page, so one read-only link works on both.
+`canmodifystoresettings` still includes `canviewwallet` on 2.4, so existing
+wallet-history keys keep working.
 
 `kassiber btcpay key-url --server-url https://btcpay.example.com [--preset
 read_only] [--scope all|single] [--store-id ID]` prints the permissions, manual
@@ -429,7 +438,7 @@ The preview addresses are only used in memory; the plan carries an opaque
 
 | Action | Use it for |
 | --- | --- |
-| `wallet_source` | Import BTCPay's confirmed on-chain wallet history as a Kassiber wallet. Needs the `wallet_history` key. Comments become notes, labels become tags, and payout fees are booked as fees. |
+| `wallet_source` | Import BTCPay's confirmed on-chain wallet history as a Kassiber wallet. Needs the `wallet_history` key. Comments become notes, labels become tags, and payout fees are booked as fees. Also imports a store's whole [Bark wallet](#bark-wallets-btc-ark) when its plugin serves wallet history. |
 | `existing_wallet` | The store pays into a wallet you already track (descriptor, xpub, Liquid). The wallet keeps its own chain sync; BTCPay adds invoice provenance and, with a history key, labels and comments. Recommended automatically when the preview addresses belong to that wallet. |
 | `payment_ledger` | The store settles into something Kassiber cannot watch: a Lightning node or wallet, a plugin rail, or a layer-two wallet. BTCPay's settled payments and completed payouts become the wallet's balance. Recommended for Lightning when no Lightning node is connected to the book, and for bitcoin plugin rails. |
 | `provenance_only` | Keep invoices, payments, and payouts only. Used when a connected Lightning node already books the payments, for a store that shares a wallet already imported through another store, or with a read-only key for an on-chain wallet Kassiber does not track yet. |
@@ -464,6 +473,7 @@ wallet you already track.
 | `BTC-CHAIN`, `LBTC-CHAIN` | Wallet source, mapping, or provenance. BTCPay 1.x ids (`BTC`) are accepted. |
 | `BTC-LN` | Payment ledger, or provenance when the node that receives the payments (LND, Core Lightning) is connected to the book; Kassiber then links BTCPay payments to it by payment hash. Plugin wallets behind `BTC-LN` (Boltz → Liquid, Breez, Blink, Strike, Nostr Wallet Connect, …) usually cannot be watched, so the ledger is the balance source. |
 | `BTC-LNURL` (LNURL, Lightning Address) | Same as `BTC-LN`, booked in the same Lightning ledger for the store. |
+| `BTC-ARK` (Bark plugin; `BARK` before plugin 0.10) | [Bark wallet](#bark-wallets-btc-ark) import with plugin 0.10 or later and a key that can view the wallet; payment ledger otherwise. |
 | Other `BTC-…` plugin rails | Payment ledger, one per rail. |
 | Plugin rails in an unknown currency, altcoins, and Liquid assets (`ARKADE`, `XMR-CHAIN`, `USDT-CHAIN`, …) | Provenance or skipped; Kassiber books only payments it can confirm are bitcoin. |
 
@@ -493,6 +503,75 @@ review the suggested link to apply its invoice price.
 - Pending payments are reported as `pending` and booked once they settle.
 - A ledger sync fails when BTCPay cannot be read, instead of booking from old
   records.
+
+#### Bark wallets (BTC-ARK)
+
+The Bark plugin settles Ark payments, and Lightning payments it receives, into
+the store's Bark wallet. From plugin 0.10 it serves that whole wallet at the
+standard wallet-history path (`/payment-methods/BTC-ARK/wallet/transactions`)
+to a key with `btcpay.store.canviewwallet`, which the read-only preset
+includes. Inspection asks `/payment-methods/BTC-ARK/wallet` once per store to
+tell such plugins from older ones; setup then recommends a `wallet_source`.
+Older plugins, stores without Bark set up, and keys that cannot view the
+wallet keep a payment ledger.
+
+Kassiber books every final row (BTCPay `Confirmed`) so that the booked effect
+equals the row's `amount`, the signed change of the wallet's balance with the
+fee included, to the msat:
+
+- receives (`ark-receive`, `lightning-receive`, `onchain-receive`) book their
+  gross amount (`amount + fee`) inbound and the fee as a fee-only row;
+- sends (`ark-send`, `lightning-send`, `offboard`, `send-onchain`,
+  `onchain-send`, an `exit` claimed outside the wallet) book the principal
+  (`-amount - fee`) outbound with the fee;
+- rows whose amount is only their fee (`refresh`, `board`, `exit-fee`,
+  `exit-claim`, `onchain-internal`, an offboard into the wallet's own on-chain
+  part) book one fee-only row.
+
+An `unknown` kind, an inflow on a send kind, a fee larger than the amount, or a
+fee without an amount stops the sync with `bark_row_unsupported` before
+anything is booked. A row that pays an invoice (by VTXO outpoint, Lightning
+payment hash, or a pre-0.10 `{invoice}#ark-movement-N-I` payment with the
+row's invoice label, the payment amount telling apart the VTXOs of one
+movement) or a payout (by payment hash or transaction) is booked under that
+payment's provenance key, so it links exactly; other rows are booked as
+`btcpay-bark:{store}:{row id}` and move to the provenance key once BTCPay
+reports the payment. Bark payment hashes (`payment_hash_source =
+btcpay_bark`) never pair automatically with another wallet; review such
+transfers.
+
+Switching from a ledger. When the plugin of a store booked as a `BTC-ARK`
+payment ledger starts serving wallet history, the next sync switches that
+wallet to the Bark import. Every active row the ledger booked must match
+exactly one Bark row of the same direction and amount; it is kept with its id,
+notes, tags and reviews, and takes Bark's fee. If any cannot be matched, the
+sync stops with `bark_migration_conflict` (reason `unmatched_ledger_rows`,
+listing each payment) and the book stays unchanged; excluding a payment that
+was booked by mistake lets the switch go ahead. A row whose fee would change
+while custody, a pair, a loan or source-of-funds evidence binds it refuses
+too (`bound_by_review`).
+
+Lightning through Bark. Lightning payments that settle into the Bark wallet
+are the Bark import's. A `BTC-LN` payment ledger of the same store that already
+booked one moves that row into the Bark wallet (`lightning_ledger_rows_moved`)
+with its notes and reviews, and the ledger holds the payment back afterwards
+(`held_tracked_elsewhere`); a ledger synced after the Bark wallet holds it back
+from the start. Another wallet booking the same payment in the same direction
+(for example a node connected to the book) stops the sync with
+`bark_migration_conflict` (`booked_by_other_wallet`) until one copy is
+excluded.
+
+Network. No Bark field names the network; setup takes the server's on-chain
+network for the wallet, as for ledgers, and every sync checks the Ark
+addresses the store's Bark payments went to (`ark1…` mainnet, `tark1…` any
+test network). A book bound to another network refuses the import with
+`book_network_mismatch` before anything is booked.
+
+Bark's own exports and wallets outside BTCPay are not imported here (#353).
+The plugin's behaviour above was checked against a regtest Ark server
+(`./scripts/integration-harness.sh btcpay-bark`); its recorded answers are in
+`tests/fixtures/btcpay_bark/`.
+A `BTC-ARK` method cannot be mapped onto another tracked wallet.
 
 A store payment method that already imports wallet history or books a payment
 ledger keeps doing so until that wallet is archived; setup does not offer a
@@ -559,6 +638,8 @@ wallet's history.
 - one Kassiber wallet per real wallet: stores sharing a wallet map onto it once
 - Lightning, LNURL, and plugin rails stay provenance; track the node or wallet
   that receives the funds as its own connection
+- a Bark store (plugin 0.10 or later) imports its whole Bark wallet with the
+  read-only key
 - see [BTCPay Server](#btcpay-server-greenfield-api) for setup and limits
 
 ### Esplora

@@ -2,19 +2,23 @@
 
 Greenfield permissions are strings such as ``btcpay.store.canviewinvoices``
 that may be scoped to one store with a ``:<storeId>`` suffix. Broader
-permissions include narrower ones; the inclusion table below mirrors
-``GET /misc/permissions`` on BTCPay Server 2.3.
+permissions include narrower ones; the inclusion table below is the union of
+``GET /misc/permissions`` on BTCPay Server 2.3 and 2.4.
 
 Kassiber needs very little:
 
 - ``btcpay.store.canviewstoresettings`` is read-only and already includes
   invoices, payment requests, payouts, pull payments, and reports. It also
-  unlocks the store catalog, enabled payment methods, and the wallet address
-  preview Kassiber uses to recognise which wallet a store pays into.
-- BTCPay's own wallet history endpoints are gated behind
-  ``btcpay.store.canmodifystoresettings``. That permission can also change the
-  store, including where it sends customer payments, so Kassiber treats it as
-  an explicit opt-in and never recommends it by default.
+  unlocks the store catalog and enabled payment methods.
+- The on-chain wallet's address preview (which Kassiber uses to recognise
+  which wallet a store pays into) and BTCPay's own wallet history moved in
+  BTCPay 2.4 to the read-only ``btcpay.store.canviewwallet``. Up to 2.3 the
+  preview needs ``canviewstoresettings`` and the history needs
+  ``btcpay.store.canmodifystoresettings``, which can also change the store,
+  including where it sends customer payments, so Kassiber treats it as an
+  explicit opt-in and never recommends it by default. A 2.3 authorize page
+  silently drops the unknown ``canviewwallet``, so the read-only preset asks
+  for it on every server.
 """
 
 from __future__ import annotations
@@ -27,6 +31,7 @@ from ..errors import AppError
 
 VIEW_STORE_SETTINGS = "btcpay.store.canviewstoresettings"
 MODIFY_STORE_SETTINGS = "btcpay.store.canmodifystoresettings"
+VIEW_WALLET = "btcpay.store.canviewwallet"
 VIEW_INVOICES = "btcpay.store.canviewinvoices"
 VIEW_PAYMENT_REQUESTS = "btcpay.store.canviewpaymentrequests"
 VIEW_PAYOUTS = "btcpay.store.canviewpayouts"
@@ -34,7 +39,8 @@ VIEW_PULL_PAYMENTS = "btcpay.store.canviewpullpayments"
 VIEW_REPORTS = "btcpay.store.canviewreports"
 UNRESTRICTED = "unrestricted"
 
-# Direct inclusions from BTCPay Server 2.3 (`GET /misc/permissions`). The
+# Direct inclusions from BTCPay Server 2.3 and 2.4 (`GET /misc/permissions`;
+# 2.4 adds the Wallets plugin's policies under `canmodifystoresettings`). The
 # closure is computed below so only first-level edges need to be listed.
 _DIRECT_INCLUDES: dict[str, tuple[str, ...]] = {
     UNRESTRICTED: (
@@ -64,7 +70,25 @@ _DIRECT_INCLUDES: dict[str, tuple[str, ...]] = {
         "btcpay.store.canuselightningnode",
         "btcpay.store.canmodifyofferings",
         "btcpay.store.webhooks.canmodifywebhooks",
+        "btcpay.store.canmanagewallets",
+        "btcpay.store.canmanagelegacyaccesstokens",
+        "btcpay.store.cansendstoreemails",
     ),
+    "btcpay.store.canmanagewallets": (
+        "btcpay.store.canmanagewalletsettings",
+        "btcpay.store.canmanagewallettransactions",
+    ),
+    "btcpay.store.canmanagewalletsettings": (VIEW_WALLET,),
+    "btcpay.store.canmanagewallettransactions": (
+        "btcpay.store.cancreatetransactions",
+        "btcpay.store.cansigntransactions",
+        "btcpay.store.canbroadcasttransactions",
+        "btcpay.store.cancanceltransactions",
+    ),
+    "btcpay.store.cancreatetransactions": (VIEW_WALLET,),
+    "btcpay.store.cansigntransactions": (VIEW_WALLET,),
+    "btcpay.store.canbroadcasttransactions": (VIEW_WALLET,),
+    "btcpay.store.cancanceltransactions": (VIEW_WALLET,),
     VIEW_STORE_SETTINGS: (
         VIEW_INVOICES,
         VIEW_PAYMENT_REQUESTS,
@@ -76,7 +100,9 @@ _DIRECT_INCLUDES: dict[str, tuple[str, ...]] = {
         VIEW_INVOICES,
         "btcpay.store.cancreateinvoice",
         "btcpay.store.cancreatelightninginvoice",
+        "btcpay.store.canmanageinvoicestatus",
     ),
+    "btcpay.store.canmanageinvoicestatus": (VIEW_INVOICES,),
     "btcpay.store.canmodifypaymentrequests": (VIEW_PAYMENT_REQUESTS,),
     "btcpay.store.canmanagepullpayments": (
         "btcpay.store.cancreatepullpayments",
@@ -106,6 +132,7 @@ READ_ONLY_PERMISSIONS = frozenset(
         VIEW_PAYOUTS,
         VIEW_PULL_PAYMENTS,
         VIEW_REPORTS,
+        VIEW_WALLET,
         "btcpay.store.canviewofferings",
         "btcpay.store.canviewlightninginvoice",
         "btcpay.user.canviewprofile",
@@ -118,6 +145,7 @@ READ_ONLY_PERMISSIONS = frozenset(
 PERMISSION_LABELS = {
     VIEW_STORE_SETTINGS: "View your stores",
     MODIFY_STORE_SETTINGS: "Modify your stores",
+    VIEW_WALLET: "View wallets",
     VIEW_INVOICES: "View invoices",
     VIEW_PAYMENT_REQUESTS: "View payment requests",
     VIEW_PAYOUTS: "View payouts",
@@ -126,26 +154,62 @@ PERMISSION_LABELS = {
     UNRESTRICTED: "Unrestricted access",
 }
 
-# Kassiber capability -> the narrowest permission that grants it.
+# Kassiber capability -> the narrowest permission that grants it on BTCPay
+# Server 2.4 and later, where the Wallets plugin guards the on-chain wallet.
 CAPABILITY_PERMISSIONS: dict[str, str] = {
     "store_catalog": VIEW_STORE_SETTINGS,
-    "wallet_preview": VIEW_STORE_SETTINGS,
+    "wallet_preview": VIEW_WALLET,
     "invoices": VIEW_INVOICES,
     "payment_requests": VIEW_PAYMENT_REQUESTS,
     "payouts": VIEW_PAYOUTS,
     "pull_payments": VIEW_PULL_PAYMENTS,
+    "wallet_history": VIEW_WALLET,
+}
+# The same on BTCPay Server 2.3 and earlier.
+LEGACY_CAPABILITY_PERMISSIONS: dict[str, str] = {
+    **CAPABILITY_PERMISSIONS,
+    "wallet_preview": VIEW_STORE_SETTINGS,
     "wallet_history": MODIFY_STORE_SETTINGS,
 }
 CAPABILITIES = tuple(CAPABILITY_PERMISSIONS)
+WALLET_POLICY_VERSION = (2, 4)
+
+
+def server_version(value: Any) -> tuple[int, int] | None:
+    """``(major, minor)`` of a BTCPay version string, or ``None``."""
+
+    parts = str(value or "").strip().lstrip("v").split(".")
+    try:
+        return int(parts[0]), int(parts[1]) if len(parts) > 1 else 0
+    except ValueError:
+        return None
+
+
+def capability_permissions(version: tuple[int, int] | None) -> tuple[dict[str, str], ...]:
+    """Each permission table that may apply: one for a known server version,
+    both (newest first) when the version is unknown."""
+
+    if version is None:
+        return (CAPABILITY_PERMISSIONS, LEGACY_CAPABILITY_PERMISSIONS)
+    if version >= WALLET_POLICY_VERSION:
+        return (CAPABILITY_PERMISSIONS,)
+    return (LEGACY_CAPABILITY_PERMISSIONS,)
+
+
+def wallet_history_preset(version: tuple[int, int] | None) -> str:
+    """The preset whose key reads wallet history on this server."""
+
+    return "read_only" if version is not None and version >= WALLET_POLICY_VERSION else "wallet_history"
 
 KEY_PRESETS: dict[str, dict[str, Any]] = {
     "read_only": {
-        "permissions": (VIEW_STORE_SETTINGS,),
+        "permissions": (VIEW_STORE_SETTINGS, VIEW_WALLET),
         "label": "Read-only (recommended)",
         "summary": (
             "Invoices, payments, refunds and payouts, payment requests, and a "
             "wallet check that recognises which wallet each store pays into. "
-            "The key cannot change your store."
+            "On BTCPay Server 2.4 and later it also reads each store's on-chain "
+            "wallet history. The key cannot change your store."
         ),
         "capabilities": (
             "store_catalog",
@@ -161,9 +225,10 @@ KEY_PRESETS: dict[str, dict[str, Any]] = {
         "label": "Include BTCPay wallet history",
         "summary": (
             "Adds BTCPay's own on-chain wallet history with its labels and "
-            "comments. BTCPay only offers this under the 'Modify your stores' "
-            "permission, which could also change the store's payout wallet. "
-            "Prefer the read-only key plus a watch-only wallet when you can."
+            "comments on BTCPay Server 2.3 and earlier, which only offer it "
+            "under the 'Modify your stores' permission. That permission could "
+            "also change the store's payout wallet. On 2.4 and later the "
+            "read-only key already includes wallet history."
         ),
         "capabilities": CAPABILITIES,
     },
@@ -247,11 +312,15 @@ class KeyGrant:
     def has(self, permission: str, store_id: str | None) -> bool:
         return permission in self.effective(store_id)
 
-    def capabilities(self, store_id: str | None) -> dict[str, bool]:
+    def capabilities(self, store_id: str | None, version: tuple[int, int] | None = None) -> dict[str, bool]:
+        """What the key can read on a server of ``version``; with an unknown
+        version, a capability either table grants counts."""
+
         effective = self.effective(store_id)
+        tables = capability_permissions(version)
         return {
-            capability: permission in effective
-            for capability, permission in CAPABILITY_PERMISSIONS.items()
+            capability: any(table[capability] in effective for table in tables)
+            for capability in CAPABILITY_PERMISSIONS
         }
 
 
@@ -316,7 +385,7 @@ def excess_permissions(grant: KeyGrant, *, wallet_history: bool = False) -> list
     return sorted(name for name in names if name not in allowed)
 
 
-def grant_summary(grant: KeyGrant) -> dict[str, Any]:
+def grant_summary(grant: KeyGrant, version: tuple[int, int] | None = None) -> dict[str, Any]:
     scope = "unknown"
     if grant.known:
         scope = "all_stores" if grant.all_stores else ("selected_stores" if grant.store_permissions else "no_stores")
@@ -327,12 +396,12 @@ def grant_summary(grant: KeyGrant) -> dict[str, Any]:
         "permissions": list(grant.raw),
         "risk": key_risk(grant),
         "excess_permissions": excess_permissions(grant, wallet_history=True),
-        "global_capabilities": grant.capabilities(None) if grant.known else {},
+        "global_capabilities": grant.capabilities(None, version) if grant.known else {},
     }
 
 
-def missing_for_capability(capability: str) -> str:
-    return CAPABILITY_PERMISSIONS[capability]
+def missing_for_capability(capability: str, version: tuple[int, int] | None = None) -> str:
+    return capability_permissions(version)[0][capability]
 
 
 def preset_permissions(preset: str) -> tuple[str, ...]:
@@ -441,6 +510,7 @@ __all__ = [
     "KEY_PRESETS",
     "STORE_SCOPES",
     "KeyGrant",
+    "LEGACY_CAPABILITY_PERMISSIONS",
     "MODIFY_STORE_SETTINGS",
     "READ_ONLY_PERMISSIONS",
     "VIEW_INVOICES",
@@ -448,7 +518,9 @@ __all__ = [
     "VIEW_PAYMENT_REQUESTS",
     "VIEW_PULL_PAYMENTS",
     "VIEW_STORE_SETTINGS",
+    "VIEW_WALLET",
     "build_authorize_url",
+    "capability_permissions",
     "default_store_scope",
     "excess_permissions",
     "expand_permission",
@@ -458,5 +530,7 @@ __all__ = [
     "parse_key_grant",
     "permission_label",
     "preset_permissions",
+    "server_version",
     "split_permission",
+    "wallet_history_preset",
 ]

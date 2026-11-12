@@ -1165,7 +1165,10 @@ def _wallet_with_freshness_checkpoint(
 
 
 def _mark_daemon_wallet_synced(conn: sqlite3.Connection, wallet: Mapping[str, Any]) -> None:
-    config = json.loads(wallet["config_json"] or "{}")
+    # The stored config: a sync may have changed it (a Bark payment ledger
+    # switches to the wallet import).
+    row = conn.execute("SELECT config_json FROM wallets WHERE id = ?", (wallet["id"],)).fetchone()
+    config = json.loads((row[0] if row is not None else wallet["config_json"]) or "{}")
     config["last_synced_at"] = now_iso()
     conn.execute(
         "UPDATE wallets SET config_json = ? WHERE id = ?",

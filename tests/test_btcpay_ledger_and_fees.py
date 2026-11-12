@@ -596,7 +596,7 @@ class LedgerPlanTest(_BookTest):
             self.conn, self.workspace, self.profile, backend_name="shop", routes=routes, label="Café"
         )
         ledgers = {wallet["label"]: wallet["config"] for wallet in applied["payment_ledgers"]}
-        self.assertEqual(sorted(ledgers), ["Café - Café - BTC-ARK (plugin)", "Café - Café - Lightning"])
+        self.assertEqual(sorted(ledgers), ["Café - Café - Bark (Ark)", "Café - Café - Lightning"])
         self.assertEqual(ledgers["Café - Café - Lightning"]["payment_method_ids"], ["BTC-LN", "BTC-LNURL"])
         self.assertEqual(applied["provenance_store_ids"], ["S1"])
 

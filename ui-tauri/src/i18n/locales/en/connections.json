@@ -1092,11 +1092,11 @@
       "presets": {
         "read_only": {
           "title": "Read-only",
-          "body": "Invoices, payments, refunds, payouts and payment requests. Enough to book Lightning and plugin payments and to explain stores whose wallet you already track. The key cannot change your store."
+          "body": "Invoices, payments, refunds, payouts and payment requests. Enough to book Lightning and plugin payments and to explain stores whose wallet you already track. On BTCPay Server 2.4 and later it also imports each store's on-chain wallet history. The key cannot change your store."
         },
         "wallet_history": {
           "title": "Read-only plus BTCPay wallet history",
-          "body": "Also imports each store's on-chain wallet as BTCPay records it, with labels, comments and payout fees. BTCPay only offers this with the 'Modify your stores' permission, which could also change where your store receives payments."
+          "body": "For BTCPay Server 2.3 and earlier: also imports each store's on-chain wallet as BTCPay records it, with labels, comments and payout fees. These versions only offer this with the 'Modify your stores' permission, which could also change where your store receives payments. On 2.4 and later, choose Read-only."
         }
       },
       "permissionsLabel": "Permissions",
@@ -1202,6 +1202,7 @@
         "liquid_onchain": "Customers pay into this store's Liquid wallet.",
         "lightning": "Lightning payments settle in the store's Lightning node or a plugin wallet (for example Boltz, Breez, Blink, Strike or Nostr Wallet Connect). When Kassiber cannot connect to it, BTCPay's payments become the balance.",
         "lnurl": "LNURL and Lightning Address payments settle through the store's Lightning connection.",
+        "bark": "Payments settle into the store's Bark (Ark) wallet. With Bark plugin 0.10 or later and a key that can view the wallet, Kassiber imports the whole wallet, fees included; older plugins book BTCPay's payments instead.",
         "plugin": "Provided by a BTCPay plugin. When it settles in bitcoin, Kassiber books its payments from BTCPay.",
         "non_bitcoin": "Kassiber tracks Bitcoin and Liquid Bitcoin only; these payments are skipped."
       },
@@ -1226,13 +1227,16 @@
         "lightning_payment_ledger": "Kassiber cannot watch this store's Lightning node or wallet, so it books BTCPay's settled payments and completed payouts as the balance.",
         "plugin_payment_ledger": "Plugin payment method: Kassiber books BTCPay's settled payments and completed payouts as the balance.",
         "plugin_rail": "Plugin payment method in a currency Kassiber cannot confirm is bitcoin; invoices are kept as records.",
+        "import_bark_wallet_history": "Imports the store's whole Bark wallet from BTCPay: payments, sends, refreshes and their fees.",
+        "bark_payment_ledger": "Kassiber books BTCPay's settled Bark payments and completed payouts as the balance. Once the Bark plugin serves wallet history (0.10 or later) to a key that can view the wallet, the next sync switches to the whole Bark wallet and keeps the payments already booked.",
+        "bark_wallet_history_unavailable": "This store's Bark plugin does not serve wallet history: it needs plugin 0.10 or later, and Bark set up for the store.",
         "not_ledger_rail": "Only Lightning and bitcoin plugin payment methods can be booked from BTCPay's payments.",
         "network_mismatch": "This store's wallet is on a different network than this book.",
         "wallet_recognised": "Kassiber already tracks the wallet this store pays into.",
         "shared_wallet_already_imported": "Another store already imports this same wallet.",
         "shared_wallet": "Another store in this setup pays into the same wallet; it is imported once.",
         "import_btcpay_wallet_history": "Imports BTCPay's wallet history for this store.",
-        "read_only_key_upgrade": "This key cannot read BTCPay's wallet history. Create a wallet-history key to import the store wallet from BTCPay, or map it to a wallet Kassiber already tracks.",
+        "read_only_key_upgrade": "This key cannot read BTCPay's wallet history. Create a key that can (on BTCPay Server 2.4 the read-only key with 'View wallets') to import the store wallet from BTCPay, or map it to a wallet Kassiber already tracks.",
         "wallet_history_permission_missing": "Needs a key with BTCPay wallet-history access.",
         "invoices_permission_missing": "The key cannot read invoices for this store.",
         "not_on_chain": "Only on-chain Bitcoin and Liquid can be imported as a wallet.",

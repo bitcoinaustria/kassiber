@@ -155,18 +155,23 @@ from ..wallet_setup import BSMS_DESCRIPTOR_SOURCE, parse_bsms_descriptor_record
 from ..importers import load_import_records
 from ..btcpay.client import normalize_server_url as normalize_btcpay_server_url
 from ..btcpay.permissions import MODIFY_STORE_SETTINGS as BTCPAY_MODIFY_STORE_SETTINGS
+from ..btcpay.permissions import VIEW_WALLET as BTCPAY_VIEW_WALLET
 from ..btcpay.permissions import build_authorize_url as build_btcpay_authorize_url
-from ..btcpay.payment_methods import asset_for_payment_method
+from ..btcpay.payment_methods import asset_for_payment_method, canonical_payment_method_id
 from ..btcpay.permissions import key_setup_guide as btcpay_key_setup_guide
+from ..core import btcpay_bark as core_btcpay_bark
 from ..core import btcpay_ledger as core_btcpay_ledger
 from ..core import btcpay_setup as core_btcpay_setup
+from ..btcpay.payment_methods import BARK_PAYMENT_METHOD_ID as BTCPAY_BARK_PAYMENT_METHOD_ID
 from ..sync_btcpay import (
     DEFAULT_PAGE_SIZE as BTCPAY_DEFAULT_PAGE_SIZE,
     DEFAULT_PAYMENT_METHOD_ID as BTCPAY_DEFAULT_PAYMENT_METHOD_ID,
+    bark_wallet_history_status,
     fetch_btcpay_invoice_provenance,
     fetch_btcpay_payouts,
     fetch_btcpay_records,
     inspect_btcpay_backend,
+    require_settlement_payment_method,
     require_wallet_history_payment_method,
 )
 
@@ -1993,9 +1998,17 @@ def _wallet_sync_hooks(commit=True):
     )
 
 
+def _stored_wallet_config(conn, wallet):
+    """The wallet's config as stored now: a sync may have changed it (a Bark
+    payment ledger switches to the wallet import)."""
+
+    row = conn.execute("SELECT config_json FROM wallets WHERE id = ?", (wallet["id"],)).fetchone()
+    return json.loads((row[0] if row is not None else wallet["config_json"]) or "{}")
+
+
 def _mark_wallet_synced(conn, wallet, synced_at=None):
     timestamp = synced_at or now_iso()
-    config = json.loads(wallet["config_json"] or "{}")
+    config = _stored_wallet_config(conn, wallet)
     config["last_synced_at"] = timestamp
     conn.execute(
         "UPDATE wallets SET config_json = ? WHERE id = ?",
@@ -2614,6 +2627,8 @@ def sync_wallet(
 
 
 def _is_missing_wallet_history_permission(exc, store_id):
+    # BTCPay 2.4 names `canviewwallet` for the wallet endpoints; 2.3 named
+    # `canmodifystoresettings`.
     details = exc.details if isinstance(exc.details, dict) else {}
     missing = str(details.get("missing_permission") or "")
     # BTCPay may scope the missing permission to the store
@@ -2622,7 +2637,7 @@ def _is_missing_wallet_history_permission(exc, store_id):
     # permission.
     name, scoped, scope = missing.partition(":")
     return exc.code == "auth_error" and (
-        (name == BTCPAY_MODIFY_STORE_SETTINGS and (not scoped or scope == store_id))
+        (name in {BTCPAY_MODIFY_STORE_SETTINGS, BTCPAY_VIEW_WALLET} and (not scoped or scope == store_id))
         or (not missing and details.get("http_status") == 403)
     )
 
@@ -2726,6 +2741,18 @@ def _sync_btcpay_wallet(
         )
     store_id = btcpay_config["store_id"]
     payment_method_id = btcpay_config["payment_method_id"]
+    if canonical_payment_method_id(payment_method_id) == BTCPAY_BARK_PAYMENT_METHOD_ID:
+        return _sync_bark_wallet(
+            conn,
+            runtime_config,
+            profile,
+            wallet,
+            backend,
+            checkpoint,
+            store_id=store_id,
+            page_size=page_size,
+            commit=commit,
+        )
     previous_provenance = checkpoint.get("invoice_provenance")
     # Payouts first: they tell the wallet import how much of a send was fee.
     provenance, provenance_checkpoint = _sync_store_provenance(
@@ -2803,6 +2830,151 @@ def _sync_btcpay_wallet(
     return outcome
 
 
+def _sync_bark_wallet(
+    conn,
+    runtime_config,
+    profile,
+    wallet,
+    backend,
+    checkpoint,
+    *,
+    store_id,
+    page_size,
+    commit,
+    migrated_from_ledger=None,
+):
+    """Import a store's whole Bark wallet (Bark plugin 0.10 and later).
+
+    Invoice provenance is refreshed first so rows that pay an invoice book
+    under the payment's provenance key. Lightning payments a ``BTC-LN``
+    payment ledger booked move into this wallet, which settled them.
+    """
+
+    previous_provenance = checkpoint.get("invoice_provenance")
+    provenance, provenance_checkpoint = _sync_store_provenance(
+        conn,
+        runtime_config,
+        profile,
+        backend_name=backend["name"],
+        store_id=store_id,
+        checkpoint=previous_provenance if isinstance(previous_provenance, dict) else {},
+        commit=commit,
+        suggest=False,
+    )
+    btcpay_meta = {}
+    records = fetch_btcpay_records(
+        backend,
+        store_id=store_id,
+        payment_method_id=BTCPAY_BARK_PAYMENT_METHOD_ID,
+        page_size=page_size,
+        checkpoint={} if migrated_from_ledger is not None else checkpoint,
+        metadata=btcpay_meta,
+    )
+    if migrated_from_ledger is not None and provenance.get("status") != "synced":
+        # Without current provenance the booked payments cannot be matched.
+        raise AppError(
+            f"BTCPay invoices for store {store_id} cannot be read, so '{wallet['label']}' cannot switch to the Bark wallet yet",
+            code=provenance.get("code") or "unavailable",
+            hint=provenance.get("hint") or "Sync again once BTCPay answers; the payment ledger stays as it is.",
+            details={"store_id": store_id},
+            retryable=bool(provenance.get("retryable")),
+        )
+    # Identities, the ledger switch, moved Lightning rows and the import land
+    # together or not at all: a refusal leaves the book as it was. Freshness
+    # progress commits on this connection, so the import stays quiet inside.
+    core_btcpay_bark.require_book_network(conn, profile["id"], store_id)
+    savepoint = f"bark_import_{uuid.uuid4().hex}"
+    # Reserve the writer first: a deferred savepoint that reads before its
+    # first write fails at once with database_busy under another writer.
+    begin_write_savepoint(conn, savepoint)
+    progress_token = core_sync.sync_progress_emitter.set(None)
+    try:
+        identities = core_btcpay_bark.assign_identities(
+            conn, profile["id"], wallet["id"], store_id=store_id, records=records
+        )
+        kept = 0
+        if migrated_from_ledger is not None:
+            kept = core_btcpay_bark.migrate_payment_ledger(conn, profile, wallet, records)["kept"]
+            conn.execute(
+                "UPDATE wallets SET config_json = ? WHERE id = ?",
+                (json.dumps(core_btcpay_bark.bark_config(migrated_from_ledger), sort_keys=True), wallet["id"]),
+            )
+        moved = core_btcpay_bark.adopt_lightning_ledger_rows(
+            conn,
+            profile["id"],
+            wallet,
+            backend_name=backend["name"],
+            store_id=store_id,
+            records=records,
+        )
+        outcome = _import_records_for_sync(
+            conn,
+            profile,
+            wallet,
+            records,
+            f"btcpay-bark:{backend['name']}:{store_id}",
+            apply_btcpay=True,
+            commit=False,
+        )
+        if (kept or moved or identities["rekeyed"]) and not outcome.get("journal_invalidated"):
+            _import_coordinator_hooks().invalidate_journals(conn, profile["id"])
+            outcome["journal_invalidated"] = True
+    except BaseException:
+        conn.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+        conn.execute(f"RELEASE SAVEPOINT {savepoint}")
+        raise
+    finally:
+        core_sync.sync_progress_emitter.reset(progress_token)
+    conn.execute(f"RELEASE SAVEPOINT {savepoint}")
+    if provenance.get("status") == "synced":
+        provenance["suggestions"] = _refresh_commercial_suggestions(conn, profile)
+    if commit:
+        conn.commit()
+    outcome.update(
+        {
+            "backend": backend["name"],
+            "backend_kind": "btcpay",
+            "backend_url": redact_backend_url(backend["url"]),
+            "store_id": store_id,
+            "payment_method_id": BTCPAY_BARK_PAYMENT_METHOD_ID,
+            "page_size": page_size,
+            "fetched": len(records),
+            "bark": {
+                "linked_to_payments": identities["linked"],
+                "ambiguous_payments": identities["ambiguous"],
+                "identities_rekeyed": identities["rekeyed"],
+                "lightning_ledger_rows_moved": moved,
+                "migrated_from_payment_ledger": migrated_from_ledger is not None,
+                "ledger_rows_kept": kept,
+            },
+            "pages_fetched": btcpay_meta.get("pages_fetched", 0),
+            "stopped_by_known_page": bool(btcpay_meta.get("stopped_by_known_page")),
+            "stop_reason": btcpay_meta.get("stop_reason"),
+            "deep_audit": btcpay_meta.get("deep_audit"),
+        }
+    )
+    next_checkpoint = {
+        key: value
+        for key, value in checkpoint.items()
+        if key not in {"btcpay_pages", "btcpay_pagination"}
+    }
+    next_checkpoint.update(
+        {
+            "backend": {"name": backend["name"], "kind": "btcpay"},
+            "btcpay_pages": btcpay_meta.get("btcpay_pages", {}),
+            "btcpay_pagination": btcpay_meta.get("btcpay_pagination", {}),
+            "store_id": store_id,
+            "payment_method_id": BTCPAY_BARK_PAYMENT_METHOD_ID,
+            "invoice_provenance": provenance_checkpoint,
+        }
+    )
+    checkpoint.clear()
+    checkpoint.update(next_checkpoint)
+    outcome["invoice_provenance"] = provenance
+    outcome["freshness_checkpoint"] = checkpoint
+    return outcome
+
+
 def _refresh_commercial_suggestions(conn, profile):
     suggested = core_commercial.suggest_links(
         conn,
@@ -2836,6 +3008,24 @@ def _sync_btcpay_payment_ledger(
     btcpay_config = core_wallets.wallet_btcpay_sync_config(config)
     store_id = btcpay_config["store_id"]
     payment_method_ids = core_btcpay_ledger.ledger_payment_method_ids(config)
+    bark_status = None
+    if core_btcpay_bark.is_bark_ledger(config):
+        # Bark plugin 0.10 and later serve the whole wallet: switch to it and
+        # keep what the ledger booked. Older plugins keep the ledger.
+        bark_status = bark_wallet_history_status(backend, store_id)
+        if bark_status is None:
+            return _sync_bark_wallet(
+                conn,
+                runtime_config,
+                profile,
+                wallet,
+                backend,
+                checkpoint,
+                store_id=store_id,
+                page_size=page_size,
+                commit=commit,
+                migrated_from_ledger=config,
+            )
     if not payment_method_ids:
         raise AppError(
             f"Wallet '{wallet['label']}' has no BTCPay payment methods to book",
@@ -2917,6 +3107,8 @@ def _sync_btcpay_payment_ledger(
             "freshness_checkpoint": checkpoint,
         }
     )
+    if bark_status is not None:
+        outcome["bark_wallet_history"] = bark_status
     return outcome
 
 
@@ -3269,7 +3461,7 @@ def attach_btcpay_provenance_to_wallet(
     payment_method_id = core_wallets.normalize_btcpay_payment_method_id(
         payment_method_id
     )
-    require_wallet_history_payment_method(payment_method_id)
+    require_settlement_payment_method(payment_method_id)
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     wallet = resolve_wallet(conn, profile["id"], wallet_ref)
     backend = resolve_backend(runtime_config, backend_name)

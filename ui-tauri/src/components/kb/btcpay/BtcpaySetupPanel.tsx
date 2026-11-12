@@ -536,7 +536,7 @@ export function BtcpaySetupPanel({
   const keyIsReadOnly = apiKeyInfo?.known && risk === "read_only";
   const presetPermissions = (value: BtcpayKeyPreset) =>
     value === "read_only"
-      ? ["btcpay.store.canviewstoresettings"]
+      ? ["btcpay.store.canviewstoresettings", "btcpay.store.canviewwallet"]
       : ["btcpay.store.canmodifystoresettings"];
 
   return (
