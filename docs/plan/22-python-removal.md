@@ -285,6 +285,8 @@ rewrite. Each rule below covers a value that differs between two correct runs.
 | Clock readings inside the run's window (±5 s, the recording's window plus 10 minutes of lookback) become `<time>` | wall-clock reads. ISO, compact (`20261110T120000Z`) and epoch forms. |
 | The same at whole hours up to 72 h away, or at 7, 14, 30, 60, 90, 180 or 365 days | expiries derived from the clock, such as a 90-day dismissal. Arbitrary offsets stay literal, so a fixture dated 10 days after the run compares exactly. |
 | Both sides are normalized with the same spans: the replay's window, the recording's, and the window of any run that re-recorded the session (`rerecorded_us`) | a reading restored from the starting state appears on both sides; with one-sided spans, the hour-offset rule matched it whenever the replay ran at the same minutes and seconds, so equal state differed at random. A re-recorded session keeps its first window, which still covers the frozen SQLite clock, and adds the re-run's, which covers the real clock. |
+| A clock stamp's collision suffix in a file name (`report-<time>-2.csv`) folds into `<time>` | writers stamp names to the second and take the next free `-N`; which run's writes share a second is timing. Same-shaped files compare as a multiset by content, so a missing, extra or changed file still differs. |
+| A diagnostics report's `platform` (system, kernel release, machine) becomes `<host>` | it names the machine that ran the replay; every other report field compares. |
 | Never a clock reading: a number under a figure key (amount, msat, sat, price, fee, gain, loss, basis, proceeds, tax, cost, value, quantity, balance, total, fiat, income, rate) | an msat amount can look like a millisecond epoch. |
 | `just now` and `N min ago` style ages become a placeholder | relative to the clock. |
 | Durations (`*elapsed*`, `*duration*` keys or columns, `{"type":"duration_ms","value":N}` log records, fractional `seconds`/`user`/`sys`/`cpu`/`wall` and the same with a `*_` prefix) compare as present, not by value | they measure run time. Whole numbers under those keys stay literal. |
@@ -355,6 +357,14 @@ closed-terminal tests of `test_rust_freshness_graph` and
 or owner locks (`test_rust_store_interop`, the MCP privacy fence). Their
 behaviour is covered by the porters' Rust tests where they hold kills, or
 listed in `dropped.tsv`.
+
+A replay runs on its recording's calendar: the clock shim reads realtime as
+the recorded start (or the shared SQLite clock's base) plus real elapsed
+time, so "today" and certificate validity stay put while durations stay
+real. Restored state names the replay's checkout (a book's custom CA bundle
+among the repository's fixtures), a `~user` argument names the replaying
+account, and 22 sessions' stand-in `lightning-cli` scripts start through
+`/usr/bin/env python3` instead of the recording checkout's `.venv`.
 
 A replay must not depend on where the checkout lives. Test builds seed
 SQLite's PRNG from every argument, `argv[0]` (the binary's absolute path)
