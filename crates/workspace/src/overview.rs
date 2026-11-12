@@ -2058,7 +2058,13 @@ fn profile_overview(
         Value::Float(x) => x,
         _ => 0.0,
     };
-    Ok(dict([
+    let others = other_assets(
+        conn,
+        profile,
+        &py_str(&val(&fiat, "fiatCurrency")),
+        book_state,
+    )?;
+    let mut snapshot = dict([
         ("priceEur", Value::Float(price_eur)),
         ("priceUsd", Value::Float(price_usd)),
         ("marketRate", market),
@@ -2113,7 +2119,135 @@ fn profile_overview(
                 ("quarantines", quarantines),
             ]),
         ),
-    ]))
+    ]);
+    // Added only when the book holds other crypto assets, so a Bitcoin-only
+    // book's snapshot stays byte-identical.
+    if !others.is_empty() {
+        set(&mut snapshot, "otherAssets", Value::List(others));
+    }
+    Ok(snapshot)
+}
+
+/// Whole units of a stored quantity (10^-11 of a unit for every crypto
+/// asset) as an exact decimal string: `150000000000` -> `"1.5"`.
+fn units_decimal(units: i128) -> String {
+    let digits = units.unsigned_abs().to_string();
+    let digits = format!("{digits:0>12}");
+    let (whole, fraction) = digits.split_at(digits.len() - 11);
+    let fraction = fraction.trim_end_matches('0');
+    let sign = if units < 0 { "-" } else { "" };
+    if fraction.is_empty() {
+        format!("{sign}{whole}")
+    } else {
+        format!("{sign}{whole}.{fraction}")
+    }
+}
+
+/// One other crypto asset's holding across the book's wallets.
+#[derive(Default)]
+struct AssetHolding {
+    units: i128,
+    basis: Option<f64>,
+    wallets: BTreeSet<String>,
+}
+
+/// The book's holdings of crypto assets other than Bitcoin
+/// (docs/plan/23-crypto-assets.md), per asset in code order. Bitcoin views
+/// and totals never include them. Quantities come from current journal
+/// holdings, with their cost basis; an asset journals do not hold yet (stale
+/// journals, every row quarantined) counts its transactions, with no basis.
+/// The market value uses the book's own price for the asset, the one
+/// `reports portfolio-summary` uses; without one it is unknown (`null`),
+/// never zero. Empty when the book holds only Bitcoin.
+fn other_assets(
+    conn: &Connection,
+    profile: &Value,
+    fiat_code: &str,
+    book_state: bool,
+) -> Result<Vec<Value>> {
+    let id = text(profile, "id");
+    let mut books: BTreeMap<String, AssetHolding> = BTreeMap::new();
+    if book_state {
+        for row in rows(
+            conn,
+            "SELECT wallet_id, asset, quantity, cost_basis FROM journal_wallet_holdings \
+             WHERE profile_id = ? ORDER BY asset ASC, wallet_id ASC, id ASC",
+            [&id],
+        )
+        .unwrap_or_default()
+        {
+            let asset = kassiber_pytext::upper(kassiber_pytext::strip(&text(&row, "asset")));
+            if asset.is_empty() || kassiber_store::assets::is_bitcoin(&asset) {
+                continue;
+            }
+            let units = msat(&val(&row, "quantity"))?;
+            let basis = dec_float(&val(&row, "cost_basis"))?;
+            let holding = books.entry(asset).or_default();
+            holding.units += units;
+            holding.basis = Some(holding.basis.unwrap_or(0.0) + basis);
+            if units != 0 {
+                holding.wallets.insert(text(&row, "wallet_id"));
+            }
+        }
+    }
+    let mut observed: BTreeMap<String, AssetHolding> = BTreeMap::new();
+    for row in rows(
+        conn,
+        "SELECT wallet_id, asset, SUM(CASE WHEN direction = 'inbound' THEN amount \
+         WHEN direction = 'outbound' THEN -amount - COALESCE(fee, 0) ELSE 0 END) AS quantity \
+         FROM transactions WHERE profile_id = ? AND excluded = 0 GROUP BY wallet_id, asset",
+        [&id],
+    )? {
+        let asset = kassiber_pytext::upper(kassiber_pytext::strip(&text(&row, "asset")));
+        if asset.is_empty() || kassiber_store::assets::is_bitcoin(&asset) {
+            continue;
+        }
+        let units = msat(&val(&row, "quantity"))?;
+        let holding = observed.entry(asset).or_default();
+        holding.units += units;
+        if units != 0 {
+            holding.wallets.insert(text(&row, "wallet_id"));
+        }
+    }
+    let mut holdings: Vec<(String, AssetHolding, &'static str)> = Vec::new();
+    let codes: BTreeSet<String> = books.keys().chain(observed.keys()).cloned().collect();
+    for code in codes {
+        let (holding, source) = match books.remove(&code) {
+            Some(holding) => (holding, "books"),
+            None => (observed.remove(&code).unwrap_or_default(), "transactions"),
+        };
+        if holding.units != 0 {
+            holdings.push((code, holding, source));
+        }
+    }
+    if holdings.is_empty() {
+        return Ok(Vec::new());
+    }
+    let codes: Vec<&str> = holdings.iter().map(|(code, _, _)| code.as_str()).collect();
+    let rates = kassiber_reports::holding_rates(conn, profile, &codes)?;
+    Ok(holdings
+        .into_iter()
+        .map(|(code, holding, source)| {
+            let rate = rates.get(&code).copied().filter(|rate| rate.is_finite());
+            let market = rate.map(|rate| btc(holding.units) * rate);
+            let float = |value: Option<f64>| value.map_or(Value::Null, Value::Float);
+            dict([
+                ("asset", s(code.as_str())),
+                ("quantity", s(units_decimal(holding.units))),
+                ("quantityUnits", Value::Int(holding.units.into())),
+                ("walletCount", (holding.wallets.len() as i64).into()),
+                ("source", s(source)),
+                ("fiatCurrency", s(fiat_code)),
+                ("rate", float(rate)),
+                ("costBasis", float(holding.basis)),
+                ("marketValue", float(market)),
+                (
+                    "unrealized",
+                    float(market.zip(holding.basis).map(|(m, b)| m - b)),
+                ),
+            ])
+        })
+        .collect())
 }
 
 /// Running `(balance_btc, cost_basis)` per activity row, as
@@ -2241,7 +2375,7 @@ fn book_overview(
     ] {
         set(&mut status, key, value);
     }
-    Ok(dict([
+    let mut book = dict([
         (
             "profile",
             dict([
@@ -2278,7 +2412,11 @@ fn book_overview(
             "readiness",
             dict([("ready", Value::Bool(ready)), ("hints", Value::List(hints))]),
         ),
-    ]))
+    ]);
+    if let Some(others) = get(&snapshot, "otherAssets") {
+        set(&mut book, "otherAssets", others.clone());
+    }
+    Ok(book)
 }
 
 fn empty_workspace(workspace: Option<&Value>) -> Value {
@@ -2883,5 +3021,137 @@ mod same_time_tests {
             conn.execute("INSERT INTO import_batch_transactions(batch_id,transaction_id,source_position) VALUES('b',?,?)", kassiber_store::rusqlite::params![id, position]).unwrap();
         }
         assert_eq!(latest_transaction_rate(conn, "p", "EUR").unwrap(), 10000.0);
+    }
+}
+
+#[cfg(test)]
+mod other_asset_tests {
+    use super::*;
+
+    fn book() -> (tempfile::TempDir, kassiber_store::Book) {
+        let root = tempfile::tempdir().unwrap();
+        let book = kassiber_store::Book::create(root.path(), None).unwrap();
+        book.connection().execute_batch("INSERT INTO workspaces(id,label,created_at) VALUES('ws','W','t');
+            INSERT INTO profiles(id,workspace_id,label,fiat_currency,created_at) VALUES('p','ws','P','EUR','t');
+            INSERT INTO wallets(id,workspace_id,profile_id,label,kind,created_at) VALUES('w','ws','p','Exchange','custom','t');
+            INSERT INTO wallets(id,workspace_id,profile_id,label,kind,created_at) VALUES('v','ws','p','Cold','custom','t');").unwrap();
+        (root, book)
+    }
+
+    fn insert(
+        conn: &Connection,
+        id: &str,
+        wallet: &str,
+        asset: &str,
+        amount: i64,
+        rate: Option<f64>,
+    ) {
+        conn.execute("INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,occurred_at,direction,asset,amount,fiat_currency,fiat_rate,created_at) VALUES(?1,'ws','p',?2,?1,'2024-06-01T00:00:00Z','inbound',?3,?4,'EUR',?5,'t')",
+            kassiber_store::rusqlite::params![id, wallet, asset, amount, rate]).unwrap();
+    }
+
+    fn profile(conn: &Connection) -> Value {
+        rows(conn, "SELECT * FROM profiles WHERE id = 'p'", [])
+            .unwrap()
+            .remove(0)
+    }
+
+    fn snapshot(conn: &Connection) -> Value {
+        let workspace = rows(conn, "SELECT * FROM workspaces WHERE id = 'ws'", [])
+            .unwrap()
+            .remove(0);
+        profile_overview(
+            conn,
+            &workspace,
+            &profile(conn),
+            &Clock { now: 0 },
+            &kassiber_setup::SystemSources,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn exact_decimal_quantities_from_units() {
+        assert_eq!(units_decimal(150_000_000_000), "1.5");
+        assert_eq!(units_decimal(1), "0.00000000001");
+        assert_eq!(units_decimal(-200_000_000_000), "-2");
+        assert_eq!(units_decimal(0), "0");
+    }
+
+    #[test]
+    fn a_bitcoin_only_book_adds_no_field() {
+        let (_root, book) = book();
+        let conn = book.connection();
+        insert(conn, "b", "v", "BTC", 100_000_000_000, Some(50_000.0));
+        insert(conn, "l", "v", "LBTC", 50_000_000_000, None);
+        let snapshot = snapshot(conn);
+        assert!(get(&snapshot, "otherAssets").is_none());
+        assert_eq!(
+            get(&snapshot, "balanceSummary").and_then(|b| get(b, "totalBtc")),
+            Some(&Value::Float(1.5))
+        );
+    }
+
+    #[test]
+    fn other_assets_list_per_asset_and_stay_out_of_bitcoin_totals() {
+        let (_root, book) = book();
+        let conn = book.connection();
+        insert(conn, "b", "v", "BTC", 100_000_000_000, Some(50_000.0));
+        insert(conn, "e1", "w", "ETH", 100_000_000_000, Some(2_000.0));
+        insert(conn, "e2", "v", "ETH", 50_000_000_000, None);
+        insert(conn, "s", "w", "SOL", 300_000_000_000, None);
+        let snapshot = snapshot(conn);
+        // Bitcoin totals count BTC only.
+        assert_eq!(
+            get(&snapshot, "balanceSummary").and_then(|b| get(b, "totalBtc")),
+            Some(&Value::Float(1.0))
+        );
+        let Some(Value::List(others)) = get(&snapshot, "otherAssets") else {
+            panic!("otherAssets missing");
+        };
+        assert_eq!(others.len(), 2);
+        let eth = &others[0];
+        assert_eq!(val(eth, "asset"), s("ETH"));
+        assert_eq!(val(eth, "quantity"), s("1.5"));
+        assert_eq!(
+            val(eth, "quantityUnits"),
+            Value::Int(150_000_000_000i64.into())
+        );
+        assert_eq!(val(eth, "walletCount"), Value::Int(2.into()));
+        assert_eq!(val(eth, "source"), s("transactions"));
+        assert_eq!(val(eth, "fiatCurrency"), s("EUR"));
+        assert_eq!(val(eth, "rate"), Value::Float(2_000.0));
+        assert_eq!(val(eth, "marketValue"), Value::Float(3_000.0));
+        // Journals hold nothing yet: the basis is unknown, not zero.
+        assert_eq!(val(eth, "costBasis"), Value::Null);
+        assert_eq!(val(eth, "unrealized"), Value::Null);
+        // No price in the book: the value is unknown, never zero.
+        let sol = &others[1];
+        assert_eq!(val(sol, "asset"), s("SOL"));
+        assert_eq!(val(sol, "quantity"), s("3"));
+        assert_eq!(val(sol, "rate"), Value::Null);
+        assert_eq!(val(sol, "marketValue"), Value::Null);
+    }
+
+    #[test]
+    fn current_journal_holdings_carry_quantity_and_cost_basis() {
+        let (_root, book) = book();
+        let conn = book.connection();
+        insert(conn, "e1", "w", "ETH", 100_000_000_000, Some(2_000.0));
+        conn.execute_batch("INSERT INTO journal_wallet_holdings(id,workspace_id,profile_id,wallet_id,asset,quantity,cost_basis,created_at) VALUES
+            ('h1','ws','p','w','ETH',100000000000,1800.5,'t'),
+            ('h2','ws','p','w','BTC',100000000000,30000,'t');").unwrap();
+        let others = other_assets(conn, &profile(conn), "EUR", true).unwrap();
+        assert_eq!(others.len(), 1);
+        let eth = &others[0];
+        assert_eq!(val(eth, "source"), s("books"));
+        assert_eq!(val(eth, "quantity"), s("1"));
+        assert_eq!(val(eth, "costBasis"), Value::Float(1_800.5));
+        assert_eq!(val(eth, "marketValue"), Value::Float(2_000.0));
+        assert_eq!(val(eth, "unrealized"), Value::Float(199.5));
+        // Without current journals the same holding counts transactions.
+        let stale = other_assets(conn, &profile(conn), "EUR", false).unwrap();
+        assert_eq!(val(&stale[0], "source"), s("transactions"));
+        assert_eq!(val(&stale[0], "costBasis"), Value::Null);
     }
 }
