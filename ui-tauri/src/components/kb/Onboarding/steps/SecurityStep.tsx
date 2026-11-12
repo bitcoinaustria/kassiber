@@ -3,7 +3,11 @@ import { useTranslation } from "react-i18next";
 
 import { canUseTouchIdPassphraseUnlock } from "@/daemon/transport";
 
-import { databasePassphraseHint } from "../constants";
+import {
+  DATABASE_PASSPHRASE_HINT_KEYS,
+  databasePassphraseIssue,
+  MIN_DATABASE_PASSPHRASE_CHARS,
+} from "../constants";
 import { CheckRow, ChoiceCard, TextField } from "../fields";
 import { OnboardingStepActions, OnboardingStepPage } from "../frame";
 import type { StepComponentProps } from "../types";
@@ -18,14 +22,19 @@ export const SecurityStep = ({
   const { t } = useTranslation(["onboarding", "common"]);
   const encrypted = form.databaseMode === "sqlcipher";
   const touchIdAvailable = encrypted && canUseTouchIdPassphraseUnlock();
-  const passphraseHint = encrypted
-    ? databasePassphraseHint(
+  const passphraseIssue = encrypted
+    ? databasePassphraseIssue(
         form.databasePassphrase,
         form.databasePassphraseConfirm,
       )
     : null;
+  const passphraseHint = passphraseIssue
+    ? t(DATABASE_PASSPHRASE_HINT_KEYS[passphraseIssue], {
+        min: MIN_DATABASE_PASSPHRASE_CHARS,
+      })
+    : null;
   const canCreateBooks = encrypted
-    ? passphraseHint === null && form.recoveryAcknowledged
+    ? passphraseIssue === null && form.recoveryAcknowledged
     : form.plaintextAcknowledged;
   return (
     <OnboardingStepPage

@@ -299,6 +299,12 @@
     "passphrasePlaceholder": "At least 12 characters",
     "confirmPassphrase": "Confirm passphrase",
     "confirmPassphrasePlaceholder": "Repeat passphrase",
+    "hint": {
+      "required": "Enter a database passphrase.",
+      "tooShort": "Use at least {{min}} characters.",
+      "confirmRequired": "Confirm the database passphrase.",
+      "mismatch": "Passphrases do not match."
+    },
     "passphraseNote": "Sent only to the local daemon to unlock the database — never stored in the UI.",
     "recoveryAck": "I understand there is no passphrase recovery path.",
     "recoveryAckDescription": "If the passphrase is lost, the SQLCipher database cannot be opened.",

@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 
+import i18n from "@/i18n";
+
 import {
   DEFAULT_FORM,
   aiBaseUrlHint,
   backendEndpointHint,
   localAiBaseUrlHint,
-  databasePassphraseHint,
+  DATABASE_PASSPHRASE_HINT_KEYS,
+  databasePassphraseIssue,
+  MIN_DATABASE_PASSPHRASE_CHARS,
   electrumEndpointUrl,
   GAINS_ALGORITHM_DEFAULTS,
   gainsAlgorithmsFor,
@@ -150,18 +154,43 @@ describe("onboarding Austrian tax defaults", () => {
 
 describe("onboarding database passphrase validation", () => {
   it("requires a long passphrase and matching confirmation", () => {
-    expect(databasePassphraseHint("", "")).toBe("Enter a database passphrase.");
-    expect(databasePassphraseHint("short", "short")).toBe(
-      "Use at least 12 characters.",
-    );
-    expect(databasePassphraseHint("long enough value", "")).toBe(
-      "Confirm the database passphrase.",
-    );
-    expect(databasePassphraseHint("long enough value", "different value")).toBe(
-      "Passphrases do not match.",
+    expect(databasePassphraseIssue("", "")).toBe("required");
+    expect(databasePassphraseIssue("short", "short")).toBe("tooShort");
+    expect(databasePassphraseIssue("long enough value", "")).toBe(
+      "confirmRequired",
     );
     expect(
-      databasePassphraseHint("long enough value", "long enough value"),
+      databasePassphraseIssue("long enough value", "different value"),
+    ).toBe("mismatch");
+    expect(
+      databasePassphraseIssue("long enough value", "long enough value"),
     ).toBeNull();
+  });
+
+  it("translates every issue in English and Austrian German", () => {
+    const issues = Object.keys(
+      DATABASE_PASSPHRASE_HINT_KEYS,
+    ) as (keyof typeof DATABASE_PASSPHRASE_HINT_KEYS)[];
+    const render = (lng: "en" | "de") =>
+      issues.map((issue) =>
+        i18n.t(DATABASE_PASSPHRASE_HINT_KEYS[issue], {
+          ns: "onboarding",
+          lng,
+          min: MIN_DATABASE_PASSPHRASE_CHARS,
+        }),
+      );
+
+    expect(render("en")).toEqual([
+      "Enter a database passphrase.",
+      "Use at least 12 characters.",
+      "Confirm the database passphrase.",
+      "Passphrases do not match.",
+    ]);
+    expect(render("de")).toEqual([
+      "Gib eine Datenbank-Passphrase ein.",
+      "Verwende mindestens 12 Zeichen.",
+      "Bestätige die Datenbank-Passphrase.",
+      "Die Passphrasen stimmen nicht überein.",
+    ]);
   });
 });
