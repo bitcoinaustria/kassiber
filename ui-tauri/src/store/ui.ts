@@ -738,8 +738,8 @@ function migrateAssistantDockToPanel(restored: Partial<UiState>) {
 
 /**
  * v3: the "hide sensitive values" boolean became a three-state privacy mode.
- * A user who hid values keeps amounts hidden; percentages stay visible, as
- * they were before "hideAll" existed.
+ * A user who hid values gets "hideAmounts", which hides everything the
+ * boolean hid; "hideAll" only adds the shares the boolean left visible.
  */
 function migrateHideSensitiveToPrivacyMode(restored: Partial<UiState>) {
   return {

@@ -434,8 +434,8 @@
     "reviewAi": "Assistent-Einstellungen",
     "modeLabel": "Werte am Bildschirm",
     "modeNormal": "Guthaben, Adressen, Beträge und Prozentwerte werden vollständig angezeigt.",
-    "modeHideAmounts": "Guthaben, Adressen und Beträge sind verborgen, bis du sie einblendest. Prozentwerte bleiben sichtbar.",
-    "modeHideAll": "Beträge sind verborgen, ebenso die Prozentwerte und Anteile, die zeigen, wie dein Bestand aufgeteilt ist.",
+    "modeHideAmounts": "Guthaben, Adressen und Beträge sind verborgen, bis du sie einblendest.",
+    "modeHideAll": "Verbirgt zusätzlich die Prozentwerte und Anteile, die zeigen, wie dein Bestand aufgeteilt ist.",
     "unlockLabel": "Beträge beim Entsperren ausblenden",
     "unlockOn": "Jeder Start und jedes Entsperren beginnt mit verborgenen Beträgen.",
     "unlockOff": "Kassiber behält die zuletzt gewählte Einstellung."
