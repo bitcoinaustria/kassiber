@@ -450,18 +450,37 @@ def _sync_fields(payload: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in (data or {}).items() if isinstance(value, (int, float, str, bool))}
 
 
+def _error_codes(value: Any) -> list[str]:
+    """Every `error.code` in a result, depth first: a daemon job reports its
+    failure inside a successful envelope."""
+    codes: list[str] = []
+    if isinstance(value, dict):
+        error = value.get("error")
+        if isinstance(error, dict) and isinstance(error.get("code"), str):
+            codes.append(error["code"])
+        for item in value.values():
+            codes.extend(_error_codes(item))
+    elif isinstance(value, list):
+        for item in value:
+            codes.extend(_error_codes(item))
+    return codes
+
+
 def _run_stage(book: Book, stage: str, action) -> dict[str, Any]:
     payload, seconds, rss_mb = action(stage)
+    output = _sync_fields(payload)
+    errors = sorted(set(_error_codes(payload.get("data"))))
     result: dict[str, Any] = {
         "event": "benchmark_result",
         "schema_version": SCHEMA_VERSION,
         "stage": stage,
         "book": book.label,
-        "ok": True,
+        "ok": output.get("ok") is not False and not errors,
+        "errors": errors,
         "seconds": round(seconds, 3),
         "peak_rss_mb": round(rss_mb, 1),
         "cpu_seconds": round(book.last_cpu_seconds, 3),
-        "output": _sync_fields(payload),
+        "output": output,
     }
     _emit(result)
     return result
