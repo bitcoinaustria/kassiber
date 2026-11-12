@@ -1403,5 +1403,86 @@
     "autoPaired_other": "{{count}} exact transfer pairs applied.",
     "attentionTitle": "Journals need attention",
     "autoPairSkipped": "Automatic pairing was skipped: {{message}}"
+  },
+  "exchange": {
+    "intro": "Kassiber reads your {{provider}} history through a read-only API key. It never trades, withdraws or moves funds, and it contacts {{provider}} only when you test the key or press Sync now.",
+    "guide": {
+      "title": "Create a read-only API key",
+      "kraken": "In Kraken, open Settings → API and create a new key. Copy the API key and the private key; Kraken shows the private key only once.",
+      "coinbase": "In Coinbase, open Settings → API and create a key for your BTC wallet. Copy the API key and its secret. Kassiber signs requests with that key and secret; key files from the Coinbase Developer Platform are not supported yet.",
+      "binance": "In Binance, open Account → API Management, create a system-generated key and edit its restrictions. Copy the API key and the secret key; Binance shows the secret only once. Kassiber refuses a key that can do more than read.",
+      "bitpanda": "In Bitpanda, open Account settings → API Keys → New API key. Bitpanda shows the key only once, and it expires after at most a year. Kassiber refuses a key that can trade.",
+      "grant": "Turn on only",
+      "deny": "Leave off",
+      "open": "Open the {{provider}} API key page"
+    },
+    "field": {
+      "apiKey": "API key",
+      "secret": {
+        "kraken": "Private key",
+        "coinbase": "API secret",
+        "binance": "Secret key"
+      },
+      "stored": "When you add the connection, Kassiber stores the key in this book's backend settings — encrypted along with the book when the book is encrypted — and never shows it again."
+    },
+    "test": {
+      "button": "Test connection",
+      "pending": "Testing…",
+      "explain": "Test connection is the first time Kassiber contacts {{provider}}: it signs one to three read requests with this key. Nothing is saved until you add the connection.",
+      "okReadOnly": "The key works, and {{provider}} confirms it can only read.",
+      "okUnknown": "The key works. {{provider}} does not say what else a key may do, so check that only the read permissions above are on.",
+      "changed": "The key changed since the last test. Test it again before adding the connection."
+    },
+    "issue": {
+      "api_key": "Paste the API key.",
+      "api_secret": "Paste the secret that belongs to this key.",
+      "test_first": "Test the connection before adding it."
+    },
+    "syncAfter": "Import {{provider}} history right after adding the connection",
+    "added": {
+      "title": "{{provider}} connected",
+      "body": "Saved {{label}}. Press Sync now on its page to import its history.",
+      "importedBody_one": "Imported {{count}} transaction into {{label}}.",
+      "importedBody_other": "Imported {{count}} transactions into {{label}}."
+    },
+    "error": {
+      "auth": "{{provider}} refused the key. Check that it is current, copied completely, allowed from this IP address, and has exactly the read permissions above.",
+      "rateLimited": "{{provider}} is limiting requests right now. Wait a minute and try again.",
+      "offline": "Offline mode is on, so Kassiber did not contact {{provider}}. Turn offline mode off to test or sync.",
+      "consent": "Kassiber did not get your go-ahead for this request. Try the action again.",
+      "protocol": "{{provider}} answered in a way Kassiber cannot read safely. Nothing was imported.",
+      "refused": "Kassiber stopped because an entry could not be booked safely, and imported nothing. If the details say a type is not recognised, please report it so it can be supported; meanwhile you can record that entry through the generic ledger.",
+      "config": "This connection's saved key is incomplete. Remove the connection and add the exchange again with a read-only key.",
+      "timeout": "{{provider}} did not answer in time. Try again later.",
+      "network": "Kassiber could not reach {{provider}}. Check the network connection and any proxy settings.",
+      "http": "{{provider}} answered with an error.",
+      "conflict": "A wallet with this name already exists in this book. Choose another name.",
+      "needsRust": "Exchange API connections need Kassiber's Rust backend. This app runs the Python backend, which offers exchange syncs only from the command line.",
+      "unknown": "The request failed.",
+      "permissions": "Permissions still on: {{list}}",
+      "serverSaid": "Details: {{message}}"
+    },
+    "sync": {
+      "title": "{{provider}} API",
+      "body": "Kassiber contacts {{provider}} only when you press Sync now. Refresh all, background refresh and the assistant never sync exchange accounts.",
+      "button": "Sync now",
+      "running": "Syncing…",
+      "key": "Read-only API key",
+      "keyStored": "Stored in backend “{{backend}}”",
+      "keyMissing": "Missing — add the exchange again",
+      "lastSync": "Last sync",
+      "never": "Not synced since Kassiber started",
+      "ok": "{{time}} · {{imported}} new of {{fetched}} read",
+      "failed": "{{time}} · failed",
+      "skipped_one": "{{count}} entry was skipped because it is not BTC or moves only fiat.",
+      "skipped_other": "{{count}} entries were skipped because they are not BTC or move only fiat.",
+      "sessionNote": "Sync results are kept until Kassiber restarts; the book stores only the imported transactions.",
+      "startedTitle": "Syncing {{label}}",
+      "startedBody": "Reading {{provider}} history.",
+      "finishedTitle": "{{label}} synced",
+      "finishedBody_one": "{{count}} new transaction from {{fetched}} read.",
+      "finishedBody_other": "{{count}} new transactions from {{fetched}} read.",
+      "failedTitle": "{{label}} sync failed"
+    }
   }
 }

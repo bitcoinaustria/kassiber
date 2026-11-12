@@ -4,6 +4,28 @@ export type AssistantModelSelection = {
 } | null;
 
 export type AiProviderKind = "local" | "remote" | "tee";
+/**
+ * A provider row's kind: a privacy posture, or a CLI proxy (a CLIProxyAPI
+ * server serving the user's signed-in subscriptions), which is always off
+ * this device and speaks each model in that model's own format.
+ */
+export type AiProviderRowKind = AiProviderKind | "cli_proxy";
+export const CLI_PROXY_KIND = "cli_proxy" as const;
+
+export function isCliProxyProvider(provider: { kind?: unknown } | null | undefined): boolean {
+  return provider?.kind === CLI_PROXY_KIND;
+}
+
+/** Where a provider's prompts go: a CLI proxy sends them off this device. */
+export function providerPosture(kind: AiProviderRowKind): AiProviderKind {
+  return kind === CLI_PROXY_KIND ? "remote" : kind;
+}
+
+/**
+ * The levels a CLI proxy takes and maps onto each family's own thinking
+ * control; mirrors the daemon's `cli_proxy::REASONING_EFFORTS`.
+ */
+export const CLI_PROXY_REASONING_EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
 export const NATIVE_AI_PROVIDER_BY_LOCATOR = {
   "claude-cli://default": "claude",
   "codex-cli://default": "codex",
@@ -95,7 +117,7 @@ export interface AiProviderRow {
   name: string;
   display_name?: string | null;
   base_url: string;
-  kind: AiProviderKind;
+  kind: AiProviderRowKind;
   default_model?: string | null;
   notes?: string | null;
   acknowledged_at?: string | null;
@@ -214,6 +236,18 @@ export interface AiModelRow {
   input_modalities?: string[];
   output_modalities?: string[];
   capabilities?: unknown;
+  /**
+   * CLI proxy models: the format the model is spoken in, from its family;
+   * null when Kassiber cannot chat with it (`unsupported_reason` says why).
+   */
+  api_format?: AiWireApiFormat | null;
+  unsupported_reason?: "not_a_chat_model" | "unknown_family";
+  /**
+   * CLI proxy models listed as `<prefix>/<model>`: a proxy credential given
+   * that prefix (one account) serves them, or the proxy's own namespace.
+   */
+  prefix?: string;
+  base_model?: string;
   /** Faster, higher-cost serving mode (Codex Fast tier, Claude Opus fast mode). */
   supports_fast_mode?: boolean;
   /** Provider wording for that mode, e.g. "2x speed, increased usage". */
@@ -421,6 +455,16 @@ export function selectedModelReasoningEfforts({
   if (!selection) return [];
   const model = models.find((row) => row.id === selection.model);
   const provider = providers.find((row) => row.name === selection.provider);
+  if (provider && isCliProxyProvider(provider)) {
+    // The proxy takes its own levels up to max; a model it cannot chat with
+    // takes none.
+    if (model?.supports_reasoning_effort !== true) return [];
+    const levels: readonly string[] = CLI_PROXY_REASONING_EFFORTS;
+    const listed = normalizeEffortList(model.reasoning_efforts)
+      .map((effort) => effort.toLowerCase())
+      .filter((effort) => levels.includes(effort));
+    return listed.length > 0 ? [...new Set(listed)] : [...CLI_PROXY_REASONING_EFFORTS];
+  }
   if (provider && !nativeAiProviderRuntime(provider.base_url)) {
     if (model?.supports_reasoning_effort !== true) return [];
     const listed = normalizeEffortList(model.reasoning_efforts)

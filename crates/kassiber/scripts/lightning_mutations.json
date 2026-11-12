@@ -1,0 +1,212 @@
+[
+  {
+    "id": "lightning-service-authority",
+    "file": "crates/kassiber/src/real_store/lightning.rs",
+    "find": "if !matches!(current, Ok::<_, AppError>(true)) {",
+    "replace": "if !matches!(current, Ok::<_, AppError>(true)) && false {",
+    "expect_failing": [
+      "lightning_service_requires_exact_grant_and_current_book_config_without_traffic"
+    ],
+    "rule": "A changed book or configuration must refuse before a node read."
+  },
+  {
+    "id": "lightning-service-book-state",
+    "file": "crates/kassiber/src/real_store/lightning.rs",
+    "find": "setting(conn, \"database_instance_id\")?,",
+    "replace": "Some(\"fixed\".into()),",
+    "expect_failing": [
+      "lightning_service_requires_exact_grant_and_current_book_config_without_traffic"
+    ],
+    "rule": "Current book identity is checked independently of the prepared transport request."
+  },
+  {
+    "id": "lightning-service-context-state",
+    "file": "crates/kassiber/src/real_store/lightning.rs",
+    "find": "setting(conn, \"context_profile\")?,",
+    "replace": "None,",
+    "expect_failing": [
+      "lightning_service_requires_exact_grant_and_current_book_config_without_traffic"
+    ],
+    "rule": "Context changes revoke even an explicitly scoped request."
+  },
+  {
+    "id": "lightning-service-wallet-state",
+    "file": "crates/kassiber/src/real_store/lightning.rs",
+    "find": "        wallet,\n    ])",
+    "replace": "        { let _ = wallet; None },\n    ])",
+    "expect_failing": [
+      "lightning_service_requires_exact_grant_and_current_book_config_without_traffic"
+    ],
+    "rule": "Any changed wallet configuration invalidates the request."
+  },
+  {
+    "id": "lightning-service-backend-state",
+    "file": "crates/kassiber/src/real_store/lightning.rs",
+    "find": "&& backend(self.conn, self.config, &connection)? == self.backend",
+    "replace": "&& { let _ = backend(self.conn, self.config, &connection)?; true }",
+    "expect_failing": [
+      "lightning_service_requires_exact_grant_and_current_book_config_without_traffic"
+    ],
+    "rule": "Effective private backend configuration is rechecked before acquisition."
+  },
+  {
+    "id": "lightning-service-revoke",
+    "file": "crates/kassiber/src/real_store/lightning.rs",
+    "find": "        self.0.revoke();",
+    "replace": "        let _ = &self.0;",
+    "expect_failing": [
+      "lightning_service_capability_backend_and_grant_lifetime"
+    ],
+    "rule": "Completion revokes every shared clone of the request grant."
+  },
+  {
+    "id": "lightning-service-capabilities",
+    "file": "crates/kassiber/src/real_store/lightning.rs",
+    "find": ".map(|k| (k, Value::Bool(true)))",
+    "replace": ".map(|k| (k, Value::Bool(false)))",
+    "expect_failing": [
+      "lightning_service_capability_backend_and_grant_lifetime"
+    ],
+    "rule": "Operator reports include the adapters explicit reference capabilities."
+  },
+  {
+    "id": "lightning-service-unavailable",
+    "file": "crates/kassiber/src/real_store/lightning.rs",
+    "find": "if ![\"coreln\", \"lnd\"].contains(&kind) {",
+    "replace": "if ![\"coreln\", \"lnd\", \"nwc\"].contains(&kind) {",
+    "expect_failing": [
+      "lightning_service_capability_backend_and_grant_lifetime"
+    ],
+    "rule": "An unregistered NWC adapter refuses before backend traffic."
+  },
+  {
+    "id": "lightning-service-backend-merge",
+    "file": "crates/setup/src/backends.rs",
+    "find": "        merge(conn, &mut current)?;",
+    "replace": "        let _ = conn;",
+    "expect_failing": [
+      "lightning_backend_resolution_preserves_db_config_and_environment_precedence"
+    ],
+    "rule": "Backend resolution retains DB configuration and process-field precedence."
+  },
+  {
+    "id": "lightning-operation-binding",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "            self.operation,\n",
+    "replace": "            \"fixed-operation\",\n",
+    "expect_failing": [
+      "lightning_service_requires_exact_grant_and_current_book_config_without_traffic"
+    ],
+    "rule": "A CLI read grant cannot authorize a daemon read of the same connection."
+  },
+  {
+    "id": "lightning-lnd-resource-authority",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "            check()?;\n            self.read(path, body, consent, deadline)",
+    "replace": "            let _ = &check;\n            self.read(path, body, consent, deadline)",
+    "expect_failing": [
+      "lnd_checked_report_refuses_between_reads_and_before_return"
+    ],
+    "rule": "LND rechecks book authority before each HTTP resource."
+  },
+  {
+    "id": "lightning-lnd-return-authority",
+    "file": "crates/chain/src/lightning.rs",
+    "find": "        check()?;\n        self.http",
+    "replace": "        let _ = &check;\n        self.http",
+    "expect_failing": [
+      "lnd_checked_report_refuses_between_reads_and_before_return"
+    ],
+    "rule": "LND checks book authority after the final response."
+  },
+  {
+    "id": "lightning-cln-resource-authority",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "                check()?;\n                self.read(method, consent, deadline)",
+    "replace": "                let _ = &check;\n                self.read(method, consent, deadline)",
+    "expect_failing": [
+      "cln_checked_report_refuses_between_resources_and_before_return"
+    ],
+    "rule": "CLN checks book authority before each subprocess including optional reads."
+  },
+  {
+    "id": "lightning-cln-return-authority",
+    "file": "crates/chain/src/lightning/cln.rs",
+    "find": "        check()?;\n        self.gate",
+    "replace": "        let _ = &check;\n        self.gate",
+    "expect_failing": [
+      "cln_checked_report_refuses_between_resources_and_before_return"
+    ],
+    "rule": "CLN checks book authority after the final subprocess."
+  },
+  {
+    "id": "lightning-cli-connection",
+    "file": "crates/cli/src/reports.rs",
+    "find": "[\"connection\", \"window_days\", \"file\", \"workspace\", \"profile\"]",
+    "replace": "[\"label\", \"window_days\", \"file\", \"workspace\", \"profile\"]",
+    "expect_failing": [
+      "lightning_cli_preserves_action_scope_window_file_and_registration"
+    ],
+    "rule": "The CLI forwards the exact connection selector."
+  },
+  {
+    "id": "lightning-cli-export-file",
+    "file": "crates/cli/src/reports.rs",
+    "find": "[\"connection\", \"window_days\", \"file\", \"workspace\", \"profile\"]",
+    "replace": "[\"connection\", \"window_days\", \"filename\", \"workspace\", \"profile\"]",
+    "expect_failing": [
+      "lightning_cli_preserves_action_scope_window_file_and_registration"
+    ],
+    "rule": "The export action binds and publishes the requested literal CSV destination."
+  },
+  {
+    "id": "lightning-cli-registration",
+    "file": "crates/cli/src/reports.rs",
+    "find": "    \"reports.lightning-profitability\",\n",
+    "replace": "",
+    "expect_failing": [
+      "lightning_cli_preserves_action_scope_window_file_and_registration"
+    ],
+    "rule": "The profitability CLI must route to its native family."
+  },
+  {
+    "id": "lightning-cli-export-probe",
+    "file": "crates/cli/src/describe.rs",
+    "find": "    \"reports.export-lightning-profitability-csv\",\n",
+    "replace": "",
+    "expect_failing": [
+      "lightning_cli_preserves_action_scope_window_file_and_registration"
+    ],
+    "rule": "The native implementation probe must advertise the completed CSV route."
+  },
+  {
+    "id": "lightning-daemon-registration",
+    "file": "crates/daemon/src/reports.rs",
+    "find": "    \"ui.reports.lightning_profitability\",\n    \"ui.connections.node.snapshot\",\n    \"ui.exports.preview\",",
+    "replace": "    \"ui.connections.node.snapshot\",\n    \"ui.exports.preview\",",
+    "expect_failing": [
+      "lightning_daemon_preserves_alias_scope_window_and_registration"
+    ],
+    "rule": "The native daemon must advertise its completed profitability kind."
+  },
+  {
+    "id": "chain-lnd-report-binding",
+    "file": "crates/chain/src/lightning.rs",
+    "find": ".with_action_binding(binding(&config)?);",
+    "replace": ".with_action_binding([0; 32]);",
+    "expect_failing": [
+      "lnd_report_consent_binds_book_profile_connection_window_export_and_credentials"
+    ],
+    "rule": "Consent distinguishes the owning book, profile, connection, window, export and complete backend configuration."
+  },
+  {
+    "id": "chain-cln-report-action-binding",
+    "file": "crates/net/src/process.rs",
+    "find": ".with_action_binding(binding);",
+    "replace": ".with_action_binding({ let _ = binding; [0; 32] });",
+    "expect_failing": [
+      "cln_report_consent_binds_action_and_every_process_option_before_launch"
+    ],
+    "rule": "The CLN grant binds book, profile, connection, window and export destination."
+  }
+]

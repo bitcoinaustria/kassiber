@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
+import { httpModelRunsAssistant } from "@/components/ai/providerModelSearch";
 import {
+  isCliProxyProvider,
   isLoopbackAiHttpUrl,
+  providerPosture,
   nativeAiProviderRuntime,
   modelSupportsReasoningEffort,
   providerSupportsReasoningEffort,
@@ -267,5 +270,55 @@ describe("AI reasoning effort capability detection", () => {
         selectedModelSupportsReasoningEffort({ selection: { provider: "codex", model: "other" }, providers: codex, models }),
       ).toBe(true);
     });
+  });
+});
+
+describe("CLI proxy providers", () => {
+  const providers = [
+    {
+      name: "cli-proxy",
+      base_url: "http://127.0.0.1:8317/v1",
+      kind: "cli_proxy" as const,
+      has_api_key: true,
+      is_default: true,
+    },
+  ];
+  const models = [
+    {
+      id: "claude-sonnet-5-5",
+      api_format: "chat_completions" as const,
+      supports_tools: true,
+      supports_reasoning_effort: true,
+      reasoning_efforts: ["low", "medium", "high", "xhigh", "max"],
+    },
+    { id: "gpt-image-2", api_format: null, unsupported_reason: "not_a_chat_model" as const },
+  ];
+
+  it("is always off this device", () => {
+    expect(isCliProxyProvider(providers[0])).toBe(true);
+    expect(providerPosture("cli_proxy")).toBe("remote");
+    expect(providerPosture("local")).toBe("local");
+  });
+
+  it("offers a model the proxy's levels, and nothing for a model it cannot chat with", () => {
+    expect(
+      selectedModelReasoningEfforts({
+        selection: { provider: "cli-proxy", model: "claude-sonnet-5-5" },
+        providers,
+        models,
+      }),
+    ).toEqual(["low", "medium", "high", "xhigh", "max"]);
+    expect(
+      selectedModelReasoningEfforts({
+        selection: { provider: "cli-proxy", model: "gpt-image-2" },
+        providers,
+        models,
+      }),
+    ).toEqual([]);
+  });
+
+  it("keeps a model without a known format out of the assistant's models", () => {
+    expect(httpModelRunsAssistant(models[0])).toBe(true);
+    expect(httpModelRunsAssistant(models[1])).toBe(false);
   });
 });

@@ -7,10 +7,16 @@ const BOOK_WRITES = new Set([
   "ui.wallets.create", "ui.wallets.import_file", "ui.wallets.import_samourai",
   "ui.documents.import_report", "ui.connections.btcpay.create",
   "ui.connections.bullbitcoin_wallet.create", "ui.metadata.bip329.import",
-  "ui.backends.create",
+  "ui.backends.create", "ui.connections.exchange.create",
 ]);
 export function recordConnectionSetupMutation(outcome: ConnectionSetupOutcome, kind: string, data: unknown): void {
   if (BOOK_WRITES.has(kind)) outcome.mutations.push(kind);
+  // An exchange sync either imports or fails as a whole.
+  if (kind === "ui.connections.exchange.sync") {
+    outcome.synced = true;
+    outcome.mutations.push(kind);
+    return;
+  }
   if (kind !== "ui.wallets.sync") return;
   const results = data && typeof data === "object" && "results" in data ? data.results : null;
   if (!Array.isArray(results) || results.length === 0

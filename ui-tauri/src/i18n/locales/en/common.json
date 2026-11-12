@@ -68,5 +68,9 @@
     "yearCount_other": "{{count}} tx",
     "yearCountSoFar_one": "so far · {{count}} tx",
     "yearCountSoFar_other": "so far · {{count}} tx"
+  },
+  "taxCountry": {
+    "previewBadge": "Preview",
+    "previewNotice": "Not yet reviewed by a tax professional for this country — check results before filing."
   }
 }

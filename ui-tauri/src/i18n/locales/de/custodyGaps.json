@@ -65,11 +65,29 @@
       "recordedFanout": "Exakte Ausgänge einer aufgezeichneten Chain-Transaktion",
       "rowMatched": "Exakt übereinstimmende Wallet-Beobachtungen",
       "nativeTransfer": "Exaktes natives Wallet-Ereignis",
+      "exchangeTxid": "Börsenauszahlung mit dieser Transaktion und exaktem Betrag (automatisch)",
       "reviewedTransfer": "Geprüfter interner Transferdatensatz",
       "reviewedGapBridge": "Geprüfte Verwahrungsbrücke über eine fehlende Wallet",
       "channelLifecycle": "Verifizierter Kanal-Lebenszyklus",
       "reviewedDefault": "Geprüfter interner Verwahrungsnachweis",
       "verifiedDefault": "Verifizierter Wallet- oder Chain-Nachweis"
+    },
+    "undo": {
+      "action": "Automatische Paarung aufheben",
+      "title": "Diese automatische Paarung aufheben?",
+      "description": "Kassiber behandelt die Börsenauszahlung und diesen Eingang dann nicht mehr als eine Bewegung zwischen deinen eigenen Wallets. Beide Transaktionen kommen zurück in die Prüfung, und die Journale müssen neu berechnet werden.",
+      "route": "{{from}} → {{to}}",
+      "restoreHint": "Du kannst sie auf dieser Seite wiederherstellen, bis du sie verlässt, oder später über den Assistenten oder „kassiber transfers dismissals delete“. Sonst bleibt die Aufhebung zehn Jahre bestehen.",
+      "cancel": "Paarung behalten",
+      "confirm": "Paarung aufheben",
+      "undoing": "Wird aufgehoben…",
+      "failed": "Die Paarung konnte nicht aufgehoben werden."
+    },
+    "undone": {
+      "title": "Aufgehobene automatische Paarungen",
+      "description": "Diese Paarungen zählen nicht mehr als Bewegungen zwischen deinen eigenen Wallets. Stelle eine wieder her, damit Kassiber sie wieder automatisch paart.",
+      "restore": "Paarung wiederherstellen",
+      "failed": "Die Paarung konnte nicht wiederhergestellt werden."
     }
   },
   "reviewQueue": {

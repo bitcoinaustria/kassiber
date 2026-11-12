@@ -68,5 +68,9 @@
     "yearCount_other": "{{count}} Tx",
     "yearCountSoFar_one": "bis heute · {{count}} Tx",
     "yearCountSoFar_other": "bis heute · {{count}} Tx"
+  },
+  "taxCountry": {
+    "previewBadge": "Vorschau",
+    "previewNotice": "Noch nicht von einer Steuerberaterin oder einem Steuerberater für dieses Land geprüft — Ergebnisse vor der Einreichung kontrollieren."
   }
 }

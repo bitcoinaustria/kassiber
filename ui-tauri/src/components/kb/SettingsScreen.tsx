@@ -74,6 +74,7 @@ import { TerminalCommandSettingsPanel } from "./settings/TerminalCommandSettings
 import { sectionMeta } from "./settings/SettingsNavigation";
 import {
   PLAINTEXT_DELETE_ACK,
+  WIPE_EVERYTHING_ACK,
   backendPayload,
   backendRowToSettingsBackend,
   deriveExplorerSettings,
@@ -229,6 +230,9 @@ export function SettingsScreen({
     React.useState(false);
   const [resetDataPlaintextAck, setResetDataPlaintextAck] =
     React.useState("");
+  const [resetDataWipeEverything, setResetDataWipeEverything] =
+    React.useState(false);
+  const [resetDataWipeAck, setResetDataWipeAck] = React.useState("");
   const [resetDataError, setResetDataError] = React.useState<string | null>(
     null,
   );
@@ -505,6 +509,8 @@ export function SettingsScreen({
     setResetDataConfirm("");
     setResetDataClearSharedRates(false);
     setResetDataPlaintextAck("");
+    setResetDataWipeEverything(false);
+    setResetDataWipeAck("");
     setResetDataError(null);
     setResetDataOpen(true);
   };
@@ -796,6 +802,16 @@ export function SettingsScreen({
     }
   };
 
+  const closeResetBookData = () => {
+    setResetDataOpen(false);
+    setResetDataPassphrase("");
+    setResetDataConfirm("");
+    setResetDataClearSharedRates(false);
+    setResetDataPlaintextAck("");
+    setResetDataWipeEverything(false);
+    setResetDataWipeAck("");
+  };
+
   const onResetBookData = async () => {
     setResetDataError(null);
     if (encryptedWorkspace && !resetDataPassphrase) {
@@ -815,11 +831,21 @@ export function SettingsScreen({
       setResetDataError(t("resetBook.errorConfirm", { book: bookLabel }));
       return;
     }
+    if (
+      resetDataWipeEverything &&
+      resetDataWipeAck.trim() !== WIPE_EVERYTHING_ACK
+    ) {
+      setResetDataError(
+        t("resetBook.errorWipe", { challenge: WIPE_EVERYTHING_ACK }),
+      );
+      return;
+    }
     try {
       const envelope = await resetBookData.mutateAsync({
         confirm: "RESET",
         confirm_profile: bookLabel,
         clear_shared_rates: resetDataClearSharedRates,
+        wipe_everything: resetDataWipeEverything,
         auth_response: encryptedWorkspace
           ? { passphrase_secret: resetDataPassphrase }
           : { plaintext_delete_ack: PLAINTEXT_DELETE_ACK },
@@ -834,6 +860,20 @@ export function SettingsScreen({
         Number(removed.source_funds_links ?? 0) +
         Number(removed.source_funds_cases ?? 0) +
         Number(removed.source_funds_snapshots ?? 0);
+      const keptDecisions = envelope.data?.decisions?.kept;
+      if (keptDecisions !== undefined) {
+        addNotification({
+          title: t("resetBook.notifyTitle"),
+          body: t("resetBook.notifyKeptBody", {
+            transactions: formatCount(removed.transactions ?? 0),
+            journalRows: formatCount(removed.journal_entries ?? 0),
+            decisions: formatCount(keptDecisions),
+          }),
+          tone: "success",
+        });
+        closeResetBookData();
+        return;
+      }
       const summary = [
         t("resetBook.summary.transactions", {
           value: formatCount(removed.transactions ?? 0),
@@ -875,11 +915,7 @@ export function SettingsScreen({
         body: t("resetBook.notifyBody", { summary: summary.join(", ") }),
         tone: "success",
       });
-      setResetDataOpen(false);
-      setResetDataPassphrase("");
-      setResetDataConfirm("");
-      setResetDataClearSharedRates(false);
-      setResetDataPlaintextAck("");
+      closeResetBookData();
     } catch (error) {
       setResetDataError(
         error instanceof Error ? error.message : t("resetBook.errorGeneric"),
@@ -1296,6 +1332,44 @@ export function SettingsScreen({
                   </span>
                 </Label>
               </div>
+              <div className="space-y-3 rounded-lg border border-destructive/40 bg-destructive/5 p-3">
+                <div className="flex items-start gap-3">
+                  <Checkbox
+                    id="reset-data-wipe-everything"
+                    checked={resetDataWipeEverything}
+                    onCheckedChange={(checked) => {
+                      setResetDataWipeEverything(checked === true);
+                      setResetDataWipeAck("");
+                    }}
+                  />
+                  <Label
+                    htmlFor="reset-data-wipe-everything"
+                    className="grid gap-1 text-sm leading-relaxed"
+                  >
+                    <span>{t("resetBook.wipeLabel")}</span>
+                    <span className="font-normal text-muted-foreground">
+                      {t("resetBook.wipeHint")}
+                    </span>
+                  </Label>
+                </div>
+                {resetDataWipeEverything && (
+                  <div className="space-y-2">
+                    <Label htmlFor="reset-data-wipe-ack">
+                      {t("resetBook.wipeConfirmLabel", {
+                        challenge: WIPE_EVERYTHING_ACK,
+                      })}
+                    </Label>
+                    <Input
+                      id="reset-data-wipe-ack"
+                      value={resetDataWipeAck}
+                      placeholder={WIPE_EVERYTHING_ACK}
+                      onChange={(event) =>
+                        setResetDataWipeAck(event.target.value)
+                      }
+                    />
+                  </div>
+                )}
+              </div>
               {resetDataError && (
                 <p className="m-0 text-sm text-destructive">
                   {resetDataError}
@@ -1316,7 +1390,9 @@ export function SettingsScreen({
                 >
                   {resetBookData.isPending
                     ? t("resetBook.submitPending")
-                    : t("resetBook.submit")}
+                    : resetDataWipeEverything
+                      ? t("resetBook.submitWipe")
+                      : t("resetBook.submit")}
                 </Button>
               </DialogFooter>
             </form>

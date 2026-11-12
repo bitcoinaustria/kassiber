@@ -12,6 +12,17 @@ Code: `kassiber/core/book_reset.py` (keep and re-bind),
 `core/imports.insert_wallet_records`. Tests:
 `tests/test_book_reset_keeps_decisions.py`.
 
+The Rust shell ports it byte for byte: `crates/setup/src/book_reset.rs` and
+`profile_reset.rs`, the claim in `crates/wallets/src/file_import.rs` and
+`publication/insert.rs`, and the hold in the journal loader
+(`reset_hold_quarantines`). `crates/setup/tests/book_reset.rs` pins each rule,
+the frozen desktop vectors (`crates/setup/fixtures/python_desktop.json`) pin
+the reset envelopes and stored rows, and `tests/test_rust_book_reset.py`
+compares a reset, a resync with a missing and a changed transaction, the
+journal run and the wipe between the runtimes. The mutation entries in
+`crates/setup/scripts/book_reset_mutations.json`
+(`book_reset_mutation_check.py`) each fail a named test.
+
 ## Two actions
 
 | Action | Daemon args | What survives |
@@ -36,7 +47,7 @@ What the default reset does with each table of the active book.
 | Derived | `journal_entries`, `journal_quarantines`, `journal_tax_summary`, `journal_account_holdings`, `journal_wallet_holdings`, `journal_quantity_postings` / `_issues` / `_balances`, `journal_custody_decisions` / `_economic_relations` / `_gap_inputs` / `_reconciliations`, `import_batch_transactions` | Deleted; the next journal run rebuilds them. Journal markers are reset so it does. |
 | Decision, parked | `loan_legs`, `transaction_pairs`, `transaction_pair_dismissals`, `direct_swap_payouts`, `custody_component_transaction_memberships`, `transaction_tags`, `commercial_links`, transaction `attachments`, `external_document_attachments`, `source_funds_links`, `source_funds_link_attachments`, `source_funds_source_attachments`, `source_funds_cases`, `source_funds_snapshots`, `transaction_edit_events`, `transaction_edit_fields` | Copied verbatim into `book_reset_parked_rows` (parents first), then cascaded away with the transactions. Restored when their transactions are back. Attachment files stay on disk; attachment GC treats parked files as live. |
 | Decision, on the transaction row | `note`, `review_status`, `taxability_override`, `at_regime_override`, `at_category_override`, `kind_override`, `excluded`, `pricing_review_accepted_price`, `commercial_applied_link_id`; the price columns when the user set the price (`manual_override`, legacy `manual`, a reviewed commercial link, or a pricing edit in the history) | Kept in `book_reset_transactions.metadata_json` and written back onto the returned row. Provider and rate-cache prices are re-derived instead. |
-| Decision, kept in place | `custody_components` and their legs, allocations, terms and commitments; `custody_gap_reviews` (+ sets, transactions); `custody_authored_evidence_snapshots`; `custody_ai_assistance_audits`; `filed_report_snapshots` and their impacts, resolutions and chain captures; `review_workflow_receipts`; `external_documents`; book-level `attachments`; `source_funds_sources`, `source_funds_recipients`; `tags`; `saved_views`; `swap_matching_rules`; `bip329_labels`; `chain_analysis_cases`, `_labels`, `_label_history`, `_datasets`, `_dataset_claims`; `ai_chat_sessions` / `_messages` | Untouched. Custody legs lose their `transaction_id` through `ON DELETE SET NULL` but keep `anchor_transaction_id`; the returned row re-points them. |
+| Decision, kept in place | `custody_components` and their legs, allocations, terms and commitments; `custody_gap_reviews` (+ sets, transactions); `custody_authored_evidence_snapshots`; `custody_ai_assistance_audits`; `filed_report_snapshots` and their impacts, resolutions and chain captures; `review_workflow_receipts`; `synthetic_import_duplicate_reviews` (counted by the wipe only); `external_documents`; book-level `attachments`; `source_funds_sources`, `source_funds_recipients`; `tags`; `saved_views`; `swap_matching_rules`; `bip329_labels`; `chain_analysis_cases`, `_labels`, `_label_history`, `_datasets`, `_dataset_claims`; `ai_chat_sessions` / `_messages` | Untouched. Custody legs lose their `transaction_id` through `ON DELETE SET NULL` but keep `anchor_transaction_id`; the returned row re-points them. |
 | Configuration | `workspaces`, `profiles` (tax settings), `accounts`, `wallets`, `backends`, `book_network_bindings`, `freshness_source_states` flags, `wallet_utxos`, `btcpay_provenance_records`, `lightning_node_records`, `import_batches`, `rates_cache` (unless `clear_shared_rates`) | Kept. |
 
 A reset re-prices returned rows from the current rate cache, so their

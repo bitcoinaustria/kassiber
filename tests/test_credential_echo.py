@@ -855,3 +855,17 @@ class NoEchoPathTest(CredentialEchoAssertions, unittest.TestCase):
                 # Any reason keeps the Python transport, which withholds them.
                 self.assertIsNotNone(bdk_compatibility_reason(backend, state))
 
+
+class RustScrubVectorsTest(unittest.TestCase):
+    def test_rust_credential_vectors_are_current(self):
+        """crates/credentials reproduces these outputs; regenerate on change."""
+
+        import subprocess
+        import sys
+
+        root = Path(__file__).resolve().parents[1]
+        result = subprocess.run(
+            [sys.executable, str(root / "crates/credentials/tools/export_vectors.py"), "--check"],
+            cwd=root, capture_output=True, text=True, timeout=120,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)

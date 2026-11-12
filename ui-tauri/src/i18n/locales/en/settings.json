@@ -107,7 +107,7 @@
   },
   "resetBook": {
     "title": "Reset book data",
-    "description": "This keeps wallet and backend connections for {{book}}, then clears imported/synced rows, journals, swap review state, labels, attachments, and source-funds work. The shared fiat-rate cache is kept unless you explicitly include it below.",
+    "description": "Synced transactions and journals for {{book}} are deleted and rebuilt by the next sync. Your decisions and documents are kept: reviews, pairs and custody components, loan marks, source-of-funds links, attachments, notes, tags and price edits. Each binds again when its transactions come back; anything that no longer matches is held for review. Wallet and backend connections are kept, and the shared fiat-rate cache too unless you include it below.",
     "passphraseHint": " Enter the database passphrase and the book name to continue.",
     "plaintextHint": " These plaintext books have no database passphrase; type the explicit local-reset challenge and book name to continue.",
     "passphraseLabel": "Passphrase",
@@ -115,14 +115,20 @@
     "bookNameLabel": "Book name",
     "clearRatesLabel": "Also clear shared fiat-rate cache",
     "clearRatesHint": "This cache is shared across every book in this local data root. Leave it off to keep existing BTC-EUR/BTC-USD history.",
+    "wipeLabel": "Wipe everything instead",
+    "wipeHint": "Also delete this book's decisions and documents, including attachment files and decisions kept from an earlier reset. Only connections remain; nothing comes back with the next sync.",
+    "wipeConfirmLabel": "Type {{challenge}} to wipe everything",
     "submitPending": "Resetting…",
     "submit": "Reset",
+    "submitWipe": "Wipe everything",
     "errorPassphrase": "Enter the database passphrase.",
     "errorPlaintext": "Type {{challenge}} to confirm local reset.",
     "errorConfirm": "Type {{book}} to confirm reset.",
+    "errorWipe": "Type {{challenge}} to confirm wiping everything.",
     "errorGeneric": "Book reset failed.",
     "notifyTitle": "Book data reset",
     "notifyBody": "Cleared {{summary}}. Wallet and backend connections were kept.",
+    "notifyKeptBody": "Deleted {{transactions}} transactions and {{journalRows}} journal rows. Kept {{decisions}} decisions; sync the book's wallets to bind them again.",
     "summary": {
       "transactions": "{{value}} transactions",
       "journalRows": "{{value}} journal rows",
@@ -564,14 +570,16 @@
       "local": "On this computer",
       "remote": "Remote server",
       "tee": "Confidential server (TEE)",
-      "cli": "Subscription app"
+      "cli": "Subscription app",
+      "cli_proxy": "CLI proxy"
     },
     "showDetails": "{{name}} details",
     "address": "Address",
     "edit": "Edit",
     "remove": "Remove",
     "agentsAllowLabel": "Allow agents",
-    "agentsSessionLabel": "Access to this book"
+    "agentsSessionLabel": "Access to this book",
+    "refreshModels": "Refresh models"
   },
   "chatHistory": {
     "mode": {
@@ -611,7 +619,8 @@
     "kindHint": {
       "local": "Runs on this machine. No data leaves the device.",
       "remote": "Cloud, LAN, or vendor CLI provider. Prompts may leave the device.",
-      "tee": "Provider claims a trusted-execution / attestation path (e.g. Maple AI). Kassiber still treats it as off-device."
+      "tee": "Provider claims a trusted-execution / attestation path (e.g. Maple AI). Kassiber still treats it as off-device.",
+      "cli_proxy": "A CLI proxy passes prompts on to the services behind your subscriptions, so it is always treated as off this device. Each model is spoken in the format its family needs."
     },
     "editTitle": "Edit AI provider",
     "addTitle": "Add AI provider",
@@ -626,7 +635,8 @@
       "openrouter": "One key for models from many vendors.",
       "custom": "Any other server that speaks the OpenAI API, such as a gateway on your network. Enter its base URL, usually ending in /v1; an address off this device is treated as remote.",
       "cli": "Uses the {{label}} you're signed in to; it can send prompts to its own model service.",
-      "customApi": "Any hosted service that speaks the OpenAI API, such as Groq, Mistral or Together. Enter its base URL, usually ending in /v1, and your key."
+      "customApi": "Any hosted service that speaks the OpenAI API, such as Groq, Mistral or Together. Enter its base URL, usually ending in /v1, and your key.",
+      "cliProxy": "A CLIProxyAPI server that serves the subscriptions you are signed in to (Claude Code, Codex, Gemini CLI, …) as one API. Enter its address and, if it has one, its client key; Test & discover lists its models."
     },
     "presetNoteLocal": "Local {{label}} endpoint.",
     "copyCommand": "Copy command",
@@ -742,7 +752,8 @@
     "postureName": {
       "local": "On this computer",
       "remote": "Leaves this computer",
-      "tee": "Trusted execution"
+      "tee": "Trusted execution",
+      "cli_proxy": "Leaves this computer"
     },
     "privacy": {
       "title": "Prompts to {{name}} leave this computer",
@@ -759,7 +770,19 @@
     "next": "Next",
     "errorChooseProvider": "Choose a provider to continue.",
     "errorNameRequired": "Give this provider a name.",
-    "errorAckRequiredNext": "Acknowledge that prompts may leave this device to continue."
+    "errorAckRequiredNext": "Acknowledge that prompts may leave this device to continue.",
+    "testDiscover": "Test & discover",
+    "checkHintCliProxy": "Test & discover lists the models the proxy serves. With a default model chosen, it also checks that the model answers with a short test prompt.",
+    "discovered_one": "Found {{count}} model on the proxy.",
+    "discovered_other": "Found {{count}} models on the proxy.",
+    "discoveredUnusable_one": "{{count}} of them cannot run the assistant (an image or video model, or an unknown family).",
+    "discoveredUnusable_other": "{{count}} of them cannot run the assistant (image or video models, or unknown families).",
+    "discoveredChoose": "Choose a default model; testing again checks that it answers.",
+    "discoveredSaved": "Saved as this provider's model list.",
+    "testModelNotListed": "The proxy does not list {{model}}. Choose one of its models.",
+    "testModelNotChat": "{{model}} is not a chat model. Choose another one.",
+    "testModelUnknownFamily": "Kassiber does not know which format {{model}} needs. Choose another one.",
+    "testFormatUsed": "Asked in the {{format}} format."
   },
   "backendModal": {
     "edit": {

@@ -1,10 +1,11 @@
 import type {
   AiModelRow,
   AiModelsListData,
+  AiProviderKind,
   AiProviderRow,
   AiProviderRuntimeStatus,
 } from "@/lib/aiCapabilities";
-import { nativeAiProviderRuntime } from "@/lib/aiCapabilities";
+import { nativeAiProviderRuntime, providerPosture } from "@/lib/aiCapabilities";
 
 function providerLocator(provider: AiProviderRow): string {
   return provider.base_url.trim().toLowerCase();
@@ -104,12 +105,12 @@ export function storedModelFavoritesFor<T extends { provider: string; model: str
 export function modelPrivacyPosture(
   provider: AiProviderRow,
   model: AiModelsListData["models"][number],
-): AiProviderRow["kind"] {
-  return model.privacy_posture ?? provider.kind;
+): AiProviderKind {
+  return model.privacy_posture ?? providerPosture(provider.kind);
 }
 
 /** Privacy-first row order: on-device, then TEE, then anything off-device. */
-const POSTURE_RANK: Record<AiProviderRow["kind"], number> = {
+const POSTURE_RANK: Record<AiProviderKind, number> = {
   local: 0,
   tee: 1,
   remote: 2,
@@ -123,7 +124,8 @@ export function sortByPrivacyPosture<T>(
   items: readonly T[],
   posture: (item: T) => AiProviderRow["kind"],
 ): T[] {
-  return [...items].sort((a, b) => POSTURE_RANK[posture(a)] - POSTURE_RANK[posture(b)]);
+  const rank = (item: T) => POSTURE_RANK[providerPosture(posture(item))];
+  return [...items].sort((a, b) => rank(a) - rank(b));
 }
 
 /**
@@ -183,7 +185,31 @@ export function modelIdNamesNonChatModel(id: string): boolean {
  * its output has no text, rules it out. Where a listing says nothing, as
  * OpenAI's does, only an id with a clear non-chat mark is ruled out.
  */
+/**
+ * The prefix a CLI proxy lists a model under (`work/claude-sonnet-5-5` is
+ * served only by the proxy credential with the prefix `work`), or null.
+ */
+export function modelRoutePrefix(model: AiModelRow): string | null {
+  return typeof model.prefix === "string" && model.prefix.trim() ? model.prefix : null;
+}
+
+/**
+ * Keeps a CLI proxy's prefixed models together: unprefixed models first,
+ * then each prefix's in prefix order, leaving the order inside each group
+ * untouched (`Array.sort` is stable).
+ */
+export function compareModelRoutePrefix(a: AiModelRow, b: AiModelRow): number {
+  const left = modelRoutePrefix(a);
+  const right = modelRoutePrefix(b);
+  if (left === right) return 0;
+  if (left === null) return -1;
+  if (right === null) return 1;
+  return left.localeCompare(right);
+}
+
 export function httpModelRunsAssistant(model: AiModelRow): boolean {
+  // A CLI proxy model Kassiber cannot chat with (no known format).
+  if (model.unsupported_reason) return false;
   if (model.supports_tools === false) return false;
   const outputs = Array.isArray(model.output_modalities) ? model.output_modalities : [];
   if (outputs.length > 0) return outputs.includes("text");

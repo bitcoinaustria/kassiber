@@ -31,6 +31,7 @@ kassiber/ai/provider_broker/*.mjs
 /crates/chain/fixtures/python_btcpay.json
 /crates/chain/fixtures/python_cln.json
 /crates/chain/fixtures/python_lightning.json
+/crates/cli/tests/data/argparse_cases.txt
 /crates/cli/tests/data/document_review.json
 /crates/credentials/tests/data/vectors.json
 /crates/diagnostics/tests/arguments.json
@@ -412,5 +413,9 @@ kassiber/ai/provider_broker/*.mjs
 /tests/fixtures/custody_transfer_cases.json
 /tests/fixtures/historical/pre_pair_fee_c0a015de.sqlite3.gz.b64
 /tests/fixtures/historical/pre_partial_payout_ca9a672f.sqlite3.gz.b64
+/tests/fixtures/historical/pre_sync_bae01537b.sqlite3.gz.b64
+/tests/fixtures/rust_port/commands_describe.json
 /tests/fixtures/rust_port/daemon_kinds.json
+/tests/fixtures/rust_port/environment.json
+/tests/fixtures/rust_port/error_codes.json
 # <<< generated test data

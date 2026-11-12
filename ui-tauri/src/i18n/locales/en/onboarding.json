@@ -89,10 +89,14 @@
     "method": {
       "MOVING_AVERAGE_AT": "Moving average (Austrian)",
       "MOVING_AVERAGE": "Moving average (average cost)",
+      "MOVING_AVERAGE_FIFO_PERIOD": "Average cost per wallet, holding period by FIFO",
       "FIFO": "FIFO (first in, first out)",
       "LIFO": "LIFO (last in, first out)",
       "HIFO": "HIFO (highest in, first out)",
-      "LOFO": "LOFO (lowest in, first out)"
+      "LOFO": "LOFO (lowest in, first out)",
+      "UK_SHARE_MATCHING": "UK share matching (same day, 30 days, pool)",
+      "JP_TOTAL_AVERAGE": "Total average (Japan, 総平均法)",
+      "JP_MOVING_AVERAGE": "Moving average (Japan, 移動平均法)"
     },
     "renameWorkspace": {
       "title": "Edit book set name",

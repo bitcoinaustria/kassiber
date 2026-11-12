@@ -30,6 +30,7 @@ from kassiber.errors import AppError
 from tests import test_rust_custody_loader as cases
 from tests.test_rp2_ownership_transfers import OwnershipDeriverHandlerTest
 from tests.rust_port.custody_loader_oracle import exception_boundaries
+from tests.rust_port.portable_dump import iterdump as portable_iterdump
 
 LOADED_TABLES = (
     "accounts", "backends", "book_network_bindings", "transactions", "wallets",
@@ -281,7 +282,7 @@ def run(binary, out, summary_out=None, *, first_row=False, declared_only=False, 
                         if affinity == "none":
                             conn = without_affinity(original)
                         try:
-                            sql = "\n".join(conn.iterdump())
+                            sql = "\n".join(portable_iterdump(conn))
                             if "refusal" in expected(conn, profile):
                                 raise RuntimeError(f"{fixture}/{affinity}: baseline refuses")
                             with subprocess.Popen([str(binary)], stdin=subprocess.PIPE, stdout=subprocess.PIPE,

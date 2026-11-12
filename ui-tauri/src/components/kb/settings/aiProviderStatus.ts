@@ -8,9 +8,11 @@
  */
 
 import {
+  CLI_PROXY_REASONING_EFFORTS,
   HTTP_REASONING_EFFORTS,
   NATIVE_RUNTIME_REASONING_EFFORTS,
   PROVIDER_DEFAULT_EFFORTS,
+  isCliProxyProvider,
   nativeAiProviderRuntime,
   type AiModelRow,
   type AiProviderRow,
@@ -100,7 +102,11 @@ export function providerEffortOptions(
       ),
   );
   const stored = provider.default_reasoning_effort;
-  const ceiling: readonly string[] | null = runtime ? null : HTTP_REASONING_EFFORTS;
+  const ceiling: readonly string[] | null = runtime
+    ? null
+    : isCliProxyProvider(provider)
+      ? CLI_PROXY_REASONING_EFFORTS
+      : HTTP_REASONING_EFFORTS;
   const options = PROVIDER_DEFAULT_EFFORTS.filter(
     (effort) =>
       effort === stored ||

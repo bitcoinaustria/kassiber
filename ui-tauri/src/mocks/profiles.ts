@@ -7,15 +7,12 @@
  * cases for the schema once it lands.
  */
 
-export type ProfileTaxCountry = "at" | "generic";
+import type { GainsAlgorithm, TaxCountry } from "@/lib/taxCountries";
+
+export type ProfileTaxCountry = TaxCountry;
 export type CostBasisPoolScope = "global" | "wallet";
-export type ProfileGainsAlgorithm =
-  | "FIFO"
-  | "LIFO"
-  | "HIFO"
-  | "LOFO"
-  | "MOVING_AVERAGE"
-  | "MOVING_AVERAGE_AT";
+// Every method a registry country allows.
+export type ProfileGainsAlgorithm = GainsAlgorithm;
 
 export interface Profile {
   id: string;
@@ -27,6 +24,8 @@ export interface Profile {
   gainsAlgorithm?: ProfileGainsAlgorithm;
   costBasisPoolScope?: CostBasisPoolScope;
   allowedCostBasisPoolScopes?: CostBasisPoolScope[];
+  // Present (true) only for a country not yet reviewed by a tax professional.
+  taxCountryPreview?: boolean;
   accounts: number;
   wallets: number;
   lastOpened: string;

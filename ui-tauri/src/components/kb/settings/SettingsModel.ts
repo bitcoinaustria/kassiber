@@ -10,6 +10,8 @@ import {
   CLN_PRESENCE_SENTINEL_RPC_FILE,
 } from "@/lib/lightning";
 export const PLAINTEXT_DELETE_ACK = "DELETE LOCAL DATA";
+// Typed only when the user also wipes the book's decisions and documents.
+export const WIPE_EVERYTHING_ACK = "WIPE EVERYTHING";
 export const KRAKEN_OHLCVT_SUPPORT_URL =
   "https://support.kraken.com/hc/articles/360047124832-Downloadable-historical-OHLCVT-Open-High-Low-Close-Volume-Trades-data";
 export const KRAKEN_MARKET_DATA_BLOG_URL =
@@ -101,6 +103,13 @@ export interface StatusData {
 
 export interface ResetBookData {
   reset: boolean;
+  mode: "keep_decisions" | "wipe_everything";
+  /** Present for the default reset: what binds again after the resync. */
+  decisions?: {
+    kept: number;
+    bind_after_resync: Record<string, number>;
+    kept_in_place: Record<string, number>;
+  };
   removed: Record<string, number>;
   preserved: Record<string, number>;
   rates_scope: "global" | "preserved";

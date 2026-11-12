@@ -17,6 +17,16 @@ Current policies:
 - `generic` -> lot accounting in Kassiber's [tax engine](tax-engine.md)
 - `at` -> Austrian accounting in the same engine (Austrian normalization, the regime tracker, and moving-average defaults for new wallets), with Python keeping the current disposal-category / Kennzahl mapping
 
+Tax countries come from one Rust registry ([tax countries](tax-countries.md)).
+The United States (`us`) is implemented there as a Rust-only **preview**
+country ([specification](tax-country-us.md)): Python refuses its books.
+Germany, Switzerland, the United Kingdom, Spain, Ireland and Japan are
+researched as future preview countries (Rust only, not selectable yet):
+[Germany](tax-country-de.md), [Switzerland](tax-country-ch.md),
+[United Kingdom](tax-country-gb.md), [Spain](tax-country-es.md),
+[Ireland](tax-country-ie.md) and [Japan](tax-country-jp.md), each with worked
+test vectors and open questions for a tax adviser.
+
 ## Implementation boundary
 
 [custody_journal.py](../../kassiber/core/custody_journal.py) composes imported
@@ -97,6 +107,40 @@ order: its rows sort by `occurred_at`, then their anchor transaction's place in
 the source order, then the row id, which only orders the slices of one anchor.
 The latest transaction rate, the fallback price reports use when no market
 quote exists, is the last row of the latest time in the same order.
+
+The Rust backend reads the same SQL and sorts the projection the same way.
+Every reader where same-time order reaches numbers follows the source order in
+both runtimes:
+
+| Reader | Python | Rust | Effect |
+| --- | --- | --- | --- |
+| Composition load | `custody_journal._transactions` | `journals/src/loader.rs` `TRANSACTIONS` | Interpreter and pairing order, the canonical row of identical duplicates, quarantine insertion order |
+| Finalized projection | `custody_tax_projection.compile_finalized_tax_projection` | `custody/src/finalized_projection/composition.rs` | FIFO, LIFO and Austrian Alt lot order; HIFO/LOFO rank ties; which lot a same-time disposal consumes |
+| Latest transaction rate | `transaction_rate_rows`, `transaction_rate_quotes_for_profile` | `loader.rs` `RATE_ROWS`, `reports/src/holdings.rs`, `summary_pdf.rs`, `exit_tax.rs` | Fallback prices in holdings, summaries and exit tax |
+| Year-end fallback | `year_handoff._year_end_rates` | `reports/src/year_handoff.rs` | Year-handoff valuation without a cached quote |
+| Dashboard price | `ui_snapshot._latest_transaction_rate` | `workspace/src/overview.rs` | Desktop portfolio value without a cached quote |
+
+The tax engine keeps the projection's order within a timestamp, and its
+HIFO/LOFO heap breaks equal (13-place) unit costs by the row's place in that
+order; moving-average methods do not depend on the order of same-time
+acquisitions. Quantity arbitration (conflicting claims fail closed and outputs
+sort by hash), the canonical quantity input and the same-time move order
+(chain dependencies, then projection order) are order-independent. Two ties
+remain: projection rows of one anchor sort by row id, which can only order two
+direct payouts of one source at the same instant (they sort by payout id);
+and reports, exports and desktop lists still order same-time journal entries
+by `occurred_at, created_at, id`, as does the bounded custody-gap worklist's
+cut on books above its input bound. Neither changes an amount; TODO "Order
+the remaining same-time readers" tracks them.
+
+`tests/test_lot_order_determinism.py` checks that every id order of a book's
+lots gives one answer for FIFO, LIFO, HIFO, LOFO and Austrian Alt, that rows
+from two files order by content and that every latest-rate reader takes the
+file's last row; `tests/integration/test_lot_order_determinism.py` checks that
+Rust books byte-identical journals from the same book and records Python's
+file positions. `crates/store/scripts/lot_order_mutations.json` (run by
+`lot_order_mutation_check.py`) reverts each reader, writer, migration step
+and stamp.
 
 Calculation semantics version 8 introduced this order. The one-shot
 `same-time-source-order-v1` migration requires version 8 of every processed
@@ -391,8 +435,6 @@ Control and Disposals checks written to the workbook. A cached failing check
 therefore displays a mismatch even in viewers that do not recalculate formulas;
 the live formula remains available for later spreadsheet edits.
 
-## Rates and tax input quality
-
 Exit-tax previews and PDF/XLSX estimates report the book's selected accounting
 method. They reconstruct global inventory and wallet quantities from journal
 entries before the next civil midnight (exclusive): Europe/Vienna for Austrian
@@ -559,15 +601,11 @@ Kennzahlen 172, 174, and 176. Domestic-provider and withheld-KESt rows such as
 them. The structured JSON report includes active Steuerbericht-style handoff sections
 across 1.x-4.x so unsupported areas such as margin/derivatives, gifts, lost coins,
 commercial mining, and minting are visible as zero-value placeholders instead
-of disappearing from the handoff. The PDF export renders those same real
-Kassiber rows as a styled Austrian report with summary/detail pages, holdings,
-Besonderheiten, explanations, a landscape transaction appendix, a
-FinanzOnline-style Kennzahl summary, and FAQ.
-The XLSX export mirrors that structure as an accountant-facing workbook with
-an `Übersicht` sheet, separate numbered tabs such as `1.1.`, `2.1.`, and
-`3.3.`, plus an `Erläuterungen zum Steuerreport` notes sheet.
-The CSV bundle mirrors the same layout as separate files so each section can
-keep its own table headers instead of flattening every section into one lossy
-CSV shape.
+of disappearing from the handoff. The PDF, XLSX and CSV exports render one
+document in the [shared report design](report-design.md#austrian-sections), in
+German: the Kennzahl page with its section index, disposals and income with a
+`section` column, holdings, a landscape transaction appendix, explanations and
+FAQ. The workbook has one sheet per table; the CSV bundle has one machine-format
+file per table plus `summary.csv` and `manifest.json`.
 
 See [../plan/06-austrian-tax-engine.md](../plan/06-austrian-tax-engine.md) for the broader design and remaining Austrian backlog, plus [../austrian-handoff.md](../austrian-handoff.md) for the current marker / carry-basis contract.

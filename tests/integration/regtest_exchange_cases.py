@@ -109,6 +109,22 @@ def _read_state(
         conn.close()
 
 
+def _withdrawal_evidence(data_root: Path, profile_id: str, txid: str) -> list[str]:
+    conn = open_db(str(data_root))
+    try:
+        return [
+            row["reason"]
+            for row in conn.execute(
+                "SELECT d.reason FROM journal_custody_decisions d "
+                "JOIN transactions t ON t.id = d.target_transaction_id "
+                "WHERE d.profile_id=? AND t.external_id=? ORDER BY d.decision_id",
+                (profile_id, txid),
+            )
+        ]
+    finally:
+        conn.close()
+
+
 def price_native_fixture_rows(
     data_root: Path,
     profile: Mapping[str, Any],
@@ -146,8 +162,14 @@ def reconcile_exports(
     txids: Mapping[str, str],
     times: Mapping[str, str],
     cli: Callable[..., dict[str, Any]],
+    observed_native: bool = True,
 ) -> dict[str, Any]:
-    """Public CLI import, missing-history hold, portable review and exact oracle."""
+    """Public CLI import, missing-history hold, portable review and exact oracle.
+
+    ``observed_native`` says the native rows came from watch-only sync with
+    their transaction graphs; imported native rows prove no owned output, so
+    the withdrawal is reviewed like the deposit.
+    """
     scope = ("--workspace", workspace, "--profile", profile["id"])
     files = write_exports(artifact_dir, txids=txids, times=times)
     partial = cli(data_root, "wallets", "import-strike", *scope, "--file", str(files["incomplete"]))["data"]
@@ -170,8 +192,12 @@ def reconcile_exports(
             raise RuntimeError(f"Expected one {'native' if owned else 'platform'} anchor for {txid}")
         return matches[0]["id"]
     components = []
+    # An observed withdrawal needs no review: Strike names its txid, and its
+    # amount is exactly the native wallet's one owned output
+    # (exchange_txid_exact). A deposit from the owned wallet to the platform
+    # still needs one.
     routes = (
-        ("withdrawal", False, 600_000_000, 10_000_000),
+        *(() if observed_native else (("withdrawal", False, 600_000_000, 10_000_000),)),
         ("deposit", True, 200_000_000, 1_000_000),
     )
     for key, source_owned, principal, fee in routes:
@@ -199,9 +225,9 @@ def reconcile_exports(
     }]
     operations_file = artifact_dir / "review-operations.json"
     operations_file.write_text(json.dumps(operations, indent=2))
-    # Genuine Core rows cannot be paired automatically with graphless exchange
-    # exports. Explain custody in a dry run first, then prove that the missing
-    # purchase still blocks basis independently of those authority conflicts.
+    # The platform's deposit row is graphless, so it cannot be paired
+    # automatically with the genuine Core spend. Explain custody in a dry run
+    # first, then prove that the missing purchase still blocks basis.
     incomplete_plan = cli(
         data_root, "review", "plan", *scope, "--operations-file", str(operations_file),
         "--expected-input-version", str(incomplete["input_version"]),
@@ -228,6 +254,11 @@ def reconcile_exports(
     if not receipt["verification"]["report_ready"]:
         raise RuntimeError(
             f"Complete exchange export and reviewed custody remain blocked: {receipt['verification']}"
+        )
+    withdrawal_reasons = _withdrawal_evidence(data_root, profile["id"], txids["withdrawal"])
+    if observed_native and withdrawal_reasons != ["exchange_txid_exact"]:
+        raise RuntimeError(
+            f"The Strike withdrawal must book automatically by its txid: {withdrawal_reasons}"
         )
     actual = _read_state(data_root, profile["id"], native_wallet["id"])
     for key, expected in EXPECTED.items():
@@ -270,7 +301,12 @@ def reconcile_exports(
             },
             {
                 "id": "exchange-custody-roundtrip", "title": "Exchange withdrawal and redeposit",
-                "status": "verified", "evidence": "Reviewed export references; no native authority upgrade",
+                "status": "verified",
+                "evidence": (
+                    "Withdrawal by exact export txid (exchange_txid_exact); deposit reviewed"
+                    if observed_native
+                    else "Reviewed export references; no native authority upgrade"
+                ),
             },
             {
                 "id": "exchange-trade-basis", "title": "Trade price and carried basis",
@@ -278,6 +314,37 @@ def reconcile_exports(
             },
         ],
     }
+
+
+FAST_TXIDS = {"withdrawal": "a" * 64, "deposit": "b" * 64}
+FAST_TIMES = {"buy_time": "2020-01-01T00:00:00Z", "withdrawal_time": "2020-01-02T00:00:00Z",
+              "deposit_time": "2020-01-03T00:00:00Z", "sell_time": "2020-01-04T00:00:00Z"}
+
+
+def native_replay_lifecycle(root: Path, cli: Callable[..., dict[str, Any]]) -> dict[str, Any]:
+    """The fast lane's exchange book: CSV-imported native rows, then the exports.
+
+    The Docker runner supplies the two native rows through actual Core-backed
+    watch-only sync; here they are imported explicitly.
+    """
+    cli(root, "init")
+    cli(root, "workspaces", "create", "Exchange tests")
+    profile = cli(root, "profiles", "create", "Exchange lifecycle", "--workspace", "Exchange tests",
+                  "--fiat-currency", "EUR", "--tax-country", "generic", "--gains-algorithm", "FIFO")["data"]
+    scope = ("--workspace", "Exchange tests", "--profile", profile["id"])
+    wallet = cli(root, "wallets", "create", *scope, "--label", "Native replay", "--kind", "custom",
+                 "--chain", "bitcoin", "--network", "regtest")["data"]
+    source = root / "native-replay.csv"
+    with source.open("w", newline="") as stream:
+        writer = csv.writer(stream)
+        writer.writerow(["txid", "occurred_at", "direction", "asset", "amount", "fee"])
+        writer.writerow([FAST_TXIDS["withdrawal"], FAST_TIMES["withdrawal_time"], "inbound", "BTC", "0.006", "0"])
+        writer.writerow([FAST_TXIDS["deposit"], FAST_TIMES["deposit_time"], "outbound", "BTC", "0.002", "0.00001"])
+    cli(root, "wallets", "import-csv", *scope, "--wallet", wallet["id"], "--file", str(source))
+    price_native_fixture_rows(root, profile, wallet)
+    return reconcile_exports(data_root=root, artifact_dir=root / "evidence", workspace="Exchange tests",
+                             profile=profile, native_wallet=wallet, txids=FAST_TXIDS, times=FAST_TIMES, cli=cli,
+                             observed_native=False)
 
 
 def run_exchange_cases(

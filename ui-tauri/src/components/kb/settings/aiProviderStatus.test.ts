@@ -97,6 +97,17 @@ describe("AI provider status helpers", () => {
     ).toEqual(["low", "max"]);
   });
 
+  it("offers a CLI proxy the proxy's own levels, up to max", () => {
+    const proxy = provider("http://127.0.0.1:8317/v1", { kind: "cli_proxy" });
+    expect(providerEffortOptions(proxy, [])).toEqual(["low", "medium", "high", "xhigh", "max"]);
+    expect(
+      providerEffortOptions(proxy, [
+        { id: "claude", reasoning_efforts: ["low", "medium", "high", "xhigh", "max"] },
+        { id: "codex", reasoning_efforts: ["low", "medium", "high", "xhigh", "max"] },
+      ]),
+    ).toEqual(["low", "medium", "high", "xhigh", "max"]);
+  });
+
   it("bounds an HTTP provider's levels by what HTTP endpoints take", () => {
     expect(providerEffortOptions(provider("http://127.0.0.1:1/v1"), [])).toEqual([
       "low", "medium", "high",

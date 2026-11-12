@@ -69,13 +69,6 @@ plugin, never from the product.
   rule below; `FROZEN.json` records the result, and the tax-shadow overlay
   showed no exit-tax difference between the oracle and production.
 
-## Freeze rule
-
-Any other edit is a bug fix. It lands in production and in the oracle in the
-same commit, with a fixture that shows it, and updates `FROZEN.json`.
-
-Edits since the freeze:
-
 - `normalize.py` `_pricing_needs_review` takes main's accepted coarse-price
   rule (#708): a coarse price the owner accepted at this exact price is no
   longer held for review. Production applies it in the request builder;
@@ -85,6 +78,11 @@ Edits since the freeze:
   no regime, and its own quarantine with both currencies. Production holds it
   through the request builder's `hold`; `tests/test_price_currency_mismatch.py`
   shows it, and its books run in the tax-shadow overlay.
+
+## Freeze rule
+
+Any other edit is a bug fix. It lands in production and in the oracle in the
+same commit, with a fixture that shows it, and updates `FROZEN.json`.
 
 The product modules imported above are shared. A change in one of them moves
 the oracle and production together, so a shadow run cannot see it; the

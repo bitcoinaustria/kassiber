@@ -490,6 +490,29 @@ describe("CustodyGaps canonical custody lineage", () => {
     );
   });
 
+  it("labels an exact exchange withdrawal as automatic, not reviewed", () => {
+    const html = renderToStaticMarkup(
+      <CustodyLineageTimeline
+        snapshot={{
+          ...lineage,
+          items: [
+            {
+              ...lineage.items[0],
+              basis_state: "eligible",
+              evidence_reason: "exchange_txid_exact",
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(html).toContain("Custody verified");
+    expect(html).toContain(
+      "Exchange withdrawal naming this transaction, exact amount (automatic)",
+    );
+    expect(html).not.toContain("Reviewed internal transfer record");
+  });
+
   it("does not render transaction, wallet, component, or bundle identifiers", () => {
     const html = renderToStaticMarkup(
       <CustodyLineageTimeline snapshot={lineage} />,

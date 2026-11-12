@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+import pytest
 import yaml
 
 from scripts import python_test_shards
@@ -41,11 +42,23 @@ class PythonShardContractTest(unittest.TestCase):
     def test_sensitive_and_specialized_modules_stay_out_of_xdist(self):
         expected = {
             "tests/test_ci_shards.py": PREFLIGHT_SHARD,
+            "tests/rust_port/test_inventory.py": PREFLIGHT_SHARD,
+            "tests/rust_port/test_contracts.py": PREFLIGHT_SHARD,
             "tests/test_cli_entrypoint_smoke.py": CLI_SMOKE_SHARD,
             "tests/test_proxy.py": "serial-network",
             "tests/test_sync_backends.py": "serial-network",
             "tests/test_cli_chat.py": "serial-daemon",
             "tests/test_daemon_smoke.py": "serial-daemon",
+            "tests/test_rust_shell_parity.py": "serial-daemon",
+            "tests/test_rust_hybrid_candidate.py": "serial-daemon",
+            "tests/test_rust_wallet_discovery.py": "serial-daemon",
+            "tests/test_rust_wallet_acquisition.py": "serial-daemon",
+            "tests/test_rust_observer_state.py": "serial-daemon",
+            "tests/test_rust_wallet_publication.py": "serial-daemon",
+            "tests/test_rust_wallet_fetch.py": "serial-daemon",
+            "tests/test_rust_connections.py": "serial-daemon",
+            "tests/test_rust_wallet_sync_sources.py": "serial-daemon",
+            "tests/test_rust_wallet_sync_btcpay.py": "serial-daemon",
             "tests/test_chain_analysis_consent.py": "daemon-cli",
             "tests/test_review_regressions.py": "serial-regressions",
             "tests/test_remembered_unlock.py": "serial-integration",
@@ -74,8 +87,10 @@ class PythonShardContractTest(unittest.TestCase):
         jobs = workflow["jobs"]
         base_jobs = {
             "preflight",
+            "rust-binaries",
             "python-tests",
             "tax-shadow",
+            "custody-shadow",
             "frontend",
             "cli-smoke",
             "tax-engine",
@@ -86,9 +101,9 @@ class PythonShardContractTest(unittest.TestCase):
             set(jobs),
             base_jobs | optional_jobs,
         )
-        self.assertEqual(jobs["python-tests"]["needs"], "preflight")
-        self.assertEqual(jobs["tax-shadow"]["needs"], "preflight")
-        for job in ("frontend", "cli-smoke", "tax-engine", *sorted(optional_jobs)):
+        for job in ("python-tests", "tax-shadow", "custody-shadow"):
+            self.assertEqual(jobs[job]["needs"], ["preflight", "rust-binaries"], job)
+        for job in ("rust-binaries", "frontend", "cli-smoke", "tax-engine", *sorted(optional_jobs)):
             self.assertNotIn("needs", jobs[job])
         preflight_steps = {step.get("name") for step in jobs["preflight"]["steps"]}
         self.assertFalse(
@@ -104,7 +119,7 @@ class PythonShardContractTest(unittest.TestCase):
         required_needs = set(jobs["required"]["needs"])
         self.assertEqual(
             required_needs,
-            {"preflight", "python-tests", "tax-shadow", "frontend", "cli-smoke", "tax-engine"}
+            {"preflight", "rust-binaries", "python-tests", "tax-shadow", "custody-shadow", "frontend", "cli-smoke", "tax-engine"}
             | optional_jobs,
         )
 
@@ -149,8 +164,10 @@ class PythonShardContractTest(unittest.TestCase):
                         checked += 1
                         with self.subTest(workflow=path.name, job=job_name, step=step.get("name")):
                             self.assertTrue(setups and setups[0] < index)
-                            if "if" in step:
-                                self.assertEqual(steps[setups[0]].get("if"), step["if"])
+                            # An unconditional setup also covers conditional
+                            # builds; a conditional setup must cover the build.
+                            if "if" in steps[setups[0]]:
+                                self.assertEqual(steps[setups[0]]["if"], step.get("if"))
         self.assertGreater(checked, 10)
 
         ci = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
@@ -195,6 +212,24 @@ class PythonShardContractTest(unittest.TestCase):
             self.assertEqual(len(uv_steps), 1, job_name)
             self.assertTrue(uv_steps[0]["with"]["enable-cache"], job_name)
             self.assertEqual(uv_steps[0]["with"]["cache-dependency-glob"], "uv.lock")
+        # Every job that builds Rust restores a Cargo cache; one job per key
+        # saves it, so the parallel shards do not race to upload the same key.
+        savers: dict[str, list[str]] = {}
+        for job_name in [*uv_jobs, "rust-binaries", "tax-engine"]:
+            setup = next(
+                step
+                for step in jobs[job_name]["steps"]
+                if step.get("uses") == "./.github/actions/setup-rust"
+            )
+            key = setup["with"]["cache-key"]
+            self.assertEqual(
+                key, "rust-workspace" if job_name == "tax-engine" else "python-binding"
+            )
+            if setup["with"].get("save-cache") == "true":
+                savers.setdefault(key, []).append(job_name)
+        self.assertEqual(
+            savers, {"python-binding": ["preflight"], "rust-workspace": ["tax-engine"]}
+        )
         setup_node = next(
             step
             for step in jobs["frontend"]["steps"]
@@ -222,6 +257,75 @@ class PythonShardContractTest(unittest.TestCase):
         self.assertIn("KASSIBER_TEST_TAX_ENGINE=census", pass_line)
         self.assertEqual(gate.count("python_test_shards.py run-shadow"), 1)
 
+    def test_required_daemon_shard_and_local_gate_run_the_rust_subprocess_oracle(self):
+        workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+        jobs = workflow["jobs"]
+        self.assertIn("python-tests", jobs["required"]["needs"])
+        self.assertIn("rust-binaries", jobs["required"]["needs"])
+        self.assertEqual(shard_for(Path("tests/test_rust_shell_parity.py")), "serial-daemon")
+        self.assertEqual(shard_for(Path("tests/test_rust_reports.py")), "serial-daemon")
+        self.assertEqual(shard_for(Path("tests/test_rust_freshness_queue.py")), "serial-daemon")
+        self.assertEqual(shard_for(Path("tests/test_rust_lwk_sync_service.py")), "serial-daemon")
+        self.assertEqual(shard_for(Path("tests/test_rust_document_ingestion.py")), "serial-daemon")
+        # One job builds the harness binary, its example fixtures and the
+        # release journal probes; every lane runs them.
+        builder = [str(step.get("run") or "") for step in jobs["rust-binaries"]["steps"]]
+        self.assertIn("scripts/build-rust-test-binaries.sh build", builder)
+        self.assertIn("scripts/build-rust-test-binaries.sh pack rust-test-binaries.tar", builder)
+        script = (ROOT / "scripts/build-rust-test-binaries.sh").read_text(encoding="utf-8")
+        self.assertIn("cargo build --locked -p kassiber --features test-harness", script)
+        for example in ("discovery_fixture", "acquisition_fixture", "observer_state_fixture", "bdk_fixture",
+                        "lwk_fixture", "records_fixture", "publication_fixture", "freshness_fixture",
+                        "document_fixture"):
+            self.assertIn(f"kassiber-wallets {example} test-harness", script)
+        for name in ("python-tests", "tax-shadow", "custody-shadow"):
+            job = jobs[name]
+            self.assertEqual(job["env"]["KASSIBER_RUST_BIN"], "${{ github.workspace }}/target/debug/kassiber", name)
+            steps = job["steps"]
+            names = [step.get("name") for step in steps]
+            self.assertNotIn("continue-on-error", str(steps))
+            # The PDF tests need Poppler; a lane without it would skip them.
+            poppler = next(step["run"] for step in steps if step.get("name") == "Install Poppler")
+            self.assertIn("poppler-utils", poppler)
+            unpack = names.index("Unpack the Rust test binaries")
+            self.assertLess(names.index("Download the Rust test binaries"), unpack)
+            self.assertLess(names.index("Set up Rust"), unpack)
+            run = next(step["run"] for step in steps if "python_test_shards.py run" in str(step.get("run") or ""))
+            self.assertIn('--part "${{ matrix.part }}"', run)
+            self.assertLess(unpack, next(index for index, step in enumerate(steps)
+                                         if "python_test_shards.py run" in str(step.get("run") or "")))
+            # A split lane runs as parts 1..N of N; every other lane whole.
+            matrix = job["strategy"]["matrix"]
+            self.assertEqual(matrix["part"], ["1/1"])
+            split = [entry["shard"] for entry in matrix["exclude"]]
+            self.assertEqual(sorted(split), ["core-accounting", "serial-daemon"])
+            self.assertEqual({entry["shard"] for entry in matrix["include"]}, set(split))
+            for shard in split:
+                parts = [entry["part"] for entry in matrix["include"] if entry["shard"] == shard]
+                count = len(parts)
+                self.assertGreater(count, 1, shard)
+                self.assertEqual(parts, [f"{index}/{count}" for index in range(1, count + 1)], shard)
+
+        # The local quality gate builds the same set itself before the single pytest pass.
+        gate = (ROOT / "scripts/quality-gate.sh").read_text(encoding="utf-8")
+        select = 'export KASSIBER_RUST_BIN="$ROOT/target/debug/kassiber"'
+        self.assertIn(select, gate)
+        for build in (
+            "cargo build -p kassiber --features test-harness --locked",
+            "cargo build -p kassiber-backup --example kassiber-backup-probe --features test-hooks --offline --locked",
+            "cargo build -p kassiber-store --example kassiber-storage-probe --features test-hooks --offline --locked",
+            "cargo build -p kassiber-secrets --example kassiber-secrets-probe --features test-hooks,native-keyring --offline --locked",
+            "cargo build -p kassiber-chain --example client_fixture --features test-harness --offline --locked",
+            *(f"cargo build -p kassiber-wallets --example {example} --features test-harness --offline --locked"
+              for example in ("discovery_fixture", "acquisition_fixture", "observer_state_fixture", "bdk_fixture",
+                              "records_fixture", "publication_fixture", "freshness_fixture", "document_fixture")),
+        ):
+            with self.subTest(build=build):
+                self.assertLess(gate.index("run " + build), gate.index(select))
+        for check in ("freshness", "bdk", "lwk", "record", "observer", "acquisition", "exchange"):
+            self.assertIn(f"run py crates/wallets/scripts/{check}_mutation_check.py --check", gate)
+        self.assertLess(gate.index(select), gate.index("-m pytest tests"))
+
 
 class TaxShadowOverlayContractTest(unittest.TestCase):
     """The tax-shadow overlay reruns, against the frozen oracle, the modules
@@ -241,6 +345,7 @@ class TaxShadowOverlayContractTest(unittest.TestCase):
             "test_custody_lineage_flagship",
             "test_report_explanation_carry",
             "test_custody_native_transitions",
+            "test_rust_review_cases",
         ):
             with self.subTest(module=module):
                 self.assertIn(module, names)
@@ -294,3 +399,82 @@ class TaxShadowOverlayContractTest(unittest.TestCase):
 
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()
+
+
+def test_custody_shadow_is_required_and_excludes_only_the_single_build_budget():
+    calls = []
+    with mock.patch.object(python_test_shards, "_run_pytest", lambda paths, **options: calls.append((paths, options)) or 0):
+        python_test_shards.main(["run-custody-shadow", "--", "-q"])
+    paths, options = calls[0]
+    assert paths == shadow_overlay(ROOT)
+    assert options["custody_mode"] == "shadow"
+    assert options["distribution"] is None
+    assert options["pytest_args"] == ["--deselect", "tests/test_custody_native_reconciliation.py::test_disjoint_reviewed_routes_limit_observation_reads", "-q"]
+    workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+    assert "custody-shadow" in workflow["jobs"]["required"]["needs"]
+    assert tuple(workflow["jobs"]["custody-shadow"]["strategy"]["matrix"]["shard"]) == python_test_shards.shadow_lanes()
+    assert "run-custody-shadow" in (ROOT / "scripts/quality-gate.sh").read_text()
+
+
+def test_custody_shadow_preserves_the_ci_ordering_policy():
+    calls = []
+    with mock.patch.object(python_test_shards, "_run_pytest", lambda paths, **options: calls.append((paths, options)) or 0):
+        for lane in ("core-accounting", "serial-regressions"):
+            python_test_shards.main(["run-custody-shadow", lane, "--ci", "--", "-q"])
+    for (paths, options), lane in zip(calls, ("core-accounting", "serial-regressions")):
+        assert paths == python_test_shards._shadow_paths(lane)
+        assert options["distribution"] == python_test_shards.PARALLEL_SHARD_DISTRIBUTION.get(lane)
+        assert options["custody_mode"] == "shadow"
+
+
+def test_local_worker_and_distribution_overrides_leave_the_ci_policy_alone():
+    calls = []
+    with mock.patch.object(python_test_shards, "_run_pytest", lambda paths, **options: calls.append((paths, options)) or 0):
+        python_test_shards.main(["run", "wallets-sync", "--ci", "--", "-q"])
+        python_test_shards.main(["run", "wallets-sync", "--ci", "--workers", "16", "--dist", "worksteal", "--", "-q"])
+        python_test_shards.main(["run", "daemon-cli", "--ci", "--workers", "16"])
+    lane = validate_manifest(ROOT)["wallets-sync"]
+    assert calls[0] == (lane, {"distribution": "loadscope", "pytest_args": ["-q"]})
+    assert calls[1] == (lane, {"distribution": "worksteal", "pytest_args": ["-q"], "workers": 16})
+    assert calls[2][1] == {"distribution": "loadscope", "pytest_args": [], "workers": 16}
+    for argv in (["run", "daemon-cli", "--ci", "--dist", "worksteal"],
+                 ["run", "serial-daemon", "--ci", "--workers", "16"]):
+        with mock.patch.object(python_test_shards, "_run_pytest") as run_pytest:
+            with pytest.raises(SystemExit):
+                python_test_shards.main(argv)
+            run_pytest.assert_not_called()
+    with pytest.raises(SystemExit):
+        python_test_shards.main(["run", "wallets-sync", "--workers", "16"])
+
+
+def test_parts_split_a_lane_into_disjoint_complete_runs():
+    import os
+    import subprocess
+    import sys
+
+    def collected(part=None):
+        result = subprocess.run(
+            [sys.executable, "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider",
+             *(("--kassiber-part", part) if part else ()), "tests/test_ci_shards.py"],
+            cwd=ROOT, env=dict(os.environ), capture_output=True, text=True, timeout=120,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        return [line for line in result.stdout.splitlines() if "::" in line]
+
+    whole = collected()
+    parts = [collected(f"{index}/3") for index in (1, 2, 3)]
+    assert sorted(node for part in parts for node in part) == sorted(whole)
+    assert all(parts), "every part keeps some of these tests"
+    with pytest.raises(SystemExit):
+        python_test_shards.main(["run", "serial-daemon", "--part", "4/3"])
+    calls = []
+    with mock.patch.object(python_test_shards, "_run_pytest", lambda paths, **options: calls.append(options["pytest_args"]) or 0):
+        python_test_shards.main(["run-shadow", "serial-daemon", "--ci", "--part", "2/8", "--", "-q"])
+        python_test_shards.main(["run-custody-shadow", "core-accounting", "--ci", "--part", "1/3"])
+        python_test_shards.main(["run", "serial-daemon", "--ci", "--part", "8/8"])
+    assert calls[0] == ["--kassiber-part", "2/8", "-q"]
+    assert calls[1] == ["--deselect", "tests/test_custody_native_reconciliation.py::test_disjoint_reviewed_routes_limit_observation_reads",
+                        "--kassiber-part", "1/3"]
+    assert calls[2] == ["--kassiber-part", "8/8"]
+    # A pytest a test starts never inherits the part.
+    assert "KASSIBER_TEST_PART" not in os.environ

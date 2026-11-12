@@ -49,6 +49,21 @@ refuse reports until rebuilding; corrected proceeds are 11.2 EUR (10 + 1.2).
 It was generated with the reviewer's `upg_a.py`, changing only its scratch/source
 paths, against an archived historical Python tree. It contains no real data.
 
+## Main #654 book for the Rust main sync
+
+`pre_sync_bae01537b.sqlite3.gz.b64` was written by main at `bae01537b`
+(PR #654, the base of the Rust port before main sync 1) with
+`build_pre_sync_fixture.py`. Source `db.py` SHA-256:
+`4c44164d25de749da4abe619cffd9887251f1d277639a572e5f7778a50ed5a2e`; decoded database SHA-256:
+`fab38e9852e8f61b32390742b4e78aefe3f843634b2a814b0f20cae4493ee0a5`.
+
+The disposable Austrian EUR book holds three wallets with buys, a sale,
+interest and an owned transfer, processed journals, an AI provider and two
+custody AI audit rows under #654's narrower consent CHECK. Opening it runs
+every schema change main added after #654 (the accepted coarse price, the
+provider `agent_access` column, `ai_provider_checks`, the widened consent
+CHECK) and the semantic migrations the Rust store ports. Python and Rust must
+produce the same schema, rows and migration ledger from it.
 ## Positional CSV identities
 
 `pre_economic_csv_ids_1ec7e7da.json` is a compact projection of exact transaction

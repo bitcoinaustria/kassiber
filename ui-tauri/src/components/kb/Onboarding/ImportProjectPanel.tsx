@@ -14,6 +14,12 @@ import { useUiStore, type Identity } from "@/store/ui";
 import { KassiberWordmark } from "@/components/kb/KassiberWordmark";
 
 import { OnboardingStepPage } from "./frame";
+import {
+  defaultGainsAlgorithm,
+  isTaxCountry,
+  taxCountryEntry,
+  usesLongTermDays,
+} from "@/lib/taxCountries";
 
 interface ImportProjectPanelProps {
   selection: ImportProjectSelection;
@@ -86,7 +92,7 @@ export function ImportProjectPanel({
       const identity: Identity = {
         name: profile.name,
         workspace: workspace.name,
-        country: taxCountry === "at" ? "AT" : "Generic",
+        country: taxCountryEntry(taxCountry)?.iso ?? "Generic",
         encrypted,
         profile: profile.name,
         taxCountry,
@@ -332,7 +338,7 @@ function ProfileList({
 function normalizeTaxCountry(
   taxCountry: Profile["taxCountry"],
 ): NonNullable<Identity["taxCountry"]> {
-  return taxCountry === "at" ? "at" : "generic";
+  return isTaxCountry(taxCountry) ? taxCountry : "generic";
 }
 
 function normalizeTaxLongTermDays(
@@ -341,9 +347,9 @@ function normalizeTaxLongTermDays(
 ): number {
   return typeof value === "number" && Number.isFinite(value)
     ? value
-    : taxCountry === "at"
-      ? 0
-      : 365;
+    : usesLongTermDays(taxCountry)
+      ? 365
+      : 0;
 }
 
 const GAINS_ALGORITHMS = new Set<NonNullable<Identity["gainsAlgorithm"]>>([
@@ -353,6 +359,10 @@ const GAINS_ALGORITHMS = new Set<NonNullable<Identity["gainsAlgorithm"]>>([
   "LOFO",
   "MOVING_AVERAGE",
   "MOVING_AVERAGE_AT",
+  "MOVING_AVERAGE_FIFO_PERIOD",
+  "UK_SHARE_MATCHING",
+  "JP_TOTAL_AVERAGE",
+  "JP_MOVING_AVERAGE",
 ]);
 
 function normalizeGainsAlgorithm(
@@ -362,5 +372,5 @@ function normalizeGainsAlgorithm(
   if (value && GAINS_ALGORITHMS.has(value)) {
     return value;
   }
-  return taxCountry === "at" ? "MOVING_AVERAGE_AT" : "FIFO";
+  return defaultGainsAlgorithm(taxCountry);
 }

@@ -11,6 +11,11 @@
  * until the user presses Test connection, which issues `ai.test_connection`
  * against the entered values and saves nothing. Every step stays mounted,
  * so the rules below see the whole form whichever step is in view.
+ *
+ * A CLI proxy (docs/reference/ai-cli-proxy.md) takes only an address and an
+ * optional key: "Test & discover" lists its models, each spoken in its own
+ * format, and saving it reads that list once more as the provider's saved
+ * model list, which its chats take their formats from.
  */
 
 import {
@@ -71,6 +76,7 @@ import {
   isLoopbackAiHttpUrl,
   isNativeAiProviderLocator,
   type AiApiFormat,
+  type AiProviderRowKind,
   type AiWireApiFormat,
 } from "@/lib/aiCapabilities";
 import { cn } from "@/lib/utils";
@@ -81,7 +87,7 @@ export interface AiProviderInput {
   base_url: string;
   api_key?: string;
   default_model?: string;
-  kind: "local" | "remote" | "tee";
+  kind: AiProviderRowKind;
   notes?: string;
 }
 
@@ -115,7 +121,14 @@ const PROVIDER_KIND_HINT_KEYS = {
   local: "aiProvider.kindHint.local",
   remote: "aiProvider.kindHint.remote",
   tee: "aiProvider.kindHint.tee",
+  cli_proxy: "aiProvider.kindHint.cli_proxy",
 } as const satisfies Record<AiProviderInput["kind"], string>;
+
+const CLI_PROXY_SKIP_KEYS = {
+  model_not_listed: "aiProvider.testModelNotListed",
+  not_a_chat_model: "aiProvider.testModelNotChat",
+  unknown_family: "aiProvider.testModelUnknownFamily",
+} as const;
 
 const AUTO_REMOTE_NOTE_KEYS = {
   url: "aiProvider.autoRemote.url",
@@ -352,9 +365,11 @@ export function AiProviderForm({
   );
   // CLI agents speak their own protocol and take no API format.
   const isCliUrl = isNativeAiProviderLocator(baseUrl);
-  const formatToSave = isCliUrl ? null : apiFormat;
-  // CLI agents take no store choice.
-  const omitStoreToSave = isCliUrl ? null : omitStoreField;
+  // A CLI proxy speaks each model in its own format, from the proxy's list.
+  const isCliProxy = kind === "cli_proxy";
+  const formatToSave = isCliUrl || isCliProxy ? null : apiFormat;
+  // CLI agents take no store choice, and a CLI proxy always sends the flag.
+  const omitStoreToSave = isCliUrl || isCliProxy ? null : omitStoreField;
   // OpenAI and OpenRouter take no request without a key. Only a new provider
   // is held to it: a saved one keeps its stored key when the field is blank.
   const keyRequired = presetNeedsApiKey(preset, baseUrl);
@@ -453,6 +468,23 @@ export function AiProviderForm({
     }
   };
 
+  /**
+   * Reads a just-saved CLI proxy's model list once more, as part of saving
+   * it: that saved list is where its chats take each model's format from.
+   * Best effort: a failure leaves the provider saved, and its Settings row
+   * offers Refresh models.
+   */
+  const saveProxyModels = async (provider: string) => {
+    try {
+      await getTransport().invoke({
+        kind: "ai.list_models",
+        args: { provider, base_url: baseUrl.trim(), refresh: true },
+      });
+    } catch {
+      // The row reads "Not checked yet" and offers Refresh models.
+    }
+  };
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError(null);
@@ -527,6 +559,10 @@ export function AiProviderForm({
             api_key: apiKey.trim(),
           });
         }
+        // A new address or key forgot the saved model list.
+        if (isCliProxy && (apiKey.trim() || baseUrl.trim() !== initial.base_url.trim())) {
+          await saveProxyModels(initial.name);
+        }
         onSaved?.(initial.name);
       } else {
         const args: Record<string, unknown> = {
@@ -557,6 +593,7 @@ export function AiProviderForm({
             api_key: apiKey.trim(),
           });
         }
+        if (isCliProxy) await saveProxyModels(name.trim().toLowerCase());
         onSaved?.(name.trim().toLowerCase());
       }
       onClose();
@@ -867,7 +904,9 @@ export function AiProviderForm({
                     guardKeyOrigin(baseUrl);
                     syncEndpointSettings(baseUrl);
                   }}
-                  placeholder="http://127.0.0.1:8000/v1 or claude-cli://default"
+                  placeholder={
+                    preset?.urlPlaceholder ?? "http://127.0.0.1:8000/v1 or claude-cli://default"
+                  }
                 />
                 {autoRemote && autoRemoteShown ? (
                   <p
@@ -954,7 +993,7 @@ export function AiProviderForm({
                   />
                   <span className="font-medium">{t("aiProvider.advancedLabel")}</span>
                   <span className="ml-auto truncate text-muted-foreground">
-                    {isCliUrl
+                    {isCliUrl || isCliProxy
                       ? t(`aiProvider.postureName.${kind}`)
                       : t("aiProvider.advancedSummary", {
                           format: t(`aiProvider.apiFormat.${apiFormat}`),
@@ -966,10 +1005,12 @@ export function AiProviderForm({
                     <p id="ai-form-kind" className="text-xs font-medium">
                       {t("aiProvider.postureLabel")}
                     </p>
+                    {/* A CLI proxy's posture is fixed: off this device. */}
                     <div
                       role="group"
                       aria-labelledby="ai-form-kind"
                       className="grid grid-cols-3 gap-1.5"
+                      hidden={isCliProxy}
                     >
                       {(["local", "remote", "tee"] as const).map((option) => (
                         <button
@@ -995,7 +1036,7 @@ export function AiProviderForm({
                       {t(PROVIDER_KIND_HINT_KEYS[kind])}
                     </p>
                   </div>
-                  {!isCliUrl ? (
+                  {!isCliUrl && !isCliProxy ? (
                     <>
                       <p id="ai-form-api-format" className="text-xs font-medium">
                         {t("aiProvider.apiFormatLabel")}
@@ -1114,7 +1155,11 @@ export function AiProviderForm({
                 <li className="flex items-start gap-2">
                   <Check className="mt-px size-3.5 shrink-0 text-emerald-600" aria-hidden="true" />
                   <span>
-                    {t(isCliUrl ? "aiProvider.privacy.cliTerms" : "aiProvider.privacy.retention")}
+                    {t(
+                      isCliUrl || isCliProxy
+                        ? "aiProvider.privacy.cliTerms"
+                        : "aiProvider.privacy.retention",
+                    )}
                   </span>
                 </li>
               </ul>
@@ -1187,7 +1232,7 @@ export function AiProviderForm({
                     ) : (
                       <Activity className="size-3.5" aria-hidden="true" />
                     )}
-                    {t("aiProvider.testConnection")}
+                    {t(isCliProxy ? "aiProvider.testDiscover" : "aiProvider.testConnection")}
                   </Button>
                 </div>
                 {modelSuggestions.length > 0 ? (
@@ -1202,7 +1247,9 @@ export function AiProviderForm({
                     </p>
                   </>
                 ) : (
-                  <p className="text-xs text-muted-foreground">{t("aiProvider.checkHint")}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t(isCliProxy ? "aiProvider.checkHintCliProxy" : "aiProvider.checkHint")}
+                  </p>
                 )}
               </div>
               {testStatus.state !== "idle" ? (
@@ -1222,7 +1269,15 @@ export function AiProviderForm({
                       {t("aiProvider.testFailed", { message: testStatus.message })}
                     </p>
                   ) : null}
-                  {testStatus.state === "no_model" ? (
+                  {testStatus.state === "no_model" && isCliProxy ? (
+                    <CliProxyDiscovery
+                      modelCount={testStatus.modelCount}
+                      models={testStatus.models}
+                      skipped={testStatus.skipped}
+                      saved={testStatus.modelsSaved}
+                    />
+                  ) : null}
+                  {testStatus.state === "no_model" && !isCliProxy ? (
                     <>
                       <p className="flex items-start gap-1.5 text-amber-700 dark:text-amber-300">
                         <AlertTriangle className="mt-px size-3.5 shrink-0" aria-hidden="true" />
@@ -1250,6 +1305,14 @@ export function AiProviderForm({
                         {testStatus.probeModel ? (
                           <li>{t("aiProvider.testReplyChecked", { model: testStatus.probeModel })}</li>
                         ) : null}
+                        {testStatus.probeApiFormat ? (
+                          <li data-probe-api-format={testStatus.probeApiFormat}>
+                            {t("aiProvider.testFormatUsed", {
+                              format: t(`aiProvider.apiFormatName.${testStatus.probeApiFormat}`),
+                            })}
+                          </li>
+                        ) : null}
+                        {testStatus.modelsSaved ? <li>{t("aiProvider.discoveredSaved")}</li> : null}
                         {testStatus.detectedApiFormat ? (
                           <li data-detected-api-format={testStatus.detectedApiFormat}>
                             {t(
@@ -1338,5 +1401,52 @@ export function AiProviderForm({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * What a CLI proxy's Test & discover found: how many models it lists, how
+ * many of those cannot run the assistant (no known format), and, when the
+ * chosen model was not asked, why.
+ */
+function CliProxyDiscovery({
+  modelCount,
+  models,
+  skipped,
+  saved,
+}: {
+  modelCount: number;
+  models: AiProviderTestOutcome["models"];
+  skipped?: { reason: keyof typeof CLI_PROXY_SKIP_KEYS; model: string };
+  saved: boolean;
+}) {
+  const { t } = useTranslation("settings");
+  const unusable = models.filter((model) => model.unsupported_reason).length;
+  return (
+    <div className="grid gap-1" data-cli-proxy-discovery>
+      <p className="flex items-start gap-1.5 text-emerald-600 dark:text-emerald-400">
+        <CheckCircle2 className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+        <span>{t("aiProvider.discovered", { count: modelCount })}</span>
+      </p>
+      <ul className="grid gap-0.5 pl-5 text-muted-foreground">
+        {unusable > 0 ? (
+          <li data-unusable-models={unusable}>
+            {t("aiProvider.discoveredUnusable", { count: unusable })}
+          </li>
+        ) : null}
+        {saved ? <li>{t("aiProvider.discoveredSaved")}</li> : null}
+      </ul>
+      {skipped ? (
+        <p
+          data-probe-skipped={skipped.reason}
+          className="flex items-start gap-1.5 text-amber-700 dark:text-amber-300"
+        >
+          <AlertTriangle className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+          <span>{t(CLI_PROXY_SKIP_KEYS[skipped.reason], { model: skipped.model })}</span>
+        </p>
+      ) : (
+        <p className="pl-5 text-muted-foreground">{t("aiProvider.discoveredChoose")}</p>
+      )}
+    </div>
   );
 }

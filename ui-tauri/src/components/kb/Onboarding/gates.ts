@@ -7,14 +7,16 @@ import {
   parseTaxLongTermDays,
 } from "./constants";
 import type { OnboardingForm } from "./types";
+import { usesLongTermDays } from "@/lib/taxCountries";
 
 /** Visible books label and hidden default book label are present. */
 export const identityComplete = (form: OnboardingForm): boolean =>
   Boolean(form.workspace.trim() && form.profile.trim());
 
-/** Tax defaults are valid: Austria needs nothing extra; generic needs a day count. */
+/** Tax defaults are valid: a country with its own holding-period rule needs
+ * nothing extra; one that takes the book's day count needs a valid count. */
 export const accountingComplete = (form: OnboardingForm): boolean =>
-  form.taxCountry === "at" ||
+  !usesLongTermDays(form.taxCountry) ||
   parseTaxLongTermDays(form.taxLongTermDays) !== null;
 
 /** A sync choice was made, and it is internally consistent. */

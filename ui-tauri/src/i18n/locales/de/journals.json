@@ -284,6 +284,11 @@
         "why": "Eine ältere Version hat die Netzwerkgebühr dieses Paars als übertragenen Betrag gezählt, sie aber nicht in die volle Belastung der sendenden Seite aufgenommen. Das Paar bleibt gespeichert und wirkt erst, wenn eine korrigierte Revision geprüft ist.",
         "provide": "Prüfe das Paar. Zeige die korrigierte Revision mit kassiber review an und übernimm sie, aktualisiere es mit transfers update oder trenne es und kopple die geprüften Seiten neu. Eine Seite auszuschließen löst das nicht."
       },
+      "resetDecisionHeld": {
+        "title": "Eine beim Zurücksetzen behaltene Entscheidung wartet",
+        "why": "„Buchdaten zurücksetzen“ hat eine Entscheidung zu dieser Transaktion behalten (ein Paar, eine Kreditmarkierung, eine Verknüpfung oder eine Änderung), aber eine andere genannte Transaktion kam mit dem Sync nicht zurück oder mit anderen Beträgen.",
+        "provide": "Synce die Wallet mit der fehlenden Transaktion. Ist sie endgültig weg, löst vorerst nur „Alles löschen“ in den Einstellungen die Sperre."
+      },
       "gapHold": {
         "title": "Eine Zwischen-Wallet fehlt",
         "why": "Coins haben {{wallet}} verlassen und ein ähnlicher Betrag kam später zurück, aber die Wallet dazwischen ist nicht verbunden.",

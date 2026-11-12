@@ -305,6 +305,12 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.connections.btcpay.discover",
   "ui.connections.btcpay.key_guide",
   "ui.connections.btcpay.test",
+  // Rust only (docs/reference/exchange-desktop.md); the Python daemon
+  // refuses them and the desktop explains that.
+  "ui.connections.exchange.status",
+  "ui.connections.exchange.test",
+  "ui.connections.exchange.create",
+  "ui.connections.exchange.sync",
   "ui.connections.node.snapshot",
   "ui.reports.lightning_profitability",
   "ui.metadata.bip329.preview",

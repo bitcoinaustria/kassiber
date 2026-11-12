@@ -78,6 +78,7 @@ const PRESET_ROUTES: Record<string, string> = {
   "Codex CLI": "Through your subscription app",
   "OpenCode CLI": "Through your subscription app",
   "GitHub Copilot CLI": "Through your subscription app",
+  "CLI proxy": "Through your subscription app",
   OpenAI: "With an API key",
   OpenRouter: "With an API key",
   "Other OpenAI-compatible API": "With an API key",
@@ -684,7 +685,13 @@ describe("AiProviderForm presets", () => {
       "openai-compatible",
     ]);
     fireEvent.click(routeCard("Through your subscription app"));
-    expect(offered()).toEqual(["claude-cli", "codex-cli", "opencode-cli", "copilot-cli"]);
+    expect(offered()).toEqual([
+      "claude-cli",
+      "codex-cli",
+      "opencode-cli",
+      "copilot-cli",
+      "cli-proxy",
+    ]);
     expect(
       routeCard("Through your subscription app").querySelector("[data-posture]")?.getAttribute(
         "data-posture",
@@ -1473,5 +1480,168 @@ describe("AiProviderForm agent access", () => {
     expect(mocks.mutations["ai.providers.update"].mock.calls[0][0]).toMatchObject({
       agent_access: "full",
     });
+  });
+});
+
+describe("AiProviderForm CLI proxy", () => {
+  beforeEach(async () => {
+    await i18n.changeLanguage("en");
+    mocks.invoke.mockReset();
+    mocks.mutations = {};
+  });
+  afterEach(() => {
+    cleanup();
+  });
+
+  const PROXY_URL = "https://cli-proxy.example.ts.net/v1";
+  const MODELS = [
+    { id: "claude-sonnet-5-5", owned_by: "anthropic", api_format: "chat_completions", supports_tools: true },
+    { id: "gpt-6.1-sol", owned_by: "openai", api_format: "responses", supports_tools: true },
+    { id: "gpt-image-2", owned_by: "openai", api_format: null, unsupported_reason: "not_a_chat_model" },
+    { id: "mystery-1", owned_by: "someproxy", api_format: null, unsupported_reason: "unknown_family" },
+  ];
+
+  function discovery(probe: Record<string, unknown>, extra: Record<string, unknown> = {}) {
+    return testAnswer({
+      model_count: MODELS.length,
+      models: MODELS,
+      api_format: null,
+      detected_api_format: null,
+      tools_accepted: null,
+      store_accepted: null,
+      probe,
+      models_saved: false,
+      ...extra,
+    });
+  }
+
+  /** The minimal flow: preset, address and key, the acknowledgement. */
+  function startProxy() {
+    mount();
+    pick("CLI proxy");
+    next();
+    expect(stepInView()).toBe("connect");
+    // No address of its own: nothing points anywhere until the user types one.
+    expect(field("Base URL or CLI locator").value).toBe("");
+    expect(field("Base URL or CLI locator").placeholder).toBe("http://127.0.0.1:8317/v1");
+    type("Base URL or CLI locator", PROXY_URL);
+    type(/^API key/, "sk-proxy");
+    next();
+    expect(stepInView()).toBe("privacy");
+    fireEvent.click(ackBox());
+    next();
+    expect(stepInView()).toBe("check");
+  }
+
+  async function discover() {
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Test & discover" }));
+    });
+  }
+
+  it("discovers the proxy's models and offers only those that can chat", async () => {
+    mocks.invoke.mockResolvedValue(
+      discovery({ status: "skipped", reason: "no_model", model: null, finish_reason: null }),
+    );
+    startProxy();
+    // The format and store choices are the proxy's models' own.
+    expect(document.querySelector("[data-omit-store-option]")).toBeNull();
+    expect(document.querySelector("input[name='ai-form-api-format']")).toBeNull();
+    await discover();
+    expect(testCalls()).toEqual([
+      { base_url: PROXY_URL, kind: "cli_proxy", api_key: "sk-proxy", acknowledged: true },
+    ]);
+    expect(screen.getByText("Found 4 models on the proxy.")).toBeTruthy();
+    expect(
+      document.querySelector("[data-unusable-models]")?.getAttribute("data-unusable-models"),
+    ).toBe("2");
+    const listId = field("Default model (optional)").getAttribute("list");
+    const offered = Array.from(document.querySelectorAll(`#${listId} option`)).map(
+      (option) => (option as HTMLOptionElement).value,
+    );
+    expect(offered).toEqual(["claude-sonnet-5-5", "gpt-6.1-sol"]);
+  });
+
+  it("names the format a chosen model was asked in", async () => {
+    mocks.invoke.mockResolvedValue(
+      discovery(
+        { status: "ok", reason: null, model: "gpt-6.1-sol", finish_reason: "stop", api_format: "responses" },
+        { tools_accepted: true, store_accepted: true },
+      ),
+    );
+    startProxy();
+    type("Default model (optional)", "gpt-6.1-sol");
+    await discover();
+    expect(testCalls()[0]).toMatchObject({ model: "gpt-6.1-sol", kind: "cli_proxy" });
+    expect(screen.getByText("gpt-6.1-sol answered the test prompt.")).toBeTruthy();
+    expect(
+      document.querySelector("[data-probe-api-format]")?.textContent,
+    ).toBe("Asked in the Responses API format.");
+  });
+
+  it("says why a chosen model was not asked", async () => {
+    mocks.invoke.mockResolvedValue(
+      discovery({ status: "skipped", reason: "not_a_chat_model", model: "gpt-image-2", finish_reason: null }),
+    );
+    startProxy();
+    type("Default model (optional)", "gpt-image-2");
+    await discover();
+    expect(
+      document.querySelector("[data-probe-skipped]")?.textContent,
+    ).toBe("gpt-image-2 is not a chat model. Choose another one.");
+  });
+
+  it("saves the proxy without a format or store choice, then reads its models once", async () => {
+    mocks.invoke.mockResolvedValue({ kind: "ai.list_models", data: { models: [] } });
+    startProxy();
+    type("Default model (optional)", "claude-sonnet-5-5");
+    await submit();
+    const created = mocks.mutations["ai.providers.create"].mock.calls[0][0];
+    expect(created).toMatchObject({
+      name: "CLI proxy",
+      base_url: PROXY_URL,
+      kind: "cli_proxy",
+      default_model: "claude-sonnet-5-5",
+      acknowledged: true,
+    });
+    expect(created).not.toHaveProperty("api_format");
+    expect(created).not.toHaveProperty("omit_store_field");
+    expect(created).not.toHaveProperty("detected_api_format");
+    expect(mocks.mutations["ai.providers.set_api_key"].mock.calls[0][0]).toEqual({
+      name: "cli proxy",
+      api_key: "sk-proxy",
+    });
+    expect(mocks.invoke.mock.calls.map(([request]) => request)).toEqual([
+      {
+        kind: "ai.list_models",
+        args: { provider: "cli proxy", base_url: PROXY_URL, refresh: true },
+      },
+    ]);
+  });
+
+  it("re-reads an edited proxy's models only when its address or key changed", async () => {
+    mocks.invoke.mockResolvedValue({ kind: "ai.list_models", data: { models: [] } });
+    const saved: ExistingAiProvider = {
+      name: "cli-proxy",
+      base_url: PROXY_URL,
+      kind: "cli_proxy",
+      has_api_key: true,
+      acknowledged_at: "2026-11-01T00:00:00Z",
+    };
+    mount(saved);
+    type("Name", "Tailnet proxy");
+    await submit();
+    expect(mocks.mutations["ai.providers.update"].mock.calls[0][0]).toMatchObject({
+      kind: "cli_proxy",
+      api_format: "auto",
+    });
+    expect(mocks.invoke).not.toHaveBeenCalled();
+    cleanup();
+    mocks.mutations = {};
+    mount(saved);
+    type(/^API key/, "sk-new");
+    await submit();
+    expect(mocks.invoke).toHaveBeenCalledOnce();
+    expect(mocks.invoke.mock.calls[0][0]).toMatchObject({ kind: "ai.list_models" });
   });
 });

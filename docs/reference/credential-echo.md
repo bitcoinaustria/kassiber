@@ -63,6 +63,48 @@ against the Rust binary through `KASSIBER_TEST_CLI`).
 | Proxy and Tor settings | SOCKS5 or HTTP proxy `user:password` | SOCKS replies (binary codes, no text); HTTP proxy 407/502 bodies; malformed proxy setting; unparseable port | envelope, ring, diagnostics | malformed setting quoted verbatim; urllib's port error quoted part of the userinfo | setting shown redacted; parse errors withheld | `ProxyCredentialEchoTest` |
 | Update check (GitHub) | none | categorical error | envelope | cannot echo | cannot echo | `NoEchoPathTest.test_update_check_errors_keep_no_response_text_and_send_no_credential` |
 
+## Rust backend
+
+The Rust backend uses the same `kassiber-credentials` scrub with the same
+credential lists per integration:
+
+- **AI providers** (chat, streams, model lists, connection tests, document
+  extraction): API key and base-URL credentials withheld from body previews,
+  error objects (before lowercasing the code) and network reasons.
+  `test_rust_credential_echo.py` compares `ai providers test` with Python byte
+  for byte; `provider_errors_never_repeat_the_api_key` and the transport
+  error unit tests pin it in the crate.
+- **Esplora and Bitcoin Core HTTP** (`kassiber-chain`): every credential the
+  request carried withheld from a backend error body before the cut. Core's
+  typed RPC errors keep no server text, as in Python.
+- **BTCPay store-list check**: the decoded error body is withheld.
+- **Electrum**: backend credentials withheld from error messages.
+- **LND, Core Lightning, rate providers**: the Rust clients keep no server
+  text in their errors (no body, no `stderr`), so they cannot echo; their
+  messages are shorter than Python's.
+- **Exchange syncs, BTCPay and Lightning wallet syncs**: still served by
+  Python (the hybrid CLI hands them off), so the Python scrub applies.
+- **Core Lightning commando** (round 7): `lightning-cli` takes a rune only in
+  argv, readable by every local user, so the native report client refuses a
+  commando configuration as Python does, before any request, attempt or
+  process; `ClnConfig` no longer carries a peer or rune.
+  `cln_report_commando_configuration_is_refused_inert_and_secret_free` and
+  `test_cln_commando_configurations_are_refused_like_python_without_launch`
+  pin it; mutation entries `chain-cln-report-commando-{refused,peer,token,url}`
+  and `chain-cln-report-argv-secret-free` are killed by those tests and the
+  argv pins.
+- **BTCPay read-only keys** (round 7): a missing permission scoped to the
+  route's store (`btcpay.store.canmodifystoresettings:<storeId>`) degrades
+  label enrichment like the bare form; another store's scope still fails.
+  Label enrichment is served by Python through the hybrid CLI, which
+  `test_btcpay_read_only_key_cli.py` exercises against the Rust binary.
+- **Stored error text**: the store's migrating open runs the same
+  `stored-error-credentials-v1` migration.
+
+`test_credential_echo_cli.py` runs through the Rust binary with
+`KASSIBER_TEST_CLI='["python", "tests/rust_port/hybrid_cli.py",
+"--hybrid-rust-bin=<kassiber>"]'`.
+
 ## Existing books
 
 Opening a book runs `stored-error-credentials-v1` once (Python

@@ -1,0 +1,48 @@
+[package]
+name = "kassiber-cli"
+description = "Kassiber's command line: argparse grammar, global flags, and command dispatch"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lib]
+name = "kassiber_cli"
+
+[dependencies]
+kassiber-tax-countries = { path = "../tax-countries" }
+kassiber-diagnostics = { path = "../diagnostics" }
+kassiber-transactions = { path = "../transactions" }
+kassiber-daemon = { path = "../daemon" }
+kassiber-imports = { path = "../imports" }
+kassiber-mcp = { path = "../mcp" }
+kassiber-setup = { path = "../setup" }
+kassiber-wallets = { path = "../wallets" }
+kassiber-ai = { path = "../ai" }
+kassiber-envelope = { path = "../envelope" }
+kassiber-pyjson = { path = "../pyjson" }
+kassiber-pytext = { path = "../pytext" }
+kassiber-runtime = { path = "../runtime" }
+kassiber-release = { path = "../release" }
+kassiber-secrets = { path = "../secrets" }
+kassiber-store = { path = "../store" }
+kassiber-operator = { path = "../operator" }
+kassiber-ipc = { path = "../ipc" }
+zeroize = "1"
+# argparse's usage formatter and textwrap split text with lookaround
+# patterns; the same engine the redaction rules use.
+fancy-regex = "0.20"
+serde_json = { version = "1", features = ["arbitrary_precision"] }
+
+[dev-dependencies]
+kassiber-runtime = { path = "../runtime", features = ["fake"] }
+tempfile = "3"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[features]
+# Test builds only: KASSIBER_RUST_TEST_PROBE (see `Environment::test_probe`).
+test-probe = []

@@ -3,18 +3,26 @@ import { useTranslation } from "react-i18next";
 import { formatFiatAmount } from "@/lib/currency";
 
 import {
+  TaxCountryLabel,
+  TaxCountryPreviewNotice,
+} from "@/components/kb/TaxCountryPreview";
+import { requiredFiatCurrency, usesLongTermDays } from "@/lib/taxCountries";
+
+import {
   FIAT_CURRENCIES,
   GAINS_ALGORITHM_DEFAULTS,
+  TAX_COUNTRIES,
   gainsAlgorithmsFor,
   taxLongTermDaysHint,
 } from "../constants";
+import { onboardingRegionLabel } from "../regionLabel";
 import { NumberField, SelectField, TextField } from "../fields";
 import {
   OnboardingSection,
   OnboardingStepActions,
   OnboardingStepPage,
 } from "../frame";
-import type { StepComponentProps, TaxCountry } from "../types";
+import type { FiatCurrency, StepComponentProps } from "../types";
 
 export const EssentialsStep = ({
   form,
@@ -23,15 +31,19 @@ export const EssentialsStep = ({
   goBack,
   canContinue = true,
 }: StepComponentProps) => {
-  const { t } = useTranslation(["onboarding", "common"]);
+  const { t, i18n } = useTranslation(["onboarding", "common"]);
   const isAustrian = form.taxCountry === "at";
   const methodLabels = {
     MOVING_AVERAGE_AT: t("books.method.MOVING_AVERAGE_AT"),
     MOVING_AVERAGE: t("books.method.MOVING_AVERAGE"),
+    MOVING_AVERAGE_FIFO_PERIOD: t("books.method.MOVING_AVERAGE_FIFO_PERIOD"),
     FIFO: t("books.method.FIFO"),
     LIFO: t("books.method.LIFO"),
     HIFO: t("books.method.HIFO"),
     LOFO: t("books.method.LOFO"),
+    UK_SHARE_MATCHING: t("books.method.UK_SHARE_MATCHING"),
+    JP_TOTAL_AVERAGE: t("books.method.JP_TOTAL_AVERAGE"),
+    JP_MOVING_AVERAGE: t("books.method.JP_MOVING_AVERAGE"),
   };
 
   return (
@@ -60,27 +72,36 @@ export const EssentialsStep = ({
             <SelectField
               label={t("essentials.taxJurisdiction")}
               value={form.taxCountry}
-              options={["at", "generic"] as TaxCountry[]}
-              optionLabels={{
-                at: t("essentials.jurisdictionAustria"),
-                generic: t("essentials.jurisdictionGeneric"),
-              }}
+              options={TAX_COUNTRIES}
+              optionLabels={Object.fromEntries(
+                TAX_COUNTRIES.map((country) => [
+                  country,
+                  <TaxCountryLabel
+                    key={country}
+                    country={country}
+                    label={onboardingRegionLabel(country, t, i18n.language)}
+                  />,
+                ]),
+              )}
               onChange={(value) => {
                 if (value === form.taxCountry) return;
                 update("taxCountry", value);
-                if (value === "at") {
-                  // Austrian books start on the jurisdiction's defaults; both
-                  // stay editable right below.
-                  update("fiatCurrency", "EUR");
-                  update("gainsAlgorithm", GAINS_ALGORITHM_DEFAULTS.at);
+                const fiat = requiredFiatCurrency(value);
+                if (fiat) {
+                  // A country with its own currency starts on its defaults;
+                  // both stay editable right below.
+                  update("fiatCurrency", fiat as FiatCurrency);
+                  update("gainsAlgorithm", GAINS_ALGORITHM_DEFAULTS[value]);
                 } else if (
                   !gainsAlgorithmsFor(value).includes(form.gainsAlgorithm)
                 ) {
                   // Only replace a method the new region cannot use.
-                  update("gainsAlgorithm", GAINS_ALGORITHM_DEFAULTS.generic);
+                  update("gainsAlgorithm", GAINS_ALGORITHM_DEFAULTS[value]);
                 }
               }}
             />
+
+            <TaxCountryPreviewNotice country={form.taxCountry} />
 
             <div className="grid gap-4 sm:grid-cols-2">
               <SelectField
@@ -104,7 +125,7 @@ export const EssentialsStep = ({
                 onChange={(value) => update("gainsAlgorithm", value)}
               />
             </div>
-            {!isAustrian && (
+            {usesLongTermDays(form.taxCountry) && (
               <NumberField
                 label={t("essentials.longTermDays")}
                 name="taxLongTermDays"

@@ -17,7 +17,7 @@ and asserts the resulting behavior, not merely that schema creation succeeds.
 | Journals that read a price as another currency | Not applicable | Not applicable | Tested in `test_price_currency_mismatch.py` | `price-currency-mismatch-hold-v1` invalidates, once, every processed book with an active priced transaction whose currency is not the book's, and requires calculation semantics version 10 of it, so the next rebuild holds those rows as `price_currency_mismatch` ([quarantines](tax.md#quarantines)). Other books keep their journals; the global version 10 still reports them stale until a rebuild. |
 | Journals built through RP2 | Not applicable | Not applicable | Tested in `test_wages_semantic_migration.py` | `kassiber-tax-engine-v1` marks every processed book stale once, so the next (automatic) rebuild uses Kassiber's own [tax engine](tax-engine.md) at one fixed decimal precision. Retained journals, evidence, and filed snapshots are unchanged until then. |
 | Pair components authored before observed-fee separation | Not applicable | Not applicable | Tested against an exact `c0a015de` book in `test_custody_pair_fee_compatibility.py`, including interrupted invalidation and repeat opens | `custody-legacy-pair-fee-review-v1` audits counts and marks affected journals stale once. A source below the complete observed debit with a `reviewed_residual:network_fee` allocation fails validation with `legacy_pair_fee_allocation_review_required`. The immutable component stays visible for revision; migration does not reinterpret its fee or suspense. Audit and invalidation roll back together. |
-| Journals built with a random same-time lot order | Not applicable | Not applicable | Tested in `test_lot_order_determinism.py` | `same-time-source-order-v1` requires calculation semantics version 3 of every processed book, once, so the next (automatic) rebuild orders same-time rows by the [source order](tax.md#same-time-order). Input markers, retained journals and filed snapshots are unchanged until then. |
+| Journals built with a random same-time lot order | Not applicable | Not applicable | Tested in `test_lot_order_determinism.py` | `same-time-source-order-v1` requires calculation semantics version 8 of every processed book, once, so the next (automatic) rebuild orders same-time rows by the [source order](tax.md#same-time-order). Input markers, retained journals and filed snapshots are unchanged until then. |
 | Ancient REAL BTC to INTEGER msat rebuild | Tested with a focused legacy transaction/holdings fixture | Same migration path | Not applicable to a fresh current database | Amounts convert exactly and all later transaction metadata columns survive the rebuild. |
 | Credentials repeated in stored error text | Not applicable | Not applicable | Tested in `test_credential_echo.py` and `test_rust_store_migrations.py` | `stored-error-credentials-v1` withholds, once, every credential the book holds from the freshness, BTCPay store-sync, Lightning-sync and AI provider-check error columns; JSON columns are rewritten compactly. Python and the Rust store's migrating open produce the same bytes and audit. A credential no longer in the book cannot be recognized ([credential echoes](credential-echo.md)). |
 | Removed general-ledger storage (`gl_*`) | Not applicable | Not applicable | Tested in `test_legacy_ledger.py` | New databases get no `gl_*` objects. If every leftover table is empty, opening drops the ledger's `external_documents` triggers and then its tables; otherwise tables and triggers stay intact, the read-only probe writes nothing, and book deletion, reset, and partition fail with `legacy_ledger_present` until an explicit `kassiber maintenance purge-legacy-ledger --confirm`. |
@@ -63,10 +63,12 @@ disposals but no fees are included. The migration retains observations, custody
 evidence, journal rows and saved/filed artifacts; only processing replaces the
 derived projection. Generic books receive no migration input-version bump.
 Every processed book, including generic books, requires one rebuild after
-upgrade because the global calculation semantics version increases to 2.
+upgrade because the global calculation semantics version increases to 2
+(7 since the import-identity and legacy pair fee changes).
 The targeted Austrian migration and the global version check are separate:
 the latter also refuses older stamped builds after migration; an audit alone
 cannot make journals rebuilt by an older writer fresh.
+
 ## ID-less CSV identity compatibility
 
 Binance supplemental autoinvest/dividend, Coinfinity, Pocket Bitcoin and Ledger
@@ -158,6 +160,12 @@ second, the batch sequence migration and encryption, the confirmed-distinct revi
 and its binding to exclusion state, and a network partition that must carry
 import batches with their rows so a held group stays held.
 
+The version numbers 3 to 6 above belong to the Python fix line that introduced
+these holds. That line also used version 2 for the legacy pair fee blocker
+below, while the Austrian consumed-regime migration used version 2 for its own
+change. The merged calculation semantics version is 7 and includes all of them,
+so every journal stamped 2 to 6 requires a current rebuild.
+
 ## Same-time source order
 
 Opening a book adds the nullable `import_batch_transactions.source_position`
@@ -167,13 +175,25 @@ Existing links keep a NULL position, so their rows sort before positioned
 rows of the same time and among themselves by content; rows created by later
 file imports record their place in the run. No transaction row changes.
 
-The global calculation semantics version becomes 3 and the
+The global calculation semantics version becomes 8 and the
 `same-time-source-order-v1` audit raises every processed book's required
-version to 3 without touching its input markers. Freshness then reports
+version to 8 without touching its input markers. Freshness then reports
 "journal calculation semantics changed; rebuild with current Kassiber" until a
-version-3 rebuild, which may book different gains, cost basis or fallback
+version-8 rebuild, which may book different gains, cost basis or fallback
 rates where same-time rows were ordered by row id before. An older build that
 rebuilds stamps an older version, which stays stale for current readers.
+
+The Python reference fix line numbers this change version 3; the merged
+version is 8, after the import-identity and legacy pair fee versions above.
+
+The Rust store adds the column and runs the audit at Python's positions in
+its ordered pass (`crates/store/src/compat_ordered.rs`, `semantics.rs`), and
+both runtimes stamp and require version 8 alike
+(`tests/test_rust_store_migrations.py`). A Rust binary from before this
+change refuses the new column, index and audit until it is upgraded.
+Frozen oracle dumps gain the column through `upgrade_schema_dumps.py` and
+older stamps through `restamp_journal_semantics.py`; only vectors the order
+itself changes are regenerated.
 
 ## Dependency-origin correction
 
@@ -187,6 +207,18 @@ journal invalidation is needed. Existing stored explanations remain until
 then name a previously omitted blocker. Saved exports and filed snapshots
 are not rewritten.
 
+## Exact exchange withdrawals
+
+[Exact exchange withdrawals](custody-resolution.md#exchange-withdrawals-that-name-their-txid)
+add no schema, stored column or migration. Before them, the exact case was
+held as `recorded_transfer_authority_conflict`, which blocks every report.
+Books that held it book the move on their next journal rebuild; until then
+they keep that report-blocking hold, so a retained journal never carries a
+figure the new build would contradict. Books whose user already reviewed
+the pair keep their authored component unchanged. The calculation semantics
+version therefore stays as it is: a rebuild by an older writer re-creates
+the same hold, never a different number.
+
 ## Custody authoring transaction compatibility
 
 The savepoint atomicity fix changes transaction ownership, not the schema or
@@ -196,7 +228,10 @@ commits consolidation changes, journal processing owns its writer transaction,
 and review/component/gap authoring boundaries commit their completed operation.
 No caller in these paths requires an outermost savepoint release to persist it.
 
-`tests/test_custody_authoring_atomicity.py` injects late failures and compares
+`tests/test_custody_authoring_atomicity.py` injects component/gap failures after
+the outermost authoring savepoint has actually been released, before the caller
+commits. A failure inside that savepoint cannot expose an accidental release
+commit. The suite compares
 all persisted tables after rollback, including input versions, memberships and
 audit records. It also pins rollback of successful `commit=False` applies.
 There is no reliable historical failed-request marker from which to reconstruct
@@ -228,36 +263,12 @@ rewrite the next time current Python rebuilds. Backups preserve both formats.
 The scoped 128 MiB rebuild cache is a connection setting. It adds no schema,
 migration or stored-format change, so the same Python/Rust schema manifest and
 older-binary coexistence rules apply. SQLCipher retains DELETE/FULL durability.
-## Dependency-origin correction
 
-The custody dependency-origin fixed-point correction changes only the
-`blocked_by_transaction_ids` explanation stored in `journal_quarantines`:
-previous builds could omit a connected explicit root depending on Python's
-hash seed. Selected rows, blocked transaction membership, journal amounts and
-report-readiness barriers are unchanged. No schema migration or automatic
-journal invalidation is needed. Existing stored explanations remain until
-`journals process` rebuilds them; review evidence and the displayed root may
-then name a previously omitted blocker. Saved exports and filed snapshots
-are not rewritten.
-
-## Custody authoring transaction compatibility
-
-The savepoint atomicity fix changes transaction ownership, not the schema or
-existing authored revisions. Low-level component and legacy consolidation
-helpers leave persistence to their caller; database initialization explicitly
-commits consolidation changes, journal processing owns its writer transaction,
-and review/component/gap authoring boundaries commit their completed operation.
-No caller in these paths requires an outermost savepoint release to persist it.
-
-`tests/test_custody_authoring_atomicity.py` injects component/gap failures after
-the outermost authoring savepoint has actually been released, before the caller
-commits. A failure inside that savepoint cannot expose an accidental release
-commit. The suite compares
-all persisted tables after rollback, including input versions, memberships and
-audit records. It also pins rollback of successful `commit=False` applies.
-There is no reliable historical failed-request marker from which to reconstruct
-an owner's intended review. Opening an existing book does not silently repair
-or replay authoring; see [recovery](custody-components.md#authoring-transactions-and-recovery).
+Native journal persistence has a separate process-termination campaign in
+`crates/journals/tests/crash.rs`: dirty-page DML boundaries and pre/post-COMMIT
+on physical SQLite WAL/NORMAL and SQLCipher DELETE/FULL books. Reopen checks
+complete typed dumps, integrity and foreign keys. This covers the unregistered
+R4-12 writer, not migration termination or the R4-13 pipeline caller.
 
 ## Intentionally not inferred during upgrade
 
@@ -283,9 +294,6 @@ stamp columns already exist. It records the affected book count and required
 version, and requires a stamped rebuild of previously processed books, because
 the earlier custody-hold correction applied to every such book. Adoption leaves
 unprocessed books alone and preserves input markers. Raw observations, authored
-Kassiber restores freshness. The first upgrade also
-requires a stamped rebuild of previously processed books, because the earlier
-custody-hold correction applied to every such book. Raw observations, authored
 reviews, retained journals and filed snapshots are not rewritten by this guard.
 
 This protects reopen after an older binary rebuilds; it cannot make an older
@@ -293,17 +301,18 @@ binary's own reports correct. Use the current binary for accounting. The exact
 `ca9a672f` partial-payout fixture covers older publication both before and after
 a current rebuild, including repeated publication at an identical timestamp.
 
-Calculation semantics version 2 includes the legacy pair fee validation blocker.
-The pair migration requires version 2 for affected books, so a version-one
-writer cannot clear the review barrier by publishing matching input markers.
-Previously stamped version-one journals also require a current rebuild under
-the shared freshness check. Retained journals and filed snapshots stay intact.
+Calculation semantics version 7 includes the legacy pair fee validation blocker.
+The pair migration requires version 7 for affected books, so an older writer,
+including one stamping the Austrian version 2, cannot clear the review barrier by
+publishing matching input markers. Previously stamped journals also require a
+current rebuild under the shared freshness check. Retained journals and filed snapshots stay intact.
 
 The existing `wages-acquisition-semantics-v1`, `rp2-pool-basis-semantics-v1`,
 `custody-fail-closed-holds-v1`, `at-acquisition-valuation-support-v1`, and
 `custody-partial-payout-pricing-v1` migrations require stamped semantics
-version 1; `at-outflow-consumed-regime-v2` requires version 2 for their affected books,
-and `same-time-source-order-v1` version 8 for every processed book, and
+version 1; `at-outflow-consumed-regime-v2` requires version 2,
+`custody-legacy-pair-fee-review-v1` version 7 for their affected books,
+`same-time-source-order-v1` version 8 for every processed book, and
 `price-currency-mismatch-hold-v1` version 10 for its affected books. Their
 one-shot audits still record the upgrade, but are no longer the only protection
 against accepting an older calculation. Future calculation changes must bump
@@ -346,8 +355,14 @@ an audit sentinel alone cannot establish what generated retained journals.
 
 ## Remaining fixture limits
 
-- The historical fixtures cover plaintext schema/data migration. They do not
-  duplicate the separate SQLCipher page-format and passphrase tests.
+- Rust's private ordered pass matches both original fixtures exactly up to
+  the explicit R2 authored-consolidation refusal. Pair-free variants pass full
+  first-pass parity and unchanged Python reopen after the custody view was
+  moved after the leg-role rebuild. This does not establish full Rust migration
+  of the original books.
+- The checked-in fixtures are plaintext. R3 repeats those exact first-pass,
+  prefix and reopen comparisons on disposable SQLCipher copies.
+  These do not replace the separate SQLCipher page-format and passphrase tests.
 - They do not simulate process termination at every migration statement;
   transaction/crash atomicity is covered by migration-specific tests rather
   than this scenario matrix.
@@ -389,3 +404,67 @@ separately; whole-open Python cookie stability is not claimed.
 
 See the [page-index implementation evidence](transaction-page-index.md) for
 measurements and verification results.
+
+## Native journal pre-build legacy numeric inputs
+
+R4-10 changes no schema or stored values on open. The unregistered pre-build
+stage preserves historical REAL/text storage classes and the Python stage's
+lazy quantity conversion. Malformed reviewed integer text propagates its exact
+Python refusal and rolls back the stage; it does not silently become a skipped
+migration. An oversized valid integer becomes the same exact blocking migration
+issue as Python, without a native fixed-width panic. Existing fractional-msat
+truncation is retained only for parity; see the [R4-10 edge evidence](r4-journal-pipeline.md#r4-10-legacy-and-refusal-expansion).
+
+Binary numeric prices retain their stored BLOB class and Python's chained
+decimal refusal during processing, including rollback of earlier pricing writes.
+The private comparison dump preserves infinite REAL bits rather than substituting
+null; this adds no database or product format. See the
+[uncovered numeric paths](r4-journal-pipeline.md#r4-10-uncovered-numeric-paths).
+
+## Storage added by main #675 to #708
+
+Main after #654 added four storage changes. Python fresh creation includes
+them; existing books receive them in `ensure_schema_compat`, and the Rust
+store runs the same steps at the same positions of its ordered pass:
+
+| Change | Existing books |
+| --- | --- |
+| `transactions.pricing_review_accepted_price` (#708) | Added after `pricing_quality`, and again after the msat rebuild, whose fixed column list drops it from a legacy REAL-typed table |
+| `ai_providers.agent_access TEXT NOT NULL DEFAULT 'full'` | Added after `omit_store_field`; every existing provider stays `full` |
+| `ai_provider_checks` | Created by the base schema, then by `_ensure_ai_provider_checks_schema` after the secret-reference table |
+| Custody AI audit `consent_decision` CHECK widened to `mode_auto`, `mode_full_access`, `mcp_host` | Rebuilt once after the custody leg-role rebuild and before the projection view: foreign keys off, one immediate transaction, rows copied by Python's exact column list, row count checked (`custody_schema_migration_failed` if it changes), index and immutability trigger restored. A table that already admits all three values is left alone |
+
+None of them writes a migration audit; they are schema steps, not semantic
+migrations, so books keep the same ledger. A rebuilt or altered table keeps
+the migration's own SQL spelling, as in Python, and the structural admission
+gate accepts it.
+
+Coverage: `pre_sync_bae01537b.sqlite3.gz.b64` (a processed Austrian book
+with an AI provider and narrow-CHECK audit rows, written by main #654) joins
+the historical fixtures, so the exact first-pass dump, Python reopen and Rust
+re-migration comparisons run on it in plaintext and SQLCipher.
+`tests/test_rust_store_migrations.py` also compares the audit rebuild with
+Python's step, kills it at each checkpoint and resumes in either runtime,
+opens a current Python book holding rows in every new object with Rust (both
+open modes) without any change, and alternates Rust and Python opens of a
+Rust-created book with no migration loop.
+`crates/store/scripts/mutations.json` breaks each step and the refusal rules
+one at a time (`crates/store/scripts/mutation_check.py`); every entry fails
+a Rust store test.
+
+Rust tests that rebuild their books from the manifest carry frozen Python
+dumps cut from the older schema. `tests/rust_port/upgrade_schema_dumps.py`
+upgraded them for these steps, filling in each added column's default and
+the empty table, as this compatibility pass does. A later additive column
+can extend its `ADDED` list. A step that backfills other values, drops a
+column or reorders one needs its vectors regenerated instead. Whole-book
+checks compare their table names with `kassiber_store::table_names()` or
+`tests/rust_port/book_schema.py`, not with a fixed count.
+
+**Newer layouts.** The Rust store refuses a book carrying any object, column
+or migration audit it does not know (`requires_python_migration`), in both its
+admission-only and migrating opens, before writing anything. Python does not:
+its open is additive and leaves unknown tables, columns, indexes, triggers
+and audits in place. The asymmetry is deliberate. A Rust binary must not run
+accounting on a schema written by a newer build, and an older Python build
+keeps its existing behaviour. Upgrade the Rust binary together with Python.

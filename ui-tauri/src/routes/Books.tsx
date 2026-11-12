@@ -53,6 +53,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import i18next from "i18next";
+import {
+  TaxCountryLabel,
+  TaxCountryPreviewBadge,
+  TaxCountryPreviewNotice,
+} from "@/components/kb/TaxCountryPreview";
+import { defaultPoolScope, taxCountryName } from "@/lib/taxCountries";
 import {
   GAINS_ALGORITHM_DEFAULTS,
   TAX_COUNTRIES,
@@ -73,10 +80,13 @@ import {
 const ACCOUNTING_METHOD_LABEL_KEYS = {
   MOVING_AVERAGE_AT: "books.method.MOVING_AVERAGE_AT",
   MOVING_AVERAGE: "books.method.MOVING_AVERAGE",
+  MOVING_AVERAGE_FIFO_PERIOD: "books.method.MOVING_AVERAGE_FIFO_PERIOD",
   FIFO: "books.method.FIFO",
   LIFO: "books.method.LIFO",
   HIFO: "books.method.HIFO",
   LOFO: "books.method.LOFO",
+  JP_TOTAL_AVERAGE: "books.method.JP_TOTAL_AVERAGE",
+  JP_MOVING_AVERAGE: "books.method.JP_MOVING_AVERAGE",
 } as const satisfies Record<string, string>;
 
 const accountingMethodLabel = (
@@ -93,17 +103,22 @@ const accountingMethodLabel = (
 const TAX_COUNTRY_LABEL_KEYS = {
   at: "books.region.at",
   generic: "books.region.generic",
-} as const satisfies Record<TaxCountry, string>;
+} as const satisfies Partial<Record<TaxCountry, string>>;
 
 const COST_BASIS_POOL_SCOPE_LABEL_KEYS = {
   global: "books.poolScope.global",
   wallet: "books.poolScope.wallet",
 } as const satisfies Record<CostBasisPoolScope, string>;
 
+// Austria and the generic country keep their own wording; every other
+// country reads the registry's name in the UI language.
 const regionLabel = (
   country: TaxCountry,
   t: TFunction<"onboarding">,
-): string => t(TAX_COUNTRY_LABEL_KEYS[country]);
+): string => {
+  const key = TAX_COUNTRY_LABEL_KEYS[country as keyof typeof TAX_COUNTRY_LABEL_KEYS];
+  return key ? t(key) : taxCountryName(country, i18next.language);
+};
 
 const costBasisPoolScopeLabel = (
   scope: CostBasisPoolScope,
@@ -554,7 +569,7 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
           // Reset the method to the new region's default — the previous method
           // may be invalid there, and update_profile would reject it.
           setRenameProfileMethod(GAINS_ALGORITHM_DEFAULTS[value]);
-          setRenameProfilePoolScope("global");
+          setRenameProfilePoolScope(defaultPoolScope(value) as CostBasisPoolScope);
           if (renameProfileError) setRenameProfileError(null);
         }}
         onMethodChange={(value) => {
@@ -836,6 +851,7 @@ function BookRow({
         </div>
         <p className="truncate text-xs text-muted-foreground">
           {profile.taxPolicy}
+          {profile.taxCountryPreview ? <TaxCountryPreviewBadge /> : null}
         </p>
       </div>
       <dl className="hidden shrink-0 grid-cols-[4.5rem_4.5rem_7rem] gap-x-4 text-xs md:grid">
@@ -1035,12 +1051,16 @@ function CreateProfileDialog({
                   <SelectContent>
                     {TAX_COUNTRIES.map((option) => (
                       <SelectItem key={option} value={option}>
-                        {regionLabel(option, t)}
+                        <TaxCountryLabel
+                          country={option}
+                          label={regionLabel(option, t)}
+                        />
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
+              <TaxCountryPreviewNotice country={country} />
 
               <div className="space-y-2">
                 <Label htmlFor="create-profile-method">
@@ -1215,12 +1235,16 @@ function RenameProfileDialog({
                   <SelectContent>
                     {TAX_COUNTRIES.map((option) => (
                       <SelectItem key={option} value={option}>
-                        {regionLabel(option, t)}
+                        <TaxCountryLabel
+                          country={option}
+                          label={regionLabel(option, t)}
+                        />
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
+              <TaxCountryPreviewNotice country={country} />
 
               <div className="space-y-2">
                 <Label htmlFor="rename-profile-method">

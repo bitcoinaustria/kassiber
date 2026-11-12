@@ -1,5 +1,6 @@
 import type { TaxCountry } from "@/components/kb/Onboarding/types";
 import type { CostBasisPoolScope, Profile } from "@/mocks/profiles";
+import { taxCountryEntry } from "@/lib/taxCountries";
 
 interface ProfileSettingsUpdatePayload extends Record<string, unknown> {
   profile_id: string;
@@ -14,7 +15,7 @@ export const poolScopesForProfileEdit = (
 ): CostBasisPoolScope[] =>
   country === (profile.taxCountry ?? "generic")
     ? (profile.allowedCostBasisPoolScopes ?? ["global"])
-    : ["global"];
+    : ([...(taxCountryEntry(country)?.pool_scopes ?? ["global"])] as CostBasisPoolScope[]);
 
 export const profileSettingsUpdatePayload = (
   profile: Profile,

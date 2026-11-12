@@ -269,7 +269,6 @@ class LwkDescriptorContractTest(unittest.TestCase):
     def test_exact_pin_platform_wheels_and_packager_collection(self):
         pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
         lock = (ROOT / "uv.lock").read_text(encoding="utf-8")
-        workflow = (ROOT / ".github/workflows/prerelease-binaries.yml").read_text(encoding="utf-8")
         app_packager = (ROOT / "scripts/build-macos-arm64-app.sh").read_text(
             encoding="utf-8"
         )
@@ -285,12 +284,13 @@ class LwkDescriptorContractTest(unittest.TestCase):
             "macosx_11_0_arm64", "manylinux_2_17_x86_64.manylinux2014_x86_64", "win_amd64",
         ):
             self.assertIn(f"lwk-0.18.0-py3-none-{platform}.whl", lock)
-        self.assertEqual(workflow.count("--collect-submodules lwk"), 1)
+        # Release builds ship the Rust binary since dc9b62a48; the Python app
+        # packager still freezes the observer with its metadata.
+        self.assertEqual(app_packager.count("--collect-submodules lwk"), 1)
         self.assertEqual(
-            workflow.count("--collect-submodules lwk"),
-            workflow.count("--copy-metadata lwk"),
+            app_packager.count("--collect-submodules lwk"),
+            app_packager.count("--copy-metadata lwk"),
         )
-        self.assertIn("--copy-metadata lwk", app_packager)
         self.assertEqual(
             inspect.signature(require_lwk().WalletTxOut.wildcard_index).return_annotation,
             "'int'",

@@ -76,6 +76,7 @@ import { cn } from "@/lib/utils";
 import type { FiatCompleteness, OverviewSnapshot } from "@/mocks/seed";
 import type { CapitalGainsReport } from "@/mocks/reports";
 import { useUiStore } from "@/store/ui";
+import { TaxCountryPreviewNotice } from "@/components/kb/TaxCountryPreview";
 
 type ReportTone = "good" | "warning" | "alert" | "neutral";
 type ReportHref = "/journals" | "/review";
@@ -586,6 +587,8 @@ function ReportsView({
         yearLocked={activeExport !== null}
         readiness={showReadinessNotice ? null : readiness}
       />
+
+      <TaxCountryPreviewNotice country={report.jurisdictionCode} />
 
       <ReportMetricStrip
         hideSensitive={hideSensitive}

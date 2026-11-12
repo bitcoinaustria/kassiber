@@ -20,8 +20,8 @@ then `python3`. Set `KASSIBER_PYTHON=/path/to/python` to override the Python
 executable, or `KASSIBER_REPO_ROOT=/path/to/checkout` when the development
 binary should run against a different checkout.
 
-Packaged prerelease desktop builds bundle a PyInstaller CLI runtime (onedir on
-macOS, onefile elsewhere)
+Packaged prerelease desktop builds bundle the Rust `kassiber` binary as their
+sidecar ([Rust packaging](rust-packaging.md))
 and prefer that bundled executable before the development Python fallback when
 starting the daemon. `KASSIBER_PYTHON` remains the highest-priority override
 for daemon startup and installed-app CLI forwarding during debugging.
@@ -369,6 +369,19 @@ named saved provider is acknowledged as remote or TEE), and returns
 not present as success. The semantics are in [the AI
 reference](ai.md#connection-test).
 
+On the Rust backend, `kind` may also be `cli_proxy` (a CLIProxyAPI server; see
+[CLI proxy providers](ai-cli-proxy.md)). Such a provider takes no
+`api_format`, `detected_api_format` or `omit_store_field`, and its
+`effective_api_format` is `null`. Its `ai.list_models` rows add `api_format`
+(`null` with `unsupported_reason` for a model Kassiber cannot chat with), and
+`prefix` and `base_model` for a `<prefix>/<model>` id, and
+its `ai.test_connection` result adds `models_saved` and `probe.api_format`,
+with `probe.reason` `model_not_listed`, `not_a_chat_model` or `unknown_family`
+for a model it did not ask. `ai.chat` on it fails before any request with
+`ai_cli_proxy_models_unchecked`, `ai_cli_proxy_model_unknown` or
+`ai_cli_proxy_format_unknown`. The Python backend refuses such a row on every
+contacting path with `ai_provider_unsupported`.
+
 `ui.profiles.switch` accepts `{"profile_id":"..."}` and updates the active
 book set / book (`context_workspace` / `context_profile` internally) after the
 database is already unlocked. It does not create a per-book passphrase
@@ -431,11 +444,14 @@ default cookie-file locations plus local `bitcoin.conf` RPC settings and
 returns candidate URL/network/auth-source metadata without cookie contents.
 When `bitcoin.conf` contains `rpcuser`/`rpcpassword`, the daemon may use those
 credentials internally to prove reachability, but the response does not include
-the username or password. Cookie-file candidates include a bounded
-`credential_ref` for immediate local probing; renderer-supplied cookiefile
+the username or password. Basic-auth and cookie-file candidates include an opaque
+`credential_ref` for local probing or explicit backend creation. Creation
+re-resolves current local configuration, binds the candidate's endpoint/network,
+and removes conflicting authentication fields. References exclude passwords
+and are not a session credential cache. Renderer-supplied cookiefile
 probes and desktop-created Bitcoin Core cookiefile backends are constrained to
-default `~/.bitcoin/**/.cookie` paths and loopback RPC URLs. Users who want to
-save basic auth still enter it explicitly. `ui.backends.bitcoinrpc.test` probes
+default `~/.bitcoin/**/.cookie` paths and loopback RPC URLs. Basic auth can also
+be entered explicitly. `ui.backends.bitcoinrpc.test` probes
 a saved or inline Core RPC backend with `getblockchaininfo`, `getnetworkinfo`,
 wallet RPC, and `getblockfilter`; it reports reachability, peer/sync state,
 pruning/IBD, wallet-RPC availability, and BIP158 filter-index availability. A
@@ -718,6 +734,17 @@ the active books/profile. The daemon persists the note, replaces the
 transaction tag set (creating missing tag rows), updates the exclusion flag, and
 invalidates processed journals so reports are rebuilt before use.
 
+The same grouped save accepts `review_status`, `taxable`, `at_regime`,
+`at_category`, `kind`, `source`, `reason`, and pricing fields `fiat_currency`,
+`fiat_rate`, `fiat_value`, `pricing_source_kind`, `pricing_quality` and
+`pricing_external_ref`. Omitted fields preserve authored state; explicit null
+clears nullable note/review/tax fields. Null tags preserve the current set,
+while an empty array clears it. Prices must be finite decimals and preserve
+their exact scale; missing rate/value is derived from the observed amount.
+Exclusion preserves active custody evidence and kind overrides validate the
+observed direction. One real save appends one audit event atomically with all
+changes and journal invalidation; no-op saves append nothing.
+
 `ui.wallets.update` accepts `{"wallet":"..."}` for the active books/profile and
 edits at least one of `label`, the same wallet config fields the create
 endpoint takes (`backend`, `chain`, `network`, `descriptor`,
@@ -882,6 +909,30 @@ retries, pauses, resumes, and cancels jobs, but it never performs network sync
 itself. Persistent state lives in SQLite under `freshness_jobs` and
 `freshness_source_states`.
 
+The Rust daemon registers the supported Bitcoin variants of
+`ui.wallets.sync`, `ui.freshness.run` and `ui.workspace.freshness.run`, including
+their default local journal refresh. Successful native executions require a
+nonempty UTF-8 string request ID and a fully supported source selection.
+Enabled unported rate sources, unsupported wallet/backend shapes and wallet
+sync's separate direct-sync cases remain on Python in the test hybrid candidate.
+A direct native unsupported invocation refuses before consent. Production
+builds return native journal refusals without starting Python. Only the
+development hybrid launcher enables individual journal replay, after exact
+durable-file comparison proves rollback. A committed stale-first rebuild
+prevents replay. Python retains production authority until R4-16.
+The guarded candidate selector only reads an already opened book; it neither
+opens nor migrates a database, changes queue state nor contacts a backend.
+
+The native request runner owns a separate connection, streams product progress,
+services `ui.freshness.cancel`, `.pause`, `.resume` and offline changes while
+fetching, and joins before book switching, locking or shutdown. Private
+successful-job graph grants enter a bounded mailbox only after the terminal
+record is written and flushed. Automatic graph lookup then uses the captured
+backend through `kassiber-net`, its own SQLite/SQLCipher connection and the same
+source controls. Saved jobs, launch, status and idle without a live request
+grant cannot authorize graph work. See the
+[Rust product checkpoint](rust-shell.md#bitcoin-wallet-sync-product-routes-r5-no-refresh).
+
 Within the daemon, refresh execution is serialized across recovery, queueing,
 batch fetch and apply. A background tick skips an occupied execution slot; an
 explicit competing refresh returns retryable `project_operation_in_progress`.
@@ -962,7 +1013,10 @@ automatic transfer pairing followed by a rebuild, recorded as the book's
 journal freshness job. Stored MOVE decisions and ownership review cards block
 conflicting automatic pairs only against a current projection, so a stale book
 is rebuilt before pairing and rebuilt once more only when pairs were applied;
-a current book that gained no pairs is left as is. The step performs no network
+a current book that gained no pairs is left as is. The first stale rebuild
+commits separately. If the second rebuild fails or is cancelled, that first
+rebuild remains; pending pairs, their candidate cache and the second rebuild
+roll back together. The step performs no network
 I/O and honors the policy's `journals` source class. Its outcome is returned as
 `journals: {status, rebuilt, quarantines, auto_pair_applied, error}` with
 `status` one of `processed`, `current`, `deferred`, `disabled`, `failed`,
@@ -984,6 +1038,24 @@ Automatic pairing never recreates a pair the user deleted.
 Automatic background and report-read syncs keep their journal policy. A queued
 journal job reused by a later request keeps automatic pairing if either
 request asked for it.
+
+The native daemon also serves `ui.journals.snapshot`, `ui.journals.events.list`,
+`ui.journals.transfers.list`, `ui.journals.quarantine` and
+`ui.journals.quarantine.resolve` from the open book, with Python's payloads.
+The resolution applies one audited metadata change and may rebuild journals;
+the reads never write.
+
+The native `ui.journals.process` route shares the freshness execution slot and
+journal service. It runs directly without adding queue or source-state rows,
+and grants no wallet, rate or graph transport authority. Its worker binds the
+captured active book, checks cancellation and selection at journal phases and
+before commit, and joins before locking, switching books or shutdown. The
+terminal response is flushed before its deferred checkpoint completes. It
+accepts no processing arguments; the shared `expected_scope` guard remains
+available. Development candidate selection requires a nonempty UTF-8 string
+request ID. The assistant's internal mutation runs the same service without
+automatic pairing; Python's consent-bound dispatcher keeps serving it until
+R6 ports the chat loop.
 
 `ui.workspace.freshness.run` is the explicit book-set refresh path. It requires
 `args.workspace_id`, loops through every profile in that workspace, recovers
@@ -1049,7 +1121,11 @@ memory zeroization.
 First sync progress phases are `discovery`, `backend_fetch`, `decode_enrich`,
 `import`, `rate_coverage`, `journal_refresh`, `done`, and `error`. The streaming
 `ui.wallets.sync.progress` and `ui.freshness.run.progress` records include the
-phase plus source identifiers.
+phase plus source identifiers. When several wallets sync at once, each wallet's
+prefetch records (`discovery`, `backend_fetch`, `decode_enrich` without a
+`job_id`) keep their own order, but their interleaving between wallets is not
+fixed: Python prefetches on a thread pool, and Rust runs the same steps in job
+order. The per-job records that follow arrive one job at a time.
 
 `ui.wallets.identify_onchain` (Reconcile's "Verify on chain") prepares the whole
 reconciliation on the main thread, then looks up the transactions local history
@@ -1104,6 +1180,15 @@ capability names). Capability blocks exposed to the desktop use camelCase
 booleans such as `nodeSnapshot` and `routingProfitability`; they never include
 peer pubkeys, channel funding outpoints, short channel ids, descriptors,
 backend URLs/tokens, raw wallet config, or other identity graph data.
+
+The native R5 backend now serves `ui.reports.lightning_profitability` through
+its shared book service, with the same aliases, scoped lookup, window coercion
+and capability projection. Only that explicit request grants node acquisition;
+book open, status and configuration reads remain inert. Scope/config changes
+between resources refuse before another read or publication. This registration
+adds no AI tool or node-snapshot/backend-test implementation. Native transport
+errors retain the documented raw-response redactions. See the
+[Lightning product checkpoint](rust-shell.md#lightning-profitability-product-wiring-r5).
 
 ## Encrypted database
 
@@ -1190,3 +1275,14 @@ cancellation sends no export/restore action. Once an explicitly confirmed
 installation starts it runs to completion or rollback; it is not interruptible
 halfway through replacement. These actions are desktop-only, absent from AI
 tools, and never synchronize backup files or credentials.
+
+## Legacy hygiene snapshot
+
+`ui.privacy_hygiene.snapshot` is the existing local Phase-1 transaction/inventory
+scorer. Its native implementation preserves active context, optional `wallet`,
+`transaction` and `limit` arguments, public findings and coverage states. The
+CLI launches it through `kassiber daemon`; there is no corresponding new CLI
+command. `reports privacy-hygiene` and `ui.reports.privacy_hygiene` remain the
+distinct configuration report. The scorer performs no network request or
+accounting write. Its [native acceptance](rust-shell.md#legacy-hygiene-daemon-acceptance-r5-privacy-legacy)
+records wire, table, routing and unhandled-diagnostic parity.

@@ -13,7 +13,7 @@ import { useTranslation } from "react-i18next";
 import { Star } from "lucide-react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import type { AiProviderRow } from "@/lib/aiCapabilities";
+import { providerPosture, type AiProviderRow } from "@/lib/aiCapabilities";
 import { isImeKeyEvent } from "@/lib/imeKeyEvent";
 import { cn } from "@/lib/utils";
 import {
@@ -161,20 +161,20 @@ export const ModelPickerSidebar = React.memo(function ModelPickerSidebar({
             const stale = staleProviders.has(provider.name);
             const tooltip = [
               name,
-              t(`modelPicker.posture.${provider.kind}`),
+              t(`modelPicker.posture.${providerPosture(provider.kind)}`),
               stale ? t("modelPicker.staleShort") : null,
             ]
               .filter(Boolean)
               .join(" · ");
             return railButton(
               modelPickerViewKey({ provider: provider.name }),
-              `${name} · ${t(`modelPicker.posture.${provider.kind}`)}`,
+              `${name} · ${t(`modelPicker.posture.${providerPosture(provider.kind)}`)}`,
               tooltip,
               <ProviderGlyph
                 provider={provider}
                 className="size-5"
                 // A stale inventory reads as a warning, like an off-device one.
-                dotPosture={stale ? "remote" : provider.kind}
+                dotPosture={stale ? "remote" : providerPosture(provider.kind)}
               />,
               () => onSelectView({ provider: provider.name }),
             );

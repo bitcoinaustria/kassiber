@@ -142,8 +142,8 @@ export const SelectField = <T extends string>({
   label: string;
   value: T;
   options: T[];
-  optionLabels?: Partial<Record<T, string>>;
-  description?: string | null;
+  optionLabels?: Partial<Record<T, ReactNode>>;
+  description?: ReactNode;
   onChange: (value: T) => void;
 }) => {
   return (

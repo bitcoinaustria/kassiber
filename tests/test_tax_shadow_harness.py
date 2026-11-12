@@ -257,6 +257,12 @@ class SessionEndTest(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="kassiber-tax-shadow-session-") as scratch:
             test_file = Path(scratch) / "test_shadow_session_probe.py"
             test_file.write_text(test, encoding="utf-8")
+            # The harness reports in-repository paths relative to ROOT. Local
+            # verification may deliberately put TMPDIR inside the worktree.
+            try:
+                self.probe_module = test_file.resolve().relative_to(ROOT).as_posix()
+            except ValueError:
+                self.probe_module = test_file.resolve().as_posix()
             env = _child_env(inject=inject)
             env["KASSIBER_TEST_TAX_ENGINE"] = mode
             return subprocess.run(
@@ -284,10 +290,7 @@ class SessionEndTest(unittest.TestCase):
         result = self._session(compare.SHADOW, inject=True)
         self.assertEqual(result.returncode, 1, result.stdout[-4000:] + result.stderr[-2000:])
         self.assertIn("1 passed", result.stdout)
-        self.assertRegex(
-            result.stdout,
-            r"FAILED: calls that differed from the oracle: 1, in .*/test_shadow_session_probe\.py",
-        )
+        self.assertIn(f"FAILED: calls that differed from the oracle: 1, in {self.probe_module}", result.stdout)
 
     def test_a_test_that_stubs_the_engine_runs_uncompared(self):
         # Both tests see the injected difference; only the unmarked one is compared.
@@ -310,14 +313,8 @@ class SessionEndTest(unittest.TestCase):
         self.assertIn("2 passed", result.stdout)
         self.assertIn("production calls compared with the oracle: 1", result.stdout)
         self.assertRegex(result.stdout, r"(?m)^generic: 2 v2$")
-        self.assertRegex(
-            result.stdout,
-            r"calls not compared because the test stubs the engine: 1, in .*/test_shadow_session_probe\.py",
-        )
-        self.assertRegex(
-            result.stdout,
-            r"FAILED: calls that differed from the oracle: 1, in .*/test_shadow_session_probe\.py",
-        )
+        self.assertIn(f"calls not compared because the test stubs the engine: 1, in {self.probe_module}", result.stdout)
+        self.assertIn(f"FAILED: calls that differed from the oracle: 1, in {self.probe_module}", result.stdout)
 
     def test_an_ld5_refusal_is_counted_and_fails_the_session(self):
         # A row that includes its fee in its amount is a shape a finalized
@@ -347,17 +344,14 @@ class SessionEndTest(unittest.TestCase):
         self.assertIn("production calls compared with the oracle: 0", result.stdout)
         self.assertRegex(result.stdout, r"(?m)^unclassified: 0 v2, 1 not routed$")
         self.assertIn("LD-5 refusals (shapes a finalized projection cannot have): 1", result.stdout)
-        self.assertRegex(
-            result.stdout,
-            r"FAILED: calls production's builder refused under LD-5: 1, in .*/test_shadow_session_probe\.py",
-        )
+        self.assertIn(f"FAILED: calls production's builder refused under LD-5: 1, in {self.probe_module}", result.stdout)
 
     def test_census_fails_an_engine_caller_outside_the_overlay(self):
         result = self._session(compare.CENSUS)
         self.assertEqual(result.returncode, 1, result.stdout[-4000:] + result.stderr[-2000:])
         self.assertIn("1 passed", result.stdout)
         self.assertIn("production calls: 1, from test modules: 1", result.stdout)
-        self.assertIn("are not in the shadow overlay (scripts/python_test_shards.py): ", result.stdout)
+        self.assertIn(f"are not in the shadow overlay (scripts/python_test_shards.py): {self.probe_module}", result.stdout)
         self.assertIn("test_shadow_session_probe.py", result.stdout)
 
 
@@ -509,8 +503,16 @@ class SessionReportTest(unittest.TestCase):
                 users[name] = count
         # A spy that only observes, like the request spies of
         # test_custody_pre_tax_projection and test_review_regressions, needs
-        # no marker.
-        self.assertEqual(users, {})
+        # no marker. The review vector replays, the journal-process capture()
+        # and the render oracle replace the build or its inputs and feed it
+        # recorded ids (the review exporter children run without the shadow
+        # mode).
+        self.assertEqual(users, {
+            "tests/test_rust_journal_process.py": 3,
+            "tests/test_rust_journal_render.py": 2,
+            "tests/test_rust_review_builds.py": 1,
+            "tests/test_rust_review_cases.py": 2,
+        })
 
 
 if __name__ == "__main__":  # pragma: no cover

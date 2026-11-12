@@ -46,6 +46,7 @@ export type CauseKey =
   | "importDuplicateRefill"
   | "importDuplicatePreBatch"
   | "legacyPairFee"
+  | "resetDecisionHeld"
   | "gapHold"
   | "implicitDelta"
   | "unclaimedResidual"
@@ -100,6 +101,7 @@ const REASON_CAUSES: Record<string, CauseKey> = {
   native_transition_fee_timing_unresolved: "nativeTransitionFeeTiming",
   custody_authored_migration_incomplete: "migrationIncomplete",
   synthetic_import_duplicate_review_required: "importDuplicate",
+  book_reset_decision_held: "resetDecisionHeld",
   custody_basis_barrier: "basisBarrier",
   transfer_pair_dependency_blocked: "pairDependency",
   basis_provenance_incomplete: "provenanceIncomplete",
@@ -193,6 +195,7 @@ const CAUSE_CATEGORIES: Record<CauseKey, QuarantineCategory> = {
   nativeTransitionAmbiguous: "needs_decision",
   nativeTransitionAmountMismatch: "needs_decision",
   migrationIncomplete: "needs_decision",
+  resetDecisionHeld: "needs_decision",
   importDuplicate: "needs_decision",
   importDuplicateRefill: "needs_decision",
   importDuplicatePreBatch: "needs_decision",
