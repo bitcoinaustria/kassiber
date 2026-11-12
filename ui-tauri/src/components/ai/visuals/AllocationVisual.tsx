@@ -7,6 +7,7 @@ import type { VisualFormat } from "./format";
 import { seriesColorMap, type VisualPalette } from "./palette";
 import { stagger } from "./motion";
 import { CountUp, GrowBar, Legend, Segmented } from "./primitives";
+import { maskSensitive, useSensitive } from "@/lib/sensitive";
 
 type Measure = "market_value" | "quantity" | "cost_basis" | "unrealized_pnl";
 type Group = "wallet" | "asset";
@@ -69,6 +70,8 @@ interface Props {
 
 export function AllocationVisual({ visual, fmt, palette, hideSensitive }: Props) {
   const { t } = useTranslation("assistant");
+  // "Hide all" also hides the shares: proportions reveal composition.
+  const hideShares = useSensitive("share");
   const [measure, setMeasure] = useState<Measure>((visual.measure as Measure) ?? "market_value");
   const [group, setGroup] = useState<Group>(visual.groupBy);
   const entities = useMemo(() => groupRows(visual.rows, group, measure), [visual.rows, group, measure]);
@@ -130,7 +133,7 @@ export function AllocationVisual({ visual, fmt, palette, hideSensitive }: Props)
           />
         </div>
       </div>
-      {!signed && positiveTotal > 0 ? (
+      {!signed && positiveTotal > 0 && !hideShares ? (
         <div className="flex h-3 w-full gap-[2px] overflow-hidden rounded-full" role="img" aria-label={t("visual.allocation.share")}>
           {known.map((entity, index) =>
             (entity.value ?? 0) > 0 ? (
@@ -174,16 +177,19 @@ export function AllocationVisual({ visual, fmt, palette, hideSensitive }: Props)
                 <span className={cn("font-medium tabular-nums", hideSensitive && "sensitive")}>
                   {value === null
                     ? t("visual.unknownValue")
-                    : signed
-                      ? fmt.signed(format(Math.abs(value), entity.asset), value)
-                      : format(value, entity.asset)}
+                    : maskSensitive(
+                        signed
+                          ? fmt.signed(format(Math.abs(value), entity.asset), value)
+                          : format(value, entity.asset),
+                        hideSensitive,
+                      )}
                 </span>
                 {!signed && positiveTotal > 0 && value !== null && value > 0 && !mixedAmount ? (
-                  <span className="w-11 text-2xs tabular-nums text-muted-foreground">{fmt.percent(value / positiveTotal)}</span>
+                  <span className="w-11 text-2xs tabular-nums text-muted-foreground">{maskSensitive(fmt.percent(value / positiveTotal), hideShares)}</span>
                 ) : null}
               </div>
               <div className="col-span-2 h-1.5 w-full rounded-full bg-muted/50">
-                {value !== null ? (
+                {value !== null && !hideShares ? (
                   <GrowBar fraction={fraction} color={color} delayMs={stagger(index) + 80} className="opacity-80" />
                 ) : null}
               </div>

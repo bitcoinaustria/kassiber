@@ -15,6 +15,7 @@ import {
   buildHoldingsBySource,
   portfolioCompletenessDetail,
 } from "./model";
+import { maskSensitive, useSensitive } from "@/lib/sensitive";
 
 /** Sources listed before the rest fold into "Other sources". */
 const SHOWN_SOURCES = 8;
@@ -33,6 +34,7 @@ export const HoldingsBySourceChart = ({
   currency: Currency;
 }) => {
   const { t } = useTranslation("overview");
+  const hideShares = useSensitive("share");
   const isBitcoinMode = currency === "btc";
   const fiatCurrency = activeMarketFiatCurrency(snapshot);
   const holdings = buildHoldingsBySource(snapshot, SHOWN_SOURCES);
@@ -46,11 +48,14 @@ export const HoldingsBySourceChart = ({
   const fiatValueUnavailable =
     !isBitcoinMode && fiatCompleteness(snapshot.fiat).marketRateMissing;
   const valueLabel = (btc: number, value: number) =>
-    isBitcoinMode
-      ? formatBtc(btc, { precision: 3 })
-      : fiatValueUnavailable
-        ? "—"
-        : formatWholeFiatAmount(value, fiatCurrency);
+    maskSensitive(
+      isBitcoinMode
+        ? formatBtc(btc, { precision: 3 })
+        : fiatValueUnavailable
+          ? "—"
+          : formatWholeFiatAmount(value, fiatCurrency),
+      hideSensitive,
+    );
 
   return (
     <section className="@container/holdings kb-surface space-y-2.5 p-3 sm:px-4" aria-label={t("holdings.aria")}>
@@ -70,8 +75,10 @@ export const HoldingsBySourceChart = ({
                   blurClass(hideSensitive),
                 )}
               >
-                {unrealizedPercent >= 0 ? "+" : ""}
-                {unrealizedPercent.toFixed(1)}%
+                {maskSensitive(
+                  `${unrealizedPercent >= 0 ? "+" : ""}${unrealizedPercent.toFixed(1)}%`,
+                  hideShares,
+                )}
               </span>{" "}
               {t("holdings.vsCostBasis")}
             </p>
@@ -116,7 +123,10 @@ export const HoldingsBySourceChart = ({
                 {valueLabel(item.btc, item.value)}
               </span>
               <span className={cn("text-right text-muted-foreground tabular-nums", blurClass(hideSensitive))}>
-                {item.percent === 0 && item.value > 0 ? "<1%" : `${item.percent}%`}
+                {maskSensitive(
+                  item.percent === 0 && item.value > 0 ? "<1%" : `${item.percent}%`,
+                  hideShares,
+                )}
               </span>
             </li>
           ))}

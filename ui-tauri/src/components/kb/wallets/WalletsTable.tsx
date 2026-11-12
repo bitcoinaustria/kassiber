@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils";
 import type { Connection, OverviewSnapshot } from "@/mocks/seed";
 
 import { formatBtc, formatEur, hiddenSensitiveClassName } from "./format";
+import { maskSensitive, useSensitive } from "@/lib/sensitive";
 
 interface WalletsTableProps {
   balanceSharesOverlap?: boolean;
@@ -372,6 +373,7 @@ function WalletRow({
   totalBtc,
 }: WalletRowProps) {
   const { t } = useTranslation("connections");
+  const hideShares = useSensitive("share");
   const isBackend = connection.role === "backend";
   const pct = totalBtc > 0 ? (connection.balance / totalBtc) * 100 : 0;
   const isEur = currency === "eur";
@@ -462,10 +464,12 @@ function WalletRow({
             className="relative h-2 overflow-hidden rounded-full bg-muted"
             title={compositionTitle}
           >
-            <div
-              className="absolute inset-y-0 left-0 rounded-full bg-primary transition-[width]"
-              style={{ width: `${Math.max(1.5, pct)}%` }}
-            />
+            {hideShares ? null : (
+              <div
+                className="absolute inset-y-0 left-0 rounded-full bg-primary transition-[width]"
+                style={{ width: `${Math.max(1.5, pct)}%` }}
+              />
+            )}
           </div>
         )}
       </TableCell>
@@ -509,9 +513,10 @@ function WalletRow({
               )}
             >
               <CurrencyToggleText>
-                {isEur
-                  ? fiatLabel
-                  : `₿ ${formatBtc(connection.balance)}`}
+                {maskSensitive(
+                  isEur ? fiatLabel : `₿ ${formatBtc(connection.balance)}`,
+                  hideSensitive,
+                )}
               </CurrencyToggleText>
             </div>
             <div
@@ -521,9 +526,10 @@ function WalletRow({
               )}
             >
               <CurrencyToggleText>
-                {isEur
-                  ? `₿ ${formatBtc(connection.balance)}`
-                  : fiatLabel}
+                {maskSensitive(
+                  isEur ? `₿ ${formatBtc(connection.balance)}` : fiatLabel,
+                  hideSensitive,
+                )}
               </CurrencyToggleText>
             </div>
           </>

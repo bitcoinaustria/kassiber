@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { formatBtc } from "@/lib/currency";
 import { fiatCompleteness } from "@/lib/fiatCompleteness";
+import { maskSensitive, useSensitive } from "@/lib/sensitive";
 import { cn } from "@/lib/utils";
 import type { OverviewSnapshot } from "@/mocks/seed";
 
@@ -36,6 +37,7 @@ export const StatsCards = ({
   onRefreshMarketRate?: () => void;
 }) => {
   const { t } = useTranslation("overview");
+  const hideShares = useSensitive("share");
   const to = t as OverviewTranslate;
   // The bitcoin held and what it is worth, both at once whichever currency
   // the app shows: the toggle would otherwise turn one into the other.
@@ -54,7 +56,7 @@ export const StatsCards = ({
   const statusKey = statStatusKey(stat, balanceStatus, completeness);
   const statusText = statusKey
     ? t(statusKey, { count: balanceStatus?.quarantines ?? 0 })
-    : `${stat.isPositive ? "+" : "-"}${stat.changePercent.toFixed(1)}%`;
+    : maskSensitive(`${stat.isPositive ? "+" : "-"}${stat.changePercent.toFixed(1)}%`, hideShares);
   const portfolioWarningHref = completenessIssue
     ? completenessIssue.href
     : statusKey === "stats.status.needsJournals"
@@ -130,7 +132,10 @@ export const StatsCards = ({
                 blurClass(hideSensitive),
               )}
             >
-              {formatBtc(latestPortfolioBalanceBtc(snapshot), { precision: 3 })}
+              {maskSensitive(
+                formatBtc(latestPortfolioBalanceBtc(snapshot), { precision: 3 }),
+                hideSensitive,
+              )}
             </p>
             <p className="truncate text-2xs text-muted-foreground sm:text-xs">
               {t("stats.heldIn", { count: sourcesHoldingBitcoin(snapshot) })}
@@ -160,7 +165,12 @@ export const StatsCards = ({
               {valueUnavailable ? (
                 <span>—</span>
               ) : (
-                <span>{formatCompactDisplayMoney(stat.value, fiatRate, "eur", fiatCurrency)}</span>
+                <span>
+                  {maskSensitive(
+                    formatCompactDisplayMoney(stat.value, fiatRate, "eur", fiatCurrency),
+                    hideSensitive,
+                  )}
+                </span>
               )}
             </p>
             <div className="flex min-w-0 items-center gap-1.5 text-2xs sm:text-xs">
