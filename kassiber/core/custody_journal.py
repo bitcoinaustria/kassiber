@@ -16,6 +16,7 @@ import uuid
 from typing import Any, Callable, Mapping
 
 from ..errors import AppError
+from ..db import JOURNAL_CALCULATION_SEMANTICS_VERSION
 from ..msat import btc_to_msat, dec, msat_to_btc
 from ..time_utils import now_iso, parse_iso_datetime_or_none
 from ..tax_policy import require_tax_processing_supported
@@ -37,6 +38,7 @@ from . import transfer_matching
 from .custody_evidence import build_canonical_quantity_input, enriched_quantity_rows
 from .engines import KassiberTaxEngine, TaxEngineLedgerInputs
 from .journal_calculation import encode_calculation
+from .transaction_order import same_time_order_sql, transaction_order_sql
 from .lightning import channel_lifecycle
 from .repo import resolve_scope
 
@@ -52,10 +54,18 @@ def evaluate_projection_freshness(
     processed_count = int(profile["last_processed_tx_count"] or 0)
     input_version = int(profile["journal_input_version"] or 0)
     processed_version = int(profile["last_processed_input_version"] or 0)
+    has_semantics = {"required_journal_semantics_version", "journal_semantics_version"} <= set(profile.keys())
+    required_semantics = int(profile["required_journal_semantics_version"] or 0) if has_semantics else 0
+    built_semantics = int(profile["journal_semantics_version"] or 0) if has_semantics else 0
+    semantics_current = has_semantics and (not required_semantics or (
+        built_semantics == JOURNAL_CALCULATION_SEMANTICS_VERSION
+        and built_semantics >= required_semantics
+    ))
     is_current = bool(
         processed_at
         and processed_count == active_count
         and input_version == processed_version
+        and semantics_current
     )
     if active_count == 0:
         status = "no_transactions"
@@ -69,9 +79,12 @@ def evaluate_projection_freshness(
     elif input_version != processed_version:
         status = "stale"
         reason = "journal inputs changed since last processing"
+    elif not semantics_current:
+        status = "stale"
+        reason = "journal calculation semantics changed; rebuild with current Kassiber"
     else:
         status = "current"
-        reason = "journals match the active transaction count and input version"
+        reason = "journals match the active transaction count, input version and calculation semantics"
     return {
         "status": status,
         "is_current": is_current,
@@ -85,6 +98,27 @@ def evaluate_projection_freshness(
     }
 
 
+def projection_freshness_sql(profile_alias: str) -> str:
+    """SQL form of canonical freshness for transaction-list predicates.
+
+    Keep SQL consumers here rather than maintaining private, partial checks.
+    ``profile_alias`` is an internal SQL identifier, never user input.
+    """
+    p = profile_alias
+    return f"""(
+        {p}.last_processed_at IS NOT NULL
+        AND {p}.last_processed_tx_count = (
+            SELECT COUNT(*) FROM transactions freshness_tx
+            WHERE freshness_tx.profile_id = {p}.id AND freshness_tx.excluded = 0
+        )
+        AND {p}.journal_input_version = {p}.last_processed_input_version
+        AND ({p}.required_journal_semantics_version = 0 OR (
+            {p}.journal_semantics_version = {JOURNAL_CALCULATION_SEMANTICS_VERSION}
+            AND {p}.journal_semantics_version >= {p}.required_journal_semantics_version
+        ))
+    )"""
+
+
 def projection_freshness(
     conn: sqlite3.Connection,
     profile: str | Mapping[str, Any],
@@ -94,8 +128,7 @@ def projection_freshness(
     if isinstance(profile, str):
         row = conn.execute(
             """
-            SELECT p.last_processed_at, p.last_processed_tx_count,
-                   p.journal_input_version, p.last_processed_input_version,
+            SELECT p.*,
                    (SELECT COUNT(*) FROM transactions t
                     WHERE t.profile_id = p.id AND t.excluded = 0)
                        AS active_transaction_count
@@ -160,6 +193,61 @@ def stored_move_transaction_ids(
     }
 
 
+# A price stored in another currency than the book's is no rate of the book's
+# currency (``pricing.price_currency_mismatch``).
+_PRICE_IN_BOOK_CURRENCY = pricing.price_in_book_currency_sql()
+
+
+def transaction_rate_quotes_for_profile(
+    conn, profile_id: str, *, at_or_before: str | None = None, exclusive: bool = False
+) -> dict[str, dict[str, Any]]:
+    """Return transaction rates with their actual observation timestamps.
+
+    Historical valuations compare instants, including legacy offset timestamps.
+    Unbounded callers retain the existing transaction ordering.
+    """
+
+    from ..time_utils import timestamp_predicate
+
+    bound = ""
+    time = "occurred_at DESC"
+    params = [profile_id]
+    if at_or_before is not None:
+        bound = " AND " + timestamp_predicate(conn, "occurred_at", "<" if exclusive else "<=")
+        time = "kassiber_timestamp_us(occurred_at) DESC"
+        params.append(at_or_before)
+    rows = _latest_first_rows(
+        conn,
+        "asset, occurred_at, fiat_rate, fiat_value",
+        "FROM transactions WHERE profile_id = ? AND excluded = 0" + bound,
+        params,
+        time,
+    )
+    rates: dict[str, Any] = {}
+    for row in rows:
+        asset = row["asset"]
+        if asset in rates:
+            continue
+        rate = row["fiat_rate_exact"] if "fiat_rate_exact" in row.keys() else None
+        value = (
+            row["fiat_value_exact"] if "fiat_value_exact" in row.keys() else None
+        )
+        rate_dec = dec(rate) if rate is not None else None
+        value_dec = dec(value) if value is not None else None
+        if rate_dec is None and row["fiat_rate"] is not None:
+            rate_dec = dec(row["fiat_rate"])
+        if value_dec is None and row["fiat_value"] is not None:
+            value_dec = dec(row["fiat_value"])
+        if rate_dec is not None:
+            rates[asset] = {"rate": rate_dec, "timestamp": row["occurred_at"]}
+        elif value_dec is not None and row["amount"]:
+            rates[asset] = {
+                "rate": value_dec / msat_to_btc(row["amount"]),
+                "timestamp": row["occurred_at"],
+            }
+    return rates
+
+
 def latest_transaction_rates_for_profile(conn, profile_id: str) -> dict[str, Any]:
     """Return the latest usable transaction-derived rate for each asset."""
 
@@ -167,16 +255,45 @@ def latest_transaction_rates_for_profile(conn, profile_id: str) -> dict[str, Any
 
 
 def transaction_rate_rows(conn, profile_id):
-    try:
-        return conn.execute(
-            "SELECT asset,fiat_rate,fiat_value,fiat_rate_exact,fiat_value_exact,amount FROM transactions WHERE profile_id=? AND excluded=0 ORDER BY occurred_at DESC,created_at DESC,id DESC",
-            (profile_id,),
-        ).fetchall()
-    except sqlite3.OperationalError:
-        return conn.execute(
-            "SELECT asset,fiat_rate,fiat_value,amount FROM transactions WHERE profile_id=? AND excluded=0 ORDER BY occurred_at DESC,created_at DESC,id DESC",
-            (profile_id,),
-        ).fetchall()
+    return _latest_first_rows(
+        conn,
+        "asset,fiat_rate,fiat_value",
+        "FROM transactions WHERE profile_id=? AND excluded=0",
+        (profile_id,),
+        "occurred_at DESC",
+    )
+
+
+def _latest_first_rows(conn, columns, source, params, time):
+    """Rows latest first, a same-time group in reverse source order.
+
+    The latest row of a same-time group is the last in source order. Narrow
+    tables (old books, fixtures) may lack the source order's columns and then
+    keep the legacy order; without the exact-price columns they read the
+    float prices alone. A row priced in another currency than its book's is
+    no rate of the book's currency; tables without a profiles table or a
+    currency column keep every row, as before.
+    """
+    order = time + ", " + same_time_order_sql("transactions", descending=True)
+    legacy = time + ", created_at DESC, id DESC"
+    shapes = (
+        (columns + ",fiat_rate_exact,fiat_value_exact,amount", order),
+        (columns + ",fiat_rate_exact,fiat_value_exact,amount", legacy),
+        (columns + ",amount", legacy),
+    )
+    attempts = [
+        (selected, ordering, filtered)
+        for filtered in (True, False)
+        for selected, ordering in shapes
+    ]
+    for selected, ordering, filtered in attempts[:-1]:
+        where = source + (" AND " + _PRICE_IN_BOOK_CURRENCY if filtered else "")
+        try:
+            return conn.execute(f"SELECT {selected} {where} ORDER BY {ordering}", params).fetchall()
+        except sqlite3.OperationalError:
+            pass
+    selected, ordering, _filtered = attempts[-1]
+    return conn.execute(f"SELECT {selected} {source} ORDER BY {ordering}", params).fetchall()
 
 
 def rates_from_transaction_rows(rows) -> dict[str, Any]:
@@ -484,7 +601,25 @@ class CustodyJournalBuilder:
         self.as_of = as_of
 
     def _transactions(self):
-        rows = self.conn.execute(
+        try:
+            rows = self._transaction_rows(transaction_order_sql("t"))
+        except sqlite3.OperationalError as exc:
+            # A narrow legacy table without the source order's columns keeps
+            # the legacy order; current books always have them.
+            if "no such column" not in str(exc) and "no such table" not in str(exc):
+                raise
+            rows = self._transaction_rows("t.occurred_at ASC, t.created_at ASC, t.id ASC")
+
+        return [
+            {
+                **dict(row),
+                "_closed_confirmation_observation": ownership_transfers.capture_confirmation_observation(row),
+            }
+            for row in rows
+        ]
+
+    def _transaction_rows(self, order: str):
+        return self.conn.execute(
             """
             SELECT
                 t.*,
@@ -507,18 +642,9 @@ class CustodyJournalBuilder:
             LEFT JOIN chain_observation_provenance observation
               ON observation.transaction_id = t.id
             WHERE t.profile_id = ? AND t.excluded = 0
-            ORDER BY t.occurred_at ASC, t.created_at ASC, t.id ASC
-            """,
+            ORDER BY """ + order,
             (self.profile_id,),
         ).fetchall()
-
-        return [
-            {
-                **dict(row),
-                "_closed_confirmation_observation": ownership_transfers.capture_confirmation_observation(row),
-            }
-            for row in rows
-        ]
 
     def _wallet_refs(self) -> dict[str, dict[str, Any]]:
         refs: dict[str, dict[str, Any]] = {}
@@ -1005,6 +1131,11 @@ def store_ledger_state(
         ),
     )
     filed_impact_resolutions = []
+    conn.execute(
+        """UPDATE profiles SET journal_semantics_version = ?,
+            required_journal_semantics_version = MAX(required_journal_semantics_version, ?) WHERE id = ?""",
+        (JOURNAL_CALCULATION_SEMANTICS_VERSION, JOURNAL_CALCULATION_SEMANTICS_VERSION, profile_id),
+    )
     chain_impact_resolution_count = 0
     if (
         not state.get("custody_component_blockers")
@@ -1032,14 +1163,18 @@ def store_ledger_state(
 def load_stored_ledger_state(
     conn: sqlite3.Connection,
     profile: Mapping[str, Any],
+    *,
+    rate_cutoff: str | None = None,
+    rate_cutoff_exclusive: bool = False,
 ) -> dict[str, Any]:
     """Load the report-facing ledger projection without reinterpreting custody."""
 
     profile_id = str(profile["id"])
     entries = []
     for row in conn.execute(
-        "SELECT * FROM journal_entries WHERE profile_id = ? "
-        "ORDER BY occurred_at ASC, created_at ASC, id ASC",
+        "SELECT e.*, w.label AS wallet_label FROM journal_entries e "
+        "LEFT JOIN wallets w ON w.id = e.wallet_id WHERE e.profile_id = ? "
+        "ORDER BY e.occurred_at ASC, e.created_at ASC, e.id ASC",
         (profile_id,),
     ).fetchall():
         entry = dict(row)
@@ -1073,11 +1208,15 @@ def load_stored_ledger_state(
             (profile_id,),
         ).fetchall()
     }
+    quotes = transaction_rate_quotes_for_profile(
+        conn, profile_id, at_or_before=rate_cutoff, exclusive=rate_cutoff_exclusive
+    )
     return {
         "entries": entries,
         "quarantines": quarantines,
         "wallet_holdings": wallet_holdings,
-        "latest_rates": latest_transaction_rates_for_profile(conn, profile_id),
+        "latest_rates": {asset: quote["rate"] for asset, quote in quotes.items()},
+        "latest_rate_timestamps": {asset: quote["timestamp"] for asset, quote in quotes.items()},
     }
 
 

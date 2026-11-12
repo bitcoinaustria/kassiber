@@ -43,6 +43,60 @@ from .custody_evidence import resolve_protocol_scope, row_boundary_amounts
 
 _MIGRATION_NAMESPACE = uuid.UUID("95ed148a-743a-4dcc-9b55-ca8cc203d547")
 _VALUATION_UNIT = "reviewed_source_msat"
+LEGACY_PAIR_FEE_REVIEW_MIGRATION = "custody-legacy-pair-fee-review-v1"
+
+
+def mark_legacy_pair_fee_reviews(conn: sqlite3.Connection) -> bool:
+    """Invalidate old pair journals once; retain immutable economics for review.
+
+    The validation blocker remains reproducible from the authored legs and
+    observed debit. It requires semantics version 7: the Austrian outflow
+    migration's version 2 predates the blocker. The audit and journal invalidation share a savepoint, so
+    interruption cannot leave a completed audit over a still-current journal.
+    """
+    with _savepoint(conn, "legacy_pair_fee_review"):
+        if conn.execute(
+            "SELECT 1 FROM schema_migration_audits WHERE migration_name = ?",
+            (LEGACY_PAIR_FEE_REVIEW_MIGRATION,),
+        ).fetchone():
+            return False
+        candidates = conn.execute("""
+            SELECT DISTINCT component.id, component.profile_id
+            FROM custody_components component
+            JOIN custody_component_legs fee ON fee.component_id = component.id
+            WHERE component.state = 'active'
+              AND component.conservation_mode = 'quantity'
+              AND fee.role = 'fee' AND fee.notes = 'reviewed_residual:network_fee'
+        """).fetchall()
+        affected = [row for row in candidates if any(
+            issue["code"] == "legacy_pair_fee_allocation_review_required"
+            for issue in get_component(conn, row["id"])["validation"]["issues"]
+        )]
+        profiles = sorted({row["profile_id"] for row in affected})
+        conn.execute("""
+            INSERT INTO schema_migration_audits
+                (id, migration_name, schema_version, impact_json, created_at)
+            VALUES (?, ?, 1, ?, ?)
+        """, (
+            LEGACY_PAIR_FEE_REVIEW_MIGRATION, LEGACY_PAIR_FEE_REVIEW_MIGRATION,
+            json.dumps({
+                "schema_version": 1,
+                "migration": LEGACY_PAIR_FEE_REVIEW_MIGRATION,
+                "affected_component_count": len(affected),
+                "affected_profile_count": len(profiles),
+                "required_journal_semantics_version": 7,
+                "explanation": "Legacy pair fee allocations require review; authored economics and retained journals are unchanged.",
+            }, sort_keys=True), now_iso(),
+        ))
+        conn.executemany("""
+            UPDATE profiles SET last_processed_at = NULL,
+                last_processed_tx_count = 0,
+                journal_input_version = journal_input_version + 1,
+                ownership_review_counts_json = NULL,
+                required_journal_semantics_version = MAX(required_journal_semantics_version, 7)
+            WHERE id = ?
+        """, [(profile_id,) for profile_id in profiles])
+    return True
 
 
 @dataclass(frozen=True)
@@ -598,14 +652,15 @@ def _pair_group_spec(
     for ordinal, (row, source_hash) in enumerate(zip(ordered, hashes)):
         source_id = str(_field(row, "out_transaction_id"))
         target_id = str(_field(row, "in_transaction_id"))
-        source_principal = row_boundary_amounts(
+        source_boundary = row_boundary_amounts(
             {
                 "direction": _field(row, "out_direction"),
                 "amount": _field(row, "out_tx_amount"),
                 "fee": _field(row, "out_fee"),
                 "amount_includes_fee": _field(row, "out_amount_includes_fee"),
             }
-        ).principal_msat
+        )
+        source_principal = source_boundary.principal_msat
         target_principal = row_boundary_amounts(
             {
                 "direction": _field(row, "in_direction"),
@@ -615,7 +670,7 @@ def _pair_group_spec(
             }
         ).principal_msat
         available_source = source_principal - source_used.get(source_id, 0)
-        source_totals[source_id] = source_principal
+        source_totals[source_id] = source_boundary.wallet_movement_msat
         available_target = target_principal - target_used.get(target_id, 0)
         explicit = _field(row, "out_amount")
         requested = available_source if explicit in (None, "") else int(explicit)
@@ -719,10 +774,10 @@ def _pair_group_spec(
     partial_sources = {
         source_id: {
             "reviewed_msat": source_used.get(source_id, 0),
-            "principal_msat": principal_msat,
+            "debit_msat": debit_msat,
         }
-        for source_id, principal_msat in source_totals.items()
-        if source_used.get(source_id, 0) != principal_msat
+        for source_id, debit_msat in source_totals.items()
+        if source_used.get(source_id, 0) != debit_msat
     }
     spec = {
         "component_id": component_id,
@@ -1685,23 +1740,19 @@ def _append_source_residual(
             "amount_includes_fee": _field(row, "out_amount_includes_fee"),
         }
     )
-    residual = boundary.principal_msat - reviewed_source_msat
+    residual = boundary.wallet_movement_msat - reviewed_source_msat
     if residual <= 0:
         return
-    # An imported miner fee is authoritative physical evidence, not custody
-    # suspense.  Historical pair matching commonly represented a destination
-    # shortfall equal to that fee, so preserve it as an explicit fee sink.  A
-    # larger or fee-less shortfall remains unresolved custody until reviewed.
-    residual_parts = [(classification, residual)]
-    if (
-        classification == "suspense_continuation"
-        and 0 < boundary.fee_msat <= residual
-    ):
-        residual_parts = [("network_fee", boundary.fee_msat)]
-        if residual > boundary.fee_msat:
-            residual_parts.append(
-                ("suspense_continuation", residual - boundary.fee_msat)
-            )
+    # The observed debit includes the miner fee in addition to principal.
+    # Allocate that known fee once; classify only the remaining principal
+    # shortfall through the review (including a refund's additional fee).
+    residual_parts = []
+    principal_residual = residual
+    if 0 < boundary.fee_msat <= residual:
+        residual_parts.append(("network_fee", boundary.fee_msat, True))
+        principal_residual -= boundary.fee_msat
+    if principal_residual:
+        residual_parts.append((classification, principal_residual, False))
     component_id = str(spec["component_id"])
     source = next(
         (
@@ -1719,13 +1770,14 @@ def _append_source_residual(
         )
     source_id = str(source["id"])
     source["amount_msat"] = int(source["amount_msat"]) + residual
-    for residual_classification, residual_amount in residual_parts:
+    for residual_classification, residual_amount, observed_fee in residual_parts:
+        residual_key = "observed_network_fee" if observed_fee else residual_classification
         sink_id = _stable_id(
             component_id,
             "leg",
             "residual-sink",
             source_id,
-            residual_classification,
+            residual_key,
         )
         sink = {
             **source,
@@ -1743,7 +1795,10 @@ def _append_source_residual(
                 if residual_classification == "network_fee"
                 else f"reviewed-custody-suspense:{row['id']}"
             ),
-            "notes": f"reviewed_residual:{residual_classification}",
+            "notes": (
+                "observed_network_fee" if observed_fee
+                else f"reviewed_residual:{residual_classification}"
+            ),
         }
         sink["wallet_id"] = None
         spec["legs"].append(sink)
@@ -1754,7 +1809,7 @@ def _append_source_residual(
                     "allocation",
                     "residual",
                     source_id,
-                    residual_classification,
+                    residual_key,
                 ),
                 source_leg_id=source_id,
                 sink_leg_id=sink_id,

@@ -10,8 +10,10 @@ from dataclasses import dataclass
 from typing import Any, Callable, Mapping, Sequence
 
 from ..errors import AppError
+from ..time_utils import timestamp_predicate
 from ..importers import GENERIC_LEDGER_KIND_DIRECTIONS, load_bip329_file
 from ..msat import dec, msat_to_btc
+from .custody_pricing import finite_decimal, validate_transaction_price
 from . import pricing
 from . import ownership
 from . import transaction_history
@@ -286,10 +288,7 @@ def _clean_fiat_currency(value, fallback):
 def _clean_decimal_or_none(value, field):
     if value in (None, ""):
         return None
-    try:
-        return dec(value)
-    except Exception as exc:
-        raise AppError(f"{field} must be a decimal number", code="validation", retryable=False) from exc
+    return finite_decimal(value, field)
 
 
 def _clean_optional_choice(value, field, choices):
@@ -379,6 +378,7 @@ def _transaction_pricing_payload(
         **pricing.pricing_payload(
             rate=rate,
             value=value,
+            amount_msat=tx["amount"],
             source_kind=clean_source_kind,
             quality=clean_quality,
             provider=provider,
@@ -443,6 +443,10 @@ def _apply_audited_transaction_update(
         changed_fields = []
     if not changed_fields:
         return None, False
+
+    if {"fiat_rate", "fiat_rate_exact", "fiat_value", "fiat_value_exact"}.intersection(tx_updates):
+        # History reverts bypass the ordinary pricing payload normalizer.
+        validate_transaction_price({**dict(tx), **tx_updates})
 
     savepoint = f"metadata_update_{uuid.uuid4().hex}" if not commit else None
     if savepoint:
@@ -894,10 +898,10 @@ def list_transaction_records(
     elif excluded is False:
         where.append("t.excluded = 0")
     if start_ts:
-        where.append("t.occurred_at >= ?")
+        where.append(timestamp_predicate(conn, "t.occurred_at", ">="))
         params.append(start_ts)
     if end_ts:
-        where.append("t.occurred_at <= ?")
+        where.append(timestamp_predicate(conn, "t.occurred_at", "<="))
         params.append(end_ts)
 
     cursor_filters = {
@@ -1088,12 +1092,12 @@ def _tx_updates_for_revert_field(field, before_value):
         return {"at_category_override": before_value}, {"at_category": before_value}
     if field == "fiat_rate":
         return {
-            "fiat_rate": None if before_value is None else float(dec(before_value)),
+            "fiat_rate": None if before_value is None else float(finite_decimal(before_value, field)),
             "fiat_rate_exact": before_value,
         }, {"fiat_rate": before_value}
     if field == "fiat_value":
         return {
-            "fiat_value": None if before_value is None else float(dec(before_value)),
+            "fiat_value": None if before_value is None else float(finite_decimal(before_value, field)),
             "fiat_value_exact": before_value,
         }, {"fiat_value": before_value}
     column_fields = {

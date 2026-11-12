@@ -10,6 +10,7 @@
 
 import { Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -25,6 +26,7 @@ import {
 } from "lucide-react";
 
 import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
+import { ExitTaxFmvCard } from "@/components/reports/ExitTaxFmvCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -78,30 +80,34 @@ const DESTINATION_OPTIONS: Array<{ value: ExitTaxDestination; label: string }> =
   { value: "third_country", label: "Third country (non-EU/EEA)" },
 ];
 
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
 function basename(path: string): string {
   const parts = path.split(/[\\/]/);
   return parts[parts.length - 1] || path;
 }
 
 export function ExitTax() {
+  const { t } = useTranslation("overview");
   const hideSensitive = useUiStore((state) => state.hideSensitive);
-  const [departureDate, setDepartureDate] = useState<string>(todayIso());
+  const [departureDate, setDepartureDate] = useState<string>("");
   const [destination, setDestination] = useState<ExitTaxDestination>("eu_eea");
   const [activeExport, setActiveExport] = useState<ExportFormat | null>(null);
   const [exportStatus, setExportStatus] = useState<ExitTaxExportStatus | null>(null);
 
+  // Keep the core's current civil day available after selecting another day.
+  // The query cache shares this with preview while the default is selected.
+  const todayPreview = useDaemon<ExitTaxReport>("ui.reports.exit_tax_preview", {
+    departure_date: undefined,
+    destination,
+  });
   const preview = useDaemon<ExitTaxReport>("ui.reports.exit_tax_preview", {
-    departure_date: departureDate,
+    departure_date: departureDate || undefined,
     destination,
   });
   const exportPdf = useDaemonMutation("ui.reports.export_exit_tax_pdf");
   const exportXlsx = useDaemonMutation("ui.reports.export_exit_tax_xlsx");
 
   const report = preview.data?.data;
+  const resolvedDepartureDate = departureDate || report?.departureDate || "";
   const ccy = report?.fiatCurrency ?? "EUR";
 
   const fmtMoney = useMemo(() => {
@@ -123,7 +129,7 @@ export function ExitTax() {
     setActiveExport(format);
     const mutation = format === "pdf" ? exportPdf : exportXlsx;
     mutation.mutate(
-      { departure_date: departureDate, destination },
+      { departure_date: resolvedDepartureDate, destination },
       {
         onSuccess: async (envelope) => {
           const payload = (envelope.data ?? {}) as {
@@ -175,11 +181,17 @@ export function ExitTax() {
           <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
             Departure date
             <DatePicker
-              value={departureDate}
-              onChange={(next) => setDepartureDate(next || todayIso())}
+              value={resolvedDepartureDate}
+              today={todayPreview.data?.data?.departureDate}
+              onChange={setDepartureDate}
               className={cn(pageHeaderActionClassName, "w-[180px]")}
             />
           </label>
+          {report ? (
+            <p className="text-xs text-muted-foreground">
+              {t("exitTaxDepartureTimezone", { timezone: report.departureTimezone })}
+            </p>
+          ) : null}
           <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
             Destination
             <Select
@@ -249,29 +261,39 @@ function ExitTaxBody({
   exportStatus,
   onExport,
 }: BodyProps) {
+  const { t } = useTranslation("overview");
+  const missingFmv = report.status.missingFmvAssets ?? [];
   const totals = report.totals;
   const deferred = totals.collectionTiming === "deferred";
-  const incomplete = report.status.needsJournals || report.status.quarantines > 0;
+  const incomplete = report.status.needsJournals || report.status.quarantines > 0 || missingFmv.length > 0;
   // Alt/Neu is Austrian terminology; a generic profile gets neutral labels.
   const isAt = report.jurisdictionCode === "AT";
 
   return (
     <div className="grid gap-4">
       {incomplete ? (
-        <div className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm">
+        <div role="status" className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm">
           <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
           <div>
-            <p className="font-medium">This estimate is incomplete.</p>
-            <p className="text-muted-foreground">
-              {report.status.needsJournals
-                ? "Journals are not processed yet."
-                : `${report.status.quarantines} quarantined transaction(s) are excluded.`}{" "}
-              Resolve them in the{" "}
-              <Link to="/review" className="underline underline-offset-2">
-                quarantine queue
-              </Link>{" "}
-              before relying on the number.
-            </p>
+            <p className="font-medium">{t("exitTaxReadiness.title")}</p>
+            {report.status.needsJournals ? (
+              <p className="text-muted-foreground">{t("exitTaxReadiness.journals")}</p>
+            ) : null}
+            {report.status.quarantines > 0 ? (
+              <p className="text-muted-foreground">
+                <Trans
+                  t={t}
+                  i18nKey="exitTaxReadiness.quarantines"
+                  count={report.status.quarantines}
+                  components={{ queue: <Link to="/review" className="underline underline-offset-2" /> }}
+                />
+              </p>
+            ) : null}
+            {missingFmv.length > 0 ? (
+              <p className="text-muted-foreground">
+                {t("exitTaxFmv.incomplete", { assets: missingFmv.join(", ") })}
+              </p>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -435,6 +457,11 @@ function ExitTaxBody({
             <p className="mt-1 text-xs text-muted-foreground">
               Export the estimate for your tax adviser to review and stamp.
             </p>
+            {incomplete ? (
+              <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">
+                {t("exitTaxReadiness.exportDraft")}
+              </p>
+            ) : null}
             <div className="mt-3 flex flex-col gap-2">
               <Button
                 variant="default"
@@ -496,22 +523,7 @@ function ExitTaxBody({
           </section>
 
           {/* FMV source */}
-          <section className="kb-surface p-(--kb-card-padding)">
-            <h2 className="text-sm font-medium">Fair market value</h2>
-            <ul className="mt-2 grid gap-1 text-xs text-muted-foreground">
-              {report.fmvSource.map((source) => (
-                <li key={source.asset} className="flex items-center justify-between gap-2">
-                  <span>{source.pair}</span>
-                  <span className="tabular-nums">
-                    {source.rate != null ? fmtMoney(source.rate) : "—"}
-                    <Badge variant="outline" className="ml-2">
-                      {source.source}
-                    </Badge>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </section>
+          <ExitTaxFmvCard quotes={report.fmvSource} fmtMoney={fmtMoney} />
 
           {/* Assumptions & review gate */}
           <section className="kb-surface p-(--kb-card-padding)">

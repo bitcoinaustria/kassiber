@@ -1143,7 +1143,9 @@ class CustodyGapSnapshotTests(unittest.TestCase):
                 last_processed_at TEXT,
                 last_processed_tx_count INTEGER NOT NULL DEFAULT 0,
                 journal_input_version INTEGER NOT NULL DEFAULT 0,
-                last_processed_input_version INTEGER NOT NULL DEFAULT 0
+                last_processed_input_version INTEGER NOT NULL DEFAULT 0,
+                required_journal_semantics_version INTEGER NOT NULL DEFAULT 0,
+                journal_semantics_version INTEGER NOT NULL DEFAULT 0
             );
             CREATE TABLE custody_gap_reviews (
                 id TEXT PRIMARY KEY,

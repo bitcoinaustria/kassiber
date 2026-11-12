@@ -5,6 +5,7 @@ operations and ledger builder on an isolated memory snapshot. Application
 revalidates that result under SQLite's writer lock and stores one durable
 receipt alongside existing domain history. A digest binds content, not authority.
 """
+
 from __future__ import annotations
 
 import base64
@@ -21,11 +22,12 @@ from ..errors import AppError
 from ..msat import dec, msat_to_btc
 from ..secrets import sqlcipher
 from ..time_utils import now_iso
+from .custody_pricing import finite_decimal
 from .custody_quantity import CUSTODY_SUSPENSE
 from . import (
     custody_component_planner, custody_components, custody_gap_reviews, custody_gaps,
-    custody_journal, custody_review_terms, metadata, pricing, quarantine_resolution,
-    quarantine_review, tax_events,
+    custody_journal, custody_review_terms, import_identity, metadata, pricing,
+    quarantine_resolution, quarantine_review, tax_events,
 )
 
 MAX_OPERATIONS = 50
@@ -168,6 +170,21 @@ def _inspect_cases(conn, profile, *, limit, cursor):
                 and transaction_id in pairs):
             case["pair"] = quarantine_review.pair_evidence(conn, transaction_id, pairs[transaction_id])
             case["supported_operations"] = ["unpair", *case["supported_operations"]]
+        if reasons[transaction_id] == import_identity.DUPLICATE_REVIEW:
+            detail = details[transaction_id]
+            case["import_duplicate"] = {key: detail.get(key) for key in (
+                "group_fingerprint", "transaction_ids", "active_count", "largest_single_batch_count",
+                "hold_reasons", "refilled_excluded_transaction_ids")}
+            case["supported_operations"] = ["exclude", import_identity.CONFIRM_DISTINCT]
+        if transaction_id in pairs:
+            guidance = custody_review_terms.pair_review_guidance(conn, pairs[transaction_id])
+            if guidance.get("repair"):
+                case["missing_evidence"] = [{"code": code, "status": "unresolved"}
+                                            for code in guidance["review_codes"]]
+                case["repair"] = guidance["repair"]
+                case["pair"] = quarantine_review.pair_evidence(conn, transaction_id, pairs[transaction_id])
+                if guidance["repair"]["preview_operation"]:
+                    case["supported_operations"].append("repair_legacy_pair")
         cases.append(case)
     next_cursor = None
     if len(ids) > limit:
@@ -391,10 +408,11 @@ def _operations(operations):
             if set(operation["request"]) - allowed:
                 raise _error("Custody review request contains unsupported fields")
             continue
-        if kind == "unpair":
-            if set(operation) != {"type", "pair_id", "expected_fingerprint", "reason"}:
-                raise _error("Unpair review requires exactly pair_id, expected_fingerprint and reason")
-            for key in ("pair_id", "expected_fingerprint", "reason"):
+        if kind in {"unpair", "repair_legacy_pair", import_identity.CONFIRM_DISTINCT}:
+            target = "transaction_id" if kind == import_identity.CONFIRM_DISTINCT else "pair_id"
+            if set(operation) != {"type", target, "expected_fingerprint", "reason"}:
+                raise _error(f"This review requires exactly {target}, expected_fingerprint and reason")
+            for key in (target, "expected_fingerprint", "reason"):
                 if not isinstance(operation[key], str) or not operation[key].strip():
                     raise _error(f"Review operation requires {key}")
                 operation[key] = operation[key].strip()
@@ -417,7 +435,7 @@ def _operations(operations):
             if not isinstance(operation[key], str) or len(operation[key]) > 512:
                 raise _error("Review prices must be exact decimal strings of at most 512 characters")
             try:
-                value = Decimal(operation[key])
+                value = finite_decimal(operation[key], key)
                 if (not value.is_finite() or abs(value.as_tuple().exponent) > 512
                         or value < 0 or (key == "fiat_rate" and value == 0)):
                     raise ValueError()
@@ -562,12 +580,16 @@ def _effects(state, conn, profile, operations=()) -> dict[str, Any]:
     ], key=_json)
     quantity = state.get("custody_quantity")
     blocked = bool(state.get("custody_component_blockers") or (quantity and quantity.report_blocked))
-    acquisition = {}
+    extra = {}
     if any(op["type"] == "kind_override" for op in operations):
         from .acquisition_review import acquisition_effects
-        acquisition = acquisition_effects(state, conn, profile)
+        extra = acquisition_effects(state, conn, profile)
+    pair_ids = sorted({op["pair_id"] for op in operations if op["type"] == "repair_legacy_pair"})
+    if pair_ids:
+        # A legacy repair revises authored amounts: show them, not just a digest.
+        extra["legacy_pairs"] = [_pair_terms(conn, profile, pair_id) for pair_id in pair_ids]
     return {
-        **acquisition,
+        **extra,
         "entries_count": len(entries), "quarantine_count": len(quarantines),
         "quarantines": [{"transaction_id": tx, "reason": reason} for tx, reason in quarantines[:100]],
         "wallet_holdings": holdings[:100], "report_ready": not quarantines and not blocked,
@@ -677,6 +699,22 @@ def _tax_delta(before, after) -> dict[str, Any]:
         if changed:
             years.append(item)
     return {"years": years}
+def _pair_terms(conn, profile, pair_id) -> dict[str, Any]:
+    """The pair's current reviewed legs and allocations, in msat."""
+    pair = quarantine_review.pairs_by_id(conn, str(profile["id"])).get(pair_id)
+    if pair is None:
+        return {"pair_id": pair_id, "legs": [], "allocations": []}
+    component = custody_components.get_component(conn, pair["component_id"], include_local_evidence=False)
+    roles = {leg["id"]: leg["role"] for leg in component["legs"]}
+    return {
+        "pair_id": pair_id,
+        "legs": [{"role": leg["role"], "transaction_id": leg["transaction_id"], "asset": leg["asset"],
+                  "amount_msat": int(leg["amount_msat"])} for leg in component["legs"]],
+        "allocations": [{"source": roles.get(row["source_leg_id"]), "sink": roles.get(row["sink_leg_id"]),
+                         "source_amount_msat": int(row["source_amount_msat"]),
+                         "sink_amount_msat": int(row["sink_amount_msat"])}
+                        for row in component["allocations"]],
+    }
 
 
 def _cases(state) -> dict[str, dict[str, Any]]:
@@ -747,6 +785,26 @@ def _apply_operations(conn, profile, operations, hooks, authored_source, state, 
                 conn, workspace_id=profile["workspace_id"], profile_id=profile["id"],
                 expected_input_version=_version(conn, profile), authored_source=authored_source,
                 commit=False, **operation["request"],
+            )
+        elif kind == "repair_legacy_pair":
+            pair = quarantine_review.pairs_by_id(conn, str(profile["id"])).get(operation["pair_id"])
+            if pair is None:
+                raise _error("Review pair was not found", "review_case_changed")
+            guidance = custody_review_terms.pair_review_guidance(conn, pair)
+            if (quarantine_review.pair_fingerprint(conn, pair) != operation["expected_fingerprint"]
+                    or guidance.get("repair", {}).get("preview_operation") != kind):
+                raise _error("Legacy pair changed; inspect it again", "review_case_changed")
+            notes = ((pair.get("notes") or "") + "\nLegacy fee review: " + operation["reason"]).strip()
+            result = custody_review_terms.update_pair_review(
+                conn, profile=profile, pair_id=operation["pair_id"], notes=notes,
+                commit=False, authored_source=authored_source,
+            )
+        elif kind == import_identity.CONFIRM_DISTINCT:
+            # Judged on the held group itself: another reason may head a member's case.
+            result = import_identity.confirm_distinct(
+                conn, profile, transaction_id=operation["transaction_id"],
+                expected_fingerprint=operation["expected_fingerprint"], reason=operation["reason"],
+                authored_source=authored_source,
             )
         elif kind == "unpair":
             if quarantine_review.pairs_by_id(conn, str(profile["id"])).get(operation["pair_id"]) is None:

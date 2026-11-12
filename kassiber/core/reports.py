@@ -1391,6 +1391,7 @@ def _historical_portfolio_summary(conn, profile, hooks: ReportHooks, as_of_dt, *
         WHERE profile_id = ? AND excluded = 0
           AND occurred_at <= ?
           AND (fiat_rate IS NOT NULL OR fiat_value IS NOT NULL)
+          AND """ + pricing.price_in_book_currency_sql() + """
         ORDER BY occurred_at ASC, created_at ASC, id ASC
         """,
         (profile["id"], hooks.iso_z(as_of_dt)),
@@ -1751,6 +1752,7 @@ def report_balance_history(
         FROM transactions
         WHERE profile_id = ? AND excluded = 0
           AND (fiat_rate IS NOT NULL OR fiat_value IS NOT NULL)
+          AND """ + pricing.price_in_book_currency_sql() + """
         ORDER BY occurred_at ASC, created_at ASC, id ASC
         """,
         (profile["id"],),
@@ -3155,9 +3157,13 @@ def _summary_pdf_data_integrity(conn, profile, wallets, hooks: ReportHooks, star
 
 def _summary_pdf_flow_periods(conn, profile_id, wallets, hooks: ReportHooks, start_dt, end_dt):
     wallet_filter, wallet_params = _wallet_scope_sql("t.wallet_id", wallets)
+    # A price in another currency than the book's reads as no price.
+    _book_price = pricing.price_in_book_currency_sql("t")
     rows = conn.execute(
         f"""
-        SELECT t.occurred_at, t.direction, t.amount, t.fee, t.fiat_rate, t.fiat_value
+        SELECT t.occurred_at, t.direction, t.amount, t.fee,
+               CASE WHEN {_book_price} THEN t.fiat_rate END AS fiat_rate,
+               CASE WHEN {_book_price} THEN t.fiat_value END AS fiat_value
         FROM transactions t
         WHERE t.profile_id = ?
           AND {wallet_filter}
@@ -3293,9 +3299,13 @@ def _summary_pdf_benchmark(conn, hooks: ReportHooks, start_dt, end_dt, fiat_curr
 
 def _summary_pdf_top_movements(conn, profile_id, wallets, hooks: ReportHooks, start_dt, end_dt, *, limit=5):
     wallet_filter, wallet_params = _wallet_scope_sql("t.wallet_id", wallets)
+    # A price in another currency than the book's reads as no price.
+    _book_price = pricing.price_in_book_currency_sql("t")
     rows = conn.execute(
         f"""
-        SELECT t.occurred_at, t.direction, t.asset, t.amount, t.fiat_value, t.fiat_rate,
+        SELECT t.occurred_at, t.direction, t.asset, t.amount,
+               CASE WHEN {_book_price} THEN t.fiat_value END AS fiat_value,
+               CASE WHEN {_book_price} THEN t.fiat_rate END AS fiat_rate,
                t.counterparty, t.description, w.label AS wallet
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id
@@ -5925,6 +5935,13 @@ def _optional_decimal_pref(row, exact_key, legacy_key):
     value = _optional_decimal(row.get(exact_key))
     if value is None:
         value = _optional_decimal(row.get(legacy_key))
+    # Raw transaction exports remain available for recovery of legacy bad prices.
+    if value is not None:
+        from .custody_pricing import finite_decimal
+        try:
+            return finite_decimal(value, exact_key)
+        except AppError:
+            return None
     return value
 
 
@@ -6297,7 +6314,10 @@ def _generic_report_xlsx_write_sheet(workbook, spec, formats):
     last_column = max(len(headers) - 1, 0)
     widths = [_generic_report_column_width(header, rows) for header in headers]
     worksheet.set_row(0, 28)
-    worksheet.merge_range(0, 0, 0, last_column, spec["title"], formats["title"])
+    if last_column:
+        worksheet.merge_range(0, 0, 0, last_column, spec["title"], formats["title"])
+    else:
+        worksheet.write_string(0, 0, spec["title"], formats["title"])
     header_lines = max(
         (_estimate_wrapped_lines(_report_column_label(header), widths[index]) for index, header in enumerate(headers)),
         default=1,
@@ -7452,9 +7472,11 @@ def _exit_tax_xlsx_specs(report):
         {"field": "Profile", "value": report["profile"]},
         {"field": "Jurisdiction", "value": report["jurisdictionCode"]},
         {"field": "Departure date", "value": report["departureDate"]},
+        {"field": "Departure timezone", "value": report["departureTimezone"]},
         {"field": "Destination", "value": report["destination"]},
         {"field": "Collection timing", "value": totals["collectionTiming"]},
         {"field": "Accounting method", "value": report["method"]},
+        {"field": "Journal input version", "value": report["journalInputVersion"]},
         {"field": f"Neubestand gain ({ccy})", "value": totals["neuGain"]},
         {"field": f"Taxable gain ({ccy})", "value": totals["taxableGain"]},
         {"field": "Rate", "value": totals["estimatedTaxRate"]},
@@ -7483,7 +7505,15 @@ def _exit_tax_xlsx_specs(report):
         }
         for holding in report["walletHoldings"]
     ]
-    notes = [{"note": note} for note in report["assumptions"]]
+    notes = []
+    if report["status"]["quarantines"]:
+        notes.append({
+            "note": f"{report['status']['quarantines']} quarantined transaction(s) — "
+                    "estimate is incomplete until resolved."
+        })
+    if report["status"].get("missingFmvAssets"):
+        notes.append({"note": "Incomplete estimate: missing FMV for " + ", ".join(report["status"]["missingFmvAssets"])})
+    notes.extend({"note": note} for note in report["assumptions"])
     notes.append({"note": report["reviewGate"]})
     return [
         {
@@ -7491,6 +7521,14 @@ def _exit_tax_xlsx_specs(report):
             "title": f"Exit-tax estimate — {report['profile']}",
             "headers": ["field", "value"],
             "rows": overview,
+        },
+        {
+            "sheet_name": "FMV quotes",
+            "title": "Fair market value quotes",
+            "headers": ["asset", "pair", "rate", "source", "as_of"],
+            "rows": [{"asset": quote["asset"], "pair": quote["pair"],
+                      "rate": quote["rate"], "source": quote["source"],
+                      "as_of": quote["asOf"]} for quote in report["fmvSource"]],
         },
         {
             "sheet_name": "Deemed disposal",

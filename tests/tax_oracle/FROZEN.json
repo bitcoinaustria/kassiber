@@ -3,7 +3,7 @@
   "files": {
     "adapter.py": {
       "source": "kassiber/core/engines/rp2.py",
-      "sha256": "737997108336965670dfff4ef74ff25d89009cc895fb3b9d72e5b9568d81fdaa"
+      "sha256": "4ebe52040e46441755035b8bdc1d9a0d97a2b3e88afdfbceffec1876ffe3bd77"
     },
     "austrian.py": {
       "source": "kassiber/core/austrian.py",
@@ -11,7 +11,7 @@
     },
     "normalize.py": {
       "source": "kassiber/core/tax_events.py",
-      "sha256": "a53215f65eb13e66dd707f2957ca1f409db922c9d62d2a878f7cd16160832dd6"
+      "sha256": "ac35f5ae81404d909d7888cbb9811b4d7058e11a91bffce4ca78a32980410643"
     },
     "pair_allocation.py": {
       "source": "kassiber/core/pair_allocation.py",

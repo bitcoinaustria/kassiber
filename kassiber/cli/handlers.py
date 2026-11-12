@@ -40,6 +40,7 @@ from ..core import commercial as core_commercial
 from ..core import custody_authored_migration as core_custody_authored_migration
 from ..core import custody_journal as core_custody_journal
 from ..core import journal_calculation as core_journal_calculation
+from ..core.custody_pricing import finite_decimal
 from ..core import quarantine_resolution as core_quarantine_resolution
 from ..core import quarantine_review as core_quarantine_review
 from ..core import transaction_verify as core_transaction_verify
@@ -123,6 +124,7 @@ from ..time_utils import (
     _iso_z,
     _parse_iso_datetime,
     now_iso,
+    timestamp_predicate,
     timestamp_to_iso,
 )
 from ..util import (
@@ -251,24 +253,8 @@ def _row_int(row, key, default=0):
 
 
 def _journals_current_for_profile(conn, profile):
-    current_count = conn.execute(
-        """
-        SELECT COUNT(*) AS count
-        FROM transactions
-        WHERE profile_id = ? AND excluded = 0
-        """,
-        (profile["id"],),
-    ).fetchone()["count"]
-    input_version = _row_int(profile, "journal_input_version")
-    processed_version = _row_int(profile, "last_processed_input_version")
-    return (
-        int(current_count or 0),
-        bool(
-            profile["last_processed_at"]
-            and int(current_count or 0) == _row_int(profile, "last_processed_tx_count")
-            and input_version == processed_version
-        ),
-    )
+    freshness = core_custody_journal.projection_freshness(conn, profile)
+    return freshness["active_transaction_count"], freshness["is_current"]
 
 
 BITCOIN_LAYER_TRANSITION_PAIR_KINDS = (
@@ -3884,13 +3870,11 @@ def _normalize_transaction_payment_method(value):
 
 
 def _transaction_custody_projection_exists_sql(relation_type=None):
-    freshness = """
+    freshness = f"""
         EXISTS (
           SELECT 1 FROM profiles custody_profile
           WHERE custody_profile.id = t.profile_id
-            AND custody_profile.last_processed_at IS NOT NULL
-            AND custody_profile.journal_input_version =
-                custody_profile.last_processed_input_version
+            AND {core_custody_journal.projection_freshness_sql('custody_profile')}
         )
     """
     move = """
@@ -4112,10 +4096,10 @@ def list_transactions(
         filters.append("upper(t.asset) = ?")
         params.append(asset.upper())
     if start_ts:
-        filters.append("t.occurred_at >= ?")
+        filters.append(timestamp_predicate(conn, "t.occurred_at", ">="))
         params.append(start_ts)
     if end_ts:
-        filters.append("t.occurred_at <= ?")
+        filters.append(timestamp_predicate(conn, "t.occurred_at", "<="))
         params.append(end_ts)
     if txid_terms:
         placeholders = ", ".join("?" for _ in txid_terms)
@@ -4412,33 +4396,43 @@ def auto_price_transactions_from_rates_cache(conn, profile):
         cached_rate = core_rates.get_cached_rate_at_or_before(conn, pair, pricing_at)
         if cached_rate is None:
             continue
-        rate = pricing.decimal_from_exact(
-            row["fiat_rate_exact"],
-            cached_rate.get("rate_exact"),
-            row["fiat_rate"],
-            cached_rate["rate"],
-        )
-        fiat_value = pricing.decimal_from_exact(row["fiat_value_exact"])
-        if fiat_value is None and rate is not None and row["amount"] > 0:
-            fiat_value = rate * msat_to_btc(row["amount"])
-        if fiat_value is None:
-            fiat_value = pricing.decimal_from_exact(row["fiat_value"])
-        if rate is None and fiat_value is not None and row["amount"] > 0:
-            rate = fiat_value / msat_to_btc(row["amount"])
-        source_kind = pricing.rate_cache_source_kind(cached_rate)
-        quality = pricing.rate_cache_quality(cached_rate)
-        payload = pricing.pricing_payload(
-            rate=rate,
-            value=fiat_value,
-            source_kind=source_kind,
-            quality=quality,
-            provider=cached_rate["source"],
-            pair=cached_rate["pair"],
-            pricing_timestamp=cached_rate["timestamp"],
-            fetched_at=cached_rate["fetched_at"],
-            granularity=cached_rate.get("granularity"),
-            method=cached_rate.get("method"),
-        )
+        try:
+            rate = pricing.decimal_from_exact(
+                row["fiat_rate_exact"],
+                cached_rate.get("rate_exact"),
+                row["fiat_rate"],
+                cached_rate["rate"],
+            )
+            rate = finite_decimal(rate, "fiat_rate") if rate is not None else None
+            fiat_value = pricing.decimal_from_exact(row["fiat_value_exact"])
+            if fiat_value is None and rate is not None and row["amount"] > 0:
+                fiat_value = rate * msat_to_btc(row["amount"])
+            if fiat_value is None:
+                fiat_value = pricing.decimal_from_exact(row["fiat_value"])
+            if rate is None and fiat_value is not None and row["amount"] > 0:
+                rate = fiat_value / msat_to_btc(row["amount"])
+            source_kind = pricing.rate_cache_source_kind(cached_rate)
+            quality = pricing.rate_cache_quality(cached_rate)
+            payload = pricing.pricing_payload(
+                amount_msat=row["amount"],
+                rate=rate,
+                value=fiat_value,
+                source_kind=source_kind,
+                quality=quality,
+                provider=cached_rate["source"],
+                pair=cached_rate["pair"],
+                pricing_timestamp=cached_rate["timestamp"],
+                fetched_at=cached_rate["fetched_at"],
+                granularity=cached_rate.get("granularity"),
+                method=cached_rate.get("method"),
+            )
+        except AppError as exc:
+            if exc.code != "validation":
+                raise
+            # Retain no invalid derived price. A local quarantine explains the
+            # unusable cached valuation and a later valid cache can retry it.
+            conn.execute("UPDATE transactions SET pricing_method='unsupported_price_range', pricing_quality='missing' WHERE id=?", (row["id"],))
+            continue
         conn.execute(
             """
             UPDATE transactions
@@ -4781,10 +4775,10 @@ def list_journal_events(
         where.append("lower(je.entry_type) = ?")
         params.append(entry_type.lower())
     if start_ts:
-        where.append("je.occurred_at >= ?")
+        where.append(timestamp_predicate(conn, "je.occurred_at", ">="))
         params.append(start_ts)
     if end_ts:
-        where.append("je.occurred_at <= ?")
+        where.append(timestamp_predicate(conn, "je.occurred_at", "<="))
         params.append(end_ts)
 
     cursor_filters = _journal_cursor_filters(

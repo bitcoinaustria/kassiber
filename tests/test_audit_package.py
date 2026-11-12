@@ -9,6 +9,7 @@ from kassiber.core import custody_filed_reports
 from kassiber.core import source_funds
 from kassiber.db import open_db, resolve_attachments_root
 from kassiber.errors import AppError
+from tests.custody_projection_fixtures import stamp_journal_semantics
 
 
 NOW = "2026-05-01T12:00:00Z"
@@ -173,6 +174,7 @@ class AuditPackageCoreTest(unittest.TestCase):
             """,
             (NOW, self.profile_id),
         )
+        stamp_journal_semantics(self.conn, self.profile_id)
         self.conn.commit()
 
     def _add_file_attachment(self, name="receipt.pdf", content=b"receipt\n", tx_id=None):
@@ -1414,10 +1416,15 @@ class AuditPackageCoreTest(unittest.TestCase):
                 "filed_report_impact_count": 1,
             },
         )
-        self.assertEqual(summary["summary"]["schema_migration_audit_count"], 7)
+        self.assertEqual(summary["summary"]["schema_migration_audit_count"], 13)
         migration_names = [audit["migration_name"] for audit in summary["schema_migration_audits"]]
+        self.assertIn("at-outflow-consumed-regime-v2", migration_names)
+        self.assertIn("custody-legacy-pair-fee-review-v1", migration_names)
         self.assertIn("stored-error-credentials-v1", migration_names)
+        self.assertIn("same-time-source-order-v1", migration_names)
         self.assertIn("custody-fail-closed-holds-v1", migration_names)
+        self.assertIn("custody-partial-payout-pricing-v1", migration_names)
+        self.assertIn("journal-calculation-semantics-adoption-v1", migration_names)
         valuation_migration_audit = next(
             audit
             for audit in summary["schema_migration_audits"]

@@ -382,5 +382,24 @@
       "stale": "Der Journalstand ist veraltet. Verarbeite die Journale neu, um aktuelle Anschaffungskosten zu sehen.",
       "unavailable": "Es gibt keinen Marktkurs, daher zeigt Kassiber keinen aktuellen Wert an."
     }
+  },
+  "exitTaxFmv": {
+    "title": "Marktwert",
+    "asOf": "Stand:",
+    "unavailable": "Nicht verfügbar",
+    "source": {
+      "cache": "Cache",
+      "transaction": "Transaktion",
+      "missing": "Fehlend"
+    },
+    "incomplete": "Schätzung unvollständig: kein verwendbarer Marktwertkurs für {{assets}}."
+  },
+  "exitTaxDepartureTimezone": "Zeitzone des Wegzugs: {{timezone}}",
+  "exitTaxReadiness": {
+    "title": "Diese Schätzung ist unvollständig.",
+    "journals": "Die Journale wurden noch nicht verarbeitet.",
+    "quarantines_one": "{{count}} Transaktion in Quarantäne ist ausgeschlossen. Kläre sie in der <queue>Quarantäneliste</queue>, bevor du dich auf den Betrag verlässt.",
+    "quarantines_other": "{{count}} Transaktionen in Quarantäne sind ausgeschlossen. Kläre sie in der <queue>Quarantäneliste</queue>, bevor du dich auf den Betrag verlässt.",
+    "exportDraft": "Unvollständiger Entwurf — Exporte bleiben zur Prüfung verfügbar."
   }
 }

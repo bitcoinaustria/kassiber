@@ -383,6 +383,10 @@ def _profile_semantics_signature(
                 AS processed_version,
             (SELECT last_processed_tx_count FROM profiles WHERE id = :pid)
                 AS processed_tx_count,
+            (SELECT required_journal_semantics_version FROM profiles WHERE id = :pid)
+                AS required_semantics,
+            (SELECT journal_semantics_version FROM profiles WHERE id = :pid)
+                AS built_semantics,
             (SELECT COUNT(*) FROM transactions WHERE profile_id = :pid)
                 AS transaction_count,
             (SELECT COUNT(*) FROM wallets WHERE profile_id = :pid) AS wallets,
@@ -399,6 +403,8 @@ def _profile_semantics_signature(
         int(_row_get(row, "version") or 0),
         int(_row_get(row, "processed_version") or 0),
         int(_row_get(row, "processed_tx_count") or 0),
+        int(_row_get(row, "required_semantics") or 0),
+        int(_row_get(row, "built_semantics") or 0),
         int(_row_get(row, "transaction_count") or 0),
         int(_row_get(row, "wallets") or 0),
         int(_row_get(row, "utxos") or 0),
@@ -2597,7 +2603,11 @@ def _annotate_graph(
 
     row_id = str(_row_get(row, "id"))
     row_annotations = semantics.get("by_row", {}).get(row_id, [])
-    group_ids = {annotation.get("groupId") for annotation in row_annotations if annotation.get("groupId")}
+    # Sorted, not set order: the annotation order must not follow PYTHONHASHSEED.
+    group_ids = sorted(
+        {annotation.get("groupId") for annotation in row_annotations if annotation.get("groupId")},
+        key=str,
+    )
     for node in graph["outputs"]:
         if node.get("role") == "owned_destination":
             for group_id in group_ids:

@@ -186,6 +186,7 @@ class RollbackScaleTests(unittest.TestCase):
             CREATE TABLE import_batch_transactions(
                 batch_id TEXT NOT NULL REFERENCES import_batches(id) ON DELETE CASCADE,
                 transaction_id TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+                source_position INTEGER,
                 PRIMARY KEY (batch_id, transaction_id)
             );
             CREATE TABLE transaction_tags(

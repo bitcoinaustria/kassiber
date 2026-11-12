@@ -264,6 +264,26 @@
         "why": "Ein in einer älteren Version geprüftes Transfer-Paar oder eine Auszahlung ließ sich nicht ins aktuelle Format übernehmen.",
         "provide": "Öffne die Transaktion und prüfe die Zuordnung erneut."
       },
+      "importDuplicate": {
+        "title": "Eine importierte Transaktion ist möglicherweise doppelt gespeichert",
+        "why": "Zeilen aus getrennten Importen dieses Börsen- oder Wallet-Exports sehen gleich aus und sind mehr, als ein einzelner Export enthielt. Ältere Versionen haben Zeilen ohne eigene ID nach ihrer Position in der Datei nummeriert, daher konnte ein späterer, längerer Export dieselbe Transaktion noch einmal speichern. Kassiber hält jede Kopie zurück und wählt keine für dich aus.",
+        "provide": "Vergleiche die Exporte des Anbieters. Schließe jede Zeile aus, die eine andere Transaktion kopiert. Ist jede Zeile eine eigene Transaktion, bestätige das stattdessen mit der Prüfung confirm_distinct_import_rows (kassiber review plan, dann review apply); dabei wird nichts ausgeschlossen."
+      },
+      "importDuplicateRefill": {
+        "title": "Ein neuerer Import wiederholt möglicherweise eine ausgeschlossene Transaktion",
+        "why": "Du hast eine frühere Kopie dieser gleich aussehenden Zeilen ausgeschlossen. Ein späterer Export dieser Börse oder Wallet hat danach eine Zeile an der Stelle dieser Kopie hinzugefügt. Kassiber kann nicht erkennen, ob die neue Zeile die ausgeschlossene Transaktion oder eine eigene ist, hält die Zeilen daher zurück und wählt keine für dich aus.",
+        "provide": "Vergleiche die Exporte des Anbieters. Ist die neue Zeile die ausgeschlossene Transaktion, schließe sie ebenfalls aus. Nur wenn jede zurückgehaltene Zeile eine eigene Transaktion ist, bestätige das mit der Prüfung confirm_distinct_import_rows (kassiber review plan, dann review apply). Die Bestätigung zählt die ausgeschlossene Transaktion über die neue Zeile wieder mit."
+      },
+      "importDuplicatePreBatch": {
+        "title": "Ältere Importe haben eine Transaktion möglicherweise doppelt gespeichert",
+        "why": "Diese gleich aussehenden Zeilen wurden alle importiert, bevor Kassiber Importläufe aufgezeichnet hat. Daher ist unklar, ob sie aus einem oder mehreren Exporten stammen. Nur Zeilen, die in derselben Sekunde gespeichert wurden, zählen als ein Export, deshalb wird auch ein Import zurückgehalten, der über eine Sekundengrenze lief. Kassiber hält jede Kopie zurück und wählt keine für dich aus.",
+        "provide": "Vergleiche die Exporte des Anbieters. Schließe jede Zeile aus, die eine andere Transaktion kopiert. Ist jede Zeile eine eigene Transaktion, bestätige das stattdessen mit der Prüfung confirm_distinct_import_rows (kassiber review plan, dann review apply); dabei wird nichts ausgeschlossen."
+      },
+      "legacyPairFee": {
+        "title": "Bei einem älteren Transfer-Paar muss die Gebühr geprüft werden",
+        "why": "Eine ältere Version hat die Netzwerkgebühr dieses Paars als übertragenen Betrag gezählt, sie aber nicht in die volle Belastung der sendenden Seite aufgenommen. Das Paar bleibt gespeichert und wirkt erst, wenn eine korrigierte Revision geprüft ist.",
+        "provide": "Prüfe das Paar. Zeige die korrigierte Revision mit kassiber review an und übernimm sie, aktualisiere es mit transfers update oder trenne es und kopple die geprüften Seiten neu. Eine Seite auszuschließen löst das nicht."
+      },
       "gapHold": {
         "title": "Eine Zwischen-Wallet fehlt",
         "why": "Coins haben {{wallet}} verlassen und ein ähnlicher Betrag kam später zurück, aber die Wallet dazwischen ist nicht verbunden.",
@@ -338,6 +358,11 @@
         "title": "Nur ein ungefährer Preis verfügbar",
         "why": "Der Preis für dieses Datum stammt aus einer groben Quelle (z. B. einem Tagesdurchschnitt), und deine Einstellungen verlangen eine Prüfung.",
         "provide": "Bestätige den Preis oder gib den genauen Preis von deinem Beleg ein."
+      },
+      "priceCurrency": {
+        "title": "Preis in einer anderen Währung",
+        "why": "Dieser Preis ist in {{priceCurrency}} gespeichert, deine Buchwährung ist jetzt aber {{bookCurrency}}. Kassiber rechnet ihn nicht um, daher wird die Transaktion zurückgehalten.",
+        "provide": "Gib den Preis in {{bookCurrency}} von deinem Beleg ein."
       },
       "swapPriceRequired": {
         "title": "Swap-Auszahlung braucht einen Wert",
@@ -436,7 +461,8 @@
         "sendingWallet": "die sendende Wallet",
         "amount": "einen unbekannten Betrag",
         "date": "früheres Datum",
-        "root": "siehe Ursache oben"
+        "root": "siehe Ursache oben",
+        "currency": "eine Währung"
       },
       "reviewedSuspensePair": {
         "title": "Ein Transfer-Paar geht nicht auf",

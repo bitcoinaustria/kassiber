@@ -88,8 +88,8 @@ class CustodyGapLifecycleTests(unittest.TestCase):
             "INSERT INTO workspaces(id, label, created_at) VALUES('ws', 'Books', 'now')"
         )
         self.conn.execute(
-            "INSERT INTO profiles(id, workspace_id, label, created_at) "
-            "VALUES('profile', 'ws', 'Book', 'now')"
+            "INSERT INTO profiles(id, workspace_id, label, fiat_currency, created_at) "
+            "VALUES('profile', 'ws', 'Book', 'EUR', 'now')"
         )
         for wallet_id, label in (("a", "Old vault"), ("c", "New vault")):
             self.conn.execute(

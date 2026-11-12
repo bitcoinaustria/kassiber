@@ -19,6 +19,7 @@ from ..db import get_setting
 from ..errors import AppError
 from ..msat import btc_to_msat, dec, msat_to_btc
 from ..tax_policy import build_tax_policy
+from .transaction_order import transaction_order_sql
 from .journal_markers import (
     MARKER_ALT_IN,
     MARKER_ALT_OUT,
@@ -26,7 +27,7 @@ from .journal_markers import (
     parse_marker,
     parse_marker_int,
 )
-from ..time_utils import UNKNOWN_OCCURRED_AT, _iso_z, _parse_iso_datetime, now_iso
+from ..time_utils import UNKNOWN_OCCURRED_AT, _iso_z, _parse_iso_datetime, now_iso, timestamp_predicate
 from ..transfers import profile_bitcoin_rail_carrying_value
 from ..wallet_descriptors import (
     BITCOIN_NETWORK_ALIASES,
@@ -42,6 +43,7 @@ from . import import_batches as core_import_batches
 from . import output_inventory as core_output_inventory
 from . import ownership as core_ownership
 from . import freshness as core_freshness
+from . import pricing
 from . import custody_components as core_custody_components
 from . import custody_journal as core_custody_journal
 from . import custody_quantity_store as core_custody_quantity_store
@@ -337,7 +339,7 @@ def _latest_transaction_rate(
           AND asset = 'BTC'
           AND fiat_currency = ?
           AND fiat_rate IS NOT NULL
-        ORDER BY occurred_at DESC, created_at DESC, id DESC
+        ORDER BY """ + transaction_order_sql("transactions", descending=True) + """
         LIMIT 1
         """,
         (profile_id, fiat_currency),
@@ -998,10 +1000,10 @@ def _review_queue_leg_filters(
         filters.append(wallet_sql)
         params.extend(wallet_params)
     if since:
-        filters.append("t.occurred_at >= ?")
+        filters.append(timestamp_predicate(conn, "t.occurred_at", ">="))
         params.append(since)
     if until:
-        filters.append("t.occurred_at <= ?")
+        filters.append(timestamp_predicate(conn, "t.occurred_at", "<="))
         params.append(until)
     return filters, params
 
@@ -3311,9 +3313,13 @@ def _portfolio_series(
     *,
     has_book_state: bool,
 ) -> list[dict[str, Any]]:
+    # A price in another currency than the book's reads as no price.
+    book_price = pricing.price_in_book_currency_sql()
     rows = conn.execute(
-        """
-        SELECT occurred_at, direction, amount, fee, fiat_rate, fiat_value
+        f"""
+        SELECT occurred_at, direction, amount, fee,
+               CASE WHEN {book_price} THEN fiat_rate END AS fiat_rate,
+               CASE WHEN {book_price} THEN fiat_value END AS fiat_value
         FROM transactions
         WHERE profile_id = ? AND excluded = 0 AND asset IN ('BTC', 'LBTC')
         ORDER BY occurred_at ASC, created_at ASC, id ASC
@@ -3813,7 +3819,6 @@ def _tax_free_balance_snapshot(
                 "at_category": row["at_category"],
             }
         )
-    today = datetime.now(timezone.utc).date().isoformat()
     report = report_builders.compute_deemed_disposal(
         conn,
         dict(profile),
@@ -3824,7 +3829,6 @@ def _tax_free_balance_snapshot(
             "quarantines": [],
             "latest_rates": {},
         },
-        departure_date=today,
         destination="eu_eea",
     )
     totals = report["totals"]
@@ -3852,7 +3856,13 @@ def _tax_free_balance_snapshot(
         "taxableMarketValue": totals["neuMarketValue"],
         "needsJournals": needs_journals,
         "quarantines": quarantines,
-        "wallets": _tax_free_wallet_summaries(entries),
+        "wallets": _tax_free_wallet_summaries(
+            entries,
+            remaining_alt_sats={
+                lot["asset"]: lot["quantitySats"]
+                for lot in report["lots"] if lot["regime"] == "alt"
+            },
+        ),
         "buckets": [
             {
                 "id": "altbestand",
@@ -3874,8 +3884,12 @@ def _tax_free_balance_snapshot(
     }
 
 
-def _tax_free_wallet_summaries(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    tax_free_by_wallet: dict[str, Decimal] = defaultdict(Decimal)
+def _tax_free_wallet_summaries(
+    entries: list[dict[str, Any]],
+    *,
+    remaining_alt_sats: dict[str, int] | None = None,
+) -> list[dict[str, Any]]:
+    tax_free_by_wallet_asset: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
     for entry in entries:
         entry_type = str(entry.get("entry_type") or "")
         if entry_type == "transfer_fee":
@@ -3883,6 +3897,7 @@ def _tax_free_wallet_summaries(entries: list[dict[str, Any]]) -> list[dict[str, 
         wallet_id = str(entry.get("wallet_id") or "")
         if not wallet_id:
             continue
+        key = (wallet_id, str(entry.get("asset") or ""))
         qty = dec(entry.get("quantity") or 0)
         if qty == 0:
             continue
@@ -3897,18 +3912,25 @@ def _tax_free_wallet_summaries(entries: list[dict[str, Any]]) -> list[dict[str, 
             if alt_msat is not None:
                 alt_qty = dec(msat_to_btc(alt_msat))
                 if entry_type == "transfer_out":
-                    tax_free_by_wallet[wallet_id] -= alt_qty
+                    tax_free_by_wallet_asset[key] -= alt_qty
                 else:
-                    tax_free_by_wallet[wallet_id] += alt_qty
+                    tax_free_by_wallet_asset[key] += alt_qty
                 continue
         if _entry_has_alt_regime(entry):
-            tax_free_by_wallet[wallet_id] += qty
+            tax_free_by_wallet_asset[key] += qty
+    # Wallet flow hints alone cannot account for globally pooled lot selection:
+    # a sale in another wallet can exhaust this asset's Altbestand. The shared
+    # inventory already applies RP2's consumed regimes; do not select lots here.
+    has_alt_by_wallet: dict[str, bool] = {}
+    for (wallet_id, asset), qty in tax_free_by_wallet_asset.items():
+        has_alt = qty > 0 and (remaining_alt_sats is None or remaining_alt_sats.get(asset, 0) > 0)
+        has_alt_by_wallet[wallet_id] = has_alt_by_wallet.get(wallet_id, False) or has_alt
     return [
         {
             "walletId": wallet_id,
-            "hasTaxFreeBalance": qty > 0,
+            "hasTaxFreeBalance": has_alt,
         }
-        for wallet_id, qty in sorted(tax_free_by_wallet.items())
+        for wallet_id, has_alt in sorted(has_alt_by_wallet.items())
     ]
 
 
@@ -3918,12 +3940,10 @@ def _entry_alt_flow_msat(entry: dict[str, Any], marker: str) -> int | None:
 
 def _entry_has_alt_regime(entry: dict[str, Any]) -> bool:
     marker = _entry_at_regime_marker(entry)
-    if marker == "alt":
-        return True
-    if marker == "neu":
-        return False
+    if marker is not None:
+        return marker == "alt"
     category = entry.get("at_category")
-    if category:
+    if dec(entry.get("quantity") or 0) < 0 and category:
         return str(category).startswith("alt")
     occurred_at = entry.get("occurred_at")
     if not occurred_at:
@@ -4657,7 +4677,7 @@ def _build_transactions_page_snapshot(
     since_filter = None
     if since is not None:
         since_filter = _iso_z(_parse_iso_datetime(since, "since"))
-        filters.append("t.occurred_at >= ?")
+        filters.append(timestamp_predicate(conn, "t.occurred_at", ">="))
         params.append(since_filter)
     until = _coerce_optional_string_arg(raw_args, "until")
     if until is None:
@@ -4665,7 +4685,7 @@ def _build_transactions_page_snapshot(
     until_filter = None
     if until is not None:
         until_filter = _iso_z(_parse_iso_datetime(until, "until"))
-        filters.append("t.occurred_at <= ?")
+        filters.append(timestamp_predicate(conn, "t.occurred_at", "<="))
         params.append(until_filter)
     txids_filter = _coerce_optional_string_list_arg(
         raw_args,
@@ -5452,7 +5472,7 @@ def build_transactions_dashboard_snapshot(
         )
     since = _iso_z(_parse_iso_datetime(since_raw, "since")) if since_raw else None
     until = _iso_z(_parse_iso_datetime(until_raw, "until")) if until_raw else None
-    if since and until and since > until:
+    if since and until and _parse_iso_datetime(since, "since") > _parse_iso_datetime(until, "until"):
         raise AppError("since must not be after until", code="validation", retryable=False)
     timezone_name = _coerce_optional_string_arg(raw_args, "timezone") or "UTC"
     try:
@@ -5508,10 +5528,10 @@ def build_transactions_dashboard_snapshot(
     filters = list(base_filters)
     params = list(base_params)
     if since:
-        filters.append("t.occurred_at >= ?")
+        filters.append(timestamp_predicate(conn, "t.occurred_at", ">="))
         params.append(since)
     if until:
-        filters.append("t.occurred_at <= ?")
+        filters.append(timestamp_predicate(conn, "t.occurred_at", "<="))
         params.append(until)
     rows = conn.execute(
         f"""
@@ -6268,6 +6288,15 @@ _BREAKDOWN_ORDER = (
 )
 
 
+def _is_long_term_gain(row: sqlite3.Row) -> bool:
+    """Whether a journal row's holding period is long-term.
+
+    Both tax engines store ``long``; ``long_term`` is accepted too, so the
+    lot label and the breakdown bucket always agree on a row.
+    """
+    return str(row["capital_gains_type"] or "").lower() in {"long", "long_term"}
+
+
 def _capital_gains_breakdown(
     rows: list[sqlite3.Row],
     swaps: list[dict[str, Any]],
@@ -6294,7 +6323,7 @@ def _capital_gains_breakdown(
             return str(kennzahl) if kennzahl else "unassigned"
         if row["entry_type"] == "income":
             return "income"
-        if str(row["capital_gains_type"] or "").lower() == "long":
+        if _is_long_term_gain(row):
             return "long_term"
         return "short_term"
 
@@ -6527,7 +6556,7 @@ def build_capital_gains_snapshot(
             ),
             "type": (
                 "LT"
-                if str(row["capital_gains_type"] or "").lower() == "long"
+                if _is_long_term_gain(row)
                 else "ST"
             ),
             "transactionId": row["transaction_id"],
@@ -9120,7 +9149,7 @@ def build_audit_changes_since_last_answer_snapshot(
         column = profile_column(table, column)
         return int(
             conn.execute(
-                f"SELECT COUNT(*) AS count FROM {table} WHERE profile_id = ? AND {column} > ?",
+                f"SELECT COUNT(*) AS count FROM {table} WHERE profile_id = ? AND {timestamp_predicate(conn, column, '>')}",
                 (profile["id"], since_filter),
             ).fetchone()["count"]
             or 0
@@ -9146,7 +9175,7 @@ def build_audit_changes_since_last_answer_snapshot(
         "wallets": count_since("wallets"),
         "rates": int(
             conn.execute(
-                "SELECT COUNT(*) AS count FROM rates_cache WHERE fetched_at > ?",
+                f"SELECT COUNT(*) AS count FROM rates_cache WHERE {timestamp_predicate(conn, 'fetched_at', '>')}",
                 (since_filter,),
             ).fetchone()["count"]
             or 0

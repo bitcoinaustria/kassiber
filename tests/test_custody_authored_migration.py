@@ -30,6 +30,7 @@ from kassiber.core.custody_journal import (
 )
 from kassiber.db import open_db
 from kassiber.errors import AppError
+from tests.custody_projection_fixtures import stamp_journal_semantics
 
 
 NOW = "2026-01-01T00:00:00Z"
@@ -181,13 +182,13 @@ def test_reopen_migrates_legacy_reviews_to_active_exact_components(tmp_path):
         ) == [
             ("destination", 900),
             ("fee", 10),
-            ("source", 1000),
-            ("suspense", 90),
+            ("source", 1010),
+            ("suspense", 100),
         ]
         assert sum(
             allocation["source_amount_msat"]
             for allocation in pair["allocations"]
-        ) == 1000
+        ) == 1010
         assert len(pair["economic_terms"]) == 1
         terms = pair["economic_terms"][0]
         assert terms["term_kind"] == "transaction_pair"
@@ -855,6 +856,7 @@ def test_transaction_flow_filters_use_only_current_custody_projection(tmp_path):
         ("a" * 64, "b" * 64, "c" * 64, NOW),
     )
 
+    stamp_journal_semantics(conn, 'profile')
     transfers, _ = list_transactions(conn, "ws", "profile", flow="transfer")
     assert {row["id"] for row in transfers} == {"flow-out", "flow-in"}
     incoming, _ = list_transactions(conn, "ws", "profile", flow="incoming")
@@ -968,7 +970,7 @@ def test_connected_fanout_pairs_activate_as_one_atomic_component(tmp_path):
         assert sum(
             allocation["source_amount_msat"]
             for allocation in component["allocations"]
-        ) == 1000
+        ) == 1010
         assert {
             leg["anchor_transaction_id"]
             for leg in component["legs"]

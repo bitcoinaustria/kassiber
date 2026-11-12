@@ -602,7 +602,9 @@ def _add_exit_tax_report_args(parser: argparse.ArgumentParser) -> None:
     _add_workspace_profile_args(parser)
     parser.add_argument(
         "--departure-date",
-        help="Departure date (YYYY-MM-DD) the deemed disposal is valued at; defaults to today",
+        help=("Departure date (YYYY-MM-DD) or date-time with an offset; timed inputs "
+              "without an offset are rejected. Defaults to today in Europe/Vienna "
+              "for Austrian books, UTC otherwise"),
     )
     parser.add_argument(
         "--destination",

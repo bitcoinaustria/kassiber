@@ -10,7 +10,6 @@ tax-engine input contract.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from decimal import Decimal
 from typing import Any, Mapping, Sequence
 
 from ..errors import AppError
@@ -20,6 +19,7 @@ from ..transfers import is_bitcoin_rail_pair
 from . import pricing, quarantine_catalog
 from .privacy_hops import privacy_hop_evidence_from_row
 from .custody_evidence import row_principal_msat
+from .custody_pricing import finite_decimal, validate_transaction_price
 from .custody_quantity import (
     EXTERNAL_CONFIRMED,
     EXTERNAL_PRESUMED,
@@ -29,7 +29,8 @@ from .custody_quantity import (
     QuantityObservation,
     QuantitySlice,
 )
-from .custody_quantity_runtime import CanonicalQuantityState
+from .custody_quantity_runtime import CanonicalQuantityState, with_tax_projection_blockers
+from .tax_events import transaction_price_quarantine
 from .transfer_chronology import chain_order_evidence
 
 
@@ -110,6 +111,9 @@ def _base_row(
         observation.anchor_transaction_id
     )
     result = dict(source or {})
+    for field in ("fiat_value", "fiat_value_exact", "fiat_rate", "fiat_rate_exact"):
+        if result.get(field) not in (None, ""):
+            finite_decimal(result[field], f"transaction {observation.anchor_transaction_id}: {field}")
     # A coarse-price review was accepted for the transaction's own price; the
     # projection re-slices that price below, so keep what was reviewed.
     result["pricing_review_price"] = pricing.reviewed_price(result)
@@ -168,10 +172,11 @@ def _projected_slice_row(
             value = base.get("fiat_value")
         if value not in (None, ""):
             try:
-                rate = Decimal(str(value)) / msat_to_btc(original_amount)
+                rate = finite_decimal(value, f"transaction {observation.anchor_transaction_id}: fiat_value") / msat_to_btc(original_amount)
             except (ArithmeticError, ValueError):
                 rate = None
             if rate is not None:
+                rate = finite_decimal(rate, f"transaction {observation.anchor_transaction_id}: fiat_rate")
                 base["fiat_rate"] = float(rate)
                 base["fiat_rate_exact"] = format(rate, "f")
     base["fiat_value"] = None
@@ -264,10 +269,10 @@ def _direct_payout_settlement_rows(
     payout_value_raw = _field(payout, "payout_fiat_value")
     if payout_amount_msat <= 0 or payout_value_raw in (None, ""):
         return None
-    payout_value = Decimal(str(payout_value_raw))
+    payout_value = finite_decimal(payout_value_raw, f"transaction {source.anchor_transaction_id}: payout_fiat_value")
     if payout_value <= 0:
         return None
-    payout_rate = payout_value / msat_to_btc(payout_amount_msat)
+    payout_rate = finite_decimal(payout_value / msat_to_btc(payout_amount_msat), f"transaction {source.anchor_transaction_id}: payout_fiat_rate")
     payout_id = str(_field(payout, "id") or source.anchor_transaction_id)
     payout_at = _direct_payout_occurred_at(payout) or source.occurred_at
     base = _base_row(source, rows_by_id)
@@ -332,8 +337,14 @@ def compile_finalized_tax_projection(
     """Compile selected custody slices into the irreversible tax input."""
 
     rows_by_id = {str(_field(row, "id") or ""): row for row in rows}
+    # Same-time projection rows follow their anchors' place in `rows`, the
+    # source order (`transaction_order`); the engine keeps that order for
+    # same-time lots. The row id only orders the rows of one anchor: its
+    # quantity hash commits to random wallet ids.
+    source_rank: dict[str, int] = {}
+    for transaction_id in rows_by_id:
+        source_rank.setdefault(transaction_id, len(source_rank))
     observations = {item.quantity_hash: item for item in state.projection.observations}
-    eligible = {_slice_key(item.source) for item in state.tax_eligibility.eligible_decisions}
     non_events = {str(item) for item in non_event_transaction_ids if item}
     explicitly_blocked = {str(item) for item in blocked_transaction_ids if item}
     blocked_anchor_ids = {
@@ -350,6 +361,31 @@ def compile_finalized_tax_projection(
         direct_payout_records,
         rows_by_id,
     )
+    valuation_blockers = []
+    for transaction_id, row in rows_by_id.items():
+        try:
+            validate_transaction_price(row)
+            if _field(row, "pricing_method") == "unsupported_price_range":
+                raise AppError("cached rate produces a value outside the supported decimal range", code="validation")
+        except AppError as exc:
+            valuation_blockers.append(_quarantine(profile, transaction_id, "invalid_transaction_price", {"cause": str(exc)}))
+    split_sources = set()
+    for decision in state.projection.decisions:
+        source = observations[decision.source.observation_hash]
+        payout = payouts_by_source.get(source.anchor_transaction_id)
+        if (payout is not None and decision.reason == "reviewed_direct_payout_source"
+            and decision.component_id == _field(payout, "component_id")
+            and decision.source.amount_msat != int(_field(payout, "out_amount") or source.amount_msat)):
+            split_sources.add(source.anchor_transaction_id)
+    valuation_blockers.extend(
+        _quarantine(profile, transaction_id, "split_payout_requires_review", {"cause": "split payout allocation requires review"})
+        for transaction_id in sorted(split_sources)
+    )
+    if valuation_blockers:
+        state = with_tax_projection_blockers(state, rows_by_id, valuation_blockers)
+        explicitly_blocked.update(item["transaction_id"] for item in valuation_blockers)
+        interpreter_quarantines = (*interpreter_quarantines, *valuation_blockers)
+    eligible = {_slice_key(item.source) for item in state.tax_eligibility.eligible_decisions}
 
     issue_reasons_by_transaction: dict[str, set[str]] = {}
     for issue in state.issues:
@@ -403,8 +439,10 @@ def compile_finalized_tax_projection(
             origins = blocked_origins.setdefault(neighbor, set())
             if not blocked_origins[transaction_id] <= origins:
                 origins.update(blocked_origins[transaction_id])
-                if neighbor not in explicitly_blocked:
-                    frontier.append(neighbor)
+                # Explicit roots can also bridge other roots to a dependent.
+                # Propagate every growing origin set, including at roots,
+                # until the whole connected path reaches a fixed point.
+                frontier.append(neighbor)
             if neighbor not in effectively_blocked:
                 effectively_blocked.add(neighbor)
     event_order_by_hash: dict[str, tuple[str, str, str, str, str]] = {}
@@ -492,9 +530,16 @@ def compile_finalized_tax_projection(
         allocated_fee_sources.add(source.quantity_hash)
         return source.fee_msat
 
-    def quarantine_basis_barrier(source: QuantityObservation) -> None:
+    def quarantine_basis_barrier(source: QuantityObservation, *, check_price: bool = False) -> None:
         if source.anchor_transaction_id not in rows_by_id:
             return
+        if check_price:
+            row = rows_by_id[source.anchor_transaction_id]
+            price_cause = transaction_price_quarantine(
+                profile, row, str(_field(row, "wallet_label") or source.wallet_id)
+            )
+            if price_cause is not None:
+                quarantines.setdefault((source.anchor_transaction_id, price_cause["reason"]), price_cause)
         source_barrier = state.tax_eligibility.barrier_for(source)
         source_reasons = issue_reasons_by_transaction.get(
             source.anchor_transaction_id, set()
@@ -552,7 +597,13 @@ def compile_finalized_tax_projection(
             continue
         is_eligible = _slice_key(decision.source) in eligible
         if not is_eligible:
-            quarantine_basis_barrier(source)
+            # Preserve intrinsic valuation causes on standalone events. A
+            # reviewed payout can supply its own price, and internal moves do
+            # not require a standalone disposal price.
+            quarantine_basis_barrier(source, check_price=(
+                decision.state in {EXTERNAL_CONFIRMED, EXTERNAL_PRESUMED}
+                and source.anchor_transaction_id not in payouts_by_source
+            ))
             continue
         if decision.target is not None and decision.state in {
             INTERNAL_VERIFIED,
@@ -666,6 +717,13 @@ def compile_finalized_tax_projection(
                 )
                 continue
             payout = payouts_by_source.get(source.anchor_transaction_id)
+            # Transaction identity alone also matches the unreviewed residual.
+            # Only the selected authored payout allocation grants these terms.
+            if payout is not None and (
+                decision.reason != "reviewed_direct_payout_source"
+                or decision.component_id != _field(payout, "component_id")
+            ):
+                payout = None
             payout_asset = (
                 str(_field(payout, "payout_asset") or "").upper()
                 if payout is not None
@@ -746,8 +804,8 @@ def compile_finalized_tax_projection(
                 projected["privacy_boundary"] = None
             payout_value = _field(payout, "payout_fiat_value") if payout else None
             if payout_value not in (None, "") and decision.source.amount_msat > 0:
-                value = Decimal(str(payout_value))
-                rate = value / msat_to_btc(decision.source.amount_msat)
+                value = finite_decimal(payout_value, f"transaction {source.anchor_transaction_id}: payout_fiat_value")
+                rate = finite_decimal(value / msat_to_btc(decision.source.amount_msat), f"transaction {source.anchor_transaction_id}: payout_fiat_rate")
                 projected.update(
                     {
                         "fiat_rate": float(rate),
@@ -905,7 +963,7 @@ def compile_finalized_tax_projection(
             observation.anchor_transaction_id not in projected_anchor_ids
             and observation.anchor_transaction_id not in quarantined_ids
         ):
-            quarantine_basis_barrier(observation)
+            quarantine_basis_barrier(observation, check_price=True)
 
     # Taxable cross-asset reviews do not assert continuing custody, so they do
     # not emit an internal quantity claim.  Preserve them as audit/tax-relation
@@ -967,7 +1025,11 @@ def compile_finalized_tax_projection(
         )
         existing_cross_pair_ids.add(pair_id)
     return FinalizedTaxProjection(
-        rows=tuple(sorted(projection_rows, key=lambda row: (str(row["occurred_at"]), str(row["id"])))),
+        rows=tuple(sorted(projection_rows, key=lambda row: (
+            str(row["occurred_at"]),
+            source_rank.get(str(_field(row, "journal_transaction_id") or ""), len(source_rank)),
+            str(row["id"]),
+        ))),
         intra_pairs=tuple(intra_pairs),
         cross_asset_pairs=tuple(cross_asset_pairs),
         quarantines=tuple(

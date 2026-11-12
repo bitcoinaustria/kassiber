@@ -3,3 +3,5 @@
 # docs/reference/testing.md#generated-test-data). <git blob id> <path>
 branch t3code/test-data
 commit fcb97231d0828d16c168618601c75449a7b53a67
+8f650eebc442f3d717a07a0d9820a12393c039fc tests/fixtures/historical/pre_pair_fee_c0a015de.sqlite3.gz.b64
+f14aeff58f16070e90dfc6c4b19bfa79d0c3cfbd tests/fixtures/historical/pre_partial_payout_ca9a672f.sqlite3.gz.b64

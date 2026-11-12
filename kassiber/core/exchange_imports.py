@@ -125,8 +125,10 @@ def _record(
     pricing_source_kind = (
         pricing.SOURCE_EXCHANGE_EXECUTION if fiat_value is not None else None
     )
-    if fiat_rate is None and fiat_value is not None and amount:
-        fiat_rate = fiat_value / amount
+    # A sell's amount is negative; the unit price is not. A value that is not
+    # positive prices nothing, so the row stays unpriced (missing_spot_price).
+    if fiat_rate is None and fiat_value is not None and fiat_value > 0 and amount:
+        fiat_rate = fiat_value / abs(amount)
     return {
         "txid": external_id,
         "occurred_at": occurred_at,
@@ -268,10 +270,12 @@ def normalize_kraken_records(
                 raw={**raw, "trade": dict(trade)},
                 fiat_currency=fiat_currency,
                 fiat_value=fiat_value,
+                # Kraken's price is cost / volume. Without it, rebuild that
+                # rather than divide a sell's net-of-fee proceeds.
                 fiat_rate=(
                     _decimal(trade.get("price"))
                     if trade.get("price") not in (None, "")
-                    else None
+                    else (cost / abs(amount) if cost and amount else None)
                 ),
                 pricing_method="kraken_api",
                 pricing_external_ref=str(row.get("refid") or ledger_id),

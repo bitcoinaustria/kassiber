@@ -11,6 +11,18 @@ from kassiber.db import DATABASE_INSTANCE_ID_SETTING
 
 
 class CapitalGainsSnapshotParityTests(unittest.TestCase):
+    def test_long_term_engine_label_is_presented_as_long_term(self):
+        conn = self._conn()
+        try:
+            conn.execute("INSERT INTO wallets VALUES ('w1', 'p1', 'Hot')")
+            conn.execute("INSERT INTO transactions VALUES ('t','p1','w1',0,1,'2026-01-01T00:00:00Z','BTC',1000)")
+            conn.execute("INSERT INTO journal_entries VALUES ('j','p1','t','disposal','2026-01-01T00:00:00Z',-1000,1,2,1,NULL,NULL,'long_term','now','BTC')")
+            with patch.object(ui_snapshot, "_journal_freshness", return_value={"needs_processing": False}):
+                result = ui_snapshot.build_capital_gains_snapshot(conn, tax_year=2026)
+            self.assertEqual(result["lots"][0]["type"], "LT")
+        finally:
+            conn.close()
+
     def _conn(self, *, tax_country: str = "generic", gains_algorithm: str = "fifo"):
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row
@@ -71,6 +83,36 @@ class CapitalGainsSnapshotParityTests(unittest.TestCase):
         conn.execute("INSERT INTO settings VALUES ('context_workspace', 'ws1')")
         conn.execute("INSERT INTO settings VALUES ('context_profile', 'p1')")
         return conn
+
+    def test_long_term_rows_share_their_label_and_breakdown_bucket(self):
+        """A long-term row is LT and counts in the long-term group, whether it
+        is stored as `long` (both engines) or `long_term`."""
+        conn = self._conn()
+        try:
+            conn.execute("INSERT INTO wallets VALUES ('w1', 'p1', 'Hot')")
+            for index, spelling in enumerate(["long", "long_term", "short"]):
+                conn.execute(
+                    "INSERT INTO transactions VALUES (?,?,?,?,?,?,?,?)",
+                    (f"t{index}", "p1", "w1", 0, 1, "2026-01-01T00:00:00Z", "BTC", 1000),
+                )
+                conn.execute(
+                    "INSERT INTO journal_entries (id, profile_id, transaction_id, entry_type, "
+                    "occurred_at, quantity, cost_basis, proceeds, gain_loss, at_category, "
+                    "at_kennzahl, capital_gains_type, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (f"j{index}", "p1", f"t{index}", "disposal", "2026-01-01T00:00:00Z", -1000,
+                     1.0, 3.0 + index, 2.0 + index, None, None, spelling, "now"),
+                )
+            with patch.object(ui_snapshot, "_journal_freshness", return_value={"needs_processing": False}):
+                result = ui_snapshot.build_capital_gains_snapshot(conn, tax_year=2026)
+            labels = {lot["transactionId"]: lot["type"] for lot in result["lots"]}
+            self.assertEqual(labels, {"t0": "LT", "t1": "LT", "t2": "ST"})
+            groups = {group["key"]: group for group in result["breakdown"]}
+            self.assertEqual(sorted(groups), ["long_term", "short_term"])
+            self.assertEqual(groups["long_term"]["transactionIds"], ["t0", "t1"])
+            self.assertEqual(groups["long_term"]["gainLossEur"], 5.0)
+            self.assertEqual(groups["short_term"]["transactionIds"], ["t2"])
+        finally:
+            conn.close()
 
     def test_income_entries_appear_in_lots(self):
         conn = self._conn()

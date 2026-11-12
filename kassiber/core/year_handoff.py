@@ -33,11 +33,13 @@ from ..errors import AppError
 from ..msat import dec
 from ..time_utils import UNKNOWN_OCCURRED_AT
 from . import freshness as core_freshness
+from . import pricing
 from . import rates as core_rates
 from .asset_presentation import AssetPresentation, describe_asset
 from .austrian import AT_TAX_TZ, stated_kennzahl
 from .custody_evidence import normalize_boundary_amounts
 from .journal_markers import strip_markers
+from .transaction_order import transaction_order_sql
 from .transaction_classification import (
     classification_entry_type,
     classify,
@@ -328,7 +330,7 @@ class _Period:
 
 
 def _period_for_profile(profile: Mapping[str, Any], year: int) -> _Period:
-    tax_country = str(_row_get(profile, "tax_country") or "").lower()
+    tax_country = str(_row_get(profile, "tax_country") or "").strip().lower()
     return _Period(year, AT_TAX_TZ if tax_country == "at" else _UTC)
 
 
@@ -473,9 +475,8 @@ def _year_end_rates(
     """
     fiat_currency = profile["fiat_currency"]
     end_iso = _Period.iso(period.end)
-    # The cache lookup is inclusive; a quote stamped exactly at the boundary
-    # opens the next year and must not value this one.
-    last_second_iso = _Period.iso(period.end - timedelta(seconds=1))
+    # A quote stamped exactly at the exclusive boundary opens the next year
+    # and must not value this one.
     rates: dict[str, dict[str, Any]] = {}
     for asset, spellings in sorted(spellings_by_asset.items()):
         spellings = sorted(spellings)
@@ -492,7 +493,7 @@ def _year_end_rates(
         cached = None
         if pair is not None:
             try:
-                cached = core_rates.get_cached_rate_at_or_before(conn, pair, last_second_iso)
+                cached = core_rates.get_cached_rate_at_or_before(conn, pair, end_iso, exclusive=True)
             except sqlite3.OperationalError:
                 cached = None
             except AppError as exc:
@@ -516,7 +517,8 @@ def _year_end_rates(
               AND asset IN ({", ".join("?" for _ in spellings)})
               AND occurred_at < ?
               AND (fiat_rate IS NOT NULL OR fiat_value IS NOT NULL)
-            ORDER BY occurred_at DESC, created_at DESC, id DESC
+              AND {pricing.price_in_book_currency_sql()}
+            ORDER BY {transaction_order_sql("transactions", descending=True)}
             LIMIT 1
             """,
             (profile["id"], *spellings, end_iso),

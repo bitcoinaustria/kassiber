@@ -70,13 +70,50 @@ advanced. Explanation references expire on every rebuild, while list cursors
 can survive one that leaves their rows unchanged. See the
 [storage contract](r4-journal-pipeline.md#2-deterministic-entry-ids-and-changed-row-writes).
 
+### Same-time order
+
+Rows that share `occurred_at` are common: an exchange export holds many fills
+in one second and a block holds many transactions. The lot engine keeps the
+projection's order for them (FIFO and LIFO consume lots in it; HIFO and LOFO
+fall back to it when unit costs tie), so the order must come from the data,
+never from a random row id or from when a row was inserted. Custody
+composition reads transactions in this source order
+(`kassiber/core/transaction_order.py`):
+
+1. `occurred_at`;
+2. a confirmed chain row's block height (`raw_json` `status.block_height`);
+   Kassiber stores no position within a block, so rows of one block continue
+   below;
+3. the row's position in the file that imported it
+   ([import runs](imports.md#import-runs-and-rolling-one-back));
+4. the external id, then the accounting content (direction, asset, amounts,
+   prices, kind and tax overrides) and the wallet label;
+5. the row id.
+
+A missing key sorts first. Rows still equal at step 5 are in one wallet with
+the same time, amounts, prices, kind and overrides, so whichever the engine
+takes first books the same amounts. The finalized tax projection keeps the
+order: its rows sort by `occurred_at`, then their anchor transaction's place in
+the source order, then the row id, which only orders the slices of one anchor.
+The latest transaction rate, the fallback price reports use when no market
+quote exists, is the last row of the latest time in the same order.
+
+Calculation semantics version 8 introduced this order. The one-shot
+`same-time-source-order-v1` migration requires version 8 of every processed
+book, so journals built before it read as stale ("journal calculation
+semantics changed") until the next rebuild; input markers, retained journals
+and filed snapshots are unchanged until then.
+
 ## Transfers
 
 Cross-wallet self-transfers are auto-detected when both legs share the same
 typed physical `(chain, network, txid, asset identity)` and principal. A
 64-hex provider/order id is not a txid merely because it has the same shape;
 the transaction graph or an explicit txid-named import field must establish
-that type. Deterministic booked moves are kept out of review.
+that type. Deterministic booked moves are kept out of review. A Strike or
+River withdrawal that names the txid of an owned wallet's receipt, for exactly
+its one owned output, books the same way with the `exchange_txid_exact`
+evidence ([exchange withdrawals](custody-resolution.md#exchange-withdrawals-that-name-their-txid)).
 When the ownership graph proves a move but the journal declines to guess a
 destination or split, `transfers suggest` surfaces an `ownership_graph` card
 in the transfer tab instead of leaving the proof quarantine-only. It is exact
@@ -106,7 +143,12 @@ tagged `ownership_derived` in the transfer audit (its journal entry reads
    flagged for review** — never mis-booked. Bitcoin rows usually provide the
    whole graph. Liquid sync persists and merges only the non-secret input/output
    values each connected wallet can locally unblind; unknown/conflicting
-   confidential value blocks the component instead of being guessed.
+   confidential value blocks the component instead of being guessed. Opening
+   a book never rewrites a Liquid graph its observer committed to. Earlier
+   versions added `asset`/`asset_id` to those graphs on every open, which
+   revoked their authority and booked owned Liquid moves as disposals; such
+   rows are restored on open when the committed hash proves the original,
+   and the book's journals are marked for reprocessing.
 
 2. **Multi-source consolidation deriver.** A conservative N→1 Bitcoin
    consolidation is decomposed when every input is owned, the graph has exactly
@@ -270,6 +312,21 @@ that only follow from another transaction, `evidence` and the next `actions`
 Quarantine causes typically include:
 
 - missing spot price
+- `price_currency_mismatch` — the row's stored price is in another currency
+  than the book's. A book's currency can change after its rows were priced
+  (`profiles set --fiat-currency`, or a country that requires its own
+  currency, such as `at`); stored prices keep the currency they were stored
+  in and are never read as the new one. The row is held like a conflicting
+  spend: a move with a held leg is not a move, and later disposals of the
+  asset wait behind it (`basis_provenance_incomplete`). Its detail names
+  `price_currency` and `book_currency`. A price override in the book's
+  currency releases it; Kassiber does not convert prices. Rows without a
+  price or without a recorded currency are unaffected. The transaction-price
+  fallbacks for holdings values, balance history, the year handoff's closing
+  rate and the summary PDF's flows read such a price as no price. The
+  `profiles set` (and desktop) update that changes the currency answers with
+  `price_currency_holds`: the reason, the new `book_currency`, how many
+  `transactions` the next run holds, and their count `by_currency`.
 - missing cost basis
 - insufficient lots
 - ambiguous or unsupported tax semantics
@@ -324,9 +381,91 @@ Quarantine causes typically include:
   double-spend siblings; verify or resync them from a chain-backed wallet before
   treating competing histories as settled.
 
+The full-report XLSX `Verify!B2` banner caches the verdict of the same cached
+Control and Disposals checks written to the workbook. A cached failing check
+therefore displays a mismatch even in viewers that do not recalculate formulas;
+the live formula remains available for later spreadsheet edits.
+
+## Rates and tax input quality
+
+Exit-tax previews and PDF/XLSX estimates report the book's selected accounting
+method. They reconstruct global inventory and wallet quantities from journal
+entries before the next civil midnight (exclusive): Europe/Vienna for Austrian
+books, UTC for generic books. This includes fractional seconds and compares
+exact instants even for legacy offset timestamps. Internal transfers move wallet context without
+changing global inventory; income recognition is not counted twice.
+Dashboard wallet tax-free hints retain the journal's transfer-regime flows,
+but are cleared per asset when the shared consumed-lot inventory has no
+Altbestand left, including when another wallet's sale consumed those lots.
+They do not identify physical tax lots within a globally pooled book.
+FMV chooses the closest cached or transaction quote strictly before that same
+cutoff. Either source must be at most 24 hours old relative to the cutoff;
+exactly 24 hours is allowed. At equal instants the cache wins, retaining manual
+priority over provider rows. This is the current owner-selected policy, open to
+owner revision. Older, future or undated quotes cannot fill a valuation.
+The source and actual quote timestamp, rendered in UTC with a `Z` suffix,
+are shown in the PDF, XLSX and desktop FMV card. Missing FMV sets incomplete readiness
+(`status.missingFmvAssets`): the desktop shows a top banner above Export,
+affected values remain null, and PDF/XLSX handoffs are labelled incomplete
+drafts. Preview and export remain available for review; missing prices prevent
+a complete estimate. Wallet-context assets use the same lookup,
+and the XLSX assumptions sheet discloses quarantines and incomplete estimates.
+Missing FMV for any held asset, including a wallet-only rail without an
+acquisition bucket, keeps market-value, gain and estimated-tax totals null;
+known quantities and basis remain available for review.
+Exit-tax exports remain valuation drafts outside the ordinary realized-report
+snapshot system; see [saved and filed report impact](custody-components.md#saved-and-filed-report-impact).
+PDF/XLSX drafts stamp the journal input version alongside the FMV quotes for
+manual comparison after changes; this does not register a saved/filed snapshot.
+
+### Exit-tax departure day and timezone
+
+Austrian books use the Europe/Vienna civil departure day, including DST,
+consistent with the Alt/Neu cutoff and realized capital-gains tax year.
+Generic books use the UTC day. A date-only departure names that civil day;
+a departure supplied with a time and offset is converted to the jurisdiction's
+civil day first. The exclusive cutoff is the next midnight in that timezone,
+converted to UTC for inventory, cached quotes and transaction quotes together.
+Timed departures require an explicit offset (`Z` or, for example, `+01:00`).
+A date-time without an offset is rejected with a typed `validation` error;
+use a date alone to name a civil day without specifying an instant.
+PDF and XLSX drafts stamp `departureTimezone` as well as the departure date.
+Managed desktop and AI export filenames use that resolved civil date
+(`YYYY-MM-DD`), so timed inputs cannot put offset punctuation in filenames.
+The desktop takes its default departure date from the core and displays that
+timezone. The calendar's today outline uses the core's default civil day,
+including after a different departure date is selected.
+This replaces the earlier open timezone question with the owner's decision.
+
+For departure 2024-12-31, a receipt at 2025-01-01 00:30 Europe/Vienna
+(2024-12-31 23:30Z) is excluded from an Austrian book. In summer,
+2024-04-01 00:30 Europe/Vienna (2024-03-31 22:30Z) is likewise excluded
+from departure 2024-03-31. The FMV age limit remains 24 elapsed hours;
+it does not expand to cover a 25-hour autumn departure day.
+
 ## Rates and tax input quality
 
 If transactions do not already include usable fiat pricing, Kassiber first tries to fill them from the local rates cache during journal processing. When a transaction has a known `confirmed_at` timestamp, Kassiber prices from that confirmation time; otherwise it falls back to `occurred_at`. `LBTC` / `L-BTC` transactions use the BTC fiat rate because Liquid Bitcoin is pegged one-to-one with BTC.
+
+All price write paths use shared finite decimal validation, including overrides,
+history reverts, manual/cached rates, BTCPay, imports, documents and source-of-funds sources. Values must
+fit finite numeric output, use exponents between -308 and 308, and have zero or
+magnitude at least 1e-13 and below 1e19. The upper bound reserves the engine's
+13 decimal places within its 32-digit precision; numeric mirrors must also stay
+below that limit after float conversion. The lower bound prevents the engine
+from comparing a positive price as zero.
+Negative zero normalizes to zero. Derived totals (`rate * amount`) and unit
+rates (`value / amount`) obey the same limits at write time. Invalid stored
+transaction pricing is quarantined as `invalid_transaction_price`, with the
+transaction and cause, while the rest of the rebuild completes. An unusable
+cached valuation stores no derived price and receives the same quarantine.
+These holds block dependent basis through the existing exposure-pool barriers.
+Raw transaction exports leave invalid prices blank. Invalid legacy payouts remain listable and deletable;
+correct the source price or delete and recreate the invalid review before
+rebuilding journals. Split payout allocations quarantine their whole source as
+`split_payout_requires_review` until reviewed, without pricing a residual or
+aborting other transactions. Legacy payout migration records a blocking migration issue
+when its stored price is invalid.
 
 Pricing now carries provenance alongside the legacy numeric fields: source kind,
 provider, pair, source timestamp, fetched timestamp, granularity, method, and

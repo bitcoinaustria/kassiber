@@ -707,7 +707,10 @@ def build_index(conn: sqlite3.Connection, profile_id: str, *, observer: str = "o
             names = [item[0] for item in cursor.description]
             profiles = [dict(zip(names, row)) for row in cursor]
         profile = profiles[0] if profiles else {}
-        fresh = bool(profile.get("last_processed_at")) and profile.get("journal_input_version") == profile.get("last_processed_input_version") and profile.get("last_processed_tx_count") == sum(not row.get("excluded") for row in transactions)
+        from ..custody_journal import evaluate_projection_freshness
+        fresh = bool(profile) and evaluate_projection_freshness(
+            profile, sum(not row.get("excluded") for row in transactions)
+        )["is_current"]
         builder.relations(read("journal_custody_decisions"), read("journal_custody_economic_relations"), fresh)
         if not fresh:
             builder.finding("custody_projection_stale", [], "Canonical custody relations require a current journal rebuild before they can be traversed.", severity="info")

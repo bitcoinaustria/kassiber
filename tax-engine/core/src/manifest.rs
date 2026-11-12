@@ -111,6 +111,8 @@ pub enum QuarantineReason {
     ConflictingSpend,
     /// An unconfirmed on-chain spend (a custody hold).
     PendingOnchainConfirmation,
+    /// A price stored in a currency other than the book's (a hold).
+    PriceCurrencyMismatch,
     /// A transfer leg blocked by another leg of its atomic group.
     DerivedTransferGroupBlocked,
     /// More is spent from a wallet than it holds.
@@ -135,12 +137,13 @@ pub enum QuarantineReason {
 
 impl QuarantineReason {
     /// Every reason: normalize, then the walk's gates, then the carries.
-    pub const ALL: [QuarantineReason; 14] = [
+    pub const ALL: [QuarantineReason; 15] = [
         QuarantineReason::MissingSpotPrice,
         QuarantineReason::PricingReviewRequired,
         QuarantineReason::PrivacyHopUnresolved,
         QuarantineReason::ConflictingSpend,
         QuarantineReason::PendingOnchainConfirmation,
+        QuarantineReason::PriceCurrencyMismatch,
         QuarantineReason::DerivedTransferGroupBlocked,
         QuarantineReason::InsufficientLots,
         QuarantineReason::MissingCostBasis,
@@ -160,6 +163,7 @@ impl QuarantineReason {
             QuarantineReason::PrivacyHopUnresolved => "privacy_hop_unresolved",
             QuarantineReason::ConflictingSpend => "conflicting_spend",
             QuarantineReason::PendingOnchainConfirmation => "pending_onchain_confirmation",
+            QuarantineReason::PriceCurrencyMismatch => "price_currency_mismatch",
             QuarantineReason::DerivedTransferGroupBlocked => "derived_transfer_group_blocked",
             QuarantineReason::InsufficientLots => "insufficient_lots",
             QuarantineReason::MissingCostBasis => "missing_cost_basis",
@@ -201,6 +205,9 @@ pub enum DetailKind {
     PrivacyHop,
     /// A custody hold: Python adds the row's external id.
     Hold,
+    /// A price in another currency: Python adds the row's external id, its
+    /// price currency and the book's currency.
+    PriceCurrency,
     /// `_quarantine_partner_leg`: the other leg of a transfer; nothing added.
     PartnerLeg,
     /// Every other template; nothing added.
@@ -209,10 +216,11 @@ pub enum DetailKind {
 
 impl DetailKind {
     /// Every detail kind.
-    pub const ALL: [DetailKind; 5] = [
+    pub const ALL: [DetailKind; 6] = [
         DetailKind::PricingReview,
         DetailKind::PrivacyHop,
         DetailKind::Hold,
+        DetailKind::PriceCurrency,
         DetailKind::PartnerLeg,
         DetailKind::Plain,
     ];
@@ -223,6 +231,7 @@ impl DetailKind {
             DetailKind::PricingReview => "pricing_review",
             DetailKind::PrivacyHop => "privacy_hop",
             DetailKind::Hold => "hold",
+            DetailKind::PriceCurrency => "price_currency",
             DetailKind::PartnerLeg => "partner_leg",
             DetailKind::Plain => "plain",
         }
@@ -540,6 +549,7 @@ mod tests {
                 | QuarantineReason::PrivacyHopUnresolved
                 | QuarantineReason::ConflictingSpend
                 | QuarantineReason::PendingOnchainConfirmation
+                | QuarantineReason::PriceCurrencyMismatch
                 | QuarantineReason::DerivedTransferGroupBlocked
                 | QuarantineReason::InsufficientLots
                 | QuarantineReason::MissingCostBasis
@@ -569,6 +579,7 @@ mod tests {
                 DetailKind::PricingReview
                 | DetailKind::PrivacyHop
                 | DetailKind::Hold
+                | DetailKind::PriceCurrency
                 | DetailKind::PartnerLeg
                 | DetailKind::Plain => DetailKind::ALL.contains(&kind),
             }
@@ -695,7 +706,7 @@ mod tests {
         );
         assert_eq!(
             value["quarantine_reasons"].as_array().map(Vec::len),
-            Some(14)
+            Some(15)
         );
         assert_eq!(
             value["detail_kinds"],
@@ -703,6 +714,7 @@ mod tests {
                 "pricing_review",
                 "privacy_hop",
                 "hold",
+                "price_currency",
                 "partner_leg",
                 "plain"
             ])

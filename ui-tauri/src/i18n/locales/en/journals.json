@@ -264,6 +264,26 @@
         "why": "A transfer pair or payout reviewed in an older version could not be converted to the current format.",
         "provide": "Open the transaction and review the pairing again."
       },
+      "importDuplicate": {
+        "title": "An imported transaction may be stored twice",
+        "why": "Rows from separate imports of this exchange or wallet export look identical and are more than any single export contained. Earlier versions numbered rows without their own ID by file position, so a later, longer export could store the same transaction again. Kassiber holds every copy and picks none for you.",
+        "provide": "Compare the provider's exports. Exclude each row that copies another transaction. If every row is a separate transaction, confirm that instead with the confirm_distinct_import_rows review (kassiber review plan, then review apply); nothing is excluded."
+      },
+      "importDuplicateRefill": {
+        "title": "A newer import may repeat a transaction you excluded",
+        "why": "You excluded an earlier copy of these identical rows. A later export from this exchange or wallet then added a row in the place that copy held. Kassiber cannot tell whether the new row is the transaction you excluded or a separate one, so it holds the rows and picks none for you.",
+        "provide": "Compare the provider's exports. If the new row is the transaction you excluded, exclude it too. Only if every held row is a separate transaction, confirm that with the confirm_distinct_import_rows review (kassiber review plan, then review apply). Confirming counts the transaction you excluded again, through the new row."
+      },
+      "importDuplicatePreBatch": {
+        "title": "Older imports may have stored a transaction twice",
+        "why": "These identical rows were all imported before Kassiber recorded import runs, so it cannot tell whether they came from one export or several. Only rows stored in the same second count as one export, so one import that ran across a second boundary is held as well. Kassiber holds every copy and picks none for you.",
+        "provide": "Compare the provider's exports. Exclude each row that copies another transaction. If every row is a separate transaction, confirm that instead with the confirm_distinct_import_rows review (kassiber review plan, then review apply); nothing is excluded."
+      },
+      "legacyPairFee": {
+        "title": "An older transfer pair needs its fee reviewed",
+        "why": "An older version counted this pair's network fee as moved principal but left it out of the sending side's full debit. The pair stays recorded and changes nothing until a corrected revision is reviewed.",
+        "provide": "Review the pair. Preview and apply the corrected revision with kassiber review, update it with transfers update, or unpair it and pair the reviewed legs again. Excluding a leg does not answer this."
+      },
       "gapHold": {
         "title": "An intermediate wallet is missing",
         "why": "Coins left {{wallet}} and a similar amount came back later, but the wallet in between is not connected.",
@@ -338,6 +358,11 @@
         "title": "Only an approximate price is available",
         "why": "The price for this date comes from a coarse source (for example a daily average) and your settings require a review.",
         "provide": "Confirm the price or enter the exact price from your receipt."
+      },
+      "priceCurrency": {
+        "title": "Price is in another currency",
+        "why": "This price is stored in {{priceCurrency}}, but your book currency is now {{bookCurrency}}. Kassiber does not convert it, so the transaction is held.",
+        "provide": "Enter the price in {{bookCurrency}} from your receipt."
       },
       "swapPriceRequired": {
         "title": "Swap payout needs a value",
@@ -436,7 +461,8 @@
         "sendingWallet": "the sending wallet",
         "amount": "an unknown amount",
         "date": "earlier date",
-        "root": "see the cause above"
+        "root": "see the cause above",
+        "currency": "a currency"
       },
       "reviewedSuspensePair": {
         "title": "A transfer pair doesn't add up",

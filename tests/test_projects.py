@@ -33,6 +33,47 @@ class ProjectCatalogTests(unittest.TestCase):
             tables.index("custody_gap_review_transactions"),
         )
 
+    def test_workspace_split_policy_covers_every_table_a_partition_carries(self):
+        from kassiber.core.book_network_migration import AUTHORED_SCOPES, EXTRA_SCOPES
+
+        declared = {
+            table
+            for key in (
+                "workspace_profile_scoped_tables",
+                "relationship_tables_following_parent_rows",
+                "project_shared_tables_copied_to_each_split_project",
+            )
+            for table in WORKSPACE_SPLIT_POLICY[key]
+        }
+        self.assertEqual(sorted((set(AUTHORED_SCOPES) | set(EXTRA_SCOPES)) - declared), [])
+        categories = {}
+        for key in (
+            "workspace_profile_scoped_tables",
+            "relationship_tables_following_parent_rows",
+            "project_shared_tables_copied_to_each_split_project",
+        ):
+            for table in WORKSPACE_SPLIT_POLICY[key]:
+                self.assertNotIn(table, categories, f"{table} is listed twice")
+                categories[table] = key
+        # A partition scopes each table by its own profile_id or by a parent
+        # row's; nothing it carries is shared project-wide.
+        with tempfile.TemporaryDirectory() as root:
+            conn = open_db(root)
+            try:
+                for table in sorted(set(AUTHORED_SCOPES) | set(EXTRA_SCOPES)):
+                    columns = {row["name"] for row in conn.execute(f'PRAGMA table_info("{table}")')}
+                    expected = (
+                        "workspace_profile_scoped_tables"
+                        if "profile_id" in columns or table in {"workspaces", "profiles"}
+                        else "relationship_tables_following_parent_rows"
+                    )
+                    self.assertEqual(categories[table], expected, table)
+            finally:
+                conn.close()
+        self.assertEqual(categories["import_batches"], "workspace_profile_scoped_tables")
+        self.assertEqual(categories["import_batch_transactions"], "relationship_tables_following_parent_rows")
+        self.assertEqual(categories["source_funds_snapshots"], "relationship_tables_following_parent_rows")
+
     def test_catalog_stores_only_non_secret_project_metadata(self):
         with tempfile.TemporaryDirectory() as root:
             entry = create_project("Family Treasury", state_root=root)

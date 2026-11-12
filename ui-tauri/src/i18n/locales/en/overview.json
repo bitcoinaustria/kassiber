@@ -382,5 +382,24 @@
       "stale": "Journals are outdated. Reprocess them to see current cost basis.",
       "unavailable": "No market rate is available, so Kassiber shows no current value."
     }
+  },
+  "exitTaxFmv": {
+    "title": "Fair market value",
+    "asOf": "As of:",
+    "unavailable": "Unavailable",
+    "source": {
+      "cache": "Cache",
+      "transaction": "Transaction",
+      "missing": "Missing"
+    },
+    "incomplete": "Estimate incomplete: no usable FMV quote for {{assets}}."
+  },
+  "exitTaxDepartureTimezone": "Departure timezone: {{timezone}}",
+  "exitTaxReadiness": {
+    "title": "This estimate is incomplete.",
+    "journals": "Journals are not processed yet.",
+    "quarantines_one": "{{count}} quarantined transaction is excluded. Resolve it in the <queue>quarantine queue</queue> before relying on the number.",
+    "quarantines_other": "{{count}} quarantined transactions are excluded. Resolve them in the <queue>quarantine queue</queue> before relying on the number.",
+    "exportDraft": "Incomplete draft — exports remain available for review."
   }
 }

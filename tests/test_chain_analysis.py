@@ -20,8 +20,8 @@ def connection():
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
     conn.executescript("""
-        CREATE TABLE profiles(id TEXT, last_processed_at TEXT, journal_input_version INTEGER, last_processed_input_version INTEGER, last_processed_tx_count INTEGER);
-        INSERT INTO profiles VALUES('p',NULL,0,0,0);
+        CREATE TABLE profiles(id TEXT, last_processed_at TEXT, journal_input_version INTEGER, last_processed_input_version INTEGER, last_processed_tx_count INTEGER, required_journal_semantics_version INTEGER DEFAULT 0, journal_semantics_version INTEGER DEFAULT 0);
+        INSERT INTO profiles VALUES('p',NULL,0,0,0,0,0);
         CREATE TABLE wallets(id TEXT, profile_id TEXT, kind TEXT, config_json TEXT);
         INSERT INTO wallets VALUES('w','p','descriptor','{}');
         CREATE TABLE transactions(id TEXT PRIMARY KEY, profile_id TEXT, wallet_id TEXT, external_id TEXT, amount INTEGER, asset TEXT, raw_json TEXT, occurred_at TEXT, excluded INTEGER, privacy_boundary TEXT);

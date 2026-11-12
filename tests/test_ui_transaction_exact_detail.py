@@ -2,7 +2,7 @@ import unittest
 
 from kassiber.core import ui_snapshot
 from tests import test_transaction_graph as fixtures
-from tests.custody_projection_fixtures import insert_reviewed_projection
+from tests.custody_projection_fixtures import insert_reviewed_projection, stamp_journal_semantics
 
 
 class ExactTransactionDetailTests(unittest.TestCase):
@@ -21,6 +21,7 @@ class ExactTransactionDetailTests(unittest.TestCase):
             occurred_at=fixtures.NOW, target_occurred_at=fixtures.NOW,
         )
         book.conn.execute("UPDATE profiles SET last_processed_at=?, last_processed_tx_count=2, last_processed_input_version=journal_input_version WHERE id='profile-1'", (fixtures.NOW,))
+        stamp_journal_semantics(book.conn, 'profile-1')
         before = ui_snapshot.build_transactions_snapshot(book.conn)
         activity_before = ui_snapshot._activity_transactions(book.conn, "profile-1", has_book_state=True)
         self.assertEqual(len(before["txs"]), 1)

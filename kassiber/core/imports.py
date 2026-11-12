@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from .book_network import network_write
+from .custody_pricing import finite_decimal
 
 """Import orchestration helpers above the parser-only `kassiber.importers` boundary."""
 
@@ -1068,7 +1069,7 @@ def _transaction_merge_updates(
                 updates["fingerprint"] = fingerprint
             rate = existing["fiat_rate_exact"] or existing["fiat_rate"]
             if rate not in (None, ""):
-                exact_value = format(dec(rate) * dec(normalized["amount"]), "f")
+                exact_value = format(finite_decimal(finite_decimal(rate, "fiat_rate") * dec(normalized["amount"]), "fiat_value"), "f")
                 updates["fiat_value"] = float(exact_value)
                 updates["fiat_value_exact"] = exact_value
             elif existing["fiat_value"] is not None or existing["fiat_value_exact"] is not None:
@@ -1157,7 +1158,7 @@ def _transaction_merge_updates(
         # rather than retaining the compatibility projection's stale value.
         rate = existing["fiat_rate_exact"] or existing["fiat_rate"]
         if rate not in (None, ""):
-            exact_value = format(dec(rate) * dec(normalized["amount"]), "f")
+            exact_value = format(finite_decimal(finite_decimal(rate, "fiat_rate") * dec(normalized["amount"]), "fiat_value"), "f")
             updates["fiat_value"] = float(exact_value)
             updates["fiat_value_exact"] = exact_value
         elif existing["fiat_value"] is not None or existing["fiat_value_exact"] is not None:
@@ -1666,10 +1667,12 @@ def normalize_import_record(record: ImportRow, source_label: str = "") -> dict[s
     fiat_rate = record.get("fiat_rate")
     fiat_value = record.get("fiat_value")
     has_import_price = fiat_rate not in (None, "") or fiat_value not in (None, "")
-    rate = dec(fiat_rate) if fiat_rate not in (None, "") else None
-    value = dec(fiat_value) if fiat_value not in (None, "") else None
+    rate = finite_decimal(fiat_rate, "fiat_rate") if fiat_rate not in (None, "") else None
+    value = finite_decimal(fiat_value, "fiat_value") if fiat_value not in (None, "") else None
     if value is None and rate is not None:
-        value = amount * rate
+        value = finite_decimal(amount * rate, "fiat_value")
+    if rate is None and value is not None and amount:
+        finite_decimal(value / amount, "fiat_rate")
     source_kind = None
     quality = None
     if has_import_price:
@@ -1706,6 +1709,7 @@ def normalize_import_record(record: ImportRow, source_label: str = "") -> dict[s
     else:
         pricing_timestamp = None
     payload = pricing.pricing_payload(
+        amount_msat=btc_to_msat(amount),
         rate=rate,
         value=value,
         source_kind=source_kind,
@@ -1838,6 +1842,14 @@ def insert_wallet_records(
         raise AppError("Import wallet does not belong to the selected book", code="not_found")
     normalized_records = [normalize_import_record(record, source_label=source_label) for record in records]
     guard_observations(conn, profile["id"], ({**normalized, "wallet_kind": scoped_wallet["kind"], "wallet_config_json": scoped_wallet["config_json"]} for normalized in normalized_records))
+    from ..importers import synthetic_csv_identity
+    from .import_identity import occurrence_slots, stored_synthetic_occurrences
+    synthetic_identities = [synthetic_csv_identity(row["external_id"], row["raw_json"])
+                            for row in normalized_records]
+    stored_occurrences = ({key: occurrence_slots(members) for key, members in
+                           stored_synthetic_occurrences(conn, profile_id=profile["id"], wallet_id=wallet["id"]).items()}
+                          if any(synthetic_identities) else {})
+    incoming_occurrences = {}
     if authoritative_chain_observer:
         # Direction is no longer part of native identity, so two records in one
         # batch sharing (txid, asset) with opposite directions would now write
@@ -1866,6 +1878,20 @@ def insert_wallet_records(
                     retryable=False,
                 )
     for index, (record, normalized) in enumerate(zip(records, normalized_records), start=1):
+        identity = synthetic_identities[index - 1]
+        if identity is not None:
+            key = (wallet["id"], identity[0])
+            occurrence = incoming_occurrences[key] = incoming_occurrences.get(key, 0) + 1
+            stored = stored_occurrences.get(key, {}).get(occurrence)
+            if stored is not None and stored["external_id"] != normalized["external_id"]:
+                # Compatibility is an in-memory match, never an ID migration or
+                # enrichment that could overwrite the owner's reviewed row.
+                skipped += 1
+                unchanged += 1
+                if progress is not None and (index % 200 == 0 or index == total):
+                    _emit_import_progress(progress, wallet_label=wallet["label"], processed=index,
+                                          total=total, imported=imported, skipped=skipped)
+                continue
         tax_platform_row_identity = str_or_none(
             record.get("_tax_platform_row_identity")
         )
@@ -3190,6 +3216,10 @@ def import_file_into_wallet(
                 input_format,
             )
         )
+        # Reactivation changes journal inputs even without a pricing refresh.
+        if outcome.get("reactivated") and not outcome.get("journal_invalidated"):
+            hooks.invalidate_journals(conn, profile["id"])
+            outcome["journal_invalidated"] = True
     # Record the run before committing, so a wrongly-mapped import can be rolled
     # back without deleting the whole wallet. Only rows this run created are
     # linked (see core.import_batches), so enrichment of pre-existing rows is

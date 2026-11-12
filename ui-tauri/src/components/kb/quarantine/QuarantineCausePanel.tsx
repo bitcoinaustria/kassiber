@@ -268,10 +268,13 @@ export function QuarantineCausePanel({
       case "resolve_root":
         if (action.transaction_id) onOpenTransaction(action.transaction_id, "details");
         return;
-      case "review_pair":
-        // The pair, and its Unpair button, sit on the sheet's Linked tab.
-        if (action.transaction_id) openRoot(group, action.transaction_id, "linked");
+      case "review_pair": {
+        // The pair, and its Unpair button, sit on the sheet's Linked tab. An
+        // older daemon's legacy-pair action names only the pair: open the root.
+        const target = action.transaction_id ?? rootId;
+        if (target) openRoot(group, target, "linked");
         return;
+      }
       default: {
         const target = action.transaction_id ?? rootId;
         if (target) openRoot(group, target);

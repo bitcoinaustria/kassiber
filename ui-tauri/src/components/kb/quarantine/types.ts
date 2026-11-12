@@ -56,6 +56,9 @@ export interface QuarantineEvidence {
   row_amount_msat?: number;
   owned_receipts_msat?: number;
   owned_outputs_msat?: number;
+  /** A price stored in another currency than the book's, and the book's. */
+  price_currency?: string;
+  book_currency?: string;
   /** A suspense-holding pair this transaction is one leg of. */
   pair_id?: string;
   /** A digest of the pair review and its legs; an unpair must carry it back. */
@@ -77,6 +80,12 @@ export interface QuarantineEvidence {
     out_amount_msat: number;
     in_amount_msat: number;
   };
+  /** Validation codes of the pair this row is a leg of. */
+  review_codes?: string[];
+  /** Why a duplicate import group is held (cross_import_excess, refilled_excluded_copy, pre_batch_excess). */
+  import_hold_reasons?: string[];
+  /** Excluded copies whose place a newer import's row took. */
+  import_refilled_excluded_transaction_ids?: string[];
 }
 
 export interface QuarantinePairLeg {

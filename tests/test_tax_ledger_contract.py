@@ -461,7 +461,7 @@ def test_the_enrichment_table_reproduces_every_stored_quarantine() -> None:
             ]
             assert quarantine in rendered, (case["name"], quarantine)
             kinds[kind] = kinds.get(kind, 0) + 1
-    assert set(kinds) == set(ledger_response.DETAIL_ENRICHMENT), kinds
+    assert set(kinds) == set(ledger_response.DETAIL_ENRICHMENT) - ledger_response.ENGINE_ONLY_DETAIL_KINDS, kinds
     assert floats, "no stored detail carries a float"
 
 

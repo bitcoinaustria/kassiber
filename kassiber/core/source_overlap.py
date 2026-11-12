@@ -1042,8 +1042,8 @@ def duplicate_transaction_preview(
             str(row["external_id"] or "").strip().lower(),
             row["direction"],
             row["asset"],
-            int(row["amount"] or 0),
-            int(row["fee"] or 0),
+            row["amount"] or 0,
+            row["fee"] or 0,
         )
         groups.setdefault(key, []).append(row)
     duplicate_groups = []

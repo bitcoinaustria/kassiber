@@ -1070,11 +1070,8 @@ def sync_wallet_from_backend(
         # A deduplicated row can still become the newest contradictory chain
         # observation. Only compare when the journal has not already gone stale
         # from imported changes, and leave steady-state refreshes current.
-        journal_current = conn is not None and conn.execute(
-            """SELECT 1 FROM profiles WHERE id = ? AND last_processed_at IS NOT NULL
-                AND journal_input_version = last_processed_input_version""",
-            (profile["id"],),
-        ).fetchone() is not None
+        from .custody_journal import projection_freshness
+        journal_current = conn is not None and projection_freshness(conn, profile["id"])["is_current"]
         previous_observation_inputs = (
             _observed_accounting_inputs(conn, profile["id"], provenance_entries)
             if journal_current else None

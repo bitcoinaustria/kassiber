@@ -6,6 +6,7 @@ import logging
 import tempfile
 import traceback
 import unittest
+from decimal import Decimal
 from email.message import Message
 from pathlib import Path
 from urllib import error as urlerror
@@ -344,6 +345,100 @@ class ExchangeImporterTest(unittest.TestCase):
         self.assertEqual(binance[0]["fiat_currency"], "PLN")
         self.assertEqual(kraken[0]["asset"], "BTC")
         self.assertEqual(kraken[0]["fiat_currency"], "PLN")
+
+
+def _kraken_trades(sell_cost):
+    """A priced Kraken buy, then a sell whose trade row has no price."""
+
+    return normalize_kraken_records(
+        {"result": {"ledger": {
+            "buy": {"type": "trade", "asset": "XXBT", "amount": "0.02", "refid": "tb", "time": "1690000000"},
+            "sell": {"type": "trade", "asset": "XXBT", "amount": "-0.01", "refid": "ts", "time": "1700000000"},
+        }}},
+        {"result": {"trades": {
+            "tb": {"pair": "XXBTZEUR", "cost": "500", "fee": "1", "price": "25000"},
+            "ts": {"pair": "XXBTZEUR", "cost": sell_cost, "fee": "1"},
+        }}},
+    )
+
+
+def _coinbase_trades():
+    return normalize_coinbase_records({"currency": "BTC", "transactions": [
+        {"id": "cb-buy", "type": "buy", "created_at": "2023-07-22T00:00:00Z",
+         "amount": {"amount": "0.02", "currency": "BTC"},
+         "native_amount": {"amount": "500", "currency": "EUR"}},
+        {"id": "cb-sell", "type": "sell", "created_at": "2023-11-14T00:00:00Z",
+         "amount": {"amount": "-0.01", "currency": "BTC"},
+         "native_amount": {"amount": "-399", "currency": "EUR"}},
+    ]})
+
+
+class ExchangeSellPriceTest(unittest.TestCase):
+    """A sell without a quoted price is never given a negative rate."""
+
+    def test_sell_rates_are_positive_and_a_zero_value_sell_has_none(self):
+        kraken_sell = _kraken_trades("400")[1]
+        self.assertEqual(kraken_sell["direction"], "outbound")
+        # Kraken's price is cost / volume, the same as a priced trade's.
+        self.assertEqual(kraken_sell["fiat_rate"], Decimal("40000"))
+        self.assertEqual(kraken_sell["fiat_value"], Decimal("399"))
+        coinbase_sell = _coinbase_trades()[1]
+        self.assertEqual(coinbase_sell["fiat_rate"], Decimal("39900"))
+        self.assertEqual(coinbase_sell["fiat_value"], Decimal("399"))
+        worthless = _kraken_trades("0")[1]
+        self.assertIsNone(worthless["fiat_rate"])
+        self.assertEqual(worthless["fiat_value"], Decimal("0"))
+
+    def test_sells_are_priced_in_journals_and_a_zero_value_sell_is_held(self):
+        from kassiber.cli import handlers
+        from kassiber.core import accounts, imports as core_imports, wallets as core_wallets
+        from kassiber.db import open_db
+
+        with tempfile.TemporaryDirectory() as data_root:
+            conn = open_db(Path(data_root))
+            try:
+                workspace = accounts.create_workspace(conn, "W")
+                profile = accounts.create_profile(conn, workspace["id"], "P", "EUR", "FIFO", "generic", 365)
+                hooks = handlers._import_coordinator_hooks()
+                for kind, records in (
+                    ("kraken", _kraken_trades("400")),
+                    ("coinbase", _coinbase_trades()),
+                ):
+                    wallet = core_wallets.create_wallet(conn, workspace["id"], profile["id"], kind, kind)
+                    profile = handlers.resolve_scope(conn, workspace["id"], profile["id"])[1]
+                    wallet = handlers.resolve_wallet(conn, profile["id"], wallet["id"])
+                    core_imports.import_records_into_wallet(
+                        conn, profile, wallet, records, f"{kind}:api:{kind}", hooks, report_updates=True,
+                    )
+                rates = {
+                    row["external_id"]: row["fiat_rate_exact"]
+                    for row in conn.execute("SELECT external_id, fiat_rate_exact FROM transactions")
+                }
+                self.assertEqual(rates["kraken:sell"], "40000")
+                self.assertEqual(rates["coinbase:cb-sell"], "39900")
+                handlers.process_journals(conn, workspace["id"], profile["id"])
+                self.assertEqual(handlers.list_quarantines(conn, workspace["id"], profile["id"]), [])
+
+                # A sell worth nothing has no price to give: it is held for
+                # one, and disposals after it in the pool wait behind it.
+                wallet = core_wallets.create_wallet(conn, workspace["id"], profile["id"], "kraken-zero", "kraken")
+                wallet = handlers.resolve_wallet(conn, profile["id"], wallet["id"])
+                zero_sell = {**_kraken_trades("0")[1], "txid": "kraken:zero-sell"}
+                core_imports.import_records_into_wallet(
+                    conn, profile, wallet, [zero_sell], "kraken:api:zero", hooks, report_updates=True,
+                )
+                handlers.process_journals(conn, workspace["id"], profile["id"])
+                held = handlers.list_quarantines(conn, workspace["id"], profile["id"])
+                self.assertEqual(
+                    [row["external_id"] for row in held if row["category"] == "missing_price"],
+                    ["kraken:zero-sell"],
+                )
+                self.assertEqual(
+                    {row["external_id"]: row["reason"] for row in held}["kraken:zero-sell"],
+                    "missing_spot_price",
+                )
+            finally:
+                conn.close()
 
 
 # A key and secret with characters percent-encoding changes, so the escaped

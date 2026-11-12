@@ -11,6 +11,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any, Mapping
 
 from ..msat import dec
+from .custody_pricing import finite_decimal, validate_transaction_price
 
 LEGACY_SOURCE_IMPORT = "import"
 LEGACY_SOURCE_MANUAL = "manual"
@@ -59,6 +60,54 @@ def decimal_from_exact(*values: Any) -> Decimal | None:
         if value not in (None, ""):
             return dec(value)
     return None
+
+
+PRICE_CURRENCY_MISMATCH_REASON = "price_currency_mismatch"
+_PRICE_FIELDS = ("fiat_rate_exact", "fiat_rate", "fiat_value_exact", "fiat_value")
+
+
+_ASCII_UPPER = str.maketrans("abcdefghijklmnopqrstuvwxyz", "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+
+def currency_code(value: Any) -> str:
+    """A stored currency as journals compare it.
+
+    SQLite's ``UPPER(TRIM(x))``: spaces stripped, ASCII letters upper-cased,
+    so the SQL readers (``price_in_book_currency_sql``) agree with it.
+    """
+    return str(value or "").strip(" ").translate(_ASCII_UPPER)
+
+
+def price_in_book_currency_sql(alias: str = "transactions") -> str:
+    """SQL: the transaction's price, if any, counts in its book's currency.
+
+    The reader-side twin of ``price_currency_mismatch`` for queries that
+    read stored prices as the book's (fallback valuations, flows): a row
+    priced in another currency reads as unpriced there.
+    """
+    column = f"{alias}.fiat_currency"
+    return (
+        f"(TRIM(COALESCE({column}, '')) = '' OR UPPER(TRIM({column})) = "
+        f"(SELECT UPPER(TRIM(COALESCE(book.fiat_currency, ''))) FROM profiles book "
+        f"WHERE book.id = {alias}.profile_id))"
+    )
+
+
+def price_currency_mismatch(row: Mapping[str, Any], book_currency: Any) -> str | None:
+    """The currency of a row's stored price when it is not the book's.
+
+    A book's currency can change after its rows were priced; their prices
+    keep the currency they were stored in. Such a price never counts in the
+    book's currency. A row without a price, or without a recorded currency,
+    has nothing to compare.
+    """
+    keys = row.keys() if hasattr(row, "keys") else ()
+    currency = currency_code(row["fiat_currency"]) if "fiat_currency" in keys else ""
+    if not currency or currency == currency_code(book_currency):
+        return None
+    if all(field not in keys or row[field] in (None, "") for field in _PRICE_FIELDS):
+        return None
+    return currency
 
 
 def reviewed_price(row: Mapping[str, Any]) -> str | None:
@@ -178,9 +227,13 @@ def pricing_payload(
     granularity: str | None = None,
     method: str | None = None,
     external_ref: str | None = None,
+    amount_msat: int | None = None,
 ) -> dict[str, Any]:
-    rate_exact = exact_decimal(rate)
-    value_exact = exact_decimal(value)
+    rate_exact = exact_decimal(finite_decimal(rate, "fiat_rate")) if rate not in (None, "") else None
+    value_exact = exact_decimal(finite_decimal(value, "fiat_value")) if value not in (None, "") else None
+    if amount_msat is not None:
+        validate_transaction_price(dict(id="pricing input", amount=amount_msat,
+            fiat_rate_exact=rate_exact, fiat_value_exact=value_exact))
     return {
         "fiat_rate": float(dec(rate_exact)) if rate_exact is not None else None,
         "fiat_value": float(dec(value_exact)) if value_exact is not None else None,

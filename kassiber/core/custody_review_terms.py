@@ -13,9 +13,10 @@ import uuid
 
 from . import custody_authored_migration, transfer_matching
 from .custody_evidence import row_principal_msat
+from .custody_pricing import finite_decimal
 from .repo import invalidate_journals
 from ..errors import AppError
-from ..msat import btc_to_msat, dec, msat_to_btc
+from ..msat import btc_to_msat, msat_to_btc
 from ..tax_policy import (
     cross_asset_carrying_value_supported,
     recommended_pair_policy,
@@ -189,7 +190,21 @@ def payout_to_dict(row) -> dict[str, Any]:
     )
     swap_fee_msat = row["swap_fee_msat"] if "swap_fee_msat" in keys else None
     out_amount = row["out_amount"] if "out_amount" in keys else None
+    invalid_price = False
+    try:
+        numeric_price = (
+            float(finite_decimal(payout_fiat_value, "payout_fiat_value"))
+            if payout_fiat_value is not None else None
+        )
+    except AppError:
+        numeric_price = None
+        invalid_price = True
     return {
+        "invalid": invalid_price,
+        "validation_error": (
+            "Invalid payout_fiat_value; delete and recreate this payout"
+            if invalid_price else None
+        ),
         "id": row["id"],
         "component_id": row["component_id"] if "component_id" in keys else None,
         "workspace_id": row["workspace_id"],
@@ -201,9 +216,7 @@ def payout_to_dict(row) -> dict[str, Any]:
         "payout_amount": float(msat_to_btc(row["payout_amount"])),
         "payout_amount_msat": int(row["payout_amount"]),
         "payout_occurred_at": row["payout_occurred_at"],
-        "payout_fiat_value": (
-            float(payout_fiat_value) if payout_fiat_value is not None else None
-        ),
+        "payout_fiat_value": numeric_price,
         "payout_external_id": row["payout_external_id"],
         "counterparty": row["counterparty"],
         "notes": row["notes"],
@@ -216,7 +229,7 @@ def payout_to_dict(row) -> dict[str, Any]:
 
 
 def _positive_btc_amount_msat(value, flag_name: str) -> int:
-    amount = dec(value)
+    amount = finite_decimal(value, flag_name)
     if amount <= 0:
         raise AppError(f"{flag_name} must be positive", code="validation")
     return btc_to_msat(amount)
@@ -537,7 +550,14 @@ def create_payout_review(
                 f"({out_amount_msat} > {full_out_msat} msat).",
                 code="validation",
             )
-    payout_value = dec(payout_fiat_value) if payout_fiat_value is not None else None
+    payout_value = (
+        finite_decimal(payout_fiat_value, "--payout-fiat-value")
+        if payout_fiat_value is not None else None
+    )
+    if payout_value is not None:
+        for quantity in (payout_amount_msat, out_amount_msat or row_principal_msat(out_row)):
+            if quantity > 0:
+                finite_decimal(payout_value / msat_to_btc(quantity), "payout_fiat_rate")
     if payout_value is not None and payout_value < 0:
         raise AppError("--payout-fiat-value must not be negative", code="validation")
     payout_occurred_at = _payout_occurred_at(payout_occurred_at)
@@ -609,7 +629,8 @@ def create_payout_review(
         payout_amount_msat=payout_amount_msat,
         payout_occurred_at=payout_occurred_at,
         payout_fiat_value=(
-            float(payout_value) if payout_value is not None else None
+            # Authored economic terms persist decimal text, not numeric output.
+            format(payout_value, "f") if payout_value is not None else None
         ),
         payout_external_id=payout_external_id,
         counterparty=counterparty,
@@ -665,6 +686,7 @@ def list_pair_reviews(
         conn, profile_id=profile_id, include_deleted=include_deleted
     ):
         entry = pair_to_dict(row)
+        entry.update(pair_review_guidance(conn, row))
         entry["component"] = {
             "id": row["component_id"],
             "source_count": int(row["component_source_count"]),
@@ -697,6 +719,25 @@ def list_pair_reviews(
         }
         output.append(entry)
     return output
+
+
+def pair_review_guidance(conn, pair) -> dict[str, Any]:
+    """Explain legacy fee holds without revising any authored facts."""
+    from .custody_components import get_component
+    component = get_component(conn, pair["component_id"], include_local_evidence=False)
+    codes = sorted({issue["code"] for issue in component["validation"]["issues"]})
+    result = {"review_required": bool(codes), "review_codes": codes}
+    if "legacy_pair_fee_allocation_review_required" in codes:
+        result["repair"] = {
+            "code": "legacy_pair_fee_allocation_review_required",
+            "pair_id": pair["id"],
+            "command": f'transfers update --pair-id {pair["id"]} --note "Reviewed complete debit and residual"',
+            "alternative": f'transfers unpair --pair-id {pair["id"]}, then transfers pair with the reviewed legs',
+            "preview_operation": (
+                "repair_legacy_pair" if len(component["economic_terms"]) == 1 else None
+            ),
+        }
+    return result
 
 
 def delete_payout_review(

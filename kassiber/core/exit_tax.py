@@ -11,7 +11,7 @@ Design (see docs/plan/11-exit-tax-deemed-disposal.md):
 - This module owns NO tax math. It reads the stored journal projection the
   tax engine already computed and reconstructs the remaining inventory and its
   cost basis per regime directly from those entries: acquisitions add (by
-  acquisition-date regime), disposals subtract (by their `at_category` regime
+  acquisition-date regime), disposals subtract (by their persisted consumed regime
   and the engine's own consumed cost basis). Income recognition lines are
   skipped for quantity/basis — the engine already books the matching
   acquisition lot for earn receipts, so counting income again would double the
@@ -28,13 +28,13 @@ Not tax advice.
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Mapping, Optional, Sequence
 
 from ..errors import AppError
 from ..tax_policy import build_tax_policy
-from ..time_utils import parse_timestamp
+from ..time_utils import parse_iso_datetime_or_none, timestamp_microseconds
 from . import pricing
 from . import report_context as core_report_context
 from . import custody_journal
@@ -42,6 +42,7 @@ from . import rates as core_rates
 from .journal_markers import MARKER_REGIME, parse_marker
 from .austrian import (
     AT_CATEGORY_TO_KENNZAHL,
+    AT_TAX_TZ,
     CRYPTO_KENNZAHLEN_FROM,
     E1KV_KENNZAHLEN,
     infer_regime_from_timestamp,
@@ -59,6 +60,10 @@ from ..msat import dec
 # only; the deemed-disposal gain a Steuerberater files may differ. Kept here, not
 # in TaxPolicy, because it is presentation/estimate logic, not engine tax math.
 AT_SONDERSTEUERSATZ = Decimal("0.275")
+
+# Owner-selected historical FMV policy, measured from the exclusive cutoff
+# rather than wall time, and shared by cached and transaction quotes.
+FMV_MAX_AGE_SECONDS = 24 * 60 * 60
 
 DESTINATION_EU_EEA = "eu_eea"
 DESTINATION_THIRD_COUNTRY = "third_country"
@@ -129,8 +134,10 @@ _ASSUMPTION_DEFERRAL_THIRD = (
     "on departure."
 )
 _ASSUMPTION_FMV = (
-    "EXIT-005: Fair market value uses the best available cached rate at or before "
-    "the departure date; it does not imply intraday coverage."
+    "EXIT-005: Fair market value uses the closest cached or transaction quote "
+    "strictly before the exclusive departure cutoff, at most 24 hours old. "
+    "Older, future or undated quotes leave the asset unpriced. "
+    "It does not imply intraday coverage."
 )
 _ASSUMPTION_FUTURE_TIGHTENING = (
     "EXIT-003: A planned 1 July 2026 tightening (annual proof when deferred gains "
@@ -173,16 +180,36 @@ def _normalize_destination(destination: Optional[str]) -> str:
     )
 
 
-def _resolve_departure(departure_date: Optional[str]) -> tuple[str, str]:
-    """Return (departure_date 'YYYY-MM-DD', cutoff RFC3339 end-of-day)."""
+def _resolve_departure(departure_date: Optional[str], jurisdiction: str = "generic") -> tuple[str, str]:
+    """Return the jurisdiction's civil day and its next midnight in UTC.
 
-    if not departure_date:
-        day = datetime.now(timezone.utc).date().isoformat()
+    A date-only input names that civil day. An offset/timed input denotes an
+    instant and selects its civil day in Europe/Vienna (AT) or UTC (generic).
+    Construct the next local midnight before converting to UTC so DST applies.
+    """
+
+    zone = AT_TAX_TZ if jurisdiction.strip().lower() == "at" else timezone.utc
+    if departure_date:
+        raw = str(departure_date).strip()
+        hint = "Use a date (YYYY-MM-DD) or a date-time with an offset, e.g. 2025-01-01T12:00:00+01:00."
+        try:
+            # fromisoformat also accepts compact dates and interprets a bare
+            # date plus Z as a naive midnight. Neither is a timed departure.
+            if len(raw) != 10 and "T" not in raw.upper() and " " not in raw:
+                raise ValueError("Expected YYYY-MM-DD or a date-time")
+            instant = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise AppError("Invalid exit-tax departure date", code="validation", hint=hint) from exc
+        if len(raw) == 10:
+            instant = instant.replace(tzinfo=zone)
+        elif instant.tzinfo is None or instant.utcoffset() is None:
+            raise AppError("Exit-tax departure time requires an offset", code="validation", hint=hint)
     else:
-        # parse_timestamp validates and normalizes; keep only the date part.
-        day = parse_timestamp(str(departure_date))[:10]
-    cutoff = f"{day}T23:59:59Z"
-    return day, cutoff
+        instant = datetime.now(timezone.utc)
+    day = instant.astimezone(zone).date()
+    next_day = day + timedelta(days=1)
+    cutoff = datetime.combine(next_day, datetime.min.time(), tzinfo=zone)
+    return day.isoformat(), cutoff.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def _description_at_regime(description: Any) -> Optional[str]:
@@ -191,19 +218,18 @@ def _description_at_regime(description: Any) -> Optional[str]:
 
 
 def _entry_is_alt(entry: Mapping[str, Any]) -> bool:
-    """Regime of a journal entry for inventory accounting.
+    """Read the matched-lot marker before the overrideable tax category.
 
-    Disposals/fees carry an `at_category` (e.g. ``neu_gain``, ``alt_taxfree``);
-    its prefix is authoritative. The tax engine serializes explicit Austrian
-    overrides and transfer fee regimes into the description as ``at_regime=...``;
-    honor that marker before falling back to the acquisition-date cutoff.
+    Rebuilt disposal and fee rows persist their pre-override consumed regime.
+    The category/date fallback supports legacy projections; freshness checks
+    require affected retained books to rebuild before reports use them.
     """
 
     marker = _description_at_regime(entry.get("description"))
     if marker is not None:
         return marker == "alt"
     category = entry.get("at_category")
-    if category:
+    if dec(entry.get("quantity") or 0) < 0 and category:
         return str(category).startswith("alt")
     occurred_at = entry.get("occurred_at")
     if occurred_at:
@@ -216,50 +242,47 @@ def _fmv_at(
     asset: str,
     fiat_currency: str,
     target_iso: str,
-    fallback_rates: Mapping[str, Any],
+    fallback_quotes: Mapping[str, Mapping[str, Any]],
 ) -> tuple[Optional[Decimal], dict[str, Any]]:
-    """Fair market value of one unit of ``asset`` at/just before ``target_iso``.
+    """Choose the closest valid quote before cutoff, from either local source.
 
-    Uses the canonical cache lookup ``get_cached_rate_at_or_before`` so the FMV is
-    always bounded by the departure date (a historical departure never picks up a
-    later/future rate) and a reviewed manual override wins over a provider row at
-    the same timestamp. If no rate at-or-before the date exists, fall back to the
-    profile's transaction price, else mark the asset unpriced.
+    Both sources share the 24-hour age limit. At equal instants the cache wins;
+    its canonical lookup preserves reviewed manual priority over providers.
     """
 
     pair = core_rates.transaction_rate_pair(asset, fiat_currency)
+    candidates = []
     if pair is not None:
         try:
-            cached = core_rates.get_cached_rate_at_or_before(conn, pair, target_iso)
+            cached = core_rates.get_cached_rate_at_or_before(conn, pair, target_iso, exclusive=True)
         except (AppError, sqlite3.OperationalError):
             cached = None
         if cached is not None:
             rate = pricing.decimal_from_exact(cached.get("rate_exact"), cached.get("rate"))
-            if rate is not None and rate > 0:
-                return rate, {
-                    "asset": asset,
-                    "rate": float(rate),
-                    "pair": pair,
-                    "asOf": cached.get("timestamp"),
-                    "source": "cache",
-                }
-    fallback = fallback_rates.get(asset) if fallback_rates else None
+            candidates.append((rate, cached.get("timestamp"), "cache"))
+    fallback = fallback_quotes.get(asset)
     if fallback is not None:
-        fallback_dec = dec(fallback)
-        if fallback_dec > 0:
-            return fallback_dec, {
-                "asset": asset,
-                "rate": float(fallback_dec),
-                "pair": pair or f"{asset}-{str(fiat_currency).upper()}",
-                "asOf": target_iso,
-                "source": "transaction",
-            }
+        candidates.append((dec(fallback["rate"]), fallback.get("timestamp"), "transaction"))
+    cutoff_instant = timestamp_microseconds(target_iso)
+    usable = []
+    for rate, timestamp, source in candidates:
+        instant = timestamp_microseconds(timestamp)
+        if (rate is not None and rate > 0 and instant is not None
+                and cutoff_instant is not None
+                and 0 < cutoff_instant - instant <= FMV_MAX_AGE_SECONDS * 1_000_000):
+            usable.append((instant, rate, timestamp, source))
+    if usable:
+        _, rate, timestamp, source = max(usable, key=lambda quote: quote[0])
+        return rate, {
+            "asset": asset, "rate": float(rate),
+            "pair": pair or f"{asset}-{str(fiat_currency).upper()}",
+            "asOf": parse_iso_datetime_or_none(timestamp).isoformat().replace("+00:00", "Z"),
+            "source": source,
+        }
     return None, {
-        "asset": asset,
-        "rate": None,
+        "asset": asset, "rate": None,
         "pair": pair or f"{asset}-{str(fiat_currency).upper()}",
-        "asOf": target_iso,
-        "source": "missing",
+        "asOf": None, "source": "missing",
     }
 
 
@@ -314,22 +337,38 @@ def compute_deemed_disposal(
     - inflow cost: acquisitions carry it in ``fiat_value`` (``cost_basis`` is
       ``None``).
     - outflow basis: the engine-computed consumed ``cost_basis``.
-    - ``at_category`` (AT only): ``None``, or a string whose prefix (``alt`` /
-      ``neu`` / ``income``) is the regime; acquisitions/transfers carry ``None``.
+    - ``at_regime`` in the description (AT): the pre-override consumed regime
+      on disposal/fee rows; acquisition markers retain acquisition regime.
+    - ``at_category`` (AT): overrideable realized tax treatment, independent of
+      consumed inventory regime; acquisitions/transfers carry ``None``.
     """
 
     jurisdiction = str(profile.get("tax_country") or "generic").strip().lower()
     is_at = jurisdiction == "at"
     fiat_currency = str(profile.get("fiat_currency") or "EUR").upper()
-    day, cutoff = _resolve_departure(departure_date)
+    day, cutoff = _resolve_departure(departure_date, jurisdiction)
     # The departure day as the owner names it, not its UTC end (which is
     # already 1 March in Vienna for 28 February).
     old_rules = is_at and day < CRYPTO_KENNZAHLEN_FROM.date().isoformat()
     dest = _normalize_destination(destination)
-    method = build_tax_policy(profile).default_accounting_method
+    policy = build_tax_policy(profile)
+    method = str(profile.get("gains_algorithm") or policy.default_accounting_method).strip().lower()
+    cutoff_instant = timestamp_microseconds(cutoff)
 
     entries: Sequence[Mapping[str, Any]] = state.get("entries") or ()
-    fallback_rates = state.get("latest_rates") or {}
+    # A bare latest rate has no historical authority. Require its source time,
+    # even for directly supplied states, before admitting it to this valuation.
+    fallback_quotes = {}
+    for asset, value in (state.get("latest_rates") or {}).items():
+        timestamp = (state.get("latest_rate_timestamps") or {}).get(asset)
+        instant = timestamp_microseconds(timestamp)
+        if instant is not None and instant < cutoff_instant:
+            fallback_quotes[asset] = {"rate": value, "timestamp": timestamp}
+
+    wallet_labels = {
+        key[0]: key[1] for key in (state.get("wallet_holdings") or {})
+    }
+    wallet_quantities: dict[tuple[str, str, str], Decimal] = {}
 
     # Per-asset Alt/Neu inventory + cost basis, rebuilt from engine entries.
     assets: dict[str, dict[str, _RegimeBucket]] = {}
@@ -343,9 +382,21 @@ def compute_deemed_disposal(
 
     for entry in entries:
         occurred_at = entry.get("occurred_at")
-        if occurred_at and str(occurred_at) > cutoff:
+        instant = timestamp_microseconds(occurred_at)
+        if instant is None:
+            raise AppError("Exit-tax inventory requires a valid journal timestamp.", code="validation")
+        if instant >= cutoff_instant:
             continue  # not yet held / disposed of as of the departure date
         entry_type = str(entry.get("entry_type") or "")
+        asset = str(entry.get("asset") or "")
+        qty = dec(entry.get("quantity") or 0)
+        wallet_id = entry.get("wallet_id")
+        # transfer_out already includes the separate transfer_fee quantity,
+        # matching reports._holdings_quantity_delta and RP2's BalanceSet.
+        if asset and wallet_id and entry_type not in ("income", "transfer_fee"):
+            wallet_label = entry.get("wallet_label") or wallet_labels.get(wallet_id) or str(wallet_id)
+            key = (str(wallet_id), str(wallet_label), asset)
+            wallet_quantities[key] = wallet_quantities.get(key, Decimal("0")) + qty
         if entry_type in ("transfer_in", "transfer_out"):
             continue  # net-zero across owned wallets; never touches the pool
         if entry_type == "income":
@@ -354,10 +405,8 @@ def compute_deemed_disposal(
             # _HOLDINGS_QUANTITY_SKIP_ENTRY_TYPES). Still flag EXIT-004.
             has_income = True
             continue
-        asset = str(entry.get("asset") or "")
         if not asset:
             continue
-        qty = dec(entry.get("quantity") or 0)
         # Generic profiles have no regime; pool everything as Neubestand-equiv.
         alt = _entry_is_alt(entry) if is_at else False
         bucket = _bucket(asset, alt)
@@ -382,8 +431,11 @@ def compute_deemed_disposal(
 
     fmv_source: list[dict[str, Any]] = []
     fmv_by_asset: dict[str, Optional[Decimal]] = {}
-    for asset in sorted(assets):
-        rate, source = _fmv_at(conn, asset, fiat_currency, cutoff, fallback_rates)
+    wallet_assets = {key[2] for key, qty in wallet_quantities.items() if qty > 0}
+    held_assets = {asset for asset, regimes in assets.items()
+                   if any(bucket.clamped()[0] > 0 for bucket in regimes.values())} | wallet_assets
+    for asset in sorted(held_assets):
+        rate, source = _fmv_at(conn, asset, fiat_currency, cutoff, fallback_quotes)
         fmv_by_asset[asset] = rate
         fmv_source.append(source)
 
@@ -442,10 +494,14 @@ def compute_deemed_disposal(
                 }
             )
 
-    if has_unpriced_neu:
+    # A wallet-only asset (for example the incoming rail of a carrying-value
+    # move) has no acquisition bucket here. Its missing valuation still makes
+    # the entire handoff incomplete, as the assumption below promises.
+    has_missing_fmv = any(source["source"] == "missing" for source in fmv_source)
+    if has_unpriced_neu or has_missing_fmv:
         neu_market_total = None
         neu_gain_total = None
-    if has_unpriced_alt:
+    if has_unpriced_alt or has_missing_fmv:
         alt_market_total = None
 
     taxable_gain = (
@@ -462,11 +518,10 @@ def compute_deemed_disposal(
     collection_timing = "deferred" if dest == DESTINATION_EU_EEA else "immediate"
 
     wallet_holdings = []
-    for key, totals in (state.get("wallet_holdings") or {}).items():
-        # key = (wallet_id, wallet_label, account_code, asset)
+    for key, qty in wallet_quantities.items():
+        # Transfers affect wallet context, while leaving the global pool alone.
         wallet_label = key[1]
-        asset = key[3]
-        qty = dec(totals.get("quantity") or 0)
+        asset = key[2]
         if qty <= 0:
             continue
         fmv = fmv_by_asset.get(asset)
@@ -501,12 +556,13 @@ def compute_deemed_disposal(
         assumptions.append(_ASSUMPTION_FMV)
     if any(source["source"] == "missing" for source in fmv_source):
         assumptions.append(
-            "EXIT-005: No cached rate found for one or more assets — run "
+            "EXIT-005: No usable cached or transaction quote found for one or more assets — run "
             "`kassiber rates sync`; market value, gain, and estimated tax stay "
             "incomplete (null) until those holdings are priced."
         )
 
     quarantines = list(state.get("quarantines") or ())
+    missing_fmv_assets = [source["asset"] for source in fmv_source if source["source"] == "missing"]
 
     return {
         "workspace": profile.get("workspace_label") or profile.get("workspace_id"),
@@ -514,8 +570,13 @@ def compute_deemed_disposal(
         "jurisdictionCode": "AT" if is_at else "generic",
         "fiatCurrency": fiat_currency,
         "departureDate": day,
+        "departureTimezone": "Europe/Vienna" if is_at else "UTC",
         "destination": dest,
         "method": method,
+        "journalInputVersion": (
+            int(profile["journal_input_version"])
+            if profile.get("journal_input_version") is not None else None
+        ),
         "fmvSource": fmv_source,
         "totals": {
             "neuQuantitySats": _sats(neu_qty_total),
@@ -536,6 +597,7 @@ def compute_deemed_disposal(
         "status": {
             "needsJournals": not bool(entries),
             "quarantines": len(quarantines),
+            "missingFmvAssets": missing_fmv_assets,
         },
     }
 
@@ -561,7 +623,8 @@ def report_exit_tax(
         )
     workspace = report_context.workspace
     profile = report_context.profile
-    state = custody_journal.load_stored_ledger_state(conn, profile)
+    day, cutoff = _resolve_departure(departure_date, str(profile["tax_country"] or "generic"))
+    state = custody_journal.load_stored_ledger_state(conn, profile, rate_cutoff=cutoff, rate_cutoff_exclusive=True)
     profile = dict(profile)
     workspace_label = workspace["label"] if "label" in workspace.keys() else None
     profile.setdefault("workspace_label", workspace_label)
@@ -569,7 +632,7 @@ def report_exit_tax(
         conn,
         profile,
         state,
-        departure_date=departure_date,
+        departure_date=day,
         destination=destination,
     )
 
@@ -616,7 +679,18 @@ def format_exit_tax_lines(report: Mapping[str, Any]) -> list[str]:
     lines: list[str] = []
     lines.append(f"Exit-tax estimate — {report['profile']} ({report['jurisdictionCode']})")
     lines.append(f"Departure date: {report['departureDate']}    Destination: {report['destination']}")
+    lines.append(f"Departure timezone: {report['departureTimezone']}")
     lines.append(f"Accounting method: {report['method']}")
+    version = report.get("journalInputVersion")
+    lines.append(f"Journal input version: {version if version is not None else 'unavailable'}")
+    lines.append("FMV quotes:")
+    for quote in report["fmvSource"]:
+        lines.append(
+            f"  {quote['asset']} ({quote['pair']}): {_fmt_eur(quote['rate'], ccy)}; "
+            f"source: {quote['source']}; as of: {quote['asOf'] or 'unavailable'}"
+        )
+    if report["status"].get("missingFmvAssets"):
+        lines.append("Incomplete estimate: missing FMV for " + ", ".join(report["status"]["missingFmvAssets"]))
     lines.append("")
     lines.append("Deemed disposal at fair market value:")
     lines.append(

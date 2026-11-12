@@ -355,9 +355,17 @@ def _evidence(
         evidence["counterpart_transaction_ids"] = sorted(set(counterparts))
     if detail.get("blocked_by_reason"):
         evidence["blocked_by_reason"] = str(detail["blocked_by_reason"])
+    if reason == "synthetic_import_duplicate_review_required":
+        # Why the import group is held, and any excluded copy a newer row refilled.
+        for key in ("hold_reasons", "refilled_excluded_transaction_ids"):
+            if isinstance(detail.get(key), list):
+                evidence[f"import_{key}"] = [str(item) for item in detail[key]]
     for key in ("row_amount_msat", "owned_receipts_msat", "owned_outputs_msat"):
         if isinstance(detail.get(key), int):
             evidence[key] = int(detail[key])
+    for key in ("price_currency", "book_currency"):
+        if detail.get(key):
+            evidence[key] = str(detail[key])
     return evidence
 
 
@@ -696,6 +704,14 @@ def review_quarantine(
             "evidence": evidence,
         }
         item["actions"] = _actions(info, item, evidence, root, wallets)
+        if transaction_id in pairs:
+            from .custody_review_terms import pair_review_guidance
+            guidance = pair_review_guidance(conn, pairs[transaction_id])
+            if guidance.get("repair"):
+                evidence.update(guidance)
+                # The held leg opens the pair; the repair names the pair itself.
+                item["actions"].append({"kind": "review_pair", "transaction_id": transaction_id,
+                                        **guidance["repair"]})
         # Wallet ids travel only inside the actions that need them.
         item.pop("wallet_id")
         items.append(item)

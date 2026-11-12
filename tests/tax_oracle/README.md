@@ -56,6 +56,19 @@ module and those binding operations, so the switch stays on `rp2`; selecting
 `build_generic_policy` with its constants, and Austria comes from RP2's AT
 plugin, never from the product.
 
+## Edits since the freeze
+
+- `adapter.py`, Austrian disposals, fees and transfer fees: the journal
+  rows keep the regime of the lots RP2 consumed (`alt` or `neu`), taken
+  before category and taxability overrides are applied. One taxable event
+  splits into a row per category and consumed regime, so exit tax and
+  inventory follow the lots actually removed. The oracle edits are
+  `9dd068193` (exit-tax outflows) and `26bff7014` (disposals, and regimes
+  kept before tax overrides); the matching production change is the Rust
+  engine's `506c45a6c`. They landed in separate commits, against the freeze
+  rule below; `FROZEN.json` records the result, and the tax-shadow overlay
+  showed no exit-tax difference between the oracle and production.
+
 ## Freeze rule
 
 Any other edit is a bug fix. It lands in production and in the oracle in the
@@ -67,6 +80,11 @@ Edits since the freeze:
   rule (#708): a coarse price the owner accepted at this exact price is no
   longer held for review. Production applies it in the request builder;
   the `generic-coarse-*-accepted-review` and stale-acceptance goldens show it.
+- `normalize.py` holds a row whose stored price is in another currency than
+  the book's (`price_currency_mismatch`) exactly like a pending row: no move,
+  no regime, and its own quarantine with both currencies. Production holds it
+  through the request builder's `hold`; `tests/test_price_currency_mismatch.py`
+  shows it, and its books run in the tax-shadow overlay.
 
 The product modules imported above are shared. A change in one of them moves
 the oracle and production together, so a shadow run cannot see it; the

@@ -23,6 +23,7 @@ DDL — add it to `SCHEMA` or `ensure_schema_compat` here instead.
 import contextvars
 import errno
 import hashlib
+import itertools
 import json
 import os
 import sqlite3
@@ -617,7 +618,8 @@ def _migrate_wages_acquisition_semantics(conn) -> int:
         SET last_processed_at = NULL,
             last_processed_tx_count = 0,
             journal_input_version = journal_input_version + 1,
-            ownership_review_counts_json = NULL
+            ownership_review_counts_json = NULL,
+            required_journal_semantics_version = MAX(required_journal_semantics_version, 1)
         WHERE EXISTS (
             SELECT 1
             FROM transactions transaction_row
@@ -685,7 +687,8 @@ def _migrate_rp2_pool_basis_semantics(conn) -> int:
         SET last_processed_at = NULL,
             last_processed_tx_count = 0,
             journal_input_version = journal_input_version + 1,
-            ownership_review_counts_json = NULL
+            ownership_review_counts_json = NULL,
+            required_journal_semantics_version = MAX(required_journal_semantics_version, 1)
         WHERE {affected}
         """
     )
@@ -749,7 +752,8 @@ def _migrate_custody_hold_semantics(conn) -> int:
         SET last_processed_at = NULL,
             last_processed_tx_count = 0,
             journal_input_version = journal_input_version + 1,
-            ownership_review_counts_json = NULL
+            ownership_review_counts_json = NULL,
+            required_journal_semantics_version = MAX(required_journal_semantics_version, 1)
         WHERE {affected}
         """
     )
@@ -818,6 +822,123 @@ def _migrate_tax_engine_semantics(conn) -> int:
         WHERE {affected}
         """
     )
+    return 1
+
+
+AT_OUTFLOW_REGIME_SEMANTICS_MIGRATION = "at-outflow-consumed-regime-v2"
+
+
+def _migrate_at_outflow_regime_semantics(conn) -> int:
+    """Require stamped v2 journals for AT outflows with consumed-lot regimes."""
+    if conn.execute(
+        "SELECT 1 FROM schema_migration_audits WHERE migration_name = ?",
+        (AT_OUTFLOW_REGIME_SEMANTICS_MIGRATION,),
+    ).fetchone():
+        return 0
+    affected = """lower(trim(tax_country)) = 'at' AND EXISTS (
+        SELECT 1 FROM journal_entries WHERE profile_id = profiles.id
+        AND entry_type IN ('disposal', 'fee', 'transfer_fee'))"""
+    count = int(conn.execute(f"SELECT COUNT(*) FROM profiles WHERE {affected}").fetchone()[0])
+    inserted = conn.execute(
+        """INSERT OR IGNORE INTO schema_migration_audits
+           (id, migration_name, schema_version, impact_json, created_at)
+           VALUES (?, ?, 1, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))""",
+        (AT_OUTFLOW_REGIME_SEMANTICS_MIGRATION, AT_OUTFLOW_REGIME_SEMANTICS_MIGRATION,
+         json.dumps({"schema_version": 1, "migration": AT_OUTFLOW_REGIME_SEMANTICS_MIGRATION,
+                     "affected_profile_count": count,
+                     "required_journal_semantics_version": 2}, sort_keys=True)),
+    )
+    if int(inserted.rowcount or 0) == 0:
+        return 0
+    conn.execute(f"""UPDATE profiles SET last_processed_at = NULL,
+        last_processed_tx_count = 0, journal_input_version = journal_input_version + 1,
+        ownership_review_counts_json = NULL,
+        required_journal_semantics_version = MAX(required_journal_semantics_version, 2)
+        WHERE {affected}""")
+    return 1
+
+
+SAME_TIME_ORDER_SEMANTICS_MIGRATION = "same-time-source-order-v1"
+SAME_TIME_ORDER_SEMANTICS_VERSION = 8
+
+
+def _migrate_same_time_order_semantics(conn) -> int:
+    """Require stamped v8 journals of processed books, once.
+
+    Versions before 8 ordered same-time lots by random row ids, so any retained
+    journal may hold numbers another build would not reproduce. Input markers
+    stay; the semantics check reports the book stale until a v8 rebuild.
+    """
+    if conn.execute(
+        "SELECT 1 FROM schema_migration_audits WHERE migration_name = ?",
+        (SAME_TIME_ORDER_SEMANTICS_MIGRATION,),
+    ).fetchone():
+        return 0
+    affected = """last_processed_at IS NOT NULL OR EXISTS (
+        SELECT 1 FROM journal_entries WHERE profile_id = profiles.id)"""
+    count = int(conn.execute(f"SELECT COUNT(*) FROM profiles WHERE {affected}").fetchone()[0])
+    inserted = conn.execute(
+        """INSERT OR IGNORE INTO schema_migration_audits
+           (id, migration_name, schema_version, impact_json, created_at)
+           VALUES (?, ?, 1, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))""",
+        (SAME_TIME_ORDER_SEMANTICS_MIGRATION, SAME_TIME_ORDER_SEMANTICS_MIGRATION,
+         json.dumps({"schema_version": 1, "migration": SAME_TIME_ORDER_SEMANTICS_MIGRATION,
+                     "affected_profile_count": count,
+                     "required_journal_semantics_version": SAME_TIME_ORDER_SEMANTICS_VERSION},
+                    sort_keys=True)),
+    )
+    if int(inserted.rowcount or 0) == 0:
+        return 0
+    conn.execute(f"""UPDATE profiles
+        SET required_journal_semantics_version = MAX(required_journal_semantics_version, {SAME_TIME_ORDER_SEMANTICS_VERSION})
+        WHERE {affected}""")
+    return 1
+
+
+PRICE_CURRENCY_SEMANTICS_MIGRATION = "price-currency-mismatch-hold-v1"
+PRICE_CURRENCY_SEMANTICS_VERSION = 10
+
+
+def _migrate_price_currency_semantics(conn) -> int:
+    """Rebuild, once, processed books holding a price in another currency.
+
+    Before semantics version 10 a book whose currency changed after its rows
+    were priced read those prices as its new currency. Its journals are
+    invalidated and must be rebuilt at version 10, which holds those rows.
+    """
+    if conn.execute(
+        "SELECT 1 FROM schema_migration_audits WHERE migration_name = ?",
+        (PRICE_CURRENCY_SEMANTICS_MIGRATION,),
+    ).fetchone():
+        return 0
+    from .core.pricing import price_in_book_currency_sql
+
+    priced = " OR ".join(
+        f"COALESCE(CAST(t.{column} AS TEXT), '') <> ''"
+        for column in ("fiat_rate_exact", "fiat_rate", "fiat_value_exact", "fiat_value")
+    )
+    affected = f"""(last_processed_at IS NOT NULL OR EXISTS (
+        SELECT 1 FROM journal_entries WHERE profile_id = profiles.id))
+        AND EXISTS (SELECT 1 FROM transactions t WHERE t.profile_id = profiles.id
+            AND t.excluded = 0 AND ({priced}) AND NOT {price_in_book_currency_sql("t")})"""
+    count = int(conn.execute(f"SELECT COUNT(*) FROM profiles WHERE {affected}").fetchone()[0])
+    inserted = conn.execute(
+        """INSERT OR IGNORE INTO schema_migration_audits
+           (id, migration_name, schema_version, impact_json, created_at)
+           VALUES (?, ?, 1, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))""",
+        (PRICE_CURRENCY_SEMANTICS_MIGRATION, PRICE_CURRENCY_SEMANTICS_MIGRATION,
+         json.dumps({"schema_version": 1, "migration": PRICE_CURRENCY_SEMANTICS_MIGRATION,
+                     "affected_profile_count": count,
+                     "required_journal_semantics_version": PRICE_CURRENCY_SEMANTICS_VERSION},
+                    sort_keys=True)),
+    )
+    if int(inserted.rowcount or 0) == 0:
+        return 0
+    conn.execute(f"""UPDATE profiles SET last_processed_at = NULL,
+        last_processed_tx_count = 0, journal_input_version = journal_input_version + 1,
+        ownership_review_counts_json = NULL,
+        required_journal_semantics_version = MAX(required_journal_semantics_version, {PRICE_CURRENCY_SEMANTICS_VERSION})
+        WHERE {affected}""")
     return 1
 
 
@@ -939,6 +1060,95 @@ def _migrate_stored_error_credentials(conn) -> int:
     return 1
 
 
+PARTIAL_PAYOUT_SEMANTICS_MIGRATION = "custody-partial-payout-pricing-v1"
+# 8: same-time lots, legs and rates follow the source order instead of row ids.
+# 10: a price stored in another currency than the book's is held
+# (``price_currency_mismatch``) instead of read as the book's currency.
+JOURNAL_CALCULATION_SEMANTICS_VERSION = 10
+JOURNAL_SEMANTICS_ADOPTION_MIGRATION = "journal-calculation-semantics-adoption-v1"
+
+
+def _migrate_journal_semantics_adoption(conn) -> int:
+    """Require stamped rebuilds of retained journals once, with a local audit.
+
+    The audit, rather than column creation, keys adoption so books opened by
+    the earlier unaudited implementation acquire the same durable sentinel.
+    The caller commits the audit and requirement together.
+    """
+    if conn.execute(
+        "SELECT 1 FROM schema_migration_audits WHERE migration_name = ?",
+        (JOURNAL_SEMANTICS_ADOPTION_MIGRATION,),
+    ).fetchone():
+        return 0
+    affected = """last_processed_at IS NOT NULL OR EXISTS (
+        SELECT 1 FROM journal_entries WHERE profile_id = profiles.id
+    )"""
+    affected_count = int(conn.execute(
+        f"SELECT COUNT(*) FROM profiles WHERE {affected}"
+    ).fetchone()[0])
+    impact = {
+        "schema_version": 1,
+        "migration": JOURNAL_SEMANTICS_ADOPTION_MIGRATION,
+        "required_journal_semantics_version": 1,
+        "affected_profile_count": affected_count,
+        "explanation": "Requires stamped calculation semantics for previously processed books; retained journals and input markers are unchanged.",
+    }
+    inserted = conn.execute(
+        """INSERT OR IGNORE INTO schema_migration_audits
+           (id, migration_name, schema_version, impact_json, created_at)
+           VALUES (?, ?, 1, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))""",
+        (JOURNAL_SEMANTICS_ADOPTION_MIGRATION, JOURNAL_SEMANTICS_ADOPTION_MIGRATION,
+         json.dumps(impact, sort_keys=True, separators=(",", ":"))),
+    )
+    if int(inserted.rowcount or 0) == 0:
+        return 0
+    conn.execute(f"""UPDATE profiles
+        SET required_journal_semantics_version = MAX(required_journal_semantics_version, 1)
+        WHERE {affected}""")
+    return 1
+
+
+def _migrate_partial_payout_semantics(conn) -> int:
+    """Invalidate only profiles with active partial source payout reviews."""
+    if conn.execute(
+        "SELECT 1 FROM schema_migration_audits WHERE migration_name = ?",
+        (PARTIAL_PAYOUT_SEMANTICS_MIGRATION,),
+    ).fetchone():
+        return 0
+    from .core.custody_authored_migration import list_payout_review_records
+    from .core.custody_evidence import row_principal_msat
+
+    affected = []
+    for profile in conn.execute("SELECT id FROM profiles").fetchall():
+        for payout in list_payout_review_records(conn, profile_id=profile["id"]):
+            source = conn.execute(
+                "SELECT * FROM transactions WHERE id = ?",
+                (payout["out_transaction_id"],),
+            ).fetchone()
+            if 0 < int(payout["reviewed_out_amount_msat"]) < row_principal_msat(source):
+                affected.append(profile["id"])
+                break
+    inserted = conn.execute(
+        """INSERT OR IGNORE INTO schema_migration_audits
+           (id, migration_name, schema_version, impact_json, created_at)
+           VALUES (?, ?, 1, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))""",
+        (PARTIAL_PAYOUT_SEMANTICS_MIGRATION, PARTIAL_PAYOUT_SEMANTICS_MIGRATION,
+         json.dumps({"schema_version": 1, "migration": PARTIAL_PAYOUT_SEMANTICS_MIGRATION,
+                     "affected_profile_count": len(affected)}, sort_keys=True)),
+    )
+    if int(inserted.rowcount or 0) == 0:
+        return 0
+    conn.executemany(
+        """UPDATE profiles SET last_processed_at = NULL,
+               last_processed_tx_count = 0,
+               journal_input_version = journal_input_version + 1,
+               ownership_review_counts_json = NULL,
+               required_journal_semantics_version = MAX(required_journal_semantics_version, 1) WHERE id = ?""",
+        [(profile_id,) for profile_id in affected],
+    )
+    return 1
+
+
 SCHEMA = """
 PRAGMA foreign_keys = ON;
 
@@ -982,6 +1192,8 @@ CREATE TABLE IF NOT EXISTS profiles (
     cost_basis_pool_scope TEXT NOT NULL DEFAULT 'global',
     journal_input_version INTEGER NOT NULL DEFAULT 0,
     last_processed_input_version INTEGER NOT NULL DEFAULT 0,
+    required_journal_semantics_version INTEGER NOT NULL DEFAULT 0,
+    journal_semantics_version INTEGER NOT NULL DEFAULT 0,
     last_processed_at TEXT,
     last_processed_tx_count INTEGER NOT NULL DEFAULT 0,
     ownership_review_counts_json TEXT,
@@ -1352,6 +1564,9 @@ CREATE TABLE IF NOT EXISTS import_batches (
     source_filename TEXT,
     column_map_json TEXT,
     imported_at TEXT NOT NULL,
+    -- Insertion order; `imported_at` has one-second resolution. Filled by
+    -- trg_import_batches_sequence and carried verbatim by copies.
+    import_sequence INTEGER,
     rows_inserted INTEGER NOT NULL DEFAULT 0,
     rows_updated INTEGER NOT NULL DEFAULT 0,
     rows_skipped INTEGER NOT NULL DEFAULT 0
@@ -1363,8 +1578,15 @@ CREATE TABLE IF NOT EXISTS import_batches (
 CREATE TABLE IF NOT EXISTS import_batch_transactions (
     batch_id TEXT NOT NULL REFERENCES import_batches(id) ON DELETE CASCADE,
     transaction_id TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+    -- The row's 1-based position among the rows the run created, which keep
+    -- the file's order. Orders same-time rows (core/transaction_order.py);
+    -- NULL for rows imported before it was recorded.
+    source_position INTEGER,
     PRIMARY KEY (batch_id, transaction_id)
 );
+
+CREATE INDEX IF NOT EXISTS idx_import_batch_transactions_transaction
+    ON import_batch_transactions(transaction_id);
 
 CREATE INDEX IF NOT EXISTS idx_import_batches_profile_time
     ON import_batches(profile_id, imported_at DESC, id);
@@ -2000,6 +2222,31 @@ CREATE TRIGGER IF NOT EXISTS trg_review_workflow_receipt_immutable
 BEFORE UPDATE ON review_workflow_receipts
 BEGIN
     SELECT RAISE(ABORT, 'review_workflow_receipt_immutable');
+END;
+
+-- Append-only owner confirmations that a held group of ID-less CSV rows with
+-- one economic identity holds genuinely distinct trades. Each binds the exact
+-- members (and their exclusion) it confirmed; any change re-opens the hold.
+CREATE TABLE IF NOT EXISTS synthetic_import_duplicate_reviews (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    wallet_id TEXT NOT NULL,
+    economic_hash TEXT NOT NULL,
+    group_fingerprint TEXT NOT NULL CHECK(length(group_fingerprint) = 64),
+    transaction_ids_json TEXT NOT NULL,
+    reason TEXT NOT NULL CHECK(length(trim(reason)) > 0),
+    authored_source TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_synthetic_import_duplicate_reviews_profile
+    ON synthetic_import_duplicate_reviews(profile_id, wallet_id, economic_hash);
+
+CREATE TRIGGER IF NOT EXISTS trg_synthetic_import_duplicate_review_immutable
+BEFORE UPDATE ON synthetic_import_duplicate_reviews
+BEGIN
+    SELECT RAISE(ABORT, 'synthetic_import_duplicate_review_immutable');
 END;
 
 CREATE TABLE IF NOT EXISTS custody_ai_assistance_audits (
@@ -3780,6 +4027,36 @@ def get_setting(conn, key):
     return row["value"] if row else None
 
 
+def _migrate_import_batch_sequence(conn) -> bool:
+    """Number import batches in insertion order, once, and for every later insert.
+
+    Duplicate-import review orders imports by this sequence: two imports in the
+    same second share `imported_at`, and batch ids are random. Existing rows are
+    numbered by `(imported_at, rowid)`, the best insertion evidence a book holds.
+    The trigger also numbers batches an older binary writes. Partitions and
+    SQLCipher exports copy the stored value, so later rowid changes do not
+    reorder imports.
+    """
+    changed = _ensure_column_no_commit(conn, "import_batches", "import_sequence", "INTEGER")
+    pending = [row[0] for row in conn.execute(
+        "SELECT id FROM import_batches WHERE import_sequence IS NULL ORDER BY imported_at, rowid"
+    )]
+    if pending:
+        base = conn.execute("SELECT COALESCE(MAX(import_sequence), 0) FROM import_batches").fetchone()[0]
+        conn.executemany("UPDATE import_batches SET import_sequence = ? WHERE id = ?",
+                         [(base + offset, batch_id) for offset, batch_id in enumerate(pending, start=1)])
+        changed = True
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_import_batches_sequence ON import_batches(import_sequence)")
+    conn.execute("""CREATE TRIGGER IF NOT EXISTS trg_import_batches_sequence
+        AFTER INSERT ON import_batches WHEN NEW.import_sequence IS NULL
+        BEGIN
+            UPDATE import_batches
+            SET import_sequence = (SELECT COALESCE(MAX(import_sequence), 0) + 1 FROM import_batches)
+            WHERE id = NEW.id;
+        END""")
+    return changed
+
+
 def _ensure_column_no_commit(conn, table_name, column_name, definition):
     """Idempotent `ALTER TABLE ... ADD COLUMN` — no-op when the column exists."""
     columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()}
@@ -5383,6 +5660,24 @@ def ensure_schema_compat(conn):
     ensure_column(conn, "profiles", "cost_basis_pool_scope", "TEXT NOT NULL DEFAULT 'global'")
     ensure_column(conn, "profiles", "journal_input_version", "INTEGER NOT NULL DEFAULT 0")
     ensure_column(conn, "profiles", "last_processed_input_version", "INTEGER NOT NULL DEFAULT 0")
+    _ensure_column_no_commit(
+        conn, "profiles", "required_journal_semantics_version", "INTEGER NOT NULL DEFAULT 0"
+    )
+    _ensure_column_no_commit(
+        conn, "profiles", "journal_semantics_version", "INTEGER NOT NULL DEFAULT 0"
+    )
+    if _migrate_journal_semantics_adoption(conn):
+        conn.commit()
+    # Older binaries update these markers but know nothing about semantics.
+    # Invalidate the stamp even if they rebuild twice at the same timestamp.
+    # Current builders stamp separately, after publishing the input markers.
+    conn.execute("""CREATE TRIGGER IF NOT EXISTS trg_journal_semantics_unstamped
+        AFTER UPDATE OF last_processed_at, last_processed_input_version ON profiles
+        BEGIN
+            UPDATE profiles SET journal_semantics_version = 0,
+                required_journal_semantics_version = MAX(required_journal_semantics_version, 1)
+            WHERE id = NEW.id;
+        END""")
     # Cached count of unresolved swap/transfer candidates, written when the
     # matcher runs during journal processing, surfaced as a side-nav hint.
     # NULL = never computed (no badge).
@@ -5423,6 +5718,12 @@ def ensure_schema_compat(conn):
     if _migrate_custody_hold_semantics(conn):
         conn.commit()
     if _migrate_tax_engine_semantics(conn):
+        conn.commit()
+    if _migrate_at_outflow_regime_semantics(conn):
+        conn.commit()
+    if _migrate_import_batch_sequence(conn):
+        conn.commit()
+    if _migrate_same_time_order_semantics(conn):
         conn.commit()
     ensure_column(conn, "backends", "batch_size", "INTEGER")
     ensure_column(conn, "backends", "config_json", "TEXT NOT NULL DEFAULT '{}'")
@@ -5527,6 +5828,9 @@ def ensure_schema_compat(conn):
     # Compact retained calculations (see core/journal_calculation.py). Existing
     # rows keep calculation_json until the next journal build rewrites them.
     ensure_column(conn, "journal_entries", "calculation_compact", "TEXT")
+    # File position of an imported row; rows imported before stay NULL and
+    # sort by their content (core/transaction_order.py).
+    ensure_column(conn, "import_batch_transactions", "source_position", "INTEGER")
     from .core.acquisition_review import migrate_valuation_support
     if migrate_valuation_support(conn):
         conn.commit()
@@ -5703,11 +6007,18 @@ def ensure_schema_compat(conn):
     # The import is local to keep the core module independent from schema
     # bootstrap and to avoid a module-level db -> core -> db cycle.
     from .core.custody_authored_migration import (
+        mark_legacy_pair_fee_reviews,
         refresh_legacy_authored_components,
     )
 
     migration = refresh_legacy_authored_components(conn)
     if migration.changed:
+        conn.commit()
+    if _migrate_partial_payout_semantics(conn):
+        conn.commit()
+    if mark_legacy_pair_fee_reviews(conn):
+        conn.commit()
+    if _migrate_price_currency_semantics(conn):
         conn.commit()
     _ensure_commercial_reconciliation_schema(conn)
     _ensure_freshness_schema(conn)
@@ -7694,6 +8005,24 @@ def _backfilled_transaction_fingerprint(row, asset_code):
     )
 
 
+def _observed_liquid_graph(raw, expected, observed_graph_hash):
+    """Return ``raw`` without the backfilled identity fields its provenance lacks.
+
+    Only fields holding exactly the backfilled value are candidates, smallest
+    removal first, and only a payload whose canonical hash equals the
+    observer's committed hash is returned. Anything else stays as it is.
+    """
+    from .core.chain_observer.provenance import canonical_graph_hash
+
+    candidates = [key for key, value in expected.items() if key in raw and raw[key] == value]
+    for size in range(1, len(candidates) + 1):
+        for removed in itertools.combinations(candidates, size):
+            restored = {key: value for key, value in raw.items() if key not in removed}
+            if canonical_graph_hash(restored) == observed_graph_hash:
+                return restored
+    return None
+
+
 def _backfill_liquid_asset_codes(conn):
     """Heal Liquid transactions whose asset was stored as a raw policy-asset hex.
 
@@ -7734,9 +8063,11 @@ def _backfill_liquid_asset_codes(conn):
     legacy_rows = conn.execute(
         f"""
         SELECT t.id, t.profile_id, t.external_id, t.asset, t.raw_json,
-               w.config_json
+               w.config_json, observation.graph_hash AS observation_graph_hash
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id
+        LEFT JOIN chain_observation_provenance observation
+          ON observation.transaction_id = t.id
         WHERE upper(replace(t.asset, '-', '')) = 'LBTC'
            OR lower(t.asset) IN ({placeholders})
         """,
@@ -7776,6 +8107,25 @@ def _backfill_liquid_asset_codes(conn):
             "asset_id": asset_id,
             "asset": "LBTC",
         }
+        observed_graph_hash = row["observation_graph_hash"]
+        if observed_graph_hash:
+            # A current observer graph is not a legacy observation: its
+            # provenance commits to the exact payload, so filling identity
+            # fields here would silently revoke its authority. Rows an earlier
+            # run of this backfill already rewrote are restored when the
+            # committed hash proves which added fields to drop.
+            from .core.chain_observer.provenance import canonical_graph_hash
+
+            if canonical_graph_hash(row["raw_json"]) == observed_graph_hash:
+                continue
+            restored_raw = _observed_liquid_graph(raw, expected, observed_graph_hash)
+            if restored_raw is not None:
+                conn.execute(
+                    "UPDATE transactions SET raw_json = ? WHERE id = ?",
+                    (json.dumps(restored_raw, sort_keys=True), row["id"]),
+                )
+                affected_profile_ids.add(row["profile_id"])
+                continue
         existing_txid = str(raw.get("txid") or "").strip().lower()
         existing_chain = str(raw.get("chain") or "").strip()
         existing_network = str(raw.get("network") or "").strip()

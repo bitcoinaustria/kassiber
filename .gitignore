@@ -25,4 +25,6 @@ log/
 kassiber/ai/provider_broker/*.mjs
 # >>> generated test data: tests/test-data.lock (scripts/fetch-test-data.sh --ignore)
 /.test-data/
+/tests/fixtures/historical/pre_pair_fee_c0a015de.sqlite3.gz.b64
+/tests/fixtures/historical/pre_partial_payout_ca9a672f.sqlite3.gz.b64
 # <<< generated test data

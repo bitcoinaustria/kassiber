@@ -114,6 +114,24 @@ For an outbound anchor whose backend stores the miner fee separately, the
 source leg is the complete debit (`transaction amount + transaction fee`). The
 fee leg allocates part of that source; it is not added a second time for anchor
 coverage. For fee-inclusive imports, the source equals the stored net debit.
+Older pair components that counted an observed fee as reviewed principal while
+omitting it from the complete source debit require a new reviewed revision.
+They remain authored-active but ineffective with
+`legacy_pair_fee_allocation_review_required`; an audited one-shot compatibility
+step marks affected journals stale without changing those immutable facts.
+`transfers list` and quarantine review name that code and the affected pair.
+After reviewing the complete debit and residual, use
+`transfers update --pair-id <pair-id> --note "Reviewed complete debit and residual"`
+to author a corrected revision, or unpair and pair the reviewed legs again.
+Simple pairs also offer `repair_legacy_pair` through the explicit
+[review plan/apply workflow](custody-resolution.md); no repair happens on open
+or journal rebuild.
+Pair authoring uses that same debit when allocating a reviewed residual: a
+1,000 msat principal, separate 10 msat fee, and 998 msat receipt produce a
+1,010 msat source, 998 msat destination, 2 msat suspense, and 10 msat fee.
+For a reviewed swap refund, the remaining principal shortfall can instead be
+an additional reviewed fee. It consumes principal separately from the observed
+miner fee; both fee allocations must retain their distinct meanings.
 
 Anchored legs always inherit the imported transaction's canonical occurrence
 time; an authored override is rejected. Transaction-less legs require a valid
@@ -374,7 +392,11 @@ PDF/CSV/XLSX report, summary PDF, and Austrian E 1kv PDF/XLSX/CSV bundle.
 Read-only previews, transaction-ledger exports, and valuation-as-of exit-tax
 estimates do not create markers. Exit tax needs a separate replayable valuation
 recipe; recording ordinary realized-journal totals against it would create false
-amendment evidence. Export is evidence that a report was saved, not that it was
+amendment evidence. As an interim manual freshness check, exit-tax PDF/XLSX
+drafts stamp the journal input version and every FMV quote's source and `asOf`.
+Compare those stamps with a newly generated draft after a rebuild or rate
+change; they are not a registered snapshot or automatic amendment detection.
+Export is evidence that a report was saved, not that it was
 legally filed, so only an explicit user action may create a `filed` marker.
 
 The marker stores the report kind and period, an application-computed SHA-256

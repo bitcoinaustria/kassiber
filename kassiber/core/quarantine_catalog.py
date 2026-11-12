@@ -109,8 +109,13 @@ _REASONS: dict[str, ReasonInfo] = {
     ),
     # Prices.
     "missing_spot_price": _info(CATEGORY_MISSING_PRICE, ACTION_SET_PRICE),
+    "invalid_transaction_price": _info(CATEGORY_MISSING_PRICE, ACTION_SET_PRICE),
+    "split_payout_requires_review": _info(CATEGORY_NEEDS_DECISION, ACTION_PAIR_TRANSFER),
     "pricing_review_required": _info(CATEGORY_MISSING_PRICE, ACTION_SET_PRICE),
     "at_swap_price_required": _info(CATEGORY_MISSING_PRICE, ACTION_SET_PRICE),
+    # A price stored in another currency than the book's (the book's currency
+    # changed); a price in the book's currency releases it.
+    "price_currency_mismatch": _info(CATEGORY_MISSING_PRICE, ACTION_SET_PRICE),
     # A disposal needs earlier acquisitions Kassiber has not seen or priced.
     "insufficient_lots": _info(
         CATEGORY_MISSING_ACQUISITION_HISTORY, ACTION_IMPORT_HISTORY, ACTION_CONNECT_WALLET
@@ -148,6 +153,7 @@ _REASONS: dict[str, ReasonInfo] = {
         CATEGORY_NEEDS_DECISION, ACTION_ATTACH_EVIDENCE
     ),
     "custody_authored_migration_incomplete": _info(CATEGORY_NEEDS_DECISION),
+    "synthetic_import_duplicate_review_required": _info(CATEGORY_NEEDS_DECISION),
     "custody_component_blocked": _info(CATEGORY_NEEDS_DECISION),
     "custody_interpreter_blocked": _info(CATEGORY_NEEDS_DECISION),
     "unclassified_income_kind": _info(CATEGORY_NEEDS_DECISION, ACTION_CLASSIFY),

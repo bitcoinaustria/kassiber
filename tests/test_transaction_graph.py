@@ -11,7 +11,7 @@ from kassiber.cli.handlers import create_transaction_pair, process_journals
 from kassiber.core.sync_backends import address_to_scriptpubkey
 from kassiber.db import ensure_schema_compat, open_db, set_setting
 from kassiber.errors import AppError
-from tests.custody_projection_fixtures import insert_reviewed_projection
+from tests.custody_projection_fixtures import insert_reviewed_projection, stamp_journal_semantics
 
 
 NOW = "2026-01-01T00:00:00Z"
@@ -3919,6 +3919,7 @@ class TransactionGraphTest(unittest.TestCase):
             (NOW,),
         )
 
+        stamp_journal_semantics(self.conn, 'profile-1')
         payload = self._graph("swap-out")
 
         route = payload["swapRoute"]
@@ -3999,6 +4000,7 @@ class TransactionGraphTest(unittest.TestCase):
             (NOW,),
         )
 
+        stamp_journal_semantics(self.conn, 'profile-1')
         payload = self._graph("coinjoin-out")
 
         route = payload["swapRoute"]
@@ -4570,3 +4572,47 @@ class TransactionGraphTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+_GROUP_ORDER_CHILD = r"""
+import json
+from kassiber.core.transaction_graph import _annotate_graph
+
+
+class Index:
+    def lookup_outpoint(self, outpoint):
+        return [type("M", (), dict(wallet_id="w2", wallet_label="Two", chain="bitcoin",
+                                   network="main", branch_label="receive"))()]
+
+    def lookup_script(self, script):
+        return []
+
+
+graph = {"inputs": [], "outputs": [{"id": "out-0", "outpoint": "aa:0", "_script": None,
+                                    "ownership": "unknown", "role": "output", "annotations": []}]}
+row = {"id": "t", "wallet_id": "w1", "direction": "outbound", "raw_json": "{}"}
+groups = [{"groupId": f"custody-decision:{name}"} for name in "hgfedcba"]
+groups.append({"groupId": "custody-decision:a"})
+_annotate_graph(graph, row, Index(), {"by_row": {"t": groups}}, raw={})
+print(json.dumps([a.get("groupId") for a in graph["outputs"][0]["annotations"]
+                  if a["code"] == "linked_transfer_group"]))
+"""
+
+
+class LinkedTransferGroupOrderTest(unittest.TestCase):
+    def test_group_annotation_order_is_sorted_under_every_hash_seed(self):
+        import os
+        import subprocess
+        import sys
+
+        root = Path(__file__).resolve().parent.parent
+        expected = [f"custody-decision:{name}" for name in "abcdefgh"]
+        for seed in ("0", "1", "2", "3", "4", "5", "17", "4242"):
+            env = {key: value for key, value in os.environ.items() if key != "XDG_DATA_HOME"}
+            env["PYTHONHASHSEED"] = seed
+            result = subprocess.run(
+                [sys.executable, "-c", _GROUP_ORDER_CHILD],
+                cwd=root, env=env, capture_output=True, text=True, check=False, timeout=60,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout), expected, seed)

@@ -34,6 +34,12 @@ identity and cannot publish after a new binding. Explicit backend instance
 assignments must match. Publicly shared graph caches need explicit matching
 instance provenance before a regtest book can reuse them.
 
+Some importers store a provider `network` field that names a payment rail, not
+an environment. The check reads three of them by source: Bull Bitcoin wallet
+CSV `bitcoin`/`liquid`/`lightning` and Coinbase's `network` object are no
+evidence, and Binance's `"BTC"` rail on a BTC row is mainnet evidence. Any
+other unknown value contradicts the row's network. See [imports](imports.md#binance-api-and-supplemental-csv).
+
 Bindings are authored immutable scope. Backend credentials and observer
 ownership authority remain local.
 
@@ -55,8 +61,11 @@ longer needed.
 
 The partition retains original immutable row IDs. Authored relationships must be
 closed within the selected connections: a custody component or other linked
-record crossing the boundary blocks export. Attachments are checked against their
-stored hashes. The target excludes unrelated profiles, backend and AI secrets,
+record crossing the boundary blocks export. Import batches travel with the rows
+they created, with their stored import sequence, so a held duplicate import stays
+held and a confirmation stays bound to its group; a batch whose rows span the
+boundary blocks export. Attachments are
+checked against their stored hashes. The target excludes unrelated profiles, backend and AI secrets,
 derived journals, observer SDK caches and previously saved/filed reports. Native
 observation provenance and selected wallet policy history remain evidence, not a
 freshness claim. Source reports remain in the original project.

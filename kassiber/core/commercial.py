@@ -20,6 +20,7 @@ from ..util import str_or_none
 from . import attachments as core_attachments
 from .custody_evidence import row_boundary_amounts
 from . import freshness as core_freshness
+from .custody_pricing import finite_decimal
 from . import pricing
 
 
@@ -116,7 +117,7 @@ def _amount_msat(value: Any) -> int | None:
 
 
 def _exact(value: Any) -> str | None:
-    return pricing.exact_decimal(value)
+    return None if value in (None, "") else format(finite_decimal(value, "commercial price"), "f")
 
 
 def _computed_rate(fiat_value: Any, crypto_amount: Any) -> str | None:
@@ -125,7 +126,7 @@ def _computed_rate(fiat_value: Any, crypto_amount: Any) -> str | None:
     amount = dec(crypto_amount)
     if amount == 0:
         return None
-    return _exact(dec(fiat_value) / amount)
+    return _exact(finite_decimal(fiat_value, "fiat_value") / amount)
 
 
 # Invoices priced in bitcoin (common for Point of Sale and crowdfund apps)
@@ -1914,6 +1915,7 @@ def _apply_reviewed_link_to_transaction(conn, profile, link, commercial_kind):
         rate = _exact(dec(fiat_value) / msat_to_btc(amount))
     if fiat_value or rate:
         payload = pricing.pricing_payload(
+            amount_msat=tx["amount"],
             rate=rate,
             value=fiat_value,
             source_kind=source_kind,

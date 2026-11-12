@@ -112,6 +112,21 @@ def test_source_trace_is_bounded_and_does_not_invent_pool_sources(carried_book, 
     assert result['custody_truncated']
 
 
+@pytest.mark.parametrize('pricing', [None, [], 'invalid'])
+def test_malformed_retained_lot_pricing_returns_detail_mismatch(carried_book, pricing):
+    conn, profile, reference = carried_book
+    row = conn.execute("SELECT * FROM journal_entries WHERE transaction_id='swap-out'").fetchone()
+    # Rebuilt journals store the compact form; the explanation reads it first.
+    calculation = stored_calculation(row)
+    calculation['fragments'][0]['lot']['pricing'] = pricing
+    conn.execute('UPDATE journal_entries SET calculation_json=?, calculation_compact=NULL WHERE id=?',
+                 (json.dumps(calculation), row['id']))
+    result = explain_capital_gain(conn, profile, reference)
+    detail = result['calculation']['fragments'][0]['lot']['inherited_basis']
+    assert detail['status'] == 'engine_detail_mismatch'
+    assert detail['source_calculations'][0]['calculation'] is None
+
+
 def test_recursive_source_trace_stops_on_cycle(carried_book):
     conn, profile, reference = carried_book
     row = conn.execute("SELECT * FROM journal_entries WHERE transaction_id='swap-out'").fetchone()

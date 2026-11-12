@@ -284,8 +284,8 @@ def _journal_values(conn, profile_id) -> dict[str, dict[str, Decimal]]:
     for row in conn.execute(
         """
         SELECT transaction_id, entry_type,
-               COALESCE(fiat_value_exact, fiat_value) AS fiat_value,
-               COALESCE(proceeds_exact, proceeds) AS proceeds
+               COALESCE(NULLIF(fiat_value_exact, ''), fiat_value) AS fiat_value,
+               COALESCE(NULLIF(proceeds_exact, ''), proceeds) AS proceeds
         FROM journal_entries
         WHERE profile_id = ? AND entry_type IN ('income', 'disposal', 'acquisition')
         """,

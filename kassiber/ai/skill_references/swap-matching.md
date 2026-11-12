@@ -164,7 +164,8 @@ it the payout books at the outbound's time.
 
 The direct payout review model is not Austrian-only: when
 `payout_fiat_value` is present, it becomes the reviewed proceeds for the
-taxable source-row disposal. That lets privacy-preserving provider payout
+taxable reviewed source allocation only. A partial payout never prices the
+unreviewed residual; that part needs its own admissible transaction pricing. That lets privacy-preserving provider payout
 flows preserve the actual sale value even when no owned inbound leg exists.
 
 Reviewed BTC ↔ LBTC rail changes may carry value on every profile while the

@@ -215,6 +215,11 @@ Generic wallet imports accept JSON arrays or CSV files with these fields:
 
 If imported transactions carry `fiat_rate` or `fiat_value`, Kassiber stores both
 the legacy numeric value and an exact decimal string plus pricing provenance.
+Fiat values and rates must pass the shared [pricing limits](tax.md#rates-and-tax-input-quality).
+When only a fiat value is supplied, import validates the rate derived from that
+value and the Bitcoin amount before storing the transaction, but does not store
+that inferred rate. The imported total remains a value assertion, so a later
+amount correction cannot silently rescale it as a unit-price assertion.
 Generic imports default to `pricing_source_kind=generic_import`; source-specific
 exports may pass stronger kinds such as `exchange_execution`,
 `btcpay_invoice`, `btcpay_payment`, or `btcpay_payout`. Stronger later pricing can replace weaker
@@ -765,6 +770,14 @@ What a rollback does and does not remove:
 The run also stores the confirmed `column_map`, so a recurring export from the
 same platform can be re-imported with the same plan.
 
+Each created row keeps its position among the run's created rows
+(`import_batch_transactions.source_position`, 1-based, in file order). Journal
+processing uses it to order rows that share a timestamp, such as exchange fills
+in one second ([same-time order](tax.md#same-time-order)). Rows a run only
+enriched keep the position of the run that created them; rows imported before
+positions were recorded, and rows from sync or records-based imports, have
+none and order by their content.
+
 Deleting the whole connection (`wallets delete --cascade`, or the desktop
 connection's delete action) remains the blunt option when the wallet itself was
 a mistake.
@@ -1268,6 +1281,11 @@ Behavior:
 - USD/EUR/etc. fees on buys are included in cost basis; fiat fees on sells
   reduce proceeds
 - BTC fees become Kassiber BTC fees
+- an Account Activity withdrawal keeps `Transaction ID` as its txid; `Sent
+  Amount` is the amount sent on chain and `Fee Amount` River's charge, so in a
+  `river` wallet it books as an
+  [automatic own-account transfer](custody-resolution.md#exchange-withdrawals-that-name-their-txid)
+  when it is exactly an owned wallet's observed output
 - `Transaction Type` / `Tag` becomes the transaction kind and a `river:*` tag
 - `Method`, `Source`, and `Destination` are preserved in the description/note
 - machine output includes inserted/updated transaction summaries so desktop
@@ -1535,6 +1553,13 @@ Behavior:
 - custody movements retain no fiat execution price and require reviewed pairing
   when the export has no txid
 
+Reimports clear legacy 21bitcoin reconciliation tags and reactivate the
+corresponding excluded rows. Reactivation invalidates journals once even when
+the row has no execution price or other import update, so reports require
+processing the current inputs. Clearing a legacy tag on an already-active row
+does not by itself invalidate journals. A failed invalidation rolls back the
+reactivation with the import.
+
 ## Pocket Bitcoin
 
 Kassiber supports Pocket Bitcoin account CSV exports as exchange evidence. The
@@ -1615,6 +1640,10 @@ Behavior:
   preserve the exported 64-character hash as `payment_hash` when present
 - on-chain rows use `Transaction Hash` as the transaction id when Strike
   provides one
+- `Amount BTC` is the amount sent on chain and `Fee BTC` Strike's charge on
+  top; a withdrawal whose amount is exactly an owned wallet's observed output
+  in that transaction books as an
+  [automatic own-account transfer](custody-resolution.md#exchange-withdrawals-that-name-their-txid)
 - `BTC Price` is used as the exact CSV rate when present; fiat amount columns
   and buy-row cost basis can fill pricing when Strike does not export a price
 - fiat-only deposit and reversal rows are ignored by the importer
@@ -1664,7 +1693,9 @@ The importer fetches Kraken private `TradesHistory` and `Ledgers`, imports
 BTC/LBTC deposits and withdrawals as wallet movement, and imports fiat-quoted
 BTC/LBTC trades as exact `exchange_execution` pricing (`pricing_method =
 "kraken_api"`). BTC trades without matching trade history or without a fiat
-quote fail safe.
+quote fail safe. A trade row without `price` takes its cost / volume, which is
+what Kraken's price is; one without a cost stays unpriced, and `journals
+process` holds it as `missing_spot_price`.
 
 ### Coinbase API
 
@@ -1681,9 +1712,13 @@ python3 -m kassiber wallets sync-coinbase \
 ```
 
 BTC account `buy`, `sell`, `trade`, and `advanced_trade_fill` rows import as
-exact execution evidence when Coinbase supplies a usable fiat native amount.
+exact execution evidence when Coinbase supplies a usable fiat native amount;
+the unit rate is that amount over the BTC amount, positive for buys and sells.
 BTC sends/exchange transfers import as wallet movement without exact execution
 pricing. Unsupported BTC row types raise validation errors rather than guessing.
+A send's `network` is an object (`hash`, `status`, and fee/link fields), not a
+network declaration, so the book-network check ignores it for Coinbase wallets
+and the row stays unscoped.
 
 ### Binance API and Supplemental CSV
 
@@ -1705,11 +1740,39 @@ altcoin/BNB dust conversions, staking-lock principal bookkeeping, and mining
 subaccounts that require an extra username are intentionally deferred because
 they are either altcoin-heavy or need additional provider-specific controls.
 
+Binance deposit and withdraw history rows name the coin's transfer rail in
+`network`. On a BTC row in a Binance wallet, `"BTC"` (exact case) is Bitcoin on
+chain and counts as mainnet evidence, since Binance runs on mainnet only: it
+imports into a mainnet or unbound book and is refused in a test, signet or
+regtest book. Any other rail, such as `LIGHTNING` or a token network like
+`BSC`, is refused as a contradicting network rather than guessed, and refuses
+the whole batch. The stored raw row keeps Binance's own value.
+
 Supplemental Binance CSV import currently supports:
 
 - autoinvest BTC rows funded by fiat (`binance_supplemental_csv`) as exact
   execution evidence
 - BTC dividend/mining-style rows as income without exact fiat pricing
+
+ID-less autoinvest and dividend rows use their economic tuple plus the count
+of identical occurrences within the file. Prepending newer rows to a cumulative
+export therefore preserves the earlier rows' identities while keeping genuine
+identical repeats. Coinfinity, Pocket Bitcoin and Ledger Live use the same
+rule for their ID-less fallback rows; explicit provider and chain ids retain
+their identity. Mutable notes and labels do not participate in these keys.
+Old positional IDs are recognized from their stored raw rows without rewriting
+them, including excluded/reviewed evidence. Existing excess copies across import
+batches block reports as `synthetic_import_duplicate_review_required` until the
+user reviews the exports and either excludes the duplicate rows or confirms
+through the review workflow that every row is a distinct trade. The same hold
+applies when a newer import's row takes the place of a copy the user excluded
+(confirming distinct trades then counts that excluded trade again through the
+new row), and when identical rows that all predate import batches were stored in
+different seconds. Only rows stored in the same second count as one pre-batch
+export, so one old import that crossed a second boundary is also held; that known
+false hold costs one confirmation and never merges rows. Imports are ordered by
+a stored insertion sequence, not their one-second timestamp. See
+[identity compatibility](database-compatibility.md#id-less-csv-identity-compatibility).
 
 ```bash
 python3 -m kassiber wallets import-binance-supplemental \

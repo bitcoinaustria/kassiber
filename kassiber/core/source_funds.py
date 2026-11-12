@@ -12,6 +12,7 @@ from types import MappingProxyType
 from typing import Any, Callable, Mapping, Sequence
 
 from ..envelope import json_ready
+from .custody_pricing import finite_decimal
 from ..errors import AppError
 from ..msat import btc_to_msat, dec, msat_to_btc
 from ..source_funds_pdf_report import write_source_funds_pdf
@@ -710,7 +711,7 @@ def create_source(
     normalized_asset = normalize_asset_code(asset)
     amount_msat = _amount_msat(amount, label="--amount")
     source_type = _normalize_source_type(source_type)
-    fiat = None if fiat_value in (None, "") else float(dec(fiat_value))
+    fiat = None if fiat_value in (None, "") else float(finite_decimal(fiat_value, "fiat_value"))
     currency = (fiat_currency or profile["fiat_currency"] or "").strip().upper() or None
     stored_acquired_at = parse_timestamp(acquired_at) if acquired_at not in (None, "") else None
     label = str(label or "").strip()

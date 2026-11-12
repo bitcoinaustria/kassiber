@@ -19,8 +19,9 @@ from ..db import APP_NAME, get_setting, set_setting
 from ..errors import AppError
 from ..proxy import urlopen_with_proxy
 from ..redaction import request_credentials
+from .custody_pricing import finite_decimal
 from . import pricing
-from ..time_utils import _iso_z, _parse_iso_datetime
+from ..time_utils import _iso_z, _parse_iso_datetime, timestamp_predicate
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +46,7 @@ _COINGECKO_VS = {"USD": "usd", "EUR": "eur"}
 _COINGECKO_COIN = {"BTC": "bitcoin"}
 _COINBASE_EXCHANGE_PRODUCT = {"BTC-USD": "BTC-USD", "BTC-EUR": "BTC-EUR"}
 _MEMPOOL_PRICE_QUOTES = {"USD", "EUR"}
-_RATE_ASSET_ALIASES = {"LBTC": "BTC"}
+_RATE_ASSET_ALIASES = {"LBTC": "BTC", "L-BTC": "BTC"}
 _KRAKEN_STABLECOIN_QUOTES = {"DAI", "USDC", "USDT"}
 _KRAKEN_SUPPORTED_QUOTES = {"EUR", "USD"}
 _KRAKEN_BATCH_SIZE = 10_000
@@ -225,10 +226,8 @@ def http_get_json(
 def _float_from_exact(value):
     if value in (None, ""):
         return None, None
-    exact = pricing.exact_decimal(value)
-    if exact is None:
-        return None, None
-    return float(pricing.decimal_from_exact(exact)), exact
+    number = finite_decimal(value, "rate cache value")
+    return float(number), format(number, "f")
 
 
 def _rate_insert_params(
@@ -375,11 +374,11 @@ def get_rate_range(conn, pair, start=None, end=None, order="asc", limit=None):
     params = [normalized]
     if start:
         start_dt = _parse_iso_datetime(start, "start")
-        sql += " AND timestamp >= ?"
+        sql += " AND " + timestamp_predicate(conn, "timestamp", ">=")
         params.append(_iso_z(start_dt))
     if end:
         end_dt = _parse_iso_datetime(end, "end")
-        sql += " AND timestamp <= ?"
+        sql += " AND " + timestamp_predicate(conn, "timestamp", "<=")
         params.append(_iso_z(end_dt))
     sql += (
         f" ORDER BY timestamp {order_sql},"
@@ -406,15 +405,17 @@ def get_rate_range(conn, pair, start=None, end=None, order="asc", limit=None):
     ]
 
 
-def get_cached_rate_at_or_before(conn, pair, occurred_at):
+def get_cached_rate_at_or_before(conn, pair, occurred_at, *, exclusive=False):
+    """Last quote at a boundary; exclusive bounds support calendar closes."""
     normalized = require_supported_pair(pair)
     occurred_ts = _iso_z(_parse_iso_datetime(occurred_at, "occurred_at"))
+    operator = "<" if exclusive else "<="
     row = conn.execute(
-        """
+        f"""
         SELECT pair, timestamp, rate, rate_exact, source, fetched_at, granularity, method
         FROM rates_cache
-        WHERE pair = ? AND timestamp <= ?
-        ORDER BY timestamp DESC,
+        WHERE pair = ? AND {timestamp_predicate(conn, "timestamp", operator)}
+        ORDER BY kassiber_timestamp_us(timestamp) DESC,
                  CASE WHEN source = 'manual' THEN 0 ELSE 1 END ASC,
                  fetched_at DESC
         LIMIT 1
@@ -1750,15 +1751,15 @@ def _parse_kraken_csv_row(row, member_name, line_number, interval_minutes):
                 tz=timezone.utc,
             )
         )
-        open_value = pricing.decimal_from_exact(open_raw)
-        high_value = pricing.decimal_from_exact(high_raw)
-        low_value = pricing.decimal_from_exact(low_raw)
-        close_value = pricing.decimal_from_exact(close_raw)
-        volume_value = pricing.decimal_from_exact(volume_raw)
+        open_value = finite_decimal(open_raw, "open")
+        high_value = finite_decimal(high_raw, "high")
+        low_value = finite_decimal(low_raw, "low")
+        close_value = finite_decimal(close_raw, "close")
+        volume_value = finite_decimal(volume_raw, "volume")
         trades = int(trades_raw)
     except Exception as exc:
         raise AppError(f"{member_name}:{line_number}: invalid row values", code="validation") from exc
-    if not open_value or not high_value or not low_value or not close_value:
+    if any(value is None or value <= 0 for value in (open_value, high_value, low_value, close_value)):
         raise AppError(f"{member_name}:{line_number}: OHLC prices must be positive", code="validation")
     if volume_value is None or volume_value < 0:
         raise AppError(f"{member_name}:{line_number}: volume must be non-negative", code="validation")
@@ -2110,12 +2111,7 @@ def sync_rates(
 
 def set_manual_rate(conn, pair, timestamp, rate, source="manual", granularity=None, method=None):
     normalized = _normalize_rate_pair(pair)
-    try:
-        value = pricing.decimal_from_exact(rate)
-    except Exception as exc:
-        raise AppError(f"Invalid rate '{rate}'", code="validation") from exc
-    if value is None:
-        raise AppError(f"Invalid rate '{rate}'", code="validation")
+    value = finite_decimal(rate, "rate")
     if value <= 0:
         raise AppError("Rate must be positive", code="validation")
     effective_granularity = granularity or ("exact" if source == "manual" else "unknown")

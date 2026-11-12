@@ -69,7 +69,13 @@ def _evidence(row):
         # not a main/test/regtest declaration. Other explicit scope stays live.
         raw.pop("network", None)
         row = {**row, "raw_json": raw}
-    environment, valid = bitcoin_network_domain_evidence(row, allow_implicit_main=False)
+    if row.get("wallet_kind") == "binance" and row.get("asset") == "BTC" and raw.get("network") == "BTC":
+        # Binance's deposit/withdraw history names the coin's transfer
+        # network, and "BTC" is Bitcoin on chain; Binance runs on mainnet
+        # only. Other rails (LIGHTNING, BSC, ...) stay unsupported evidence.
+        raw["network"] = "main"
+        row = {**row, "raw_json": raw}
+    environment, valid =bitcoin_network_domain_evidence(row, allow_implicit_main=False)
     columns = {key: row[key] for key in ("chain", "network", "bitcoin_network", "chain_network") if row.get(key) not in (None, "")}
     if columns:
         for payload in (raw, _json(row.get("wallet_config_json") or row.get("config_json"))):

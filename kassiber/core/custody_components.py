@@ -34,6 +34,8 @@ from typing import Any, Iterable, Iterator, Mapping, Sequence
 import uuid
 
 from ..errors import AppError, build_remediation
+from ..msat import msat_to_btc
+from .custody_pricing import finite_decimal
 from ..time_utils import parse_iso_datetime_or_none, parse_timestamp
 from ..transfers import (
     LIGHTNING_INFERENCE_WALLET_KINDS,
@@ -635,6 +637,14 @@ def normalize_economic_terms(
                 "custody_component_validation",
                 details={"ordinal": ordinal},
             )
+        if raw.get("payout_fiat_value_exact") not in (None, ""):
+            payout_value = finite_decimal(raw["payout_fiat_value_exact"], "payout_fiat_value_exact")
+            for field, leg in (("reviewed_source_amount_msat", source), ("payout_amount_msat", target)):
+                quantity = _exact_optional_signed_int(raw.get(field), field)
+                if quantity is None:
+                    quantity = leg.get("amount_msat")
+                if quantity and quantity > 0:
+                    finite_decimal(payout_value / msat_to_btc(quantity), "payout_fiat_rate")
         normalized.append(
             {
                 "id": _optional_text(raw.get("id"), "id") or str(uuid.uuid4()),
@@ -3330,6 +3340,31 @@ def _db_anchor_validation(
                     }
                 )
 
+    legs_by_id = {str(leg["id"]): leg for leg in legs}
+    fee_by_transaction: dict[str, int] = defaultdict(int)
+    for allocation in allocations:
+        source = legs_by_id.get(str(allocation.get("source_leg_id")))
+        sink = legs_by_id.get(str(allocation.get("sink_leg_id")))
+        if source is not None and sink is not None and sink.get("role") == "fee":
+            fee_by_transaction[str(source.get("transaction_id"))] += int(allocation.get("source_amount_msat") or 0)
+            row = transaction_rows.get(str(source.get("transaction_id")))
+            if row is not None and conservation_mode == "quantity":
+                boundary = row_boundary_amounts(row)
+                if (
+                    sink.get("notes") == "reviewed_residual:network_fee"
+                    and boundary.fee_msat > 0
+                    and int(source.get("amount_msat") or 0) < boundary.wallet_movement_msat
+                ):
+                    issues.append({
+                        "code": "legacy_pair_fee_allocation_review_required",
+                        "message": (
+                            "legacy pair fee allocation may consume principal as well as "
+                            "the observed fee; revise the complete debit and residual"
+                        ),
+                        "source_leg_id": source["id"],
+                        "fee_leg_id": sink["id"],
+                        "review_required": True,
+                    })
     coverage: list[dict[str, Any]] = []
     for transaction_id in sorted(by_transaction):
         row = transaction_rows.get(transaction_id)
@@ -3352,7 +3387,7 @@ def _db_anchor_validation(
             for leg in by_transaction[transaction_id]
         )
         expected = (
-            boundary.principal_msat
+            boundary.principal_msat + min(boundary.fee_msat, fee_by_transaction[transaction_id])
             if partial_review
             else boundary.wallet_movement_msat
         )
@@ -3378,7 +3413,6 @@ def _db_anchor_validation(
     # A reviewed suspense residual must never absorb an already-observed miner
     # fee. Components containing suspense require explicit allocations, so the
     # exact fee split can be checked per anchored source leg without inference.
-    legs_by_id = {str(leg["id"]): leg for leg in legs}
     allocations_by_source: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
     for allocation in allocations:
         allocations_by_source[str(allocation.get("source_leg_id"))].append(allocation)

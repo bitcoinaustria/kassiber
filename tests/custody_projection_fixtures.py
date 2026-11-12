@@ -11,6 +11,15 @@ from kassiber.core.custody_evidence import (
     enriched_quantity_rows,
 )
 from kassiber.core.custody_quantity import QuantityDomain
+from kassiber.db import JOURNAL_CALCULATION_SEMANTICS_VERSION
+
+
+def stamp_journal_semantics(conn: sqlite3.Connection, profile_id: str) -> None:
+    """Complete a fixture's simulated current build after its marker update."""
+    conn.execute(
+        "UPDATE profiles SET journal_semantics_version = ? WHERE id = ?",
+        (JOURNAL_CALCULATION_SEMANTICS_VERSION, profile_id),
+    )
 
 
 def insert_reviewed_projection(

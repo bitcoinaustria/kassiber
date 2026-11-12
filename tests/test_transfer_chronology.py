@@ -45,6 +45,9 @@ def _round_trip_rows(seed=1):
 @pytest.mark.parametrize("profile", [PROFILE, ownership_fixtures.AustrianSelfTransferEngineTest.AT_PROFILE], ids=["generic", "austrian"])
 def test_same_block_round_trip_uses_chain_dependencies_in_every_import_order(seed, profile):
     rows = _round_trip_rows(seed)
+    # Priced in the book's currency: another one is held (price_currency_mismatch).
+    for row in rows:
+        row["fiat_currency"] = profile["fiat_currency"]
     for ordered in (rows, list(reversed(rows)), rows[3:] + rows[:3]):
         state = KassiberTaxEngine(profile).build_ledger_state(
             finalized_tax_inputs(profile, rows=ordered,

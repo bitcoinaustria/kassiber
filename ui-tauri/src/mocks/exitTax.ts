@@ -43,8 +43,10 @@ export interface ExitTaxReport {
   jurisdictionCode: "AT" | "generic";
   fiatCurrency: string;
   departureDate: string;
+  departureTimezone: "Europe/Vienna" | "UTC";
   destination: ExitTaxDestination;
   method: string;
+  journalInputVersion: number | null;
   fmvSource: ExitTaxFmvSource[];
   totals: {
     neuQuantitySats: number;
@@ -62,7 +64,7 @@ export interface ExitTaxReport {
   walletHoldings: ExitTaxWalletHolding[];
   assumptions: string[];
   reviewGate: string;
-  status: { needsJournals: boolean; quarantines: number };
+  status: { needsJournals: boolean; quarantines: number; missingFmvAssets: string[] };
 }
 
 const REVIEW_GATE =
@@ -73,7 +75,7 @@ const REVIEW_GATE =
 const BASE_ASSUMPTIONS = [
   "EXIT: Altbestand (acquired before 2021-03-01 Europe/Vienna) is treated as tax-free and excluded from the deemed-disposal base; only Neubestand unrealized gains are taxed.",
   "EXIT-002: Neubestand gains estimated at the 27.5% Sondersteuersatz (§ 27a EStG). Loss offset beyond the same income type is out of scope.",
-  "EXIT-005: Fair market value uses the best available cached rate at or before the departure date; it does not imply intraday coverage.",
+  "EXIT-005: Fair market value uses the closest cached or transaction quote strictly before the exclusive departure cutoff, at most 24 hours old. Older, future or undated quotes leave the asset unpriced. It does not imply intraday coverage.",
 ];
 
 const DEFERRAL_NOTE: Record<ExitTaxDestination, string> = {
@@ -109,10 +111,12 @@ export function buildExitTaxFixture(
     jurisdictionCode: "AT",
     fiatCurrency: "EUR",
     departureDate,
+    departureTimezone: "Europe/Vienna",
     destination,
     method: "moving_average_at",
+    journalInputVersion: 1,
     fmvSource: [
-      { asset: "BTC", rate: fmv, pair: "BTC-EUR", asOf: "2026-06-15T00:00:00Z", source: "cache" },
+      { asset: "BTC", rate: fmv, pair: "BTC-EUR", asOf: `${departureDate}T12:00:00Z`, source: "cache" },
     ],
     totals: {
       neuQuantitySats: neuSats,
@@ -156,6 +160,6 @@ export function buildExitTaxFixture(
     ],
     assumptions,
     reviewGate: REVIEW_GATE,
-    status: { needsJournals: false, quarantines: 0 },
+    status: { needsJournals: false, quarantines: 0, missingFmvAssets: [] },
   };
 }

@@ -42,6 +42,10 @@ export type CauseKey =
   | "nativeTransitionAmountMismatch"
   | "nativeTransitionFeeTiming"
   | "migrationIncomplete"
+  | "importDuplicate"
+  | "importDuplicateRefill"
+  | "importDuplicatePreBatch"
+  | "legacyPairFee"
   | "gapHold"
   | "implicitDelta"
   | "unclaimedResidual"
@@ -58,6 +62,7 @@ export type CauseKey =
   | "carryUnresolved"
   | "missingPrice"
   | "pricingReview"
+  | "priceCurrency"
   | "swapPriceRequired"
   | "insufficientLots"
   | "missingCostBasis"
@@ -94,6 +99,7 @@ const REASON_CAUSES: Record<string, CauseKey> = {
   native_transition_amount_mismatch: "nativeTransitionAmountMismatch",
   native_transition_fee_timing_unresolved: "nativeTransitionFeeTiming",
   custody_authored_migration_incomplete: "migrationIncomplete",
+  synthetic_import_duplicate_review_required: "importDuplicate",
   custody_basis_barrier: "basisBarrier",
   transfer_pair_dependency_blocked: "pairDependency",
   basis_provenance_incomplete: "provenanceIncomplete",
@@ -102,6 +108,7 @@ const REASON_CAUSES: Record<string, CauseKey> = {
   bitcoin_rail_carry_basis_unresolved: "carryUnresolved",
   missing_spot_price: "missingPrice",
   pricing_review_required: "pricingReview",
+  price_currency_mismatch: "priceCurrency",
   at_swap_price_required: "swapPriceRequired",
   insufficient_lots: "insufficientLots",
   missing_cost_basis: "missingCostBasis",
@@ -138,6 +145,9 @@ export const CAUSE_KEYS = Array.from(
     "componentProblem",
     "quantityOther",
     "reviewedSuspensePair",
+    "legacyPairFee",
+    "importDuplicateRefill",
+    "importDuplicatePreBatch",
   ]),
 );
 
@@ -161,6 +171,7 @@ const CAUSE_CATEGORIES: Record<CauseKey, QuarantineCategory> = {
   pendingConfirmation: "missing_chain_evidence",
   missingPrice: "missing_price",
   pricingReview: "missing_price",
+  priceCurrency: "missing_price",
   swapPriceRequired: "missing_price",
   insufficientLots: "missing_acquisition_history",
   missingCostBasis: "missing_acquisition_history",
@@ -182,6 +193,10 @@ const CAUSE_CATEGORIES: Record<CauseKey, QuarantineCategory> = {
   nativeTransitionAmbiguous: "needs_decision",
   nativeTransitionAmountMismatch: "needs_decision",
   migrationIncomplete: "needs_decision",
+  importDuplicate: "needs_decision",
+  importDuplicateRefill: "needs_decision",
+  importDuplicatePreBatch: "needs_decision",
+  legacyPairFee: "needs_decision",
   unclaimedResidual: "needs_decision",
   sourceOverlap: "needs_decision",
   searchCapacity: "needs_decision",
@@ -209,9 +224,19 @@ export function causeKeyFor(
     if (blocker === "reviewed_residual_suspense" && evidence?.pair_id) {
       return "reviewedSuspensePair";
     }
+    // An older pair whose fee allocation needs a corrected revision.
+    if (evidence?.review_codes?.includes("legacy_pair_fee_allocation_review_required")) {
+      return "legacyPairFee";
+    }
     if (blocker && BLOCKER_CAUSES[blocker]) return BLOCKER_CAUSES[blocker];
     if (blocker.startsWith("custody_component_")) return "componentProblem";
     return "quantityOther";
+  }
+  if (reason === "synthetic_import_duplicate_review_required") {
+    // A refill can count a transaction the owner excluded; say so first.
+    const holds = evidence?.import_hold_reasons ?? [];
+    if (holds.includes("refilled_excluded_copy")) return "importDuplicateRefill";
+    if (holds.includes("pre_batch_excess")) return "importDuplicatePreBatch";
   }
   return REASON_CAUSES[reason] ?? null;
 }
@@ -274,6 +299,8 @@ export function causeCopy(context: CauseContext, typedT: TFunction<"journals">):
     available: formatMsat(evidence.available_msat) || t("quarantine.cause.fallback.amount"),
     since: evidence.lot_state_uncertain_since?.slice(0, 10) || t("quarantine.cause.fallback.date"),
     root: context.rootLabel || t("quarantine.cause.fallback.root"),
+    priceCurrency: evidence.price_currency || t("quarantine.cause.fallback.currency"),
+    bookCurrency: evidence.book_currency || t("quarantine.cause.fallback.currency"),
   };
   const whyQuotesAmounts =
     evidence.required_msat != null || evidence.available_msat != null;
@@ -328,6 +355,7 @@ export function sheetTabForCause(
   if (category === "missing_acquisition_history") return "tax";
   if (
     key === "reviewedSuspensePair" ||
+    key === "legacyPairFee" ||
     key === "ownershipSourceAmbiguous" ||
     key === "ownershipDestinationAmbiguous" ||
     key === "nativeTransitionAmbiguous" ||
@@ -354,6 +382,9 @@ const EXCLUSION_DECISIONS = new Set<CauseKey>([
   "unclassifiedIncome",
   "nonSaleDisposal",
   "ownershipDuplicateOutbound",
+  "importDuplicate",
+  "importDuplicateRefill",
+  "importDuplicatePreBatch",
 ]);
 
 /** Exclusion is offered for prices and a few explicit classification questions. */

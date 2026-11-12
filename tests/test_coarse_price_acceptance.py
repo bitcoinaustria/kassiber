@@ -18,8 +18,8 @@ class CoarsePriceAcceptanceTest(unittest.TestCase):
         conn = self.conn
         conn.execute("INSERT INTO workspaces(id,label,created_at) VALUES('w','W','2020')")
         conn.execute(
-            "INSERT INTO profiles(id,workspace_id,label,require_coarse_review,created_at) "
-            "VALUES('p','w','P',1,'2020')"
+            "INSERT INTO profiles(id,workspace_id,label,fiat_currency,require_coarse_review,created_at) "
+            "VALUES('p','w','P','EUR',1,'2020')"
         )
         conn.execute(
             "INSERT INTO wallets(id,workspace_id,profile_id,label,kind,created_at) "

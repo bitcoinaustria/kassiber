@@ -29,6 +29,9 @@ Re-run `kassiber journals process` after:
 - exclusion changes
 - note or tag changes that affect review flow
 - rate overrides
+- an upgrade that reports "journal calculation semantics changed": for example
+  same-time lots now follow block height and file row order instead of row ids,
+  so the rebuild may change gains where several lots share one timestamp
 
 ## Process journals
 
@@ -95,7 +98,10 @@ array of typed operations, for example after verifying the stated invoice:
 
 A price operation requires exactly one of `fiat_rate` or `fiat_value`, as an exact
 decimal string in the book's fiat currency (the cases' `fiat_currency`), plus an
-audit reason. Convert a receipt in another currency first and say so in the reason. `exclude` requires `transaction_id` and a
+audit reason. Convert a receipt in another currency first and say so in the reason.
+A `price_currency_mismatch` case is a row priced in another currency than the
+book's (its detail names both); only a price override in the book's currency
+releases it, and Kassiber never converts the stored price. `exclude` requires `transaction_id` and a
 reason establishing why the row belongs outside accounting. Never use exclusion
 to hide missing evidence, a custody gap, or a transfer. `unpair` takes the
 case's `pair.pair_id`, its `pair.pair_fingerprint` as `expected_fingerprint`,
@@ -120,7 +126,11 @@ covers everything the user agreed to:
   `policy`, `out_amount_msat` (cross-asset only), and a reason.
 - `undismiss_pair`: the two legs and a reason; removes that dismissal.
 - `dismiss_pair`: the two legs, a reason, `expires_in_days` 1 to 3650
-  (default 90). Permanent dismissals stay on `transfers dismiss`.
+  (default 90). Permanent dismissals stay on `transfers dismiss`. It also
+  undoes an automatic exchange withdrawal transfer, which the lineage tool
+  shows with the evidence reason `exchange_txid_exact` (an exchange row named
+  the receipt's txid and exact amount; it is not a user review). Propose it
+  only when the user says the two rows are not one movement.
 - `custody_gap`: `action` (`create`, `dismiss`, `revise`, `reopen`,
   `classify_residual` with `classification`), `gap_id`, and a reason.
 - `kind_override`: an inbound kind (or null) for a non-quarantined inbound
@@ -138,6 +148,29 @@ what-if path: `before`/`after` carry per-year `tax` figures (realized gain/loss,
 income, and for Austrian EUR books the Kennzahlen and indicative tax, withheld
 while any report blocker remains) and `delta` lists the years that change.
 Answer "what does this do to my taxes?" from a plan, never by estimating.
+
+`legacy_pair_fee_allocation_review_required` names a historical pair whose fee
+allocation needs review. Show the case's exact `repair.command` to the user:
+`transfers update --pair-id <pair-id> --note "Reviewed complete debit and residual"`,
+or unpair and pair the reviewed legs again. A simple pair can preview/apply
+`repair_legacy_pair` through the local CLI review workflow. AI cannot author
+that revision; never replace it with exclusion or automatic unpairing.
+
+`synthetic_import_duplicate_review_required` identifies held ID-less CSV rows.
+Every active member is held; Kassiber selects no survivor. The case's
+`import_duplicate.hold_reasons` say why: `cross_import_excess` (rows across
+imports exceed any single export's count), `refilled_excluded_copy` (a newer
+import's row took the place of a copy the user excluded, listed in
+`refilled_excluded_transaction_ids`), or `pre_batch_excess` (every row predates
+import batches, and rows stored in different seconds count as separate imports;
+one import that crossed a second boundary is a known false hold).
+Compare the source exports with the user before using `metadata exclude` for
+the copies they identify. Genuine identical repeats in one export are retained.
+If the user confirms every held row is a separate trade, the case offers
+`confirm_distinct_import_rows` with its `group_fingerprint`; that confirmation is
+local CLI only and AI cannot author it. For a refill, tell the user first that
+confirming distinct trades counts the transaction they excluded again through
+the new row. Never exclude a row the user has not identified as a copy.
 
 In chat use `ui.review.cases`, inspect `ui.transactions.review_context` and
 `ui.transfers.review_context`, then `ui.review.plan`. Explain the returned

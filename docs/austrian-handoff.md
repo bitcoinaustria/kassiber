@@ -102,6 +102,13 @@ it on the journal entries it composes from those fragments:
 - The engine decides the semantic category from the matched lot, swap marker,
   and holding period.
 - Kassiber persists the resulting `at_category` string on journal rows.
+- For outflow inventory and dashboard classification, disposal and fee rows
+  persist the pre-override regime of RP2's matched lots in `at_regime`, with
+  separate rows per consumed regime even when a category override merges their
+  realized treatment. This marker takes precedence over `at_category`, which
+  remains overrideable for realized tax reporting. The original event marker
+  describes input intent; FIFO, LOFO and ordinary moving average can consume
+  lots of another regime. Fee categories stay empty and taxable gain stays zero.
 - Kassiber maps that semantic category onto current BMF / FinanzOnline
   Kennzahlen via its own table so tax-form wiring can evolve without
   re-implementing Austrian tax semantics. The category names are semantic
@@ -216,8 +223,9 @@ For split source transactions, the row can store an `out_amount` that covers
 only the payout portion of the source spend; journal processing derives the
 remaining same-asset self-transfer from the imported owned inbound leg.
 The model is country-neutral: the reviewed `payout_fiat_value`, when
-present, becomes the taxable source-row proceeds for ordinary direct
-payout reviews. Cross-asset carrying-value treatment is available for
+present, becomes the taxable proceeds for only the reviewed source allocation
+in ordinary direct payout reviews. A partial payout never prices the unreviewed
+residual; that part uses normal transaction pricing or remains quarantined. Cross-asset carrying-value treatment is available for
 Austrian profiles and for BTC/LBTC Bitcoin-rail moves in generic profiles.
 
 For cross-asset `policy=carrying-value` payouts, Kassiber
@@ -287,3 +295,13 @@ the Austrian legislator ever amends the cutoff, change both in one reviewed
 change, so unmarked events classified via the new cutoff are interpreted
 consistently by the reports. RP2 keeps the old cutoff, so the parity
 comparison must list the change as a reviewed difference.
+
+## Exit-tax departure calendar
+
+Austrian exit-tax drafts use the Europe/Vienna civil departure day, including
+DST, matching the acquisition-regime cutoff and realized capital-gains tax year.
+The exclusive next Vienna midnight bounds inventory and both cached and
+transaction FMV quotes; either quote source must be within 24 elapsed hours.
+Timed departures with offsets are converted to their Vienna civil day first.
+PDF/XLSX stamp the departure timezone. Generic books retain UTC days.
+This is the owner's decision; the previous UTC-versus-Vienna question is closed.

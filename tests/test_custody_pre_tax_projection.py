@@ -721,3 +721,84 @@ def test_unproven_privacy_tagged_fanout_still_blocks():
         item["reason"] for item in compiled.quarantines
     }
     assert compiled.blocked_transaction_ids != ()
+
+
+def _blocked_path_projection(blocked_ids=("source", "target"), *, reverse_decisions=False):
+    """An explicit root is also the bridge from another root to a dependent."""
+    from dataclasses import replace
+
+    rows, state = _residual_state()
+    names = {"source-move": "source", "retained": "target", "acquisition": "other"}
+    rows = [{**row, "id": names.get(row["id"], row["id"])} for row in rows]
+    observations = tuple(
+        replace(
+            observation,
+            transaction_id=names.get(observation.transaction_id, observation.transaction_id),
+            anchor_transaction_id=names.get(
+                observation.anchor_transaction_id, observation.anchor_transaction_id
+            ),
+        )
+        for observation in state.projection.observations
+    )
+    by_id = {item.transaction_id: item for item in observations}
+    reviewed = next(item for item in state.projection.decisions if item.target is not None)
+    bridge = replace(
+        reviewed,
+        source=QuantitySlice(by_id["target"].quantity_hash, 0, 9_900),
+        target=QuantitySlice(by_id["other"].quantity_hash, 0, 9_900),
+    )
+    decisions = (reviewed, bridge)
+    state = replace(
+        state,
+        projection=replace(
+            state.projection,
+            observations=observations,
+            decisions=decisions[::-1] if reverse_decisions else decisions,
+        ),
+    )
+    return compile_finalized_tax_projection(
+        {"id": "profile", "workspace_id": "workspace"},
+        rows,
+        state,
+        blocked_transaction_ids=blocked_ids,
+    )
+
+
+@pytest.mark.parametrize("blocked_ids", [
+    ("source", "target"),
+    ("target", "source"),
+    ("source", "target", "later-sale"),
+])
+@pytest.mark.parametrize("reverse_decisions", [False, True])
+def test_dependency_quarantine_names_every_connected_root(blocked_ids, reverse_decisions):
+    projection = _blocked_path_projection(blocked_ids, reverse_decisions=reverse_decisions)
+    quarantine = next(item for item in projection.quarantines if item["transaction_id"] == "other")
+    assert json.loads(quarantine["detail_json"])["blocked_by_transaction_ids"] == ["source", "target"]
+    assert not projection.rows
+    assert not projection.intra_pairs
+
+
+def test_dependency_quarantine_is_independent_of_python_hash_seed():
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    script = (
+        "from dataclasses import asdict; import json; "
+        "from tests.test_custody_pre_tax_projection import _blocked_path_projection; "
+        "print(json.dumps(asdict(_blocked_path_projection()), sort_keys=True))"
+    )
+    outputs = {
+        seed: subprocess.run(
+            [sys.executable, "-c", script],
+            cwd=Path(__file__).resolve().parents[1],
+            env={**os.environ, "PYTHONHASHSEED": str(seed)},
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        ).stdout
+        for seed in range(1, 25)
+    }
+    assert len(set(outputs.values())) == 1, outputs

@@ -17,6 +17,7 @@ from ..time_utils import parse_iso_datetime_or_none
 from ..transfers import (
     bitcoin_network_domain,
     canonical_payment_hash,
+    canonical_txid,
     detect_intra_transfers,
     detect_unscoped_transfer_review_ids,
     is_lightning_payment_hash_row,
@@ -58,6 +59,19 @@ from .custody_native_transitions import (
     compile_native_transitions,
     has_native_transition_evidence,
 )
+from .ownership_transfers import (
+    _input_owner_ids,
+    _matches_in_physical_scope,
+    _parse_onchain_tx,
+)
+from .transfer_matching import active_dismissed_pairs
+
+
+EXCHANGE_TXID_SOURCE = "exchange_txid_exact"
+# Custodial platforms whose withdrawal exports name the on-chain txid and
+# report the amount sent on chain apart from the platform's withdrawal fee.
+# The per-source conventions are in docs/reference/custody-resolution.md.
+EXCHANGE_TXID_WALLET_KINDS = frozenset({"river", "strike"})
 
 
 def _field(row: Mapping[str, Any], key: str, default: Any = None) -> Any:
@@ -165,6 +179,162 @@ def _is_exact_recorded_pair(
         and bitcoin_network_domain(out_row) is not None
         and bitcoin_network_domain(out_row) == bitcoin_network_domain(in_row)
     )
+
+
+def exchange_txid_pair_id(txid: str, vout: int) -> str:
+    """Return the transient pair id naming the matched receipt output."""
+
+    return f"exchange-txid:{txid}:{vout}"
+
+
+def _is_exchange_txid_shape(
+    source: QuantityObservation,
+    target: QuantityObservation,
+) -> bool:
+    """A platform's graphless withdrawal row and the observed owned receipt."""
+
+    return bool(
+        not source.authoritative_chain_observation
+        and target.authoritative_chain_observation
+        and source.direction == "outbound"
+        and target.direction == "inbound"
+        and source.event_key == target.event_key
+        and source.event_key.native_namespace == "chain"
+        and source.event_key.chain == "bitcoin"
+        and source.asset == target.asset
+        and source.wallet_id != target.wallet_id
+        and source.principal_msat > 0
+        and source.principal_msat == target.principal_msat
+    )
+
+
+@dataclass(frozen=True)
+class ExchangeTxidProof:
+    """A platform withdrawal bound to the one owned output it paid."""
+
+    source_quantity_hash: str
+    target_quantity_hash: str
+    txid: str
+    vout: int
+    amount_msat: int
+
+    def validates(
+        self,
+        pair: Mapping[str, Any],
+        source: QuantityObservation,
+        target: QuantityObservation,
+    ) -> bool:
+        return bool(
+            source.quantity_hash == self.source_quantity_hash
+            and target.quantity_hash == self.target_quantity_hash
+            and _is_exchange_txid_shape(source, target)
+            and source.principal_msat == self.amount_msat
+            and _field(pair, "pair_id")
+            == exchange_txid_pair_id(self.txid, self.vout)
+        )
+
+
+def _exchange_txid_owned_output(
+    row: Mapping[str, Any],
+    target: QuantityObservation,
+    scope: tuple[str, str, str, str],
+    owned_index: Any,
+) -> int | None:
+    """Return the receipt's one owned output, or ``None`` when not exact.
+
+    The whole graph must be valued. No input may belong to the book (the
+    platform funded the transaction), exactly one output may be owned, by
+    the receiving wallet alone, and its value must be the whole receipt.
+    """
+
+    if owned_index is None:
+        return None
+    parsed = _parse_onchain_tx(_field(row, "raw_json"))
+    if parsed is None or parsed.get("evidence_conflicts"):
+        return None
+    if canonical_txid(parsed.get("txid")) != scope[2]:
+        return None
+    physical_scope = (scope[0], scope[1])
+    for entry in parsed["inputs"]:
+        if _input_owner_ids(owned_index, entry, physical_scope=physical_scope):
+            return None
+    owned = []
+    for output in parsed["outputs"]:
+        owners = {
+            str(match.wallet_id)
+            for match in _matches_in_physical_scope(
+                owned_index.lookup_script(output.get("script")), physical_scope
+            )
+        }
+        if owners:
+            owned.append((output, owners))
+    if len(owned) != 1:
+        return None
+    output, owners = owned[0]
+    if owners != {target.wallet_id}:
+        return None
+    if int(output["value_sats"]) * 1000 != target.principal_msat:
+        return None
+    return int(output["n"])
+
+
+def _exchange_txid_pairs(
+    pairs: Sequence[Mapping[str, Any]],
+    observations: Mapping[str, QuantityObservation],
+    *,
+    owned_index: Any,
+    excluded_transaction_ids: set[str],
+    dismissed: set[tuple[str, str]],
+) -> tuple[list[Mapping[str, Any]], dict[tuple[str, str], ExchangeTxidProof]]:
+    """Promote exact platform withdrawals among the same-txid candidates.
+
+    ``detect_intra_transfers`` already requires exactly one outbound and one
+    inbound row for the physical txid. A platform row that names the txid is
+    still not observer evidence; it moves basis only when its principal is
+    the receipt's one owned output. Anything less keeps the ordinary
+    authority-conflict hold, and a pair dismissal undoes the promotion.
+    """
+
+    promoted: list[Mapping[str, Any]] = []
+    proofs: dict[tuple[str, str], ExchangeTxidProof] = {}
+    for pair in pairs:
+        out_row = _field(pair, "out", {}) or {}
+        in_row = _field(pair, "in", {}) or {}
+        out_id, in_id = _anchor_id(out_row), _anchor_id(in_row)
+        source, target = observations.get(out_id), observations.get(in_id)
+        scope = onchain_transfer_scope(in_row)
+        if (
+            _pair_source(pair) != "row_matched"
+            or source is None
+            or target is None
+            or scope is None
+            or {out_id, in_id} & excluded_transaction_ids
+            or (out_id, in_id) in dismissed
+            or str(_field(out_row, "wallet_kind") or "").strip().lower()
+            not in EXCHANGE_TXID_WALLET_KINDS
+            or not _is_exchange_txid_shape(source, target)
+        ):
+            promoted.append(pair)
+            continue
+        vout = _exchange_txid_owned_output(in_row, target, scope, owned_index)
+        if vout is None:
+            promoted.append(pair)
+            continue
+        proofs[(out_id, in_id)] = ExchangeTxidProof(
+            source_quantity_hash=source.quantity_hash,
+            target_quantity_hash=target.quantity_hash,
+            txid=scope[2],
+            vout=vout,
+            amount_msat=source.principal_msat,
+        )
+        promoted.append(
+            {
+                **dict(pair),
+                "source": EXCHANGE_TXID_SOURCE,
+                "pair_id": exchange_txid_pair_id(scope[2], vout),
+            }
+        )
+    return promoted, proofs
 
 
 def _row_id(row: Mapping[str, Any]) -> str:
@@ -495,6 +665,7 @@ def _pair_claims(
     wallet_refs_by_id: Mapping[str, Mapping[str, Any]],
     physical_scopes_by_anchor: Mapping[str, tuple[str, str, str, str]],
     native_transition_proofs: Mapping[tuple[str, str], NativeTransitionProof] | None = None,
+    exchange_txid_proofs: Mapping[tuple[str, str], ExchangeTxidProof] | None = None,
 ) -> tuple[
     tuple[QuantityClaim, ...],
     tuple[str, ...],
@@ -543,6 +714,12 @@ def _pair_claims(
             source_name == NATIVE_TRANSITION_SOURCE
             and transition_proof is not None
             and transition_proof.validates(pair, source, target)
+        )
+        exchange_txid_proof = (exchange_txid_proofs or {}).get((out_id, in_id))
+        exact_exchange_txid = bool(
+            source_name == EXCHANGE_TXID_SOURCE
+            and exchange_txid_proof is not None
+            and exchange_txid_proof.validates(pair, source, target)
         )
         exact_native_pair = _is_exact_native_pair(source, target)
         exact_recorded_pair = _is_exact_recorded_pair(
@@ -608,6 +785,7 @@ def _pair_claims(
             and not exact_recorded_fanout
             and not exact_native_pair
             and not exact_native_transition
+            and not exact_exchange_txid
         ):
             # Amount/time coincidence and imported graph-shaped JSON are
             # suggestions, never native ownership proof. A shared canonical
@@ -1215,6 +1393,20 @@ def compile_custody_interpreters(
         if has_chain_events or has_lightning_hashes
         else []
     )
+    auto_pairs, exchange_txid_proofs = (
+        _exchange_txid_pairs(
+            auto_pairs,
+            observations,
+            owned_index=owned_index,
+            excluded_transaction_ids=excluded,
+            dismissed=active_dismissed_pairs(swap_dismissals, now_iso=as_of),
+        )
+        if auto_pairs
+        else (auto_pairs, {})
+    )
+    exchange_txid_ids = {
+        transaction_id for key in exchange_txid_proofs for transaction_id in key
+    }
     rows_by_id = {str(_field(row, "id") or ""): row for row in rows}
     samourai_unverified_ids = samourai_candidate_ids - samourai_touched_ids - excluded
     samourai_unverified_quarantines = tuple(
@@ -1264,7 +1456,7 @@ def compile_custody_interpreters(
     complete_recorded_pair_ids = _complete_recorded_pair_ids(auto_pairs, observations)
     occupied_transition_ids = (
         excluded | samourai_touched_ids | set(channel_roles)
-        | complete_recorded_pair_ids
+        | complete_recorded_pair_ids | exchange_txid_ids
         | {
             str(_field(leg, "transaction_id"))
             for leg in loan_legs if _field(leg, "transaction_id")
@@ -1296,6 +1488,7 @@ def compile_custody_interpreters(
     paired_ids: set[str] = set()
     paired_ids.update(samourai_touched_ids)
     paired_ids.update(complete_recorded_pair_ids)
+    paired_ids.update(exchange_txid_ids)
     paired_ids.update(native_transition_ids)
     paired_ids.update(native_transition_blocked_ids)
     derivation_rows: list[Mapping[str, Any]] = list(rows)
@@ -1538,6 +1731,7 @@ def compile_custody_interpreters(
             excluded_transaction_ids=set(),
             wallet_refs_by_id=wallet_refs_by_id,
             native_transition_proofs=native_transition_proofs,
+            exchange_txid_proofs=exchange_txid_proofs,
             physical_scopes_by_anchor=physical_scopes,
         )
         native_reconciliations = reconcile_native_components(
@@ -1564,6 +1758,7 @@ def compile_custody_interpreters(
         excluded_transaction_ids=excluded,
         wallet_refs_by_id=wallet_refs_by_id,
         native_transition_proofs=native_transition_proofs,
+        exchange_txid_proofs=exchange_txid_proofs,
         physical_scopes_by_anchor=physical_scopes,
     )
     claims = tuple(

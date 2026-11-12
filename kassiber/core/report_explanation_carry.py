@@ -25,6 +25,15 @@ def retained_calculation(row):
     try:
         calculation = stored_calculation(row)
         fragments = calculation["fragments"]
+        if not isinstance(fragments, list) or any(not isinstance(item, dict) for item in fragments):
+            return "engine_detail_mismatch", None
+        for fragment in fragments:
+            lot = fragment.get("lot")
+            if lot is not None and (
+                not isinstance(lot, dict)
+                or not isinstance(lot.get("pricing", {}), dict)
+            ):
+                return "engine_detail_mismatch", None
         with localcontext() as context:
             context.prec = 32  # The tax engine's calculation precision.
             reconciled = all(

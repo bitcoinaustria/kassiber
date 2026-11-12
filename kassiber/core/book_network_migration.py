@@ -99,6 +99,10 @@ AUTHORED_SCOPES = {
     "transactions": _profile_scope("transactions"),
     "tags": _profile_scope("tags"),
     "transaction_tags": "SELECT tt.* FROM transaction_tags tt JOIN transactions t ON t.id = tt.transaction_id WHERE t.profile_id = ?",
+    # Batch membership is what holds a cross-import duplicate for review, so a
+    # partition carries each batch with exactly the rows it created.
+    "import_batches": _profile_scope("import_batches"),
+    "import_batch_transactions": "SELECT bt.* FROM import_batch_transactions bt JOIN import_batches b ON b.id = bt.batch_id WHERE b.profile_id = ?",
     **{
         table: _profile_scope(table)
         for table in (
@@ -115,6 +119,7 @@ AUTHORED_SCOPES = {
             "transaction_pairs",
             "direct_swap_payouts",
             "transaction_pair_dismissals",
+            "synthetic_import_duplicate_reviews",
             "loan_legs",
             "swap_matching_rules",
             "saved_views",
