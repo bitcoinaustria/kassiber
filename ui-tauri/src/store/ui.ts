@@ -47,9 +47,10 @@ export interface NotificationProgress {
 }
 
 /**
- * Shell commands a notification button may run. A closed list rather than a
- * callback: notifications are persisted, so an action has to be plain data
- * that the bell resolves when it renders.
+ * Shell commands a legacy notification button may run. A closed list rather
+ * than a callback, so an action stays plain data that the bell checks when it
+ * renders. Structured entries use `NotificationOperation` in
+ * `store/notifications.ts`, which also carries the original options.
  */
 export const NOTIFICATION_COMMANDS = ["process-journals", "refresh-book"] as const;
 export type NotificationCommand = (typeof NOTIFICATION_COMMANDS)[number];
@@ -64,6 +65,12 @@ export interface NotificationAction {
   command?: NotificationCommand;
 }
 
+/**
+ * A notification from a sender not yet moved to the structured model in
+ * `store/notifications.ts`. The center shows these under Recent: they carry
+ * no badge and cannot displace a condition. RAM only, like every
+ * notification: nothing here reaches `kb.ui`.
+ */
 export interface AppNotification {
   id: string;
   title: string;
@@ -73,8 +80,7 @@ export interface AppNotification {
   progress?: NotificationProgress;
   /**
    * Extra lines shown when the entry is expanded, such as which sources
-   * failed. Kept in memory only: they quote error text from backends, so
-   * `uiStatePartialForStorage` drops them before `kb.ui` reaches disk.
+   * failed. They can quote backend error text.
    */
   details?: string[];
   action?: NotificationAction;
@@ -592,22 +598,6 @@ export function bookIdentityKey(identity: Identity | null): string | null {
 }
 
 /**
- * What of a notification may reach `kb.ui` on disk. Progress is transient,
- * and detail lines quote backend error text (endpoints, server messages), so
- * both stay in memory; after a restart the entry keeps its title and body.
- */
-function stripNotificationProgress(
-  notifications: AppNotification[] | undefined,
-): AppNotification[] {
-  return (notifications ?? []).map((notification) => {
-    const clone = { ...notification };
-    delete clone.progress;
-    delete clone.details;
-    return clone;
-  });
-}
-
-/**
  * Legacy notifications kept for the session. Their own bound, so they can
  * never crowd out a condition (see `store/notifications.ts`).
  */
@@ -731,7 +721,8 @@ export function uiStatePartialForStorage(state: UiState) {
     assistantChatPermissionModes: state.assistantChatPermissionModes,
     assistantProviderToolProfiles: state.assistantProviderToolProfiles,
     daemonSession: state.daemonSession,
-    notifications: stripNotificationProgress(state.notifications),
+    // Notifications are deliberately absent: their text, details, scope, and
+    // actions stay in RAM (see `store/notifications.ts`).
     firstSyncDone: state.firstSyncDone,
     bookChartPeriods: state.bookChartPeriods,
     tableSorts: state.tableSorts,
@@ -739,7 +730,7 @@ export function uiStatePartialForStorage(state: UiState) {
   };
 }
 
-export const UI_STATE_VERSION = 4;
+export const UI_STATE_VERSION = 5;
 
 /**
  * v1: `developerToolsEnabled` stopped meaning "show the Logs page" and became
@@ -768,6 +759,10 @@ export function migrateUiState(
     ...dock,
     ...(version >= 3 ? {} : migrateHideSensitiveToPrivacyMode(restored)),
     ...(version >= 4 ? {} : migrateClosedBarDefault({ ...restored, ...dock })),
+    // v5: notifications left `kb.ui`. Older blobs carry titles, bodies, and
+    // executable actions; drop them unread. Zustand rewrites the blob after a
+    // migration, so the payload leaves the disk too.
+    ...(version >= 5 ? {} : { notifications: undefined }),
   } as ReturnType<typeof uiStatePartialForStorage>;
 }
 
@@ -1275,9 +1270,9 @@ export const useUiStore = create<UiState>()(
           assistantPanelFocusRequest: 0,
           assistantColumnClaimed: false,
           assistantPanelRevealRequest: 0,
-          notifications: stripNotificationProgress(
-            restored.notifications ?? current.notifications,
-          ),
+          // Never restored: a stored notification could replay an old action
+          // against whichever book is open now. The session's own stay.
+          notifications: current.notifications,
           firstSyncDone: restored.firstSyncDone ?? current.firstSyncDone,
           bookChartPeriods: normalizeBookChartPeriods(
             restored.bookChartPeriods ??

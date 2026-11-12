@@ -118,7 +118,7 @@ describe("UI persistence", () => {
     expect(encoded).toContain('"clearClipboard":false');
   });
 
-  it("keeps notification details in memory but never in kb.ui", () => {
+  it("keeps notifications in memory but never in kb.ui", () => {
     useUiStore.setState({ notifications: [] });
     useUiStore.getState().addNotification({
       title: "Book refresh needs attention",
@@ -136,8 +136,28 @@ describe("UI persistence", () => {
     );
     expect(encoded).not.toContain("node.example");
     expect(encoded).not.toContain('"details"');
-    // The action is plain data and survives a restart.
-    expect(encoded).toContain('"command":"refresh-book"');
+    // Nothing of a notification survives a restart, its action least of all:
+    // replayed later, it would run against whichever book is open then.
+    expect(encoded).not.toContain('"command":"refresh-book"');
+    expect(encoded).not.toContain("Book refresh needs attention");
+  });
+
+  it("drops stored notifications when migrating to v5", () => {
+    const migrated = migrateUiState(
+      {
+        theme: "light",
+        notifications: [
+          {
+            id: "old",
+            title: "Book refresh failed",
+            action: { label: "Retry", command: "refresh-book" },
+          },
+        ],
+      },
+      4,
+    );
+    expect(migrated).toMatchObject({ theme: "light" });
+    expect((migrated as { notifications?: unknown }).notifications).toBeUndefined();
   });
 
   it("clears the replaced entry's details and action on a dedupe update", () => {

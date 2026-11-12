@@ -35,6 +35,7 @@ import {
 } from "@/store/notifications";
 import {
   bookIdentityKey,
+  UI_STATE_VERSION,
   useUiStore,
   type AppNotification,
   type Identity,
@@ -674,6 +675,77 @@ describe("NotificationCenter privacy modes", () => {
       fireEvent.click(screen.getByRole("button", { name: "Review sources" }));
     });
     expect(navigate).toHaveBeenCalledWith({ to: "/connections" });
+    expect(runOperation).not.toHaveBeenCalled();
+  });
+});
+
+describe("notification persistence", () => {
+  it("writes no notification payload to kb.ui", () => {
+    useUiStore.getState().addNotification({
+      title: `Imported ${SENTINEL_LABEL}`,
+      body: `Saved ${SENTINEL_PATH} (${SENTINEL_AMOUNT})`,
+      tone: "error",
+      details: ["Cold storage: tcp://10.0.0.7:50001 refused"],
+      action: { label: "Retry", command: "refresh-book" },
+    });
+    useNotificationStore.getState().raiseCondition(
+      sourceFailure("s1", SENTINEL_LABEL, SENTINEL_PATH),
+    );
+    useUiStore.getState().setTheme("light");
+
+    const stored = storage.get("kb.ui") ?? "";
+    expect(stored).toContain('"theme":"light"');
+    for (const sentinel of [
+      SENTINEL_LABEL,
+      SENTINEL_PATH,
+      SENTINEL_AMOUNT,
+      "10.0.0.7",
+      "refresh-book",
+      "notifications",
+    ]) {
+      expect(stored).not.toContain(sentinel);
+    }
+  });
+
+  it("purges a legacy blob and keeps unrelated preferences", async () => {
+    storage.set(
+      "kb.ui",
+      JSON.stringify({
+        version: 4,
+        state: {
+          theme: "light",
+          developerToolsEnabled: true,
+          notifications: [
+            {
+              id: "old",
+              createdAt: "2026-11-12T10:00:00Z",
+              title: `Book refresh failed for ${SENTINEL_LABEL}`,
+              body: SENTINEL_PATH,
+              tone: "error",
+              action: { label: "Retry", command: "refresh-book" },
+            },
+          ],
+        },
+      }),
+    );
+    // No store write between seeding and rehydrate: persist would overwrite it.
+    await act(async () => {
+      await useUiStore.persist.rehydrate();
+    });
+
+    const state = useUiStore.getState();
+    expect(state.notifications).toEqual([]);
+    expect(state.theme).toBe("light");
+    expect(state.developerToolsEnabled).toBe(true);
+    const stored = storage.get("kb.ui") ?? "";
+    expect(JSON.parse(stored).version).toBe(UI_STATE_VERSION);
+    expect(stored).not.toContain(SENTINEL_LABEL);
+    expect(stored).not.toContain("refresh-book");
+    expect(stored).not.toContain("notifications");
+
+    // Nothing restored means nothing to run against the open book.
+    const { runOperation } = openBell();
+    expect(screen.queryByRole("button", { name: /Retry|Erneut/ })).toBeNull();
     expect(runOperation).not.toHaveBeenCalled();
   });
 });
