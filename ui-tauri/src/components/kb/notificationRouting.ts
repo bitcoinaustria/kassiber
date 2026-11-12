@@ -1,4 +1,10 @@
 import {
+  NOTIFICATION_OPERATION_KINDS,
+  type NotificationActionSpec,
+  type NotificationOperation,
+  type NotificationScope,
+} from "@/store/notifications";
+import {
   NOTIFICATION_COMMANDS,
   type NotificationAction,
   type NotificationCommand,
@@ -27,7 +33,9 @@ function asRoutePath(
     : undefined;
 }
 
-// Map a notification title to the screen that explains it.
+// Map a legacy notification's title to the screen that explains it. Only
+// senders still on `addNotification` reach this; structured entries name
+// their destination and never route from (translated) prose.
 export function notificationRouteFor(title: string): AppRoutePath | undefined {
   const normalized = title.toLowerCase();
   // Failures / "needs attention" go to Logs, which captures freshness job
@@ -127,4 +135,69 @@ export function resolveNotificationAction(
     };
   }
   return { label, kind: "navigate", to: target };
+}
+
+/** A structured entry's button, checked and bound to the open book. */
+export type ResolvedEntryAction =
+  | { kind: "navigate"; to: NotificationTarget; stale: boolean }
+  | { kind: "operation"; operation: NotificationOperation };
+
+function validOperation(
+  operation: NotificationOperation | undefined,
+): NotificationOperation | null {
+  if (!operation || typeof operation !== "object") return null;
+  if (
+    !(NOTIFICATION_OPERATION_KINDS as readonly string[]).includes(operation.kind)
+  ) {
+    return null;
+  }
+  if (operation.kind === "refresh-book") {
+    return typeof operation.forceFull === "boolean"
+      ? { kind: "refresh-book", forceFull: operation.forceFull }
+      : null;
+  }
+  return typeof operation.autoPair === "boolean"
+    ? { kind: "process-journals", autoPair: operation.autoPair }
+    : null;
+}
+
+function navigationTarget(
+  value: string,
+  developerToolsEnabled: boolean,
+): NotificationTarget | null {
+  const target = asRoutePath(value);
+  if (!target) return null;
+  if (target === "/logs") {
+    return developerToolsEnabled ? "/logs" : "/settings/developer";
+  }
+  return target;
+}
+
+/**
+ * Resolve a structured action against the book open right now. Unknown
+ * routes and operations fail closed (no button). An operation whose book is
+ * no longer open never replays: it becomes navigation to its review route,
+ * marked stale, so the user decides again in the right place.
+ */
+export function resolveEntryAction(
+  action: NotificationActionSpec | undefined,
+  scope: NotificationScope,
+  currentBook: string | null,
+  developerToolsEnabled: boolean,
+): ResolvedEntryAction | null {
+  if (!action || typeof action !== "object") return null;
+  if (action.type === "navigate") {
+    const to = navigationTarget(action.to, developerToolsEnabled);
+    return to ? { kind: "navigate", to, stale: scope.book !== currentBook } : null;
+  }
+  if (action.type === "operation") {
+    const operation = validOperation(action.operation);
+    const review = navigationTarget(action.review, developerToolsEnabled);
+    if (!operation || !review) return null;
+    if (scope.book !== currentBook) {
+      return { kind: "navigate", to: review, stale: true };
+    }
+    return { kind: "operation", operation };
+  }
+  return null;
 }

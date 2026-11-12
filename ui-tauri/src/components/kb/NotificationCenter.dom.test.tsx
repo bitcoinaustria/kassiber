@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 //
-// Mounted, not static: expanding, dismissing and the action buttons only exist
-// once the popover is open, and what reaches `kb.ui` depends on the live store.
+// Mounted, not static: the lanes, actions, and details only exist once the
+// popover is open, and what reaches `kb.ui` depends on the live store.
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -24,13 +24,45 @@ const storage = vi.hoisted(() => {
 const navigate = vi.hoisted(() => vi.fn());
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => navigate }));
 
-import { UI_STATE_VERSION, useUiStore, type AppNotification } from "@/store/ui";
+import i18n from "@/i18n";
+import {
+  conditionKey,
+  MAX_RESULTS,
+  resetNotificationStore,
+  useNotificationStore,
+  type ConditionInput,
+  type NotificationOperation,
+} from "@/store/notifications";
+import {
+  bookIdentityKey,
+  useUiStore,
+  type AppNotification,
+  type Identity,
+} from "@/store/ui";
 
 import { NotificationCenter } from "./NotificationCenter";
+import { resolveEntryAction } from "./notificationRouting";
 
 const MINUTE = 60_000;
 
-function notification(
+const BOOK_A = {
+  name: "Book A",
+  workspace: "Ws",
+  profile: "A",
+} as unknown as Identity;
+const BOOK_B = {
+  name: "Book B",
+  workspace: "Ws",
+  profile: "B",
+} as unknown as Identity;
+const A = bookIdentityKey(BOOK_A);
+
+// Strings that must never surface outside Normal, or reach disk at all.
+const SENTINEL_LABEL = "Sentinel Cold Vault";
+const SENTINEL_PATH = "/Users/sentinel/secret-wallet.json";
+const SENTINEL_AMOUNT = "0.4242 BTC";
+
+function legacy(
   overrides: Partial<AppNotification> & Pick<AppNotification, "id" | "title">,
 ): AppNotification {
   return {
@@ -41,28 +73,86 @@ function notification(
   };
 }
 
+function sourceFailure(source: string, label: string, message: string): ConditionInput {
+  return {
+    code: "source.refresh-failed",
+    scope: { book: A, source },
+    severity: "error",
+    priority: "attention",
+    params: { sources: [label] },
+    action: { type: "navigate", to: "/connections" },
+    details: [{ label, message, phraseKey: "failed" }],
+  };
+}
+
+function refreshFailure(book: string | null, forceFull = false): ConditionInput {
+  return {
+    code: "book-refresh.failed",
+    scope: { book },
+    severity: "error",
+    priority: "attention",
+    params: { forceFull },
+    action: {
+      type: "operation",
+      operation: { kind: "refresh-book", forceFull },
+      review: "/connections",
+    },
+  };
+}
+
 function openBell(props: Partial<React.ComponentProps<typeof NotificationCenter>> = {}) {
-  const runCommand = vi.fn();
-  render(<NotificationCenter runCommand={runCommand} {...props} />);
+  const runOperation = vi.fn<(operation: NotificationOperation) => void>();
+  render(<NotificationCenter runOperation={runOperation} {...props} />);
   act(() => {
-    fireEvent.click(screen.getByRole("button", { name: /^Notifications/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /^(Notifications|Benachrichtigungen)/ }),
+    );
   });
-  return { runCommand };
+  return { runOperation };
+}
+
+function reopen() {
+  act(() => {
+    fireEvent.click(
+      screen.getByRole("button", { name: /^(Notifications|Benachrichtigungen)/ }),
+    );
+  });
 }
 
 function entry(title: string): HTMLElement {
-  const match = screen
-    .getAllByTestId("notification-entry")
-    .find((element) => element.textContent?.includes(title));
+  const match = [
+    ...screen.queryAllByTestId("notification-entry"),
+    ...screen.queryAllByTestId("notification-attention"),
+    ...screen.queryAllByTestId("notification-running"),
+  ].find((element) => element.textContent?.includes(title));
   if (!match) throw new Error(`no entry titled ${title}`);
   return match;
 }
 
-beforeEach(() => {
+function section(id: string): HTMLElement | null {
+  return document.querySelector(`[data-section="${id}"]`);
+}
+
+/** Visible text plus every aria-label and title: what assistive tech reads. */
+function renderedText(): string {
+  const parts = [document.body.textContent ?? ""];
+  for (const element of document.querySelectorAll("[aria-label],[title]")) {
+    parts.push(element.getAttribute("aria-label") ?? "");
+    parts.push(element.getAttribute("title") ?? "");
+  }
+  return parts.join("\n");
+}
+
+beforeEach(async () => {
   navigate.mockReset();
+  storage.clear();
+  resetNotificationStore();
+  await i18n.changeLanguage("en");
   useUiStore.setState({
     lang: "en",
     developerToolsEnabled: false,
+    privacyMode: "normal",
+    identity: BOOK_A,
     notifications: [],
   });
 });
@@ -71,13 +161,362 @@ afterEach(() => {
   cleanup();
 });
 
-describe("NotificationCenter", () => {
-  it("shows when each entry arrived, relative and in full", () => {
+describe("NotificationCenter lanes", () => {
+  it("orders Needs attention, Running, then Recent, blockers first", () => {
+    const store = useNotificationStore.getState();
+    store.raiseCondition(sourceFailure("s1", "Hot", "timeout"));
+    store.raiseCondition({
+      ...sourceFailure("s2", "Cold", "refused"),
+      code: "book-refresh.backend-required",
+      scope: { book: A },
+      priority: "blocking",
+    });
+    store.reconcileConditions({
+      present: [
+        {
+          code: "journals.stale",
+          scope: { book: A },
+          severity: "warning",
+          priority: "attention",
+          action: {
+            type: "operation",
+            operation: { kind: "process-journals", autoPair: true },
+            review: "/journals",
+          },
+        },
+      ],
+    });
+    store.startJob({
+      id: "book-refresh",
+      code: "book-refresh",
+      scope: { book: A },
+      progress: { value: 40 },
+    });
+    store.addResult({
+      code: "journals.processed",
+      scope: { book: A },
+      severity: "info",
+      params: { transactions: 3, entries: 5 },
+    });
     useUiStore.setState({
-      notifications: [notification({ id: "a", title: "Export finished" })],
+      notifications: [legacy({ id: "l", title: "Export finished" })],
     });
     openBell();
 
+    const order = [...document.querySelectorAll("[data-section]")].map((el) =>
+      el.getAttribute("data-section"),
+    );
+    expect(order).toEqual(["attention", "running", "recent"]);
+    const attention = within(section("attention")!).getAllByTestId(
+      "notification-attention",
+    );
+    // A blocker leads; then the live journal state; then the rest.
+    expect(attention[0].textContent).toContain("Add a backend to sync wallets");
+    expect(attention[1].textContent).toContain("Journals need processing");
+    expect(attention[2].textContent).toContain("1 source could not refresh");
+    expect(within(section("running")!).getByText("Refreshing book")).toBeTruthy();
+    expect(within(section("recent")!).getByText("Journals processed")).toBeTruthy();
+    expect(within(section("recent")!).getByText("Export finished")).toBeTruthy();
+  });
+
+  it("badges unresolved attention groups only", () => {
+    const store = useNotificationStore.getState();
+    store.raiseCondition(sourceFailure("s1", "Hot", "timeout"));
+    store.raiseCondition(sourceFailure("s2", "Cold", "refused"));
+    store.raiseCondition(refreshFailure(A));
+    for (let index = 0; index < 5; index += 1) {
+      store.addResult({
+        code: "book-refresh.finished",
+        scope: { book: `other-${index}` },
+        severity: "info",
+      });
+    }
+    useUiStore.setState({
+      notifications: [
+        legacy({ id: "ok", title: "Saved", tone: "success" }),
+        legacy({ id: "err", title: "Export failed", tone: "error" }),
+      ],
+    });
+    render(<NotificationCenter runOperation={vi.fn()} />);
+    // Two sources fold into one group; results and legacy entries never count.
+    expect(
+      screen.getByRole("button", { name: "Notifications (2 active)" }),
+    ).toBeTruthy();
+  });
+
+  it("keeps every condition while more than 30 receipts arrive", () => {
+    const store = useNotificationStore.getState();
+    store.raiseCondition(refreshFailure(A));
+    for (let index = 0; index < 45; index += 1) {
+      store.addResult({
+        code: "journals.processed",
+        scope: { book: `book-${index}` },
+        severity: "info",
+        params: { transactions: index },
+      });
+      useUiStore.getState().addNotification({
+        title: `Receipt ${index}`,
+        body: "Done.",
+        tone: "success",
+      });
+    }
+    expect(useNotificationStore.getState().results).toHaveLength(MAX_RESULTS);
+    expect(useUiStore.getState().notifications).toHaveLength(MAX_RESULTS);
+    expect(
+      useNotificationStore.getState().conditions[
+        conditionKey("book-refresh.failed", { book: A })
+      ],
+    ).toBeDefined();
+
+    openBell();
+    expect(entry("Book refresh failed")).toBeTruthy();
+    expect(
+      within(section("recent")!).getAllByTestId("notification-entry"),
+    ).toHaveLength(MAX_RESULTS);
+  });
+
+  it("Clear recent removes results and legacy entries, never conditions or jobs", () => {
+    const store = useNotificationStore.getState();
+    store.raiseCondition(refreshFailure(A));
+    store.startJob({
+      id: "journal-processing",
+      code: "journal-processing",
+      scope: { book: A },
+      progress: { indeterminate: true },
+    });
+    store.addResult({ code: "book-refresh.finished", scope: { book: A }, severity: "info" });
+    useUiStore.setState({ notifications: [legacy({ id: "l", title: "Copied" })] });
+    openBell();
+
+    act(() => {
+      fireEvent.click(screen.getByRole("button", { name: "Clear recent" }));
+    });
+    expect(useNotificationStore.getState().results).toEqual([]);
+    expect(useUiStore.getState().notifications).toEqual([]);
+    expect(section("recent")).toBeNull();
+    expect(entry("Book refresh failed")).toBeTruthy();
+    expect(entry("Processing journals")).toBeTruthy();
+  });
+
+  it("offers no dismiss on a condition, and dismisses one result", () => {
+    useNotificationStore.getState().raiseCondition(refreshFailure(A));
+    useNotificationStore.getState().addResult({
+      code: "book-refresh.finished",
+      scope: { book: A },
+      severity: "info",
+    });
+    openBell();
+    expect(
+      within(entry("Book refresh failed")).queryByRole("button", { name: /Dismiss/ }),
+    ).toBeNull();
+    act(() => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "Dismiss notification: Book refreshed" }),
+      );
+    });
+    expect(useNotificationStore.getState().results).toEqual([]);
+  });
+
+  it("marks entries seen on open without resolving them", () => {
+    useNotificationStore.getState().raiseCondition(refreshFailure(A));
+    openBell();
+    const [condition] = Object.values(useNotificationStore.getState().conditions);
+    expect(condition.seenAt).toBeTruthy();
+    expect(condition.occurrenceCount).toBe(1);
+  });
+
+  it("shows how often a condition occurred", () => {
+    const store = useNotificationStore.getState();
+    store.raiseCondition(refreshFailure(A));
+    store.raiseCondition(refreshFailure(A));
+    store.raiseCondition(refreshFailure(A));
+    openBell();
+    const row = entry("Book refresh failed");
+    expect(within(row).getByText("×3")).toBeTruthy();
+    expect(within(row).getByText("Arrived 3 times")).toBeTruthy();
+  });
+});
+
+describe("NotificationCenter actions and scope", () => {
+  it("retries with the original options for the open book", () => {
+    useNotificationStore.getState().raiseCondition(refreshFailure(A, true));
+    const { runOperation } = openBell();
+    act(() => {
+      fireEvent.click(screen.getByRole("button", { name: "Retry rescan" }));
+    });
+    expect(runOperation).toHaveBeenCalledWith({ kind: "refresh-book", forceFull: true });
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it("disables an operation already running", () => {
+    useNotificationStore.getState().raiseCondition(refreshFailure(A));
+    openBell({ pendingOperations: { "refresh-book": true } });
+    expect(
+      (screen.getByRole("button", { name: "Refreshing..." }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+  });
+
+  it("never replays a stale action on another book", () => {
+    // A late failure for book A lands while book B is open.
+    useUiStore.setState({ identity: BOOK_B });
+    useNotificationStore.getState().raiseCondition(refreshFailure(A));
+    useNotificationStore.getState().addResult({
+      code: "book-refresh.pending",
+      scope: { book: A },
+      severity: "info",
+      action: {
+        type: "operation",
+        operation: { kind: "refresh-book", forceFull: false },
+        review: "/connections",
+      },
+    });
+    const { runOperation } = openBell();
+    // A's condition is not B's to show or to count; it is kept, not evicted.
+    expect(screen.queryByText("Book refresh failed")).toBeNull();
+    expect(screen.getByRole("button", { name: "Notifications" })).toBeTruthy();
+    const row = entry("Some sources are still queued");
+    expect(within(row).getByText("Started in another book")).toBeTruthy();
+    act(() => {
+      fireEvent.click(within(row).getByRole("button", { name: "Review" }));
+    });
+    expect(runOperation).not.toHaveBeenCalled();
+    expect(navigate).toHaveBeenCalledWith({ to: "/connections" });
+
+    // Back on A, its condition is there again with a live Retry.
+    cleanup();
+    useUiStore.setState({ identity: BOOK_A });
+    const second = openBell();
+    act(() => {
+      fireEvent.click(
+        within(entry("Book refresh failed")).getByRole("button", { name: "Retry" }),
+      );
+    });
+    expect(second.runOperation).toHaveBeenCalledWith({
+      kind: "refresh-book",
+      forceFull: false,
+    });
+  });
+
+  it("revalidates scope at click time, not render time", () => {
+    useNotificationStore.getState().addResult({
+      code: "book-refresh.pending",
+      scope: { book: A },
+      severity: "info",
+      action: {
+        type: "operation",
+        operation: { kind: "refresh-book", forceFull: false },
+        review: "/connections",
+      },
+    });
+    const { runOperation } = openBell();
+    const button = within(entry("Some sources are still queued")).getByRole("button", {
+      name: "Retry",
+    });
+    // The book changes under an open list, before the click lands.
+    useUiStore.setState({ identity: BOOK_B }, false);
+    act(() => void fireEvent.click(button));
+    expect(runOperation).not.toHaveBeenCalled();
+    expect(navigate).toHaveBeenCalledWith({ to: "/connections" });
+  });
+
+  it("gives the same destinations in English and Austrian German", async () => {
+    const store = useNotificationStore.getState();
+    store.raiseCondition(sourceFailure("s1", "Hot", "timeout"));
+    store.raiseCondition({
+      code: "book-refresh.backend-required",
+      scope: { book: A },
+      severity: "warning",
+      priority: "attention",
+      action: { type: "navigate", to: "/settings/bitcoin" },
+    });
+    const clickAll = () => {
+      openBell();
+      const rows = screen.getAllByTestId("notification-attention");
+      for (let index = 0; index < rows.length; index += 1) {
+        const current = screen.getAllByTestId("notification-attention")[index];
+        act(() => void fireEvent.click(within(current).getAllByRole("button")[0]));
+        reopen();
+      }
+      cleanup();
+      return navigate.mock.calls.map(([call]) => call);
+    };
+    const english = clickAll();
+    navigate.mockReset();
+    await act(async () => {
+      await i18n.changeLanguage("de");
+    });
+    useUiStore.setState({ lang: "de" });
+    const german = clickAll();
+    expect(english).toEqual([
+      { to: "/settings/bitcoin" },
+      { to: "/connections" },
+    ]);
+    expect(german).toEqual(english);
+  });
+
+  it("fails closed on unknown routes and operations", () => {
+    const store = useNotificationStore.getState();
+    store.addResult({
+      code: "book-refresh.pending",
+      scope: { book: A },
+      severity: "info",
+      action: { type: "navigate", to: "https://example.com" },
+    });
+    store.addResult({
+      code: "journals.processed",
+      scope: { book: A },
+      severity: "info",
+      action: {
+        type: "operation",
+        operation: { kind: "delete-book" } as unknown as NotificationOperation,
+        review: "/journals",
+      },
+    });
+    useUiStore.setState({
+      notifications: [
+        legacy({
+          id: "l",
+          title: "Tampered",
+          action: { label: "Go", target: "https://example.com" },
+        }),
+        legacy({
+          id: "c",
+          title: "Tampered command",
+          action: { label: "Run", command: "rm" as never },
+        }),
+      ],
+    });
+    openBell();
+    for (const title of [
+      "Some sources are still queued",
+      "Journals processed",
+      "Tampered",
+      "Tampered command",
+    ]) {
+      expect(entry(title)).toBeTruthy();
+    }
+    expect(screen.queryByRole("button", { name: "Open wallets" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Go" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Run" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Open journals" })).toBeNull();
+    expect(
+      resolveEntryAction(
+        { type: "navigate", to: "/nope" },
+        { book: A },
+        A,
+        false,
+      ),
+    ).toBeNull();
+  });
+});
+
+describe("NotificationCenter legacy entries", () => {
+  it("shows when each entry arrived, relative and in full", () => {
+    useUiStore.setState({
+      notifications: [legacy({ id: "a", title: "Export finished" })],
+    });
+    openBell();
     const time = within(entry("Export finished")).getByText("2 min. ago");
     expect(time.tagName).toBe("TIME");
     expect(time.getAttribute("dateTime")).toBe(
@@ -86,215 +525,155 @@ describe("NotificationCenter", () => {
     expect(time.getAttribute("title")).toMatch(/\d{4}/);
   });
 
-  it("expands to the full body and detail lines, and collapses again", () => {
+  it("puts detail lines behind Show details", () => {
     useUiStore.setState({
       notifications: [
-        notification({
+        legacy({
           id: "a",
-          title: "Book refresh needs attention",
+          title: "Export needs attention",
           tone: "warning",
-          body: "1 completed, 1 needs attention",
+          body: "One file was skipped",
           details: ["Cold storage: Electrum timeout"],
         }),
       ],
     });
     openBell();
-    const row = entry("Book refresh needs attention");
-
+    const row = entry("Export needs attention");
     expect(within(row).queryByText("Cold storage: Electrum timeout")).toBeNull();
-    const toggle = within(row).getByRole("button", { name: /Show more/ });
+    const toggle = within(row).getByRole("button", { name: /Show details/ });
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
-
     act(() => void fireEvent.click(toggle));
     expect(within(row).getByText("Cold storage: Electrum timeout")).toBeTruthy();
-    const collapse = within(row).getByRole("button", { name: /Show less/ });
-    expect(collapse.getAttribute("aria-expanded")).toBe("true");
-
-    act(() => void fireEvent.click(collapse));
-    expect(within(row).queryByText("Cold storage: Electrum timeout")).toBeNull();
-  });
-
-  it("offers no toggle when the body already shows in full", () => {
-    useUiStore.setState({
-      notifications: [notification({ id: "a", title: "Copied" })],
+    act(() => {
+      fireEvent.click(within(row).getByRole("button", { name: /Hide details/ }));
     });
-    openBell();
-    expect(
-      within(entry("Copied")).queryByRole("button", { name: /Show more/ }),
-    ).toBeNull();
+    expect(within(row).queryByText("Cold storage: Electrum timeout")).toBeNull();
   });
 
   it("dismisses one entry and leaves the others", () => {
     useUiStore.setState({
       notifications: [
-        notification({ id: "a", title: "Export finished" }),
-        notification({ id: "b", title: "Import rolled back" }),
+        legacy({ id: "a", title: "Export finished" }),
+        legacy({ id: "b", title: "Import rolled back" }),
       ],
     });
     openBell();
-
     act(() => {
       fireEvent.click(
-        screen.getByRole("button", {
-          name: "Dismiss notification: Export finished",
-        }),
+        screen.getByRole("button", { name: "Dismiss notification: Export finished" }),
       );
     });
-
-    expect(useUiStore.getState().notifications.map((item) => item.id)).toEqual([
-      "b",
-    ]);
-    expect(screen.queryByText("Export finished")).toBeNull();
-    expect(screen.getByText("Import rolled back")).toBeTruthy();
-  });
-
-  it("does not offer to dismiss an entry derived from book state", () => {
-    openBell({
-      systemItems: [
-        {
-          id: "review",
-          title: "Waiting for your review",
-          body: "2 decisions left.",
-          tone: "warning",
-          to: "/review",
-        },
-      ],
-    });
-    expect(
-      within(entry("Waiting for your review")).queryByRole("button", {
-        name: /Dismiss/,
-      }),
-    ).toBeNull();
+    expect(useUiStore.getState().notifications.map((item) => item.id)).toEqual(["b"]);
   });
 
   it("navigates from an action button and from the title", () => {
     useUiStore.setState({
       notifications: [
-        notification({
+        legacy({
           id: "a",
           title: "Backend required",
           tone: "warning",
           target: "/settings/bitcoin",
           action: { label: "Open settings", target: "/settings/bitcoin" },
         }),
-        notification({ id: "b", title: "Quarantine", target: "/review" }),
+        legacy({ id: "b", title: "Quarantine", target: "/review" }),
       ],
     });
     openBell();
-
     act(() => {
       fireEvent.click(
-        within(entry("Backend required")).getByRole("button", {
-          name: "Open settings",
-        }),
+        within(entry("Backend required")).getByRole("button", { name: "Open settings" }),
       );
     });
     expect(navigate).toHaveBeenCalledWith({ to: "/settings/bitcoin" });
-
+    reopen();
     act(() => {
-      fireEvent.click(screen.getByRole("button", { name: /^Notifications/ }));
-    });
-    act(() => {
-      fireEvent.click(
-        within(entry("Quarantine")).getByRole("button", { name: "Quarantine" }),
-      );
+      fireEvent.click(within(entry("Quarantine")).getByRole("button", { name: "Quarantine" }));
     });
     expect(navigate).toHaveBeenLastCalledWith({ to: "/review" });
   });
 
-  it("runs a command action, and holds it while it is already running", () => {
+  it("maps a legacy command onto the default operation", () => {
     useUiStore.setState({
       notifications: [
-        notification({
+        legacy({
           id: "a",
-          title: "Book refresh failed",
+          title: "Old failure",
           tone: "error",
           action: { label: "Retry", command: "refresh-book" },
         }),
       ],
     });
-    const { runCommand } = openBell();
-    act(() => {
-      fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-    });
-    expect(runCommand).toHaveBeenCalledWith("refresh-book");
-    expect(navigate).not.toHaveBeenCalled();
-
-    cleanup();
-    openBell({ pendingCommands: { "refresh-book": true } });
-    expect(
-      (screen.getByRole("button", { name: "Retry" }) as HTMLButtonElement).disabled,
-    ).toBe(true);
-  });
-
-  it("drops a stored action that names an unknown route", () => {
-    useUiStore.setState({
-      notifications: [
-        notification({
-          id: "a",
-          title: "Tampered",
-          action: { label: "Go", target: "https://example.com" },
-        }),
-      ],
-    });
-    openBell();
-    expect(screen.queryByRole("button", { name: "Go" })).toBeNull();
-  });
-
-  it("shows how often the same notification repeated", () => {
-    useUiStore.setState({
-      notifications: [
-        notification({ id: "a", title: "Export failed", tone: "error", repeatCount: 3 }),
-      ],
-    });
-    openBell();
-    const row = entry("Export failed");
-    expect(within(row).getByText("×3")).toBeTruthy();
-    expect(within(row).getByText("Arrived 3 times")).toBeTruthy();
+    const { runOperation } = openBell();
+    act(() => void fireEvent.click(screen.getByRole("button", { name: "Retry" })));
+    expect(runOperation).toHaveBeenCalledWith({ kind: "refresh-book", forceFull: false });
   });
 });
 
-describe("notification persistence", () => {
-  it("writes no detail lines to kb.ui", () => {
-    useUiStore.getState().addNotification({
-      title: "Book refresh failed",
-      body: "Electrum call failed",
-      tone: "error",
-      details: ["Cold storage: tcp://10.0.0.7:50001 refused"],
+describe("NotificationCenter privacy modes", () => {
+  function seed() {
+    const store = useNotificationStore.getState();
+    store.raiseCondition(
+      sourceFailure("s1", SENTINEL_LABEL, `rejected ${SENTINEL_AMOUNT} at ${SENTINEL_PATH}`),
+    );
+    store.raiseCondition(sourceFailure("s2", "Hot", "connection refused"));
+    useUiStore.setState({
+      notifications: [
+        legacy({
+          id: "l",
+          title: `Imported ${SENTINEL_LABEL}`,
+          body: `Saved ${SENTINEL_PATH} with ${SENTINEL_AMOUNT}`,
+          tone: "success",
+          details: [`${SENTINEL_LABEL}: 3 rows`],
+        }),
+      ],
     });
+  }
 
-    const stored = storage.get("kb.ui") ?? "";
-    expect(stored).toContain("Electrum call failed");
-    expect(stored).not.toContain("10.0.0.7");
+  function expandAll() {
+    for (const toggle of screen.queryAllByRole("button", { name: /Show details/ })) {
+      act(() => void fireEvent.click(toggle));
+    }
+  }
+
+  it("Normal shows labels and bounded detail", () => {
+    seed();
+    openBell();
+    expandAll();
+    const text = renderedText();
+    expect(text).toContain(SENTINEL_LABEL);
+    expect(text).toContain("Hot: failed — connection refused");
   });
 
-  it("drops detail lines from a stored blob on restore", async () => {
-    storage.set(
-      "kb.ui",
-      JSON.stringify({
-        version: UI_STATE_VERSION,
-        state: {
-          notifications: [
-            {
-              id: "old",
-              createdAt: "2026-11-12T10:00:00Z",
-              title: "Book refresh failed",
-              body: "Failed",
-              tone: "error",
-              details: ["token=written-by-hand"],
-              action: { label: "Retry", command: "refresh-book" },
-            },
-          ],
-        },
-      }),
-    );
-    await act(async () => {
-      await useUiStore.persist.rehydrate();
-    });
+  it("Hide amounts withholds free text that may hold an amount", () => {
+    seed();
+    useUiStore.setState({ privacyMode: "hideAmounts" });
+    openBell();
+    expandAll();
+    const text = renderedText();
+    expect(text).not.toContain(SENTINEL_AMOUNT);
+    expect(text).not.toContain("0.4242");
+    // Labels stay; the digit-bearing message does not.
+    expect(text).toContain(`${SENTINEL_LABEL}: failed — Hidden while amounts are hidden.`);
+    expect(text).toContain("Hot: failed — connection refused");
+  });
 
-    const [restored] = useUiStore.getState().notifications;
-    expect(restored).toMatchObject({ id: "old", title: "Book refresh failed" });
-    expect(restored.details).toBeUndefined();
-    expect(restored.action).toEqual({ label: "Retry", command: "refresh-book" });
+  it("Hide all shows generic text, keeps actions, and leaks nothing", () => {
+    seed();
+    useUiStore.setState({ privacyMode: "hideAll" });
+    const { runOperation } = openBell();
+    expandAll();
+    const text = renderedText();
+    for (const sentinel of [SENTINEL_LABEL, SENTINEL_PATH, SENTINEL_AMOUNT, "Hot", "refused"]) {
+      expect(text).not.toContain(sentinel);
+    }
+    expect(text).toContain("2 sources could not refresh");
+    expect(text).toContain("Task finished");
+    expect(screen.queryAllByRole("button", { name: /Show details/ })).toHaveLength(0);
+    act(() => {
+      fireEvent.click(screen.getByRole("button", { name: "Review sources" }));
+    });
+    expect(navigate).toHaveBeenCalledWith({ to: "/connections" });
+    expect(runOperation).not.toHaveBeenCalled();
   });
 });

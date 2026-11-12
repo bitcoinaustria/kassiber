@@ -97,12 +97,19 @@ import {
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useRightPanelStore } from "@/store/rightPanel";
 import { bookIdentityKey, useUiStore } from "@/store/ui";
-import type {
-  Identity,
-  NotificationCommand,
-  ThemePreference,
-} from "@/store/ui";
+import type { Identity, ThemePreference } from "@/store/ui";
+import {
+  attentionGroupCount,
+  conditionsInScope,
+  useNotificationStore,
+  type NotificationOperation,
+} from "@/store/notifications";
 import { clearFeedback } from "@/lib/feedback";
+import {
+  reviewConditionsFromBadges,
+  sourceConditionsFromSnapshot,
+} from "@/lib/notificationConditions";
+import type { FreshnessSourceState } from "@/lib/syncResults";
 import { BOOK_REFRESH_PROGRESS_ID } from "@/lib/syncProgress";
 import {
   DAEMON_AUTH_REQUIRED_EVENT,
@@ -212,10 +219,7 @@ import {
 } from "./devMode";
 import { notificationProgressValue } from "./notificationDisplay";
 import { FeedbackToaster } from "./FeedbackToaster";
-import {
-  NotificationCenter,
-  type SystemNotificationItem,
-} from "./NotificationCenter";
+import { NotificationCenter } from "./NotificationCenter";
 import { planHeaderRefresh } from "./headerRefresh";
 
 const BUG_REPORT_URL =
@@ -3040,6 +3044,43 @@ function ShellTitlebar({
   );
 }
 
+interface FreshnessStatusSnapshot {
+  sources?: FreshnessSourceState[];
+}
+
+/**
+ * Rebuild the center's live conditions from local book state whenever the
+ * shell is unlocked: journals and Review from `ui.review.badges`, and
+ * per-source refresh problems from `ui.freshness.status`. Both are local
+ * reads with no egress. Only a successful read reconciles; a failed or
+ * missing one resolves nothing, and reconciling never counts a repeat.
+ */
+function useLiveNotificationConditions(enabled: boolean, book: string | null) {
+  // The same counts as the sidebar's Review badge, from the same read.
+  const badges = useDaemon<ReviewBadges>("ui.review.badges", undefined, {
+    enabled,
+  });
+  const freshness = useDaemon<FreshnessStatusSnapshot>(
+    "ui.freshness.status",
+    undefined,
+    { enabled },
+  );
+  const badgeData = badges.isSuccess ? badges.data?.data : undefined;
+  const sources = freshness.isSuccess ? freshness.data?.data?.sources : undefined;
+  React.useEffect(() => {
+    if (!enabled || !badgeData) return;
+    useNotificationStore
+      .getState()
+      .reconcileConditions(reviewConditionsFromBadges(badgeData, book));
+  }, [badgeData, book, enabled]);
+  React.useEffect(() => {
+    if (!enabled || !Array.isArray(sources)) return;
+    useNotificationStore
+      .getState()
+      .reconcileConditions(sourceConditionsFromSnapshot(sources, book));
+  }, [book, enabled, sources]);
+}
+
 /**
  * The breadcrumb and shell actions on the title bar's page side: the
  * book-refresh split button, notifications, and the view toggles.
@@ -3058,53 +3099,22 @@ function ShellTitlebarControls({
   const headerBookKey = bookIdentityKey(identity);
   const { runJournalProcessing, isProcessingJournals } =
     useJournalProcessingAction();
-  // The same counts as the sidebar's Review badge, from the same read.
-  const { data } = useDaemon<ReviewBadges>(
-    "ui.review.badges",
-    undefined,
-    { enabled: daemonEnabled },
-  );
-  const badges = data?.data;
-  const reviewCount = reviewTotal(badges);
-  const needsJournals = Boolean(badges?.journals_needs_processing);
-  const blocksReports = (badges?.quarantine ?? 0) > 0;
-
-  const systemNotificationItems: SystemNotificationItem[] = [
-    ...(needsJournals
-      ? [
-          {
-            id: "journals-stale",
-            title: t("notifications.ledgerStale.title"),
-            body: t("notifications.ledgerStale.body"),
-            tone: "warning" as const,
-            to: "/review" as const,
-            action: {
-              label: t("notifications.ledgerStale.action"),
-              command: "process-journals" as const,
-            },
-          },
-        ]
-      : []),
-    ...(reviewCount > 0
-      ? [
-          {
-            id: "review",
-            title: t("notifications.review.title"),
-            body: t("notifications.review.body", { count: reviewCount }),
-            tone: "warning" as const,
-            to: "/review" as const,
-          },
-        ]
-      : []),
-  ];
-  const runNotificationCommand = (command: NotificationCommand) => {
-    if (command === "process-journals") runJournalProcessing();
-    else onRefresh();
+  useLiveNotificationConditions(daemonEnabled, headerBookKey);
+  const conditions = useNotificationStore((s) => s.conditions);
+  const inScope = conditionsInScope(conditions, headerBookKey);
+  const attentionCount = attentionGroupCount(conditions, headerBookKey);
+  const blocksReports = inScope.some((entry) => entry.priority === "blocking");
+  const runNotificationOperation = (operation: NotificationOperation) => {
+    if (operation.kind === "process-journals") {
+      runJournalProcessing();
+    } else {
+      onRefresh({ forceFull: operation.forceFull });
+    }
   };
   const notificationAlertClassName =
     blocksReports
       ? "border border-red-500/35 bg-red-500/10 text-red-700 hover:bg-red-500/15 hover:text-red-700 dark:text-red-300 dark:hover:text-red-300"
-      : needsJournals || reviewCount > 0
+      : attentionCount > 0
         ? "border border-amber-500/35 bg-amber-500/10 text-amber-700 hover:bg-amber-500/15 hover:text-amber-700 dark:text-amber-300 dark:hover:text-amber-300"
         : "";
   return (
@@ -3205,13 +3215,12 @@ function ShellTitlebarControls({
           </DropdownMenu>
         </div>
         <NotificationCenter
-          systemItems={systemNotificationItems}
           triggerClassName={cn(
             shellIconButtonClassName,
             notificationAlertClassName,
           )}
-          runCommand={runNotificationCommand}
-          pendingCommands={{
+          runOperation={runNotificationOperation}
+          pendingOperations={{
             "process-journals": isProcessingJournals,
             "refresh-book": isRefreshing,
           }}

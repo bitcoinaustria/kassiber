@@ -607,7 +607,11 @@ function stripNotificationProgress(
   });
 }
 
-const MAX_NOTIFICATIONS = 12;
+/**
+ * Legacy notifications kept for the session. Their own bound, so they can
+ * never crowd out a condition (see `store/notifications.ts`).
+ */
+const MAX_NOTIFICATIONS = 30;
 
 function sameNotificationText(
   a: Pick<AppNotification, "title" | "body" | "tone">,
