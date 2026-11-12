@@ -3391,8 +3391,10 @@ mod selected_data_root_tests {
         };
         assert!(context.resolve_for_bootstrap(&options(&selection)).is_err());
         let selected = selected_data_root_in(&context, &selection).unwrap();
+        // Compare locations, not spellings: macOS's temporary directory is
+        // reached through the `/var` -> `/private/var` symlink.
         assert_eq!(
-            selected,
+            kassiber_paths::canonicalize_allow_missing(&selected).unwrap(),
             kassiber_paths::canonicalize_allow_missing(&data).unwrap()
         );
     }
