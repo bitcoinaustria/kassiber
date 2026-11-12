@@ -16,7 +16,6 @@ import {
   ArrowRight,
   BadgeCheck,
   BarChart3,
-  Bell,
   BookOpen,
   Bug,
   ChevronDown,
@@ -98,7 +97,11 @@ import {
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useRightPanelStore } from "@/store/rightPanel";
 import { bookIdentityKey, useUiStore } from "@/store/ui";
-import type { AppNotification, Identity, ThemePreference } from "@/store/ui";
+import type {
+  Identity,
+  NotificationCommand,
+  ThemePreference,
+} from "@/store/ui";
 import { BOOK_REFRESH_PROGRESS_ID } from "@/lib/syncProgress";
 import {
   DAEMON_AUTH_REQUIRED_EVENT,
@@ -206,15 +209,11 @@ import {
   devLockProps,
   isDevLockedRoute,
 } from "./devMode";
+import { notificationProgressValue } from "./notificationDisplay";
 import {
-  notificationTarget,
-  type NotificationTarget,
-} from "./notificationRouting";
-import {
-  filterNotifications,
-  type NotificationFilter,
-  shouldHideNotificationProgressLabel,
-} from "./notificationDisplay";
+  NotificationCenter,
+  type SystemNotificationItem,
+} from "./NotificationCenter";
 import { planHeaderRefresh } from "./headerRefresh";
 
 const BUG_REPORT_URL =
@@ -306,13 +305,6 @@ type RouteMeta = {
   searchKey: string;
 };
 
-type NotificationItem = Omit<AppNotification, "createdAt"> & {
-  createdAt?: string;
-  to?: NotificationTarget;
-  action?: "process-journals";
-  actionLabel?: string;
-};
-
 const APP_COMMIT_SHORT = APP_COMMIT ? APP_COMMIT.slice(0, 7) : "unknown";
 const APP_IS_DEV_BUILD = APP_VERSION === "dev";
 const NATIVE_MENU_EVENT = "kassiber:intent";
@@ -379,11 +371,6 @@ function foregroundTouchIdAutoPrompt(autoPromptRequested: boolean) {
     appVisible,
     windowFocused,
   });
-}
-
-function notificationProgressValue(value: number | undefined) {
-  if (typeof value !== "number" || !Number.isFinite(value)) return 0;
-  return Math.max(0, Math.min(100, value));
 }
 
 const appMainClassName =
@@ -3054,10 +3041,6 @@ function ShellTitlebarControls({
 }: ShellTitlebarControlsProps) {
   const { t } = useTranslation(["chrome", "nav"]);
   const preAlphaBannerVisible = useUiStore((s) => s.preAlphaBannerVisible);
-  const navigate = useNavigate();
-  const appNotifications = useUiStore((s) => s.notifications);
-  const clearNotifications = useUiStore((s) => s.clearNotifications);
-  const developerToolsEnabled = useUiStore((s) => s.developerToolsEnabled);
   const identity = useUiStore((s) => s.identity);
   const reopenFirstSyncCard = useUiStore((s) => s.reopenFirstSyncCard);
   const headerBookKey = bookIdentityKey(identity);
@@ -3074,7 +3057,7 @@ function ShellTitlebarControls({
   const needsJournals = Boolean(badges?.journals_needs_processing);
   const blocksReports = (badges?.quarantine ?? 0) > 0;
 
-  const systemNotificationItems: NotificationItem[] = [
+  const systemNotificationItems: SystemNotificationItem[] = [
     ...(needsJournals
       ? [
           {
@@ -3083,8 +3066,10 @@ function ShellTitlebarControls({
             body: t("notifications.ledgerStale.body"),
             tone: "warning" as const,
             to: "/review" as const,
-            action: "process-journals" as const,
-            actionLabel: t("notifications.ledgerStale.action"),
+            action: {
+              label: t("notifications.ledgerStale.action"),
+              command: "process-journals" as const,
+            },
           },
         ]
       : []),
@@ -3100,37 +3085,16 @@ function ShellTitlebarControls({
         ]
       : []),
   ];
-  const notificationItems: NotificationItem[] = [
-    ...appNotifications.map((item) => ({
-      ...item,
-      to: notificationTarget(
-        item.title,
-        item.tone,
-        developerToolsEnabled,
-        item.target,
-      ),
-    })),
-    ...systemNotificationItems,
-  ];
-  const [notificationFilter, setNotificationFilter] =
-    React.useState<NotificationFilter>("all");
-  const needsActionItems = filterNotifications(notificationItems, "needsAction");
-  const visibleNotificationItems =
-    notificationFilter === "needsAction" ? needsActionItems : notificationItems;
-  const notificationCount = notificationItems.filter(
-    (item) => item.tone !== "info" || item.title.toLowerCase().includes("sync"),
-  ).length;
+  const runNotificationCommand = (command: NotificationCommand) => {
+    if (command === "process-journals") runJournalProcessing();
+    else onRefresh();
+  };
   const notificationAlertClassName =
     blocksReports
       ? "border border-red-500/35 bg-red-500/10 text-red-700 hover:bg-red-500/15 hover:text-red-700 dark:text-red-300 dark:hover:text-red-300"
       : needsJournals || reviewCount > 0
         ? "border border-amber-500/35 bg-amber-500/10 text-amber-700 hover:bg-amber-500/15 hover:text-amber-700 dark:text-amber-300 dark:hover:text-amber-300"
         : "";
-  const notificationLabel =
-    notificationCount > 0
-      ? t("notifications.labelActive", { count: notificationCount })
-      : t("notifications.label");
-
   return (
     <>
       {/*
@@ -3228,172 +3192,23 @@ function ShellTitlebarControls({
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className={cn(
-                "relative",
-                shellIconButtonClassName,
-                notificationAlertClassName,
-              )}
-              aria-label={notificationLabel}
-              title={notificationLabel}
-            >
-              <Bell className="size-4" aria-hidden="true" />
-              {notificationCount > 0 && (
-                <span className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full bg-destructive text-3xs font-medium text-destructive-foreground">
-                  {notificationCount}
-                </span>
-              )}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-80">
-            <div className="flex items-center justify-between gap-2 px-2 py-1.5">
-              <DropdownMenuLabel className="p-0">
-                {t("notifications.label")}
-              </DropdownMenuLabel>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-7 px-2 text-xs"
-                disabled={appNotifications.length === 0}
-                onClick={(event) => {
-                  event.preventDefault();
-                  clearNotifications();
-                }}
-              >
-                {t("notifications.clearAll")}
-              </Button>
-            </div>
-            <div
-              role="group"
-              aria-label={t("notifications.filter.label")}
-              className="flex gap-1 px-2 pb-1.5"
-            >
-              {(["all", "needsAction"] as const).map((filter) => (
-                <Button
-                  key={filter}
-                  type="button"
-                  variant={notificationFilter === filter ? "secondary" : "ghost"}
-                  size="sm"
-                  className="h-7 px-2 text-xs"
-                  aria-pressed={notificationFilter === filter}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    setNotificationFilter(filter);
-                  }}
-                >
-                  {filter === "all"
-                    ? t("notifications.filter.all")
-                    : t("notifications.filter.needsAction", {
-                        count: needsActionItems.length,
-                      })}
-                </Button>
-              ))}
-            </div>
-            <DropdownMenuSeparator />
-            {visibleNotificationItems.length === 0 ? (
-              <p className="px-3 py-4 text-center text-xs text-muted-foreground">
-                {notificationFilter === "needsAction"
-                  ? t("notifications.empty.needsAction")
-                  : t("notifications.empty.all")}
-              </p>
-            ) : null}
-            {visibleNotificationItems.map((item) => {
-              const progressLabel =
-                item.progress?.label &&
-                !shouldHideNotificationProgressLabel(
-                  item.body,
-                  item.progress.label,
-                )
-                  ? item.progress.label
-                  : null;
-              return (
-                <div key={item.id} className="px-1 py-1">
-                  <DropdownMenuItem
-                    className="flex cursor-pointer items-start justify-between gap-3 rounded-md whitespace-normal"
-                    onSelect={(event) => {
-                      // An in-progress book refresh minimized via "Continue in
-                      // background" re-opens the full-screen sync card (rather than
-                      // navigating); letting the menu close on select reveals it.
-                      // A live `progress` means a refresh is active, so this covers
-                      // first sync AND later incremental refreshes.
-                      if (
-                        item.dedupeKey === "book-refresh" &&
-                        item.progress &&
-                        headerBookKey !== null
-                      ) {
-                        reopenFirstSyncCard(headerBookKey);
-                        return;
-                      }
-                      if (!item.to) return;
-                      event.preventDefault();
-                      void navigate({ to: item.to });
-                    }}
-                  >
-                    <span className="min-w-0">
-                      <span className="block font-medium">{item.title}</span>
-                      <span className="block text-xs text-muted-foreground">
-                        {item.body}
-                      </span>
-                    </span>
-                    {item.to ? (
-                      <ChevronRight
-                        className="mt-1 size-4 shrink-0 text-muted-foreground"
-                        aria-hidden="true"
-                      />
-                    ) : null}
-                  </DropdownMenuItem>
-                  {item.progress ? (
-                    <div className="px-2 pb-1">
-                      <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                        <div
-                          className={cn(
-                            "h-full rounded-full bg-primary transition-[width] duration-300",
-                            item.progress.indeterminate &&
-                              "w-1/2 will-change-transform motion-safe:animate-[route-progress_0.9s_ease-in-out_infinite] motion-reduce:w-full motion-reduce:will-change-auto",
-                          )}
-                          style={
-                            item.progress.indeterminate
-                              ? undefined
-                              : {
-                                  width: `${notificationProgressValue(item.progress.value)}%`,
-                                }
-                          }
-                        />
-                      </div>
-                      {progressLabel ? (
-                        <div className="mt-1 text-xs text-muted-foreground">
-                          {progressLabel}
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-                  {item.action === "process-journals" ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="mt-1 h-7 w-full justify-center text-xs"
-                      disabled={isProcessingJournals}
-                      onClick={(event) => {
-                        event.preventDefault();
-                        runJournalProcessing();
-                      }}
-                    >
-                      {isProcessingJournals
-                        ? t("notifications.processing")
-                        : item.actionLabel}
-                    </Button>
-                  ) : null}
-                </div>
-              );
-            })}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <NotificationCenter
+          systemItems={systemNotificationItems}
+          triggerClassName={cn(
+            shellIconButtonClassName,
+            notificationAlertClassName,
+          )}
+          runCommand={runNotificationCommand}
+          pendingCommands={{
+            "process-journals": isProcessingJournals,
+            "refresh-book": isRefreshing,
+          }}
+          onOpenRunningBookRefresh={
+            headerBookKey !== null
+              ? () => reopenFirstSyncCard(headerBookKey)
+              : undefined
+          }
+        />
         <CurrencyToggle />
         <ThemeMenu />
         <PrivacyModeButton className={shellIconButtonClassName} />
