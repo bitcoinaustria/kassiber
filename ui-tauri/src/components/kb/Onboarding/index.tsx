@@ -67,6 +67,7 @@ import {
   type RegtestStatusData,
 } from "./regtestDemo";
 import {
+  OnboardingStepCount,
   OnboardingStepper,
   type StepperEntry,
 } from "./stepper";
@@ -773,6 +774,11 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
                 <div className="flex items-center gap-3">
                   <KassiberWordmark />
                   <span className="text-sm text-ink-3">{t("frame.setup")}</span>
+                  <OnboardingStepCount
+                    current={currentStep}
+                    total={stepperEntries.length}
+                    className="ml-auto"
+                  />
                 </div>
                 <OnboardingStepper
                   steps={stepperEntries}

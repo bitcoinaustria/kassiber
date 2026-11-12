@@ -120,7 +120,7 @@
     }
   },
   "frame": {
-    "step": "Schritt {{current}}/{{total}}",
+    "step": "Schritt {{current}} von {{total}}",
     "setup": "Setup",
     "setupConnects": "Das Setup verbindet sich nirgendwohin, außer du testest einen Server."
   },

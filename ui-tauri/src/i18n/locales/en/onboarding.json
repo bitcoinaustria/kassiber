@@ -120,7 +120,7 @@
     }
   },
   "frame": {
-    "step": "Step {{current}}/{{total}}",
+    "step": "Step {{current}} of {{total}}",
     "setup": "Setup",
     "setupConnects": "Setup connects to nothing unless you test a server."
   },
