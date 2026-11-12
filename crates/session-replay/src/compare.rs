@@ -26,6 +26,15 @@ const MAX_OFFSET_HOURS: i64 = 72;
 /// Expiry periods the product uses (a dismissal lasts 90 days).
 const OFFSET_DAYS: [i64; 7] = [7, 14, 30, 60, 90, 180, 365];
 
+/// A collision suffix right after a clock stamp in a file name:
+/// `report-<time>-2.csv`. Writers that stamp names to the second take the
+/// next free `-N` when an earlier file holds that second, so whether two
+/// writes share a second (and which gets `-2`) is wall-clock timing.
+fn stamp_suffix() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"<time>-[0-9]+(\.[A-Za-z][A-Za-z0-9]*)").unwrap())
+}
+
 fn uuid4() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
@@ -430,7 +439,11 @@ impl<'a> Canon<'a> {
             at = end;
         }
         out.push_str(&text[at..]);
-        out
+        // `<time>` and `<time>-N` name the same file shape. Files fold into
+        // one group compared as a multiset by content, so a missing, extra,
+        // overwritten or changed file still differs; only which file of a
+        // second carries which suffix is not compared.
+        stamp_suffix().replace_all(&out, "<time>$1").into_owned()
     }
 
     /// Table rows in an order both runs share: by their shape with generated
@@ -743,6 +756,37 @@ mod tests {
             local_offset_us: HOUR_US,
             also: Vec::new(),
         }
+    }
+
+    #[test]
+    fn stamped_names_fold_their_collision_suffix_and_nothing_else() {
+        let pinned = HashSet::new();
+        let mut canon = Canon::new(window(), &pinned);
+        let first = canon.rewrite(
+            "reports/kassiber-ledger-template-20261110-120003.xlsx",
+            false,
+        );
+        let second = canon.rewrite(
+            "reports/kassiber-ledger-template-20261110-120003-2.xlsx",
+            false,
+        );
+        let later = canon.rewrite(
+            "reports/kassiber-ledger-template-20261110-120004-3.csv",
+            false,
+        );
+        assert_eq!(first, "reports/kassiber-ledger-template-<time>.xlsx");
+        assert_eq!(second, first);
+        assert_eq!(later, "reports/kassiber-ledger-template-<time>.csv");
+        // Not a file extension, or no clock stamp before it: left alone.
+        assert_eq!(
+            canon.rewrite("20261110-120003-2.5 btc", false),
+            "<time>-2.5 btc"
+        );
+        assert_eq!(canon.rewrite("report-2.csv", false), "report-2.csv");
+        assert_eq!(
+            canon.rewrite("report-20250101-000000-2.csv", false),
+            "report-20250101-000000-2.csv"
+        );
     }
 
     #[test]
