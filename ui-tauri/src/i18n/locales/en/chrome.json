@@ -222,8 +222,12 @@
     "title": "Display currency: {{current}}. Switch to {{next}}."
   },
   "sensitive": {
-    "show": "Show sensitive data",
-    "hide": "Hide sensitive data"
+    "cycle": "Privacy: {{current}}. Switch to {{next}}.",
+    "modes": {
+      "normal": "Show all",
+      "hideAmounts": "Hide amounts",
+      "hideAll": "Hide all"
+    }
   },
   "theme": {
     "label": "Theme",

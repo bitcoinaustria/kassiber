@@ -26,7 +26,6 @@ import {
   Database,
   Download,
   Eye,
-  EyeOff,
   Fingerprint,
   Folder,
   Gauge,
@@ -132,6 +131,7 @@ import {
   unlockFailureKey,
 } from "@/lib/appLock";
 import { formatShortcut, isMacPlatform } from "@/lib/shortcutLabel";
+import { useUnlockPrivacy } from "@/lib/sensitive";
 import { cn } from "@/lib/utils";
 import {
   clearSessionUnlockPassphrase,
@@ -176,6 +176,7 @@ import { FirstSyncCard } from "./FirstSyncCard";
 import { AlphaNotice } from "./AlphaNotice";
 import { KassiberWordmark } from "./KassiberWordmark";
 import { ImportRootRestoreScreen, LockScreen } from "./LockScreen";
+import { PrivacyModeButton } from "./PrivacyModeButton";
 import { AssistantLayout } from "./assistant-panel/AssistantLayout";
 import { useClaimWindowTitlebar, useWindowChrome } from "./windowChromeContext";
 import {
@@ -742,6 +743,7 @@ export function AppShell() {
   const [locked, setLocked] = React.useState(
     () => lockEncryptedWorkspaceOnLaunch,
   );
+  useUnlockPrivacy(locked);
   const [touchIdAutoPromptPending, setTouchIdAutoPromptPending] =
     React.useState(() =>
       foregroundTouchIdAutoPrompt(lockEncryptedWorkspaceOnLaunch),
@@ -1636,12 +1638,11 @@ export function AppShell() {
               hasWorkspace: store.identity !== null,
               aiFeaturesEnabled: store.aiFeaturesEnabled,
               developerToolsEnabled: store.developerToolsEnabled,
-              hideSensitive: store.hideSensitive,
               navigate: ({ to, hash }) => {
                 void navigate({ to, hash: hash ?? undefined });
               },
               lockApp,
-              setHideSensitive,
+              cyclePrivacyMode: store.cyclePrivacyMode,
               decreaseAppScale: store.decreaseAppScale,
               increaseAppScale: store.increaseAppScale,
               resetAppScale: store.resetAppScale,
@@ -1688,7 +1689,6 @@ export function AppShell() {
     runMenuWalletSync,
     aiFeaturesEnabled,
     addNotification,
-    setHideSensitive,
     t,
   ]);
 
@@ -3051,8 +3051,6 @@ function ShellTitlebarControls({
   const { t } = useTranslation(["chrome", "nav"]);
   const preAlphaBannerVisible = useUiStore((s) => s.preAlphaBannerVisible);
   const navigate = useNavigate();
-  const hideSensitive = useUiStore((s) => s.hideSensitive);
-  const setHideSensitive = useUiStore((s) => s.setHideSensitive);
   const appNotifications = useUiStore((s) => s.notifications);
   const clearNotifications = useUiStore((s) => s.clearNotifications);
   const developerToolsEnabled = useUiStore((s) => s.developerToolsEnabled);
@@ -3356,24 +3354,7 @@ function ShellTitlebarControls({
         </DropdownMenu>
         <CurrencyToggle />
         <ThemeMenu />
-        <Button
-          variant="ghost"
-          size="icon"
-          className={cn(
-            shellIconButtonClassName,
-            hideSensitive && "bg-sidebar-row-active [&>svg]:text-sidebar-foreground",
-          )}
-          aria-label={hideSensitive ? t("sensitive.show") : t("sensitive.hide")}
-          aria-pressed={hideSensitive}
-          title={hideSensitive ? t("sensitive.show") : t("sensitive.hide")}
-          onClick={() => setHideSensitive(!hideSensitive)}
-        >
-          {hideSensitive ? (
-            <EyeOff className="size-4" aria-hidden="true" />
-          ) : (
-            <Eye className="size-4" aria-hidden="true" />
-          )}
-        </Button>
+        <PrivacyModeButton className={shellIconButtonClassName} />
         <NetworkStatusIndicator daemonEnabled={daemonEnabled} />
         <Button
           variant="ghost"

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { useOfflineMode } from "@/lib/offlineMode";
 import { cn } from "@/lib/utils";
+import { PRIVACY_MODES, type PrivacyMode } from "@/store/ui";
 import { SettingsGroup, SettingsRow, SettingsSelect } from "./SettingsControls";
 import {
   backendProtocolLabel,
@@ -124,9 +125,23 @@ export function ExposureEndpointRow({
   );
 }
 
+const PRIVACY_MODE_LABEL = {
+  normal: "chrome:sensitive.modes.normal",
+  hideAmounts: "chrome:sensitive.modes.hideAmounts",
+  hideAll: "chrome:sensitive.modes.hideAll",
+} as const satisfies Record<PrivacyMode, string>;
+
+const PRIVACY_MODE_DESCRIPTION = {
+  normal: "privacy.modeNormal",
+  hideAmounts: "privacy.modeHideAmounts",
+  hideAll: "privacy.modeHideAll",
+} as const satisfies Record<PrivacyMode, string>;
+
 export function PrivacySettingsPanel({
-  hideSensitive,
-  setHideSensitive,
+  privacyMode,
+  setPrivacyMode,
+  hideAmountsOnUnlock,
+  setHideAmountsOnUnlock,
   clearClipboard,
   setClearClipboard,
   automaticUpdateChecks,
@@ -137,8 +152,10 @@ export function PrivacySettingsPanel({
   onManageAi,
   onManageMarketData,
 }: {
-  hideSensitive: boolean;
-  setHideSensitive: (value: boolean) => void;
+  privacyMode: PrivacyMode;
+  setPrivacyMode: (mode: PrivacyMode) => void;
+  hideAmountsOnUnlock: boolean;
+  setHideAmountsOnUnlock: (value: boolean) => void;
   clearClipboard: boolean;
   setClearClipboard: (value: boolean) => void;
   automaticUpdateChecks: boolean;
@@ -149,7 +166,7 @@ export function PrivacySettingsPanel({
   onManageAi: () => void;
   onManageMarketData: () => void;
 }) {
-  const { t } = useTranslation("settings");
+  const { t } = useTranslation(["settings", "chrome"]);
   const [filter, setFilter] = React.useState<ExposureFilter | null>(null);
   const offlineMode = useOfflineMode();
 
@@ -211,14 +228,31 @@ export function PrivacySettingsPanel({
 
       <SettingsGroup title={t("privacy.onScreenHeading")}>
         <SettingsRow
-          label={t("privacy.blurLabel")}
-          description={hideSensitive ? t("privacy.blurOn") : t("privacy.blurOff")}
-          htmlFor="settings-blur"
+          label={t("privacy.modeLabel")}
+          description={t(PRIVACY_MODE_DESCRIPTION[privacyMode])}
+          htmlFor="settings-privacy-mode"
+        >
+          <SettingsSelect<PrivacyMode>
+            value={privacyMode}
+            onValueChange={setPrivacyMode}
+            options={PRIVACY_MODES.map((mode) => ({
+              value: mode,
+              label: t(PRIVACY_MODE_LABEL[mode]),
+            }))}
+            triggerProps={{ id: "settings-privacy-mode" }}
+          />
+        </SettingsRow>
+        <SettingsRow
+          label={t("privacy.unlockLabel")}
+          description={
+            hideAmountsOnUnlock ? t("privacy.unlockOn") : t("privacy.unlockOff")
+          }
+          htmlFor="settings-hide-on-unlock"
         >
           <Switch
-            id="settings-blur"
-            checked={hideSensitive}
-            onCheckedChange={setHideSensitive}
+            id="settings-hide-on-unlock"
+            checked={hideAmountsOnUnlock}
+            onCheckedChange={setHideAmountsOnUnlock}
           />
         </SettingsRow>
         <SettingsRow

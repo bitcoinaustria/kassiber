@@ -109,8 +109,10 @@ export function SettingsScreen({
   sectionId = DEFAULT_SETTINGS_SECTION_ID,
 }: SettingsScreenProps) {
   const { t } = useTranslation(["settings", "common"]);
-  const hideSensitive = useUiStore((s) => s.hideSensitive);
-  const setHideSensitive = useUiStore((s) => s.setHideSensitive);
+  const privacyMode = useUiStore((s) => s.privacyMode);
+  const setPrivacyMode = useUiStore((s) => s.setPrivacyMode);
+  const hideAmountsOnUnlock = useUiStore((s) => s.hideAmountsOnUnlock);
+  const setHideAmountsOnUnlock = useUiStore((s) => s.setHideAmountsOnUnlock);
   const clearClipboard = useUiStore((s) => s.clearClipboard);
   const setClearClipboard = useUiStore((s) => s.setClearClipboard);
   const currency = useUiStore((s) => s.currency);
@@ -1103,8 +1105,10 @@ export function SettingsScreen({
       case "security-privacy":
         return (
           <PrivacySettingsPanel
-            hideSensitive={hideSensitive}
-            setHideSensitive={setHideSensitive}
+            privacyMode={privacyMode}
+            setPrivacyMode={setPrivacyMode}
+            hideAmountsOnUnlock={hideAmountsOnUnlock}
+            setHideAmountsOnUnlock={setHideAmountsOnUnlock}
             clearClipboard={clearClipboard}
             setClearClipboard={setClearClipboard}
             automaticUpdateChecks={automaticUpdateChecks}

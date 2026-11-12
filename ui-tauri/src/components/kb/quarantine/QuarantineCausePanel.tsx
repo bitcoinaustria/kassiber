@@ -52,6 +52,7 @@ import type {
   QuarantinePairLeg,
   QuarantineSnapshot,
 } from "./types";
+import { sensitiveClass } from "@/lib/sensitive";
 
 /** Actions whose button already says what to do, so the card need not spell it out. */
 const SELF_DESCRIBING_ACTIONS = new Set(["sync_wallet", "connect_wallet", "import_history", "set_price", "pair_transfer"]);
@@ -107,9 +108,6 @@ interface QuarantineCausePanelProps {
 function formatMsat(value: number) {
   return formatSats(Math.round(Math.abs(value) / 1000));
 }
-
-// Same masking class as the rest of the app: amounts follow "hide sensitive".
-const sensitiveClass = (hidden: boolean) => (hidden ? "sensitive" : "");
 
 function dateOnly(value: string | null | undefined) {
   return value ? value.slice(0, 10) : "";

@@ -3728,7 +3728,12 @@ fn build_app_menu(
     let close_item = menu_item(app, MENU_WINDOW_CLOSE, "Close Window", Some("CmdOrCtrl+W"))?;
     #[cfg(not(target_os = "macos"))]
     let quit_item = menu_item(app, MENU_QUIT, "Quit Kassiber", Some("CmdOrCtrl+Q"))?;
-    let toggle_sensitive = menu_item(app, MENU_TOGGLE_SENSITIVE, "Toggle Sensitive Values", None)?;
+    let toggle_sensitive = menu_item(
+        app,
+        MENU_TOGGLE_SENSITIVE,
+        "Cycle Privacy Mode",
+        Some("CmdOrCtrl+Shift+H"),
+    )?;
     let ui_scale_decrease_item = menu_item(
         app,
         MENU_UI_SCALE_DECREASE,

@@ -17,6 +17,8 @@ import {
   type AnalysisQuery,
 } from "@/lib/chainAnalysis";
 import { copyTextWithPolicy } from "@/lib/clipboard";
+import { Sensitive } from "@/components/kb/Sensitive";
+import { maskSensitive, useSensitive } from "@/lib/sensitive";
 import type { GraphSelection } from "./InvestigationGraph";
 import { EvidenceDetails, Fact } from "./EvidenceDetails";
 import { WatchAction } from "./WatchControls";
@@ -48,6 +50,7 @@ export function SelectionInspector({
   observer?: AnalysisQuery["observer"];
 }) {
   const { t } = useTranslation("chainAnalysis");
+  const hideAmounts = useSensitive();
   const [copied, setCopied] = useState(false);
   if (!node && !edge) return null;
   const selectedId = node?.outpoint || node?.txid || node?.id || edge?.id;
@@ -95,7 +98,7 @@ export function SelectionInspector({
       {node && (
         <>
           <p className="mt-1 font-mono text-lg tracking-tight">
-            {formatAnalysisAmount(node.amount_msat, node.asset)}
+            <Sensitive>{formatAnalysisAmount(node.amount_msat, node.asset)}</Sensitive>
           </p>
           <div className="my-4 grid grid-cols-2 gap-2">
             <Button
@@ -169,7 +172,7 @@ export function SelectionInspector({
             />
             <Fact
               label={t("amount")}
-              value={formatAnalysisAmount(edge.amount_msat, edge.asset)}
+              value={maskSensitive(formatAnalysisAmount(edge.amount_msat, edge.asset), hideAmounts)}
             />
             {(["source", "target"] as const).map((key) => (
               <div key={key}>

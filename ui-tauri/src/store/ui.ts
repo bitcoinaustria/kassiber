@@ -266,6 +266,23 @@ function normalizeAssistantClosedBar(value: unknown): AssistantClosedBarMode | n
     : null;
 }
 
+export const PRIVACY_MODES = ["normal", "hideAmounts", "hideAll"] as const;
+export type PrivacyMode = (typeof PRIVACY_MODES)[number];
+
+export function normalizePrivacyMode(value: unknown): PrivacyMode | null {
+  return PRIVACY_MODES.includes(value as PrivacyMode)
+    ? (value as PrivacyMode)
+    : null;
+}
+
+export function nextPrivacyMode(mode: PrivacyMode): PrivacyMode {
+  return PRIVACY_MODES[(PRIVACY_MODES.indexOf(mode) + 1) % PRIVACY_MODES.length];
+}
+
+function privacyModeState(privacyMode: PrivacyMode) {
+  return { privacyMode, hideSensitive: privacyMode !== "normal" };
+}
+
 export interface UiState {
   lang: Lang;
   currency: Currency;
@@ -274,7 +291,15 @@ export interface UiState {
   analysisNetwork: AnalysisNetwork;
   theme: ThemePreference;
   appScale: number;
+  /**
+   * What the UI hides: nothing, amounts, or amounts plus the percentages and
+   * shares that reveal portfolio composition. The canonical privacy setting.
+   */
+  privacyMode: PrivacyMode;
+  /** `privacyMode !== "normal"`, kept in sync for the many amount call sites. */
   hideSensitive: boolean;
+  /** Launch and unlock raise the mode to at least "hideAmounts". */
+  hideAmountsOnUnlock: boolean;
   clearClipboard: boolean;
   /**
    * Books (profile ids) that opted in to probing their own connections on a
@@ -392,7 +417,14 @@ export interface UiState {
   increaseAppScale: () => void;
   decreaseAppScale: () => void;
   resetAppScale: () => void;
+  /** Boolean shim: `true` keeps "hideAll" if set, otherwise "hideAmounts". */
   setHideSensitive: (hideSensitive: boolean) => void;
+  setPrivacyMode: (mode: PrivacyMode) => void;
+  /** Normal → Hide amounts → Hide all → Normal. */
+  cyclePrivacyMode: () => void;
+  setHideAmountsOnUnlock: (enabled: boolean) => void;
+  /** Applies "hide amounts when Kassiber unlocks" if the user enabled it. */
+  enforceUnlockPrivacy: () => void;
   setClearClipboard: (clearClipboard: boolean) => void;
   setConnectionAutoCheck: (profileId: string, enabled: boolean) => void;
   setExplorerSettings: (settings: Partial<ExplorerSettings>) => void;
@@ -595,6 +627,26 @@ export function normalizeAssistantModelFavorites(
   return favorites;
 }
 
+/**
+ * The restored privacy mode, raised to "hideAmounts" at launch when the user
+ * asked for amounts to start hidden. `hideSensitive` is always derived.
+ */
+export function restoredPrivacy(
+  restored: Partial<UiState>,
+  current: Pick<UiState, "privacyMode">,
+) {
+  const hideAmountsOnUnlock = restored.hideAmountsOnUnlock === true;
+  const mode =
+    normalizePrivacyMode(restored.privacyMode) ??
+    (restored.hideSensitive === true ? "hideAmounts" : current.privacyMode);
+  return {
+    hideAmountsOnUnlock,
+    ...privacyModeState(
+      hideAmountsOnUnlock && mode === "normal" ? "hideAmounts" : mode,
+    ),
+  };
+}
+
 export function uiStatePartialForStorage(state: UiState) {
   return {
     lang: state.lang,
@@ -602,7 +654,8 @@ export function uiStatePartialForStorage(state: UiState) {
     dataMode: normalizeStoredDataMode(state.dataMode, state.identity),
     analysisNetwork: normalizeAnalysisNetwork(state.analysisNetwork),
     theme: state.theme,
-    hideSensitive: state.hideSensitive,
+    privacyMode: state.privacyMode,
+    hideAmountsOnUnlock: state.hideAmountsOnUnlock,
     clearClipboard: state.clearClipboard,
     connectionAutoCheckBooks: state.connectionAutoCheckBooks,
     appScale: state.appScale,
@@ -631,7 +684,7 @@ export function uiStatePartialForStorage(state: UiState) {
   };
 }
 
-export const UI_STATE_VERSION = 2;
+export const UI_STATE_VERSION = 3;
 
 /**
  * v1: `developerToolsEnabled` stopped meaning "show the Logs page" and became
@@ -657,6 +710,7 @@ export function migrateUiState(
     // version is treated as pre-v1 instead of slipping through.
     ...(version >= 1 ? {} : { developerToolsEnabled: false }),
     ...(version >= 2 ? {} : migrateAssistantDockToPanel(restored)),
+    ...(version >= 3 ? {} : migrateHideSensitiveToPrivacyMode(restored)),
   } as ReturnType<typeof uiStatePartialForStorage>;
 }
 
@@ -682,6 +736,18 @@ function migrateAssistantDockToPanel(restored: Partial<UiState>) {
   } as Partial<UiState>;
 }
 
+/**
+ * v3: the "hide sensitive values" boolean became a three-state privacy mode.
+ * A user who hid values gets "hideAmounts", which hides everything the
+ * boolean hid; "hideAll" only adds the shares the boolean left visible.
+ */
+function migrateHideSensitiveToPrivacyMode(restored: Partial<UiState>) {
+  return {
+    privacyMode: restored.hideSensitive === true ? "hideAmounts" : "normal",
+    hideSensitive: undefined,
+  } as Partial<UiState>;
+}
+
 export const useUiStore = create<UiState>()(
   persist(
     (set) => ({
@@ -691,7 +757,9 @@ export const useUiStore = create<UiState>()(
       analysisNetwork: "main",
       theme: DEFAULT_THEME,
       appScale: DEFAULT_APP_SCALE,
+      privacyMode: "normal",
       hideSensitive: false,
+      hideAmountsOnUnlock: false,
       clearClipboard: true,
       connectionAutoCheckBooks: [],
       explorerSettings: DEFAULT_EXPLORER_SETTINGS,
@@ -748,7 +816,27 @@ export const useUiStore = create<UiState>()(
           appScale: normalizeAppScale(state.appScale - APP_SCALE_STEP),
         })),
       resetAppScale: () => set({ appScale: DEFAULT_APP_SCALE }),
-      setHideSensitive: (hideSensitive) => set({ hideSensitive }),
+      setHideSensitive: (hideSensitive) =>
+        set((state) =>
+          privacyModeState(
+            !hideSensitive
+              ? "normal"
+              : state.privacyMode === "hideAll"
+                ? "hideAll"
+                : "hideAmounts",
+          ),
+        ),
+      setPrivacyMode: (mode) => set(privacyModeState(mode)),
+      cyclePrivacyMode: () =>
+        set((state) => privacyModeState(nextPrivacyMode(state.privacyMode))),
+      setHideAmountsOnUnlock: (hideAmountsOnUnlock) =>
+        set({ hideAmountsOnUnlock }),
+      enforceUnlockPrivacy: () =>
+        set((state) =>
+          state.hideAmountsOnUnlock && state.privacyMode === "normal"
+            ? privacyModeState("hideAmounts")
+            : state,
+        ),
       setClearClipboard: (clearClipboard) => set({ clearClipboard }),
       setConnectionAutoCheck: (profileId, enabled) =>
         set((state) => {
@@ -1049,6 +1137,7 @@ export const useUiStore = create<UiState>()(
           analysisNetwork: normalizeAnalysisNetwork(restored.analysisNetwork ?? current.analysisNetwork),
           appScale: normalizeAppScale(restored.appScale ?? current.appScale),
           clearClipboard: restored.clearClipboard ?? current.clearClipboard,
+          ...restoredPrivacy(restored, current),
           // Only an explicit per-book opt-in starts the timer; anything else
           // is off.
           connectionAutoCheckBooks: normalizeConnectionAutoCheckBooks(

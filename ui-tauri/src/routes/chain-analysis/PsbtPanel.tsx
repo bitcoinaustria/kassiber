@@ -7,6 +7,7 @@ import { handOffToAssistant } from "@/components/ai/assistantHandoff";
 import { DaemonScopeContext, useDaemon, useDaemonMutation } from "@/daemon/client";
 import { isFilePickerAvailable, pickChainAnalysisSource, type AnalysisSourceSelection } from "@/lib/filePicker";
 import { DEFAULT_ANALYSIS_QUERY, formatAnalysisAmount } from "@/lib/chainAnalysis";
+import { maskSensitive, useSensitive } from "@/lib/sensitive";
 import { payjoinOptions, psbtAssistantContext, type PsbtAnalysis, type PsbtComparison } from "@/lib/chainAnalysisWorkbench";
 import { ANALYSIS_NETWORKS, type AnalysisNetwork, useUiStore } from "@/store/ui";
 import { EntropyPanel } from "./EntropyPanel";
@@ -26,6 +27,7 @@ export function PsbtPanel(props: { onError: (value: unknown) => void; initialNet
 function PsbtPanelContent({ onError, initialNetwork }: { onError: (value: unknown) => void; initialNetwork?: string }) {
   const { t } = useTranslation("chainAnalysis");
   const { t: settingsT } = useTranslation("settings");
+  const hideAmounts = useSensitive();
   const boundary = useContext(DaemonScopeContext);
   const assistant = useContext(AssistantSessionContext);
   const [before, setBefore] = useState<AnalysisSourceSelection | null>(null);
@@ -267,11 +269,12 @@ function PsbtPanelContent({ onError, initialNetwork }: { onError: (value: unknow
       <div className="grid gap-3 text-xs sm:grid-cols-3">
         <Fact label={t("psbt.inputsAdded")} value={current.comparison.delta.inputs_added.length} />
         <Fact label={t("psbt.inputsRemoved")} value={current.comparison.delta.inputs_removed.length} />
-        <Fact label={t("psbt.feeDelta")} value={formatAnalysisAmount(current.comparison.delta.fee_msat)} />
+        <Fact label={t("psbt.feeDelta")} value={maskSensitive(formatAnalysisAmount(current.comparison.delta.fee_msat), hideAmounts)} />
         </div>
-      <div className="text-xs">
+      {/* The raw delta repeats the fee in msat. */}
+      {!hideAmounts && <div className="text-xs">
         <StructuredValue value={current.comparison.delta} />
-        </div>
+        </div>}
       {current.comparison.payjoin && <div className="space-y-3 rounded-lg border p-4">
         <h3 className="text-sm font-medium">
           {t("psbt.payjoin")} · {current.comparison.payjoin.status}
@@ -336,7 +339,8 @@ function PsbtPanelContent({ onError, initialNetwork }: { onError: (value: unknow
 
 export function PsbtResult({ result, title }: { result: PsbtAnalysis; title?: string }) {
   const { t } = useTranslation("chainAnalysis");
-  const amount = (value: string | null) => value == null ? t("workbench.unknown") : formatAnalysisAmount(value);
+  const hidden = useSensitive();
+  const amount = (value: string | null) => value == null ? t("workbench.unknown") : maskSensitive(formatAnalysisAmount(value), hidden);
   return <article className="space-y-4 rounded-lg border p-4">
     <h3 className="text-sm font-medium">
       {title || t("psbt.result")} · PSBT v{result.psbt_version}

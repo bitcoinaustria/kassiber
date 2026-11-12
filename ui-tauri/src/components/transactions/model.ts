@@ -172,7 +172,7 @@ export const compactCurrencyFormatter = new Intl.NumberFormat("de-AT", {
   maximumFractionDigits: 0,
 });
 
-export const blurClass = (hidden: boolean) => (hidden ? "sensitive" : "");
+export { sensitiveClass as blurClass } from "@/lib/sensitive";
 
 export function formatInlineBtc(btc: number, precision = 8) {
   return `₿${Math.abs(btc).toFixed(precision)}`;

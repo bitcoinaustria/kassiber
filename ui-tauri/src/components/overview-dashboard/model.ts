@@ -339,7 +339,7 @@ export type OverviewReadiness = {
   tone: OverviewHealthTone;
 };
 
-export const blurClass = (hidden: boolean) => (hidden ? "sensitive" : "");
+export { sensitiveClass as blurClass } from "@/lib/sensitive";
 
 export function btcFromEur(eur: number, priceEur: number) {
   return priceEur ? eur / priceEur : 0;

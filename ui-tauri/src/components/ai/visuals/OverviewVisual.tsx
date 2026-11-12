@@ -11,6 +11,7 @@ import type { VisualFormat } from "./format";
 import type { VisualPalette } from "./palette";
 import { stagger } from "./motion";
 import { CountUp, Legend, Segmented, StatTile, TooltipFrame } from "./primitives";
+import { maskSensitive, useSensitive } from "@/lib/sensitive";
 
 type Range = "3m" | "1y" | "all";
 const RANGE_DAYS = { "3m": 92, "1y": 366 } as const;
@@ -25,6 +26,7 @@ interface Props {
 
 export function OverviewVisual({ visual, fmt, palette, hideSensitive, expanded }: Props) {
   const { t } = useTranslation("assistant");
+  const hideShares = useSensitive("share");
   const reduced = usePrefersReducedMotion();
   const { stats } = visual;
   const incomplete = !stats.basisComplete;
@@ -91,7 +93,7 @@ export function OverviewVisual({ visual, fmt, palette, hideSensitive, expanded }
           label={t("visual.overview.unrealized")}
           value={stats.unrealized}
           format={(value) => fmt.signed(fmt.fiat(Math.abs(value)), value)}
-          delta={!incomplete && unrealizedPct !== null && stats.unrealized !== null ? { label: fmt.percent(unrealizedPct), value: stats.unrealized } : null}
+          delta={!incomplete && unrealizedPct !== null && stats.unrealized !== null ? { label: maskSensitive(fmt.percent(unrealizedPct), hideShares), value: stats.unrealized } : null}
           incomplete={incomplete}
           incompleteLabel={t("visual.overview.incompleteShort")}
           sensitive={hideSensitive}
@@ -169,7 +171,7 @@ export function OverviewVisual({ visual, fmt, palette, hideSensitive, expanded }
       {visual.wallets.length ? (
         <div className="kb-visual-rise space-y-1.5" style={{ animationDelay: "320ms" }}>
           <div className="text-2xs text-muted-foreground">{t("visual.overview.allocation")}</div>
-          <div className="flex h-2.5 w-full gap-[2px] overflow-hidden rounded-full" role="img" aria-label={t("visual.overview.allocation")}>
+          {hideShares ? null : <div className="flex h-2.5 w-full gap-[2px] overflow-hidden rounded-full" role="img" aria-label={t("visual.overview.allocation")}>
             {visual.wallets.map((wallet, index) =>
               wallet.share > 0 ? (
                 <span
@@ -179,14 +181,14 @@ export function OverviewVisual({ visual, fmt, palette, hideSensitive, expanded }
                 />
               ) : null,
             )}
-          </div>
+          </div>}
           <ul className="grid grid-cols-1 gap-x-4 gap-y-1 text-xs sm:grid-cols-2">
             {visual.wallets.map((wallet, index) => (
               <li key={`${wallet.label ?? "other"}-${index}`} className="flex min-w-0 items-center gap-2">
                 <span className="size-2 shrink-0 rounded-xs" style={{ backgroundColor: walletColors[Math.min(index, walletColors.length - 1)] }} aria-hidden="true" />
                 <span className="min-w-0 flex-1 truncate">{wallet.label ?? t("visual.overview.otherWallets", { count: wallet.otherCount })}</span>
-                <span className={cn("tabular-nums text-muted-foreground", hideSensitive && "sensitive")}>{fmt.btcCompact(wallet.balanceBtc)}</span>
-                <span className="w-12 text-right tabular-nums">{fmt.percent(wallet.share)}</span>
+                <span className={cn("tabular-nums text-muted-foreground", hideSensitive && "sensitive")}>{maskSensitive(fmt.btcCompact(wallet.balanceBtc), hideSensitive)}</span>
+                <span className="w-12 text-right tabular-nums">{maskSensitive(fmt.percent(wallet.share), hideShares)}</span>
               </li>
             ))}
           </ul>

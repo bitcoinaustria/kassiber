@@ -3,6 +3,8 @@ import { ArrowRight, ArrowUpRight, CheckCircle2, HelpCircle } from "lucide-react
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { formatFiatAmount } from "@/lib/currency";
+import { Sensitive } from "@/components/kb/Sensitive";
+import { maskSensitive, useSensitive } from "@/lib/sensitive";
 import { formatCustodyMsat } from "@/routes/custodyGapsModel";
 import { reviewRecord, reviewTaxDelta, reviewText, type ReviewArtifact, type ReviewEffects, type ReviewReceipt, type ReviewRecord } from "./reviewWorkflow";
 
@@ -48,7 +50,7 @@ function CustodyRequest({ request }: { request: ReviewRecord | null }) {
           const amount = leg.amount_btc !== undefined ? `${reviewText(leg.amount_btc)} ${asset || `(${unresolvedAsset})`}`
             : leg.amount_msat !== undefined ? asset ? formatCustodyMsat(reviewText(leg.amount_msat), asset)
               : `${reviewText(leg.amount_msat)} msat (${unresolvedAsset})` : "—";
-          return <p key={legIndex} className="break-words"><span>{reviewText(leg.role)}</span>{" · "}<span className="font-mono">{amount}</span>{" · "}{reviewText(leg.transaction ?? leg.transaction_id ?? leg.wallet ?? leg.wallet_id ?? leg.untracked_wallet)}{leg.occurred_at ? ` · ${reviewText(leg.occurred_at)}` : ""}</p>;
+          return <p key={legIndex} className="break-words"><span>{reviewText(leg.role)}</span>{" · "}<span className="font-mono"><Sensitive>{amount}</Sensitive></span>{" · "}{reviewText(leg.transaction ?? leg.transaction_id ?? leg.wallet ?? leg.wallet_id ?? leg.untracked_wallet)}{leg.occurred_at ? ` · ${reviewText(leg.occurred_at)}` : ""}</p>;
         })}
       </div>;
     })}
@@ -83,8 +85,8 @@ function ReviewOperation({ operation }: { operation: ReviewRecord }) {
     {operation.gap_id ? <p className="break-all font-mono text-xs">{reviewText(operation.gap_id)}</p> : null}
     {detailText ? <p className="text-xs">{detailText}</p> : null}
     {operation.pair_id ? <p className="break-all font-mono text-xs">{reviewText(operation.pair_id)}</p> : null}
-    {operation.fiat_rate !== undefined ? <p className="text-xs">{t("review.op.rate")}: <span className="font-mono">{reviewText(operation.fiat_rate)}</span></p> : null}
-    {operation.fiat_value !== undefined ? <p className="text-xs">{t("review.op.value")}: <span className="font-mono">{reviewText(operation.fiat_value)}</span></p> : null}
+    {operation.fiat_rate !== undefined ? <p className="text-xs">{t("review.op.rate")}: <span className="font-mono"><Sensitive>{reviewText(operation.fiat_rate)}</Sensitive></span></p> : null}
+    {operation.fiat_value !== undefined ? <p className="text-xs">{t("review.op.value")}: <span className="font-mono"><Sensitive>{reviewText(operation.fiat_value)}</Sensitive></span></p> : null}
     {operation.type === "custody_component" ? <CustodyRequest request={request} /> : null}
     {reason ? <p className="whitespace-pre-wrap text-xs text-muted-foreground">{t("review.proposedInterpretation")}: {reason}</p> : null}
   </li>;
@@ -111,14 +113,15 @@ function RemainingIssues({ effects }: { effects: ReviewEffects }) {
 /** Per-year tax change the server computed for this plan (after minus before). */
 export function ReviewTaxDeltaView({ artifact }: { artifact: ReviewRecord }) {
   const { t } = useTranslation("assistant");
+  const hidden = useSensitive();
   const delta = reviewTaxDelta(artifact);
   if (!delta) return null;
   const { tax, years } = delta;
-  const money = (value: number) => `${value > 0 ? "+" : ""}${formatFiatAmount(value, tax.fiat_currency)}`;
+  const money = (value: number) => maskSensitive(`${value > 0 ? "+" : ""}${formatFiatAmount(value, tax.fiat_currency)}`, hidden);
   const indicative = (year: (typeof years)[number]) => {
     if (typeof year.estimated_tax_eur_cents === "number") return `${t("review.tax.indicative")} ${money(year.estimated_tax_eur_cents / 100)}`;
     const after = tax.years.find((row) => row.year === year.year)?.indicative_tax?.estimated_tax_eur_cents;
-    return typeof after === "number" ? t("review.tax.indicativeAfter", { amount: formatFiatAmount(after / 100, tax.fiat_currency) })
+    return typeof after === "number" ? t("review.tax.indicativeAfter", { amount: maskSensitive(formatFiatAmount(after / 100, tax.fiat_currency), hidden) })
       : t("review.tax.withheld");
   };
   return <section className="space-y-1.5" aria-label={t("review.tax.title")}>

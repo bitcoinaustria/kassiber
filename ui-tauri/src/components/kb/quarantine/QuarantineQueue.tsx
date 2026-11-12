@@ -13,8 +13,7 @@ import {
   type QuarantineSheetTab,
 } from "./explain";
 import type { QuarantineItem } from "./types";
-
-const sensitiveClass = (hidden: boolean) => (hidden ? "sensitive" : "");
+import { sensitiveClass } from "@/lib/sensitive";
 
 /**
  * The transactions that only wait on a cause and clear with it. What needs

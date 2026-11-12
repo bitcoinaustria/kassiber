@@ -14,6 +14,8 @@ import {
   normalizeAnalysisNetwork,
   normalizeBookChartPeriods,
   migrateUiState,
+  nextPrivacyMode,
+  restoredPrivacy,
   normalizeAssistantChatPermissionModes,
   normalizeAssistantModelFavorites,
   normalizeSidePanelWidth,
@@ -373,5 +375,88 @@ describe("assistant tool set preferences", () => {
     ).toEqual({ ollama: "scoped" });
     store.setAssistantProviderToolProfile("ollama", null);
     expect(useUiStore.getState().assistantProviderToolProfiles).toEqual({});
+  });
+});
+
+describe("privacy mode", () => {
+  it("migrates the old hide-sensitive switch to hiding amounts", () => {
+    expect(migrateUiState({ hideSensitive: true } as never, 2)).toMatchObject({
+      privacyMode: "hideAmounts",
+    });
+    expect(migrateUiState({ hideSensitive: false } as never, 2)).toMatchObject({
+      privacyMode: "normal",
+    });
+    expect(migrateUiState({} as never, 1)).toMatchObject({ privacyMode: "normal" });
+    // Already-migrated state is left alone.
+    expect(migrateUiState({ privacyMode: "hideAll" } as never, 3)).toMatchObject({
+      privacyMode: "hideAll",
+    });
+  });
+
+  it("persists the mode, not the derived flag", () => {
+    useUiStore.getState().setPrivacyMode("hideAll");
+    const stored = uiStatePartialForStorage(useUiStore.getState());
+    expect(stored).toMatchObject({ privacyMode: "hideAll", hideAmountsOnUnlock: false });
+    expect(stored).not.toHaveProperty("hideSensitive");
+    useUiStore.getState().setPrivacyMode("normal");
+  });
+
+  it("cycles normal → hide amounts → hide all → normal, keeping hideSensitive in sync", () => {
+    const store = useUiStore.getState;
+    store().setPrivacyMode("normal");
+    expect(store().hideSensitive).toBe(false);
+    store().cyclePrivacyMode();
+    expect(store()).toMatchObject({ privacyMode: "hideAmounts", hideSensitive: true });
+    store().cyclePrivacyMode();
+    expect(store()).toMatchObject({ privacyMode: "hideAll", hideSensitive: true });
+    store().cyclePrivacyMode();
+    expect(store()).toMatchObject({ privacyMode: "normal", hideSensitive: false });
+    expect(nextPrivacyMode("hideAll")).toBe("normal");
+  });
+
+  it("keeps hide all when a boolean caller asks to hide", () => {
+    const store = useUiStore.getState;
+    store().setPrivacyMode("hideAll");
+    store().setHideSensitive(true);
+    expect(store().privacyMode).toBe("hideAll");
+    store().setHideSensitive(false);
+    expect(store().privacyMode).toBe("normal");
+    store().setHideSensitive(true);
+    expect(store().privacyMode).toBe("hideAmounts");
+    store().setPrivacyMode("normal");
+  });
+
+  it("raises the mode on unlock only when the user asked for it", () => {
+    const store = useUiStore.getState;
+    store().setPrivacyMode("normal");
+    store().enforceUnlockPrivacy();
+    expect(store().privacyMode).toBe("normal");
+
+    store().setHideAmountsOnUnlock(true);
+    store().enforceUnlockPrivacy();
+    expect(store().privacyMode).toBe("hideAmounts");
+    // Never lowers a stricter choice.
+    store().setPrivacyMode("hideAll");
+    store().enforceUnlockPrivacy();
+    expect(store().privacyMode).toBe("hideAll");
+
+    store().setHideAmountsOnUnlock(false);
+    store().setPrivacyMode("normal");
+  });
+
+  it("starts hidden at launch when hide-on-unlock is on", () => {
+    const current = { privacyMode: "normal" } as const;
+    expect(
+      restoredPrivacy({ privacyMode: "normal", hideAmountsOnUnlock: true }, current),
+    ).toMatchObject({ privacyMode: "hideAmounts", hideSensitive: true });
+    expect(restoredPrivacy({ privacyMode: "hideAll" }, current)).toMatchObject({
+      privacyMode: "hideAll",
+      hideSensitive: true,
+      hideAmountsOnUnlock: false,
+    });
+    expect(restoredPrivacy({ privacyMode: "bogus" } as never, current)).toMatchObject({
+      privacyMode: "normal",
+      hideSensitive: false,
+    });
   });
 });
