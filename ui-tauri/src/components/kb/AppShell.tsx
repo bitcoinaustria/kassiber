@@ -210,7 +210,11 @@ import {
   notificationTarget,
   type NotificationTarget,
 } from "./notificationRouting";
-import { shouldHideNotificationProgressLabel } from "./notificationDisplay";
+import {
+  filterNotifications,
+  type NotificationFilter,
+  shouldHideNotificationProgressLabel,
+} from "./notificationDisplay";
 import { planHeaderRefresh } from "./headerRefresh";
 
 const BUG_REPORT_URL =
@@ -3108,6 +3112,11 @@ function ShellTitlebarControls({
     })),
     ...systemNotificationItems,
   ];
+  const [notificationFilter, setNotificationFilter] =
+    React.useState<NotificationFilter>("all");
+  const needsActionItems = filterNotifications(notificationItems, "needsAction");
+  const visibleNotificationItems =
+    notificationFilter === "needsAction" ? needsActionItems : notificationItems;
   const notificationCount = notificationItems.filter(
     (item) => item.tone !== "info" || item.title.toLowerCase().includes("sync"),
   ).length;
@@ -3259,8 +3268,41 @@ function ShellTitlebarControls({
                 {t("notifications.clearAll")}
               </Button>
             </div>
+            <div
+              role="group"
+              aria-label={t("notifications.filter.label")}
+              className="flex gap-1 px-2 pb-1.5"
+            >
+              {(["all", "needsAction"] as const).map((filter) => (
+                <Button
+                  key={filter}
+                  type="button"
+                  variant={notificationFilter === filter ? "secondary" : "ghost"}
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  aria-pressed={notificationFilter === filter}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    setNotificationFilter(filter);
+                  }}
+                >
+                  {filter === "all"
+                    ? t("notifications.filter.all")
+                    : t("notifications.filter.needsAction", {
+                        count: needsActionItems.length,
+                      })}
+                </Button>
+              ))}
+            </div>
             <DropdownMenuSeparator />
-            {notificationItems.map((item) => {
+            {visibleNotificationItems.length === 0 ? (
+              <p className="px-3 py-4 text-center text-xs text-muted-foreground">
+                {notificationFilter === "needsAction"
+                  ? t("notifications.empty.needsAction")
+                  : t("notifications.empty.all")}
+              </p>
+            ) : null}
+            {visibleNotificationItems.map((item) => {
               const progressLabel =
                 item.progress?.label &&
                 !shouldHideNotificationProgressLabel(

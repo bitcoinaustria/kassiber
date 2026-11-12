@@ -179,7 +179,9 @@
     "vsCostBasis": "vs. Anschaffungskosten",
     "viewConnections": "Wallets anzeigen",
     "otherSources": "Sonstige Quellen",
-    "empty": "Noch keine Wallet hält Bitcoin."
+    "empty": "Noch keine Wallet hält Bitcoin.",
+    "lastSynced": "synced {{time}}",
+    "lastSyncedAt": "Zuletzt synced {{date}}"
   },
   "recentTx": {
     "title": "Letzte Transaktionen",
@@ -269,6 +271,8 @@
     "events_one": "{{count}} Ereignis",
     "events_other": "{{count}} Ereignisse",
     "net": "netto",
+    "rangeChange": "Veränderung im Zeitraum",
+    "rangeChangePercent": "{{percent}} %",
     "in": "ein",
     "out": "aus",
     "swap": "Swap",

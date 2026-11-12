@@ -213,6 +213,15 @@
       "title": "Waiting for your review",
       "body_one": "{{count}} decision left.",
       "body_other": "{{count}} decisions left."
+    },
+    "filter": {
+      "label": "Show notifications",
+      "all": "All",
+      "needsAction": "Needs action ({{count}})"
+    },
+    "empty": {
+      "all": "No notifications.",
+      "needsAction": "Nothing needs your action."
     }
   },
   "currencyToggle": {

@@ -199,6 +199,7 @@ export const OverviewDashboard = ({
             currency={currency}
             onOpenTransactionDetail={openTransactionDetail}
             onRefresh={refreshOverviewState}
+            onAddConnection={() => setAddConnectionOpen(true)}
             isRefreshing={isRefreshingOverview}
           />
           {/* Beside the chart the list takes the chart's height, not its own:

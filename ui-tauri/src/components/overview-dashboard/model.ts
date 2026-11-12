@@ -25,7 +25,8 @@ import {
   isBasisIncompleteAt,
   isBasisIncompleteOnDay,
 } from "@/lib/fiatCompleteness";
-import { currentUiLocale } from "@/lib/localeFormat";
+import { decimalBtcToMsat } from "@/lib/custodyComponentBulk";
+import { currentUiLocale, formatCount } from "@/lib/localeFormat";
 import {
   autoCandidatePeriods,
   historyYearsBetween,
@@ -114,6 +115,11 @@ export type HoldingsItem = {
   percent: number;
   /** The source's rail, for its logo; none for the "Other sources" row. */
   rail?: SwapRail;
+  /**
+   * When the source last synced, as the overview snapshot reports it; absent
+   * for the "Other sources" row and for sources that never synced (imports).
+   */
+  lastSyncAt?: string;
 };
 
 export type PortfolioChartPoint = {
@@ -1003,6 +1009,66 @@ export function hasTreasuryChartData(snapshot: OverviewSnapshot): boolean {
   if (snapshot.portfolioSeries?.length) return true;
   return activityTxs(snapshot).length > 0;
 }
+
+export type BalanceRangeChange = {
+  startMsat: bigint;
+  endMsat: bigint;
+  deltaMsat: bigint;
+  /** Null when the range opens at a zero balance: no percentage of nothing. */
+  percent: number | null;
+};
+
+// The daemon sends balances as JSON numbers. For any amount up to 15
+// significant digits (all BTC to the sat, and msat below 10,000 BTC) the
+// shortest decimal form is the daemon's own Decimal, so the msat is exact.
+function balanceBtcToMsat(btc: number): bigint | null {
+  if (!Number.isFinite(btc)) return null;
+  const msat = decimalBtcToMsat(String(Math.abs(btc)));
+  return msat === null ? null : btc < 0 ? -msat : msat;
+}
+
+/**
+ * How much the balance moved between the first and last point of the range
+ * the chart shows. The subtraction is in integer msat, so a sub-sat movement
+ * on a large balance survives; only the percentage is a float.
+ */
+export function balanceRangeChange(
+  points: ReadonlyArray<Pick<PortfolioChartPoint, "balanceBtc">>,
+): BalanceRangeChange | null {
+  if (points.length < 2) return null;
+  const startMsat = balanceBtcToMsat(points[0].balanceBtc);
+  const endMsat = balanceBtcToMsat(points[points.length - 1].balanceBtc);
+  if (startMsat === null || endMsat === null) return null;
+  const deltaMsat = endMsat - startMsat;
+  const percent =
+    startMsat > 0n ? (Number(deltaMsat) / Number(startMsat)) * 100 : null;
+  return { startMsat, endMsat, deltaMsat, percent };
+}
+
+/**
+ * Signed BTC text for an msat amount, exact: eight decimals, or eleven when
+ * the amount carries sub-sat msat. Matches `formatBtc`'s `+ ₿` / `− ₿` shape.
+ */
+export function formatSignedMsatBtc(msat: bigint): string {
+  const abs = msat < 0n ? -msat : msat;
+  const whole = abs / 100_000_000_000n;
+  const fraction = (abs % 100_000_000_000n).toString().padStart(11, "0");
+  const digits = fraction.endsWith("000") ? fraction.slice(0, 8) : fraction;
+  return `${msat < 0n ? "− " : "+ "}₿ ${whole}.${digits}`;
+}
+
+/** Signed sats for an msat amount; a sub-sat remainder is named, not rounded. */
+export function formatSignedMsatSats(msat: bigint): string {
+  const abs = msat < 0n ? -msat : msat;
+  const sats = abs / 1000n;
+  const rest = abs % 1000n;
+  // 21M BTC is 2.1e15 sats, inside Number's exact-integer range.
+  const grouped = formatCount(Number(sats));
+  const text =
+    rest === 0n ? `${grouped} sats` : `${grouped} sats ${rest.toString()} msat`;
+  return `${msat < 0n ? "− " : "+ "}${text}`;
+}
+
 export function getDataForPeriod(
   period: TimePeriod,
   snapshot: OverviewSnapshot,
@@ -2235,10 +2301,17 @@ export function buildHoldingsBySource(snapshot: OverviewSnapshot, shown = 4): Ho
       btc: connection.balance,
       // An exchange, file or ecash source gets no rail logo, not a guessed one.
       rail: holdingRail(connection),
+      lastSyncAt: connection.lastSyncAt ?? undefined,
     }))
     .sort((a, b) => b.btc - a.btc);
   const total = rows.reduce((sum, item) => sum + item.btc, 0);
-  const visibleRows: Array<{ name: string; nameKey?: string; btc: number; rail?: SwapRail }> =
+  const visibleRows: Array<{
+    name: string;
+    nameKey?: string;
+    btc: number;
+    rail?: SwapRail;
+    lastSyncAt?: string;
+  }> =
     rows.length > shown
       ? [
           ...rows.slice(0, shown - 1),
@@ -2256,6 +2329,7 @@ export function buildHoldingsBySource(snapshot: OverviewSnapshot, shown = 4): Ho
     value: item.btc * fiatRate,
     percent: percentOf(item.btc, total),
     rail: item.rail,
+    ...(item.lastSyncAt ? { lastSyncAt: item.lastSyncAt } : {}),
   }));
 }
 
