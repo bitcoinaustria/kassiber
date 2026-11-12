@@ -201,13 +201,15 @@ pub fn descriptor_args(argv: &[String]) -> Vec<i32> {
 /// A pipe already holding `bytes` (closed for writing); returns its read
 /// end, for a child to receive at a given descriptor number.
 #[cfg(unix)]
-#[allow(unsafe_code)] // pipe(2) and the write end's ownership
+#[allow(unsafe_code)] // pipe2(2) and the write end's ownership
 pub fn filled_pipe(bytes: &[u8]) -> io::Result<i32> {
     use std::io::Write;
     use std::os::fd::FromRawFd;
     let mut ends = [0i32; 2];
-    // SAFETY: `ends` has room for the two descriptors pipe(2) writes.
-    if unsafe { libc::pipe(ends.as_mut_ptr()) } != 0 {
+    // Close-on-exec from the start: replays spawn from many threads, and a
+    // pipe meant for one session must not leak into another's child.
+    // SAFETY: `ends` has room for the two descriptors pipe2(2) writes.
+    if unsafe { libc::pipe2(ends.as_mut_ptr(), libc::O_CLOEXEC) } != 0 {
         return Err(io::Error::last_os_error());
     }
     // SAFETY: the write end was just created and is owned only here.
@@ -217,19 +219,58 @@ pub fn filled_pipe(bytes: &[u8]) -> io::Result<i32> {
     Ok(ends[0])
 }
 
-/// Give a child each `(target, source)` descriptor before it executes.
+/// Close the parent's copies of handed-over sources once the child started.
 #[cfg(unix)]
-#[allow(unsafe_code)] // dup2(2) in the forked child
+#[allow(unsafe_code)] // close(2) on descriptors filled_pipe opened
+pub fn close_sources(descriptors: &[(i32, i32)]) {
+    for (_, source) in descriptors {
+        // SAFETY: each source is a pipe end the caller opened and owns.
+        unsafe { libc::close(*source) };
+    }
+}
+
+/// The most descriptors one child receives (`hand_over`).
+pub const MAX_HANDED: usize = 32;
+
+/// Give a child each `(target, source)` descriptor before it executes.
+///
+/// A source may carry the number of another target (the parent's descriptor
+/// numbers are whatever its other threads left free), so every source is
+/// first moved above all targets, close-on-exec, and only then placed; a
+/// plain dup2 in order could overwrite a source before it is used. The
+/// caller closes its sources once the child has started.
+#[cfg(unix)]
+#[allow(unsafe_code)] // fcntl(2) and dup2(2) in the forked child
 pub fn hand_over(command: &mut std::process::Command, descriptors: Vec<(i32, i32)>) {
     use std::os::unix::process::CommandExt;
     if descriptors.is_empty() {
         return;
     }
-    // SAFETY: only async-signal-safe dup2 runs between fork and exec.
+    assert!(
+        descriptors.len() <= MAX_HANDED,
+        "too many descriptors to hand over"
+    );
+    let base = descriptors
+        .iter()
+        .map(|(target, _)| *target)
+        .max()
+        .unwrap_or(0)
+        + 1;
+    // SAFETY: only async-signal-safe fcntl and dup2 run between fork and
+    // exec, on a stack array; no allocation.
     unsafe {
         command.pre_exec(move || {
-            for (target, source) in &descriptors {
-                if libc::dup2(*source, *target) < 0 {
+            let mut moved = [0i32; MAX_HANDED];
+            for (index, (_, source)) in descriptors.iter().enumerate() {
+                let fd = libc::fcntl(*source, libc::F_DUPFD_CLOEXEC, base);
+                if fd < 0 {
+                    return Err(io::Error::last_os_error());
+                }
+                moved[index] = fd;
+            }
+            for (index, (target, _)) in descriptors.iter().enumerate() {
+                // A fresh dup2 target is not close-on-exec.
+                if libc::dup2(moved[index], *target) < 0 {
                     return Err(io::Error::last_os_error());
                 }
             }

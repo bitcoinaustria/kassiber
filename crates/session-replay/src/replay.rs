@@ -639,6 +639,7 @@ pub fn replay(
             .unwrap_or_default();
         handed.push((*fd, crate::filled_pipe(&bytes).map_err(|e| e.to_string())?));
     }
+    let handed_sources = handed.clone();
     crate::hand_over(&mut command, handed);
     command
         .stdin(Stdio::piped())
@@ -646,9 +647,10 @@ pub fn replay(
         .stderr(Stdio::piped());
 
     let started = now_us();
-    let mut child = command
-        .spawn()
-        .map_err(|e| format!("start {}: {e}", binary.display()))?;
+    let spawned = command.spawn();
+    // The child has its copies; the parent's pipes would only leak.
+    crate::close_sources(&handed_sources);
+    let mut child = spawned.map_err(|e| format!("start {}: {e}", binary.display()))?;
     let lines = Arc::new(AtomicU64::new(0));
     let printed = Arc::new(std::sync::Mutex::new(Vec::<u8>::new()));
     let mut stdout = child.stdout.take().unwrap();

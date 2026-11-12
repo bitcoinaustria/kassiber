@@ -71,6 +71,9 @@ crates/session-replay/src/bin/session-shim.rs|main|let mut command = Command::ne
 crates/session-replay/src/replay.rs|replay|let mut command = Command::new(&unshare);
 crates/session-replay/src/replay.rs|replay|let mut command = Command::new(binary);
 crates/session-replay/src/replay.rs|replay|let _ = Command::new("kill")
+# The descriptor hand-over test reads its pipes through bash; local only.
+crates/session-replay/tests/handover.rs|swapped_sources_and_targets_keep_their_contents|let mut command = Command::new("/bin/bash");
+crates/session-replay/tests/handover.rs|filled_pipes_do_not_leak_into_other_children|let output = Command::new("/bin/bash")
 # Coverage for replays: `llvm-profdata merge` (or $LLVM_PROFDATA) folds a
 # session's raw counters into one profile; local files only.
 crates/session-replay/src/bin/session-replay.rs|merge_profile|let _ = std::process::Command::new(tool)
