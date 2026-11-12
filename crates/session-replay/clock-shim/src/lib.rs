@@ -19,6 +19,10 @@
 //! `KASSIBER_REPLAY_REALTIME_BASE_US`; then `gettimeofday` and `time` read
 //! that realtime too. Monotonic clocks are untouched. Linux only.
 
+// The shim interposes glibc's clock calls, so it only exists on Linux;
+// elsewhere the crate is empty and the workspace still builds.
+#![cfg(target_os = "linux")]
+
 use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 use std::sync::OnceLock;
 
