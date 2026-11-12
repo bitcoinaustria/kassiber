@@ -104,8 +104,8 @@ quarantines do not block it, and nothing is stored or sent anywhere.
 comparison workbook into the managed exports directory.
 
 `ui.exports.preview` returns what an export would write without writing it:
-`file_name`, `row_count`, `sheets` (each with `columns`, the first rows as
-display strings, and `total`), `warnings`, and `reconciled` for the year
+`file_name`, `row_count`, `sheets` (each with `columns`, its rows as display
+strings, up to 5,000 per sheet, and `total`), `warnings`, and `reconciled` for the year
 handoff. It accepts `export` (`transactions`, `year_handoff`, `labels`) plus
 `format`, `wallets` (or `wallet`), or `year`, calls the same builder as the export, and raises
 the export's own errors, including the quarantine blocks. It is a local read

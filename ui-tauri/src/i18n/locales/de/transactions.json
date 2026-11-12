@@ -224,9 +224,8 @@
       "fileRows_one": "{{formatted}} Zeile",
       "fileRows_other": "{{formatted}} Zeilen",
       "preview": {
-        "showing_one": "Erste {{shown}} von {{formatted}} Zeile",
-        "showing_other": "Erste {{shown}} von {{formatted}} Zeilen",
-        "complete": "Alle Zeilen sichtbar",
+        "showing_one": "Vorschau zeigt die ersten {{shown}} von {{formatted}} Zeile; die Datei enthält alle",
+        "showing_other": "Vorschau zeigt die ersten {{shown}} von {{formatted}} Zeilen; die Datei enthält alle",
         "empty": "Keine Zeilen",
         "failed": "Keine Vorschau für diesen Export",
         "updating": "Wird aktualisiert…"

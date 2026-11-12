@@ -416,10 +416,10 @@ Blockpit (`ui.transactions.export_platform_csv` with `platform`), and BIP 329
 labels (`ui.metadata.bip329.export`, mode `all`, always all time). The period
 is a preset (today … last year, all time) or two days in the book's calendar;
 the dialog writes the days its preview resolved. It previews each file before
-it is written (`ui.exports.preview`): the real column headers, the first rows,
-the row count, the resolved days and any warnings, such as a draft list. A
-quarantine block shows there, with the blocking rows and a link to the
-Review screen, before export. The year handoff is on the Reports screen
+it is written (`ui.exports.preview`): the real column headers, every row (up
+to 5,000), the row count, the resolved days and any warnings, such as a draft
+list. A quarantine block shows there, with the blocking rows and a link to
+the Review screen, before export. The year handoff is on the Reports screen
 and the CoinTracking/Blockpit comparison on Reconcile, not in this dialog.
 It exports the chosen scope, not the screen's
 transient view filters. Fiat columns reflect the currency each transaction was

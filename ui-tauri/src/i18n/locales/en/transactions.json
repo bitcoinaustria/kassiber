@@ -224,9 +224,8 @@
       "fileRows_one": "{{formatted}} row",
       "fileRows_other": "{{formatted}} rows",
       "preview": {
-        "showing_one": "First {{shown}} of {{formatted}} row",
-        "showing_other": "First {{shown}} of {{formatted}} rows",
-        "complete": "Every row is shown",
+        "showing_one": "Showing the first {{shown}} of {{formatted}} row; the file holds all of them",
+        "showing_other": "Showing the first {{shown}} of {{formatted}} rows; the file holds all of them",
         "empty": "No rows",
         "failed": "No preview for this export",
         "updating": "Updating…"
