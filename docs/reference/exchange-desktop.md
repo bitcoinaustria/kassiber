@@ -48,7 +48,9 @@ page).
 
 An exchange wallet's page shows an exchange card instead of the chain refresh:
 whether its key is stored, the last sync of this session (time, new and read
-rows, skipped Bitpanda operations) or its error, and **Sync now**. The header
+rows, skipped Bitpanda operations, Bitpanda's BTC balance against the book's)
+or its error, and **Sync now**. The balance is masked when amounts are hidden;
+a mismatch adds a note naming the usual causes. The header
 Refresh runs the same sync; Full rescan is hidden. Errors are explained by
 code, then the daemon's own message and hint:
 
@@ -75,7 +77,7 @@ rest operator), and refuse unknown arguments before any work.
 
 | Kind | Arguments | Network | Answer |
 | --- | --- | --- | --- |
-| `ui.connections.exchange.status` | `wallet?` | none | `connections`: per exchange wallet of the active profile, `wallet_id`, `wallet`, `exchange`, `provider`, `backend`, `backend_configured`, `has_api_key`, `has_api_secret` (null for Bitpanda) and `last_sync` (`status`, `at`, `imported`, `fetched`, `skipped`, or the error envelope's `error`) |
+| `ui.connections.exchange.status` | `wallet?` | none | `connections`: per exchange wallet of the active profile, `wallet_id`, `wallet`, `exchange`, `provider`, `backend`, `backend_configured`, `has_api_key`, `has_api_secret` (null for Bitpanda) and `last_sync` (`status`, `at`, `imported`, `fetched`, `skipped`, `provider_balance`, or the error envelope's `error`) |
 | `ui.connections.exchange.test` | `backend`, or `exchange`, `api_key`, `api_secret`, `url?` | the check above, once | `exchange`, `ok`, `read_only` (true when the exchange confirmed it, null when it does not say) |
 | `ui.connections.exchange.create` | `exchange`, `api_key`, `api_secret` (not for Bitpanda), `label?`, `url?` | none | `exchange`, `wallet` (`id`, `label`, `kind`), `backend` (the redacted backend row) |
 | `ui.connections.exchange.sync` | `wallet` | the CLI sync's reads | the CLI's `wallets.sync-<kind>` data |

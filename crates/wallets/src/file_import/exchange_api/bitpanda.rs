@@ -26,6 +26,15 @@ pub(super) struct Fetched {
     pub records: Vec<Py>,
     /// Operations left out on purpose, by reason; reported in the envelope.
     pub skipped: Py,
+    /// Bitpanda's own BTC balance, read from the history already fetched.
+    pub reported: Reported,
+}
+
+/// Bitpanda's BTC balance as its history states it, or why it is unknown.
+#[derive(Clone, PartialEq, Debug)]
+pub(super) enum Reported {
+    Msat(i64),
+    Unavailable(&'static str),
 }
 
 pub(super) fn fetch(client: &Client<'_>) -> Result<Fetched, AppError> {
@@ -562,12 +571,74 @@ pub(super) fn normalize(
     }
     Ok(Fetched {
         records,
+        reported: reported(&relevant, btc),
         skipped: dict([
             ("fiat_only_operations", Py::from(fiat_only)),
             ("non_btc_operations", Py::from(other)),
             ("internal_btc_moves", Py::from(internal)),
         ]),
     })
+}
+
+/// Bitpanda's BTC balance: over its BTC wallets, the `asset_balance_after`
+/// of each wallet's latest BTC transaction. The whole history was read, so
+/// that is the current balance; it is unknown, never guessed, when a leg
+/// names no wallet, a latest leg lacks a whole-msat BTC balance, or two legs
+/// at a wallet's latest time disagree.
+fn reported(relevant: &[Operation<'_>], btc: &str) -> Reported {
+    let mut latest: BTreeMap<&str, (i64, Vec<&Leg<'_>>)> = BTreeMap::new();
+    let legs = relevant
+        .iter()
+        .flat_map(|operation| &operation.legs)
+        .filter(|leg| leg.holding == Holding::Btc);
+    for leg in legs {
+        let Some(wallet) = leg.wallet.as_deref() else {
+            return Reported::Unavailable("a BTC transaction names no Bitpanda wallet");
+        };
+        let entry = latest.entry(wallet).or_insert((leg.occurred, vec![]));
+        if leg.occurred > entry.0 {
+            *entry = (leg.occurred, vec![leg]);
+        } else if leg.occurred == entry.0 {
+            entry.1.push(leg);
+        }
+    }
+    if latest.is_empty() {
+        return Reported::Unavailable("Bitpanda listed no BTC transactions");
+    }
+    let mut total = 0i64;
+    for (_, legs) in latest.values() {
+        let mut balance: Option<&Decimal> = None;
+        for leg in legs {
+            let raw = at(leg.raw, "asset_balance_after");
+            let whole = fraction_digits(at(raw, "value")) <= BTC_DECIMALS;
+            let foreign = id(at(raw, "asset_id")).is_some_and(|asset| asset != btc)
+                || id(at(raw, "currency_id")).is_some();
+            let (Some(value), true, false) = (&leg.balance_after, whole, foreign) else {
+                return Reported::Unavailable(
+                    "a BTC wallet's latest transaction has no whole-msat BTC balance",
+                );
+            };
+            match balance {
+                Some(seen) if seen != value => {
+                    return Reported::Unavailable(
+                        "a BTC wallet's latest transactions show different balances",
+                    )
+                }
+                _ => balance = Some(value),
+            }
+        }
+        let msat = balance.map(crate::file_import::msat);
+        let Some(Ok(msat)) = msat else {
+            return Reported::Unavailable(
+                "a BTC wallet's latest transaction has no whole-msat BTC balance",
+            );
+        };
+        let Some(sum) = total.checked_add(msat) else {
+            return Reported::Unavailable("Bitpanda's BTC balances overflow");
+        };
+        total = sum;
+    }
+    Reported::Msat(total)
 }
 
 const REVIEW: &str = "Kassiber imports only plain BTC buys, sells, deposits, withdrawals and rewards from Bitpanda; record this operation yourself (generic ledger import) after checking it in Bitpanda.";

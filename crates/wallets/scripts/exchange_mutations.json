@@ -617,6 +617,57 @@
     "rule": "Bitpanda needs the key alone, no secret."
   },
   {
+    "id": "bitpanda-balance-latest-leg",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "        if leg.occurred > entry.0 {\n            *entry = (leg.occurred, vec![leg]);",
+    "replace": "        if leg.occurred < entry.0 {\n            *entry = (leg.occurred, vec![leg]);",
+    "expect_failing": [
+      "bitpanda_reads_only_and_maps_every_btc_event",
+      "bitpanda_reports_a_balance_mismatch_without_changing_the_book"
+    ],
+    "rule": "Bitpanda's reported balance is each wallet's balance after its latest BTC transaction."
+  },
+  {
+    "id": "bitpanda-balance-tie-disagrees",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "                Some(seen) if seen != value => {",
+    "replace": "                Some(seen) if seen != value && false => {",
+    "expect_failing": [
+      "bitpanda_balance_is_unavailable_rather_than_guessed"
+    ],
+    "rule": "Two legs at a wallet's latest time with different balances leave the balance unknown."
+  },
+  {
+    "id": "bitpanda-balance-whole-msat",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "            let whole = fraction_digits(at(raw, \"value\")) <= BTC_DECIMALS;",
+    "replace": "            let whole = true;",
+    "expect_failing": [
+      "bitpanda_balance_is_unavailable_rather_than_guessed"
+    ],
+    "rule": "A reported balance finer than a msat is not rounded into a comparison."
+  },
+  {
+    "id": "bitpanda-balance-needs-wallet",
+    "file": "crates/wallets/src/file_import/exchange_api/bitpanda.rs",
+    "find": "        let Some(wallet) = leg.wallet.as_deref() else {\n            return Reported::Unavailable(\"a BTC transaction names no Bitpanda wallet\");\n        };",
+    "replace": "        let wallet = leg.wallet.as_deref().unwrap_or(\"\");",
+    "expect_failing": [
+      "bitpanda_balance_is_unavailable_rather_than_guessed"
+    ],
+    "rule": "A BTC leg without a wallet makes the reported balance unknown."
+  },
+  {
+    "id": "exchange-provider-balance-book-sum",
+    "file": "crates/wallets/src/file_import/exchange_api.rs",
+    "find": "WHEN direction = 'outbound' THEN -amount - fee ELSE 0 END), 0) \\\n",
+    "replace": "WHEN direction = 'outbound' THEN -amount ELSE 0 END), 0) \\\n",
+    "expect_failing": [
+      "bitpanda_reads_only_and_maps_every_btc_event"
+    ],
+    "rule": "The book balance compared with the exchange's subtracts outbound fees."
+  },
+  {
     "id": "desktop-binance-unknown-flags",
     "file": "crates/wallets/src/file_import/exchange_api/binance.rs",
     "find": "(name.starts_with(\"enable\") || name.starts_with(\"permits\"))",

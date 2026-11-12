@@ -366,7 +366,13 @@ impl RealBook {
         let record = match &result {
             Ok(payload) => {
                 let mut record = vec![("status", s("ok")), ("at", s(at))];
-                for key in ["imported", "updated", "fetched", "skipped"] {
+                for key in [
+                    "imported",
+                    "updated",
+                    "fetched",
+                    "skipped",
+                    "provider_balance",
+                ] {
                     if let Some(value) = get(payload, key) {
                         record.push((key, value.clone()));
                     }

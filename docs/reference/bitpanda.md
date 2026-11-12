@@ -209,8 +209,35 @@ external id and fingerprint, pricing updates, journal invalidation, import
 runs. `raw_json` is `{operation_id, operation_type, transaction}` plus
 `cash_transaction` for a trade, sorted. The envelope adds the framework's
 `backend`, `backend_kind`, `backend_url` (redacted), `wallet`, `fetched` and
-`input_format: "bitpanda_api"`, and `skipped`:
-`{"fiat_only_operations", "non_btc_operations", "internal_btc_moves"}` counts.
+`input_format: "bitpanda_api"`, `skipped`:
+`{"fiat_only_operations", "non_btc_operations", "internal_btc_moves"}` counts,
+and `provider_balance` (below).
+
+### Balance check
+
+Each transaction's `asset_balance_after` is the Bitpanda wallet's balance
+after it, and the sync reads the whole history. So Bitpanda's current BTC
+balance is the sum, over its BTC wallets (`wallet_id`), of the balance after
+each wallet's latest BTC transaction. This uses the operations already read,
+with no request to `/v1/portfolio` and no `Balances` scope. Skipped internal
+moves count, because they change which Bitpanda wallet holds the BTC; refused
+operations stop the sync before any comparison.
+
+After the import, `provider_balance` compares that figure with the Kassiber
+wallet's book balance: its included BTC rows, inbound amounts less outbound
+amounts and fees, in msat.
+
+| `status` | Fields | When |
+| --- | --- | --- |
+| `matches` | `asset`, `provider_msat`, `book_msat`, `difference_msat` (`0`) | the two agree |
+| `mismatch` | same; `difference_msat` = book − Bitpanda | they differ |
+| `unavailable` | `asset`, `reason` | a BTC leg names no wallet; a wallet's latest BTC leg has no balance, a balance finer than a msat or in another asset; two legs at a wallet's latest time show different balances; or no BTC transaction at all |
+
+The check is informational. It never changes, adds or refuses rows, and it
+never guesses (no rounding, no earlier balance standing in for a missing
+one). A mismatch usually means excluded transactions, rows added to the same
+wallet from another source, or history the API did not return; it is
+reported, not corrected.
 
 ## Setup
 
@@ -257,7 +284,10 @@ explicit Test connection and Sync now do, under their own consent.
 The desktop sets up and syncs Bitpanda like Kraken, Coinbase and Binance:
 a key guide, Test connection (the write-scope check, currencies and one
 operations row), Create connection and Sync now; see
-[exchange connections in the desktop](exchange-desktop.md). No exchange sync
+[exchange connections in the desktop](exchange-desktop.md). After Sync now,
+the wallet's exchange card shows Bitpanda's balance against the book's
+(masked when amounts are hidden), or that the history does not state it
+unambiguously. No exchange sync
 is exposed to the assistant, so neither is Bitpanda: no assistant tool calls
 the Bitpanda API, and `ui.wallets.request_input` keeps the source list of the
 AI tool catalog (`crates/ai/src/data/catalog.json`, generated from Python's
@@ -281,7 +311,7 @@ import with explicit columns.
 - `crates/wallets/src/file_import/exchange_api/tests/bitpanda_api.rs`: a
   loopback fake built from the documented shapes: every mapped event, the
   request sequence and escaping, idempotent re-sync, both withdrawal-fee
-  readings, the write-scope refusal, auth errors and echoed keys, throttling
+  readings, the balance check (match, mismatch, each unavailable case), the write-scope refusal, auth errors and echoed keys, throttling
   and its exhaustion, malformed pages, the BTC asset lookup, each refusal
   above, consent, offline and missing-key refusals before any request.
 - The recorded `test_rust_exchange_desktop` sessions

@@ -1801,7 +1801,9 @@ with the cash leg as exact `exchange_execution` pricing (`pricing_method =
 "bitpanda_api"`), BTC deposits, withdrawals and rewards. Fiat-only and
 non-BTC operations (altcoins, BEST, metals, stocks, ETFs) are skipped and
 counted; swaps, index trades, reversals, separate trade fees and unknown
-types fail safe. [Bitpanda](bitpanda.md) records the API, the full mapping
+types fail safe. The result's `provider_balance` compares Bitpanda's own BTC
+balance, read from the fetched history, with the wallet's book balance.
+[Bitpanda](bitpanda.md) records the API, the full mapping, the balance check
 and every refusal.
 
 ### Binance API and Supplemental CSV

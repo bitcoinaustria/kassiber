@@ -433,6 +433,11 @@ fn bitpanda_reads_only_and_maps_every_btc_event() {
         kassiber_pyjson::dumps(at(&result, "skipped"), &Default::default()).unwrap(),
         r#"{"fiat_only_operations": 1, "non_btc_operations": 2, "internal_btc_moves": 1}"#
     );
+    // Bitpanda's balance (w-btc 0.00491 + w-earn 0.005) equals the book's.
+    assert_eq!(
+        kassiber_pyjson::dumps(at(&result, "provider_balance"), &Default::default()).unwrap(),
+        r#"{"status": "matches", "asset": "BTC", "provider_msat": 991000000, "book_msat": 991000000, "difference_msat": 0}"#
+    );
     // Only reads, each carrying the key, in this order; cursors escaped.
     assert!(served.fake.seen.lock().unwrap().iter().all(|r| r.signed));
     assert_eq!(
@@ -551,6 +556,85 @@ fn bitpanda_reads_only_and_maps_every_btc_event() {
         )
         .unwrap();
     assert_eq!(reference, "trade-2");
+}
+
+/// The scripted history with one leg's transaction rewritten.
+fn edited(id: &str, edit: impl Fn(&mut J)) -> Script {
+    let mut script = Script::new();
+    let leg = script
+        .operations
+        .iter_mut()
+        .flat_map(|op| op["transactions"].as_array_mut().unwrap())
+        .find(|tx| tx["transaction_id"] == id)
+        .unwrap();
+    edit(leg);
+    script
+}
+fn provider_balance(script: Script) -> String {
+    let (_, run) = sync(script);
+    let result = run.result.unwrap();
+    kassiber_pyjson::dumps(at(&result, "provider_balance"), &Default::default()).unwrap()
+}
+
+#[test]
+fn bitpanda_reports_a_balance_mismatch_without_changing_the_book() {
+    // Bitpanda says w-btc holds 0.001 BTC more than the rows add up to.
+    let script = edited("t-savings", |tx| tx["asset_balance_after"] = btc("0.00591"));
+    let (_, run) = sync(script);
+    let result = run.result.unwrap();
+    assert_eq!(at(&result, "imported"), &Py::from(6));
+    assert_eq!(
+        kassiber_pyjson::dumps(at(&result, "provider_balance"), &Default::default()).unwrap(),
+        r#"{"status": "mismatch", "asset": "BTC", "provider_msat": 1091000000, "book_msat": 991000000, "difference_msat": -100000000}"#
+    );
+}
+
+#[test]
+fn bitpanda_balance_is_unavailable_rather_than_guessed() {
+    let unavailable = |reason: &str| {
+        format!(r#"{{"status": "unavailable", "asset": "BTC", "reason": "{reason}"}}"#)
+    };
+    let no_balance = "a BTC wallet's latest transaction has no whole-msat BTC balance";
+    // The latest w-btc leg carries no balance; an earlier one does not stand in.
+    assert_eq!(
+        provider_balance(edited("t-savings", |tx| tx["asset_balance_after"] = J::Null)),
+        unavailable(no_balance)
+    );
+    // Finer than a msat, or in another asset.
+    assert_eq!(
+        provider_balance(edited("t-savings", |tx| tx["asset_balance_after"] =
+            btc("0.004910000001"))),
+        unavailable(no_balance)
+    );
+    assert_eq!(
+        provider_balance(edited("t-savings", |tx| tx["asset_balance_after"] = eur("0.00491"))),
+        unavailable(no_balance)
+    );
+    // A leg without a wallet cannot be placed.
+    assert_eq!(
+        provider_balance(edited("t-reward", |tx| tx["wallet_id"] = J::Null)),
+        unavailable("a BTC transaction names no Bitpanda wallet")
+    );
+    // Two legs at w-earn's latest time that disagree: neither is the balance.
+    let mut script = Script::new();
+    script.operations.push(op(
+        "op-earn",
+        "DEPOSIT",
+        vec![after(
+            tx(
+                "t-earn",
+                btc("0.001"),
+                "INCOMING",
+                "2024-01-04T00:00:00Z",
+                "w-earn",
+            ),
+            "0.006",
+        )],
+    ));
+    assert_eq!(
+        provider_balance(script),
+        unavailable("a BTC wallet's latest transactions show different balances")
+    );
 }
 
 #[test]

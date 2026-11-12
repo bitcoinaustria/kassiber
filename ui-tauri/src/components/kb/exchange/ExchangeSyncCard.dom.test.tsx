@@ -101,6 +101,84 @@ describe("ExchangeSyncCard", () => {
     expect(mocks.sync).not.toHaveBeenCalled();
   });
 
+  it("shows Bitpanda's balance against the book, masked when amounts are hidden", () => {
+    const lastSync = (provider_balance: object) => ({
+      status: "ok" as const,
+      at: "2024-01-08T00:00:00Z",
+      imported: 6,
+      fetched: 6,
+      provider_balance,
+    });
+    mocks.status = {
+      data: {
+        data: {
+          connections: [
+            row({
+              last_sync: lastSync({
+                status: "matches",
+                asset: "BTC",
+                provider_msat: 991_000_000,
+                book_msat: 991_000_000,
+                difference_msat: 0,
+              }) as ExchangeConnectionStatus["last_sync"],
+            }),
+          ],
+        },
+      },
+      error: null,
+    };
+    useUiStore.setState({ hideSensitive: true });
+    const { rerender } = render(<Card />);
+    const matches = screen.getByText("₿ 0.00991000 · matches the book");
+    expect(matches.className).toContain("sensitive");
+    expect(screen.queryByText(/disagree/)).toBeNull();
+
+    useUiStore.setState({ hideSensitive: false });
+    mocks.status = {
+      data: {
+        data: {
+          connections: [
+            row({
+              last_sync: lastSync({
+                status: "mismatch",
+                asset: "BTC",
+                provider_msat: 1_091_000_000,
+                book_msat: 991_000_001,
+                difference_msat: -99_999_999,
+              }) as ExchangeConnectionStatus["last_sync"],
+            }),
+          ],
+        },
+      },
+      error: null,
+    };
+    rerender(<Card />);
+    const mismatch = screen.getByText("₿ 0.01091000 · the book shows ₿ 0.00991000001");
+    expect(mismatch.className).not.toContain("sensitive");
+    expect(screen.getByText(/The book and Bitpanda disagree/)).toBeTruthy();
+
+    mocks.status = {
+      data: {
+        data: {
+          connections: [
+            row({
+              last_sync: lastSync({
+                status: "unavailable",
+                asset: "BTC",
+                reason: "a BTC transaction names no Bitpanda wallet",
+              }) as ExchangeConnectionStatus["last_sync"],
+            }),
+          ],
+        },
+      },
+      error: null,
+    };
+    rerender(<Card />);
+    expect(screen.getByText("Not stated unambiguously in the history")).toBeTruthy();
+    // The daemon's English reason is not shown as UI text.
+    expect(screen.queryByText(/names no Bitpanda wallet/)).toBeNull();
+  });
+
   it("syncs on Sync now and reports what it imported", async () => {
     mocks.sync.mockResolvedValue({
       kind: "ui.connections.exchange.sync",

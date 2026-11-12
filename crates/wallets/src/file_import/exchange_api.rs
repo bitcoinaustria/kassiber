@@ -96,13 +96,14 @@ pub fn execute(
     };
     // Each read rechecks the gate itself, after local steps Python takes first
     // (such as decoding the Kraken secret).
-    let mut skipped = None;
+    let (mut skipped, mut reported) = (None, None);
     let records = match kind.as_str() {
         "kraken" => kraken::fetch(&client)?,
         "coinbase" => coinbase::fetch(&client)?,
         "bitpanda" => {
             let fetched = bitpanda::fetch(&client)?;
             skipped = Some(fetched.skipped);
+            reported = Some(fetched.reported);
             fetched.records
         }
         _ => binance::fetch(&client)?,
@@ -158,7 +159,55 @@ pub fn execute(
     if let Some(skipped) = skipped {
         kassiber_envelope::set(&mut result, "skipped", skipped);
     }
+    if let Some(reported) = reported {
+        let check = provider_balance(conn, profile, &wallet.id, reported)?;
+        kassiber_envelope::set(&mut result, "provider_balance", check);
+    }
     Ok(result)
+}
+
+/// The exchange's own BTC balance against the wallet's book balance after the
+/// import: what the wallet's included BTC rows add up to. Informational: a
+/// mismatch is reported, never corrected.
+fn provider_balance(
+    conn: &Connection,
+    profile: &str,
+    wallet: &str,
+    reported: bitpanda::Reported,
+) -> Result<Py, AppError> {
+    let provider = match reported {
+        bitpanda::Reported::Msat(msat) => msat,
+        bitpanda::Reported::Unavailable(reason) => {
+            return Ok(dict([
+                ("status", s("unavailable")),
+                ("asset", s("BTC")),
+                ("reason", s(reason)),
+            ]))
+        }
+    };
+    let book: i64 = conn
+        .query_row(
+            "SELECT COALESCE(SUM(CASE WHEN direction = 'inbound' THEN amount \
+             WHEN direction = 'outbound' THEN -amount - fee ELSE 0 END), 0) \
+             FROM transactions WHERE profile_id = ? AND wallet_id = ? AND excluded = 0 AND asset = 'BTC'",
+            [profile, wallet],
+            |row| row.get(0),
+        )
+        .map_err(database_error)?;
+    Ok(dict([
+        (
+            "status",
+            s(if book == provider {
+                "matches"
+            } else {
+                "mismatch"
+            }),
+        ),
+        ("asset", s("BTC")),
+        ("provider_msat", Py::from(provider)),
+        ("book_msat", Py::from(book)),
+        ("difference_msat", Py::from(book as i128 - provider as i128)),
+    ]))
 }
 
 /// The backend's name and its exchange kind, which must be `expected` when

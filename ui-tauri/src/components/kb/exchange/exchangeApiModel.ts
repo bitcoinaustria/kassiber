@@ -138,11 +138,23 @@ export interface ExchangeCreateResult {
   backend: { name: string };
 }
 
+/** The exchange's own BTC balance against the wallet's book balance after a
+ *  sync (Bitpanda only, read from the history already fetched). */
+export interface ExchangeProviderBalance {
+  status: "matches" | "mismatch" | "unavailable";
+  asset: "BTC";
+  provider_msat?: number;
+  book_msat?: number;
+  difference_msat?: number;
+  reason?: string;
+}
+
 export interface ExchangeSyncResult {
   imported?: number;
   updated?: number;
   fetched?: number;
   skipped?: Record<string, number>;
+  provider_balance?: ExchangeProviderBalance;
   wallet?: string;
 }
 
@@ -161,6 +173,7 @@ export interface ExchangeLastSync {
   updated?: number;
   fetched?: number;
   skipped?: Record<string, number>;
+  provider_balance?: ExchangeProviderBalance;
   error?: ExchangeErrorInfo | null;
 }
 
@@ -213,6 +226,11 @@ const CODE_KINDS: Record<string, ExchangeErrorKind> = {
   kind_not_allowed: "needsRust",
   not_implemented: "needsRust",
 };
+
+/** Msat as BTC text: eight decimals, or eleven when not whole sats. */
+export function formatMsatAsBtc(msat: number): string {
+  return (msat / 1e11).toFixed(msat % 1000 === 0 ? 8 : 11);
+}
 
 export function exchangeErrorKind(code: string | undefined): ExchangeErrorKind {
   return (code && CODE_KINDS[code]) || "unknown";
