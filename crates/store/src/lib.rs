@@ -19,6 +19,7 @@ pub mod state_root;
 pub mod stored_errors;
 mod stored_values;
 pub mod transaction_order;
+mod unreleased;
 mod write_lock;
 pub use schema::table_names;
 pub use write_lock::{

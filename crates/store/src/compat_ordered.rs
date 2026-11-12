@@ -247,6 +247,8 @@ fn ensure_schema_compat(
     crate::semantics::legacy_pair_fee(conn, observer)?;
     crate::semantics::price_currency(conn, observer)?;
     transaction_page_index(conn, observer)?;
+    // Last, so the tables a repair matches have their current columns.
+    crate::unreleased::repair(conn, observer)?;
     Ok(())
 }
 

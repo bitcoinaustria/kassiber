@@ -20,6 +20,11 @@ fn quote(s: &str) -> String {
 
 /// Tokenize without folding quoted string contents or removing whitespace
 /// inside literals. Quotes around identifiers do not change their structure.
+/// Whether two definitions differ only in whitespace, comments or identifier
+/// quoting.
+pub(crate) fn same_tokens(a: &str, b: &str) -> bool {
+    tokens(a) == tokens(b)
+}
 fn tokens(sql: &str) -> Vec<String> {
     let mut chars = sql.chars().peekable();
     let mut out = Vec::new();

@@ -465,6 +465,23 @@ unknown tables, columns, indexes, triggers and audits in place. The asymmetry
 is deliberate. A Kassiber binary must not run accounting on a schema written
 by a newer build; upgrade Kassiber instead.
 
+**Unreleased development leftovers.** A book a development build (an unmerged
+branch or an intermediate `main` commit) opened can carry schema no release had, which the Python
+releases then ignored. The migrating open repairs the known ones as the last
+step of the ordered pass (`crates/store/src/unreleased.rs`), with no prompt,
+before the structural gate runs; the admission-only open still refuses them.
+Each repair matches its leftover exactly, so an object a newer release creates
+is still refused, and never discards rows:
+
+| Leftover | Origin | Repair |
+| --- | --- | --- |
+| `transaction_metadata_sources` (with or without `managed_labels_json`) | unmerged BTCPay follow-up, April 2026 | dropped while empty; a populated table is kept and refused |
+| `source_funds_links.chain_data_confirmed DEFAULT 1` | the unmerged source-of-funds branch before its squash merge (2026-05-09); `main` always had `DEFAULT 0` | table rebuilt under the current definition, rows copied as stored, foreign keys off so no cascade fires |
+
+Add an entry when a book from a development build is refused: name the
+leftover's exact shape, keep populated data refused, and add the repair's
+tests and mutation entries (`unreleased-*` in `crates/store/scripts/mutations.json`).
+
 ## Legacy custody migrations in the Rust store
 
 Python's `ensure_schema_compat` handed three book migrations to the custody
