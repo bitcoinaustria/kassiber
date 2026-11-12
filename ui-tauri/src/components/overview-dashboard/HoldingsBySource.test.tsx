@@ -109,4 +109,20 @@ describe("holdings by source", () => {
     expect(html).toContain("€ 2.000.000");
     expect(html).toContain("&lt;1%");
   });
+
+  it("names when each source last synced, from the snapshot alone", () => {
+    const connections = [
+      { ...MOCK_OVERVIEW.connections[0], id: "synced", label: "Synced wallet", balance: 2, lastSyncAt: "2026-06-26T11:58:03Z" },
+      { ...MOCK_OVERVIEW.connections[0], id: "import", label: "CSV import", balance: 1, lastSyncAt: null },
+    ];
+    const html = renderToStaticMarkup(
+      createElement(HoldingsBySourceChart, {
+        snapshot: { ...MOCK_OVERVIEW, connections },
+        hideSensitive: false,
+        currency: "btc",
+      }),
+    );
+    expect(html.match(/Last synced/g)).toHaveLength(1);
+    expect(html).toMatch(/synced \d+d ago/);
+  });
 });

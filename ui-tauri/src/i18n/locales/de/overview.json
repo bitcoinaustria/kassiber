@@ -179,7 +179,9 @@
     "vsCostBasis": "vs. Anschaffungskosten",
     "viewConnections": "Wallets anzeigen",
     "otherSources": "Sonstige Quellen",
-    "empty": "Noch keine Wallet hält Bitcoin."
+    "empty": "Noch keine Wallet hält Bitcoin.",
+    "lastSynced": "synced {{time}}",
+    "lastSyncedAt": "Zuletzt synced {{date}}"
   },
   "recentTx": {
     "title": "Letzte Transaktionen",

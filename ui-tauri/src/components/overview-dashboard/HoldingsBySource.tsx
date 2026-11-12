@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 
 import { RailIcon } from "@/components/kb/BitcoinRail";
 import { formatBtc, formatWholeFiatAmount, type Currency } from "@/lib/currency";
+import { formatShortDate } from "@/lib/date";
 import { fiatCompleteness } from "@/lib/fiatCompleteness";
 import { cn } from "@/lib/utils";
 import type { OverviewSnapshot } from "@/mocks/seed";
@@ -13,7 +14,9 @@ import {
   activeMarketFiatCurrency,
   blurClass,
   buildHoldingsBySource,
+  formatRelativeMarketRateTime,
   portfolioCompletenessDetail,
+  type OverviewTranslate,
 } from "./model";
 
 /** Sources listed before the rest fold into "Other sources". */
@@ -105,12 +108,34 @@ export const HoldingsBySourceChart = ({
               <span className="flex justify-center">
                 {item.rail ? <RailIcon rail={item.rail} size="compact" /> : null}
               </span>
-              <span
-                className={cn("truncate", item.nameKey && "text-muted-foreground")}
-                title={item.nameKey ? undefined : item.name}
-              >
-                {/* dynamic key */}
-                {item.nameKey ? t(item.nameKey as never) : item.name}
+              <span className="flex min-w-0 items-baseline gap-1.5">
+                <span
+                  className={cn("truncate", item.nameKey && "text-muted-foreground")}
+                  title={item.nameKey ? undefined : item.name}
+                >
+                  {/* dynamic key */}
+                  {item.nameKey ? t(item.nameKey as never) : item.name}
+                </span>
+                {/* Read from the snapshot already on the page; it never
+                    starts a sync. Refresh stays the header's click. */}
+                {item.lastSyncAt ? (
+                  <span
+                    className="shrink-0 text-2xs text-muted-foreground"
+                    title={t("holdings.lastSyncedAt", {
+                      date: formatShortDate(item.lastSyncAt),
+                    })}
+                  >
+                    {t("holdings.lastSynced", {
+                      time:
+                        formatRelativeMarketRateTime(
+                          item.lastSyncAt,
+                          Date.now(),
+                          t as OverviewTranslate,
+                        ) ??
+                        formatShortDate(item.lastSyncAt),
+                    })}
+                  </span>
+                ) : null}
               </span>
               <span className={cn("truncate text-right font-medium tabular-nums", blurClass(hideSensitive))}>
                 {valueLabel(item.btc, item.value)}

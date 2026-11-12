@@ -115,6 +115,11 @@ export type HoldingsItem = {
   percent: number;
   /** The source's rail, for its logo; none for the "Other sources" row. */
   rail?: SwapRail;
+  /**
+   * When the source last synced, as the overview snapshot reports it; absent
+   * for the "Other sources" row and for sources that never synced (imports).
+   */
+  lastSyncAt?: string;
 };
 
 export type PortfolioChartPoint = {
@@ -2296,10 +2301,17 @@ export function buildHoldingsBySource(snapshot: OverviewSnapshot, shown = 4): Ho
       btc: connection.balance,
       // An exchange, file or ecash source gets no rail logo, not a guessed one.
       rail: holdingRail(connection),
+      lastSyncAt: connection.lastSyncAt ?? undefined,
     }))
     .sort((a, b) => b.btc - a.btc);
   const total = rows.reduce((sum, item) => sum + item.btc, 0);
-  const visibleRows: Array<{ name: string; nameKey?: string; btc: number; rail?: SwapRail }> =
+  const visibleRows: Array<{
+    name: string;
+    nameKey?: string;
+    btc: number;
+    rail?: SwapRail;
+    lastSyncAt?: string;
+  }> =
     rows.length > shown
       ? [
           ...rows.slice(0, shown - 1),
@@ -2317,6 +2329,7 @@ export function buildHoldingsBySource(snapshot: OverviewSnapshot, shown = 4): Ho
     value: item.btc * fiatRate,
     percent: percentOf(item.btc, total),
     rail: item.rail,
+    ...(item.lastSyncAt ? { lastSyncAt: item.lastSyncAt } : {}),
   }));
 }
 

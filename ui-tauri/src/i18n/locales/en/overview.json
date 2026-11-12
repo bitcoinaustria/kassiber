@@ -179,7 +179,9 @@
     "vsCostBasis": "vs cost basis",
     "viewConnections": "View wallets",
     "otherSources": "Other sources",
-    "empty": "No wallet holds bitcoin yet."
+    "empty": "No wallet holds bitcoin yet.",
+    "lastSynced": "synced {{time}}",
+    "lastSyncedAt": "Last synced {{date}}"
   },
   "recentTx": {
     "title": "Recent Transactions",
