@@ -201,7 +201,7 @@ pub fn descriptor_args(argv: &[String]) -> Vec<i32> {
 /// A pipe already holding `bytes` (closed for writing); returns its read
 /// end, for a child to receive at a given descriptor number.
 #[cfg(unix)]
-#[allow(unsafe_code)] // pipe2(2) and the write end's ownership
+#[allow(unsafe_code)] // pipe(2)/pipe2(2), fcntl(2) and the write end's ownership
 pub fn filled_pipe(bytes: &[u8]) -> io::Result<i32> {
     use std::io::Write;
     use std::os::fd::FromRawFd;
@@ -209,8 +209,29 @@ pub fn filled_pipe(bytes: &[u8]) -> io::Result<i32> {
     // Close-on-exec from the start: replays spawn from many threads, and a
     // pipe meant for one session must not leak into another's child.
     // SAFETY: `ends` has room for the two descriptors pipe2(2) writes.
-    if unsafe { libc::pipe2(ends.as_mut_ptr(), libc::O_CLOEXEC) } != 0 {
+    #[cfg(target_os = "linux")]
+    let created = unsafe { libc::pipe2(ends.as_mut_ptr(), libc::O_CLOEXEC) };
+    // macOS and the BSDs have no pipe2(2): set the flag right after pipe(2).
+    // That leaves a short window a concurrent spawn could inherit the ends
+    // in; replays that rely on handover isolation run on Linux.
+    // SAFETY: `ends` has room for the two descriptors pipe(2) writes.
+    #[cfg(not(target_os = "linux"))]
+    let created = unsafe { libc::pipe(ends.as_mut_ptr()) };
+    if created != 0 {
         return Err(io::Error::last_os_error());
+    }
+    #[cfg(not(target_os = "linux"))]
+    for fd in ends {
+        // SAFETY: both descriptors were just created and are owned here.
+        if unsafe { libc::fcntl(fd, libc::F_SETFD, libc::FD_CLOEXEC) } != 0 {
+            let error = io::Error::last_os_error();
+            // SAFETY: closing the two descriptors pipe(2) just returned.
+            unsafe {
+                libc::close(ends[0]);
+                libc::close(ends[1]);
+            }
+            return Err(error);
+        }
     }
     // SAFETY: the write end was just created and is owned only here.
     let mut writer = unsafe { fs::File::from_raw_fd(ends[1]) };
