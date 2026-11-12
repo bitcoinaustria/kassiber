@@ -139,23 +139,31 @@ function conditionActionLabel(
       return t("notifications.condition.backendRequired.action");
     case "journals.process-failed":
       return t("notifications.condition.journalsFailed.action");
+    case "connection.sync-failed":
+    case "btcpay.provenance-incomplete":
+      return t("notifications.action.openWallet");
   }
 }
 
 /** A result's button is named after where it leads. */
 function resultActionLabel(resolved: ResolvedEntryAction, t: ChromeT): string {
-  if (resolved.kind === "navigate" && !resolved.stale) {
-    if (resolved.to === "/journals") {
-      return t("notifications.result.journalsProcessed.action");
-    }
-    if (resolved.to === "/connections") {
-      return t("notifications.result.bookRefreshPending.action");
-    }
+  switch (resolved.kind) {
+    case "open-connection":
+      return t("notifications.action.openWallet");
+    case "open-transaction":
+      return t("notifications.action.openTransaction");
+    case "operation":
+      return t("notifications.condition.bookRefreshFailed.action");
+    case "navigate":
+      if (resolved.stale) return t("notifications.staleAction");
+      if (resolved.to === "/journals") {
+        return t("notifications.result.journalsProcessed.action");
+      }
+      if (resolved.to === "/connections") {
+        return t("notifications.result.bookRefreshPending.action");
+      }
+      return t("notifications.staleAction");
   }
-  if (resolved.kind === "operation") {
-    return t("notifications.condition.bookRefreshFailed.action");
-  }
-  return t("notifications.staleAction");
 }
 
 /** A row's one button, resolved against the open book. */

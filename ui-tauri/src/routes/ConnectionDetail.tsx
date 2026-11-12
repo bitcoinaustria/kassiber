@@ -120,10 +120,18 @@ import {
 } from "@/lib/connectionEditKind";
 import {
   describeWalletSyncResult,
-  journalStepNeedsAttention,
   type JournalStepSummary,
   type SyncResult,
 } from "@/lib/syncResults";
+import {
+  endConnectionSync,
+  recordConnectionSynced,
+  recordConnectionSyncFailed,
+  startConnectionSync,
+  updateConnectionSync,
+} from "@/lib/connectionNotifications";
+import { showFeedback } from "@/lib/feedback";
+import { recordJournalStep } from "@/lib/journalStepNotice";
 import { transactionBelongsToConnection } from "@/lib/connectionTransactions";
 import { buildBalanceReconciliation } from "@/lib/walletBalanceReconcile";
 import { formatBtc, formatFiatAmount } from "@/lib/currency";
@@ -140,8 +148,8 @@ import {
   type BareXpubScriptType,
   detectWalletMaterial,
 } from "@/lib/walletMaterialFormat";
-import { useUiStore } from "@/store/ui";
-import { useSyncProgressNotice } from "@/hooks/useSyncProgressNotice";
+import { useNotificationStore } from "@/store/notifications";
+import { bookIdentityKey, useUiStore } from "@/store/ui";
 import { useConnectionRefreshState } from "@/hooks/useConnectionRefreshState";
 import { ExchangeSyncCard } from "@/components/kb/exchange/ExchangeSyncCard";
 import { useExchangeSync } from "@/components/kb/exchange/useExchangeSync";
@@ -498,7 +506,6 @@ function NodeConnectionContainer({
   hideSensitive,
 }: NodeConnectionContainerProps) {
   const { t } = useTranslation("connections");
-  const addNotification = useUiStore((state) => state.addNotification);
   const nodeSnapshotQuery = useDaemon<NodeSnapshot>(
     "ui.connections.node.snapshot",
     { connection: connection.id },
@@ -508,7 +515,6 @@ function NodeConnectionContainer({
   const resolvedConnection = liveSnapshot
     ? { ...connection, node: liveSnapshot }
     : connection;
-  const nodeSyncDedupeKey = `node-sync-${connection.id}`;
   const snapshotErrorMessage =
     nodeSnapshotQuery.error instanceof Error
       ? nodeSnapshotQuery.error.message
@@ -518,43 +524,26 @@ function NodeConnectionContainer({
     !liveSnapshot && !connection.node && nodeSnapshotQuery.isFetching;
 
   const onSync = () => {
-    if (nodeSnapshotQuery.isFetching) {
-      addNotification({
-        title: t("node.sync.alreadyRunningTitle"),
-        body: t("node.sync.alreadyRunningBody", { label: connection.label }),
-        tone: "info",
-        dedupeKey: nodeSyncDedupeKey,
-      });
-      return;
-    }
-
-    addNotification({
-      title: t("node.sync.startedTitle"),
-      body: t("node.sync.startedBody", { label: connection.label }),
-      tone: "info",
-      dedupeKey: nodeSyncDedupeKey,
-    });
-
+    // A running refresh already shows on the page and under Running.
+    if (nodeSnapshotQuery.isFetching) return;
+    const ref = {
+      book: bookIdentityKey(useUiStore.getState().identity),
+      connectionId: connection.id,
+      label: connection.label,
+    };
+    startConnectionSync(ref);
     void nodeSnapshotQuery.refetch().then((result) => {
+      endConnectionSync(connection.id);
       if (result.error) {
-        addNotification({
-          title: t("node.sync.failedTitle"),
-          body:
-            result.error instanceof Error
-              ? result.error.message
-              : t("node.sync.failedFallback"),
-          tone: "error",
-          dedupeKey: nodeSyncDedupeKey,
-        });
+        recordConnectionSyncFailed(
+          ref,
+          result.error instanceof Error
+            ? result.error.message
+            : t("node.sync.failedFallback"),
+        );
         return;
       }
-
-      addNotification({
-        title: t("node.sync.finishedTitle"),
-        body: t("node.sync.finishedBody", { label: connection.label }),
-        tone: "success",
-        dedupeKey: nodeSyncDedupeKey,
-      });
+      recordConnectionSynced(ref);
     });
   };
 
@@ -588,15 +577,12 @@ function ConnectionDetailView({
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const dataMode = useUiStore((state) => state.dataMode);
-  const addNotification = useUiStore((state) => state.addNotification);
-  const updateNotification = useUiStore((state) => state.updateNotification);
   const identity = useUiStore((state) => state.identity);
   const explorerSettings = useUiStore((state) => state.explorerSettings);
   const currency = useUiStore((state) => state.currency);
   const [pendingUtxoTransactionId, setPendingUtxoTransactionId] =
     useState<string | null>(null);
-  const syncNoticeIdRef = useRef<string | null>(null);
-  const walletSyncMutationKey = daemonMutationKey(dataMode, "ui.wallets.sync");
+    const walletSyncMutationKey = daemonMutationKey(dataMode, "ui.wallets.sync");
   const connectionRefreshing = useConnectionRefreshState(connection);
   const progressValueRef = useRef(startingSyncProgress().value ?? 5);
   const syncWallet = useDaemonStreamMutation<
@@ -605,17 +591,12 @@ function ConnectionDetailView({
   >("ui.wallets.sync", {
     onProgress: (record) => {
       const wallet = record.wallet ?? connection.label;
-      if (syncNoticeIdRef.current) {
-        const nextProgress = syncProgressNotification(
-          { ...record, wallet },
-          progressValueRef.current,
-        );
-        progressValueRef.current = nextProgress.value;
-        updateNotification(syncNoticeIdRef.current, {
-          body: nextProgress.body,
-          progress: nextProgress.progress,
-        });
-      }
+      const nextProgress = syncProgressNotification(
+        { ...record, wallet },
+        progressValueRef.current,
+      );
+      progressValueRef.current = nextProgress.value;
+      updateConnectionSync(connection.id, nextProgress.progress);
     },
   });
   const updateWallet =
@@ -746,8 +727,7 @@ function ConnectionDetailView({
     connection.balance,
     inventory,
   );
-  const { startSyncNotice, clearSyncNotice } = useSyncProgressNotice();
-  const [syncErrorMessage, setSyncErrorMessage] = useState<string | null>(null);
+    const [syncErrorMessage, setSyncErrorMessage] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [editLabel, setEditLabel] = useState(connection.label);
   const [editPassphrase, setEditPassphrase] = useState("");
@@ -878,29 +858,30 @@ function ConnectionDetailView({
       return;
     }
     if (utxoTransactionQuery.error) {
-      addNotification({
+      showFeedback({
         title: t("detail.utxoTransaction.notOpenedTitle"),
-        body:
+        description:
           utxoTransactionQuery.error instanceof Error
             ? utxoTransactionQuery.error.message
             : t("detail.utxoTransaction.couldNotResolve"),
+        descriptionPrivacy: "free-text",
         tone: "warning",
-        dedupeKey: `utxo-transaction-open-${pendingUtxoTransactionId}`,
+        key: "utxo-transaction-open",
       });
       setPendingUtxoTransactionId(null);
       return;
     }
     if (utxoTransactionQuery.data) {
-      addNotification({
+      showFeedback({
         title: t("detail.utxoTransaction.notFoundTitle"),
-        body: t("detail.utxoTransaction.notFoundBody"),
+        description: t("detail.utxoTransaction.notFoundBody"),
+        descriptionPrivacy: "safe",
         tone: "warning",
-        dedupeKey: `utxo-transaction-missing-${pendingUtxoTransactionId}`,
+        key: "utxo-transaction-open",
       });
       setPendingUtxoTransactionId(null);
     }
   }, [
-    addNotification,
     openTransactionDetail,
     pendingUtxoTransactionId,
     resolvedUtxoTransaction,
@@ -925,28 +906,25 @@ function ConnectionDetailView({
       await exchangeSync.sync();
       return;
     }
+    const book = bookIdentityKey(useUiStore.getState().identity);
     if (backendRequired) {
-      const message = t("detail.sync.backendRequiredBody");
-      setSyncErrorMessage(message);
-      addNotification({
-        title: t("detail.sync.backendRequiredTitle"),
-        body: message,
-        tone: "error",
-        dedupeKey: "wallet-sync",
-        target: backendSettingsRoute,
+      setSyncErrorMessage(t("detail.sync.backendRequiredBody"));
+      // The same condition a book refresh raises; the next refresh that
+      // finds every wallet a backend resolves it.
+      useNotificationStore.getState().raiseCondition({
+        code: "book-refresh.backend-required",
+        scope: { book },
+        severity: "warning",
+        priority: "attention",
+        action: { type: "navigate", to: backendSettingsRoute },
       });
       return;
     }
+    // A sync already running shows on the page and under Running.
     if (
       syncWallet.isPending ||
       queryClient.isMutating({ mutationKey: walletSyncMutationKey }) > 0
     ) {
-      addNotification({
-        title: t("detail.sync.alreadyRunningTitle"),
-        body: t("detail.sync.alreadyRunningBody", { label: connection.label }),
-        tone: "info",
-        dedupeKey: "wallet-sync",
-      });
       return;
     }
     if (
@@ -995,32 +973,17 @@ function ConnectionDetailView({
             retained,
           });
         }
+        // Shown beside the Sync button; nothing changed, so nothing waits
+        // in the center.
         setSyncErrorMessage(message);
-        addNotification({
-          title: t("detail.sync.rescanUnavailableTitle"),
-          body: message,
-          tone: "error",
-          dedupeKey: "wallet-sync",
-        });
         return;
       }
     }
     setSyncErrorMessage(null);
     progressValueRef.current = startingSyncProgress().value ?? 5;
-    syncNoticeIdRef.current = addNotification({
-      title: options?.forceFull
-        ? t("detail.sync.rescanStartedTitle")
-        : t("detail.sync.refreshStartedTitle"),
-      body: options?.forceFull
-        ? t("detail.sync.rescanStartedBody", { label: connection.label })
-        : t("detail.sync.refreshStartedBody", { label: connection.label }),
-      tone: "warning",
-      dedupeKey: "wallet-sync",
-      progress: startingSyncProgress(),
-    });
-    startSyncNotice(
-      t("detail.sync.stillScanning", { label: connection.label }),
-    );
+    const forceFull = Boolean(options?.forceFull);
+    const ref = { book, connectionId: connection.id, label: connection.label };
+    startConnectionSync(ref, { forceFull });
     syncWallet.mutate(
       { wallet: connection.label, force_full: Boolean(options?.forceFull) },
       {
@@ -1037,51 +1000,22 @@ function ConnectionDetailView({
           );
           if (status === "error") {
             setSyncErrorMessage(message);
+            recordConnectionSyncFailed(ref, message);
+            return;
           }
-          const needsJournalAttention = journalStepNeedsAttention(journals);
-          const notification = {
-            title:
-              status === "error"
-                ? t("detail.sync.failedTitle")
-                : needsJournalAttention
-                  ? t("journalStep.attentionTitle")
-                  : t("detail.sync.finishedTitle"),
-            body: message,
-            tone:
-              status === "error"
-                ? "error"
-                : needsJournalAttention || (journals?.quarantines ?? 0) > 0
-                  ? "warning"
-                  : "success",
-            dedupeKey: "wallet-sync",
-            progress: undefined,
-          } as const;
-          if (syncNoticeIdRef.current) {
-            updateNotification(syncNoticeIdRef.current, notification);
-          } else {
-            addNotification(notification);
-          }
+          recordConnectionSynced(ref, { forceFull, imported: result?.imported });
+          // Quarantine counts show in the live Review condition; a journal
+          // step that did not finish gets its own.
+          recordJournalStep(journals, ref.book);
         },
         onError: (error) => {
           const message =
             error instanceof Error ? error.message : t("detail.sync.failedFallback");
           setSyncErrorMessage(message);
-          const notification = {
-            title: t("detail.sync.failedTitle"),
-            body: message,
-            tone: "error",
-            dedupeKey: "wallet-sync",
-            progress: undefined,
-          } as const;
-          if (syncNoticeIdRef.current) {
-            updateNotification(syncNoticeIdRef.current, notification);
-          } else {
-            addNotification(notification);
-          }
+          recordConnectionSyncFailed(ref, message);
         },
         onSettled: () => {
-          clearSyncNotice();
-          syncNoticeIdRef.current = null;
+          endConnectionSync(connection.id);
           void queryClient.invalidateQueries({ queryKey: ["daemon"] });
         },
       },
@@ -1347,9 +1281,10 @@ function ConnectionDetailView({
       const summary = labelChanged
         ? t("detail.edit.renamed", { from: connection.label, to: nextLabel })
         : t("detail.edit.updated", { label: connection.label });
-      addNotification({
+      showFeedback({
         title: t("detail.edit.changedTitle"),
-        body: summary,
+        description: summary,
+        descriptionPrivacy: "free-text",
         tone: "success",
       });
       setEditOpen(false);
@@ -1390,9 +1325,10 @@ function ConnectionDetailView({
           ? { passphrase_secret: deletePassphrase }
           : { plaintext_delete_ack: PLAINTEXT_DELETE_ACK },
       });
-      addNotification({
+      showFeedback({
         title: t("detail.delete.removedTitle"),
-        body: t("detail.delete.removedBody", { label: connection.label }),
+        description: t("detail.delete.removedBody", { label: connection.label }),
+        descriptionPrivacy: "free-text",
         tone: "success",
       });
       setDeleteOpen(false);
@@ -1435,18 +1371,14 @@ function ConnectionDetailView({
       if (!walletMaterial) {
         setRevealError(t("detail.reveal.errorMissingDescriptor"));
         setRevealCopyStatus("error");
-        addNotification({
-          title: t("detail.reveal.failedTitle"),
-          body: t("detail.reveal.errorMissingDescriptor"),
-          tone: "error",
-        });
         return;
       }
       await copyTextWithPolicy(walletMaterial);
       setRevealCopyStatus("success");
-      addNotification({
+      showFeedback({
         title: t("detail.reveal.copiedTitle"),
-        body: t("detail.reveal.copiedBody", { label: connection.label }),
+        description: t("detail.reveal.copiedBody", { label: connection.label }),
+        descriptionPrivacy: "free-text",
         tone: "success",
       });
       revealCloseTimerRef.current = window.setTimeout(() => {
@@ -1463,11 +1395,6 @@ function ConnectionDetailView({
           : t("detail.reveal.couldNotCopy");
       setRevealError(message);
       setRevealCopyStatus("error");
-      addNotification({
-        title: t("detail.reveal.failedTitle"),
-        body: message,
-        tone: "error",
-      });
     }
   };
 

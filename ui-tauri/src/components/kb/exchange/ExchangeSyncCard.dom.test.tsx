@@ -6,6 +6,7 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import i18n from "@/i18n";
+import { resetNotificationStore, useNotificationStore } from "@/store/notifications";
 import { useUiStore } from "@/store/ui";
 
 import type { ExchangeConnectionStatus, ExchangeKind } from "./exchangeApiModel";
@@ -82,7 +83,8 @@ beforeEach(async () => {
   mocks.statusArgs.length = 0;
   mocks.refetch.mockReset();
   mocks.sync.mockReset();
-  useUiStore.setState({ notifications: [] });
+  useUiStore.setState({ identity: null });
+  resetNotificationStore();
 });
 
 afterEach(() => {
@@ -113,9 +115,16 @@ describe("ExchangeSyncCard", () => {
     });
     expect(mocks.sync).toHaveBeenCalledWith({ wallet: "w-1" });
     expect(mocks.refetch).toHaveBeenCalled();
-    const [notice] = useUiStore.getState().notifications;
-    expect(notice.title).toBe("Bitpanda synced");
-    expect(notice.body).toBe("5 new transactions from 7 read.");
+    // One Recent result that opens this exchange account; the job is over.
+    const { jobs, results } = useNotificationStore.getState();
+    expect(jobs).toEqual({});
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({
+      code: "connection.synced",
+      scope: { book: null, source: "connection:w-1" },
+      params: { transactions: 5 },
+      action: { type: "open-connection", connectionId: "w-1" },
+    });
   });
 
   it("explains a refusal and asks for a report of an unrecognised type", async () => {
@@ -129,7 +138,26 @@ describe("ExchangeSyncCard", () => {
     const alert = screen.getByRole("alert");
     expect(alert.textContent).toContain("please report it");
     expect(alert.textContent).toContain("Details: Bitpanda operation op-1 (STAKE)");
-    expect(useUiStore.getState().notifications[0].title).toBe("Bitpanda sync failed");
+    // Needs attention until a sync of this account succeeds; its one
+    // action opens the account, where Sync now and the hint are.
+    const [condition] = Object.values(useNotificationStore.getState().conditions);
+    expect(condition).toMatchObject({
+      code: "connection.sync-failed",
+      scope: { book: null, source: "connection:w-1" },
+      action: { type: "open-connection", connectionId: "w-1" },
+    });
+    expect(condition.details?.[0]).toMatchObject({ label: "Bitpanda" });
+    expect(condition.details?.[0]?.message).toContain("STAKE");
+
+    mocks.sync.mockResolvedValue({
+      kind: "ui.connections.exchange.sync",
+      schema_version: 1,
+      data: { imported: 0, fetched: 0 },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Sync now" }));
+    });
+    expect(useNotificationStore.getState().conditions).toEqual({});
   });
 
   it("shows the session's last result and error from the status", () => {

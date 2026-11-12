@@ -26,10 +26,15 @@ import {
   useDaemonMutation,
   useDaemonStreamMutation,
 } from "@/daemon/client";
-import { useSyncProgressNotice } from "@/hooks/useSyncProgressNotice";
+import { recordBtcpayProvenanceIncomplete } from "@/lib/connectionNotifications";
+import { showFeedback } from "@/lib/feedback";
 import { copyTextWithPolicy } from "@/lib/clipboard";
 import { formatCount } from "@/lib/localeFormat";
-import { useUiStore, type DeferredConnectionSetup } from "@/store/ui";
+import {
+  bookIdentityKey,
+  useUiStore,
+  type DeferredConnectionSetup,
+} from "@/store/ui";
 import { cn } from "@/lib/utils";
 import {
   CONNECTION_CATEGORIES,
@@ -892,7 +897,6 @@ function AddConnectionDialogContent({
 }: AddConnectionDialogProps & { onSetupStarted: () => void; onSetupCompleted: () => void; onSetupFailed: () => void }) {
   const { t } = useTranslation(["connections", "common", "assistant"]);
   const navigate = useNavigate();
-  const addNotification = useUiStore((state) => state.addNotification);
   const setDeferredConnectionSetup = useUiStore(
     (state) => state.setDeferredConnectionSetup,
   );
@@ -931,7 +935,7 @@ function AddConnectionDialogContent({
   const createBtcpay = useDaemonMutation<{
     mode?: "account";
     backend: { name: string };
-    wallet?: { label: string } | null;
+    wallet?: { id?: string; label: string } | null;
     wallets?: Array<{ label: string }>;
     wallet_sources?: Array<{ label: string }>;
     payment_ledgers?: Array<{ label: string }>;
@@ -1032,8 +1036,7 @@ function AddConnectionDialogContent({
       });
     },
   });
-  const { startSyncNotice, clearSyncNotice } = useSyncProgressNotice();
-  const [activeCategory, setActiveCategory] =
+    const [activeCategory, setActiveCategory] =
     React.useState<ConnectionCategory>("wallets");
   const [selectedId, setSelectedId] = React.useState("descriptor");
   const [sourceQuery, setSourceQuery] = React.useState("");
@@ -1933,18 +1936,25 @@ function AddConnectionDialogContent({
     return errors;
   };
 
-  const onSetupSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+  // A receipt for what the dialog just saved; it closes right after. Labels
+// and file names are user data, so privacy modes treat the body as free
+// text.
+const notifyAdded = (title: string, description: string) =>
+  showFeedback({
+    title,
+    description,
+    descriptionPrivacy: "free-text",
+    tone: "success",
+  });
+
+const onSetupSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (historyImport && !isHistoryImportSource(selected)) {
       setSetupError(t("add.enrichment.errorNoFormat"));
       return;
     }
     if (setupKind === "planned") {
-      addNotification({
-        title: t("add.planned.title"),
-        body: t("add.planned.body", { title: selected.title }),
-        tone: "warning",
-      });
+      setSetupError(t("add.planned.body", { title: selected.title }));
       return;
     }
     setSetupError(null);
@@ -1972,11 +1982,7 @@ function AddConnectionDialogContent({
           );
         }
         await createBackend.mutateAsync(backendArgs);
-        addNotification({
-          title: t("add.added.title"),
-          body: t("add.core.addedBody", { label }),
-          tone: "success",
-        });
+        notifyAdded(t("add.added.title"), t("add.core.addedBody", { label }));
       } else if (setupKind === "backend-settings") {
         openBackendSettings();
         return;
@@ -2014,20 +2020,9 @@ function AddConnectionDialogContent({
           birthday: form.birthday || undefined,
         });
         if (form.syncAfterCreate) {
-          startSyncNotice(
-            t("add.descriptorWallet.stillScanning", { label }),
-          );
-          try {
-            await syncWallet.mutateAsync({ wallet: label });
-          } finally {
-            clearSyncNotice();
-          }
+          await syncWallet.mutateAsync({ wallet: label });
         }
-        addNotification({
-          title: t("add.added.title"),
-          body: t("add.added.body", { label }),
-          tone: "success",
-        });
+        notifyAdded(t("add.added.title"), t("add.added.body", { label }));
       } else if (setupKind === "address-list") {
         if (form.syncAfterCreate) await requireSelectedCoreCoverage();
         const parsed = parsedAddressList;
@@ -2041,21 +2036,15 @@ function AddConnectionDialogContent({
           birthday: form.birthday || undefined,
         });
         if (form.syncAfterCreate) {
-          startSyncNotice(t("add.addressList.stillScanning", { label }));
-          try {
-            await syncWallet.mutateAsync({ wallet: label });
-          } finally {
-            clearSyncNotice();
-          }
+          await syncWallet.mutateAsync({ wallet: label });
         }
-        addNotification({
-          title: t("add.added.title"),
-          body: t("add.addressList.addedBody", {
+        notifyAdded(
+          t("add.added.title"),
+          t("add.addressList.addedBody", {
             label,
             count: parsed.valid.length,
           }),
-          tone: "success",
-        });
+        );
       } else if (setupKind === "silent-payment") {
         const startHeight = Number.parseInt(form.spScanStartHeight.trim(), 10);
         const fullHistory = form.spFullHistory;
@@ -2078,17 +2067,11 @@ function AddConnectionDialogContent({
             form.spAcknowledgeFullHistoryWarning,
           sp_acknowledge_server_warning: form.spAcknowledgeServerWarning,
         });
-        startSyncNotice(t("add.silentPayments.stillScanning", { label }));
-        try {
-          await syncWallet.mutateAsync({ wallet: label });
-        } finally {
-          clearSyncNotice();
-        }
-        addNotification({
-          title: t("add.added.title"),
-          body: t("add.silentPayments.addedBodyScanning", { label }),
-          tone: "success",
-        });
+        await syncWallet.mutateAsync({ wallet: label });
+        notifyAdded(
+          t("add.added.title"),
+          t("add.silentPayments.addedBodyScanning", { label }),
+        );
       } else if (setupKind === "samourai") {
         const gapLimit = Number.parseInt(form.gapLimit, 10);
         const { sourceSet } = buildSamouraiSourceSet(
@@ -2104,20 +2087,13 @@ function AddConnectionDialogContent({
         });
         const childLabels = envelope.data?.children.map((child) => child.label) ?? [];
         if (form.syncAfterCreate && childLabels.length > 0) {
-          startSyncNotice(
-            t("add.samourai.stillScanning", { label }),
-          );
-          try {
-            for (const childLabel of childLabels) {
-              await syncWallet.mutateAsync({ wallet: childLabel });
-            }
-          } finally {
-            clearSyncNotice();
+          for (const childLabel of childLabels) {
+            await syncWallet.mutateAsync({ wallet: childLabel });
           }
         }
-        addNotification({
-          title: t("add.samourai.importedTitle"),
-          body: form.syncAfterCreate
+        notifyAdded(
+          t("add.samourai.importedTitle"),
+          form.syncAfterCreate
             ? t("add.samourai.importedBodyScanning", {
                 label,
                 value: formatCount(childLabels.length),
@@ -2126,8 +2102,7 @@ function AddConnectionDialogContent({
                 label,
                 value: formatCount(childLabels.length),
               }),
-          tone: "success",
-        });
+        );
         setForm((current) => ({
           ...current,
           samouraiDeposit: "",
@@ -2154,24 +2129,16 @@ function AddConnectionDialogContent({
           form.btcpayCsvImportMode === "existing_wallet"
         ) {
           const targetWallet = form.targetWallet.trim();
-          startSyncNotice(
-            t("add.btcpayCsv.importingExisting", { wallet: targetWallet }),
-          );
-          try {
-            const envelope = await importFile.mutateAsync({
-              wallet: targetWallet,
-              source_file: form.sourceFile.trim(),
-              source_format: sourceFormat,
-            });
-            setLastImportResult(envelope.data ?? null);
-          } finally {
-            clearSyncNotice();
-          }
-          addNotification({
-            title: t("add.btcpayCsv.importedTitle"),
-            body: t("add.btcpayCsv.importedBody", { wallet: targetWallet }),
-            tone: "success",
+          const envelope = await importFile.mutateAsync({
+            wallet: targetWallet,
+            source_file: form.sourceFile.trim(),
+            source_format: sourceFormat,
           });
+          setLastImportResult(envelope.data ?? null);
+          notifyAdded(
+            t("add.btcpayCsv.importedTitle"),
+            t("add.btcpayCsv.importedBody", { wallet: targetWallet }),
+          );
         } else {
           await createWallet.mutateAsync({
             label,
@@ -2192,41 +2159,28 @@ function AddConnectionDialogContent({
               walletInfo: form.wasabiWalletInfo,
               additional: form.wasabiAdditional,
             });
-            startSyncNotice(t("add.wasabi.importingRpc", { label }));
-            try {
-              const envelope = await importFile.mutateAsync({
-                wallet: label,
-                source_format: "wasabi_bundle",
-                source_bundle: bundle,
-              });
-              setLastImportResult(envelope.data ?? null);
-            } finally {
-              clearSyncNotice();
-            }
+            const envelope = await importFile.mutateAsync({
+              wallet: label,
+              source_format: "wasabi_bundle",
+              source_bundle: bundle,
+            });
+            setLastImportResult(envelope.data ?? null);
           } else if (form.syncAfterCreate) {
-            startSyncNotice(
-              t("add.fileWallet.stillImporting", { label }),
+            const envelope = await syncWallet.mutateAsync({ wallet: label });
+            const result = envelope.data?.results.find(
+              (item) => item.wallet === label,
             );
-            try {
-              const envelope = await syncWallet.mutateAsync({ wallet: label });
-              const result = envelope.data?.results.find(
-                (item) => item.wallet === label,
-              );
-              const importSummary = importResultFromSyncResult(result);
-              if (importSummary) {
-                setLastImportResult(importSummary);
-              }
-            } finally {
-              clearSyncNotice();
+            const importSummary = importResultFromSyncResult(result);
+            if (importSummary) {
+              setLastImportResult(importSummary);
             }
           }
-          addNotification({
-            title: t("add.added.title"),
-            body: form.syncAfterCreate
+          notifyAdded(
+            t("add.added.title"),
+            form.syncAfterCreate
               ? t("add.added.bodyImported", { label })
               : t("add.added.body", { label }),
-            tone: "success",
-          });
+          );
         }
       } else if (setupKind === "file-enrichment") {
         const sourceFormat = selected.sourceFormat;
@@ -2234,42 +2188,24 @@ function AddConnectionDialogContent({
           throw new Error(t("add.enrichment.errorNoFormat"));
         }
         const isBookWideImport = isExchangeEvidenceFormat(sourceFormat);
-        const isFullBookImport =
-          isBookWideImport && form.bullImportMode === "full";
-        startSyncNotice(
-          isFullBookImport
-            ? t("add.enrichment.matchingFull", { title: selected.title })
-            : isBookWideImport
-            ? t("add.enrichment.matchingBook", { title: selected.title })
-            : t("add.enrichment.matchingWallet", {
-                title: selected.title,
-                wallet: form.targetWallet,
-              }),
-        );
-        let importResult: ImportFileResult | undefined;
-        try {
-          const envelope = await importFile.mutateAsync({
-            ...(isBookWideImport ? {} : { wallet: form.targetWallet }),
-            source_file: form.sourceFile.trim(),
-            source_format: sourceFormat,
-            ...(isBookWideImport ? { mode: form.bullImportMode } : {}),
-          });
-          importResult = envelope.data;
-          setLastImportResult(importResult ?? null);
-        } finally {
-          clearSyncNotice();
-        }
-        addNotification({
-          title: t("add.enrichment.finishedTitle"),
-          body: t("add.enrichment.finishedBody", {
+        const envelope = await importFile.mutateAsync({
+          ...(isBookWideImport ? {} : { wallet: form.targetWallet }),
+          source_file: form.sourceFile.trim(),
+          source_format: sourceFormat,
+          ...(isBookWideImport ? { mode: form.bullImportMode } : {}),
+        });
+        const importResult: ImportFileResult | undefined = envelope.data;
+        setLastImportResult(importResult ?? null);
+        notifyAdded(
+          t("add.enrichment.finishedTitle"),
+          t("add.enrichment.finishedBody", {
             scope: isBookWideImport
               ? t("add.enrichment.bookScope")
               : form.targetWallet,
             updated: formatCount(importResult?.updated ?? 0),
             skipped: formatCount(importResult?.skipped ?? 0),
           }),
-          tone: "success",
-        });
+        );
       } else if (setupKind === "prior-report") {
         const report = await importPriorReport.mutateAsync({
           provider: form.reportProvider.trim(),
@@ -2277,13 +2213,12 @@ function AddConnectionDialogContent({
           tax_year: form.taxYear.trim() || undefined,
           label: label === selected.title ? undefined : label,
         });
-        addNotification({
-          title: t("add.priorReport.archivedTitle"),
-          body: t("add.priorReport.archivedBody", {
+        notifyAdded(
+          t("add.priorReport.archivedTitle"),
+          t("add.priorReport.archivedBody", {
             label: report.data?.document.label ?? label,
           }),
-          tone: "success",
-        });
+        );
       } else if (setupKind === "bullbitcoin-wallet") {
         const envelope = await createBullBitcoinWallet.mutateAsync(
           form.bullWalletSetupMode === "existing_wallets"
@@ -2314,37 +2249,26 @@ function AddConnectionDialogContent({
                 )
                 .map((wallet) => wallet.label);
         if (form.syncAfterCreate && walletLabels.length > 0) {
-          startSyncNotice(
-            form.bullWalletSetupMode === "existing_wallets"
-              ? t("add.bullWallet.stillImportingExisting", { label })
-              : t("add.bullWallet.stillImportingSources", { label }),
-          );
-          try {
-            for (const walletLabel of walletLabels) {
-              const syncEnvelope = await syncWallet.mutateAsync({
-                wallet: walletLabel,
-              });
-              const result = syncEnvelope.data?.results.find(
-                (item) => item.wallet === walletLabel,
-              );
-              const importSummary = importResultFromSyncResult(result);
-              if (importSummary) {
-                setLastImportResult(importSummary);
-              }
+          for (const walletLabel of walletLabels) {
+            const syncEnvelope = await syncWallet.mutateAsync({
+              wallet: walletLabel,
+            });
+            const result = syncEnvelope.data?.results.find(
+              (item) => item.wallet === walletLabel,
+            );
+            const importSummary = importResultFromSyncResult(result);
+            if (importSummary) {
+              setLastImportResult(importSummary);
             }
-          } finally {
-            clearSyncNotice();
           }
         }
-        addNotification({
-          title:
-            form.bullWalletSetupMode === "existing_wallets"
-              ? t("add.bullWallet.mappingSavedTitle")
-              : walletLabels.length > 1
-                ? t("add.added.titlePlural")
-                : t("add.added.title"),
-          body:
-            form.bullWalletSetupMode === "existing_wallets"
+        notifyAdded(
+          form.bullWalletSetupMode === "existing_wallets"
+            ? t("add.bullWallet.mappingSavedTitle")
+            : walletLabels.length > 1
+              ? t("add.added.titlePlural")
+              : t("add.added.title"),
+          form.bullWalletSetupMode === "existing_wallets"
               ? form.syncAfterCreate
                 ? t("add.bullWallet.mappedBodyRefreshed", {
                     count: walletLabels.length,
@@ -2359,8 +2283,7 @@ function AddConnectionDialogContent({
                 : t("add.bullWallet.sourcesBody", {
                     count: walletLabels.length,
                   }),
-          tone: "success",
-        });
+        );
       } else if (setupKind === "btcpay") {
         if (!btcpayDraft?.instance || !btcpayDraft.plan) {
           throw new Error(t("add.btcpay.issue.discover_first"));
@@ -2384,31 +2307,34 @@ function AddConnectionDialogContent({
           .map((wallet) => wallet.label);
         const refresh = btcpayWalletsToRefresh(btcpayDraft.routes, createdSources);
         if (form.syncAfterCreate && refresh.walletSources.length > 0) {
-          startSyncNotice(t("add.btcpay.stillRefreshing", { label }));
-          try {
-            for (const createdLabel of refresh.walletSources) {
-              await syncWallet.mutateAsync({ wallet: createdLabel });
-            }
-          } finally {
-            clearSyncNotice();
+          for (const createdLabel of refresh.walletSources) {
+            await syncWallet.mutateAsync({ wallet: createdLabel });
           }
         }
         if (form.syncAfterCreate && refresh.mappedWallets.length > 0) {
-          startSyncNotice(t("add.btcpay.refreshingSettlement", { label }));
-          try {
-            for (const walletLabel of refresh.mappedWallets) {
-              await syncWallet.mutateAsync({ wallet: walletLabel });
-            }
-          } finally {
-            clearSyncNotice();
+          for (const walletLabel of refresh.mappedWallets) {
+            await syncWallet.mutateAsync({ wallet: walletLabel });
           }
         }
         const provenanceFailure = (envelope.data?.provenance ?? []).find(
           (result) => result.status === "error",
         );
-        addNotification({
+        const savedWallet = envelope.data?.wallet;
+        if (provenanceFailure && savedWallet?.id) {
+          // Saved, but some stores' invoices are missing until a sync of
+          // this connection loads them: that waits in the center.
+          recordBtcpayProvenanceIncomplete(
+            {
+              book: bookIdentityKey(useUiStore.getState().identity),
+              connectionId: savedWallet.id,
+              label: savedWallet.label,
+            },
+            provenanceFailure.message,
+          );
+        }
+        showFeedback({
           title: t("add.btcpay.accountSavedTitle"),
-          body: provenanceFailure
+          description: provenanceFailure
             ? t("add.btcpay.provenancePartial", {
                 message: provenanceFailure.message ?? "",
               })
@@ -2416,6 +2342,7 @@ function AddConnectionDialogContent({
                 count: btcpayDraft.routes.filter((route) => route.action !== "skip").length,
                 wallets: createdSources.length,
               }),
+          descriptionPrivacy: "free-text",
           tone: provenanceFailure ? "warning" : "success",
         });
       } else if (setupKind === "exchange-api") {
@@ -2430,52 +2357,38 @@ function AddConnectionDialogContent({
         const wallet = envelope.data?.wallet;
         let imported: number | null = null;
         if (form.syncAfterCreate && wallet) {
-          startSyncNotice(t("exchange.sync.startedBody", { provider }));
-          try {
-            const synced = await syncExchange.mutateAsync({ wallet: wallet.id });
-            imported = synced.data?.imported ?? 0;
-          } finally {
-            clearSyncNotice();
-          }
+          const synced = await syncExchange.mutateAsync({ wallet: wallet.id });
+          imported = synced.data?.imported ?? 0;
         }
-        addNotification({
-          title: t("exchange.added.title", { provider }),
-          body:
-            imported === null
-              ? t("exchange.added.body", { label: wallet?.label ?? label })
-              : t("exchange.added.importedBody", {
-                  label: wallet?.label ?? label,
-                  count: imported,
-                }),
-          tone: "success",
-        });
+        notifyAdded(
+          t("exchange.added.title", { provider }),
+          imported === null
+            ? t("exchange.added.body", { label: wallet?.label ?? label })
+            : t("exchange.added.importedBody", {
+                label: wallet?.label ?? label,
+                count: imported,
+              }),
+        );
       } else if (setupKind === "bip329") {
         if (!bip329Preview) {
           const envelope = await previewBip329.mutateAsync({
             file: form.bip329File.trim(),
           });
+          // The preview, conflicts included, shows in the dialog.
           setBip329Preview(envelope.data ?? null);
-          addNotification({
-            title: t("add.bip329.previewReadyTitle"),
-            body: t("add.bip329.previewReadyBody", {
-              count: envelope.data?.records ?? 0,
-              exact: envelope.data?.counts.exact ?? 0,
-              ambiguous: envelope.data?.counts.ambiguous ?? 0,
-            }),
-            tone: envelope.data?.counts.conflicts ? "warning" : "success",
-          });
           return;
         }
         const envelope = await importBip329.mutateAsync({
           file: form.bip329File.trim(),
         });
-        addNotification({
+        showFeedback({
           title: t("add.bip329.labelsImportedTitle"),
-          body: t("add.bip329.labelsImportedBody", {
+          description: t("add.bip329.labelsImportedBody", {
             count: envelope.data?.records ?? 0,
             added: envelope.data?.transaction_tags_added ?? 0,
             skipped: envelope.data?.preview?.counts.tag_skipped_ambiguous ?? 0,
           }),
+          descriptionPrivacy: "safe",
           tone: "success",
         });
       }
@@ -2485,12 +2398,8 @@ function AddConnectionDialogContent({
       onSetupFailed();
       const message =
         error instanceof Error ? error.message : t("add.setupFailed.fallback");
+      // Shown beside the form the user just submitted.
       setSetupError(message);
-      addNotification({
-        title: t("add.setupFailed.title"),
-        body: message,
-        tone: "error",
-      });
     }
   };
 
@@ -2840,17 +2749,18 @@ function AddConnectionDialogContent({
           },
         ],
       });
-      addNotification({
+      showFeedback({
         title: t("add.genericLedger.templateReadyTitle"),
-        body: t("add.genericLedger.templateReadyBody"),
+        description: t("add.genericLedger.templateReadyBody"),
+        descriptionPrivacy: "safe",
         tone: "success",
       });
     } catch (error) {
-      addNotification({
-        title: t("add.genericLedger.templateFailedTitle"),
-        body: error instanceof Error ? error.message : String(error),
-        tone: "error",
-      });
+      setSetupError(
+        t("add.genericLedger.templateFailedBody", {
+          message: error instanceof Error ? error.message : String(error),
+        }),
+      );
     }
   };
 
@@ -2873,23 +2783,20 @@ function AddConnectionDialogContent({
           },
         ],
       });
-      addNotification({
+      // The saved path is user data: privacy modes treat it as free text.
+      showFeedback({
         title: t("add.bip329.exportReadyTitle"),
-        body: t("add.bip329.exportReadyBody", {
+        description: t("add.bip329.exportReadyBody", {
           count: envelope.data?.exported ?? 0,
           path: copied ? savedPath : file,
         }),
+        descriptionPrivacy: "free-text",
         tone: "success",
       });
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : t("add.setupFailed.fallback");
-      setSetupError(message);
-      addNotification({
-        title: t("add.setupFailed.title"),
-        body: message,
-        tone: "error",
-      });
+      setSetupError(
+        error instanceof Error ? error.message : t("add.setupFailed.fallback"),
+      );
     }
   };
 
@@ -4097,14 +4004,15 @@ function AddConnectionDialogContent({
                         if (path) updateForm("sourceFile", path);
                       })
                       .catch((error) => {
-                        addNotification({
+                        showFeedback({
                           title: t("add.field.filePickerUnavailableTitle"),
-                          body: t("add.field.filePickerUnavailableBody", {
+                          description: t("add.field.filePickerUnavailableBody", {
                             message:
                               error instanceof Error
                                 ? error.message
                                 : t("add.field.filePickerFallback"),
                           }),
+                          descriptionPrivacy: "free-text",
                           tone: "warning",
                         });
                       });

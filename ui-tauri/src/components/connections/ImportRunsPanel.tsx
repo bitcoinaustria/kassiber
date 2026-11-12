@@ -32,7 +32,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
-import { useUiStore } from "@/store/ui";
+import { showFeedback } from "@/lib/feedback";
 
 export interface ImportBatch {
   id: string;
@@ -58,8 +58,7 @@ interface RollbackPlan {
 
 export function ImportRunsPanel({ walletId }: { walletId: string }) {
   const { t, i18n } = useTranslation("connections");
-  const addNotification = useUiStore((s) => s.addNotification);
-  const [pending, setPending] = React.useState<ImportBatch | null>(null);
+    const [pending, setPending] = React.useState<ImportBatch | null>(null);
   const [plan, setPlan] = React.useState<RollbackPlan | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -99,13 +98,15 @@ export function ImportRunsPanel({ walletId }: { walletId: string }) {
         batch: pending.id,
         confirm: "DELETE",
       });
-      addNotification({
+      // The file name is user data: privacy modes treat it as free text.
+      showFeedback({
         title: t("detail.imports.rolledBackTitle"),
-        body: t("detail.imports.rolledBackBody", {
+        description: t("detail.imports.rolledBackBody", {
           count:
             envelope.data?.transactions_deleted ?? pending.rows_present,
           file: pending.source_filename ?? pending.source_format,
         }),
+        descriptionPrivacy: "free-text",
         tone: "success",
       });
       setPending(null);

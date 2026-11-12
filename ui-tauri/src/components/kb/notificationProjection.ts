@@ -126,6 +126,20 @@ export function projectConditionGroup(
         body: t("notifications.condition.journalsFailed.body"),
         details,
       };
+    case "connection.sync-failed":
+      return {
+        title: t("notifications.condition.connectionSyncFailed.title", {
+          count: group.entries.length,
+        }),
+        body: t("notifications.condition.connectionSyncFailed.body"),
+        details,
+      };
+    case "btcpay.provenance-incomplete":
+      return {
+        title: t("notifications.condition.btcpayProvenance.title"),
+        body: t("notifications.condition.btcpayProvenance.body"),
+        details,
+      };
   }
 }
 
@@ -193,6 +207,19 @@ export function projectResult(
         body: journalsProcessedBody(entry, t),
         details,
       };
+    case "connection.synced":
+      return {
+        title: entry.params.forceFull
+          ? t("notifications.result.connectionSynced.rescanTitle")
+          : t("notifications.result.connectionSynced.title"),
+        body:
+          entry.params.transactions !== undefined
+            ? t("notifications.result.connectionSynced.imported", {
+                count: entry.params.transactions,
+              })
+            : undefined,
+        details,
+      };
   }
 }
 
@@ -201,16 +228,26 @@ export function projectJob(
   mode: PrivacyMode,
   t: ChromeT,
 ): { title: string; label?: string } {
-  const title =
-    job.code === "journal-processing"
-      ? t("notifications.job.journalProcessing")
-      : job.params.forceFull
-        ? t("notifications.job.bookRescan")
-        : t("notifications.job.bookRefresh");
+  const title = jobTitle(job, t);
   // A phase label is producer text that can name a source.
   const label =
     mode === "hideAll" ? undefined : job.progress.label?.trim() || undefined;
   return { title, label: label && label !== title ? label : undefined };
+}
+
+function jobTitle(job: JobEntry, t: ChromeT): string {
+  switch (job.code) {
+    case "journal-processing":
+      return t("notifications.job.journalProcessing");
+    case "book-refresh":
+      return job.params.forceFull
+        ? t("notifications.job.bookRescan")
+        : t("notifications.job.bookRefresh");
+    case "connection-sync":
+      return job.params.forceFull
+        ? t("notifications.job.connectionRescan")
+        : t("notifications.job.connectionSync");
+  }
 }
 
 function genericTitle(tone: NotificationTone | NotificationSeverity, t: ChromeT) {

@@ -275,6 +275,15 @@
         "title": "Journalverarbeitung fehlgeschlagen",
         "body": "Berichte behalten den bisherigen Journalstatus, bis die Verarbeitung gelingt.",
         "action": "Erneut versuchen"
+      },
+      "connectionSyncFailed": {
+        "title_one": "Sync einer Wallet fehlgeschlagen",
+        "title_other": "Sync von {{count}} Wallets fehlgeschlagen",
+        "body": "Guthaben und Transaktionen sind eventuell veraltet, bis ein Sync gelingt."
+      },
+      "btcpayProvenance": {
+        "title": "Einige BTCPay-Rechnungen fehlen",
+        "body": "Zahlungen dieser Stores fehlen die Rechnungsdetails, bis ein Sync sie lädt."
       }
     },
     "result": {
@@ -304,12 +313,24 @@
         "warnings_one": "{{count}} Warnung",
         "warnings_other": "{{count}} Warnungen",
         "action": "Journale öffnen"
+      },
+      "connectionSynced": {
+        "title": "Wallet-Sync abgeschlossen",
+        "rescanTitle": "Wallet-Rescan abgeschlossen",
+        "imported_one": "{{count}} neue Transaktion",
+        "imported_other": "{{count}} neue Transaktionen"
       }
     },
     "job": {
       "bookRefresh": "Buch wird aktualisiert",
       "bookRescan": "Buch wird neu gescannt",
-      "journalProcessing": "Journale werden verarbeitet"
+      "journalProcessing": "Journale werden verarbeitet",
+      "connectionSync": "Wallet-Sync läuft",
+      "connectionRescan": "Wallet-Rescan läuft"
+    },
+    "action": {
+      "openWallet": "Wallet öffnen",
+      "openTransaction": "Transaktion öffnen"
     }
   },
   "currencyToggle": {

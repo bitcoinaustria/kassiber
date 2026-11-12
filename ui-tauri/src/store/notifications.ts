@@ -43,6 +43,8 @@ export const CONDITION_CODES = [
   "book-refresh.failed",
   "book-refresh.backend-required",
   "journals.process-failed",
+  "connection.sync-failed",
+  "btcpay.provenance-incomplete",
 ] as const;
 export type ConditionCode = (typeof CONDITION_CODES)[number];
 
@@ -51,10 +53,15 @@ export const RESULT_CODES = [
   "book-refresh.pending",
   "book-refresh.problems",
   "journals.processed",
+  "connection.synced",
 ] as const;
 export type ResultCode = (typeof RESULT_CODES)[number];
 
-export const JOB_CODES = ["book-refresh", "journal-processing"] as const;
+export const JOB_CODES = [
+  "book-refresh",
+  "journal-processing",
+  "connection-sync",
+] as const;
 export type JobCode = (typeof JOB_CODES)[number];
 
 /**
@@ -395,11 +402,15 @@ export const useNotificationStore = create<NotificationState>()((set) => ({
         action: input.action,
         details: boundDetails(input.details),
       };
-      // One result per job outcome and book: a repeat replaces the earlier
-      // row rather than filling Recent.
+      // One result per job outcome, book, and source: a repeat replaces the
+      // earlier row rather than filling Recent.
       const rest = state.results.filter(
         (item) =>
-          !(item.code === input.code && item.scope.book === input.scope.book),
+          !(
+            item.code === input.code &&
+            item.scope.book === input.scope.book &&
+            item.scope.source === input.scope.source
+          ),
       );
       return { results: [entry, ...rest].slice(0, MAX_RESULTS) };
     }),
@@ -458,6 +469,8 @@ const CODE_ORDER: Record<ConditionCode, number> = {
   "book-refresh.backend-required": 4,
   "source.refresh-failed": 5,
   "freshness.worker-error": 6,
+  "connection.sync-failed": 7,
+  "btcpay.provenance-incomplete": 8,
 };
 
 function compareConditions(a: ConditionEntry, b: ConditionEntry): number {

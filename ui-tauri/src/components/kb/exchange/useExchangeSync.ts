@@ -2,7 +2,13 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
-import { useUiStore } from "@/store/ui";
+import {
+  endConnectionSync,
+  recordConnectionSynced,
+  recordConnectionSyncFailed,
+  startConnectionSync,
+} from "@/lib/connectionNotifications";
+import { bookIdentityKey, useUiStore } from "@/store/ui";
 
 import {
   EXCHANGE_PROVIDER_NAMES,
@@ -30,8 +36,6 @@ export function useExchangeSync({
   exchange: ExchangeKind | null;
 }) {
   const { t } = useTranslation("connections");
-  const addNotification = useUiStore((state) => state.addNotification);
-  const updateNotification = useUiStore((state) => state.updateNotification);
   const status = useDaemon<{ connections: ExchangeConnectionStatus[] }>(
     "ui.connections.exchange.status",
     { wallet: walletId },
@@ -46,55 +50,41 @@ export function useExchangeSync({
   const sync = React.useCallback(async () => {
     if (!exchange || mutation.isPending) return;
     setLastError(null);
-    const noticeId = addNotification({
-      title: t("exchange.sync.startedTitle", { label }),
-      body: t("exchange.sync.startedBody", { provider }),
-      tone: "warning",
-      dedupeKey: "wallet-sync",
-    });
+    // The book this sync belongs to, fixed at the start.
+    const ref = {
+      book: bookIdentityKey(useUiStore.getState().identity),
+      connectionId: walletId,
+      label,
+    };
+    startConnectionSync(ref);
     try {
       const envelope = await mutation.mutateAsync({ wallet: walletId });
-      const result = envelope.data ?? {};
-      updateNotification(noticeId, {
-        title: t("exchange.sync.finishedTitle", { label }),
-        body: t("exchange.sync.finishedBody", {
-          count: result.imported ?? 0,
-          fetched: result.fetched ?? 0,
-        }),
-        tone: "success",
-      });
+      recordConnectionSynced(ref, { imported: envelope.data?.imported ?? 0 });
     } catch (error) {
       const info = exchangeErrorInfo(error);
       setLastError(info);
       // The hint and any permissions the key still holds, which the wallet
-      // page shows inline; the bell keeps them in memory only.
+      // page shows inline; the center keeps them in memory only.
       const permissions = refusedPermissions(info);
-      const details = [
-        info.hint,
-        permissions.length
-          ? t("exchange.error.permissions", { list: permissions.join(", ") })
-          : null,
-      ].filter((line): line is string => Boolean(line));
-      updateNotification(noticeId, {
-        title: t("exchange.sync.failedTitle", { label }),
-        body: info.message ?? t("exchange.error.unknown", { provider }),
-        tone: "error",
-        details: details.length ? details : undefined,
-      });
+      recordConnectionSyncFailed(
+        ref,
+        info.message ?? t("exchange.error.unknown", { provider }),
+        [
+          info.hint ? { message: info.hint } : null,
+          permissions.length
+            ? {
+                message: t("exchange.error.permissions", {
+                  list: permissions.join(", "),
+                }),
+              }
+            : null,
+        ].filter((detail): detail is { message: string } => detail !== null),
+      );
     } finally {
+      endConnectionSync(walletId);
       void status.refetch();
     }
-  }, [
-    addNotification,
-    exchange,
-    label,
-    mutation,
-    provider,
-    status,
-    t,
-    updateNotification,
-    walletId,
-  ]);
+  }, [exchange, label, mutation, provider, status, t, walletId]);
 
   const row = status.data?.data?.connections?.[0] ?? null;
   const statusError = status.error ? exchangeErrorInfo(status.error) : null;
