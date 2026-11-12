@@ -905,7 +905,13 @@ fn relocate(root: &Path, paths: &Paths) -> Result<(), String> {
         }
     }
     for file in files {
-        let bytes = fs::read(&file).map_err(|e| e.to_string())?;
+        // Rewriting a book in WAL mode checkpoints it, which removes its
+        // -wal and -shm files before the walk reaches them.
+        let bytes = match fs::read(&file) {
+            Ok(bytes) => bytes,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(error.to_string()),
+        };
         if dbdump::is_sqlite(&bytes) {
             relocate_database(&file, paths)?;
         } else if let Ok(text) = std::str::from_utf8(&bytes) {
