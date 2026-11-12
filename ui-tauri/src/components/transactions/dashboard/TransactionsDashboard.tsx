@@ -425,7 +425,9 @@ const TransactionsDashboard = ({
       <div
         id="transactions-period-nav"
         className={cn(
-          "-mx-(--kb-page-gutter) flex flex-col bg-background px-(--kb-page-gutter) @4xl/page:flex-row @4xl/page:items-center @4xl/page:justify-between",
+          // One row at every width: beside a docked panel the period ranges
+          // scroll sideways and the actions keep their place on the right.
+          "-mx-(--kb-page-gutter) flex items-center justify-between bg-background px-(--kb-page-gutter)",
           tableExpanded
             ? "gap-2 pt-(--kb-page-gutter) pb-0"
             : "sticky top-2 z-30 gap-2 py-0 shadow-[0_12px_18px_-18px_hsl(var(--foreground)/0.55)] before:pointer-events-none before:absolute before:inset-x-0 before:-top-2 before:h-2 before:bg-background before:content-[''] after:pointer-events-none after:absolute after:inset-x-0 after:-bottom-2 after:h-2 after:bg-background after:content-[''] sm:top-[0.6875rem] sm:before:-top-[0.6875rem] sm:before:h-[0.6875rem] sm:after:-bottom-[0.6875rem] sm:after:h-[0.6875rem] md:top-[0.8125rem] md:before:-top-[0.8125rem] md:before:h-[0.8125rem] md:after:-bottom-[0.8125rem] md:after:h-[0.8125rem]",
@@ -448,7 +450,7 @@ const TransactionsDashboard = ({
             )}
           />
         ) : (
-          <div className={pageHeaderActionsClassName}>
+          <div className={cn(pageHeaderActionsClassName, "shrink-0")}>
             <TransactionsExportDialog
               bookTimezone={dashboardSnapshot?.history.accountingTimezone}
             />

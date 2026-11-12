@@ -126,7 +126,7 @@ const PeriodPicker = ({
         : "text-muted-foreground hover:text-foreground",
     );
   return (
-    <div className="flex h-8 max-w-full items-center gap-1 rounded-lg bg-muted p-0.5">
+    <div className="flex h-8 max-w-full min-w-0 items-center gap-1 rounded-lg bg-muted p-0.5">
       {/* One line at any width: beside a docked panel the ranges scroll
           sideways instead of breaking "30 Days" over two lines. */}
       <div className="flex min-w-0 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
