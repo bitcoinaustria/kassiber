@@ -33,6 +33,7 @@ import {
   connectionSupportsLightningCapability,
   LIGHTNING_CONNECTION_KINDS,
 } from "@/lib/lightning";
+import { Sensitive } from "@/components/kb/Sensitive";
 import { cn } from "@/lib/utils";
 import { formatCount, formatSats } from "@/lib/localeFormat";
 import type { Connection, OverviewSnapshot } from "@/mocks/seed";
@@ -298,13 +299,13 @@ function LightningProfitabilityBody({
                     </span>
                   </TableCell>
                   <TableCell className="text-right font-mono text-sm tabular-nums">
-                    {fmtSat(channel.capacitySat)}
+                    <Sensitive>{fmtSat(channel.capacitySat)}</Sensitive>
                   </TableCell>
                   <TableCell className="text-right font-mono text-sm tabular-nums">
-                    {fmtSat(channel.earnedRoutingSat)}
+                    <Sensitive>{fmtSat(channel.earnedRoutingSat)}</Sensitive>
                   </TableCell>
                   <TableCell className="text-right font-mono text-sm tabular-nums">
-                    {fmtSat(channel.openCostSat)}
+                    <Sensitive>{fmtSat(channel.openCostSat)}</Sensitive>
                   </TableCell>
                   <TableCell className="text-right">
                     <span
@@ -350,7 +351,7 @@ function Stat({
           tone,
         )}
       >
-        {value}
+        <Sensitive>{value}</Sensitive>
       </p>
     </div>
   );

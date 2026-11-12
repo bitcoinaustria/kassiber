@@ -9,6 +9,8 @@ import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { AlertTriangle, Check } from "lucide-react";
 
+import { Sensitive } from "@/components/kb/Sensitive";
+import { maskSensitive, useSensitive } from "@/lib/sensitive";
 import { cn } from "@/lib/utils";
 import { formatCustodyMsat } from "../custodyGapsModel";
 import type { GuidedLegRole } from "./guidedComponentModel";
@@ -89,6 +91,7 @@ export function MovementSummary({
   balanced: boolean;
 }) {
   const { t } = useTranslation("review");
+  const hideAmounts = useSensitive();
   const sources = sumAmounts(totals.sources);
   const sinks = sumAmounts(totals.destinations) + sumAmounts(totals.fees) + sumAmounts(totals.external) + sumAmounts(totals.suspense);
   // Nothing typed yet: stay silent rather than flag an empty form as unbalanced.
@@ -138,9 +141,9 @@ export function MovementSummary({
               </span>
             ) : null}
             <dt className="font-sans text-xs text-muted-foreground">{group.label}</dt>
-            <dd>{group.value.size
+            <dd><Sensitive>{group.value.size
               ? [...group.value].map(([asset, amount]) => formatCustodyMsat(amount.toString(), asset)).join(" + ")
-              : formatCustodyMsat("0", defaultAsset)}</dd>
+              : formatCustodyMsat("0", defaultAsset)}</Sensitive></dd>
           </div>
         ))}
       </dl>
@@ -149,7 +152,10 @@ export function MovementSummary({
           {t("swap.components.form.balance.difference", {
             // BTC and LBTC share msat exposure; a mixed-asset residual is not
             // evidence that any particular asset supplied the difference.
-            amount: assets.size > 1 ? `${difference} msat` : formatCustodyMsat(difference.toString(), defaultAsset),
+            amount: maskSensitive(
+              assets.size > 1 ? `${difference} msat` : formatCustodyMsat(difference.toString(), defaultAsset),
+              hideAmounts,
+            ),
           })}
         </p>
       ) : null}

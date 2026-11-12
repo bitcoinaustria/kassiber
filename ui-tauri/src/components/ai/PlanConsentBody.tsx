@@ -6,6 +6,7 @@
 import type * as React from "react";
 import { useTranslation } from "react-i18next";
 
+import { Sensitive } from "@/components/kb/Sensitive";
 import { formatCustodyMsat } from "@/routes/custodyGapsModel";
 import {
   type ImportPlanPreview,
@@ -83,8 +84,18 @@ function ImportPlanBody({ plan }: { plan: ImportPlanPreview }) {
                 {t(`consent.plan.direction.${total.direction}`, { defaultValue: total.direction })}
                 {" · "}
                 {t("consent.plan.rowCount", { count: total.rows })}
-                {total.amountMsat !== null ? ` · ${formatCustodyMsat(total.amountMsat, total.asset)}` : ""}
-                {total.feeMsat ? ` · ${t("consent.plan.fee")} ${formatCustodyMsat(total.feeMsat, total.asset)}` : ""}
+                {total.amountMsat !== null ? (
+                  <>
+                    {" · "}
+                    <Sensitive>{formatCustodyMsat(total.amountMsat, total.asset)}</Sensitive>
+                  </>
+                ) : null}
+                {total.feeMsat ? (
+                  <>
+                    {` · ${t("consent.plan.fee")} `}
+                    <Sensitive>{formatCustodyMsat(total.feeMsat, total.asset)}</Sensitive>
+                  </>
+                ) : null}
               </li>
             ))}
           </ul>

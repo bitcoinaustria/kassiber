@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Sensitive } from "@/components/kb/Sensitive";
+import { maskSensitive, useSensitive } from "@/lib/sensitive";
 import { cn } from "@/lib/utils";
 import { formatCustodyMsat } from "../custodyGapsModel";
 import { custodyRoleLabel, custodyBackendIssueText, type CustodyValidationIssue } from "./custodyComponentIssues";
@@ -432,6 +434,7 @@ function ReviewFact({ label, children, mono = false }: { label: string; children
  */
 export function GuidedServerPreview({ result, activates }: { result: ComponentPlanResult; activates: boolean }) {
   const { t } = useTranslation("review");
+  const hideAmounts = useSensitive();
   const components = result.components ?? (result.component ? [result.component] : []);
   const summary = result.summary ?? {
     count: components.length,
@@ -482,7 +485,7 @@ export function GuidedServerPreview({ result, activates }: { result: ComponentPl
                 </span>
                 <span className="font-medium">{custodyRoleLabel(t, leg.role)}</span>
               </p>
-              <p className="font-mono tabular-nums">{formatCustodyMsat(leg.amount_msat, leg.asset)}</p>
+              <p className="font-mono tabular-nums"><Sensitive>{formatCustodyMsat(leg.amount_msat, leg.asset)}</Sensitive></p>
             </div>
             <dl className="grid gap-x-4 gap-y-1 text-xs sm:grid-cols-[auto_minmax(0,1fr)]">
               {leg.transaction_id ? <ReviewFact label={t("swap.components.form.review.transaction")} mono>{leg.transaction_id}</ReviewFact> : null}
@@ -494,7 +497,7 @@ export function GuidedServerPreview({ result, activates }: { result: ComponentPl
               {scope ? <ReviewFact label={t("swap.components.form.review.network")}>{scope}</ReviewFact> : null}
               {conserved ? <ReviewFact label={t("swap.components.form.review.conserved")}>{conserved}</ReviewFact> : null}
               {leg.valuation_amount != null ? <ReviewFact label={t("swap.components.form.review.valuation")} mono>
-                {String(leg.valuation_amount)} {leg.valuation_unit}
+                <Sensitive>{String(leg.valuation_amount)}</Sensitive> {leg.valuation_unit}
               </ReviewFact> : null}
               {leg.notes ? <ReviewFact label={t("swap.components.form.review.notes")}>
                 <span className="whitespace-pre-wrap">{leg.notes}</span>
@@ -516,8 +519,8 @@ export function GuidedServerPreview({ result, activates }: { result: ComponentPl
               {t("swap.components.form.review.allocationEdge", {
                 source: source + 1,
                 sink: sink + 1,
-                sourceAmount: formatCustodyMsat(allocation.source_amount_msat, component.legs[source]?.asset ?? "BTC"),
-                sinkAmount: formatCustodyMsat(allocation.sink_amount_msat, component.legs[sink]?.asset ?? "BTC"),
+                sourceAmount: maskSensitive(formatCustodyMsat(allocation.source_amount_msat, component.legs[source]?.asset ?? "BTC"), hideAmounts),
+                sinkAmount: maskSensitive(formatCustodyMsat(allocation.sink_amount_msat, component.legs[sink]?.asset ?? "BTC"), hideAmounts),
               })}
             </li>;
           })}

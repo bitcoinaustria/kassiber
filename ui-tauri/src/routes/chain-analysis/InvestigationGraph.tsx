@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { EvidenceGraph, type EvidenceGraphNode, type EvidenceGraphEdge, type EvidenceGraphSelection } from "@/components/evidence-graph/EvidenceGraph";
 import { analysisNodeCaption, formatAnalysisAmount, type AnalysisNode, type AnalysisEdge } from "@/lib/chainAnalysis";
+import { maskSensitive, useSensitive } from "@/lib/sensitive";
 
 export type GraphSelection = EvidenceGraphSelection;
 
@@ -10,13 +11,14 @@ export function InvestigationGraph({ nodes, edges, selected, highlightedIds, sub
   highlightedIds: string[]; subjectId?: string; onSelect: (selection: GraphSelection) => void;
 }) {
   const { t } = useTranslation("chainAnalysis");
+  const hidden = useSensitive();
   const graphNodes = useMemo<EvidenceGraphNode[]>(() => nodes.map((node) => ({
     id: node.id, label: analysisNodeCaption(node),
-    detail: node.kind === "output" ? formatAnalysisAmount(node.amount_msat, node.asset) : `${node.chain} · ${node.network}`,
-    title: `${node.label}\n${node.outpoint || node.txid || node.id}\n${formatAnalysisAmount(node.amount_msat, node.asset)}`,
+    detail: node.kind === "output" ? maskSensitive(formatAnalysisAmount(node.amount_msat, node.asset), hidden) : `${node.chain} · ${node.network}`,
+    title: `${node.label}\n${node.outpoint || node.txid || node.id}\n${maskSensitive(formatAnalysisAmount(node.amount_msat, node.asset), hidden)}`,
     shape: node.kind === "output" ? "capsule" : "card", tone: node.wallet_ids?.length ? "positive" : "muted",
     status: node.status, preferInitialFocus: node.kind === "transaction",
-  })), [nodes]);
+  })), [nodes, hidden]);
   const graphEdges = useMemo<EvidenceGraphEdge[]>(() => edges.map((edge) => {
     const impaired = edge.status === "stale" || edge.status === "conflicting";
     const status = edge.status ? t(`observationStatus.${edge.status}`, { defaultValue: edge.status }) : "";

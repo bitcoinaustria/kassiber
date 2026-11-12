@@ -15,6 +15,7 @@ import {
   useDaemonMutation,
 } from "@/daemon/client";
 import { pageHeaderActionsClassName, pageHeaderClassName, screenShellClassName } from "@/lib/screen-layout";
+import { Sensitive } from "@/components/kb/Sensitive";
 import { cn } from "@/lib/utils";
 import {
   analysisEffectiveLayers,
@@ -451,7 +452,7 @@ export function ChainAnalysisWorkbench({
                             </button>
                           </td>
                           <td className="whitespace-nowrap p-3 font-mono">
-                            {formatAnalysisAmount(item.amount_msat, item.asset)}
+                            <Sensitive>{formatAnalysisAmount(item.amount_msat, item.asset)}</Sensitive>
                           </td>
                           <td className="p-3">
                             {item.chain} / {item.network}

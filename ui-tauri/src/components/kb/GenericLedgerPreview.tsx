@@ -22,6 +22,7 @@ import {
 import { useDaemon } from "@/daemon/client";
 import { localeForLanguage } from "@/i18n/config";
 import { formatUiNumber } from "@/lib/localeFormat";
+import { Sensitive } from "@/components/kb/Sensitive";
 import { useUiStore } from "@/store/ui";
 
 interface LedgerPreviewRow {
@@ -198,12 +199,16 @@ export function GenericLedgerPreview({
                     {row.kind ?? row.direction ?? ""}
                   </TableCell>
                   <TableCell className="text-right font-mono text-xs">
-                    {formatAssetAmount(row.amount, row.asset, lang)}
+                    <Sensitive>{formatAssetAmount(row.amount, row.asset, lang)}</Sensitive>
                   </TableCell>
                   <TableCell className="text-right text-xs text-muted-foreground">
-                    {row.fiat_value
-                      ? `${row.fiat_value}${row.fiat_currency ? ` ${row.fiat_currency}` : ""}`
-                      : ""}
+                    {row.fiat_value ? (
+                      <Sensitive>
+                        {`${row.fiat_value}${row.fiat_currency ? ` ${row.fiat_currency}` : ""}`}
+                      </Sensitive>
+                    ) : (
+                      ""
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

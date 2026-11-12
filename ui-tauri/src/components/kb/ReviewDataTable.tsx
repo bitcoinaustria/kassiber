@@ -43,7 +43,7 @@ import {
 import { cn } from "@/lib/utils";
 import { formatUiNumber } from "@/lib/localeFormat";
 import { useUiStore } from "@/store/ui";
-import { sensitiveClass as blurClass } from "@/lib/sensitive";
+import { maskSensitive, sensitiveClass as blurClass } from "@/lib/sensitive";
 
 export type ReviewTableKind = "journal-events";
 
@@ -691,7 +691,7 @@ function ReviewWorklistRow({
       </TableCell>
       <TableCell className="text-right">
         <span className={cn("text-sm font-medium tabular-nums", blurClass(hideSensitive))}>
-          {row.amount}
+          {maskSensitive(row.amount, hideSensitive)}
         </span>
         <p
           className={cn(
@@ -699,7 +699,7 @@ function ReviewWorklistRow({
             blurClass(hideSensitive),
           )}
         >
-          {row.basis}
+          {maskSensitive(row.basis, hideSensitive)}
         </p>
       </TableCell>
       <TableCell className="text-right">
@@ -710,7 +710,7 @@ function ReviewWorklistRow({
             blurClass(hideSensitive),
           )}
         >
-          {row.impact}
+          {maskSensitive(row.impact, hideSensitive)}
         </span>
       </TableCell>
       {showStateColumn ? (

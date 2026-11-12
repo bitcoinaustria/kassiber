@@ -39,6 +39,7 @@ import {
 import { openExternalUrl } from "@/daemon/transport";
 import { formatFiatAmount } from "@/lib/currency";
 import { formatCount } from "@/lib/localeFormat";
+import { Sensitive } from "@/components/kb/Sensitive";
 import { cn } from "@/lib/utils";
 
 import {
@@ -187,7 +188,7 @@ export function TransactionTargetRow({
             </div>
           </div>
           <div className={`font-mono text-sm tabular-nums md:text-right ${amountClassName}`}>
-            {txSignedAmount(row)}
+            <Sensitive>{txSignedAmount(row)}</Sensitive>
           </div>
           <div className="text-sm text-muted-foreground">
             <span className="md:hidden">{t("transactionRow.walletMobile")}</span>
@@ -316,7 +317,9 @@ export function CaseBrief({
           <p className="text-sm text-muted-foreground">
             {formatDateTime(overview?.target_date)} ·{" "}
             {overview?.target_wallet || report?.target.wallet || t("caseBrief.fallbackWallet")} ·{" "}
-            {formatBtc(overview?.target_amount ?? report?.target.required_amount, targetAsset)}
+            <Sensitive>
+              {formatBtc(overview?.target_amount ?? report?.target.required_amount, targetAsset)}
+            </Sensitive>
             {(jurisdiction || fiatCurrency) && (
               <>
                 {" "}
@@ -368,7 +371,7 @@ export function CaseBrief({
                 >
                   <span className="truncate">{pretty(source.source_type)}</span>
                   <span className="font-mono text-xs tabular-nums">
-                    {formatBtc(source.amount, source.asset || targetAsset)}
+                    <Sensitive>{formatBtc(source.amount, source.asset || targetAsset)}</Sensitive>
                   </span>
                 </div>
               ),
@@ -731,7 +734,7 @@ export function CoveragePanel({
                       {t(`coverageBucket.${name}`)}
                     </div>
                     <div className={`text-lg font-semibold ${COVERAGE_BUCKET_TONES[name]}`}>
-                      {amount.toFixed(8)}
+                      <Sensitive>{amount.toFixed(8)}</Sensitive>
                     </div>
                     <div className="text-xs opacity-80">
                       {txCount} tx · {percent.toFixed(1)}%
@@ -1015,10 +1018,12 @@ export function FlowLevelDetailPreview({
               </span>
               {level.fiat_value_total != null && (
                 <span className="font-mono tabular-nums">
-                  {formatFiatAmount(
-                    level.fiat_value_total,
-                    level.fiat_currency || "EUR",
-                  )}
+                  <Sensitive>
+                    {formatFiatAmount(
+                      level.fiat_value_total,
+                      level.fiat_currency || "EUR",
+                    )}
+                  </Sensitive>
                 </span>
               )}
             </div>
@@ -1048,7 +1053,7 @@ export function FlowLevelDetailPreview({
                   <span className="text-right font-mono tabular-nums">
                     {amount == null
                       ? "—"
-                      : `${inbound ? "+" : "−"}${formatBtc(amount, node.asset || "BTC")}`}
+                      : <Sensitive>{`${inbound ? "+" : "−"}${formatBtc(amount, node.asset || "BTC")}`}</Sensitive>}
                   </span>
                   <span className="text-right text-muted-foreground">
                     {provenance}
