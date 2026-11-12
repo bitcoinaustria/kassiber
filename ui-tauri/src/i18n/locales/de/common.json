@@ -72,5 +72,9 @@
   "taxCountry": {
     "previewBadge": "Vorschau",
     "previewNotice": "Noch nicht von einer Steuerberaterin oder einem Steuerberater für dieses Land geprüft — Ergebnisse vor der Einreichung kontrollieren."
+  },
+  "privacy": {
+    "hiddenAmount": "Betrag verborgen",
+    "hiddenShare": "Anteil verborgen"
   }
 }

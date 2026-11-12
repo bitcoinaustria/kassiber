@@ -121,10 +121,10 @@ export interface MenuIntentDeps {
   hasWorkspace: boolean;
   aiFeaturesEnabled: boolean;
   developerToolsEnabled: boolean;
-  hideSensitive: boolean;
   navigate: (opts: { to: string; hash?: string }) => void;
   lockApp: () => void;
-  setHideSensitive: (next: boolean) => void;
+  /** Normal → Hide amounts → Hide all → Normal. */
+  cyclePrivacyMode: () => void;
   runAddWalletConnection: () => void;
   runWalletSync: () => void;
   runJournalProcessing: () => void;
@@ -188,7 +188,7 @@ export function dispatchMenuIntent(
       return;
 
     case "toggle-sensitive":
-      deps.setHideSensitive(!deps.hideSensitive);
+      deps.cyclePrivacyMode();
       return;
 
     case "ui-scale-decrease":

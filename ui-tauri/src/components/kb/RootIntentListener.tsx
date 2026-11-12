@@ -46,7 +46,6 @@ export function RootIntentListener() {
               hasWorkspace: store.identity !== null,
               aiFeaturesEnabled: store.aiFeaturesEnabled,
               developerToolsEnabled: store.developerToolsEnabled,
-              hideSensitive: store.hideSensitive,
               navigate: ({ to, hash }) => {
                 void navigate({ to, hash: hash ?? undefined });
               },
@@ -55,7 +54,7 @@ export function RootIntentListener() {
               // dropped before they reach these. Log loudly if a future
               // scope-filter regression reaches this root listener.
               lockApp: unexpectedWorkspaceAction,
-              setHideSensitive: store.setHideSensitive,
+              cyclePrivacyMode: store.cyclePrivacyMode,
               decreaseAppScale: store.decreaseAppScale,
               increaseAppScale: store.increaseAppScale,
               resetAppScale: store.resetAppScale,

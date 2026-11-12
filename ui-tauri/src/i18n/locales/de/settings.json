@@ -407,9 +407,6 @@
     "offlineEnvironment": "KASSIBER_NO_EGRESS blockiert für diesen Prozess bereits Wallet- und Backend-Verbindungen. Schalte den Offline-Modus ein, um auch AI-Provider und Update-Prüfungen zu blockieren.",
     "offlineFailed": "Der Offline-Modus konnte nicht geändert werden.",
     "onScreenHeading": "Bildschirm & Zwischenablage",
-    "blurLabel": "Sensible Werte verwischen",
-    "blurOn": "Guthaben, Adressen und Beträge werden verwischt, bis du sie einblendest.",
-    "blurOff": "Guthaben, Adressen und Beträge werden vollständig angezeigt.",
     "clipboardLabel": "Zwischenablage nach dem Kopieren leeren",
     "clipboardOn": "Kopierte Adressen und Schlüssel werden nach 30 Sekunden aus der Systemzwischenablage gelöscht.",
     "clipboardOff": "Kopierte Werte bleiben in der Systemzwischenablage, bis sie überschrieben werden.",
@@ -434,7 +431,14 @@
     "assistantHeading": "Assistent-Prompts",
     "assistantEnabled": "Lokale Provider halten Prompts auf diesem Gerät. Entfernte und CLI-Provider sehen Prompt-Inhalte, die Buchdaten enthalten können.",
     "assistantDisabled": "Aus. Es wird nichts an einen Provider gesendet; Provider-Einstellungen bleiben gespeichert.",
-    "reviewAi": "Assistent-Einstellungen"
+    "reviewAi": "Assistent-Einstellungen",
+    "modeLabel": "Werte am Bildschirm",
+    "modeNormal": "Guthaben, Adressen, Beträge und Prozentwerte werden vollständig angezeigt.",
+    "modeHideAmounts": "Guthaben, Adressen und Beträge sind verborgen, bis du sie einblendest. Prozentwerte bleiben sichtbar.",
+    "modeHideAll": "Beträge sind verborgen, ebenso die Prozentwerte und Anteile, die zeigen, wie dein Bestand aufgeteilt ist.",
+    "unlockLabel": "Beträge beim Entsperren ausblenden",
+    "unlockOn": "Jeder Start und jedes Entsperren beginnt mit verborgenen Beträgen.",
+    "unlockOff": "Kassiber behält die zuletzt gewählte Einstellung."
   },
   "data": {
     "importHeading": "Daten importieren",

@@ -13,10 +13,9 @@ function makeDeps(overrides: Partial<MenuIntentDeps> = {}): MenuIntentDeps {
     // Existing cases navigate to finished routes; the early-stage gate has its
     // own describe block below, which flips this off.
     developerToolsEnabled: true,
-    hideSensitive: false,
     navigate: vi.fn(),
     lockApp: vi.fn(),
-    setHideSensitive: vi.fn(),
+    cyclePrivacyMode: vi.fn(),
     decreaseAppScale: vi.fn(),
     increaseAppScale: vi.fn(),
     resetAppScale: vi.fn(),
@@ -219,7 +218,7 @@ describe("dispatchMenuIntent — scope filter", () => {
     dispatchMenuIntent({ action: "check-for-updates" }, deps, "global");
     expect(deps.navigate).toHaveBeenCalledTimes(2); // navigate + open-settings
     expect(deps.emitSettingsSection).toHaveBeenCalledWith("privacy");
-    expect(deps.setHideSensitive).toHaveBeenCalledTimes(1);
+    expect(deps.cyclePrivacyMode).toHaveBeenCalledTimes(1);
     expect(deps.increaseAppScale).toHaveBeenCalledTimes(1);
     expect(deps.runAppUpdateCheck).toHaveBeenCalledTimes(1);
   });
@@ -237,7 +236,7 @@ describe("dispatchMenuIntent — scope filter", () => {
     dispatchMenuIntent({ action: "check-for-updates" }, deps, "workspace");
     expect(deps.navigate).not.toHaveBeenCalled();
     expect(deps.emitSettingsSection).not.toHaveBeenCalled();
-    expect(deps.setHideSensitive).not.toHaveBeenCalled();
+    expect(deps.cyclePrivacyMode).not.toHaveBeenCalled();
     expect(deps.resetAppScale).not.toHaveBeenCalled();
     expect(deps.runAppUpdateCheck).not.toHaveBeenCalled();
   });
@@ -256,14 +255,10 @@ describe("dispatchMenuIntent — scope filter", () => {
 });
 
 describe("dispatchMenuIntent — direct actions", () => {
-  it("toggle-sensitive flips hideSensitive", () => {
-    const offDeps = makeDeps({ hideSensitive: false });
-    dispatchMenuIntent({ action: "toggle-sensitive" }, offDeps);
-    expect(offDeps.setHideSensitive).toHaveBeenCalledWith(true);
-
-    const onDeps = makeDeps({ hideSensitive: true });
-    dispatchMenuIntent({ action: "toggle-sensitive" }, onDeps);
-    expect(onDeps.setHideSensitive).toHaveBeenCalledWith(false);
+  it("toggle-sensitive steps the privacy mode", () => {
+    const deps = makeDeps();
+    dispatchMenuIntent({ action: "toggle-sensitive" }, deps);
+    expect(deps.cyclePrivacyMode).toHaveBeenCalledTimes(1);
   });
 
   it("routes UI scale actions to the app scale controls", () => {

@@ -407,9 +407,6 @@
     "offlineEnvironment": "KASSIBER_NO_EGRESS already blocks wallet and backend connections for this process. Turn on offline mode to also block AI providers and update checks.",
     "offlineFailed": "Offline mode could not be changed.",
     "onScreenHeading": "Screen & clipboard",
-    "blurLabel": "Blur sensitive values",
-    "blurOn": "Balances, addresses, and amounts are blurred until you reveal them.",
-    "blurOff": "Balances, addresses, and amounts are shown in full.",
     "clipboardLabel": "Clear clipboard after copy",
     "clipboardOn": "Copied addresses and keys are cleared from the system clipboard after 30 seconds.",
     "clipboardOff": "Copied values stay in the system clipboard until overwritten.",
@@ -434,7 +431,14 @@
     "assistantHeading": "Assistant prompts",
     "assistantEnabled": "Local providers keep prompts on this machine. Remote and CLI providers see prompt content, which can include book data.",
     "assistantDisabled": "Off. Nothing is sent to a provider; provider settings stay saved.",
-    "reviewAi": "Assistant settings"
+    "reviewAi": "Assistant settings",
+    "modeLabel": "Values on screen",
+    "modeNormal": "Balances, addresses, amounts and percentages are shown in full.",
+    "modeHideAmounts": "Balances, addresses and amounts are hidden until you reveal them. Percentages stay visible.",
+    "modeHideAll": "Amounts are hidden, and so are the percentages and shares that reveal how your holdings are split.",
+    "unlockLabel": "Hide amounts when Kassiber unlocks",
+    "unlockOn": "Every launch and unlock starts with amounts hidden.",
+    "unlockOff": "Kassiber keeps the setting you chose last."
   },
   "data": {
     "importHeading": "Import data",
