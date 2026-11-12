@@ -6,13 +6,15 @@ on:
       - ".github/workflows/prerelease-binaries.yml"
       - ".github/workflows/finalize-signed-release.yml"
       - "pyproject.toml"
-      - "uv.lock"
-      - "kassiber/__init__.py"
-      - "kassiber/build_info.py"
-      - "kassiber/cli/**"
-      - "kassiber/operator/**"
-      - "kassiber/release_verification.py"
-      - "scripts/kassiber_pyinstaller_entry.py"
+      # Embedded into the Rust binary with include_str!.
+      - "kassiber/ai/skill_references/**"
+      - "kassiber/data/**"
+      - "scripts/build-rust-cli.sh"
+      - "scripts/check-linux-glibc-floor.sh"
+      - "scripts/smoke-packaged-cli.sh"
+      - "scripts/package-cli-archive.sh"
+      - "tests/test_packaged_cli_no_egress.py"
+      - "ui-tauri/provider-broker/**"
       - "scripts/build-apt-repository.sh"
       - "scripts/build-rpm-repository.sh"
       - "scripts/package-cli-deb.sh"
@@ -30,7 +32,6 @@ on:
       - ".github/actions/setup-rust/**"
       - "packaging/linux/**"
       - "packaging/release/**"
-      - "tests/test_dependency_drift.py"
       - "ui-tauri/package.json"
       - "ui-tauri/pnpm-lock.yaml"
       - "ui-tauri/src-tauri/build.rs"
@@ -91,16 +92,13 @@ jobs:
   build-cli:
     name: Build ${{ matrix.label }} CLI
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
-    # Same managed CPython as scripts/build-macos-arm64-app.sh, so a locally
-    # verified build and the published one match; see docs/reference/desktop.md.
-    # `only-managed` keeps a runner-provided 3.11 from winning instead.
+    timeout-minutes: 60
+    # The CLI and the desktop sidecar are the Rust `kassiber` binary (plan 21,
+    # stage 7). Python only runs the release helper scripts and the smoke's
+    # JSON assertions; nothing Python ships. See docs/reference/rust-packaging.md.
     env:
       UV_PYTHON: "3.11"
       UV_PYTHON_PREFERENCE: only-managed
-      # uv builds the tax engine's binding with maturin; the setup-rust step
-      # installs the pinned Rust, so maturin must never fetch a toolchain itself.
-      MATURIN_NO_INSTALL_RUST: "1"
     strategy:
       fail-fast: false
       matrix:
@@ -111,6 +109,8 @@ jobs:
             triple: aarch64-apple-darwin
             exe_ext: ""
             archive: tar
+          # Ubuntu 22.04 is the glibc 2.35 floor the AppImage, deb and rpm
+          # declare; scripts/build-rust-cli.sh refuses a binary above it.
           - label: Linux x86_64
             os: ubuntu-22.04
             target: linux-x64
@@ -135,21 +135,23 @@ jobs:
         with:
           enable-cache: true
 
+      # Runs the build-identity writer and the smoke's JSON assertions. No
+      # runner-provided interpreter is on PATH under every OS in this matrix.
       - name: Install the managed Python
         shell: bash
-        run: uv python install "$UV_PYTHON"
+        run: |
+          set -euo pipefail
+          uv python install "$UV_PYTHON"
+          echo "PYTHON=$(uv python find "$UV_PYTHON")" >> "$GITHUB_ENV"
 
       - name: Set up Rust
         uses: ./.github/actions/setup-rust
 
-      - name: Sync dependencies
-        run: uv sync --locked
-
-      # The AI provider broker is a Node sidecar bundled from
-      # ui-tauri/provider-broker. It is deliberately NOT committed, but pyproject
-      # ships the bundle as package data, so it has to exist before PyInstaller
-      # collects it — otherwise the packaged CLI silently loses every
-      # CLI-backed AI provider.
+      # The AI provider broker is a Node script bundled from
+      # ui-tauri/provider-broker. It is deliberately NOT committed. The Rust
+      # binary looks for it at <executable dir>/provider_broker/index.mjs, so
+      # every artifact ships it beside the executable — otherwise the packaged
+      # CLI silently loses every CLI-backed AI provider.
       - name: Set up Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
@@ -185,9 +187,26 @@ jobs:
           DISPATCH_PUBLISH_RELEASE: ${{ inputs.publish_release }}
         run: |
           set -euo pipefail
-          uv run --locked python -m unittest \
-            tests.test_dependency_drift.DependencyDriftTests.test_app_version_is_consistent_across_package_metadata
-          version="$(uv run --locked python -c 'import kassiber; print(kassiber.__version__)')"
+          # The backend crate carries the product version. Every other copy
+          # must agree (tests/test_dependency_drift.py checks the same set in
+          # CI, but needs the Python package this job no longer builds).
+          version="$(sed -n 's/^version *= *"\([^"]*\)".*/\1/p' crates/kassiber/Cargo.toml | head -n 1)"
+          "$PYTHON" - "$version" <<'PY'
+          import json, re, sys
+          from pathlib import Path
+          expected = sys.argv[1]
+          def table_version(path):
+              return re.search(r'(?m)^version\s*=\s*"([^"]+)"', Path(path).read_text(encoding="utf-8")).group(1)
+          found = {
+              "pyproject.toml": table_version("pyproject.toml"),
+              "ui-tauri/src-tauri/Cargo.toml": table_version("ui-tauri/src-tauri/Cargo.toml"),
+              "ui-tauri/package.json": json.loads(Path("ui-tauri/package.json").read_text(encoding="utf-8"))["version"],
+              "ui-tauri/src-tauri/tauri.conf.json": json.loads(Path("ui-tauri/src-tauri/tauri.conf.json").read_text(encoding="utf-8"))["version"],
+          }
+          wrong = {path: value for path, value in found.items() if value != expected}
+          if not expected or wrong:
+              sys.exit(f"crates/kassiber is {expected!r}, but these disagree: {wrong}")
+          PY
           release_tag=""
           if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF_TYPE" = "tag" ]; then
             release_tag="$GITHUB_REF_NAME"
@@ -215,7 +234,7 @@ jobs:
           fi
           SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)"
           export SOURCE_DATE_EPOCH
-          uv run --locked python scripts/write_build_info.py \
+          "$PYTHON" scripts/write_build_info.py \
             --output build/BUILD_INFO.json \
             --version "$version" \
             --commit "$package_commit" \
@@ -223,264 +242,75 @@ jobs:
             --run-id "$GITHUB_RUN_ID" \
             --channel "$BUILD_CHANNEL"
           echo "PACKAGE_VERSION=$version" >> "$GITHUB_ENV"
+          echo "PACKAGE_COMMIT=$package_commit" >> "$GITHUB_ENV"
+          echo "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" >> "$GITHUB_ENV"
 
-      - name: Build packaged CLI binaries
+      # One executable serves the downloadable CLI and the desktop sidecar, on
+      # every platform: no one-file extraction, no one-dir payload.
+      - name: Build the Rust kassiber binary
         shell: bash
         run: |
           set -euo pipefail
-          observer_collect_args=(
-            --collect-submodules bdkpython
-            --collect-data bdkpython
-            --copy-metadata bdkpython
-          )
-          if uv run --locked python -c 'import lwk'; then
-            observer_collect_args+=(--collect-submodules lwk --collect-data lwk --copy-metadata lwk)
-          fi
-          # Shared between both builds below so they can never drift apart.
-          # The entry script stays last, after every option.
-          pyinstaller_args=(
-            --noconfirm
-            --paths .
-            --collect-data kassiber
-            --add-data "build/BUILD_INFO.json:kassiber/data"
-            "${observer_collect_args[@]}"
-            --collect-submodules embit
-            --collect-data embit
-            --collect-submodules keyring.backends
-            --copy-metadata keyring
-            scripts/kassiber_pyinstaller_entry.py
-          )
-
-          # The downloadable CLI stays one file — a single binary is the whole
-          # point of the tarball, the Homebrew formula and the deb/rpm.
-          # Only this first build takes `--clean`; the sidecar build below reuses
-          # the warm analysis cache instead of paying for it twice.
-          uv run --locked --with pyinstaller==6.20.0 pyinstaller \
-            --clean \
-            --onefile \
-            --name kassiber \
-            "${pyinstaller_args[@]}"
-
-          # The macOS desktop sidecar is one-*dir*: cold-start fix, see
-          # docs/reference/desktop.md. Linux and Windows reuse the one-file CLI.
-          if [ "$RUNNER_OS" = "macOS" ]; then
-            uv run --locked --with pyinstaller==6.20.0 pyinstaller \
-              --onedir \
-              --name "kassiber-cli-${{ matrix.triple }}" \
-              --distpath sidecar-dist \
-              --workpath sidecar-build \
-              "${pyinstaller_args[@]}"
-            sidecar_dir="sidecar-dist/kassiber-cli-${{ matrix.triple }}"
-            test -x "$sidecar_dir/kassiber-cli-${{ matrix.triple }}"
-            test -d "$sidecar_dir/_internal"
-            # Tauri skips symlinks when copying resource directories, so a
-            # symlinked payload would arrive in the bundle broken. Named, not
-            # just counted: as a bare `test` this failed with nothing but
-            # "exit code 1".
-            symlinks="$(find "$sidecar_dir" -type l)"
-            if [ -n "$symlinks" ]; then
-              echo "Sidecar tree contains symlinks Tauri will not bundle intact:" >&2
-              printf '%s\n' "$symlinks" >&2
-              exit 1
-            fi
-          fi
+          scripts/build-rust-cli.sh \
+            --target "${{ matrix.triple }}" \
+            --channel "$BUILD_CHANNEL" \
+            --commit "$PACKAGE_COMMIT" \
+            --output dist
 
       - name: Smoke packaged CLI
         shell: bash
         run: |
           set -euo pipefail
-          assert_contains() {
-            file="$1"
-            expected="$2"
-            if ! grep -F "$expected" "$file" >/dev/null; then
-              echo "Expected $expected in $file; captured output follows:" >&2
-              cat "$file" >&2
-              return 1
-            fi
-          }
-          assert_json_value() {
-            file="$1"
-            path="$2"
-            expected="$3"
-            # Goes through uv rather than a bare `python`: no runner-provided
-            # interpreter is on PATH under every OS in this matrix.
-            if ! uv run --locked python -c 'import json, sys; from functools import reduce; value = reduce(lambda current, key: current[key], sys.argv[2].split("."), json.load(open(sys.argv[1], encoding="utf-8"))); assert value == sys.argv[3], f"{sys.argv[2]}: expected {sys.argv[3]!r}, got {value!r}"' "$file" "$path" "$expected"; then
-              cat "$file" >&2
-              return 1
-            fi
-          }
-
-          cli="./dist/kassiber${{ matrix.exe_ext }}"
-          expected_commit="$(git rev-parse --short=12 HEAD)"
-          "$cli" --help >/dev/null
-          "$cli" --version | grep "$expected_commit"
-          status_root="$RUNNER_TEMP/kassiber-status-smoke"
-          status_json="$RUNNER_TEMP/kassiber-status-smoke.json"
-          if "$cli" --data-root "$status_root" --machine status > "$status_json"; then
-            echo "Fresh status unexpectedly succeeded before kassiber init" >&2
-            exit 1
+          smoke_args=(
+            --cli "./dist/kassiber${{ matrix.exe_ext }}"
+            --scratch "$RUNNER_TEMP/kassiber-packaged-smoke"
+            --expect-commit "$(git rev-parse --short=12 HEAD)"
+          )
+          # Hosted Linux runners have no live logind user session, so Linux
+          # smokes the descriptor-passphrase path; see the script.
+          if [ "$RUNNER_OS" != "Linux" ]; then
+            smoke_args+=(--operator-unlock)
           fi
-          assert_json_value "$status_json" kind error
-          assert_json_value "$status_json" error.code not_initialized
-          "$cli" --data-root "$status_root" --machine init >/dev/null
-          "$cli" --data-root "$status_root" --machine status > "$status_json"
-          assert_json_value "$status_json" kind status
+          scripts/smoke-packaged-cli.sh "${smoke_args[@]}"
 
-          daemon_root="$RUNNER_TEMP/kassiber-daemon-smoke"
-          printf '{"request_id":"smoke-1","kind":"daemon.shutdown"}\n' \
-            | "$cli" --data-root "$daemon_root" daemon \
-            > "$RUNNER_TEMP/kassiber-daemon-smoke.jsonl"
-          assert_contains "$RUNNER_TEMP/kassiber-daemon-smoke.jsonl" '"kind":"daemon.ready"'
-          assert_contains "$RUNNER_TEMP/kassiber-daemon-smoke.jsonl" '"kind":"daemon.shutdown"'
-
-          kraken_root="$RUNNER_TEMP/kassiber-kraken-bundled-smoke"
-          printf '{"request_id":"kraken-bundled-1","kind":"ui.rates.kraken_csv.import","args":{"use_bundled":true}}\n{"request_id":"shutdown-1","kind":"daemon.shutdown"}\n' \
-            | "$cli" --data-root "$kraken_root" daemon \
-            > "$RUNNER_TEMP/kassiber-kraken-bundled-smoke.jsonl"
-          assert_contains "$RUNNER_TEMP/kassiber-kraken-bundled-smoke.jsonl" '"kind":"ui.rates.kraken_csv.import"'
-          assert_contains "$RUNNER_TEMP/kassiber-kraken-bundled-smoke.jsonl" '"bundled":true'
-          assert_contains "$RUNNER_TEMP/kassiber-kraken-bundled-smoke.jsonl" '"pairs":2'
-          assert_contains "$RUNNER_TEMP/kassiber-kraken-bundled-smoke.jsonl" '"rows":255181'
-
-          operator_root="$RUNNER_TEMP/kassiber-operator-smoke"
-          "$cli" --data-root "$operator_root" --machine init >/dev/null
-          printf '%s\n' 'packaged operator smoke passphrase' \
-            | "$cli" --data-root "$operator_root" --machine secrets init --new-passphrase-fd 0 \
-            >/dev/null
-          if [ "$RUNNER_OS" = "Linux" ]; then
-            # Hosted Linux runners have no live logind user session. Production
-            # Kassiber correctly refuses to retain an in-memory unlock there,
-            # so smoke the supported non-broker path. The Linux broker lifecycle
-            # is exercised separately by test_operator_integration.py with an
-            # owner-only logout sentinel.
-            printf '%s\n' 'packaged operator smoke passphrase' \
-              | "$cli" --data-root "$operator_root" --machine \
-                  --db-passphrase-fd 0 status \
-              > "$RUNNER_TEMP/kassiber-operator-worker.json"
-          else
-            if ! printf '%s\n' 'packaged operator smoke passphrase' \
-                | "$cli" --data-root "$operator_root" --machine operator unlock \
-                    --passphrase-fd 0 --duration 1m \
-                > "$RUNNER_TEMP/kassiber-operator-unlock.json"; then
-              cat "$RUNNER_TEMP/kassiber-operator-unlock.json" >&2
-              exit 1
-            fi
-            assert_json_value "$RUNNER_TEMP/kassiber-operator-unlock.json" data.lease unlocked
-            "$cli" --data-root "$operator_root" --machine status \
-              > "$RUNNER_TEMP/kassiber-operator-worker.json"
-            "$cli" --data-root "$operator_root" --machine operator lock >/dev/null
-          fi
-          assert_json_value "$RUNNER_TEMP/kassiber-operator-worker.json" kind status
-
-          at_root="$RUNNER_TEMP/kassiber-at-smoke"
-          "$cli" --data-root "$at_root" --machine init >/dev/null
-          "$cli" --data-root "$at_root" --machine workspaces create Smoke >/dev/null
-          "$cli" \
-            --data-root "$at_root" \
-            --machine \
-            profiles create \
-            --workspace Smoke \
-            --tax-country at \
-            --gains-algorithm MOVING_AVERAGE_AT \
-            Austrian >/dev/null
-          "$cli" \
-            --data-root "$at_root" \
-            --machine \
-            wallets create \
-            --workspace Smoke \
-            --profile Austrian \
-            --label AustrianSmoke \
-            --kind address \
-            --address bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080 >/dev/null
-          at_csv="$RUNNER_TEMP/kassiber-at-smoke.csv"
-          cat > "$at_csv" <<'CSV'
-          date,txid,direction,asset,amount,fee,fiat_rate,description
-          2026-01-01T10:00:00Z,packaged-at-buy,inbound,BTC,0.10000000,0,80000,Packaged smoke acquisition
-          2026-02-01T10:00:00Z,packaged-at-sell,outbound,BTC,0.05000000,0.0001,82000,Packaged smoke disposal
-          CSV
-          "$cli" \
-            --data-root "$at_root" \
-            --machine \
-            wallets import-csv \
-            --workspace Smoke \
-            --profile Austrian \
-            --wallet AustrianSmoke \
-            --file "$at_csv" >/dev/null
-          "$cli" \
-            --data-root "$at_root" \
-            --machine \
-            journals process \
-            --workspace Smoke \
-            --profile Austrian >/dev/null
-          xlsx_file="$RUNNER_TEMP/kassiber-at-smoke.xlsx"
-          "$cli" \
-            --data-root "$at_root" \
-            --machine \
-            reports export-austrian-e1kv-xlsx \
-            --workspace Smoke \
-            --profile Austrian \
-            --year 2026 \
-            --file "$xlsx_file" >/dev/null
-          test -s "$xlsx_file"
-
-          descriptor_root="$RUNNER_TEMP/kassiber-descriptor-smoke"
-          "$cli" --data-root "$descriptor_root" --machine init >/dev/null
-          "$cli" --data-root "$descriptor_root" --machine workspaces create Smoke >/dev/null
-          "$cli" \
-            --data-root "$descriptor_root" \
-            --machine \
-            profiles create \
-            --workspace Smoke \
-            --fiat-currency USD \
-            --tax-country generic \
-            Descriptor >/dev/null
-          "$cli" \
-            --data-root "$descriptor_root" \
-            --machine \
-            wallets create \
-            --workspace Smoke \
-            --profile Descriptor \
-            --label DescriptorSmoke \
-            --kind descriptor \
-            --descriptor 'wpkh([91790c21/84h/0h/0h]xpub6CpT4xRJntYQuFwkiZfSiK7jEtPM3e9nUfJKQ8ATWkgYJui4WS5HmzjD6C7avtwAFtmEyAusdFFxg2rZMs73SoSVkPQfEaQtrLGox92JNWn/0/*)' \
-            --gap-limit 1 >/dev/null
-          "$cli" \
-            --data-root "$descriptor_root" \
-            --machine \
-            wallets derive \
-            --workspace Smoke \
-            --profile Descriptor \
-            --wallet DescriptorSmoke \
-            --count 1 >/dev/null
+      - name: Prove the packaged CLI stays offline
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          KASSIBER_PACKAGED_CLI: dist/kassiber
+        run: |
+          set -euo pipefail
+          "$PYTHON" -m unittest -v tests.test_packaged_cli_no_egress
 
       - name: Package CLI-only release
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p release
           package_name="kassiber-cli-${{ matrix.target }}"
-          mkdir -p "release/${package_name}"
-          cp "dist/kassiber${{ matrix.exe_ext }}" "release/${package_name}/kassiber${{ matrix.exe_ext }}"
-          cp build/BUILD_INFO.json "release/${package_name}/BUILD_INFO.json"
-          chmod 755 "release/${package_name}/kassiber${{ matrix.exe_ext }}"
-          if [ "${{ matrix.archive }}" = "zip" ]; then
-            (cd release && 7z a -tzip "${package_name}.zip" "${package_name}")
-          else
-            tar -C release -czf "release/${package_name}.tar.gz" "${package_name}"
-          fi
+          broker=kassiber/ai/provider_broker/index.mjs
+          scripts/package-cli-archive.sh \
+            --binary "dist/kassiber${{ matrix.exe_ext }}" \
+            --broker "$broker" \
+            --build-info build/BUILD_INFO.json \
+            --name "$package_name" \
+            --format "${{ matrix.archive }}" \
+            --output-dir release
           if [ "$RUNNER_OS" = "Linux" ]; then
             scripts/package-cli-deb.sh \
               --binary "dist/kassiber${{ matrix.exe_ext }}" \
+              --broker "$broker" \
               --version "$PACKAGE_VERSION" \
               --output "release/${package_name}.deb"
             scripts/package-cli-rpm.sh \
               --binary "dist/kassiber${{ matrix.exe_ext }}" \
+              --broker "$broker" \
               --version "$PACKAGE_VERSION" \
               --architecture x86_64 \
               --output "release/${package_name}.rpm"
             rpm_path="$PWD/release/${package_name}.rpm"
             rpm_root="$(mktemp -d)"
             (cd "$rpm_root" && rpm2cpio "$rpm_path" | cpio --quiet -id)
+            test -s "$rpm_root/usr/lib/kassiber-cli/provider_broker/index.mjs"
             "$rpm_root/usr/bin/kassiber" --version \
               | grep "$(git rev-parse --short=12 HEAD)"
           fi
@@ -496,26 +326,31 @@ jobs:
             release/*.rpm
           if-no-files-found: error
 
-      # macOS stages the one-dir tree under `kassiber-cli/`; the others stage the
-      # identical one-file CLI flat. Both layouts are what `bundled_sidecar` in
+      # The sidecar is the same executable under its target-triple name, with
+      # the broker and the build record beside it. macOS keeps the `kassiber-cli/` directory the
+      # Touch ID helper's identity check and the bundle launcher expect; the
+      # others stage flat. Both layouts are what `bundled_sidecar` in
       # ui-tauri/src-tauri/src/supervisor.rs looks for.
       - name: Stage desktop sidecar
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p sidecar
+          sidecar_dir=sidecar
           if [ "$RUNNER_OS" = "macOS" ]; then
-            cp -R "sidecar-dist/kassiber-cli-${{ matrix.triple }}" sidecar/kassiber-cli
-            chmod 755 "sidecar/kassiber-cli/kassiber-cli-${{ matrix.triple }}"
-          else
-            cp "dist/kassiber${{ matrix.exe_ext }}" \
-              "sidecar/kassiber-cli-${{ matrix.triple }}${{ matrix.exe_ext }}"
-            chmod 755 "sidecar/kassiber-cli-${{ matrix.triple }}${{ matrix.exe_ext }}"
+            sidecar_dir=sidecar/kassiber-cli
           fi
+          mkdir -p "$sidecar_dir/provider_broker"
+          cp "dist/kassiber${{ matrix.exe_ext }}" \
+            "$sidecar_dir/kassiber-cli-${{ matrix.triple }}${{ matrix.exe_ext }}"
+          chmod 755 "$sidecar_dir/kassiber-cli-${{ matrix.triple }}${{ matrix.exe_ext }}"
+          cp kassiber/ai/provider_broker/index.mjs "$sidecar_dir/provider_broker/index.mjs"
+          # The macOS signer requires embedded build provenance in the app;
+          # the Python sidecar carried it inside its payload.
+          cp build/BUILD_INFO.json "$sidecar_dir/BUILD_INFO.json"
 
       # `path: sidecar` (the directory), not `sidecar/*`: with a glob the
-      # artifact root collapses to the single matched entry, which would flatten
-      # the one-dir tree and drop the `kassiber-cli/` level.
+      # artifact root collapses to the single matched entry, which would drop
+      # the `kassiber-cli/` level on macOS.
       - name: Upload desktop sidecar
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
@@ -608,7 +443,7 @@ jobs:
 
       # upload-artifact does not preserve the executable bit, so restore it
       # before Tauri copies the sidecar into the bundle. macOS looks one level
-      # deeper: the one-dir tree lands under `binaries/kassiber-cli/`.
+      # deeper: its sidecar lands under `binaries/kassiber-cli/`.
       - name: Verify desktop CLI sidecar inputs
         shell: bash
         run: |
@@ -616,10 +451,11 @@ jobs:
           root=ui-tauri/src-tauri/binaries
           if [ "$RUNNER_OS" = "macOS" ]; then
             root=$root/kassiber-cli
-            # A flattened artifact would strand the bootloader from its
-            # `_internal` at runtime instead of failing the build here.
-            test -d "$root/_internal"
           fi
+          # A leftover one-dir payload (the retired Python sidecar) must never ride along.
+          test ! -e "$root/_internal"
+          test -s "$root/provider_broker/index.mjs"
+          test -s "$root/BUILD_INFO.json"
           count="$(find "$root" -maxdepth 1 -type f -name 'kassiber-cli-*' | wc -l | tr -d ' ')"
           test "$count" = "${{ matrix.sidecar_expected }}"
           find "$root" -maxdepth 1 -type f -name 'kassiber-cli-*' -exec chmod 755 {} +
@@ -627,7 +463,11 @@ jobs:
           if [ "$RUNNER_OS" = "Windows" ]; then
             sidecar="$(find "$root" -maxdepth 1 -type f -name 'kassiber-cli-*.exe' -print -quit)"
             test -n "$sidecar"
+            # The PATH entry runs this copy directly, so the broker it looks
+            # for beside its own executable has to be there too.
             cp "$sidecar" ui-tauri/src-tauri/bin/kassiber.exe
+            mkdir -p ui-tauri/src-tauri/bin/provider_broker
+            cp "$root/provider_broker/index.mjs" ui-tauri/src-tauri/bin/provider_broker/index.mjs
           fi
 
       - name: Build unsigned desktop preview
@@ -682,6 +522,9 @@ jobs:
               test -n "$launcher"
               "$launcher" --version | grep "$expected_commit"
               "$launcher" --help >/dev/null
+              resources="$(dirname "$(dirname "$launcher")")"
+              test -s "$resources/binaries/kassiber-cli/provider_broker/index.mjs"
+              test ! -e "$resources/binaries/kassiber-cli/_internal"
               ;;
             Linux)
               appimage="$(find ui-tauri/src-tauri/target -path '*/release/bundle/appimage/*.AppImage' -print -quit)"
@@ -689,6 +532,24 @@ jobs:
               chmod 755 "$appimage"
               APPIMAGE_EXTRACT_AND_RUN=1 "$appimage" --cli --version \
                 | grep "$expected_commit"
+              # The shell and the sidecar inside both installers must load on
+              # the glibc floor, and the sidecar must find its broker.
+              deb="$(find ui-tauri/src-tauri/target -path '*/release/bundle/deb/*.deb' -print -quit)"
+              test -n "$deb"
+              payload="$(mktemp -d)"
+              dpkg-deb -x "$deb" "$payload"
+              scripts/check-linux-glibc-floor.sh --any-libraries "$payload/usr/bin/kassiber-ui"
+              scripts/check-linux-glibc-floor.sh \
+                "$payload/usr/lib/Kassiber/binaries/kassiber-cli-x86_64-unknown-linux-gnu"
+              test -s "$payload/usr/lib/Kassiber/binaries/provider_broker/index.mjs"
+              inspection="$(mktemp -d)"
+              (
+                cd "$inspection"
+                "$OLDPWD/$appimage" --appimage-extract 'usr/lib/Kassiber/binaries/*' >/dev/null
+              )
+              test -s "$inspection/squashfs-root/usr/lib/Kassiber/binaries/provider_broker/index.mjs"
+              scripts/check-linux-glibc-floor.sh \
+                "$inspection/squashfs-root/usr/lib/Kassiber/binaries/kassiber-cli-x86_64-unknown-linux-gnu"
               ;;
             Windows)
               # The PATH entry exposes a native executable so arguments are

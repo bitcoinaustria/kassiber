@@ -100,7 +100,7 @@ pkgdesc='Local-first Bitcoin accounting desktop application'
 arch=('x86_64')
 url='https://github.com/bitcoinaustria/kassiber'
 license=('AGPL-3.0-only')
-depends=('glibc' 'zlib' 'gtk3' 'webkit2gtk-4.1')
+depends=('glibc' 'gcc-libs' 'gtk3' 'webkit2gtk-4.1')
 provides=('kassiber' 'kassiber-command')
 conflicts=('kassiber' 'kassiber-cli' 'kassiber-cli-bin')
 options=('!strip')
@@ -139,7 +139,7 @@ package() {{
 \tarch = x86_64
 \tlicense = AGPL-3.0-only
 \tdepends = glibc
-\tdepends = zlib
+\tdepends = gcc-libs
 \tdepends = gtk3
 \tdepends = webkit2gtk-4.1
 \tprovides = kassiber
@@ -173,7 +173,7 @@ pkgdesc='Local-first Bitcoin accounting CLI'
 arch=('x86_64')
 url='https://github.com/bitcoinaustria/kassiber'
 license=('AGPL-3.0-only')
-depends=('glibc' 'zlib')
+depends=('glibc' 'gcc-libs')
 provides=('kassiber-cli' 'kassiber-command')
 conflicts=('kassiber' 'kassiber-bin' 'kassiber-cli')
 options=('!strip')
@@ -183,8 +183,13 @@ sha256sums=('{local_hashes[0]}'
             '{artifact_sha256}')
 
 package() {{
+  # The binary finds the AI provider broker beside its resolved executable.
   install -Dpm755 "${{srcdir}}/kassiber-cli-linux-x64/kassiber" \
-    "${{pkgdir}}/usr/bin/kassiber"
+    "${{pkgdir}}/usr/lib/kassiber-cli/kassiber"
+  install -Dpm644 "${{srcdir}}/kassiber-cli-linux-x64/provider_broker/index.mjs" \
+    "${{pkgdir}}/usr/lib/kassiber-cli/provider_broker/index.mjs"
+  install -dm755 "${{pkgdir}}/usr/bin"
+  ln -s ../lib/kassiber-cli/kassiber "${{pkgdir}}/usr/bin/kassiber"
   install -Dpm644 "${{srcdir}}/LICENSE" \
     "${{pkgdir}}/usr/share/licenses/${{pkgname}}/LICENSE"
 }}
@@ -200,7 +205,7 @@ package() {{
 \tarch = x86_64
 \tlicense = AGPL-3.0-only
 \tdepends = glibc
-\tdepends = zlib
+\tdepends = gcc-libs
 \tprovides = kassiber-cli
 \tprovides = kassiber-command
 \tconflicts = kassiber

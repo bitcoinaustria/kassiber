@@ -11,8 +11,8 @@ remains the execution backlog.
 
 ## Frozen TLS trust
 
-The Linux PyInstaller CLI and AppImage sidecar use the host's installed CA
-bundle when one is available, including Fedora's `/etc/pki` and Debian's
+The Linux CLI and AppImage sidecar (the Rust binary, previously a
+PyInstaller bundle) use the host's installed CA bundle when one is available, including Fedora's `/etc/pki` and Debian's
 `/etc/ssl` layouts. An explicit `SSL_CERT_FILE` remains authoritative, including
 for built-in endpoints; minimal images without a host bundle fall back to
 Kassiber's bundled certifi roots for Python/OpenSSL transports.
@@ -213,14 +213,14 @@ The recommended production shape is:
 | --- | --- | --- | --- |
 | 0: release/channel foundations | Project-owned workflows, Debian/RPM packages, AUR/Nix renderers | Tag/version equality blocks publish; signed local APT/DNF repositories pass verification; AUR metadata and Nix evaluation pass | Review whenever release/package metadata changes |
 | 1: signed APT prerelease, amd64 | Existing desktop and CLI Debian packages; Bitcoin Austria owns host/key | Ubuntu 22.04/24.04 and Debian 12 clean install, cross-surface replacement, upgrade, remove, signed-origin, expiry, and rollback drills pass; repository is atomic and monitored | About 1-2 hours/month after automation, plus key/host incident duty |
-| 2: lower CLI glibc floor + Linux ARM64 | Native x86_64/aarch64 CLI builds; upstream or project-built BDK/LWK wheels | CLI is built on the oldest promised glibc; `readelf` and container smokes prove the floor; native ARM runner builds and runs BDK, LWK, SQLCipher, PyInstaller, Debian, and desktop/AppImage matrices | Dependency-wheel monitoring every release |
+| 2: lower CLI glibc floor + Linux ARM64 | Native x86_64/aarch64 Rust CLI builds | CLI is built on the oldest promised glibc; `scripts/check-linux-glibc-floor.sh` and container smokes prove the floor; native ARM runner builds and runs the Rust binary (BDK, LWK, SQLCipher), Debian, and desktop/AppImage matrices | Toolchain and C-dependency floor checks every release |
 | 3: AUR `-bin` recipes | Project-owned `kassiber-bin` and `kassiber-cli-bin` recipes consume immutable release assets | Renderer/metadata CI is green; then `namcap`, clean-chroot build, checksum, file ownership, conflicts/provides, desktop metadata, install/upgrade/remove pass on x86_64; ARM64 is added only with real assets | Review each release and respond to AUR comments; automation cannot replace maintainer review |
 | 4: project flake, then Nixpkgs | Interim binary derivations declare `binaryNativeCode`; prefer source derivations later | Rendered flake evaluates in CI; then `nix build`, CLI/desktop smoke and sandbox paths pass on x86_64. Add aarch64 only with real release assets; maintain the upstream flake before Nixpkgs submission | Flake input/hash bumps per release; Nixpkgs review and stable backports |
 | 5: RPM + COPR | Reintroduce rebuildable `kassiber` and `kassiber-cli` SRPMs with the COPR submission itself; COPR owns hosted repository signing | Fedora 43/44 lifecycle CI is green; then COPR `rpmlint`/mock builds and published signatures pass for each enabled chroot; no generic RHEL claim | Follow Fedora releases/EOL; rebuild and test each tag, roughly 1-2 hours/month |
 | 6: OBS for openSUSE | Reuse source packaging where practical; a named Bitcoin Austria/openSUSE maintainer owns the OBS project | Tumbleweed first; Leap/SLES only after their glibc and WebKitGTK floors pass; OBS-signed repositories and zypper lifecycle tests pass per target | Track OBS target changes and openSUSE/SLES lifecycle separately from COPR |
 | Deferred: Snap | Source build or staged desktop package; project owns Snap name/store credentials | Strict confinement must support data roots, attachments, local backends, Secret Service, deep links, and single-instance D-Bus. Classic confinement requires store approval and explicit user trust | High: store credentials, tracks, confinement regressions |
 | Blocked: Flathub | No submission while current policy excludes AI-assisted application code/docs/submissions | Re-check the live policy; proceed only after written eligibility is clear and a human can maintain the submission without violating it | Policy and sandbox review every update |
-| Deferred: Alpine APK | Native musl source build, not a glibc compatibility shim | BDK/LWK/SQLCipher/PyInstaller and desktop WebKitGTK all build and run under musl on x86_64 and aarch64; `abuild` and repository signing pass | High until upstream musl artifacts exist |
+| Deferred: Alpine APK | Native musl source build, not a glibc compatibility shim | The Rust binary (BDK/LWK/SQLCipher) and desktop WebKitGTK all build and run under musl on x86_64 and aarch64; `abuild` and repository signing pass | High until upstream musl artifacts exist |
 
 The ordering is intentionally not "all RPM systems at once." The current
 Ubuntu 22.04 artifact floor cannot represent older enterprise distributions,
@@ -231,11 +231,10 @@ reduces dependency packaging but does not erase its build host's glibc floor.
 
 Linux ARM64 is a release matrix, not a filename change:
 
-1. Obtain pinned `bdkpython` and `lwk` Linux aarch64 wheels or reproducibly
-   build and attest them from their pinned sources. The current lock has Linux
-   aarch64 SQLCipher and pyrage wheels, but the pinned BDK and LWK releases are
-   x86_64-only on Linux.
-2. Use GitHub's native Ubuntu 22.04 ARM runner for both the PyInstaller CLI and
+1. Build the Rust binary natively for `aarch64-unknown-linux-gnu`
+   (`scripts/build-rust-cli.sh` already accepts the triple); BDK, LWK and
+   SQLCipher are crates now, so no Python wheels are involved.
+2. Use GitHub's native Ubuntu 22.04 ARM runner for both the Rust CLI and
    Tauri desktop build. Tauri's AppImage tooling does not cross-compile ARM;
    native ARM or emulation is required.
 3. Add `linux-arm64`, `aarch64-unknown-linux-gnu`, Debian `arm64`, and matching

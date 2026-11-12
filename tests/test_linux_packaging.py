@@ -692,10 +692,12 @@ class PackagingWorkflowVersionGateTest(unittest.TestCase):
         workflow = (
             ROOT / ".github/workflows/prerelease-binaries.yml"
         ).read_text(encoding="utf-8")
-        self.assertIn(
-            "DependencyDriftTests.test_app_version_is_consistent_across_package_metadata",
-            workflow,
-        )
+        # The packaging job checks every version copy against the backend
+        # crate without importing the Python package.
+        self.assertIn("crates/kassiber/Cargo.toml", workflow)
+        for copy in ("pyproject.toml", "ui-tauri/src-tauri/Cargo.toml",
+                     "ui-tauri/package.json", "ui-tauri/src-tauri/tauri.conf.json"):
+            self.assertIn(f'"{copy}":', workflow)
         self.assertIn('expected_version="${release_tag#v}"', workflow)
         self.assertIn('if [ "$version" != "$expected_version" ]', workflow)
         self.assertIn("does not match package version", workflow)

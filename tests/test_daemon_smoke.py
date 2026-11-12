@@ -3,7 +3,9 @@ import io
 import json
 import os
 import queue
+import select
 import shutil
+import signal
 import sqlite3
 import subprocess
 import tempfile
@@ -147,15 +149,49 @@ def _daemon_stdout_queue(proc):
     return output_queue
 
 
+def _daemon_thread_stacks(proc):
+    """Ask a stalled daemon for every thread's stack and return its stderr.
+
+    The child hooks register faulthandler on SIGUSR1; the dump goes to the
+    daemon's stderr pipe, read here straight from the descriptor because the
+    test fails right after and nothing else reads it.
+    """
+    signal_number = getattr(signal, "SIGUSR1", None)
+    if signal_number is None or proc.poll() is not None or proc.stderr is None:
+        return ""
+    try:
+        os.kill(proc.pid, signal_number)
+    except OSError:
+        return ""
+    fd = proc.stderr.fileno()
+    chunks = []
+    deadline = time.monotonic() + 2.0
+    while time.monotonic() < deadline:
+        ready, _, _ = select.select([fd], [], [], 0.2)
+        if not ready:
+            if chunks:
+                break
+            continue
+        chunk = os.read(fd, 65536)
+        if not chunk:
+            break
+        chunks.append(chunk)
+    text = b"".join(chunks).decode("utf-8", "replace")[-12000:]
+    return f"\ndaemon stderr after a stack-dump request:\n{text}" if text else ""
+
+
 def _read_daemon_line(proc, timeout=None):
     output_queue = _daemon_stdout_queue(proc)
     try:
         line = output_queue.get(timeout=timeout)
     except queue.Empty as exc:
         seen = getattr(proc, "_kassiber_seen_payloads", [])
+        # A short wait may be a test proving silence and reading on; only a
+        # real give-up interrupts the daemon for its stacks.
+        stacks = _daemon_thread_stacks(proc) if timeout >= 1.0 else ""
         raise AssertionError(
             f"daemon did not emit a payload within {timeout:.1f}s; "
-            f"last payloads: {seen!r}"
+            f"last payloads: {seen!r}{stacks}"
         ) from exc
     if line is _DAEMON_STDOUT_EOF:
         output_queue.put(_DAEMON_STDOUT_EOF)

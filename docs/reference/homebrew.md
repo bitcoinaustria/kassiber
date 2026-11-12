@@ -184,9 +184,9 @@ published release key; neither mechanism replaces the other.
   `brew install --cask --no-quarantine bitcoinaustria/kassiber/kassiber`
   skips the prompt at the user's own discretion. New production releases
   instead require the signing and notarization pipeline described above.
-- **Formula**: the frozen CLI is downloaded by Homebrew itself, which does
-  not quarantine formula resources, and the arm64 binary carries the ad-hoc
-  signature PyInstaller applies. `kassiber-cli` therefore runs without any
+- **Formula**: the CLI is downloaded by Homebrew itself, which does
+  not quarantine formula resources, and the arm64 binary carries an ad-hoc
+  signature. `kassiber-cli` therefore runs without any
   Gatekeeper prompt, making it the lowest-friction macOS path until the
   desktop app is notarized.
 
