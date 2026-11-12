@@ -145,6 +145,7 @@
     "review": "Review"
   },
   "start": {
+    "language": "Language",
     "headline": "Your Bitcoin books, kept on your machine.",
     "createNew": {
       "title": "Create new books"

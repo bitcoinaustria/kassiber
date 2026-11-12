@@ -145,6 +145,7 @@
     "review": "Prüfen"
   },
   "start": {
+    "language": "Sprache",
     "headline": "Deine Bitcoin-Bücher, auf deinem Rechner.",
     "createNew": {
       "title": "Neue Bücher erstellen"

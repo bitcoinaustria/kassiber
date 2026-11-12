@@ -161,7 +161,9 @@ block is found (its stepped outline flashes orange), and the chain moves back
 in discrete steps; small pixel cubes above it are the mempool. The artwork is
 an SVG generated locally: it shows no chain data and stays out of the
 accessibility tree and tab order. Reduced motion holds it still, and hidden
-windows pause both the animation and its timer.
+windows pause both the animation and its timer. A language select beside the
+wordmark sets the UI language, the same setting as Settings → Appearance,
+before setup starts.
 
 The pixel wordmark appears throughout setup, the lock screen, and the sidebar.
 It arrives as falling cells on the welcome screen, decrypts when the lock
