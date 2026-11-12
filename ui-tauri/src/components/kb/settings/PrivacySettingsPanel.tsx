@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { useOfflineMode } from "@/lib/offlineMode";
 import { cn } from "@/lib/utils";
+import { ExplorerFallbackSetting } from "./ExplorerFallbackSetting";
 import { SettingsGroup, SettingsRow, SettingsSelect } from "./SettingsControls";
 import {
   backendProtocolLabel,
@@ -290,6 +291,7 @@ export function PrivacySettingsPanel({
             {t("privacy.reviewAi")}
           </Button>
         </SettingsRow>
+        <ExplorerFallbackSetting />
         <SettingsRow
           label={t("privacy.filterLabel")}
           description={

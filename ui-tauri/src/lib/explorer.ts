@@ -1,7 +1,13 @@
 export interface ExplorerSettings {
   bitcoinBaseUrl: string;
   liquidBaseUrl: string;
+  /** Derived from the backend setup: false for manual and regtest books. */
   publicFallbacks: boolean;
+  /**
+   * The user's own choice (Settings → Privacy). Absent means allowed; it is
+   * kept apart from `publicFallbacks`, which every backend refresh rederives.
+   */
+  publicFallbacksAllowed?: boolean;
 }
 
 export const DEFAULT_EXPLORER_SETTINGS: ExplorerSettings = {
@@ -9,6 +15,20 @@ export const DEFAULT_EXPLORER_SETTINGS: ExplorerSettings = {
   liquidBaseUrl: "",
   publicFallbacks: true,
 };
+
+/**
+ * Whether a link may fall back to a public explorer website, which then
+ * learns the transaction or address: the setup must allow it and the user
+ * must not have turned it off.
+ */
+export function publicExplorerFallbacksEnabled(
+  settings: ExplorerSettings | undefined,
+): boolean {
+  return (
+    settings?.publicFallbacks !== false &&
+    settings?.publicFallbacksAllowed !== false
+  );
+}
 
 export type ExplorerNetwork = "bitcoin" | "liquid";
 
@@ -92,7 +112,7 @@ function targetForExplorerValue({
     network === "liquid" ? settings?.liquidBaseUrl : settings?.bitcoinBaseUrl;
   const configured = Boolean(configuredBase?.trim());
   const fallback = PUBLIC_EXPLORERS[network];
-  if (!configured && settings?.publicFallbacks === false) return null;
+  if (!configured && !publicExplorerFallbacksEnabled(settings)) return null;
   if (!configured && !isMainnetNetworkName(network, networkName)) return null;
   const baseUrl = configured ? configuredBase?.trim() ?? "" : fallback.baseUrl;
   const url = explorerUrl(baseUrl, segment, id);

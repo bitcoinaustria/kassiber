@@ -434,7 +434,11 @@
     "assistantHeading": "Assistent-Prompts",
     "assistantEnabled": "Lokale Provider halten Prompts auf diesem Gerät. Entfernte und CLI-Provider sehen Prompt-Inhalte, die Buchdaten enthalten können.",
     "assistantDisabled": "Aus. Es wird nichts an einen Provider gesendet; Provider-Einstellungen bleiben gespeichert.",
-    "reviewAi": "Assistent-Einstellungen"
+    "reviewAi": "Assistent-Einstellungen",
+    "explorerFallbacksLabel": "Explorer-Links auf öffentlichen Websites öffnen",
+    "explorerFallbacksOn": "Ohne eigenen Explorer öffnen Transaktions- und Adresslinks auf der Website eines Drittanbieters, die die nachgeschlagene Transaktion oder Adresse erfährt.",
+    "explorerFallbacksOff": "Links öffnen nur auf einem Explorer, den du hinzugefügt hast. Ohne einen werden keine Explorer-Links angezeigt.",
+    "explorerFallbacksUnavailable": "Manuelle und Regtest-Einrichtungen öffnen nie öffentliche Explorer-Websites."
   },
   "data": {
     "importHeading": "Daten importieren",
@@ -1069,6 +1073,7 @@
       "clearClipboard": "kopieren, einfügen, Zwischenablage",
       "updateChecks": "Updates, Aktualisierung, GitHub, neue Version",
       "outgoingConnections": "Netzwerk, Drittanbieter, Verbindungen, Server",
+      "explorerFallbacks": "Block-Explorer, Mempool, Transaktionslinks, Adresslinks, Drittanbieter",
       "databaseEncryption": "SQLCipher, verschlüsselt, jetzt sperren",
       "passphrase": "Passwort ändern, Kennwort",
       "autoLock": "automatisch sperren, Inaktivität, Zeitlimit, Sperre",

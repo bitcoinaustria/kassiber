@@ -432,8 +432,12 @@ export function SettingsScreen({
       ),
     ];
   }, [backendSettingsQuery.data, maintenanceSettingsQuery.data]);
+  const explorerFallbacksAllowed = useUiStore(
+    (s) => s.explorerSettings.publicFallbacksAllowed !== false,
+  );
   const publicExplorerFallbacks =
     backendSettingsQuery.isSuccess &&
+    explorerFallbacksAllowed &&
     deriveExplorerSettings(
       backends,
       backendSettingsQuery.data?.data?.summary.bootstrap_mode,

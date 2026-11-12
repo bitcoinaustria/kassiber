@@ -54,6 +54,7 @@ export const SETTINGS_SEARCH_ENTRIES = [
   entry("security-privacy", "clearClipboard", "privacy.clipboardLabel"),
   entry("security-privacy", "updateChecks", "privacy.updatesLabel"),
   entry("security-privacy", "outgoingConnections", "privacy.leavesHeading"),
+  entry("security-privacy", "explorerFallbacks", "privacy.explorerFallbacksLabel"),
 
   entry("security-lock", "databaseEncryption", "security.encryptionHeading"),
   entry("security-lock", "passphrase", "security.passphraseLabel"),

@@ -434,7 +434,11 @@
     "assistantHeading": "Assistant prompts",
     "assistantEnabled": "Local providers keep prompts on this machine. Remote and CLI providers see prompt content, which can include book data.",
     "assistantDisabled": "Off. Nothing is sent to a provider; provider settings stay saved.",
-    "reviewAi": "Assistant settings"
+    "reviewAi": "Assistant settings",
+    "explorerFallbacksLabel": "Open explorer links on public websites",
+    "explorerFallbacksOn": "Without an explorer of your own, transaction and address links open on a third-party website, which learns the transaction or address you look up.",
+    "explorerFallbacksOff": "Links open only on an explorer you added. Without one, no explorer links are shown.",
+    "explorerFallbacksUnavailable": "Manual and regtest setups never open public explorer websites."
   },
   "data": {
     "importHeading": "Import data",
@@ -1069,6 +1073,7 @@
       "clearClipboard": "copy, paste, clipboard",
       "updateChecks": "updates, GitHub, new version, release",
       "outgoingConnections": "network, third party, egress, servers",
+      "explorerFallbacks": "block explorer, mempool, transaction links, address links, third party",
       "databaseEncryption": "SQLCipher, encrypted, lock now",
       "passphrase": "password, change passphrase",
       "autoLock": "auto-lock, idle, timeout, lock",
