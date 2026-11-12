@@ -359,6 +359,17 @@ describe("LockScreen", () => {
     expect(foreground.onTouchIdUnlock).toHaveBeenCalledTimes(1);
   });
 
+  it("shows the typed passphrase on request", () => {
+    renderLock();
+    const input = screen.getByLabelText<HTMLInputElement>("Passphrase");
+    const toggle = screen.getByRole("button", { name: "Show passphrase" });
+
+    expect(input.type).toBe("password");
+    fireEvent.click(toggle);
+    expect(input.type).toBe("text");
+    expect(toggle.getAttribute("aria-pressed")).toBe("true");
+  });
+
   it("goes back to setup from the footer", () => {
     const props = renderLock();
 

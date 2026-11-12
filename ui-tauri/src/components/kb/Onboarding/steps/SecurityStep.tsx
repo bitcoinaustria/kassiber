@@ -59,6 +59,7 @@ export const SecurityStep = ({
               label={t("security.passphrase")}
               name="database-passphrase"
               type="password"
+              revealable
               autoComplete="new-password"
               autoFocus
               value={form.databasePassphrase}
@@ -69,6 +70,7 @@ export const SecurityStep = ({
               label={t("security.confirmPassphrase")}
               name="database-passphrase-confirm"
               type="password"
+              revealable
               autoComplete="new-password"
               value={form.databasePassphraseConfirm}
               placeholder={t("security.confirmPassphrasePlaceholder")}

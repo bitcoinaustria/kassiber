@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 
+import { PassphraseRevealButton } from "@/components/kb/PassphraseRevealButton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,6 +28,7 @@ export const TextField = ({
   hint,
   description,
   disabled,
+  revealable = false,
   onChange,
 }: {
   label: string;
@@ -39,30 +41,54 @@ export const TextField = ({
   hint?: string | null;
   description?: string | null;
   disabled?: boolean;
+  /** For `type="password"`: a button that shows the typed text. */
+  revealable?: boolean;
   onChange: (value: string) => void;
 }) => {
   // Hold validation hints until the field has been touched or has content, so a
   // pristine step never greets the user with a red error before they type.
   const [touched, setTouched] = useState(false);
+  // Local state, so a revealed passphrase is masked again once the step
+  // unmounts.
+  const [revealed, setRevealed] = useState(false);
   const showHint = Boolean(hint) && (touched || value.length > 0);
+  const input = (
+    <Input
+      id={name}
+      name={name}
+      type={revealable && revealed ? "text" : type}
+      autoComplete={autoComplete}
+      autoFocus={autoFocus}
+      value={value}
+      placeholder={placeholder}
+      disabled={disabled}
+      onChange={(event) => onChange(event.target.value)}
+      onBlur={() => setTouched(true)}
+      aria-invalid={showHint ? true : undefined}
+      aria-describedby={showHint ? `${name}-hint` : undefined}
+      className={cn("w-full rounded-md border-line", revealable && "pr-10")}
+    />
+  );
   return (
     <div className="space-y-2">
       <Label htmlFor={name}>{label}</Label>
-      <Input
-        id={name}
-        name={name}
-        type={type}
-        autoComplete={autoComplete}
-        autoFocus={autoFocus}
-        value={value}
-        placeholder={placeholder}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-        onBlur={() => setTouched(true)}
-        aria-invalid={showHint ? true : undefined}
-        aria-describedby={showHint ? `${name}-hint` : undefined}
-        className="w-full rounded-md border-line"
-      />
+      {revealable ? (
+        <div className="relative">
+          {input}
+          {/* Placed by a wrapper: `kb-hit-floor` keeps every button
+              `position: relative`, outranking an `absolute` utility. */}
+          <div className="absolute inset-y-0 right-0.5 flex items-center">
+            <PassphraseRevealButton
+              revealed={revealed}
+              onToggle={() => setRevealed((current) => !current)}
+              controls={name}
+              disabled={disabled}
+            />
+          </div>
+        </div>
+      ) : (
+        input
+      )}
       {showHint && (
         <p
           id={`${name}-hint`}

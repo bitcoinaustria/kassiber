@@ -72,5 +72,9 @@
   "taxCountry": {
     "previewBadge": "Preview",
     "previewNotice": "Not yet reviewed by a tax professional for this country — check results before filing."
+  },
+  "passphraseReveal": {
+    "show": "Show passphrase",
+    "hide": "Hide passphrase"
   }
 }
