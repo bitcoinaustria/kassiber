@@ -97,6 +97,14 @@ impl Paths {
             .fold(text.to_owned(), |t, (a, b)| t.replace(a, b))
     }
 
+    /// Whether `bytes` hold any recorded path.
+    pub fn named_in(&self, bytes: &[u8]) -> bool {
+        self.0.iter().any(|(recorded, _)| {
+            let needle = recorded.as_bytes();
+            bytes.windows(needle.len()).any(|w| w == needle)
+        })
+    }
+
     pub fn back(&self, text: &str) -> String {
         let mut back: Vec<_> = self.0.iter().map(|(a, b)| (b.clone(), a.clone())).collect();
         back.sort_by_key(|p| std::cmp::Reverse(p.0.len()));
@@ -913,7 +921,15 @@ fn relocate(root: &Path, paths: &Paths) -> Result<(), String> {
             Err(error) => return Err(error.to_string()),
         };
         if dbdump::is_sqlite(&bytes) {
-            relocate_database(&file, paths)?;
+            // Opening a book checkpoints its WAL when it closes, which would
+            // erase a pending journal a session records on purpose: only a
+            // book (or its WAL) that names a recorded path is opened.
+            let mut wal = file.clone().into_os_string();
+            wal.push("-wal");
+            let wal = fs::read(&wal).unwrap_or_default();
+            if paths.named_in(&bytes) || paths.named_in(&wal) {
+                relocate_database(&file, paths)?;
+            }
         } else if let Ok(text) = std::str::from_utf8(&bytes) {
             let moved = paths.forward(text);
             if moved != text {
@@ -1002,4 +1018,21 @@ fn first_difference(label: &str, a: &str, b: &str) -> String {
         clip(a),
         clip(b)
     )
+}
+
+#[cfg(test)]
+mod relocation_tests {
+    use super::Paths;
+
+    #[test]
+    fn only_bytes_naming_a_recorded_path_are_relocated() {
+        let mut paths = Paths::default();
+        paths.add("/home/rec/checkout", "/home/runner/work/checkout");
+        assert!(paths.named_in(b"ca=/home/rec/checkout/crates/net/tests/fixtures/ca.pem"));
+        assert!(!paths.named_in(b"SQLite format 3\0 no paths here"));
+        // An identical checkout path adds no mapping, so nothing is touched.
+        let mut same = Paths::default();
+        same.add("/srv/checkout", "/srv/checkout");
+        assert!(!same.named_in(b"/srv/checkout/x"));
+    }
 }
