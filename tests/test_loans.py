@@ -3,7 +3,7 @@ import unittest
 from decimal import Decimal
 
 from kassiber.core import loans as core_loans
-from kassiber.core.engines.rp2 import GenericRP2TaxEngine
+from kassiber.core.engines import KassiberTaxEngine
 from kassiber.db import open_db
 from kassiber.errors import AppError
 from kassiber.time_utils import now_iso
@@ -52,7 +52,7 @@ def _row(tx_id, direction, amount_msat, occurred_at, *, fiat_rate=50_000, wallet
 
 
 def _run(rows, loan_legs=()):
-    return GenericRP2TaxEngine(_profile()).build_ledger_state(
+    return KassiberTaxEngine(_profile()).build_ledger_state(
         finalized_tax_inputs(
             _profile(),
             rows=rows,

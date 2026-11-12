@@ -4,7 +4,7 @@ import unittest
 
 from kassiber.cli.handlers import _metadata_hooks
 from kassiber.core import metadata, pricing, review_workflow as review
-from kassiber.core.tax_events import _pricing_needs_review
+from kassiber.core.engines.ledger_request import _coarse_needs_review
 from kassiber.db import open_db
 from kassiber.errors import AppError
 
@@ -214,13 +214,13 @@ class CoarsePriceAcceptanceTest(unittest.TestCase):
     def test_needs_review_follows_the_price_the_journals_read(self):
         row = {"pricing_quality": "coarse_fallback", "fiat_rate_exact": "100",
                "fiat_value_exact": "5"}
-        self.assertTrue(_pricing_needs_review(row))
-        self.assertFalse(_pricing_needs_review({**row, "pricing_review_accepted_price": "rate:100"}))
-        self.assertTrue(_pricing_needs_review({**row, "pricing_review_accepted_price": "rate:99"}))
+        self.assertTrue(_coarse_needs_review(row))
+        self.assertFalse(_coarse_needs_review({**row, "pricing_review_accepted_price": "rate:100"}))
+        self.assertTrue(_coarse_needs_review({**row, "pricing_review_accepted_price": "rate:99"}))
         # Without a rate the journals price by value, and so does the review.
         no_rate = {"pricing_quality": "coarse_fallback", "fiat_value_exact": "5"}
-        self.assertFalse(_pricing_needs_review({**no_rate, "pricing_review_accepted_price": "value:5"}))
-        self.assertFalse(_pricing_needs_review({"pricing_quality": "exact"}))
+        self.assertFalse(_coarse_needs_review({**no_rate, "pricing_review_accepted_price": "value:5"}))
+        self.assertFalse(_coarse_needs_review({"pricing_quality": "exact"}))
 
 
 class ReviewedPriceComparisonTest(unittest.TestCase):

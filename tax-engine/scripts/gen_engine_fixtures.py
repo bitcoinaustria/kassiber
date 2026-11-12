@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Generate RP2-oracle fixtures for the native tax engine.
 
-Each case is an engine request built with ``kassiber/core/engines/
-native_request.py`` plus the response RP2 gives for the same input, run as
-Kassiber's adapter (``kassiber/core/engines/rp2.py``) drives it. Two files
-are written:
+Each case is a schema-1 engine request built with ``v1_request.py`` (next to
+this script) plus the response RP2 gives for the same input, run as the
+phase-3 adapter (frozen as ``tests/tax_oracle/adapter.py``) drives it.
+Two files are written:
 
 ``generic_fixtures.json`` (the lot methods):
 
@@ -100,10 +100,11 @@ EARN_TYPES = ("INCOME", "MINING", "STAKING", "INTEREST", "AIRDROP", "HARDFORK")
 CTX = Context(prec=32, rounding=ROUND_HALF_EVEN)
 
 
-def _load_native_request():
-    # Loaded by path: importing the kassiber package would pull in the adapter.
-    path = REPO / "kassiber" / "core" / "engines" / "native_request.py"
-    spec = util.spec_from_file_location("native_request", path)
+def _load_v1_request():
+    # Loaded by path, so the script runs however it is started; the module
+    # uses only the standard library.
+    path = Path(__file__).resolve().parent / "v1_request.py"
+    spec = util.spec_from_file_location("v1_request", path)
     if spec is None or spec.loader is None:
         raise SystemExit(f"cannot load {path}")
     module = util.module_from_spec(spec)
@@ -111,7 +112,7 @@ def _load_native_request():
     return module
 
 
-NR = _load_native_request()
+V1_REQUEST = _load_v1_request()
 
 
 # ---------------------------------------------------------------------------
@@ -568,7 +569,7 @@ def constructor_arguments(row: dict[str, Any], row_number: int, decimal_type: ty
 
 
 RP2_CLASSES = {"in": InTransaction, "out": OutTransaction, "intra": IntraTransaction}
-NATIVE_BUILDERS = {"in": NR.in_entry, "out": NR.out_entry, "intra": NR.intra_entry}
+NATIVE_BUILDERS = {"in": V1_REQUEST.in_entry, "out": V1_REQUEST.out_entry, "intra": V1_REQUEST.intra_entry}
 
 
 def error_document(exc: BaseException) -> dict[str, Any]:
@@ -588,7 +589,7 @@ def error_document(exc: BaseException) -> dict[str, Any]:
 
 
 def enc(value: Optional[Decimal]) -> Optional[str]:
-    return NR.encode_optional_decimal(value)
+    return V1_REQUEST.encode_optional_decimal(value)
 
 
 def derived_values(kind: str, tx: Any) -> dict[str, Any]:
@@ -636,7 +637,7 @@ def derived_values(kind: str, tx: Any) -> dict[str, Any]:
 
 
 def check_timestamp(where: str, fields: dict[str, Any], parsed: datetime) -> None:
-    """``native_request``'s timestamp fields must equal RP2's own parse."""
+    """``v1_request``'s timestamp fields must equal RP2's own parse."""
     vienna = parsed.astimezone(ZoneInfo("Europe/Vienna")).date().isoformat()
     expected = {
         "raw": fields["raw"],
@@ -764,7 +765,7 @@ def run_scenario(
         kind, rp2_kwargs = constructor_arguments(row, row_number, RP2Decimal)
         _, native_kwargs = constructor_arguments(row, row_number, Decimal)
         entry = NATIVE_BUILDERS[kind](**native_kwargs)
-        request = NR.check_entry_request(entry, **membership(scn))
+        request = V1_REQUEST.check_entry_request(entry, **membership(scn))
         try:
             tx = RP2_CLASSES[kind](configuration=conf, **rp2_kwargs)
         except Exception as exc:  # noqa: BLE001 - every RP2 failure is a fixture
@@ -773,7 +774,7 @@ def run_scenario(
         check_timestamp(f"{scn['name']} row {row_number}", entry["ts"], tx.timestamp)
         derived = derived_values(kind, tx)
         text = str(tx)
-        rendered = NR.entry_text(entry, derived)
+        rendered = V1_REQUEST.entry_text(entry, derived)
         if rendered != text:
             raise SystemExit(f"{scn['name']} row {row_number}: entry_text differs from RP2:\n{rendered}\n---\n{text}")
         if check_entries(index):
@@ -783,10 +784,10 @@ def run_scenario(
                 request,
                 {"schema_version": 1, "ok": True, "entry": derived},
             )
-        entries.append(NR.with_text(entry, text))
+        entries.append(V1_REQUEST.with_text(entry, text))
         sets[kind].add_entry(tx)
-    country = NR.country_spec(scn["country"], scn["long_term_days"] if scn["country"] == "generic" else None)
-    request = NR.compute_request(method=scn["method"], assets={ASSET: entries}, country=country)
+    country = V1_REQUEST.country_spec(scn["country"], scn["long_term_days"] if scn["country"] == "generic" else None)
+    request = V1_REQUEST.compute_request(method=scn["method"], assets={ASSET: entries}, country=country)
     if sets["in"].count == 0:
         return  # the adapter does not compute an asset without inbound rows
     input_data = InputData(
@@ -928,7 +929,7 @@ def check_cases(cases: Cases) -> None:
             else:
                 target.setdefault("holder", HOLDER)
         entry = NATIVE_BUILDERS[kind](**native_kwargs)
-        request = NR.check_entry_request(entry, **names)
+        request = V1_REQUEST.check_entry_request(entry, **names)
         try:
             tx = RP2_CLASSES[kind](configuration=conf, **rp2_kwargs)
         except Exception as exc:  # noqa: BLE001 - every RP2 failure is a fixture
@@ -936,8 +937,8 @@ def check_cases(cases: Cases) -> None:
             continue
         check_timestamp(f"check/{name}", entry["ts"], tx.timestamp)
         derived = derived_values(kind, tx)
-        if NR.entry_text(entry, derived) != str(tx):
-            raise SystemExit(f"check/{name}: entry_text differs from RP2:\n{NR.entry_text(entry, derived)}\n---\n{tx}")
+        if V1_REQUEST.entry_text(entry, derived) != str(tx):
+            raise SystemExit(f"check/{name}: entry_text differs from RP2:\n{V1_REQUEST.entry_text(entry, derived)}\n---\n{tx}")
         cases.add(f"check/{name}", "check_entry", request, {"schema_version": 1, "ok": True, "entry": derived})
 
 
@@ -1695,9 +1696,9 @@ def run_at_scenario(scn: dict[str, Any], scratch: Path) -> Optional[dict[str, An
             raise SystemExit(f"{where}: RP2 rejects the row: {exc}") from exc
         check_timestamp(where, entry["ts"], transaction.timestamp)
         text = str(transaction)
-        if NR.entry_text(entry, derived_values(kind, transaction)) != text:
+        if V1_REQUEST.entry_text(entry, derived_values(kind, transaction)) != text:
             raise SystemExit(f"{where}: entry_text differs from RP2")
-        entries[asset].append(NR.with_text(entry, text))
+        entries[asset].append(V1_REQUEST.with_text(entry, text))
         sets[asset][kind].add_entry(transaction)
     input_data = {
         asset: InputData(
@@ -1726,7 +1727,7 @@ def run_at_scenario(scn: dict[str, Any], scratch: Path) -> Optional[dict[str, An
         compact.append({"asset": asset, "entries": kept})
     return {
         "name": scn["name"],
-        "country": NR.country_spec(scn["country"], scn["long_term_days"] if scn["country"] == "generic" else None),
+        "country": V1_REQUEST.country_spec(scn["country"], scn["long_term_days"] if scn["country"] == "generic" else None),
         "method": scn["method"],
         "assets": compact,
         "steps": steps,
@@ -1802,7 +1803,7 @@ def z(instant: datetime) -> str:
 
 
 def instant_of(stamp_text: str) -> datetime:
-    return NR.parse_timestamp(stamp_text)
+    return V1_REQUEST.parse_timestamp(stamp_text)
 
 
 class AtFlow:

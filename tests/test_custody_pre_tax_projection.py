@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import json
-from contextlib import contextmanager
-from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -26,7 +24,8 @@ from kassiber.transfers import (
     onchain_transfer_scope,
 )
 from kassiber.core.engines.base import TaxEngineLedgerInputs
-from kassiber.core.engines.rp2 import GenericRP2TaxEngine, _GenericRailCarryResult
+from kassiber.core.engines import KassiberTaxEngine
+from kassiber.core.engines import ledger as ledger_engine
 from tests.custody_tax_helpers import (
     authoritative_chain_observation,
     finalized_tax_inputs,
@@ -116,24 +115,24 @@ def test_residual_suspense_keeps_finalized_sibling_but_blocks_later_sale():
 
 
 def test_every_projected_row_id_is_synthetic_and_pairs_are_edge_disjoint():
-    """Pin the two invariants a large amount of tax_events.py silently rests on.
+    """Pin the two invariants the tax engine's request builder refuses to see broken.
 
-    `normalize_tax_asset_inputs` only ever sees a `FinalizedTaxProjection`, and
-    several of its branches are reachable only for rows that resolve an
-    `onchain_transfer_scope` or that share a pair leg. Neither is possible today:
+    The engine only ever sees a `FinalizedTaxProjection`, and the phase-3
+    normalizer's branches for rows that resolve an `onchain_transfer_scope` or
+    that share a pair leg were deleted rather than ported (plan 20 phase 4).
+    Neither shape is possible today:
 
     1. every projected row id is re-stamped with a member of
        `_SYNTHETIC_TRANSFER_ID_PREFIXES`, and `onchain_transfer_scope` returns
        `None` for those prefixes — so the txid-scope-gated paths (the
-       Samourai/Whirlpool splitter, `_owned_fanout_row_ids`) are inert;
+       Samourai/Whirlpool splitter, owned fan-outs) had nothing to act on;
     2. each decision mints its own fresh move rows, so the pair graph is a
-       perfect matching and no multi-pair component can form — which is what
-       makes `_build_manual_multi_pair_transfers`' multi-pair branch inert.
+       perfect matching and no multi-pair component can form.
 
     Nothing in `custody_tax_projection` asserts either property, so without this
-    test the inertness is an unasserted cross-module coupling. Anyone deleting
-    that dead code needs this guard; anyone breaking these invariants needs to
-    know the dead code became live again.
+    test the coupling is unasserted. `engines/ledger_request.py` fails closed on
+    both shapes (`non_synthetic_row_id`, `shared_pair_leg`, listed difference
+    LD-5); anyone breaking these invariants turns journals into that refusal.
     """
 
     rows, state = _residual_state()
@@ -449,8 +448,11 @@ def test_basis_barrier_does_not_suppress_unrelated_asset_projection():
     assert all(item["transaction_id"] != "usdt-later" for item in projection.quarantines)
 
 
-def test_rp2_boundary_spy_never_receives_residual_or_later_basis_consumer():
+def test_engine_request_never_receives_residual_or_later_basis_consumer():
     rows, state = _residual_state()
+    # Stored rows carry these columns; the engine reads them for the text.
+    for row in rows:
+        row.update(note=None, description=None)
     profile = {
         "id": "profile",
         "workspace_id": "workspace",
@@ -464,34 +466,36 @@ def test_rp2_boundary_spy_never_receives_residual_or_later_basis_consumer():
         "source": {"id": "source", "label": "source", "account_code": "treasury", "account_label": "Treasury", "wallet_account_id": "account"},
         "destination": {"id": "destination", "label": "destination", "account_code": "treasury", "account_label": "Treasury", "wallet_account_id": "account"},
     }
-    captured: list[dict[str, object]] = []
+    original_build_request = ledger_engine.build_request
+    requests: list[dict[str, object]] = []
 
-    def spy_prepare(_profile, rows_by_asset, *_args, **_kwargs):
-        captured.extend(row for asset_rows in rows_by_asset.values() for row in asset_rows)
-        return []
+    def spy_build_request(*args, **kwargs):
+        request = original_build_request(*args, **kwargs)
+        requests.append(request)
+        return request
 
-    @contextmanager
-    def configuration(*_args, **_kwargs):
-        yield SimpleNamespace(country=SimpleNamespace(validate_input_data=lambda _items: None))
-
-    with (
-        patch("kassiber.core.engines.rp2._rp2_configuration", side_effect=configuration),
-        patch("kassiber.core.engines.rp2._apply_generic_bitcoin_rail_carry_values", side_effect=lambda _p, rows_for_engine, *_a, **_k: _GenericRailCarryResult(list(rows_for_engine), set(), [])),
-        patch("kassiber.core.engines.rp2._prepare_assets", side_effect=spy_prepare),
-        patch("kassiber.core.engines.rp2._validate_prepared_rp2_inputs"),
-        patch("kassiber.core.engines.rp2._rp2_asset_states_from_prepared", return_value={}),
-    ):
-        GenericRP2TaxEngine(profile).build_ledger_state(
+    # The spy only observes: the book still runs on production.
+    with patch.object(ledger_engine, "build_request", side_effect=spy_build_request):
+        KassiberTaxEngine(profile).build_ledger_state(
             TaxEngineLedgerInputs(
                 finalized_tax_projection=projection,
                 wallet_refs_by_id=wallet_refs,
             )
         )
 
-    anchored = {row["journal_transaction_id"] for row in captured}
+    # The spy sees production's own request.
+    assert requests and all(request == requests[-1] for request in requests)
+    rows = requests[-1]["rows"]
+    assert [row["id"] for row in rows] == [str(row["id"]) for row in projection.rows]
+    anchored = {row["anchor"] for row in rows}
     assert anchored == {"acquisition", "source-move", "retained"}
     assert "later-sale" not in anchored
-    assert all(int(row["amount"]) != 100 for row in captured)
+    assert all(row["amount_msat"] != 100 for row in rows)
+    assert sorted((row["anchor"], row["wallet_id"], row["direction"], row["amount_msat"], row["fee_msat"]) for row in rows) == [
+        ("acquisition", "source", "inbound", 10_000, 0),
+        ("retained", "destination", "inbound", 9_900, 0),
+        ("source-move", "source", "outbound", 9_900, 0),
+    ]
 
 
 def test_tax_engine_contract_rejects_raw_rows_at_construction():

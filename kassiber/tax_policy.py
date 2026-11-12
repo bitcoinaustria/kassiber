@@ -1,5 +1,5 @@
+import sys
 from dataclasses import dataclass
-from importlib import import_module
 
 from .errors import AppError
 from .transfers import is_bitcoin_rail_pair, profile_bitcoin_rail_carrying_value
@@ -14,6 +14,16 @@ ACTIVE_TAX_COUNTRIES = (DEFAULT_TAX_COUNTRY, AUSTRIAN_TAX_COUNTRY)
 DEFAULT_COST_BASIS_POOL_SCOPE = "global"
 WALLET_COST_BASIS_POOL_SCOPE = "wallet"
 GLOBAL_COST_BASIS_POOL_ID = "global"
+# Austria's country rules, as RP2's AT plugin and the engine's Austrian
+# country define them: EUR, no long-term holding period, and Austria's
+# methods with the moving average as the default.
+# tests/tax_oracle/test_oracle_contract.py keeps them in step with both.
+AUSTRIAN_FIAT_CURRENCY = "EUR"
+AUSTRIAN_LONG_TERM_DAYS = sys.maxsize
+AUSTRIAN_ACCOUNTING_METHODS = ("fifo", "moving_average", "moving_average_at")
+AUSTRIAN_DEFAULT_ACCOUNTING_METHOD = "moving_average_at"
+AUSTRIAN_REPORT_GENERATORS = ("open_positions",)
+AUSTRIAN_GENERATION_LANGUAGE = "en"
 
 
 @dataclass(frozen=True)
@@ -134,46 +144,24 @@ def build_generic_policy(profile):
     )
 
 
-def _load_rp2_austrian_country():
-    # Imported here: the engine adapter imports this module.
-    from .core.engines import rp2 as engine_adapter
-
-    if engine_adapter._tax_engine_backend() == "native":
-        return engine_adapter._native_backend().AT()
-    try:
-        module = import_module("rp2.plugin.country.at")
-    except ModuleNotFoundError as exc:
-        raise AppError(
-            "Austrian tax support requires rp2 with the `at` country plugin.",
-            code="unsupported",
-            hint=(
-                "Install the Kassiber-maintained rp2 fork from `bitcoinaustria/rp2` "
-                "with the Austrian country plugin."
-            ),
-            details={"missing_module": "rp2.plugin.country.at"},
-        ) from exc
-    return module.AT()
-
-
 def build_austrian_policy(profile):
-    country = _load_rp2_austrian_country()
     # Austria's standard method is the moving average (gleitender
     # Durchschnittspreis, §2 KryptowährungsVO) and stays the default. The other
-    # generic RP2 methods (FIFO/LIFO/HIFO/LOFO) are also offered for Austrian
+    # generic methods (FIFO/LIFO/HIFO/LOFO) are also offered for Austrian
     # books as a user-selectable choice, so widen the allowed set to the union
-    # of the AT plugin's methods and the generic methods. The default remains
-    # the AT plugin default; only an explicit, deliberate pick deviates from it.
+    # of Austria's methods and the generic methods. The default remains
+    # Austria's; only an explicit, deliberate pick deviates from it.
     allowed_methods = tuple(
-        sorted(set(country.get_accounting_methods()) | set(DEFAULT_ACCOUNTING_METHODS))
+        sorted(set(AUSTRIAN_ACCOUNTING_METHODS) | set(DEFAULT_ACCOUNTING_METHODS))
     )
     return TaxPolicy(
         tax_country=AUSTRIAN_TAX_COUNTRY,
-        fiat_currency=country.currency_iso_code.upper(),
-        long_term_days=country.get_long_term_capital_gain_period(),
+        fiat_currency=AUSTRIAN_FIAT_CURRENCY,
+        long_term_days=AUSTRIAN_LONG_TERM_DAYS,
         accounting_methods=allowed_methods,
-        report_generators=tuple(sorted(country.get_report_generators())),
-        default_accounting_method=country.get_default_accounting_method(),
-        generation_language=country.get_default_generation_language(),
+        report_generators=AUSTRIAN_REPORT_GENERATORS,
+        default_accounting_method=AUSTRIAN_DEFAULT_ACCOUNTING_METHOD,
+        generation_language=AUSTRIAN_GENERATION_LANGUAGE,
     )
 
 

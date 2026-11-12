@@ -112,7 +112,8 @@ books by default. A second country has no seam until this move happens.
   columns stay in place.
 - Small items: the NWC connection entry without an adapter, `saved_views`
   (one consumer), the AI-only swap-review context, and the unreachable
-  pre-custody normalizer branches already listed in TODO.
+  pre-custody normalizer branches, which
+  [plan 20](20-kassiber-tax-engine.md)'s phase 4 deleted.
 
 ## Extension model
 

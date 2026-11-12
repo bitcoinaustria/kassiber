@@ -10,7 +10,7 @@ and the full gate live in [CONTRIBUTING.md](../CONTRIBUTING.md).
 - `core/custody_journal.py` owns production journal composition, including
   decisions/issues/lineage and finalized tax inputs. Its
   `CustodyJournalBuilder.build_custody_decisions()` is the decision-generation
-  and performance boundary. `GenericRP2TaxEngine` consumes finalized projections;
+  and performance boundary. `KassiberTaxEngine` consumes finalized projections;
   it does not accept raw observations as an alternate accounting path.
 - Use `normalize_boundary_amounts` in `core/custody_evidence.py` for principal,
   fee, wallet movement, and wallet delta. Use `allocate_msat_fifo` in

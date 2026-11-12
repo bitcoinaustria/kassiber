@@ -26,11 +26,11 @@ class TaxEngineLedgerResult:
     """Aggregated journal state emitted for one processed profile.
 
     ``entries`` and ``quarantines`` match the rows persisted into the journal
-    tables. ``intra_audit`` contains the same-asset transfer audit trail used by
-    the current generic RP2 path. ``cross_asset_pairs`` carries manual
-    cross-asset pair metadata for envelope/report consumers without feeding
-    those pairs into RP2. ``tax_summary`` carries RP2 yearly gain/loss summary
-    rows before report-layer totals are added.
+    tables. ``intra_audit`` contains the same-asset transfer audit trail behind
+    the transfer legs. ``cross_asset_pairs`` carries the projection's manual
+    cross-asset pair metadata, passed through for envelope/report consumers.
+    ``tax_summary`` carries the engine's yearly gain/loss summary rows before
+    report-layer totals are added.
 
     ``account_holdings`` keys are ``(account_id, account_code, account_label,
     asset)`` tuples. ``wallet_holdings`` keys are ``(wallet_id, wallet_label,

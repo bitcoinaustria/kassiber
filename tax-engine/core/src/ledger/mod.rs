@@ -1,0 +1,31 @@
+//! The ledger layer (schema version 2): the engine boundary at the finalized
+//! custody projection, plan 20 phase 4.
+//!
+//! The layer builds the lot engine's entries from projection rows, runs the
+//! existing lot engine on them, and composes the journal ledger. It holds
+//! the boundary documents, [`request`] and [`response`]; [`text`], which
+//! renders an entry's `str(transaction)` once the constructor has derived
+//! its values; `normalize`, the adapter's normalization of one asset's rows
+//! and moves, with `regimes`, the Austrian regime tracker it runs first;
+//! `order`, `walk`, and `describe`, which put the normalized events and
+//! moves in the walk's order, keep the adapter's balance mirror and gates,
+//! and build the lot engine's entries with the notes the adapter composed;
+//! `carry`, the generic Bitcoin rail carry, whose passes run the lot engine
+//! before the final one; `swaplinks`, the Austrian swap-link selection
+//! between the first and the second prepare pass; `compose`, which turns
+//! the lot engine's results into journal entries, holdings, and the tax
+//! summary; and `run`, the pipeline, which answers the `ledger` and
+//! `prepare` operations for every book.
+
+pub(crate) mod carry;
+pub(crate) mod compose;
+pub(crate) mod describe;
+pub(crate) mod normalize;
+pub(crate) mod order;
+pub(crate) mod regimes;
+pub mod request;
+pub mod response;
+pub(crate) mod run;
+pub(crate) mod swaplinks;
+pub mod text;
+pub(crate) mod walk;

@@ -87,6 +87,8 @@ HEADER = f"""\
 #   cmp <x> <y> <-1|0|1>            exact comparison
 #   rp2 <ctx> <x> <y> <flags>       RP2Decimal ==, !=, >, >=, <, <= under
 #                                   ctx as six 0/1 digits, or one !error
+#   normalize <ctx> <x> <result>    x.normalize() under ctx
+#   fmtp <ctx> <x> <places> <text>  format(x, '.<places>f') under ctx
 """
 
 
@@ -212,6 +214,18 @@ class Writer:
         else:
             flags = "".join(results)
         self.emit("rp2", ctx_token(ctx), canon(x), canon(y), flags)
+
+    def normalize(self, ctx: tuple[int, str], x: Decimal) -> None:
+        def run() -> Decimal:
+            with localcontext(make_context(ctx)):
+                return x.normalize()
+
+        self.emit("normalize", ctx_token(ctx), canon(x), outcome(run))
+
+    def fixed(self, ctx: tuple[int, str], x: Decimal, places: int) -> None:
+        with localcontext(make_context(ctx)):
+            text = format(x, f".{places}f")
+        self.emit("fmtp", ctx_token(ctx), canon(x), str(places), text)
 
     def text(self, x: Decimal) -> None:
         self.emit("str", canon(x), str(x))
@@ -769,6 +783,84 @@ def gen_rp2(w: Writer, v: Values, r: random.Random) -> None:
             w.rp2(ctx, Decimal(s), Decimal(t))
 
 
+def gen_normalize(w: Writer, v: Values, r: random.Random) -> None:
+    w.section("normalize: random values")
+    for _ in scaled(300):
+        w.normalize(pick_ctx(r), v.any())
+    w.section("normalize: trailing zeros and zeros (the sign stays, whatever the rounding)")
+    for _ in scaled(60):
+        x = r.choice([v.crypto, v.fiat, v.price, v.special])()
+        sign, digits, exp = x.as_tuple()
+        coeff = int("".join(map(str, digits)))
+        k = r.randint(1, 12)
+        w.normalize(RP2_CTX, mk(sign, coeff * 10**k, exp - k))
+    for ctx in (RP2_CTX, (32, "floor"), (32, "ceiling"), (5, "down")):
+        for x in (mk(0, 0, 0), mk(1, 0, 0), mk(1, 0, -2), mk(0, 0, 5), mk(1, 0, MIN_ETINY), mk(0, 0, MAX_EMAX),
+                  mk(1, 0, 1000005), mk(0, 1000, 0), mk(1, 12300, -4), mk(0, 10**31, -31), mk(0, 5, 999995)):
+            w.normalize(ctx, x)
+    w.section("normalize: carried values (fiat / crypto quotients under RP2's context)")
+    for _ in scaled(80):
+        with localcontext(make_context(RP2_CTX)):
+            quotient = abs(v.fiat()) / (abs(v.crypto()) or Decimal(1))
+        w.normalize(RP2_CTX, quotient)
+        w.normalize(RP2_CTX, abs(v.fiat()))
+    w.section("normalize: rounding to precision, carries, subnormals, and overflow at every rounding")
+    for ctx in all_contexts([32, 9, 1]):
+        prec = ctx[0]
+        for _ in scaled(2):
+            exp = r.randint(-20, 5)
+            w.normalize(ctx, mk(v.sign(5), v.digits(prec) * 10 + 5, exp))
+            w.normalize(ctx, mk(v.sign(5), v.digits(prec) * 100 + r.choice([49, 50, 51]), exp))
+            w.normalize(ctx, mk(v.sign(5), v.digits(prec + r.randint(3, 30)), exp))
+        w.normalize(ctx, mk(v.sign(5), 10 ** (prec + 1) - 1, -3))
+        w.normalize(ctx, mk(v.sign(5), (10**prec - 1) * 10 + 5, -2))
+        w.normalize(ctx, mk(v.sign(5), 10**prec * 10 + 1, 7))
+        for exp in (-1000040, ETINY_32 - 1, ETINY_32, -1000000, -999999):
+            w.normalize(ctx, mk(v.sign(5), r.choice([1, 5, 15, 123, 10**prec + 1]), exp))
+        for exp in (999999 - prec, 999999 - prec + 1, 999999, 1000000):
+            w.normalize(ctx, mk(v.sign(5), 10 ** (prec + 1) - 1, exp))
+            w.normalize(ctx, mk(v.sign(5), 10**prec, exp))
+    for _ in scaled(30):
+        w.normalize(pick_ctx(r), v.tiny())
+        w.normalize(pick_ctx(r), v.huge())
+
+
+def gen_fixed_places(w: Writer, v: Values, r: random.Random) -> None:
+    def short(x: Decimal) -> bool:
+        # The text has an integer digit per unit of the adjusted exponent.
+        return x.adjusted() <= 60
+
+    w.section("fmtp: 4 and 8 places (str(transaction)) under RP2's context")
+    for _ in scaled(360):
+        x = v.any()
+        if short(x):
+            w.fixed(RP2_CTX, x, r.choice([4, 8]))
+    w.section("fmtp: other places and contexts (the precision does not apply)")
+    for _ in scaled(160):
+        x = v.any()
+        if short(x):
+            w.fixed(pick_ctx(r), x, r.choice([0, 1, 2, 3, 13, 20, 40]))
+    w.section("fmtp: ties, near ties, sticky tails, and carries at every rounding")
+    for ctx in all_contexts([32, 1]):
+        for places in (0, 2, 4, 8):
+            for _ in scaled(2):
+                c = v.digits(r.randint(1, 20))
+                w.fixed(ctx, mk(v.sign(5), c * 10 + 5, -places - 1), places)
+                w.fixed(ctx, mk(v.sign(5), c * 100 + r.choice([49, 51]), -places - 2), places)
+                w.fixed(ctx, mk(v.sign(5), (c * 10 + 5) * 10**20 + 1, -places - 21), places)
+            w.fixed(ctx, mk(v.sign(5), 10 ** (places + 3) - 5, -places - 1), places)
+            w.fixed(ctx, mk(v.sign(5), 10 ** (places + 3) - 1, -places - 1), places)
+            w.fixed(ctx, mk(1, 1, -places - 1), places)
+            w.fixed(ctx, mk(0, 1, -places - r.randint(5, 60)), places)
+    w.section("fmtp: zeros, exact values, and extreme exponents")
+    for ctx in (RP2_CTX, (32, "up"), (32, "floor"), (32, "ceiling"), (3, "half_up")):
+        for places in (0, 1, 4, 8, 13):
+            for x in (mk(0, 0, 0), mk(1, 0, 0), mk(1, 0, -2), mk(0, 0, -20), mk(1, 0, 5), mk(0, 0, MIN_ETINY),
+                      mk(0, 0, 999999), mk(0, 123, 5), mk(1, 15, -1), mk(0, 1, MIN_ETINY), mk(1, 7, -1000000),
+                      mk(0, 21_000_000 * 10**8, -8), mk(0, 10**32 - 1, -13)):
+                w.fixed(ctx, x, places)
+
+
 def main() -> int:
     global SCALE
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
@@ -791,6 +883,9 @@ def main() -> int:
     gen_unary(w, v, r)
     gen_cmp(w, v, r)
     gen_rp2(w, v, r)
+    # Sections added later go last, so the earlier ones keep their values.
+    gen_normalize(w, v, r)
+    gen_fixed_places(w, v, r)
     body = HEADER.replace("{seed}", str(args.seed)) + "\n".join(w.lines) + "\n"
     size = len(body.encode("ascii"))
     if args.output == OUTPUT and size >= MAX_BYTES:

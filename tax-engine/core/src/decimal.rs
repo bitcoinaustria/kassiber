@@ -672,6 +672,47 @@ impl Decimal {
         finish(false, self.coeff.clone(), i128::from(self.exp), false, ctx)
     }
 
+    /// CPython's `x.normalize()` under `ctx` (libmpdec's `mpd_qreduce`): the
+    /// value rounded to the context as `+x` is, overflow included, then
+    /// stripped of trailing zeros. A zero, including one that rounding
+    /// produced, becomes `0E0` and keeps the operand's sign (`-0.00` gives
+    /// `-0`).
+    pub fn normalize(&self, ctx: &Context) -> Result<Decimal, DecimalError> {
+        ctx.check()?;
+        let rounded = finish(
+            self.negative,
+            self.coeff.clone(),
+            i128::from(self.exp),
+            false,
+            ctx,
+        )?;
+        if rounded.is_zero() {
+            return Ok(Decimal {
+                negative: self.negative,
+                coeff: BigUint::zero(),
+                exp: 0,
+            });
+        }
+        // libmpdec stops stripping at Emax. A rounded result's adjusted
+        // exponent is at most Emax, so stripping never gets that far and the
+        // bound is only a guard.
+        let (mut coeff, mut exp) = (rounded.coeff, rounded.exp);
+        let ten = BigUint::from(10u32);
+        while exp < EMAX {
+            let (q, r) = coeff.div_rem(&ten);
+            if !r.is_zero() {
+                break;
+            }
+            coeff = q;
+            exp += 1;
+        }
+        Ok(Decimal {
+            negative: self.negative,
+            coeff,
+            exp,
+        })
+    }
+
     /// `self + other`, correctly rounded under `ctx`.
     pub fn add(&self, other: &Decimal, ctx: &Context) -> Result<Decimal, DecimalError> {
         self.add_signed(other, other.negative, ctx)
@@ -965,6 +1006,41 @@ impl Decimal {
             out.push_str(&digits);
         }
         Ok(out)
+    }
+
+    /// CPython's `format(x, '.<places>f')` under a context with `rounding`:
+    /// the value rounded to `places` decimal places with every integer digit
+    /// (the context's precision does not apply), keeping the sign, so
+    /// `-0.00001` gives `-0.0000`. Fails with `FormatTooLong` beyond
+    /// [`MAX_FIXED_PADDING`] padding zeros.
+    pub fn to_fixed_places(&self, places: u32, rounding: Rounding) -> Result<String, DecimalError> {
+        let target = -i128::from(places);
+        let exp = i128::from(self.exp);
+        if exp >= target {
+            // Exact: pad the fraction to `places` digits.
+            let missing = i128::from(places) - (-exp).max(0);
+            if missing > i128::from(MAX_FIXED_PADDING) {
+                return Err(DecimalError::FormatTooLong);
+            }
+            let mut out = self.to_fixed_string()?;
+            if missing > 0 {
+                if exp >= 0 {
+                    out.push('.');
+                }
+                out.extend(core::iter::repeat('0').take(missing as usize));
+            }
+            return Ok(out);
+        }
+        let (mut q, d) = shift_right(&self.coeff, ndigits(&self.coeff), target - exp, false);
+        if rounds_away(rounding, d, self.negative, &q) {
+            q += 1u32;
+        }
+        Decimal {
+            negative: self.negative,
+            coeff: q,
+            exp: -i64::from(places),
+        }
+        .to_fixed_string()
     }
 
     /// Compares magnitudes of two nonzero values.
@@ -1477,6 +1553,99 @@ mod tests {
         assert_eq!(canon(d("1E+1000000").neg(&RP2)), "!Overflow");
         assert_eq!(d("-0").copy_abs().to_canonical(), "0E0");
         assert_eq!(d("0").copy_negate().to_canonical(), "-0E0");
+    }
+
+    #[test]
+    fn normalizes_like_cpython() {
+        let n = |s: &str, c: &Context| canon(d(s).normalize(c));
+        assert_eq!(n("1.2300", &RP2), "123E-2");
+        assert_eq!(n("4.8E+4", &RP2), "48E3");
+        assert_eq!(n("100E-1000022", &RP2), "1E-1000020");
+        // Zeros become 0E0 with the operand's sign, whatever the rounding.
+        assert_eq!(n("-0.00", &RP2), "-0E0");
+        assert_eq!(n("0E+1000005", &RP2), "0E0");
+        assert_eq!(n("0", &ctx(32, Rounding::Floor)), "0E0");
+        assert_eq!(n("-0", &ctx(32, Rounding::Floor)), "-0E0");
+        // Rounding to the precision comes first, carries included.
+        assert_eq!(
+            n("123456789012345678901234567890123456", &RP2),
+            "12345678901234567890123456789012E4"
+        );
+        assert_eq!(n("99999999999999999999999999999999.5", &RP2), "1E32");
+        assert_eq!(n("1250", &ctx(2, Rounding::HalfEven)), "12E2");
+        assert_eq!(n("1350", &ctx(2, Rounding::HalfEven)), "14E2");
+        // Subnormal results round at Etiny; an underflow to zero keeps the sign.
+        assert_eq!(n("1E-1000040", &RP2), "0E0");
+        assert_eq!(n("-1E-1000040", &RP2), "-0E0");
+        assert_eq!(n("-1E-1000040", &ctx(32, Rounding::Floor)), "-1E-1000030");
+        assert_eq!(n("1E-1000031", &ctx(32, Rounding::Up)), "1E-1000030");
+        let nines = "9.99999999999999999999999999999999E+999999";
+        assert_eq!(n(nines, &RP2), "!Overflow");
+        assert_eq!(
+            n(nines, &ctx(32, Rounding::Down)),
+            "99999999999999999999999999999999E999968"
+        );
+        assert_eq!(n("1E+1000000", &RP2), "!Overflow");
+        assert_eq!(
+            d("1").normalize(&ctx(0, Rounding::HalfEven)),
+            Err(DecimalError::InvalidContext)
+        );
+    }
+
+    #[test]
+    fn formats_fixed_places_like_cpython() {
+        let f = |s: &str, places: u32, rounding: Rounding| d(s).to_fixed_places(places, rounding);
+        let cases = [
+            ("12.34565", 4, Rounding::HalfEven, "12.3456"),
+            ("12.34575", 4, Rounding::HalfEven, "12.3458"),
+            ("0.123456785", 8, Rounding::HalfEven, "0.12345678"),
+            ("2.5", 0, Rounding::HalfEven, "2"),
+            ("1.5", 0, Rounding::HalfEven, "2"),
+            ("2.5", 0, Rounding::HalfUp, "3"),
+            ("-1.5", 0, Rounding::Ceiling, "-1"),
+            ("9.99995", 4, Rounding::HalfEven, "10.0000"),
+            ("1.5", 4, Rounding::HalfEven, "1.5000"),
+            ("2", 4, Rounding::HalfEven, "2.0000"),
+            ("1E+3", 2, Rounding::HalfEven, "1000.00"),
+            ("0E+5", 4, Rounding::HalfEven, "0.0000"),
+            ("-0E+5", 4, Rounding::HalfEven, "-0.0000"),
+            ("-0E-2", 4, Rounding::HalfEven, "-0.0000"),
+            ("-0.00001", 4, Rounding::HalfEven, "-0.0000"),
+            ("1E-10", 4, Rounding::HalfEven, "0.0000"),
+            ("1E-10", 4, Rounding::Up, "0.0001"),
+            ("-1E-10", 4, Rounding::Floor, "-0.0001"),
+            (
+                "1E+40",
+                4,
+                Rounding::HalfEven,
+                "10000000000000000000000000000000000000000.0000",
+            ),
+            (
+                "12345678901234567890123456789012345.123456",
+                4,
+                Rounding::HalfEven,
+                "12345678901234567890123456789012345.1235",
+            ),
+        ];
+        for (input, places, rounding, expected) in cases {
+            assert_eq!(
+                f(input, places, rounding).as_deref(),
+                Ok(expected),
+                "format({input}, '.{places}f') with {rounding:?}"
+            );
+        }
+        assert_eq!(
+            f("1E+999999999999999999", 4, Rounding::HalfEven),
+            Err(DecimalError::FormatTooLong)
+        );
+        assert_eq!(
+            f("1", u32::MAX, Rounding::HalfEven),
+            Err(DecimalError::FormatTooLong)
+        );
+        assert_eq!(
+            f("1E-5", u32::MAX, Rounding::HalfEven),
+            Err(DecimalError::FormatTooLong)
+        );
     }
 
     #[test]

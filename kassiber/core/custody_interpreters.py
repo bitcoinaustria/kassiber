@@ -2,8 +2,8 @@
 
 Every adapter in this module emits exact :class:`QuantityClaim` values (or a
 native-evidence request for a rowless owned destination).  It deliberately
-does not import RP2 and it never reads the engine's rendered MOVE audit.  The
-claim set is the only input to custody arbitration.
+does not call the tax engine and never reads the engine's rendered MOVE
+audit.  The claim set is the only input to custody arbitration.
 """
 
 from __future__ import annotations

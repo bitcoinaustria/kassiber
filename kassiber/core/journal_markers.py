@@ -1,10 +1,12 @@
 """Machine markers embedded in journal entry descriptions.
 
-The engine annotates journal descriptions with ``key=value`` tokens: the
+The tax engine annotates journal descriptions with ``key=value`` tokens: the
 regime the disposed fee slice draws from, the per-regime moved quantities of
-a transfer, the pool id, the swap link. Emission and parsing live HERE so
-producers (the rp2 engine) and consumers (UI snapshots, exit tax) cannot
-drift when a marker is added or renamed. The GUI strips any ``at_*=`` token
+a transfer, the pool id, the swap link. The engine composes them
+(``tax-engine/core/src/ledger/describe.rs``); the names and parsing live HERE
+so consumers (UI snapshots, exit tax) cannot drift when a marker is added or
+renamed, and the engine's manifest is checked against these names
+(``tests/test_tax_ledger_contract.py``). The GUI strips any ``at_*=`` token
 generically before rendering.
 
 The ``at_`` prefix is historical (Austrian markers came first); the channel
@@ -18,8 +20,9 @@ MARKER_REGIME = "at_regime"
 #: held BOTH Alt and Neu inventory and Kassiber exercised the
 #: KryptowährungsVO designation right (Neu-first) on the taxpayer's behalf;
 #: absent = the regime was forced by the wallet's holdings or set by an
-#: explicit user override. Kassiber-side audit marker only — rp2 matches its
-#: own markers by exact token / distinct prefix and ignores this one.
+#: explicit user override. Kassiber-side audit marker only — the engine's
+#: Austrian rules match their markers by exact token (``at_regime=alt|neu``)
+#: or a distinct prefix (``at_pool=``, ``at_swap_link=``) and ignore this one.
 MARKER_REGIME_BASIS = "at_regime_basis"
 REGIME_BASIS_ELECTION = "wahlrecht"
 MARKER_POOL = "at_pool"

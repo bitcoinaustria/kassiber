@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-from kassiber.core.engines import GenericRP2TaxEngine
+from kassiber.core.engines import KassiberTaxEngine
 from kassiber.core.custody_evidence import build_canonical_quantity_input, enriched_quantity_rows
 from kassiber.core.custody_interpreters import (
     _observations_by_transaction, _pair_claims, compile_custody_interpreters,
@@ -69,7 +69,7 @@ class NativeTransitionEngineTest(unittest.TestCase):
                 inputs = finalized_tax_inputs(
                     PROFILE, rows=rows, wallet_refs_by_id=refs,
                 )
-                state = GenericRP2TaxEngine(PROFILE).build_ledger_state(inputs)
+                state = KassiberTaxEngine(PROFILE).build_ledger_state(inputs)
                 self.assertEqual(state.quarantines, [])
                 types = [entry["entry_type"] for entry in state.entries]
                 if role == "refund":
@@ -105,7 +105,7 @@ class NativeTransitionEngineTest(unittest.TestCase):
                 row["observation_observer_kinds_json"] = '["lwk"]'
             held_rows.append(row)
         inputs = finalized_tax_inputs(PROFILE, rows=held_rows, wallet_refs_by_id=refs)
-        state = GenericRP2TaxEngine(PROFILE).build_ledger_state(inputs)
+        state = KassiberTaxEngine(PROFILE).build_ledger_state(inputs)
 
         # The unconfirmed claim cannot carry the route, and its Lightning
         # funding leg must not fall back to an ordinary disposal meanwhile.
@@ -129,7 +129,7 @@ class NativeTransitionEngineTest(unittest.TestCase):
         cross = inputs.finalized_tax_projection.cross_asset_pairs
         self.assertEqual(len(cross), 1)
         self.assertEqual(cross[0]["policy"], "taxable")
-        state = GenericRP2TaxEngine(profile).build_ledger_state(inputs)
+        state = KassiberTaxEngine(profile).build_ledger_state(inputs)
         self.assertEqual(state.quarantines, [])
         disposal = next(e for e in state.entries if e["entry_type"] == "disposal")
         self.assertAlmostEqual(float(disposal["gain_loss"]), 19.798)
@@ -138,7 +138,7 @@ class NativeTransitionEngineTest(unittest.TestCase):
     def test_fee_inclusive_source_cannot_create_partial_move_and_new_acquisition(self):
         rows, refs = native_transition_rows()
         rows[1].update(amount_includes_fee=1, fee=1_000_000)
-        state = GenericRP2TaxEngine(PROFILE).build_ledger_state(finalized_tax_inputs(
+        state = KassiberTaxEngine(PROFILE).build_ledger_state(finalized_tax_inputs(
             PROFILE, rows=rows, wallet_refs_by_id=refs,
         ))
         held = {
@@ -154,7 +154,7 @@ class NativeTransitionEngineTest(unittest.TestCase):
                 rows, refs = native_transition_rows("refund")
                 rows[1]["occurred_at"] = "2025-12-31T12:00:00Z"
                 rows[2]["occurred_at"] = target_time
-                state = GenericRP2TaxEngine(PROFILE).build_ledger_state(finalized_tax_inputs(
+                state = KassiberTaxEngine(PROFILE).build_ledger_state(finalized_tax_inputs(
                     PROFILE, rows=rows, wallet_refs_by_id=refs,
                 ))
                 holds = {
@@ -183,7 +183,7 @@ class NativeTransitionEngineTest(unittest.TestCase):
                 pairs = inputs.finalized_tax_projection.cross_asset_pairs
                 self.assertEqual(len(pairs), 2)
                 self.assertEqual(len({p["pair_id"] for p in pairs}), 2)
-                state = GenericRP2TaxEngine(profile).build_ledger_state(inputs)
+                state = KassiberTaxEngine(profile).build_ledger_state(inputs)
                 self.assertEqual(state.quarantines, [])
                 self.assertAlmostEqual(sum(float(v["quantity"]) for v in state.wallet_holdings.values()), 0.00199)
 

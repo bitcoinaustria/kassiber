@@ -1789,9 +1789,10 @@ fn kassiber_command(resource_dir: Option<&Path>, args: Vec<String>) -> DaemonCom
     if let Some(sidecar) = bundled_sidecar(resource_dir) {
         // Packaged macOS builds inherit the bundle's read-only Contents/Resources
         // as cwd, which breaks any third-party library that writes relative paths
-        // at import time (e.g. rp2.logger -> ./log/rp2_*.log). Hand the sidecar a
-        // writable scratch directory so the daemon never has to dodge EACCES on
-        // startup. Per-call code already uses absolute paths under the data root.
+        // at import time (RP2's logger wrote ./log/rp2_*.log before packaged
+        // builds stopped bundling RP2). Hand the sidecar a writable scratch
+        // directory so the daemon never has to dodge EACCES on startup. Per-call
+        // code already uses absolute paths under the data root.
         return DaemonCommand {
             program: sidecar,
             args,

@@ -15,9 +15,23 @@ const VECTORS: &str = include_str!("data/decimal_vectors.txt");
 /// Fewest cases each operation must have, so a truncated file cannot pass.
 const MIN_CASES_PER_OP: usize = 40;
 
-const OPS: [&str; 14] = [
-    "parse", "int", "str", "fmtf", "add", "sub", "mul", "div", "quantize", "neg", "abs", "plus",
-    "cmp", "rp2",
+const OPS: [&str; 16] = [
+    "parse",
+    "int",
+    "str",
+    "fmtf",
+    "add",
+    "sub",
+    "mul",
+    "div",
+    "quantize",
+    "neg",
+    "abs",
+    "plus",
+    "cmp",
+    "rp2",
+    "normalize",
+    "fmtp",
 ];
 
 fn rounding(name: &str) -> Option<Rounding> {
@@ -187,14 +201,23 @@ fn check(fields: &[&str]) -> Result<(), String> {
                 .map_err(|_| format!("bad exponent {exp:?}"))?;
             expect_number(show(x.quantize(exp, &ctx)), expected)
         }
-        [op @ ("neg" | "abs" | "plus"), ctx, x, expected] => {
+        [op @ ("neg" | "abs" | "plus" | "normalize"), ctx, x, expected] => {
             let (ctx, x) = (context(ctx)?, operand(x)?);
             let result = match *op {
                 "neg" => x.neg(&ctx),
                 "abs" => x.abs(&ctx),
-                _ => x.plus(&ctx),
+                "plus" => x.plus(&ctx),
+                _ => x.normalize(&ctx),
             };
             expect_number(show(result), expected)
+        }
+        ["fmtp", ctx, x, places, expected] => {
+            // `format` rounds with the context's rounding, at any precision.
+            let (ctx, x) = (context(ctx)?, operand(x)?);
+            let places = places
+                .parse::<u32>()
+                .map_err(|_| format!("bad places {places:?}"))?;
+            expect(show_text(x.to_fixed_places(places, ctx.rounding)), expected)
         }
         ["cmp", x, y, expected] => {
             let (x, y) = (operand(x)?, operand(y)?);
