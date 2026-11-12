@@ -287,6 +287,7 @@ rewrite. Each rule below covers a value that differs between two correct runs.
 | Both sides are normalized with the same spans: the replay's window, the recording's, and the window of any run that re-recorded the session (`rerecorded_us`) | a reading restored from the starting state appears on both sides; with one-sided spans, the hour-offset rule matched it whenever the replay ran at the same minutes and seconds, so equal state differed at random. A re-recorded session keeps its first window, which still covers the frozen SQLite clock, and adds the re-run's, which covers the real clock. |
 | A clock stamp's collision suffix in a file name (`report-<time>-2.csv`) folds into `<time>` | writers stamp names to the second and take the next free `-N`; which run's writes share a second is timing. Same-shaped files compare as a multiset by content, so a missing, extra or changed file still differs. |
 | A diagnostics report's `platform` (system, kernel release, machine) becomes `<host>` | it names the machine that ran the replay; every other report field compares. |
+| The replayed process's own clock span counts as generated: its realtime base (the recorded start, or the shared SQLite clock's base) to that base plus the replay's elapsed time | the shim runs the process on the recording's calendar at real speed, so a slow machine writes readings past the recorded window's end. |
 | Never a clock reading: a number under a figure key (amount, msat, sat, price, fee, gain, loss, basis, proceeds, tax, cost, value, quantity, balance, total, fiat, income, rate) | an msat amount can look like a millisecond epoch. |
 | `just now` and `N min ago` style ages become a placeholder | relative to the clock. |
 | Durations (`*elapsed*`, `*duration*` keys or columns, `{"type":"duration_ms","value":N}` log records, fractional `seconds`/`user`/`sys`/`cpu`/`wall` and the same with a `*_` prefix) compare as present, not by value | they measure run time. Whole numbers under those keys stay literal. |
@@ -362,7 +363,8 @@ A replay runs on its recording's calendar: the clock shim reads realtime as
 the recorded start (or the shared SQLite clock's base) plus real elapsed
 time, so "today" and certificate validity stay put while durations stay
 real. Restored state names the replay's checkout (a book's custom CA bundle
-among the repository's fixtures), a `~user` argument names the replaying
+among the repository's fixtures; only a book that names a recorded path is
+opened, since closing a book checkpoints a WAL a session may keep on purpose), a `~user` argument names the replaying
 account, and 22 sessions' stand-in `lightning-cli` scripts start through
 `/usr/bin/env python3` instead of the recording checkout's `.venv`.
 
