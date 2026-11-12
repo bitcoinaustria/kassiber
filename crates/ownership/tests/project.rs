@@ -89,6 +89,22 @@ fn symlink_aliases_share_existing_database_identity() {
     );
 }
 
+/// std's canonicalize spells a Windows path verbatim (`\\?\C:\...`); a data
+/// root given that way is the same project as its plain spelling.
+#[cfg(windows)]
+#[test]
+fn verbatim_windows_paths_name_the_same_project() {
+    let s = scratch();
+    let data = book(&s.root.join("verbatim"));
+    let verbatim = fs::canonicalize(&data).unwrap();
+    assert!(verbatim.to_string_lossy().starts_with(r"\\?\"));
+    let plain = s.owners.canonical_project(&data).unwrap();
+    let spelled = s.owners.canonical_project(&verbatim).unwrap();
+    assert_eq!(spelled.identity, plain.identity);
+    assert_eq!(spelled.database, plain.database);
+    assert!(!spelled.database.to_string_lossy().starts_with(r"\\?\"));
+}
+
 #[test]
 fn hardlink_aliases_are_rejected_before_project_ownership() {
     let s = scratch();

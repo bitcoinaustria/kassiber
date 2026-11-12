@@ -676,6 +676,11 @@ fn canonicalize_with_depth(path: &Path, depth: usize) -> Result<PathBuf> {
     } else {
         std::env::current_dir().map_err(Error::io)?.join(path)
     };
+    // A verbatim input (`\\?\C:\...`, what std's canonicalize returns) names
+    // the same path as its plain spelling, which is what this resolves to;
+    // walking the bare `\\?\C:` prefix component would fail instead.
+    #[cfg(windows)]
+    let absolute = windows::python_resolved_path(&absolute);
     let mut resolved = PathBuf::new();
     for component in absolute.components() {
         match component {
