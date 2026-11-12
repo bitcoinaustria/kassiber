@@ -671,6 +671,61 @@ timestamps, or actions) is written to the desktop's local UI state; a
 restart starts with an empty list and rebuilds conditions from the book after
 unlock. UI state version 5 removes notifications that older versions stored.
 
+OS notifications are opt-in: **Settings → Privacy → Desktop notifications**
+(off by default) lets background outcomes reach the operating system's
+notification center. The switch is the only thing stored (`desktopNotifications` in `kb.ui`; no
+version bump). Eligibility is decided in one place,
+`osNotificationEligibility` in `ui-tauri/src/lib/osNotifications.ts`:
+
+- the switch is on and Kassiber runs in the native shell;
+- the event is an allowlisted background outcome: a raised failure that needs
+  action (source refresh, background worker, book refresh, journal run,
+  missing backend), a finished book refresh or journal run, new observations
+  committed by a background run, or a pushed local evidence-watch change;
+- the native window is not focused (a visible window behind another app
+  qualifies; an unknown focus state does not);
+- the event is new: only `raiseCondition` and `addResult` offer events, never
+  `reconcileConditions`, status reads, or the rebuild after unlock, and a
+  repeat of a condition the user has not yet seen is not news;
+- the same event was not delivered in the last 30 minutes, and nothing was
+  delivered in the last minute.
+
+Foreground receipts, toasts, progress, recovery, lock and unlock, and the
+unchanged Review or journal backlog never reach the OS.
+
+The text is fixed in Rust (`ui-tauri/src-tauri/src/os_notifications.rs`):
+the title "Kassiber" and either "Background work needs your attention." or
+"Background work has finished." (Austrian German when the UI is German). The
+webview calls `deliver_os_notification` with only an allowlisted category and
+a random 128-bit token; unknown categories and tokens that are not 16–64
+ASCII letters, digits, `-` or `_` are rejected. The webview has no
+`notification:*` permission, so the plugin's own commands and the
+`window.Notification` shim its init script installs are refused (the shim's
+one permission probe at load is expected to fail and is not logged as an
+error). Rust re-checks the switch and window focus and spaces deliveries at
+least ten seconds apart as a backstop.
+
+`tauri-plugin-notification` is pinned to `~2.4`: 2.5 and later require Tauri
+2.12, newer than this lockfile's 2.11.5 runtime. Its desktop backend shows a
+notification but reports no click, so activation is inferred: the first time
+the main window gains focus within 30 minutes of a delivery, Rust hands the
+last token back once (`os-notification://activated`). Clicking the
+notification activates Kassiber on macOS and Windows, which raises the window
+and counts as that focus; returning to Kassiber any other way in that window
+does too. The renderer then keeps the destination in RAM until the shell is
+unlocked (a locked app shows its lock screen first), checks it against the
+open book, and either opens the entry's page, an operation's review page (an
+activation never syncs, approves, retries, opens a file, or unlocks), or the
+notification list when the token is older than ten minutes, unknown after a
+restart, from another book, or its entry has been resolved.
+
+Platform limits: on macOS the OS asks for permission, if at all, when the
+first notification is posted, which can only happen after the switch is on;
+debug builds post as Terminal. Windows reports nothing for notifications
+clicked from the Action Center, and Linux notification servers generally do
+not activate the app on click. Delivery adds no network request, poll, or
+probe; it only reacts to work that was already authorized.
+
 Settings -> Desktop -> Terminal command can install a user-local `kassiber`
 launcher without administrator privileges. It writes a small managed launcher
 under the user's bin directory (for example `~/.local/bin/kassiber`) that
